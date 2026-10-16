@@ -114,7 +114,10 @@ describe("recompile coalescing", () => {
       afterWrite,
       alsoAfterWrite,
     ]);
-    expect(native.composed).toEqual([["archestra"], ["archestra", "acme"]]);
+    expect(native.composed).toEqual([
+      ["archestra", "claude-code"],
+      ["archestra", "claude-code", "acme"],
+    ]);
     expect(second.installFingerprint).not.toBe(first.installFingerprint);
     expect(third.installFingerprint).toBe(second.installFingerprint);
     expect(

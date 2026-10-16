@@ -14,6 +14,12 @@ import {
   vi,
 } from "vitest";
 
+// Radix Select uses pointer capture and scrolling APIs that jsdom lacks.
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
+
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
@@ -38,6 +44,7 @@ const account = {
   name: "Automation worker",
   icon: null,
   role: "member",
+  teamId: null,
   disabled: false,
   tokenCount: 1,
   activeTokenCount: 1,
@@ -60,6 +67,19 @@ const server = setupServer(
     HttpResponse.json([]),
   ),
   http.get(`${origin}/api/roles`, () => HttpResponse.json([])),
+  http.get(`${origin}/api/teams`, () =>
+    HttpResponse.json({
+      data: [{ id: "team-platform", name: "Platform" }],
+      pagination: {
+        currentPage: 1,
+        limit: 100,
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
+    }),
+  ),
   http.patch(`${origin}/api/service-accounts/:id`, async ({ request }) => {
     updates.push(await request.json());
     return HttpResponse.json({ ...account, ...(updates.at(-1) as object) });
@@ -127,6 +147,41 @@ test("edits a service account from its table action", async () => {
   await waitFor(() =>
     expect(updates).toEqual([
       { name: "Automation runner", icon: null, role: "member", labels: [] },
+    ]),
+  );
+});
+
+test("links a service account to a team", async () => {
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ServiceAccountsSettingsPage />
+    </QueryClientProvider>,
+  );
+
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Edit service account Automation worker",
+    }),
+  );
+  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
+  await user.click(within(dialog).getByRole("combobox", { name: "Team" }));
+  await user.click(await screen.findByRole("option", { name: "Platform" }));
+  await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+  await waitFor(() =>
+    expect(updates).toEqual([
+      {
+        name: "Automation worker",
+        icon: null,
+        role: "member",
+        teamId: "team-platform",
+        labels: [],
+      },
     ]),
   );
 });

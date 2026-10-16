@@ -82,6 +82,178 @@ test("separates the empty files state from the schedules divider", async ({
   expect(gap).toBeGreaterThanOrEqual(12);
 });
 
+test("opens project JSON as formatted code", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  await mockProject(mswControl, request, { instructions: "", fileCount: 0 });
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: `${PROJECT_PATH}/files`,
+      body: [
+        {
+          id: "json-row",
+          downloadRef: "json-preview",
+          filename: "report.json",
+          mimeType: "application/json",
+          sizeBytes: 64,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          downloadable: true,
+          projectId: PROJECT_ID,
+          projectName: "Release train",
+        },
+      ],
+    },
+    {
+      method: "get",
+      url: "/api/skill-sandbox/artifacts/json-preview",
+      body: { items: [{ count: 42 }], ok: true },
+    },
+  ]);
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await page.getByRole("button", { name: "report.json", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "report.json" });
+  await expect(dialog).toBeVisible();
+  const code = dialog.getByRole("region", { name: "Code sample, json" });
+  await expect(code).toBeVisible();
+  // A short file should fit its content instead of reserving 90% of the viewport.
+  await expect
+    .poll(async () => (await dialog.boundingBox())?.height ?? 800)
+    .toBeLessThan(500);
+  await expect.poll(() => code.textContent()).toContain('\n  "items": [\n');
+  await expect(
+    dialog.getByRole("button", { name: "Copy to clipboard" }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+
+  await mswControl.use({
+    method: "get",
+    url: "/api/skill-sandbox/artifacts/json-preview",
+    body: {
+      rows: Array.from({ length: 150 }, (_, i) => ({
+        index: i,
+        value: "Example",
+      })),
+    },
+  });
+  await page.getByRole("button", { name: "report.json", exact: true }).click();
+  await expect(code).toBeVisible();
+  await expect
+    .poll(async () => (await dialog.boundingBox())?.height ?? 800)
+    .toBeLessThanOrEqual(721);
+  await expect.poll(() => code.textContent()).toContain('"index": 149');
+  // The long body scrolls while the dialog header and close action stay visible.
+  await expect(
+    dialog.getByRole("heading", { name: "report.json" }),
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole("button", { name: "Close", exact: true }),
+  ).toBeInViewport();
+});
+
+test("opens CSV in a table and fits the short preview", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  await mockProject(mswControl, request, { instructions: "", fileCount: 0 });
+  await mswControl.use({
+    method: "get",
+    url: `${PROJECT_PATH}/files`,
+    body: [
+      {
+        id: "csv-row",
+        downloadRef: "preview-fixture-report.csv",
+        filename: "report.csv",
+        mimeType: "text/csv",
+        sizeBytes: 100,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        downloadable: true,
+        projectId: PROJECT_ID,
+        projectName: "Release train",
+      },
+    ],
+  });
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await page.getByRole("button", { name: "report.csv", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "report.csv" });
+  await expect(dialog.getByRole("table")).toBeVisible();
+  await expect(
+    dialog.getByRole("cell", { name: "Example, Alpha", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("cell", { name: "Example Beta", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await dialog.boundingBox())?.height ?? 800)
+    .toBeLessThan(350);
+});
+
+test("keeps a long wide CSV inside the viewport with a sticky header", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  await mockProject(mswControl, request, { instructions: "", fileCount: 0 });
+  await mswControl.use({
+    method: "get",
+    url: `${PROJECT_PATH}/files`,
+    body: [
+      {
+        id: "wide-csv-row",
+        downloadRef: "preview-fixture-wide.csv",
+        filename: "wide-report.csv",
+        mimeType: "text/csv",
+        sizeBytes: 10000,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        downloadable: true,
+        projectId: PROJECT_ID,
+        projectName: "Release train",
+      },
+    ],
+  });
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await page
+    .getByRole("button", { name: "wide-report.csv", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "wide-report.csv" });
+  await expect(dialog.getByText("150 rows · 13 columns")).toBeVisible();
+  await expect(
+    dialog.getByRole("columnheader", { name: "Team", exact: true }),
+  ).toBeVisible();
+  const scroller = dialog.locator('[data-slot="table-container"]');
+  await expect
+    .poll(() =>
+      scroller.evaluate(
+        (el) =>
+          el.scrollWidth > el.clientWidth && el.scrollHeight > el.clientHeight,
+      ),
+    )
+    .toBe(true);
+  await scroller.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+    el.scrollLeft = el.scrollWidth;
+  });
+  await expect(
+    dialog.getByRole("columnheader", { name: "Notes", exact: true }),
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole("cell", {
+      name: "Synthetic comparison row 150: a longer note that keeps its full text",
+      exact: true,
+    }),
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole("heading", { name: "wide-report.csv", exact: true }),
+  ).toBeInViewport();
+  const box = await dialog.boundingBox();
+  expect(box?.height).toBeLessThanOrEqual(721);
+  expect(box?.width).toBeLessThanOrEqual(1280);
+});
+
 function projectSidebar(page: Page) {
   return page.locator("section", { hasText: "Instructions" }).locator("..");
 }

@@ -10,7 +10,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useAppSessionRecorder } from "@/components/app-session-recording/use-app-session-recorder";
 import { AppDiagnosticsPanel } from "@/components/chat/app-diagnostics-panel";
 import { useApps } from "@/components/chat/apps-context";
 import { mcpToolLabel } from "@/components/chat/chat-messages.utils";
@@ -383,13 +382,6 @@ export function McpAppEntryContent({
     };
   }, [rawOutput, appId]);
 
-  // Feed this chat's session recorder: whichever app frame is live (inline card
-  // or side panel) forwards its MCP exchanges, HTML snapshots, and the injected
-  // SDK's input events to the recorder the chat page provides, so one recording
-  // follows the app across surfaces. The Record/Play controls live in the
-  // composer, not here. Inert until the user starts a recording.
-  const recorder = useAppSessionRecorder();
-
   const handleShowInPanel = () => {
     if (!toolCallId) return;
     // Hand the app over inline: the panel instance owns its own display mode
@@ -507,7 +499,6 @@ export function McpAppEntryContent({
       appVersion={appVersion ?? ownedApp?.latestVersion ?? null}
       reloadNonce={reloadNonce}
       onReload={reload}
-      recorder={appId ? recorder.runtimeHooks : undefined}
       // Owned apps only: their file store is what agent-side copy_file writes
       // into, and their SDK is what reports display state back.
       filesRevision={appId ? (appFilesRevisions.get(appId) ?? 0) : undefined}
@@ -552,10 +543,7 @@ export function McpAppEntryContent({
       right={
         <>
           {appId ? (
-            <McpAppStandaloneButton
-              app={ownedApp ?? { id: appId }}
-              disabled={recorder.status !== "idle"}
-            />
+            <McpAppStandaloneButton app={ownedApp ?? { id: appId }} />
           ) : null}
           {isOwnedInPanel ? (
             <McpAppSettingsButton
@@ -642,10 +630,7 @@ export function McpAppEntryContent({
         // up with the app's right edge, not the full chat width.
         <div className="flex w-full max-w-[80%] justify-end gap-1">
           {appId ? (
-            <McpAppStandaloneButton
-              app={ownedApp ?? { id: appId }}
-              disabled={recorder.status !== "idle"}
-            />
+            <McpAppStandaloneButton app={ownedApp ?? { id: appId }} />
           ) : null}
           <Button
             type="button"

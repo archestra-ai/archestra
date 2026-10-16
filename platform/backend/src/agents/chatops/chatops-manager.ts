@@ -2827,23 +2827,20 @@ export class ChatOpsManager {
    * True only on the bot's FIRST reply in a channel thread — sticky auto-reply
    * (and thus muting) exists only in channels, and claimThreadMuteHint ensures
    * the hint rides a single reply per thread rather than every one. Never for
-   * providers whose own Stop control is the off switch.
+   * DMs, where there is no sticky channel activation.
    */
   private async shouldHintThreadMute(
     provider: ChatOpsProvider,
     message: IncomingChatMessage,
   ): Promise<boolean> {
-    if (
-      provider.hasNativeStopControl ||
-      message.metadata?.conversationType !== "channel" ||
-      !message.threadId
-    ) {
+    if (message.metadata?.conversationType !== "channel" || !message.threadId) {
       return false;
     }
     return await claimThreadMuteHint({
       provider: provider.providerId,
       channelId: message.channelId,
       threadId: message.threadId,
+      ...(provider.stateScope && { scope: provider.stateScope }),
     });
   }
 

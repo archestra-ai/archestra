@@ -24,7 +24,6 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
-  TeamTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import ServiceAccountModel from "@/models/service-account";
@@ -646,11 +645,9 @@ async function resolveGatewayToken(params: {
   agentId: string;
   organizationId: string;
 }): Promise<string> {
-  if (params.actor.kind === "team") {
-    const token = await TeamTokenModel.findTeamToken(params.actor.id);
-    const value = token ? await TeamTokenModel.getTokenValue(token.id) : null;
-    if (value) return value;
-  } else {
+  // Team tokens are retired, so a team actor (only left on runs started
+  // before then) has nothing to act with.
+  if (params.actor.kind !== "team") {
     const selected = await selectMCPGatewayToken(
       params.agentId,
       params.actor.kind === "user" ? params.actor.id : "system",

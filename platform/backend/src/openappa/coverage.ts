@@ -1,15 +1,8 @@
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  calculatePaginationMeta,
-  parseFullToolName,
-} from "@archestra/shared";
-import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-tools";
-import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
-import { getAgentTypePermissionChecker } from "@/auth";
+import { calculatePaginationMeta, parseFullToolName } from "@archestra/shared";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { UNDECLARED_TOOL_ANNOTATOR } from "@/services/guardrails-policy";
 import type { CompositionView } from "@/types/openappa-batteries";
 import type {
   CoverageBatteryFit,
@@ -40,18 +33,17 @@ import {
 } from "./policy-text";
 
 /**
- * Which rule of the policy governs each tool reachable through a visible
- * agent, MCP gateway, or MCP server.
+ * Which rule of the policy governs each tool of a visible MCP server.
  *
  * The root text and every resolved battery's policy text are parsed here and
  * joined against the stored tool names: a tool matches a rule whose name,
  * without its argument selector, equals the tool's full name, battery rules
- * reaching it through `[server_aliases]`. Selectors, provider-run rules and
+ * reaching it through `aliases.mcp`. Selectors, provider-run rules and
  * canonical `mcp/…` spellings in the root are not evaluated, so a named rule
  * is not proof that the runtime judges a given call by it.
  *
- * Summary reports omit agent assignments. Server pages sorted by metadata
- * select their catalog page before the tools and policy counts are hydrated.
+ * Server pages sorted by metadata select their catalog page before the tools
+ * and policy counts are hydrated.
  */
 class OpenAppaCoverageService {
   /** Complete policy rows for one caller-readable catalog, without list facets. */
@@ -64,7 +56,6 @@ class OpenAppaCoverageService {
       {
         ...params,
         visibleCatalogIds: [params.catalogId],
-        includeAutoModeTools: false,
         includeAppCatalogs: true,
       },
       params.catalogId,
@@ -78,19 +69,11 @@ class OpenAppaCoverageService {
     params: { organizationId: string } & CoverageToolsQuery &
       CoverageVisibility,
   ): Promise<CoverageToolsPage> {
-    const { tools } = await buildReport(params.organizationId, {
-      ...params,
-      includeAutoModeTools: params.entityId !== undefined,
-      autoModeEntityId: params.entityId,
-    });
+    const { tools } = await buildReport(params.organizationId, params);
     const visibleCatalogIds = new Set(params.visibleCatalogIds ?? []);
     const reachable = tools
       .map((row) => row.tool)
-      .filter((tool) =>
-        params.entityId
-          ? tool.agents.some((agent) => agent.id === params.entityId)
-          : visibleCatalogIds.has(tool.catalogId),
-      );
+      .filter((tool) => visibleCatalogIds.has(tool.catalogId));
     const servers = [
       ...new Map(
         reachable.map((tool) => [
@@ -160,8 +143,6 @@ class OpenAppaCoverageService {
         return { data: [], pagination: selected.pagination };
       const { entities } = await buildReport(params.organizationId, {
         ...params,
-        includeAutoModeTools: false,
-        includeAgentAssignments: false,
         inventoryCatalogIds: selected.data.map((catalog) => catalog.id),
       });
       const byId = new Map(entities.map((entity) => [entity.id, entity]));
@@ -175,26 +156,19 @@ class OpenAppaCoverageService {
     }
     const { tools, entities } = await buildReport(params.organizationId, {
       ...params,
-      includeAutoModeTools: false,
-      includeAgentAssignments: false,
       inventoryCatalogIds: params.visibleCatalogIds ?? [],
     });
-    const tool = params.toolId
-      ? tools.find((row) => row.own && row.tool.toolId === params.toolId)?.tool
+    const toolCatalogId = params.toolId
+      ? (tools.find((row) => row.own && row.tool.toolId === params.toolId)?.tool
+          .catalogId ?? null)
       : undefined;
-    const reaching = params.toolId
-      ? new Set(
-          tool ? [tool.catalogId, ...tool.agents.map((agent) => agent.id)] : [],
-        )
-      : null;
     const search = params.search?.toLowerCase();
     const matching = entities.filter(
       (entity) =>
-        isListedTarget(entity) &&
         (!params.entityId || entity.id === params.entityId) &&
         (!search || entity.name.toLowerCase().includes(search)) &&
         (!params.type || entity.type === params.type) &&
-        (!reaching || reaching.has(entity.id)),
+        (toolCatalogId === undefined || entity.id === toolCatalogId),
     );
     matching.sort(compareTargets(params));
     return page(matching, params);
@@ -327,38 +301,23 @@ class OpenAppaCoverageService {
 
 export const openappaCoverageService = new OpenAppaCoverageService();
 
-/**
- * What a user sees of the coverage report: the registry entries they can
- * reach and the agent types they may read.
- */
+/** What a user sees of the coverage report: the registry entries they can reach. */
 export async function coverageVisibility(
   userId: string,
   organizationId: string,
 ) {
   // Registry administration is `update` on every entry, the grant the
   // retired `mcpServerInstallation:admin` role action converted into.
-  const [checker, isCatalogAdmin] = await Promise.all([
-    getAgentTypePermissionChecker({ userId, organizationId }),
-    isMcpInstallationAdmin({ userId, organizationId }),
-  ]);
+  const isCatalogAdmin = await isMcpInstallationAdmin({
+    userId,
+    organizationId,
+  });
   const visibleCatalogIds = await InternalMcpCatalogModel.findAccessibleIds({
     userId,
     isAdmin: isCatalogAdmin,
     organizationId,
   });
-  return {
-    userId,
-    visibleCatalogIds,
-    agentTypes: checker
-      .getAgentTypesWithPermission("read")
-      .filter(
-        (type): type is "agent" | "mcp_gateway" =>
-          type === "agent" || type === "mcp_gateway",
-      ),
-    excludeOtherPersonalTypes: (["agent", "mcp_gateway"] as const).filter(
-      (type) => checker.isAdmin(type),
-    ),
-  };
+  return { visibleCatalogIds };
 }
 
 /**
@@ -372,8 +331,6 @@ async function listedTools(
     params.organizationId,
     {
       ...params,
-      includeAutoModeTools: false,
-      includeAgentAssignments: false,
       inventoryCatalogIds: params.visibleCatalogIds ?? [],
     },
   );
@@ -495,19 +452,10 @@ type Report = {
 };
 
 type CoverageVisibility = {
-  userId?: string;
-  agentTypes?: Array<"agent" | "mcp_gateway">;
-  excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
   /** Registry entries this caller can see directly. */
   visibleCatalogIds?: string[];
-  /** Resolve the current viewer's dynamic Auto-mode tool access. */
-  includeAutoModeTools?: boolean;
-  /** Only resolve Auto-mode access for the target whose tools are requested. */
-  autoModeEntityId?: string;
   /** Per-catalog inspection reads app catalogs too; the overview leaves them out. */
   includeAppCatalogs?: boolean;
-  /** Summary and server rows never expose agent membership. */
-  includeAgentAssignments?: boolean;
   /** Visible catalogs, narrowed to the selected page when counts do not sort it. */
   inventoryCatalogIds?: string[];
 };
@@ -521,9 +469,9 @@ type Candidate = {
 };
 
 /**
- * `catalogId` reads only that catalog's tools and assignments. Each tool's row
- * depends on its own catalog, assignments and the policy alone, so the rows
- * for that catalog are the same as an organization-wide report's.
+ * `catalogId` reads only that catalog's tools. Each tool's row depends on its
+ * own catalog and the policy alone, so the rows for that catalog are the same
+ * as an organization-wide report's.
  */
 async function buildReport(
   organizationId: string,
@@ -533,16 +481,7 @@ async function buildReport(
   const [snapshot, inventory] = await Promise.all([
     openappaBatteriesService.coverageSnapshot(organizationId),
     ToolModel.findCoverageInventory(organizationId, {
-      visibility: visibility?.userId
-        ? {
-            userId: visibility.userId,
-            agentTypes: visibility.agentTypes ?? ["agent", "mcp_gateway"],
-            excludeOtherPersonalTypes:
-              visibility.excludeOtherPersonalTypes ?? [],
-          }
-        : undefined,
       includeAppCatalogs: visibility?.includeAppCatalogs,
-      includeAgentAssignments: visibility?.includeAgentAssignments,
       catalogIds: visibility?.inventoryCatalogIds,
       catalogId,
     }),
@@ -651,67 +590,6 @@ async function buildReport(
     else byMatch.set(entry.match, [entry]);
   }
 
-  const agentsByTool = new Map<string, Map<string, string>>();
-  const inCoverage = new Set(inventory.tools.map((tool) => tool.id));
-  const autoAccess = new Map<string, Set<string>>();
-  const autoModeEntityIds = visibility?.autoModeEntityId
-    ? new Set([visibility.autoModeEntityId])
-    : null;
-  if (visibility?.includeAutoModeTools && visibility.userId) {
-    await Promise.all(
-      inventory.entities
-        .filter(
-          (entity) =>
-            entity.accessAllTools &&
-            (!autoModeEntityIds || autoModeEntityIds.has(entity.id)),
-        )
-        .map(async (entity) => {
-          const { tools: assigned, exclusionSets } =
-            await agentToolExclusionsService.getFilteredMcpToolsByAgent(
-              entity.id,
-            );
-          const discovered = await getUnassignedDiscoverableTools({
-            assignedToolNames: new Set(assigned.map((tool) => tool.name)),
-            agentId: entity.id,
-            userId: visibility.userId,
-            organizationId,
-            exclusionSets,
-          });
-          const permittedNames = await filterToolNamesByPermission(
-            [...assigned, ...discovered].map((tool) => tool.name),
-            visibility.userId,
-            organizationId,
-          );
-          // Search resolves each name once: assigned rows win, then the
-          // newest discoverable row. Count that same dispatchable set.
-          const seenNames = new Set<string>();
-          const reachableIds = [...assigned, ...discovered].flatMap((tool) => {
-            if (!permittedNames.has(tool.name)) return [];
-            if (seenNames.has(tool.name)) return [];
-            seenNames.add(tool.name);
-            return inCoverage.has(tool.id) ? [tool.id] : [];
-          });
-          autoAccess.set(entity.id, new Set(reachableIds));
-        }),
-    );
-  }
-  for (const { toolId, agentId, agentName } of inventory.assignments) {
-    const effective = autoAccess.get(agentId);
-    if (effective && !effective.has(toolId)) continue;
-    agentsByTool.set(
-      toolId,
-      (agentsByTool.get(toolId) ?? new Map()).set(agentId, agentName),
-    );
-  }
-  for (const entity of inventory.entities) {
-    const effective = autoAccess.get(entity.id);
-    if (!effective) continue;
-    for (const toolId of effective)
-      agentsByTool.set(
-        toolId,
-        (agentsByTool.get(toolId) ?? new Map()).set(entity.id, entity.name),
-      );
-  }
   const catalogById = new Map(
     inventory.catalogs.map((catalog) => [catalog.id, catalog]),
   );
@@ -722,9 +600,6 @@ async function buildReport(
   for (const tool of inventory.tools) {
     const { serverName: prefix, toolName } = parseFullToolName(tool.name);
     if (prefix === null) continue;
-    const agents = [...(agentsByTool.get(tool.id) ?? new Map())]
-      .map(([id, name]) => ({ id, name }))
-      .sort(byName);
     const matched = byMatch.get(tool.name) ?? [];
     const base = {
       toolId: tool.id,
@@ -735,17 +610,19 @@ async function buildReport(
       name: toolName,
       fullName: tool.name,
       readOnly: tool.readOnlyHint,
-      agents,
     };
     const specific = matched.find((entry) => entry.rule.selector === null);
     const primary = specific ?? fallback;
-    // The default noop wildcard deliberately adds no coverage. Origin and
-    // revision do not change this classification.
+    // The default wildcards deliberately add no coverage: noop adds nothing,
+    // and the default model catch-all is what judges a tool no rule names.
+    // Origin and revision do not change this classification.
     const covered =
       primary !== null &&
       primary !== undefined &&
       !(
-        primary.rule.source === "catchall" && primary.rule.annotator === "noop"
+        primary.rule.source === "catchall" &&
+        primary.rule.annotator !== null &&
+        DEFAULT_CATCH_ALL_ANNOTATORS.has(primary.rule.annotator)
       );
     const own: CoverageTool = primary
       ? {
@@ -798,43 +675,12 @@ async function buildReport(
       .map((row) => row.tool.toolId),
   );
 
-  const entitiesById = new Map<string, CoverageEntity>(
-    inventory.entities.map((entity) => [
-      entity.id,
-      {
-        id: entity.id,
-        name: entity.name,
-        type: entity.agentType,
-        scope: entity.scope,
-        icon: entity.icon,
-        toolCount: 0,
-        governedCount: 0,
-        fallbackCount: 0,
-        builtInCount: 0,
-        rules: emptyRuleCounts(),
-        autoMode: entity.accessAllTools,
-      },
-    ]),
-  );
-  for (const { tool, own } of rows) {
-    if (!own) continue;
-    for (const agent of tool.agents) {
-      const entity = entitiesById.get(agent.id);
-      if (!entity) continue;
-      entity.toolCount += 1;
-      if (explicitlyGovernedTools.has(tool.toolId)) entity.governedCount += 1;
-      if (tool.rule === null || tool.rule.source === "catchall")
-        entity.fallbackCount += 1;
-      if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) entity.builtInCount += 1;
-      entity.rules[ruleBucket(tool)] += 1;
-      entitiesById.set(agent.id, entity);
-    }
-  }
+  const entities: CoverageEntity[] = [];
   const visibleCatalogIds = new Set(visibility?.visibleCatalogIds ?? []);
   for (const catalog of inventory.catalogs) {
     if (!visibleCatalogIds.has(catalog.id)) continue;
     const serverTools = toolsByCatalog.get(catalog.id) ?? [];
-    entitiesById.set(catalog.id, {
+    entities.push({
       id: catalog.id,
       name: catalog.name,
       type: "mcp_server",
@@ -847,12 +693,9 @@ async function buildReport(
       fallbackCount: serverTools.filter(
         (tool) => tool.rule === null || tool.rule.source === "catchall",
       ).length,
-      builtInCount: 0,
       rules: countRules(serverTools),
-      autoMode: false,
     });
   }
-  const entities = [...entitiesById.values()];
 
   return {
     tools: rows,
@@ -863,19 +706,8 @@ async function buildReport(
   };
 }
 
-/** Only registry servers are policy targets; agents and gateways are not listed. */
-function isListedTarget(entity: { type: string }): boolean {
-  return entity.type === "mcp_server";
-}
-
-const TARGET_TYPE_ORDER: Record<CoverageEntity["type"], number> = {
-  mcp_server: 0,
-  mcp_gateway: 1,
-  agent: 2,
-};
-
 /** A target as far as sorting reads it; a page is sorted before its counts exist. */
-type SortableTarget = Pick<CoverageEntity, "id" | "name" | "type"> &
+type SortableTarget = Pick<CoverageEntity, "id" | "name"> &
   Partial<Pick<CoverageEntity, "toolCount">>;
 
 /** How an entities query orders its targets; see `sortBy`. */
@@ -887,11 +719,8 @@ function compareTargets(
   const alphabetical = (a: SortableTarget, b: SortableTarget) =>
     a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
   if (sortBy === "name") return (a, b) => sign * alphabetical(a, b);
-  const key = (target: SortableTarget) =>
-    sortBy === "type"
-      ? TARGET_TYPE_ORDER[target.type]
-      : (target.toolCount ?? 0);
-  return (a, b) => sign * (key(a) - key(b)) || alphabetical(a, b);
+  return (a, b) =>
+    sign * ((a.toolCount ?? 0) - (b.toolCount ?? 0)) || alphabetical(a, b);
 }
 
 // =============================================================================
@@ -1003,3 +832,9 @@ function page<T>(
 
 /** A battery rule's name: `mcp/<namespace>/<tool>`. */
 const CANONICAL_RULE_NAME = /^mcp\/([^/]+)\/(.+)$/;
+
+/** The catch-all annotators a default policy routes `*` to. */
+const DEFAULT_CATCH_ALL_ANNOTATORS = new Set([
+  "noop",
+  UNDECLARED_TOOL_ANNOTATOR,
+]);

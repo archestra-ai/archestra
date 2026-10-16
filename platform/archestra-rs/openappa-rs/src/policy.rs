@@ -3,7 +3,7 @@
 //! The runtime opens under the Archestra adapter: every tool name the host hands it
 //! derives to a canonical identity (`<catalog>__<tool>` → `mcp/<catalog>/<tool>`), so a
 //! battery rule written canonically reaches an installed catalog through the
-//! `server_aliases` table the host composes into the document.
+//! `aliases.mcp` table the host composes into the document.
 use appa_eventlog::LogStore;
 use appa_package::PackageName;
 use appa_runtime::{
@@ -20,7 +20,7 @@ use std::{
 /// helper bridge derives its own deadline from it.
 pub(crate) const CONSULT_TIMEOUT: Duration = Duration::from_millis(5000);
 
-fn defaults() -> HostDefaults {
+pub(crate) fn defaults() -> HostDefaults {
     HostDefaults {
         archestra: archestra_endpoint(),
         ..HostDefaults::new(CONSULT_TIMEOUT, host_max_body_bytes())
@@ -132,7 +132,7 @@ pub(crate) struct Composed {
 }
 
 /// Compose the effective document: the root's own declarations — its `include` list,
-/// its `[server_aliases]` and its `[credentials]` — with every included battery under
+/// its `[aliases]` and its `[credentials]` — with every included battery under
 /// it by the runtime's include rules. An entry `batteries` does not answer is
 /// unresolved, which the runtime refuses naming the entry. The composed document is
 /// checked as an open checks it, so a composition that returns is also a validation.
@@ -685,7 +685,7 @@ delta = { audience = ["internal"] }
     async fn host_spelled_rules_and_aliased_battery_rules_judge_the_calls_they_name() {
         let content = compose(
             &format!(
-                "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n[[policy.tool]]\nname = \"github_prod__get_me\"\ndelta = {{}}\n[[policy.tool]]\nname = \"read\"\ndelta = {{}}\n"
+                "include = [\"{GITHUB_ENTRY}\"]\n[aliases.mcp]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n[[policy.tool]]\nname = \"github_prod__get_me\"\ndelta = {{}}\n[[policy.tool]]\nname = \"read\"\ndelta = {{}}\n"
             ),
             &[github_battery()],
         )
@@ -751,7 +751,7 @@ delta = {}
     async fn an_open_trajectory_is_judged_by_the_document_it_opened_under() {
         let root = format!("include = [\"{GITHUB_ENTRY}\"]\n[policy]\nversion = 2\n");
         let aliased = compose(
-            &format!("{root}[server_aliases]\ngithub = [\"github_prod\"]\n"),
+            &format!("{root}[aliases.mcp]\ngithub = [\"github_prod\"]\n"),
             &[github_battery()],
         )
         .unwrap()
@@ -834,7 +834,7 @@ token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
   "{LINEAR_ENTRY}",
 ]
 
-[server_aliases]
+[aliases.mcp]
 github = ["github_prod"]
 linear = ["linear"]
 
@@ -880,7 +880,7 @@ delta = {{}}
             composed.content
         );
         assert_eq!(
-            document["server_aliases"]["github"][0].as_str(),
+            document["aliases"]["mcp"]["github"][0].as_str(),
             Some("github_prod")
         );
         // The stored bytes are a hosted document: they reload as they are, with the
@@ -937,7 +937,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             }),
         };
         let root = format!(
-            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+            "include = [\"{GITHUB_ENTRY}\"]\n[aliases.mcp]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
         );
         let composed = compose(&root, &[battery()]).unwrap().content;
         assert_eq!(composed, compose(&root, &[battery()]).unwrap().content);
@@ -952,7 +952,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         assert_eq!(binding["token_env"].as_str(), Some(BRIDGE_TOKEN_ENV));
         assert!(binding.get("command").is_none());
         assert_eq!(
-            document["server_aliases"]["github"]
+            document["aliases"]["mcp"]["github"]
                 .as_array()
                 .map(Vec::len),
             Some(1)
@@ -989,7 +989,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             }),
         };
         let root = format!(
-            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+            "include = [\"{GITHUB_ENTRY}\"]\n[aliases.mcp]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
         );
         let roster = |content: &str| {
             let document: toml::Table = toml::from_str(content).unwrap();
@@ -1070,7 +1070,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         }
         };
         let root = format!(
-            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+            "include = [\"{GITHUB_ENTRY}\"]\n[aliases.mcp]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
         );
         let composed = compose(&root, &[battery()]).unwrap().content;
         let document: toml::Table = toml::from_str(&composed).unwrap();
@@ -1110,7 +1110,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         // SAFETY: as above.
         unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
         let root = format!(
-            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+            "include = [\"{GITHUB_ENTRY}\"]\n[aliases.mcp]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
         );
         for name in ["..", "."] {
             let battery = ResolvedBattery {
@@ -1133,8 +1133,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
     #[test]
     fn the_root_may_author_its_alias_table() {
         assert!(
-            validate("[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n")
-                .is_ok()
+            validate("[aliases.mcp]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n").is_ok()
         );
     }
 
@@ -1280,7 +1279,7 @@ command = ["python3", "judge.py"]
             ..github_battery()
         };
         let root = format!(
-            "include = [\"batteries/jev/appa.toml\", \"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = \"jev_key\"\nAPPA_PROVIDER_GITHUB_TOKEN = \"github_key\"\n[policy]\nversion = 2\n[[policy.tool]]\nname = \"read\"\nannotator = \"jev.tool-call\"\n"
+            "include = [\"batteries/jev/appa.toml\", \"{GITHUB_ENTRY}\"]\n[aliases.mcp]\ngithub = [\"github_prod\"]\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = \"jev_key\"\nAPPA_PROVIDER_GITHUB_TOKEN = \"github_key\"\n[policy]\nversion = 2\n[[policy.tool]]\nname = \"read\"\nannotator = \"jev.tool-call\"\n"
         );
         let jev_battery = || ResolvedBattery {
             entry: "batteries/jev/appa.toml".into(),

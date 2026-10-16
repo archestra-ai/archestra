@@ -161,7 +161,7 @@ function rootPolicy(params: { acmeEntry: string; github?: boolean }): string {
   ];
   return `include = [${includes.map((entry) => `"${entry}"`).join(", ")}]
 
-[server_aliases]
+[aliases.mcp]
 microsoft-learn = ["docs"]
 acme = [${params.github ? `"acme", "mixed"` : `"acme"`}]
 jira = ["jira_cloud"]

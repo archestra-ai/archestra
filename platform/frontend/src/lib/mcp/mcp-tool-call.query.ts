@@ -19,6 +19,8 @@ export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
       return "Org Token";
     case "team_token":
       return "Team Token";
+    case "service_account_token":
+      return "Service Account";
     case "external_idp":
       return "External IdP";
     case "session":
@@ -30,7 +32,9 @@ export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
  * Who a tool call ran on behalf of, for the calls the platform served itself.
  * A call made with a gateway token carries no user, and an auditor still needs
  * an identity for it: the token acts for its team or for the organization, so
- * that is who made the call. The auth method stays visible in its own column.
+ * that is who made the call. A service account normally carries its own name;
+ * one that has since been deleted still reads as a service account rather than
+ * an unknown caller. The auth method stays visible in its own column.
  */
 export function formatCallerIdentity(row: {
   userName: string | null;
@@ -44,6 +48,8 @@ export function formatCallerIdentity(row: {
       return { name: null, scope: "org" };
     case "team_token":
       return { name: null, scope: "team" };
+    case "service_account_token":
+      return { name: "Service account", scope: "org" };
     default:
       // Every other method authenticates a person, so a missing name means the
       // user is gone — there is nothing to name them by.

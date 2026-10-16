@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   buildSlackManifest,
   migrateSlackManifest,
+  SLACK_BOT_EVENTS,
   SLACK_REQUIRED_BOT_SCOPES,
   slackHandleFor,
   TimeInMs,
@@ -19,6 +20,7 @@ import type {
   SlackAgentBotConfig,
   SlackAppConfigToken,
   SlackAppMigrationResult,
+  SlackDbConfig,
 } from "@/types";
 import { errorMessage } from "./utils";
 
@@ -42,7 +44,7 @@ import { errorMessage } from "./utils";
  * so that one is always pasted.
  */
 class SlackAppFactory {
-  /** Apps whose manifest already asks for every required scope. */
+  /** Apps whose manifest already asks for every required scope and event. */
   private readonly manifestsWithScopes = new Set<string>();
 
   /** Validate and store a user's app configuration token pair. */
@@ -356,15 +358,15 @@ class SlackAppFactory {
   }
 
   /**
-   * A new Archestra version can need a scope an app's manifest does not ask
-   * for yet, and a reinstall only grants what the manifest asks for. So when a
-   * bot Archestra manages is missing scopes, add them to its manifest; the
-   * reinstall the settings page then asks for grants them. Checked once per
-   * app and scope list per process. Never throws.
+   * Keep managed apps subscribed to current events as well as required scopes.
+   * A reinstall alone cannot restore missing event subscriptions. Checked once
+   * per app and requirement list per process. Never throws.
    */
-  async ensureManifestScopes(bot: SlackAgentBotConfig): Promise<void> {
+  async ensureManifestScopes(
+    bot: SlackDbConfig | SlackAgentBotConfig,
+  ): Promise<void> {
     if (!bot.appId || !(bot.managed || bot.clientId)) return;
-    const key = `${bot.appId}:${SLACK_REQUIRED_BOT_SCOPES.join(",")}`;
+    const key = `${bot.appId}:${SLACK_REQUIRED_BOT_SCOPES.join(",")}:${SLACK_BOT_EVENTS.join(",")}`;
     if (this.manifestsWithScopes.has(key)) return;
     try {
       if (!(await this.hasTokenFor(bot))) return;
@@ -381,25 +383,42 @@ class SlackAppFactory {
       const asked =
         (manifest.oauth_config as { scopes?: { bot?: string[] } } | undefined)
           ?.scopes?.bot ?? [];
-      if (!SLACK_REQUIRED_BOT_SCOPES.every((scope) => asked.includes(scope))) {
+      const settings = manifest.settings as
+        | { event_subscriptions?: { bot_events?: string[] } }
+        | undefined;
+      const subscribed = settings?.event_subscriptions?.bot_events ?? [];
+      if (
+        !SLACK_REQUIRED_BOT_SCOPES.every((scope) => asked.includes(scope)) ||
+        !SLACK_BOT_EVENTS.every((event) => subscribed.includes(event))
+      ) {
+        const updated = migrateSlackManifest(manifest) as {
+          oauth_config: { scopes: { bot: string[] } };
+          settings: { event_subscriptions: { bot_events: string[] } };
+        };
+        updated.oauth_config.scopes.bot = [
+          ...new Set([...asked, ...SLACK_REQUIRED_BOT_SCOPES]),
+        ];
+        updated.settings.event_subscriptions.bot_events = [
+          ...new Set([...subscribed, ...SLACK_BOT_EVENTS]),
+        ];
         await client.apps.manifest.update({
           token,
           app_id: bot.appId,
           // Slack's own export, patched: it is a valid manifest by construction.
-          manifest: migrateSlackManifest(manifest) as unknown as Parameters<
+          manifest: updated as unknown as Parameters<
             WebClient["apps"]["manifest"]["update"]
           >[0]["manifest"],
         });
         logger.info(
           { appId: bot.appId },
-          "[SlackAppFactory] Added newly required scopes to a Slack app's manifest",
+          "[SlackAppFactory] Added required scopes and events to a Slack app's manifest",
         );
       }
       this.manifestsWithScopes.add(key);
     } catch (error) {
       logger.warn(
         { error: errorMessage(error), appId: bot.appId },
-        "[SlackAppFactory] Could not add required scopes to a Slack app's manifest",
+        "[SlackAppFactory] Could not add required scopes and events to a Slack app's manifest",
       );
     }
   }
@@ -642,7 +661,7 @@ class SlackAppFactory {
   }
 
   /** Whether the token that manages this bot's app is still saved. */
-  private async hasTokenFor(bot: SlackAgentBotConfig): Promise<boolean> {
+  private async hasTokenFor(bot: SlackDbConfig): Promise<boolean> {
     return (
       (await ChatOpsConfigModel.getSlackAppConfigToken(
         bot.configTokenUserId,

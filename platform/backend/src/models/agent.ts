@@ -1640,6 +1640,18 @@ class AgentModel {
             scopeColumn: schema.agentsTable.id,
             action: "use",
           }),
+          // Like the agents page without admin access: an admin can use
+          // every agent, but pickers offer only theirs and those shared
+          // with them or the organization.
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            organizationId: schema.agentsTable.organizationId,
+            resource: "agent",
+            scopeColumn: schema.agentsTable.id,
+            ownerColumn: schema.agentsTable.authorId,
+            userId: params.userId,
+            subjects: principal.subjects,
+            relations: ["mine", "shared", "org"],
+          }),
           params.includePersonal ? undefined : not(agentAudienceIs("personal")),
         ),
       )

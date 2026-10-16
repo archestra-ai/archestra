@@ -33,6 +33,7 @@ import {
 } from "@/utils/llm-resolution";
 import { clientSessionId } from "./actor";
 import type { OpenappaEncryptedChat } from "./encrypted-chat";
+import type { OpenappaReplayOwner } from "./replay-owner";
 import { callerUserId } from "./service";
 
 /** The trajectory a consult is made for, absent for one made off a session. */
@@ -59,6 +60,7 @@ type CallOwner =
       sessionId: string;
       userId: string | undefined;
     }
+  | { kind: "replay"; organizationId: string; userId: string | undefined }
   | { kind: "unattributed" };
 
 type ArchestraAnnotationOutcome =
@@ -75,13 +77,23 @@ type ArchestraAnnotationOutcome =
  * built-in OpenAPPA configuration agent, so limits, logs and cost apply.
  */
 class OpenAppaArchestraAnnotator {
-  async annotate(
-    request: ArchestraAnnotationRequest,
-    encryptedChat: OpenappaEncryptedChat | null = null,
-  ): Promise<ArchestraAnnotationOutcome> {
+  async annotate(params: {
+    request: ArchestraAnnotationRequest;
+    encryptedChat: OpenappaEncryptedChat | null;
+    replay: OpenappaReplayOwner | null;
+    /** Aborts the model work once the runtime stops waiting for the answer. */
+    abortSignal: AbortSignal;
+  }): Promise<ArchestraAnnotationOutcome> {
+    const { request, encryptedChat, replay, abortSignal } = params;
     const owner: CallOwner = encryptedChat
       ? { kind: "encrypted-chat", chat: encryptedChat }
-      : await sessionOwner(request.attribution);
+      : replay
+        ? {
+            kind: "replay",
+            organizationId: replay.organizationId,
+            userId: replay.userId ?? undefined,
+          }
+        : await sessionOwner(request.attribution);
     const organization = await ownerOrganization(owner);
     if (!organization)
       return { kind: "unconfigured", reason: "No organization exists yet." };
@@ -150,7 +162,7 @@ class OpenAppaArchestraAnnotator {
       budget === undefined
         ? undefined
         : Math.floor(budget / TRUNCATION_RETRY_FACTOR);
-    const call = { model, system, request, maxOutputTokens };
+    const call = { model, system, request, maxOutputTokens, abortSignal };
     const formatKey = JSON.stringify([
       selection.provider,
       selection.modelName,
@@ -187,6 +199,11 @@ class OpenAppaArchestraAnnotator {
       }
       return { kind: "answered", answer };
     } catch (error) {
+      if (abortSignal.aborted)
+        return {
+          kind: "failed",
+          reason: "The runtime stopped waiting for the annotation.",
+        };
       const apiError = APICallError.isInstance(error) ? error : null;
       const status = apiError?.statusCode;
       // 429 is the provider's rate limit; 402 is Archestra's token-cost limit.
@@ -251,6 +268,7 @@ function ownerOrganization(owner: CallOwner) {
     case "encrypted-chat":
       return OrganizationModel.getById(owner.chat.organizationId);
     case "session":
+    case "replay":
       return OrganizationModel.getById(owner.organizationId);
     case "unattributed":
       return OrganizationModel.getFirst();
@@ -267,6 +285,8 @@ function ownerIdentity(owner: CallOwner) {
       };
     case "session":
       return { sessionId: owner.sessionId, userId: owner.userId };
+    case "replay":
+      return { userId: owner.userId };
     case "unattributed":
       return {};
   }
@@ -277,6 +297,7 @@ type AnnotationCall = {
   system: SystemModelMessage;
   request: ArchestraAnnotationRequest;
   maxOutputTokens: number | undefined;
+  abortSignal: AbortSignal;
 };
 
 /**
@@ -317,6 +338,7 @@ async function structuredAnswer(
       prompt: call.request.input,
       output: Output.object({ schema: jsonSchema(call.request.schema) }),
       maxOutputTokens: call.maxOutputTokens,
+      abortSignal: call.abortSignal,
     });
     if (!isPlainObject(output)) return { kind: "unparsed" };
     formatStrikes.delete(call.formatKey);
@@ -343,6 +365,7 @@ async function taggedAnswer(
     system: call.system,
     prompt: call.request.input,
     maxOutputTokens: call.maxOutputTokens,
+    abortSignal: call.abortSignal,
   });
   return text === null ? null : parseObject(text);
 }

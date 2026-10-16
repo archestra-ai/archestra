@@ -39,7 +39,6 @@ export function conversationStorageKeys(conversationId: string) {
     rightPanelTab: `archestra-chat-right-panel-tab-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
     messageQueue: `archestra_chat_queue_${conversationId}`,
-    reviewContext: `archestra-chat-review-context-${conversationId}`,
     encryptedChatKey: `archestra_encrypted_chat_key_${conversationId}`,
     /**
      * Where the encrypted-chat key lived under the feature's former names

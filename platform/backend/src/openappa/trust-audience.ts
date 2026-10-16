@@ -96,7 +96,10 @@ class OpenAppaTrustAudienceService {
         };
       return {
         name,
-        kind: name !== "public" && named.has(name) ? "unmapped" : "builtin",
+        kind:
+          ANSWERED_UNMAPPED.has(name) || !named.has(name)
+            ? "builtin"
+            : "unmapped",
       };
     });
 
@@ -160,6 +163,13 @@ const DEFAULT_TRUST_CHAIN = ["suspicious", "trusted"];
  * `public` (`ChainAudience` in OpenAPPA's `appa-engine/src/label.rs`).
  */
 const CHAIN_AUDIENCES = ["public", "internal", "self"];
+
+/**
+ * Levels the runtime answers without a mapping: `public` is everyone, and
+ * `self` is the session principal, which the platform names for every session
+ * acting for a member (`sessionPrincipal` in `./service`).
+ */
+const ANSWERED_UNMAPPED = new Set(["public", "self"]);
 
 type PolicyFile = { entry: string | null; text: string };
 type IncludedBattery = PolicyFile &

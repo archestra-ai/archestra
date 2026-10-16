@@ -211,6 +211,20 @@ describe("access box", () => {
     expect(useHasPermissions).toHaveBeenCalledWith({ agent: ["read"] }, "*");
   });
 
+  it("offers only Mine and Shared with me when admin access is turned off", async () => {
+    setReadsEveryObject(true);
+    renderFilter({ offerAdminAccess: false });
+    const user = userEvent.setup();
+    await user.click(accessTrigger());
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(
+      screen.queryByRole("checkbox", { name: /Admin access/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: /Built-in/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps a bookmarked admin selection clearable without that access", async () => {
     setReadsEveryObject(false);
     setQuery("access=mine,others");

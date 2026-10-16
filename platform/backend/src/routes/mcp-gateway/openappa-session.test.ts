@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import formbody from "@fastify/formbody";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -10,6 +11,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { A2AManager } from "@/agents/a2a/a2a-manager";
 import config, { parseOpenAppaConfig } from "@/config";
 import * as database from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -22,8 +24,11 @@ import {
   UserTokenModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import ManagedOauthClientModel from "@/models/managed-oauth-client";
+import ServiceAccountModel from "@/models/service-account";
 import { scopedSessionId } from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
+import authRoutes from "@/routes/auth";
 import {
   issueRuntimeBinding,
   RUNTIME_BINDING_HEADER,
@@ -76,6 +81,8 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    await app.register(formbody);
+    await app.register(authRoutes);
     await app.register(mcpGatewayRoutes);
   });
 
@@ -446,6 +453,145 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
   });
 
+  for (const scope of ["a2a", "a2a mcp"]) {
+    test(`OAuth client credentials with scope ${scope} start an account-bound MCP session`, async ({
+      makeOrganization,
+      makeAgent,
+      makeUser,
+      makeServiceAccount,
+    }) => {
+      config.openappa.offerSigningSecret =
+        "test-runtime-binding-secret-32chars";
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const agent = await makeAgent({ organizationId: org.id });
+      const account = await makeServiceAccount(org.id, { role: "admin" });
+      const otherAccount = await makeServiceAccount(org.id, { role: "admin" });
+      const { oauthClient, clientSecret } =
+        await ManagedOauthClientModel.create({
+          organizationId: org.id,
+          authorId: user.id,
+          name: "Runtime automation",
+          serviceAccountId: account.id,
+          scopes: ["a2a", "mcp"],
+          allowedGatewayIds: [agent.id],
+        });
+      const tokenResponse = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        payload: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: oauthClient.clientId,
+          client_secret: clientSecret,
+          scope,
+        }).toString(),
+      });
+      expect(tokenResponse.statusCode, tokenResponse.body).toBe(200);
+      const oauthToken = tokenResponse.json().access_token;
+      const actor = await new A2AManager().resolveActorByMCPGatewayToken(
+        agent.id,
+        oauthToken,
+      );
+      expect(actor).toMatchObject({ kind: "serviceAccount", id: account.id });
+      const current = await persistBoundRun({
+        organizationId: org.id,
+        agentId: agent.id,
+        actorKind: "serviceAccount",
+        actorId: actor.id,
+      });
+      const spec = {
+        env: {},
+        secretEnv: {} as Record<string, string>,
+        activeDeadlineSeconds: 120,
+      };
+      await stampRuntimeBinding({
+        spec,
+        organizationId: org.id,
+        workspaceId: current.workspace.id,
+        taskId: current.task.id,
+      });
+      // The runtime gets its own expiring account token, even when dispatch
+      // uses an OAuth token with only the A2A scope.
+      const runtimeToken = await ServiceAccountModel.createToken({
+        serviceAccountId: account.id,
+        organizationId: org.id,
+        name: "Runtime gateway",
+        expiresIn: 120,
+      });
+      const headers = {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${runtimeToken.token}`,
+        [RUNTIME_BINDING_HEADER]: spec.secretEnv[RUNTIME_BINDING_ENV],
+        "x-archestra-run-id": current.task.id,
+      };
+      // A broad gateway grant must not let another account enter this workspace.
+      const foreign = await ServiceAccountModel.createToken({
+        serviceAccountId: otherAccount.id,
+        organizationId: org.id,
+        name: "Other runtime",
+        expiresIn: 120,
+      });
+      const denied = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: { ...headers, authorization: `Bearer ${foreign.token}` },
+        payload: { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      });
+      expect(denied.statusCode, denied.body).toBe(400);
+      expect(denied.json().error.message).toBe(
+        "OpenAPPA runtime credential does not match this workspace",
+      );
+      for (const credential of [
+        runtimeToken.token,
+        ...(scope.includes("mcp") ? [oauthToken] : []),
+      ]) {
+        for (const withSession of [false, true]) {
+          for (const method of [
+            "initialize",
+            "notifications/initialized",
+            "tools/list",
+          ]) {
+            const response = await app.inject({
+              method: "POST",
+              url: `/v1/mcp/${agent.id}`,
+              headers: {
+                ...headers,
+                authorization: `Bearer ${credential}`,
+                ...(withSession
+                  ? { "x-appa-session-id": current.workspace.workloadName }
+                  : {}),
+              },
+              payload: {
+                jsonrpc: "2.0",
+                ...(method !== "notifications/initialized" ? { id: 1 } : {}),
+                method,
+                ...(method === "initialize"
+                  ? {
+                      params: {
+                        protocolVersion: "2025-03-26",
+                        capabilities: {},
+                        clientInfo: { name: "runtime-test", version: "1" },
+                      },
+                    }
+                  : {}),
+              },
+            });
+            expect(response.statusCode, response.body).toBe(
+              method === "notifications/initialized" ? 202 : 200,
+            );
+            if (method !== "notifications/initialized") {
+              expect(response.json().error, response.body).toBeUndefined();
+              if (method === "tools/list")
+                expect(response.json().result.tools).toBeInstanceOf(Array);
+            }
+          }
+        }
+      }
+    });
+  }
+
   test("application runtimes discover tools with OpenAPPA disabled and reject forged bindings", async ({
     makeAgent,
     makeOrganization,
@@ -783,7 +929,7 @@ async function stampSibling(
 async function persistBoundRun(params: {
   organizationId: string;
   agentId: string;
-  actorKind: "team" | "system" | "oauthClient";
+  actorKind: "team" | "system" | "oauthClient" | "serviceAccount";
   actorId: string;
 }) {
   const task = await A2ATaskModel.create({

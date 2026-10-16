@@ -15,14 +15,19 @@ import "@microsoft/msgraph-sdk-chats";
 import "@microsoft/msgraph-sdk-teams";
 import "@microsoft/msgraph-sdk-users";
 import {
+  Activity,
   ActivityTypes,
-  CloudAdapter,
-  ConfigurationBotFrameworkAuthentication,
   type ConversationReference,
-  TeamsInfo,
+} from "@microsoft/agents-activity";
+import {
+  type AuthConfiguration,
+  authorizeJWT,
+  CloudAdapter,
+  type Request,
   TurnContext,
-} from "botbuilder";
-import { PasswordServiceClientCredentialFactory } from "botframework-connector";
+  type WebResponse,
+} from "@microsoft/agents-hosting";
+import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { LRUCacheManager } from "@/cache-manager";
@@ -61,10 +66,10 @@ import {
 } from "./utils";
 
 /**
- * MS Teams provider using Bot Framework SDK.
+ * MS Teams provider using Microsoft 365 Agents SDK.
  *
  * Security:
- * - JWT validation handled automatically by CloudAdapter
+ * - JWT validation runs before the adapter processes any activity
  * - Supports single-tenant and multi-tenant Azure Bot configurations
  */
 class MSTeamsProvider implements ChatOpsProvider {
@@ -72,6 +77,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   readonly displayName = "Microsoft Teams";
 
   private adapter: CloudAdapter | null = null;
+  private authorize: ReturnType<typeof authorizeJWT> | null = null;
   private graphClient: GraphServiceClient | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private config: MsTeamsDbConfig;
@@ -114,35 +120,32 @@ class MSTeamsProvider implements ChatOpsProvider {
       clientSecret: this.config.graphClientSecret,
     };
 
-    // Initialize Bot Framework adapter
-    const credentialsFactory = tenantId
-      ? new PasswordServiceClientCredentialFactory(appId, appSecret, tenantId)
-      : new PasswordServiceClientCredentialFactory(appId, appSecret);
-
-    // A tenant ID means this is a single-tenant Azure Bot. The adapter must be
-    // told so (MicrosoftAppType=SingleTenant) — otherwise it defaults to
-    // MultiTenant and validates tokens against the wrong (common) authority,
-    // rejecting every inbound activity with "Unauthorized. No valid identity."
-    const auth = new ConfigurationBotFrameworkAuthentication(
-      {
-        MicrosoftAppId: appId,
-        MicrosoftAppType: tenantId ? "SingleTenant" : "MultiTenant",
-        MicrosoftAppTenantId: tenantId || undefined,
-      },
-      credentialsFactory,
-    );
-
-    this.adapter = new CloudAdapter(auth);
+    const connection: AuthConfiguration = {
+      clientId: appId,
+      clientSecret: appSecret,
+      // Legacy multi-tenant bots acquire connector tokens from this tenant.
+      tenantId: tenantId || "botframework.com",
+      validateIssuer: true,
+    };
+    const auth: AuthConfiguration = {
+      ...connection,
+      connections: new Map([["teams", connection]]),
+      connectionsMap: [{ serviceUrl: "*", connection: "teams" }],
+    };
+    this.authorize = authorizeJWT(auth);
+    this.adapter = new CloudAdapter(auth, undefined, undefined, {
+      validateServiceUrl: true,
+    });
     this.adapter.onTurnError = async (_context, error) => {
       logger.error(
         { error: errorMessage(error) },
-        "[MSTeamsProvider] Bot Framework error",
+        "[MSTeamsProvider] Agents SDK turn error",
       );
     };
 
     logger.info(
       { tenantMode: tenantId ? "single-tenant" : "multi-tenant" },
-      "[MSTeamsProvider] Bot Framework adapter initialized",
+      "[MSTeamsProvider] Agents SDK adapter initialized",
     );
 
     // Initialize Graph client if configured
@@ -167,6 +170,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   async cleanup(): Promise<void> {
     this.adapter = null;
+    this.authorize = null;
     this.graphClient = null;
     this.eventHandler = null;
     logger.info("[MSTeamsProvider] Cleaned up");
@@ -336,11 +340,8 @@ class MSTeamsProvider implements ChatOpsProvider {
         tenantId:
           activity.channelData?.tenant?.id || activity.conversation?.tenantId,
         serviceUrl: activity.serviceUrl,
-        conversationReference: TurnContext.getConversationReference(
-          activity as Parameters<
-            typeof TurnContext.getConversationReference
-          >[0],
-        ),
+        conversationReference:
+          Activity.fromObject(activity).getConversationReference(),
         authHeader: headers.authorization || headers.Authorization,
         // Lets the manager frame group conversations for the agent ("personal",
         // "groupChat", or "channel") and tell it whether it was addressed.
@@ -458,11 +459,13 @@ class MSTeamsProvider implements ChatOpsProvider {
     const turnContext = options.originalMessage.metadata?.turnContext;
     if (placeholderActivityId && turnContext instanceof TurnContext) {
       try {
-        await turnContext.updateActivity({
-          id: placeholderActivityId,
-          type: ActivityTypes.Message,
-          text: replyText,
-        });
+        await turnContext.updateActivity(
+          Activity.fromObject({
+            id: placeholderActivityId,
+            type: ActivityTypes.Message,
+            text: replyText,
+          }),
+        );
         return placeholderActivityId;
       } catch (error) {
         logger.debug(
@@ -485,7 +488,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     let messageId = "";
     try {
-      await this.adapter.continueConversationAsync(
+      await this.adapter.continueConversation(
         this.config.appId,
         ref,
         async (context) => {
@@ -496,7 +499,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     } catch (error) {
       logger.error(
         { error: errorMessage(error) },
-        "[MSTeamsProvider] continueConversationAsync failed",
+        "[MSTeamsProvider] continueConversation failed",
       );
       throw error;
     }
@@ -530,7 +533,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       // try to look up the actual team ID
       const looksLikeTeamChannel = params.channelId.includes("@thread.tacv2");
       if (!isValidTeamId && looksLikeTeamChannel) {
-        // workspaceId should already be resolved by the route handler via TeamsInfo.
+        // workspaceId should already be resolved by the route handler via msTeamsDirectory.
         // Falling back to lookupTeamIdFromChannel (requires Azure AD app permissions).
         logger.warn(
           { channelId: params.channelId, workspaceId },
@@ -587,7 +590,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     const approvalCard = buildApprovalRequestCard(options);
-    const approvalMessage = {
+    const approvalMessage = Activity.fromObject({
       type: ActivityTypes.Message,
       text: "",
       attachments: [
@@ -596,7 +599,7 @@ class MSTeamsProvider implements ChatOpsProvider {
           content: approvalCard,
         },
       ],
-    };
+    });
 
     const turnContext = options.originalMessage.metadata?.turnContext;
     if (turnContext instanceof TurnContext) {
@@ -612,7 +615,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       );
     }
 
-    await this.adapter.continueConversationAsync(
+    await this.adapter.continueConversation(
       this.config.appId,
       conversationReference,
       async (context) => {
@@ -745,7 +748,7 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   /**
    * Get user's email from their AAD Object ID using Microsoft Graph API.
-   * Fallback method when TeamsInfo.getMember() is unavailable.
+   * Fallback method when msTeamsDirectory.getMember() is unavailable.
    * Requires User.Read.All application permission.
    */
   async getUserEmail(aadObjectId: string): Promise<string | null> {
@@ -799,15 +802,15 @@ class MSTeamsProvider implements ChatOpsProvider {
     if (!teamData?.id) return null;
 
     const [channels, teamDetails] = await Promise.all([
-      TeamsInfo.getTeamChannels(context),
-      TeamsInfo.getTeamDetails(context).catch(() => null),
+      msTeamsDirectory.getTeamChannels(context),
+      msTeamsDirectory.getTeamDetails(context).catch(() => null),
     ]);
 
     if (!channels?.length) return null;
 
     // Prefer aadGroupId (stable UUID) over thread-format team.id.
     // channelData.team.aadGroupId is often absent, so fall back to
-    // the value returned by TeamsInfo.getTeamDetails().
+    // the value returned by msTeamsDirectory.getTeamDetails().
     const workspaceId =
       teamData.aadGroupId || teamDetails?.aadGroupId || teamData.id;
 
@@ -858,12 +861,14 @@ class MSTeamsProvider implements ChatOpsProvider {
           }
         } else {
           // DMs and group chats support native typing indicators
-          await turnContext.sendActivity({ type: ActivityTypes.Typing });
+          await turnContext.sendActivity(
+            Activity.fromObject({ type: ActivityTypes.Typing }),
+          );
         }
         return;
       }
 
-      // Fallback: proactive messaging via continueConversationAsync.
+      // Fallback: proactive messaging via continueConversation.
       // Works for DMs/group chats but not for channel typing indicators.
       if (!this.adapter) return;
       const ref = metadata?.conversationReference as
@@ -871,11 +876,13 @@ class MSTeamsProvider implements ChatOpsProvider {
         | undefined;
       if (!ref) return;
 
-      await this.adapter.continueConversationAsync(
+      await this.adapter.continueConversation(
         this.config.appId,
         ref,
         async (context) => {
-          await context.sendActivity({ type: ActivityTypes.Typing });
+          await context.sendActivity(
+            Activity.fromObject({ type: ActivityTypes.Typing }),
+          );
         },
       );
     } catch (error) {
@@ -897,59 +904,69 @@ class MSTeamsProvider implements ChatOpsProvider {
     },
     handler: (context: TurnContext) => Promise<void>,
   ): Promise<void> {
-    if (!this.adapter) {
+    if (!this.adapter || !this.authorize) {
       throw new Error("MSTeamsProvider not initialized");
     }
 
-    // The Bot Framework SDK has a hardcoded `console.error(err)` in CloudAdapter.process()
-    // for auth failures. MS Teams sends duplicate webhooks per message — one always fails
-    // JWT validation with a different AppId. Suppress these expected 401s to avoid noisy logs.
-    const origConsoleError = console.error;
-    console.error = (...args: unknown[]) => {
-      const err = args[0];
+    // The Agents SDK adapter trusts request.user; it does not authenticate
+    // requests itself. Keep Microsoft's JWT middleware in front of it.
+    const request: Request = {
+      body: req.body as Record<string, unknown>,
+      headers: {
+        ...req.headers,
+        authorization: req.headers.authorization ?? req.headers.Authorization,
+      },
+      method: "POST",
+    };
+    let status = 200;
+    const response: WebResponse = {
+      headersSent: false,
+      writableEnded: false,
+      status(code) {
+        status = code;
+        return this;
+      },
+      setHeader() {
+        return this;
+      },
+      send(body) {
+        if (!this.writableEnded) {
+          this.headersSent = true;
+          this.writableEnded = true;
+          res.status(status).send(body);
+        }
+        return this;
+      },
+      end() {
+        return this.send();
+      },
+    };
+    let authenticated = false;
+    await this.authorize(request, response, () => {
+      authenticated = true;
+    });
+    if (!authenticated) return;
+
+    await this.adapter.process(request, response, async (context) => {
+      // Acknowledge ordinary activities before doing any network/agent work.
+      // Keep this callback alive until all work finishes: returning it early
+      // revokes the TurnContext used for cards, typing and threaded replies.
+      // Invoke and expectReplies activities require the SDK's response body.
       if (
-        err &&
-        typeof err === "object" &&
-        "statusCode" in err &&
-        (err as { statusCode: number }).statusCode === 401
+        context.activity.type !== ActivityTypes.Invoke &&
+        context.activity.deliveryMode !== "expectReplies"
       ) {
+        response.status(200).end();
+      }
+      const approvalPayload = this.parseApprovalDecisionPayload(
+        context.activity.value,
+      );
+      if (approvalPayload) {
+        await this.handleApprovalDecisionSubmission(context, approvalPayload);
         return;
       }
-      origConsoleError.apply(console, args);
-    };
-
-    try {
-      await this.adapter.process(
-        {
-          body: req.body as Record<string, unknown>,
-          headers: req.headers,
-          method: "POST",
-        },
-        {
-          socket: null,
-          end: () => {},
-          header: () => {},
-          send: res.send,
-          status: res.status,
-        },
-        async (context) => {
-          const approvalPayload = this.parseApprovalDecisionPayload(
-            context.activity.value,
-          );
-          if (approvalPayload) {
-            await this.handleApprovalDecisionSubmission(
-              context,
-              approvalPayload,
-            );
-            return;
-          }
-
-          await handler(context);
-        },
-      );
-    } finally {
-      console.error = origConsoleError;
-    }
+      await handler(context);
+    });
   }
 
   parseInteractivePayload(_payload: unknown): {
@@ -1031,7 +1048,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       "unknown";
     let senderEmail: string | null = null;
     try {
-      const member = await TeamsInfo.getMember(
+      const member = await msTeamsDirectory.getMember(
         context,
         context.activity.from?.id || senderId,
       );
@@ -1041,7 +1058,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     } catch (error) {
       logger.debug(
         { error: error instanceof Error ? error.message : String(error) },
-        "[MSTeamsProvider] TeamsInfo.getMember failed for approval decision, will fall back to Graph API if configured",
+        "[MSTeamsProvider] msTeamsDirectory.getMember failed for approval decision, will fall back to Graph API if configured",
       );
     }
 
@@ -1097,11 +1114,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       metadata: {
         conversationType: context.activity.conversation?.conversationType,
         turnContext: context,
-        conversationReference: TurnContext.getConversationReference(
-          context.activity as Parameters<
-            typeof TurnContext.getConversationReference
-          >[0],
-        ),
+        conversationReference: context.activity.getConversationReference(),
       },
     };
 
@@ -1128,21 +1141,23 @@ class MSTeamsProvider implements ChatOpsProvider {
         return;
       }
 
-      await context.updateActivity({
-        id: approvalMessageId,
-        type: ActivityTypes.Message,
-        text: "",
-        attachments: [
-          {
-            contentType: "application/vnd.microsoft.card.adaptive",
-            content: buildApprovalDecisionCard({
-              toolLabel: payload.toolLabel,
-              approved: payload.approved,
-              deciderName: context.activity.from?.name,
-            }),
-          },
-        ],
-      });
+      await context.updateActivity(
+        Activity.fromObject({
+          id: approvalMessageId,
+          type: ActivityTypes.Message,
+          text: "",
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: buildApprovalDecisionCard({
+                toolLabel: payload.toolLabel,
+                approved: payload.approved,
+                deciderName: context.activity.from?.name,
+              }),
+            },
+          ],
+        }),
+      );
     };
 
     if (!this.eventHandler) {
@@ -1275,14 +1290,17 @@ class MSTeamsProvider implements ChatOpsProvider {
       ],
     };
 
-    await context.sendActivity({
-      attachments: [
-        {
-          contentType: "application/vnd.microsoft.card.adaptive",
-          content: card,
-        },
-      ],
-    });
+    await context.sendActivity(
+      Activity.fromObject({
+        type: ActivityTypes.Message,
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: card,
+          },
+        ],
+      }),
+    );
   }
 
   hasMissingScopes(): boolean {

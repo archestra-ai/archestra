@@ -1790,6 +1790,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
+  [RouteId.GetSkillNames]: { skill: ["read"] },
   [RouteId.GetSkillUsageStatistics]: {},
   [RouteId.GetSkillVersions]: {},
   [RouteId.GetSkillVersion]: {},

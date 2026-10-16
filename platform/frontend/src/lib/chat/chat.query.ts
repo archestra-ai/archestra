@@ -1131,6 +1131,7 @@ export function useHasPlaywrightMcpTools(
     }) => {
       const { data: catalogTools } = await getInternalMcpCatalogTools({
         path: { id: PLAYWRIGHT_MCP_CATALOG_ID },
+        query: { view: "picker" },
       });
       if (!catalogTools?.length) {
         throw new Error("No Playwright tools found");

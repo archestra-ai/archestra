@@ -915,6 +915,7 @@ export const RouteId = {
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+  GetSkillNames: "getSkillNames",
 
   // Plugin Routes
   GetPlugins: "getPlugins",

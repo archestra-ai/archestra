@@ -157,10 +157,7 @@ export async function buildAgentRunLaunchSpec(params: {
       boundWorkspace.actorKind !== params.actor.kind ||
       boundWorkspace.actorId !== params.actor.id)
   ) {
-    throw new ApiError(
-      409,
-      "The runtime workspace is not available for this actor",
-    );
+    throw new ApiError(409, "The saved run is not available for this actor");
   }
   if (params.runtimeSession && boundWorkspace) {
     const expected = runtimeOpenAppaSession({
@@ -176,7 +173,7 @@ export async function buildAgentRunLaunchSpec(params: {
     ) {
       throw new ApiError(
         409,
-        "The runtime session does not match the persisted workspace",
+        "The runtime session does not match the saved run",
       );
     }
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, SquareTerminal } from "lucide-react";
+import { Copy, SquareTerminal, TextSelect } from "lucide-react";
 import {
   type ReactNode,
   type SyntheticEvent,
@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { FileDropZone } from "@/components/files/file-drop-zone";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -504,29 +505,44 @@ export function ExecTerminal({
           ) : (
             <div />
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Focus terminal"
-                aria-pressed={focusTerminal}
-                onClick={() => handleFocusTerminalChange(!focusTerminal)}
-                className="shrink-0 text-xs aria-pressed:bg-accent aria-pressed:text-accent-foreground"
-              >
-                <SquareTerminal />
-                <span>Focus terminal</span>
-                <span className="text-muted-foreground">
-                  {focusTerminal ? "On" : "Off"}
-                </span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {focusTerminal
-                ? "Terminal controls enabled. Click inside to type. Turn off for browser selection, copy and context menu."
-                : "Browser selection, copy and context menu enabled. Turn on to use terminal controls."}
-            </TooltipContent>
-          </Tooltip>
+          <ButtonGroup aria-label="Terminal interaction" className="shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={focusTerminal ? "secondary" : "ghost"}
+                  size="sm"
+                  aria-label="Type in terminal"
+                  aria-pressed={focusTerminal}
+                  onClick={() => handleFocusTerminalChange(true)}
+                >
+                  <SquareTerminal />
+                  <span>Type</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Click inside the terminal to type and use the running app's
+                controls.
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={focusTerminal ? "ghost" : "secondary"}
+                  size="sm"
+                  aria-label="Select terminal text"
+                  aria-pressed={!focusTerminal}
+                  onClick={() => handleFocusTerminalChange(false)}
+                >
+                  <TextSelect />
+                  <span>Select text</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Select and copy text with the browser. Typing and clicks are not
+                sent to the running app.
+              </TooltipContent>
+            </Tooltip>
+          </ButtonGroup>
         </div>
         <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
           {status === "connecting" &&

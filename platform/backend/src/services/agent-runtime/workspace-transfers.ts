@@ -621,7 +621,7 @@ async function runningRuntimeSession(params: {
     session.actorKind !== params.actor.kind ||
     session.actorId !== params.actor.id
   ) {
-    throw new ApiError(404, "Workspace not found");
+    throw new ApiError(404, "Saved run not found");
   }
   const workspace = await AgentWorkspaceModel.findByWorkloadName(
     session.workloadName,
@@ -631,7 +631,7 @@ async function runningRuntimeSession(params: {
     !["active", "idle"].includes(workspace.state) ||
     workspace.expiresAt.getTime() <= Date.now()
   ) {
-    throw new ApiError(409, "The workspace is not running");
+    throw new ApiError(409, "The Agent is not running");
   }
   return session;
 }

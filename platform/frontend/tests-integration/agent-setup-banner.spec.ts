@@ -58,10 +58,10 @@ test("spaces the setup checklist like the rest of the agent overview, and clears
 
   // A missing Claude account is a row of the setup checklist.
   const notice = page
-    .getByRole("alert")
-    .filter({ hasText: "Before this agent can run" });
+    .getByRole("status")
+    .filter({ hasText: "Connect to start" });
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText("Connect your Claude subscription");
+  await expect(notice).toContainText("Claude subscription");
 
   // The checklist is followed by where the agent gets its work, then its
   // instructions. Compare against a gap the page already keeps, not a number
@@ -188,7 +188,7 @@ async function setAccountState({
  */
 async function connectClaudeAccount(page: Page, mswControl: MswControl) {
   await page
-    .getByRole("alert")
+    .getByRole("status")
     .getByRole("button", { name: "Sign in with Claude" })
     .click();
   await expect(page.getByRole("dialog")).toBeVisible();

@@ -82,7 +82,7 @@ describe("describeAgentRuntimeStartupProgress", () => {
 
   it.for([
     ["ContainerCreating", "Preparing the agent container"],
-    ["PodInitializing", "Preparing the workspace"],
+    ["PodInitializing", "Preparing the Agent"],
   ])("describes %s without claiming an image download", ([reason, message]) => {
     const progress = describeAgentRuntimeStartupProgress(
       pod({
@@ -118,7 +118,7 @@ describe("describeAgentRuntimeStartupProgress", () => {
 
     expect(progress).toEqual({
       phase: "pulling",
-      message: "Preparing the workspace",
+      message: "Preparing the Agent",
       detail: null,
     });
   });
@@ -148,7 +148,7 @@ describe("describeAgentRuntimeStartupProgress", () => {
       }),
     );
 
-    expect(progress.message).toBe("Workspace initialization failed");
+    expect(progress.message).toBe("Agent initialization failed");
     expect(progress.detail).toContain("initialize-workspace");
     expect(progress.detail).toContain("exit code 1");
     expect(progress.detail).toContain("Could not initialize workspace volume");

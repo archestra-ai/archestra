@@ -169,16 +169,18 @@ describe("AgentRuns", () => {
 
     renderRuns();
 
+    expect(await screen.findByText("by you")).toBeVisible();
     expect(
-      await screen.findByText("Started by Alex Rivera (you)"),
+      screen.getByRole("button", { name: "More run actions" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Share" })).toBeVisible();
   });
 
   it("explains session access without deriving visibility from retired share fields", async () => {
     renderRuns();
 
-    expect(await screen.findByRole("button", { name: "Share" })).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: "More run actions" }),
+    ).toBeVisible();
     fireEvent.focus(
       screen.getByRole("button", { name: "Who can access this run?" }),
     );
@@ -199,13 +201,11 @@ describe("AgentRuns", () => {
       shareVisibility: "organization",
     });
     renderRuns();
-    expect(
-      await screen.findByText("Started by Alex Rivera (you)"),
-    ).toBeVisible();
+    expect(await screen.findByText("by you")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /Shared review/ }));
-    expect(screen.getByText("Started by Sam Chen")).toBeVisible();
+    expect(screen.getByText("by Sam Chen")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: "Share" }),
+      screen.queryByRole("button", { name: "More run actions" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Retained output")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
@@ -237,7 +237,7 @@ describe("AgentRuns", () => {
       },
     ];
     renderRuns();
-    expect(await screen.findByText("Started by automation")).toBeVisible();
+    expect(await screen.findByText("by automation")).toBeVisible();
   });
   it("shows who started each run and narrows the history by search", async () => {
     state.runs.push({
@@ -266,7 +266,7 @@ describe("AgentRuns", () => {
     expect(
       screen.queryByRole("button", { name: /Native TUI verification/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Started by Sam Chen")).toBeVisible();
+    expect(screen.getByText("by Sam Chen")).toBeVisible();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search runs" }), {
       target: { value: "nothing like this" },

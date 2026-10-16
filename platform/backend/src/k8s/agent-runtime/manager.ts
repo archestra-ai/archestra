@@ -235,7 +235,7 @@ class AgentRuntimeManager {
         pollDelayMs = Math.min(pollDelayMs * 2, 1000);
       }
       const session = await AgentRunModel.findByTaskId(spec.taskId);
-      if (!session) throw new Error("Workspace run no longer exists");
+      if (!session) throw new Error("This run no longer exists");
       await this.continueRun({ session, spec, initial: true });
       return;
     }
@@ -270,10 +270,7 @@ class AgentRuntimeManager {
     });
     const response = JSON.parse(result);
     if (response.ok !== true)
-      throw new ApiError(
-        400,
-        response.error || "Workspace file operation failed",
-      );
+      throw new ApiError(400, response.error || "File operation failed");
     return AgentWorkspaceFileResultSchema.parse(response);
   }
 
@@ -312,7 +309,7 @@ class AgentRuntimeManager {
     });
     const response = JSON.parse(result);
     if (response.ok !== true) {
-      throw new ApiError(400, response.error || "Workspace transfer failed");
+      throw new ApiError(400, response.error || "File transfer failed");
     }
     return response;
   }
@@ -450,14 +447,14 @@ class AgentRuntimeManager {
       Boolean(container.securityContext?.privileged) !== params.spec.privileged
     ) {
       const changed = [
-        ...(container?.image !== params.spec.image ? ["container image"] : []),
+        ...(container?.image !== params.spec.image ? ["software image"] : []),
         ...(Boolean(container?.securityContext?.privileged) !==
         params.spec.privileged
-          ? ["privileged mode"]
+          ? ["access to the host system"]
           : []),
       ].join(" and ");
       throw new Error(
-        `This workspace cannot resume because the Agent's ${changed} changed since it was created. Start a new run from the Agent page to use the updated settings. Saved files stay in the existing workspace until its retention deadline.`,
+        `This run cannot resume because these Agent settings changed: ${changed}. Start a new run from the Agent page to use the updated settings. Saved files are kept until their retention deadline.`,
       );
     }
     await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
@@ -548,7 +545,10 @@ class AgentRuntimeManager {
       sandbox.spec.shutdownTime &&
       Date.parse(sandbox.spec.shutdownTime) <= Date.now()
     ) {
-      throw new ApiError(409, "The workspace retention deadline has passed");
+      throw new ApiError(
+        409,
+        "The saved files have reached their retention deadline",
+      );
     }
     if (
       pending &&
@@ -557,7 +557,7 @@ class AgentRuntimeManager {
     ) {
       throw new ApiError(
         409,
-        "The saved continuation belongs to a different workspace",
+        "The saved conversation belongs to a different run",
       );
     }
     // The initial turn is already part of the Sandbox's bootstrap contract.
@@ -577,9 +577,9 @@ class AgentRuntimeManager {
     );
     const podName = await this.waitForRunningPod({
       session,
-      timeoutMessage: "The workspace could not be resumed",
+      timeoutMessage: "The run could not be resumed",
     });
-    if (!podName) throw new Error("The workspace is not running");
+    if (!podName) throw new Error("The Agent is not running");
     await this.projectWarmCredentials(session, podName);
     const script = pending?.data?.request;
     if (!script) {
@@ -597,7 +597,7 @@ class AgentRuntimeManager {
       if (published !== "present")
         throw new ApiError(
           502,
-          "The run was interrupted before its command was saved. Continue in the retained workspace to retry.",
+          "The run was interrupted before its command was saved. Select Resume to try again.",
         );
       return;
     }
@@ -847,7 +847,7 @@ class AgentRuntimeManager {
       if (!isK8sNotFoundError(error))
         logger.debug(
           { error, workloadName: session.workloadName },
-          "Workspace connection hints are unavailable",
+          "Terminal connection details are unavailable",
         );
       return null;
     }
@@ -885,11 +885,14 @@ class AgentRuntimeManager {
       sandbox.spec.shutdownTime &&
       Date.parse(sandbox.spec.shutdownTime) <= Date.now()
     ) {
-      throw new ApiError(409, "The workspace retention deadline has passed");
+      throw new ApiError(
+        409,
+        "The saved files have reached their retention deadline",
+      );
     }
     const agent = await AgentModel.findById(session.agentId);
     if (!agent || agent.organizationId !== session.organizationId) {
-      throw new ApiError(404, "Workspace Agent not found");
+      throw new ApiError(404, "Agent not found");
     }
     const organization = await OrganizationModel.getById(
       session.organizationId,
@@ -921,10 +924,10 @@ class AgentRuntimeManager {
     if (
       !(await this.waitForRunningPod({
         session,
-        timeoutMessage: "The workspace could not be resumed",
+        timeoutMessage: "The run could not be resumed",
       }))
     ) {
-      throw new ApiError(409, "The workspace could not be resumed");
+      throw new ApiError(409, "The run could not be resumed");
     }
   }
 
@@ -1362,7 +1365,7 @@ class AgentRuntimeManager {
       }
     }
     if (errors.length)
-      throw new AggregateError(errors, "Workspace cleanup did not complete");
+      throw new AggregateError(errors, "Saved file cleanup did not complete");
   }
 
   /**
@@ -1474,7 +1477,7 @@ class AgentRuntimeManager {
       await delay(AGENT_RUNTIME_INPUT_STAGING_POLL_MS);
     }
     throw new Error(
-      "The workspace did not stop in time to move to the current Agent image",
+      "The Agent did not stop in time to update its software image",
     );
   }
 
@@ -1525,7 +1528,7 @@ class AgentRuntimeManager {
         AGENT_RUNTIME_TASK_LABEL
       ];
     if (!taskId)
-      throw new Error("Workspace is missing its network policy selector");
+      throw new Error("The Agent is missing its network policy selector");
     const spec = {
       ...params.spec,
       taskId,
@@ -1815,10 +1818,7 @@ done`
   ): Promise<string> {
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
-      throw new ApiError(
-        409,
-        "Resume this workspace before accessing its files",
-      );
+      throw new ApiError(409, "Resume this run before accessing its files");
     }
     return pod.metadata.name;
   }
@@ -2032,6 +2032,6 @@ function describeWorkspaceHelperFailure(error: unknown): ApiError | null {
   }
   return new ApiError(
     400,
-    `This Agent's image has no python3, which ${archestraMcpBranding.appName} needs to read, write and transfer workspace files. Add python3 to the image, or use a maintained one.`,
+    `This Agent's image has no python3, which ${archestraMcpBranding.appName} needs to read, write and transfer saved files. Add python3 to the image, or use a maintained one.`,
   );
 }

@@ -193,6 +193,13 @@ export function ClaudeCodeAccount({
                 variant="outline"
                 suppressAutoSelect
               />
+              {(!model || model === "default") && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {model === "default"
+                    ? "Claude chooses the model from your account settings. Choose a named model here to make it explicit."
+                    : "New runs use Opus unless you choose another model."}
+                </p>
+              )}
             </div>
           )}
         </div>

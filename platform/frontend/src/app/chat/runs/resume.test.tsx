@@ -85,9 +85,7 @@ it.each([
         ...previous,
         state,
         statusReason:
-          state === "TASK_STATE_FAILED"
-            ? "The workspace could not be resumed"
-            : null,
+          state === "TASK_STATE_FAILED" ? "The run could not be resumed" : null,
       }),
     ),
   );
@@ -103,14 +101,20 @@ it.each([
   const notice = screen.getByRole(
     state === "TASK_STATE_FAILED" ? "alert" : "status",
   );
-  expect(notice).toHaveTextContent(/saved files are retained/i);
   expect(notice).toHaveTextContent(
-    state === "TASK_STATE_FAILED" ? "The run failed" : "this is normal",
+    state === "TASK_STATE_FAILED"
+      ? "Saved files are retained"
+      : "Your files are saved",
   );
   expect(notice).toHaveTextContent(
     state === "TASK_STATE_FAILED"
-      ? "Resume tries to restart"
-      : "Resume restarts",
+      ? "The run failed"
+      : "Paused to save resources",
+  );
+  expect(notice).toHaveTextContent(
+    state === "TASK_STATE_FAILED"
+      ? "Resume to try again"
+      : "Resume to continue",
   );
   client.clear();
 });

@@ -110,7 +110,8 @@ describe("AgentRunChatSession", () => {
     await user.click(screen.getByRole("button", { name: "Resume" }));
     expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
     expect(screen.queryByText("Retained run output")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Detach" }));
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Detach" }));
     expect(screen.getByText("Retained run output")).toBeInTheDocument();
     queryState.value.data = {
       ...queryState.value.data,

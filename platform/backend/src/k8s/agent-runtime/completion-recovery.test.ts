@@ -159,16 +159,20 @@ test("fails a pending workspace at the configured timeout without executing its 
   const exec = completeExec();
 
   await expect(manager.recoverRun(run)).rejects.toThrow(
-    "The workspace could not be resumed within 60 seconds. Last observed startup step: Waiting for a node.",
+    "The run could not be resumed within 60 seconds. Last observed startup step: Waiting for a node.",
   );
   expect(polls).toBe(1);
   expect(exec).not.toHaveBeenCalled();
 });
 
 test.for([
-  ["registry.example/agent:2", false, "container image"],
-  ["registry.example/agent:1", true, "privileged mode"],
-  ["registry.example/agent:2", true, "container image and privileged mode"],
+  ["registry.example/agent:2", false, "software image"],
+  ["registry.example/agent:1", true, "access to the host system"],
+  [
+    "registry.example/agent:2",
+    true,
+    "software image and access to the host system",
+  ],
 ] as const)("refuses a changed image %s with privileged=%s before modifying the saved workspace", async ([
   image,
   privileged,
@@ -211,7 +215,7 @@ test.for([
   const exec = completeExec();
   for (let attempt = 0; attempt < 2; attempt++) {
     await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
-      `This workspace cannot resume because the Agent's ${changed} changed since it was created. Start a new run from the Agent page to use the updated settings. Saved files stay in the existing workspace until its retention deadline.`,
+      `This run cannot resume because these Agent settings changed: ${changed}. Start a new run from the Agent page to use the updated settings. Saved files are kept until their retention deadline.`,
     );
   }
   expect(exec).not.toHaveBeenCalled();
@@ -286,7 +290,7 @@ test.for([
   const exec = completeExec();
 
   await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
-    "The workspace did not stop in time to move to the current Agent image",
+    "The Agent did not stop in time to update its software image",
   );
   expect(polls).toBe(5);
   expect(patches).toEqual([{ spec: { operatingMode: "Suspended" } }]);
@@ -673,7 +677,7 @@ test("keeps Sandbox expiry context alongside pod termination diagnostics", async
               type: "Finished",
               status: "True",
               reason: "SandboxExpired",
-              message: "The workspace retention deadline has passed.",
+              message: "The saved files have reached their retention deadline.",
             },
           ],
         },
@@ -704,7 +708,7 @@ test("keeps Sandbox expiry context alongside pod termination diagnostics", async
   expect(completion.reason).toContain("exit code 143");
   expect(completion.reason).toContain("SandboxExpired");
   expect(completion.reason).toContain(
-    "The workspace retention deadline has passed.",
+    "The saved files have reached their retention deadline.",
   );
 });
 

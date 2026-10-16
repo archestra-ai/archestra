@@ -2,6 +2,7 @@
 "use client";
 
 import type { CreatedBy, ResourceVisibilityScope } from "@archestra/shared";
+import { Building2, UserRound, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { CreatorAvatar, creatorLabel } from "@/components/created-by-cell";
 import { SCOPE_META } from "@/components/scope-vocabulary";
@@ -27,12 +28,15 @@ export function AudienceChip({
   audience,
   owner,
   className,
+  compact = false,
 }: {
   audience: ResourceVisibilityScope;
   owner?: CreatedBy | null;
   className?: string;
+  compact?: boolean;
 }) {
   const audienceLabel = AUDIENCE_LABELS[audience];
+  const Icon = { personal: UserRound, team: Users, org: Building2 }[audience];
   const ownerName = owner ? creatorLabel(owner) : null;
   const ownerDetail =
     owner && ownerName
@@ -55,14 +59,22 @@ export function AudienceChip({
           aria-description={AUDIENCE_TOOLTIP}
           data-testid="audience-chip"
           className={cn(
-            "inline-flex w-fit min-w-0 shrink-0 cursor-default items-center gap-1.5 rounded-full border px-2.5 py-px text-xs font-medium whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-            owner && "max-w-72 pr-1",
-            AUDIENCE_STYLES[audience],
+            compact
+              ? "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              : [
+                  "inline-flex w-fit min-w-0 shrink-0 cursor-default items-center gap-1.5 rounded-full border px-2.5 py-px text-xs font-medium whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  owner && "max-w-72 pr-1",
+                  AUDIENCE_STYLES[audience],
+                ],
             className,
           )}
         >
-          <span>{audienceLabel}</span>
-          {owner && ownerName && (
+          {compact ? (
+            <Icon className="size-4" aria-hidden />
+          ) : (
+            <span>{audienceLabel}</span>
+          )}
+          {!compact && owner && ownerName && (
             <span
               data-testid="audience-chip-owner"
               className="flex min-w-0 items-center gap-1.5 font-normal"
@@ -86,6 +98,7 @@ export function AudienceChip({
         </UnstyledButton>
       </TooltipTrigger>
       <TooltipContent>
+        {compact && <p>{audienceLabel}</p>}
         {ownerDetail ? (
           <div className="flex flex-col gap-0.5">
             <span>{`Owner: ${ownerDetail}`}</span>

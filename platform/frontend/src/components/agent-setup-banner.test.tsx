@@ -28,13 +28,13 @@ describe("AgentSetupBanner", () => {
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: "Show" })).toBeNull();
     rerender(<AgentSetupBanner items={[]} resetKey="agent-2" />);
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("dismisses the settled banner but not work the agent still needs", async () => {
     const { rerender } = render(<AgentSetupBanner items={[]} showReady />);
     await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
 
     rerender(
       <AgentSetupBanner
@@ -44,7 +44,7 @@ describe("AgentSetupBanner", () => {
         showReady
       />,
     );
-    expect(screen.getByText("Before this agent can run")).toBeVisible();
+    expect(screen.getByText("Connect to start")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
   });
 });

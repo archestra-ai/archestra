@@ -83,7 +83,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
     body: [run],
   });
   await page.goto(`/agents/${agent.id}?section=runs`);
-  const owner = page.getByText(`Started by ${ownerName}`, { exact: true });
+  const owner = page.getByText(`by ${ownerName}`, { exact: true });
   // Access comes from the run's permission policy, explained behind this
   // button, rather than from a sharing label.
   const access = page.getByRole("button", { name: "Who can access this run?" });
@@ -137,7 +137,7 @@ test("keeps a long run owner and the access details inside the phone viewport", 
     for (const control of [
       fullView,
       stop,
-      page.getByRole("button", { name: "Share", exact: true }),
+      page.getByRole("button", { name: "More run actions", exact: true }),
     ]) {
       await expect(control).toBeVisible();
       await control.scrollIntoViewIfNeeded();

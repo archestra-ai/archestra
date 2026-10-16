@@ -41,9 +41,9 @@ Removing a choice preserves existing agents and their runtime configuration.
 
 ### Update the Image
 
-Built-in coding agent images use the deployment's current catalog image unless pinned by digest. When the image reference changes, your next follow-up restarts the saved workspace on that image and keeps its files.
+Built-in coding agent images use the deployment's current catalog image unless pinned by digest. When the image reference changes, your next follow-up restarts the Agent on that image and keeps your files.
 
-If you change a custom image or privileged mode, start a new run. Saved files stay in the existing workspace until its retention deadline.
+If you change a custom image or the **Privileged mode** setting, which grants access to the host system, start a new run. Existing files are kept until their retention deadline.
 
 ## Models and Credentials
 
@@ -66,7 +66,7 @@ The built-in coding agent images use `GITHUB_TOKEN` to authenticate Git commands
 1. Save a GitHub token in [Credentials](/docs/admin/security/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
 2. Open the agent's **Agent Runtime** tab. Under **Environment**, click **Add variable**.
 3. Set **Key** to `GITHUB_TOKEN` and **Type** to **Secret**. Under **Secret source**, select your saved credential.
-4. Save the agent, start a new run, and ask it to clone the repository using its HTTPS URL. A successful clone creates the repository's directory in the workspace.
+4. Save the agent, start a new run, and ask it to clone the repository using its HTTPS URL. A successful clone creates the repository's directory in the Agent's container.
 
 What to know:
 
@@ -79,11 +79,11 @@ What to know:
 Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task. This starts a **run**: a container that works on your task. Follow-ups continue the same run. The live terminal opens and shows startup progress. Attach files before you send, and the agent reads them in its container.
 
 - **Leave and come back:** the run keeps working. Reopen it from the sidebar and send a follow-up.
-- **Past runs:** the agent's **Runs** tab lists live and finished runs. Select **Open full view** for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
+- **Past runs:** the agent's **Runs** tab lists live and finished runs. Select the **Open full view** expand icon for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
 - **Stop a run:** the person who started it can select **Stop** in Chat or on the agent's **Runs** tab. Confirm with **Stop run**. Saved files and history remain available.
-- **Copy text:** turn off **Focus terminal** to select text in the browser.
+- **Copy text:** select **Select text** to copy text with the browser. Select **Type** to use the running app's controls again.
 - **Follow-ups** reach the agent between its turns. To type them into its terminal instead, set **Steering** to **Terminal input** on the **Agent Runtime** tab.
-- **Open a web app:** **View connection details** gives a port forwarding command for the agent's **Ports to forward**.
+- **Open a web app:** for a run you started, select **Open full view**, then **More run actions → View connection details** for the agent's port forwarding command.
 
 What to know:
 

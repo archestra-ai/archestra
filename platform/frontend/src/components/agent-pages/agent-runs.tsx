@@ -1,9 +1,10 @@
 "use client";
 
-import { formatDistanceToNow } from "date-fns";
+import { formatDistance, formatDistanceToNow } from "date-fns";
 import {
   Info,
   Maximize2,
+  MoreHorizontal,
   Search,
   Share2,
   Square,
@@ -20,6 +21,12 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -39,6 +46,7 @@ import {
   useAgentRuns,
   useCancelAgentRun,
 } from "@/lib/agent-runtime.query";
+import { useRuntimeClock } from "@/lib/agent-runtime-time";
 import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -236,7 +244,7 @@ function RunDetails({
   onClosed: () => void;
 }) {
   const active = !run.endedAt;
-  const startedBy = `Started by ${initiatorLabel(run)}${canAttach ? " (you)" : ""}`;
+  const now = useRuntimeClock(true);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const cancelRun = useCancelAgentRun();
@@ -252,8 +260,8 @@ function RunDetails({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex flex-shrink-0 flex-wrap items-start justify-between gap-4 border-b px-5 py-3.5">
-        <div className="min-w-0 flex-1 basis-64 space-y-1">
+      <div className="flex flex-shrink-0 flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
+        <div className="min-w-0 flex-1 basis-48 space-y-1">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-sm font-medium">{run.title}</h2>
             <AgentRunState
@@ -267,18 +275,25 @@ function RunDetails({
               compact
             />
           </div>
-          {/* One line of facts: who, when, which run, and who else can read it. */}
           <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-            <span className="min-w-0 break-words">{startedBy}</span>
-            <span aria-hidden>·</span>
-            <time dateTime={run.startedAt}>
-              {new Date(run.startedAt).toLocaleString(undefined, {
-                dateStyle: "medium",
-                timeStyle: "short",
+            <time
+              dateTime={run.startedAt}
+              title={`Started ${new Date(run.startedAt).toLocaleString(
+                undefined,
+                {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                },
+              )}`}
+            >
+              Started{" "}
+              {formatDistance(new Date(run.startedAt), now, {
+                addSuffix: true,
               })}
             </time>
-            <span aria-hidden>·</span>
-            <span className="font-mono">{shortTaskId(run.taskId)}</span>
+            <span className="min-w-0 break-words">
+              by {canAttach ? "you" : initiatorLabel(run)}
+            </span>
             {run.projectId && (
               <>
                 <span aria-hidden>·</span>
@@ -312,13 +327,20 @@ function RunDetails({
             </Tooltip>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/chat/runs/${run.taskId}`}>
-              <Maximize2 className="size-4" />
-              <span>Open full view</span>
-            </Link>
-          </Button>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" asChild>
+                <Link
+                  href={`/chat/runs/${run.taskId}`}
+                  aria-label="Open full view"
+                >
+                  <Maximize2 />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open full view</TooltipContent>
+          </Tooltip>
           {active && canAttach && (
             <Button
               type="button"
@@ -332,29 +354,35 @@ function RunDetails({
             </Button>
           )}
           {canManageAccess && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={() => setPermissionsOpen(true)}
-            >
-              <Share2 className="size-4" />
-              Share
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="More run actions"
+                >
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setPermissionsOpen(true)}>
+                  <Share2 />
+                  <span>Share</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-        {active && !canAttach && <AgentRunLiveness run={run} />}
+        {active && <AgentRunLiveness run={run} />}
         {active && canAttach ? (
           <AgentRunTerminal
             taskId={run.taskId}
             active
-            title=""
-            // The run's status shares the terminal's toolbar row.
-            toolbarStart={<AgentRunLiveness run={run} />}
+            title="Live terminal"
+            showManualCommand={false}
             showDisconnectedStatus={false}
             onError={onClosed}
             onClosed={onClosed}
@@ -372,7 +400,7 @@ function RunDetails({
         open={stopDialogOpen}
         onOpenChange={setStopDialogOpen}
         title="Stop this run?"
-        description="The Agent process will stop. Its workspace, saved files, and run history will be retained so you can continue later."
+        description="The Agent process will stop. Saved files and run history will be retained so you can continue later."
         isPending={cancelRun.isPending}
         confirmLabel="Stop run"
         pendingLabel="Stopping…"
@@ -392,10 +420,6 @@ const ME = "__me";
 /** Groups runs by who started them: the user, else the kind of actor. */
 function starterKey(run: AgentRunListItem): string {
   return run.actorUserId ?? `kind:${run.actorKind}`;
-}
-
-function shortTaskId(taskId: string): string {
-  return taskId.slice(0, 8);
 }
 
 function initiatorLabel(run: AgentRunListItem): string {

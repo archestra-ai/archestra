@@ -108,7 +108,7 @@ export function AgentSavedSetupBanner({
             }
           : {
               id: key,
-              label: `Provide ${label}`,
+              label,
               description: `This agent needs ${label} in its container. Set a value, or connect it.`,
               status: "now",
               action: (
@@ -126,7 +126,7 @@ export function AgentSavedSetupBanner({
   if (needsClaudeAccount) {
     items.unshift({
       id: "CLAUDE_CODE_ACCOUNT",
-      label: "Connect your Claude subscription",
+      label: "Claude subscription",
       description:
         "Runs use your own Pro or Max plan. Each person who uses this agent connects their own; nobody shares yours.",
       status: "now",

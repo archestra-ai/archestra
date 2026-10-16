@@ -12,6 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useFeature } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -25,7 +26,7 @@ export function RuntimeCapableIndicator({
   runtime,
   className,
 }: {
-  variant?: "glyph" | "pill";
+  variant?: "glyph" | "pill" | "icon";
   /** The agent's saved runtime config, to name its template when it has one. */
   runtime?: unknown;
   className?: string;
@@ -38,6 +39,31 @@ export function RuntimeCapableIndicator({
     ? AGENT_CATALOG_TEMPLATE_NAMES[templateId]
     : null;
   const tooltip = `Runs ${templateName ? `${templateName} ` : ""}in a dedicated Agent Runtime. Starting it opens a live terminal instead of a chat.`;
+
+  if (variant === "icon") {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <UnstyledButton
+            aria-label={
+              templateName ? `Runtime: ${templateName}` : "Dedicated runtime"
+            }
+            className={cn(
+              "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              className,
+            )}
+          >
+            {templateId ? (
+              <CatalogAgentIcon id={templateId} size={16} />
+            ) : (
+              <TerminalSquare className="size-4" aria-hidden />
+            )}
+          </UnstyledButton>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
 
   if (variant === "pill") {
     return (

@@ -12,6 +12,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 import { ClaudeCodeAccount } from "./claude-code-account";
 
@@ -220,4 +221,55 @@ it("leaves the disconnected notice to the page banner while retaining connected 
   await queryClient.invalidateQueries();
   expect(await screen.findByRole("button", { name: "Manage" })).toBeVisible();
   view.unmount();
+});
+
+it.each([
+  [undefined, "Opus"],
+  ["default", "Claude account default"],
+  ["claude-sonnet-example", "Sonnet (example)"],
+] as const)("shows the effective model choice %s without overwriting saved configuration", async (model, label) => {
+  const onModelChange = vi.fn();
+  server.use(
+    http.get(accountUrl, () => HttpResponse.json({ state: "connected" })),
+    http.get(`${origin}/api/agents/agent-1/runtime/claude-code/models`, () =>
+      HttpResponse.json({
+        models: [
+          {
+            value: "opus",
+            displayName: "Opus",
+            description: "Default for new runs",
+          },
+          {
+            value: "default",
+            displayName: "Claude account default",
+            description: "Selected by Claude",
+          },
+          {
+            value: "claude-sonnet-example",
+            displayName: "Sonnet (example)",
+            description: "Explicit selection",
+          },
+        ],
+      }),
+    ),
+  );
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ClaudeCodeAccount
+        agentId="agent-1"
+        model={model}
+        onModelChange={onModelChange}
+      />
+    </QueryClientProvider>,
+  );
+  expect(
+    await screen.findByRole("button", {
+      name: new RegExp(label.replace(/[()]/g, "\\$&") + "$"),
+    }),
+  ).toBeVisible();
+  expect(onModelChange).not.toHaveBeenCalled();
+  if (model === "default")
+    expect(
+      screen.getByText(/Claude chooses the model from your account settings/),
+    ).toBeVisible();
 });

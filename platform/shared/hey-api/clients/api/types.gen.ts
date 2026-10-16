@@ -44923,102 +44923,6 @@ export type CreateEnvironmentResponses = {
 
 export type CreateEnvironmentResponse = CreateEnvironmentResponses[keyof CreateEnvironmentResponses];
 
-export type UpdateEnvironmentResourceDefaultsData = {
-    body: {
-        mcpRegistry?: string | null;
-        app?: string | null;
-        agent?: string | null;
-        mcpGateway?: string | null;
-        knowledgeSource?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/environments/defaults';
-};
-
-export type UpdateEnvironmentResourceDefaultsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateEnvironmentResourceDefaultsError = UpdateEnvironmentResourceDefaultsErrors[keyof UpdateEnvironmentResourceDefaultsErrors];
-
-export type UpdateEnvironmentResourceDefaultsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        mcpRegistry: string | null;
-        app: string | null;
-        agent: string | null;
-        mcpGateway: string | null;
-        knowledgeSource: string | null;
-    };
-};
-
-export type UpdateEnvironmentResourceDefaultsResponse = UpdateEnvironmentResourceDefaultsResponses[keyof UpdateEnvironmentResourceDefaultsResponses];
-
 export type DeleteEnvironmentData = {
     body?: never;
     path: {
@@ -45106,6 +45010,115 @@ export type DeleteEnvironmentResponses = {
 };
 
 export type DeleteEnvironmentResponse = DeleteEnvironmentResponses[keyof DeleteEnvironmentResponses];
+
+export type GetEnvironmentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/environments/{id}';
+};
+
+export type GetEnvironmentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetEnvironmentError = GetEnvironmentErrors[keyof GetEnvironmentErrors];
+
+export type GetEnvironmentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        namespace: string | null;
+        networkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        validationRegex: string | null;
+        trustedImageRegistries: Array<string> | null;
+        sortOrder: number;
+        createdAt: string;
+        updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    };
+};
+
+export type GetEnvironmentResponse = GetEnvironmentResponses[keyof GetEnvironmentResponses];
 
 export type UpdateEnvironmentData = {
     body: {
@@ -45228,6 +45241,102 @@ export type UpdateEnvironmentResponses = {
 };
 
 export type UpdateEnvironmentResponse = UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
+
+export type UpdateEnvironmentResourceDefaultsData = {
+    body: {
+        mcpRegistry?: string | null;
+        app?: string | null;
+        agent?: string | null;
+        mcpGateway?: string | null;
+        knowledgeSource?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/environments/defaults';
+};
+
+export type UpdateEnvironmentResourceDefaultsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateEnvironmentResourceDefaultsError = UpdateEnvironmentResourceDefaultsErrors[keyof UpdateEnvironmentResourceDefaultsErrors];
+
+export type UpdateEnvironmentResourceDefaultsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        mcpRegistry: string | null;
+        app: string | null;
+        agent: string | null;
+        mcpGateway: string | null;
+        knowledgeSource: string | null;
+    };
+};
+
+export type UpdateEnvironmentResourceDefaultsResponse = UpdateEnvironmentResourceDefaultsResponses[keyof UpdateEnvironmentResourceDefaultsResponses];
 
 export type BulkDeleteEnvironmentsData = {
     body: {

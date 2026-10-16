@@ -1227,6 +1227,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListEnvironments]: {
     environment: ["read"],
   },
+  [RouteId.GetEnvironment]: { environment: ["read"] },
   [RouteId.GetEnvironmentLabelKeys]: { environment: ["read"] },
   [RouteId.GetEnvironmentLabelValues]: { environment: ["read"] },
   [RouteId.CreateEnvironment]: {

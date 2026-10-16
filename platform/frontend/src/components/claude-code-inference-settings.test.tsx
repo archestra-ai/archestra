@@ -127,10 +127,8 @@ describe("Claude Code authentication", () => {
     expect(
       screen.queryByRole("button", { name: "Provider key" }),
     ).not.toBeInTheDocument();
+    // Sign in starts Claude's flow at once; there is no second button.
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sign in with Claude" }),
-    );
     await screen.findByLabelText("Authorization code");
     expect(modelRequests).toBe(0);
     fireEvent.change(screen.getByLabelText("Authorization code"), {

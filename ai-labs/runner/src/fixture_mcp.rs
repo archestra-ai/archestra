@@ -424,7 +424,7 @@ mod tests {
                 .expect("billing_type must be a string");
             assert!(
                 ["paid", "free"].contains(&billing),
-                "unexpected billing_type {billing:?}"
+                "billing_type must be one of paid/free"
             );
             let contract_id = s
                 .get("contract_id")

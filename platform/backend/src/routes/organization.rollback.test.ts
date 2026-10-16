@@ -1135,50 +1135,37 @@ describe("organization routes", () => {
       });
     });
 
-    test("stores the Apps Hackathon toggle when the deployment carries it", async () => {
-      config.hackathonRecorder.enabled = true;
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/security-settings",
-        payload: { appsHackathonRecorderEnabled: false },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        appsHackathonRecorderEnabled: false,
-      });
-    });
-
-    test("refuses to store the Apps Hackathon toggle where the feature does not exist", async () => {
-      // An enterprise deployment never carries the hackathon, so it must never
-      // end up recorded as having switched it on — otherwise "never for
-      // enterprise" would hold only for as long as the settings page keeps the
-      // section hidden.
-      config.hackathonRecorder.enabled = true;
-      await app.inject({
-        method: "PATCH",
-        url: "/api/organization/security-settings",
-        payload: { appsHackathonRecorderEnabled: false },
-      });
-
-      config.hackathonRecorder.enabled = false;
+    test("ignores the retired recorder preference and audits active settings", async () => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/security-settings",
         payload: {
-          appsHackathonRecorderEnabled: true,
           allowChatFileUploads: false,
+          appsHackathonRecorderEnabled: false,
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        // Left where it was, not raised to the value the request asked for...
-        appsHackathonRecorderEnabled: false,
-        // ...while everything else in the same request still applied.
-        allowChatFileUploads: false,
+      expect(response.json().allowChatFileUploads).toBe(false);
+      expect(response.json()).not.toHaveProperty(
+        "appsHackathonRecorderEnabled",
+      );
+      const organization = await app.inject({
+        method: "GET",
+        url: "/api/organization",
       });
+      expect(organization.statusCode).toBe(200);
+      expect(organization.json()).not.toHaveProperty(
+        "appsHackathonRecorderEnabled",
+      );
+
+      const [audit] = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.action, "organization.updated"));
+      expect(audit?.before).toMatchObject({ allowChatFileUploads: true });
+      expect(audit?.after).toMatchObject({ allowChatFileUploads: false });
+      expect(audit?.after).not.toHaveProperty("appsHackathonRecorderEnabled");
     });
 
     test("persists security settings across reads", async () => {

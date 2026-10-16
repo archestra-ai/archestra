@@ -149,7 +149,7 @@ function findContainerStartupProgress(
     if (status.state?.running) {
       return {
         phase: "pulling",
-        message: "Preparing the workspace",
+        message: "Preparing the Agent",
         detail: null,
       };
     }
@@ -157,7 +157,7 @@ function findContainerStartupProgress(
     if (terminated && terminated.exitCode !== 0) {
       return {
         phase: "pulling",
-        message: "Workspace initialization failed",
+        message: "Agent initialization failed",
         detail: `${status.name} (exit code ${terminated.exitCode}): ${joinReason(terminated.reason, terminated.message) ?? "Init container exited"}`,
       };
     }
@@ -183,7 +183,7 @@ function describeWaitingContainer(
       phase: "pulling",
       message:
         waiting.reason === "PodInitializing"
-          ? "Preparing the workspace"
+          ? "Preparing the Agent"
           : "Preparing the agent container",
       detail: null,
     };

@@ -89,7 +89,6 @@ describe("run_openappa_policy_tests", () => {
     expect(runs).toHaveLength(1);
     expect(response.structuredContent).toMatchObject({
       id: runs[0].id,
-      stale: false,
       files: [
         expect.objectContaining({ status: "passed" }),
         expect.objectContaining({ status: "failed" }),

@@ -91,7 +91,7 @@ export async function clearChannelThreadActive(params: {
 /**
  * Mute a channel thread — the single side-effecting entry point both providers
  * use when a user asks the bot to be quiet (a mute command, a mute reaction, or
- * a "Mute this thread" button). It does three things, in order:
+ * a "Mute this thread" button). It does four things, in order:
  *
  *  1. Records a fresh mute marker in the distributed cache. Every in-flight
  *     agent run re-reads this marker before posting and drops its reply if it
@@ -114,8 +114,7 @@ export async function clearChannelThreadActive(params: {
  * muteChannelThreadAndNotify, which every mute path goes through to decide
  * whether to confirm.
  *
- * @public — called by muteChannelThreadAndNotify and by Slack's Stop button
- * handler; the side effects have their own suite in
+ * @public — called by muteChannelThreadAndNotify and Slack mute reactions; the side effects have their own suite in
  * channel-activation.test.ts, which knip --production cannot see.
  */
 export async function muteChannelThread(params: {
@@ -124,10 +123,20 @@ export async function muteChannelThread(params: {
   threadId: string;
   scope?: string;
 }): Promise<boolean> {
-  await recordThreadMute(params);
-  chatOpsRunRegistry.cancelThread(params);
+  await stopChannelThreadReply(params);
   await markChannelThreadMuted(params);
   return await clearChannelThreadActive(params);
+}
+
+/** Cancel in-flight replies across pods while keeping the thread's activation. */
+export async function stopChannelThreadReply(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+  scope?: string;
+}): Promise<void> {
+  await recordThreadMute(params);
+  chatOpsRunRegistry.cancelThread(params);
 }
 
 /**

@@ -95,8 +95,7 @@ export function handleServerError(
   // useful text here flows straight into the UI.
   if (isBodyTooLargeError(error)) {
     // Report the limit that actually applied. A route can raise its own
-    // above the global default (the app-recording render route accepts
-    // large recording bundles), so naming the global here would misstate
+    // above the global default, so naming the global here would misstate
     // the ceiling the request hit.
     const routeLimit = request.routeOptions?.bodyLimit;
     const limit =

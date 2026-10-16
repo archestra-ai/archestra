@@ -136,6 +136,8 @@ export const SelectConversationSchema = createSelectSchema(
     messages: z.array(z.any()), // UIMessage[] from AI SDK
     chatErrors: z.array(SelectConversationChatErrorSchema),
     compactions: z.array(SelectConversationCompactionSchema),
+    /** Prompt size of the latest turn (or a later compaction); single-chat reads only. */
+    contextTokensUsed: z.number().int().nullable().optional(),
     ...selectExtendedFields,
   });
 

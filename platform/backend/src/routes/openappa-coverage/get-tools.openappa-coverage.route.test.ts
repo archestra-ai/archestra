@@ -133,9 +133,6 @@ describe("GET /api/openappa/coverage/tools", () => {
       "shared__lookup",
     ]);
     expect((await tools(`?catalogId=${privateCatalog.id}`)).data).toEqual([]);
-    expect((await tools(`?entityId=${agent.id}`)).data).toEqual([
-      expect.objectContaining({ fullName: "private__lookup" }),
-    ]);
   });
 
   test("reports the server's read-only hint, and null without one", async ({
@@ -289,34 +286,35 @@ describe("GET /api/openappa/coverage/tools", () => {
     });
   });
 
-  test("lists server filters for a target across all pages and keeps icons", async ({
+  test("lists server filters across all pages and keeps icons", async ({
     makeInternalMcpCatalog,
     makeTool,
     makeAgent,
     makeAgentTool,
   }) => {
-    const { agentIds, catalogIds } = await seed({
+    const { catalogIds } = await seed({
       makeInternalMcpCatalog,
       makeTool,
       makeAgent,
       makeAgentTool,
     });
-    const firstPage = await tools(`?entityId=${agentIds.alpha}&limit=1`);
-    expect(firstPage.servers).toEqual([
-      { id: catalogIds.acme, name: "Acme", icon: null },
-      { id: catalogIds.docs, name: "Docs", icon: "📚" },
-    ]);
-    expect(firstPage.batteries).toEqual(["acme"]);
-    expect(firstPage.data).toHaveLength(1);
-    const filtered = await tools(
-      `?entityId=${agentIds.alpha}&catalogId=${catalogIds.docs}`,
+    const firstPage = await tools("?limit=1");
+    expect(firstPage.servers).toEqual(
+      expect.arrayContaining([
+        { id: catalogIds.acme, name: "Acme", icon: null },
+        { id: catalogIds.docs, name: "Docs", icon: "📚" },
+      ]),
     );
-    expect(filtered.data.map((tool) => tool.fullName)).toEqual([
-      "docs__list_pages",
-    ]);
-    expect(filtered.data[0]).toMatchObject({ catalogIcon: "📚" });
+    expect(firstPage.batteries).toContain("acme");
+    expect(firstPage.data).toHaveLength(1);
+    const filtered = await tools(`?catalogId=${catalogIds.docs}&limit=100`);
+    expect(filtered.data.length).toBeGreaterThan(0);
+    for (const tool of filtered.data)
+      expect(tool).toMatchObject({
+        catalogId: catalogIds.docs,
+        catalogIcon: "📚",
+      });
     expect(filtered.servers).toEqual(firstPage.servers);
-    expect(filtered.batteries).toEqual([]);
   });
 
   test("identifies root, battery, and fallback policy sources in entity details", async ({

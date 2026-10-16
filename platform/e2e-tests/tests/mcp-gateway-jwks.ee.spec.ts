@@ -18,6 +18,7 @@ import { getKeycloakJwt } from "../utils";
 import {
   assignWhoamiToolToProfile,
   callMcpTool,
+  getOrgTokenForProfile,
   initializeMcpSession,
   listMcpTools,
   makeApiRequest,
@@ -221,21 +222,7 @@ test.describe("MCP Gateway - External IdP JWKS Authentication", () => {
       await assignWhoamiToolToProfile(request, profileId);
 
       // Get org token - should work since no IdP is configured
-      const tokensResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: "/api/tokens",
-      });
-      const tokensData = await tokensResponse.json();
-      const orgToken = tokensData.tokens.find(
-        (t: { isOrganizationToken: boolean }) => t.isOrganizationToken,
-      );
-      const tokenValueResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: `/api/tokens/${orgToken.id}/value`,
-      });
-      const { value: archestraToken } = await tokenValueResponse.json();
+      const archestraToken = await getOrgTokenForProfile(request);
 
       // Initialize and list tools with archestra token
       await initializeMcpSession(request, {

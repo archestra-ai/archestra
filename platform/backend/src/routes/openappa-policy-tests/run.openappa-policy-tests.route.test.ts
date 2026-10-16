@@ -125,7 +125,6 @@ describe("policy replay runs", () => {
     expect(preview.statusCode, preview.body).toBe(200);
     expect(preview.json()).toMatchObject({
       draft: true,
-      stale: false,
       validation: { valid: true },
       files: [
         {
@@ -281,7 +280,7 @@ describe("policy replay runs", () => {
       })),
     );
   });
-  test("uses real replay state and file isolation, stores outcomes and marks policy changes stale", async () => {
+  test("uses real replay state and file isolation, stores outcomes and snapshots", async () => {
     const sourceVersion = await saveFiles();
     const run = await ctx.app.inject({
       method: "POST",
@@ -291,7 +290,6 @@ describe("policy replay runs", () => {
     expect(run.statusCode, run.body).toBe(200);
     expect(run.json()).toMatchObject({
       draft: false,
-      stale: false,
       policyRevision: 1,
       validation: { valid: true },
       files: [
@@ -316,23 +314,7 @@ describe("policy replay runs", () => {
       method: "GET",
       url: "/api/openappa/policy-tests/runs",
     });
-    expect(history.json()[0]).toMatchObject({
-      id: run.json().id,
-      stale: false,
-    });
-    const changed = `${content}\n# new policy revision\n`;
-    await GuardrailsPolicyModel.save({
-      organizationId: ctx.organizationId,
-      content: changed,
-      contentHash: hash(changed),
-      updatedBy: ctx.user.id,
-      expectedRevision: 1,
-    });
-    const stale = await ctx.app.inject({
-      method: "GET",
-      url: "/api/openappa/policy-tests/runs",
-    });
-    expect(stale.json()[0]).toMatchObject({ id: run.json().id, stale: true });
+    expect(history.json()[0]).toMatchObject({ id: run.json().id });
   });
   test("saved runs reject stale versions, subsets and draft bytes without replacing history", async () => {
     const sourceVersion = await saveFiles();
@@ -372,6 +354,60 @@ describe("policy replay runs", () => {
       url: "/api/openappa/policy-tests/runs",
     });
     expect(after.json()).toEqual(before.json());
+  });
+  test("a partial run records one saved file and refuses its unsaved draft", async () => {
+    const sourceVersion = await saveFiles();
+    const single = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: { files: [files[1]], sourceVersion, partial: true },
+    });
+    expect(single.statusCode, single.body).toBe(200);
+    expect(single.json()).toMatchObject({
+      partial: true,
+      files: [{ path: files[1].path, status: "passed" }],
+    });
+    const draft = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: {
+        files: [{ ...files[1], content: `${files[1].content}# draft\n` }],
+        sourceVersion,
+        partial: true,
+      },
+    });
+    expect(draft.statusCode, draft.body).toBe(409);
+    const runs = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/policy-tests/runs",
+    });
+    expect(runs.json()).toHaveLength(1);
+  });
+  test("keeps each saved file's newest result past the 20 most recent runs", async () => {
+    const sourceVersion = await saveFiles();
+    const suite = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: { files, sourceVersion },
+    });
+    expect(suite.statusCode, suite.body).toBe(200);
+    for (let index = 0; index < 21; index++) {
+      const single = await ctx.app.inject({
+        method: "POST",
+        url: "/api/openappa/policy-tests/run",
+        payload: { files: [files[1]], sourceVersion, partial: true },
+      });
+      expect(single.statusCode, single.body).toBe(200);
+    }
+    const runs = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/policy-tests/runs",
+    });
+    const ids = runs.json().map((run: { id: string }) => run.id);
+    // 20 single-file runs plus the suite run, still the newest result for
+    // the two files no later run replayed.
+    expect(ids).toHaveLength(21);
+    expect(ids.at(-1)).toBe(suite.json().id);
   });
   test("keeps empty scenario files as cannot-run rather than false passing coverage", async () => {
     const emptyFiles = [{ path: "empty.appa", content: "# no assertions\n" }];
@@ -426,7 +462,7 @@ describe("policy replay runs", () => {
       files: [{ status: "cannot_run" }],
     });
   });
-  test("a policy changed while native replay waits makes the returned frozen run stale", async () => {
+  test("a policy changed while native replay waits leaves the run recording the policy it replayed", async () => {
     const sourceVersion = await saveFiles([files[0]]);
     const native = await import("@archestra/openappa-rs");
     const replay = native.replayOpenappaPolicy;
@@ -464,18 +500,9 @@ describe("policy replay runs", () => {
       const run = await pending;
       expect(run.statusCode, run.body).toBe(200);
       expect(run.json()).toMatchObject({
-        stale: true,
         policyRevision: 1,
         policyHash: hash(content),
         files: [{ status: "passed" }],
-      });
-      const history = await ctx.app.inject({
-        method: "GET",
-        url: "/api/openappa/policy-tests/runs",
-      });
-      expect(history.json()[0]).toMatchObject({
-        id: run.json().id,
-        stale: true,
       });
     } finally {
       release();

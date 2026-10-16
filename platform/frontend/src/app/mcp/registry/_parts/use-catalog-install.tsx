@@ -120,7 +120,9 @@ export function useCatalogInstall(opts?: {
   const pathname = usePathname();
 
   const { data: catalogItems } = useInternalMcpCatalog({});
-  const { data: installedServers } = useMcpServers();
+  const { data: installedServers } = useMcpServers({
+    includeAssignedAgents: false,
+  });
   const installMutation = useInstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const queryClient = useQueryClient();

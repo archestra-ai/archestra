@@ -39,7 +39,7 @@ export async function authorizeAgentWorkspaceAccess(params: {
     session.actorKind !== params.actor.kind ||
     session.actorId !== params.actor.id
   ) {
-    throw new ApiError(404, "Workspace not found");
+    throw new ApiError(404, "Saved run not found");
   }
   let workspace = await AgentWorkspaceModel.findByWorkloadName(
     session.workloadName,
@@ -51,7 +51,7 @@ export async function authorizeAgentWorkspaceAccess(params: {
   ) {
     throw new ApiError(
       409,
-      "The workspace must be running and retained to access files",
+      "The Agent must be running and its files retained to access them",
     );
   }
   if (workspace.state === "suspended") {
@@ -63,7 +63,7 @@ export async function authorizeAgentWorkspaceAccess(params: {
     workspace = await AgentWorkspaceModel.findByWorkloadName(
       session.workloadName,
     );
-    if (!workspace) throw new ApiError(404, "Workspace not found");
+    if (!workspace) throw new ApiError(404, "Saved run not found");
   }
   if (workspace.state === "resuming") {
     // The supervisor only restores the environment. It never starts a model
@@ -78,7 +78,7 @@ export async function authorizeAgentWorkspaceAccess(params: {
   if (!(await AgentWorkspaceModel.recordActivity(workspace.id))) {
     throw new ApiError(
       409,
-      "Workspace lifecycle changed; retry after it is resumed",
+      "The Agent changed state; retry after the run resumes",
     );
   }
   return session;

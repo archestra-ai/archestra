@@ -7,8 +7,14 @@ export const SelectPersistedFileSchema = createSelectSchema(schema.filesTable, {
   storageProvider: SkillSandboxFileStorageProviderSchema,
 });
 
-/** One persistent My Files row (the `files` table). */
-export type PersistedFile = z.infer<typeof SelectPersistedFileSchema>;
+/**
+ * One persistent My Files row (the `files` table), with its author as one
+ * principal id: a person's user id, or `service-account:<id>`.
+ */
+export type PersistedFile = Omit<
+  z.infer<typeof SelectPersistedFileSchema>,
+  "userId" | "serviceAccountId"
+> & { userId: string };
 
 /**
  * Minimal row shape the sandbox byte-storage router needs to read or delete a

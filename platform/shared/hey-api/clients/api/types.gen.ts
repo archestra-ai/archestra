@@ -23126,192 +23126,6 @@ export type UpdateAgentRunResponses = {
 
 export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRunResponses];
 
-export type GetAgentRunOpenappaReviewData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/openappa-review';
-};
-
-export type GetAgentRunOpenappaReviewErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAgentRunOpenappaReviewError = GetAgentRunOpenappaReviewErrors[keyof GetAgentRunOpenappaReviewErrors];
-
-export type GetAgentRunOpenappaReviewResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        status: 'none' | 'pending' | 'no_reviewer';
-        canDecide: boolean;
-        offerId: string | null;
-        text: string | null;
-        tool: string | null;
-        arguments: string | null;
-    };
-};
-
-export type GetAgentRunOpenappaReviewResponse = GetAgentRunOpenappaReviewResponses[keyof GetAgentRunOpenappaReviewResponses];
-
-export type DecideAgentRunOpenappaReviewData = {
-    body: {
-        decision: 'approve' | 'deny';
-        offerId: string;
-    };
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/openappa-review';
-};
-
-export type DecideAgentRunOpenappaReviewErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DecideAgentRunOpenappaReviewError = DecideAgentRunOpenappaReviewErrors[keyof DecideAgentRunOpenappaReviewErrors];
-
-export type DecideAgentRunOpenappaReviewResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        decision: 'approve' | 'deny';
-        offerId: string;
-        steered: boolean;
-    };
-};
-
-export type DecideAgentRunOpenappaReviewResponse = DecideAgentRunOpenappaReviewResponses[keyof DecideAgentRunOpenappaReviewResponses];
-
 export type ContinueAgentRunData = {
     body: {
         message?: string;
@@ -25837,651 +25651,6 @@ export type BulkDeleteApiKeysResponses = {
 };
 
 export type BulkDeleteApiKeysResponse = BulkDeleteApiKeysResponses[keyof BulkDeleteApiKeysResponses];
-
-export type AppGalleryDeviceAuthStartData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/app-gallery/device/start';
-};
-
-export type AppGalleryDeviceAuthStartErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type AppGalleryDeviceAuthStartError = AppGalleryDeviceAuthStartErrors[keyof AppGalleryDeviceAuthStartErrors];
-
-export type AppGalleryDeviceAuthStartResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        deviceCode: string;
-        userCode: string;
-        verificationUri: string;
-        interval: number;
-        expiresIn: number;
-    };
-};
-
-export type AppGalleryDeviceAuthStartResponse = AppGalleryDeviceAuthStartResponses[keyof AppGalleryDeviceAuthStartResponses];
-
-export type AppGalleryDeviceAuthPollData = {
-    body: {
-        deviceCode: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/app-gallery/device/poll';
-};
-
-export type AppGalleryDeviceAuthPollErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type AppGalleryDeviceAuthPollError = AppGalleryDeviceAuthPollErrors[keyof AppGalleryDeviceAuthPollErrors];
-
-export type AppGalleryDeviceAuthPollResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        status: 'pending';
-    } | {
-        status: 'slow_down';
-    } | {
-        status: 'complete';
-        accessToken: string;
-    };
-};
-
-export type AppGalleryDeviceAuthPollResponse = AppGalleryDeviceAuthPollResponses[keyof AppGalleryDeviceAuthPollResponses];
-
-export type EnhanceAppRecordingData = {
-    body: {
-        conversationId: string;
-        appName: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/app-recordings/enhance';
-};
-
-export type EnhanceAppRecordingErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type EnhanceAppRecordingError = EnhanceAppRecordingErrors[keyof EnhanceAppRecordingErrors];
-
-export type EnhanceAppRecordingResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        description: string | null;
-        prompt: string | null;
-        response: string | null;
-        category: string | null;
-        reason: 'empty_transcript' | 'generation_failed';
-    };
-};
-
-export type EnhanceAppRecordingResponse = EnhanceAppRecordingResponses[keyof EnhanceAppRecordingResponses];
-
-export type RenderAppRecordingVideoData = {
-    body: {
-        bundle: unknown;
-        title: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/app-recordings/render';
-};
-
-export type RenderAppRecordingVideoErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type RenderAppRecordingVideoError = RenderAppRecordingVideoErrors[keyof RenderAppRecordingVideoErrors];
-
-export type RenderAppRecordingVideoResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        jobId: string;
-    };
-};
-
-export type RenderAppRecordingVideoResponse = RenderAppRecordingVideoResponses[keyof RenderAppRecordingVideoResponses];
-
-export type CancelAppRecordingRenderData = {
-    body?: never;
-    path: {
-        jobId: string;
-    };
-    query?: never;
-    url: '/api/app-recordings/render/{jobId}';
-};
-
-export type CancelAppRecordingRenderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CancelAppRecordingRenderError = CancelAppRecordingRenderErrors[keyof CancelAppRecordingRenderErrors];
-
-export type CancelAppRecordingRenderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        cancelled: true;
-    };
-};
-
-export type CancelAppRecordingRenderResponse = CancelAppRecordingRenderResponses[keyof CancelAppRecordingRenderResponses];
-
-export type GetAppRecordingRenderStatusData = {
-    body?: never;
-    path: {
-        jobId: string;
-    };
-    query?: never;
-    url: '/api/app-recordings/render/{jobId}';
-};
-
-export type GetAppRecordingRenderStatusErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAppRecordingRenderStatusError = GetAppRecordingRenderStatusErrors[keyof GetAppRecordingRenderStatusErrors];
-
-export type GetAppRecordingRenderStatusResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        status: 'running' | 'done' | 'failed' | 'cancelled';
-        error?: string;
-    };
-};
-
-export type GetAppRecordingRenderStatusResponse = GetAppRecordingRenderStatusResponses[keyof GetAppRecordingRenderStatusResponses];
-
-export type DownloadAppRecordingVideoData = {
-    body?: never;
-    path: {
-        jobId: string;
-    };
-    query?: never;
-    url: '/api/app-recordings/render/{jobId}/video';
-};
-
-export type DownloadAppRecordingVideoResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type ReviewAppRecordingData = {
-    body?: never;
-    path?: never;
-    query: {
-        /**
-         * Absolute https://raw.githubusercontent.com/... URL of the submission's recording.json.
-         */
-        src: string;
-    };
-    url: '/api/app-recording/review';
-};
-
-export type ReviewAppRecordingErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ReviewAppRecordingError = ReviewAppRecordingErrors[keyof ReviewAppRecordingErrors];
-
-export type ReviewAppRecordingResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
 
 export type TransferAppOwnershipData = {
     body: {
@@ -35062,7 +34231,6 @@ export type GetBootstrapResponses = {
             defaultEnvironmentTrustedImageRegistries: Array<string> | null;
             skillToolsEnabled: boolean;
             mcpIdleHibernationEnabled: boolean;
-            appsHackathonRecorderEnabled: boolean;
             newAppsDisabledByDefault: boolean;
             newAppsLockedByDefault: boolean;
         } | null;
@@ -35141,13 +34309,6 @@ export type GetBootstrapResponses = {
                     redirectUri: string;
                 };
                 mcpGatewaySkillsEnabled: boolean;
-                hackathonRecorderEnabled: boolean;
-                hackathonVideoDownloadEnabled: boolean;
-                hackathonMaxFinalCutMs: number;
-                hackathonGalleryRepo: {
-                    owner: string;
-                    name: string;
-                } | null;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -36138,6 +35299,7 @@ export type GetChatConversationsResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
         scheduledRun?: {
             id: string;
             triggerId: string;
@@ -36317,6 +35479,7 @@ export type CreateChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -36481,6 +35644,7 @@ export type GetDeletedChatConversationsResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     }>;
 };
 
@@ -36735,6 +35899,7 @@ export type GetChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -36910,6 +36075,7 @@ export type UpdateChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -37620,6 +36786,7 @@ export type ForkChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -37879,6 +37046,7 @@ export type RestoreChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -38148,6 +37316,7 @@ export type CompactChatConversationResponses = {
                 compactedTokenEstimate: number;
                 createdAt: string;
             }>;
+            contextTokensUsed?: number | null;
         };
     };
 };
@@ -38320,6 +37489,7 @@ export type GenerateChatConversationTitleResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -38491,6 +37661,7 @@ export type UpdateChatMessageResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -42529,7 +41700,6 @@ export type GetPublicConfigResponses = {
         maintenanceMode: string | null;
         siteNotificationMessage: string | null;
         enterpriseCoreActive: boolean;
-        mcpSandboxDomain: string | null;
         analytics: {
             enabled: boolean;
             instanceId: string | null;
@@ -42633,13 +41803,6 @@ export type GetConfigResponses = {
                 redirectUri: string;
             };
             mcpGatewaySkillsEnabled: boolean;
-            hackathonRecorderEnabled: boolean;
-            hackathonVideoDownloadEnabled: boolean;
-            hackathonMaxFinalCutMs: number;
-            hackathonGalleryRepo: {
-                owner: string;
-                name: string;
-            } | null;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -91494,10 +90657,10 @@ export type GetOpenappaCoverageEntitiesData = {
         limit?: number;
         offset?: number;
         search?: string;
-        type?: 'agent' | 'mcp_gateway' | 'mcp_server';
+        type?: 'mcp_server';
         entityId?: string;
         toolId?: string;
-        sortBy?: 'name' | 'type' | 'tools';
+        sortBy?: 'name' | 'tools';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/openappa/coverage/entities';
@@ -91579,13 +90742,12 @@ export type GetOpenappaCoverageEntitiesResponses = {
         data: Array<{
             id: string;
             name: string;
-            type: 'agent' | 'mcp_gateway' | 'mcp_server';
+            type: 'mcp_server';
             scope: 'personal' | 'team' | 'org';
             icon: string | null;
             toolCount: number;
             governedCount: number;
             fallbackCount: number;
-            builtInCount: number;
             rules: {
                 root: number;
                 battery: number;
@@ -91593,7 +90755,6 @@ export type GetOpenappaCoverageEntitiesResponses = {
                 catchAll: number;
                 notCovered: number;
             };
-            autoMode: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -91616,7 +90777,6 @@ export type GetOpenappaCoverageToolsData = {
         offset?: number;
         search?: string;
         catalogId?: string;
-        entityId?: string;
         governedBy?: 'battery' | 'root' | 'catchall' | 'not_covered';
         battery?: string;
         kind?: 'read' | 'write' | 'approval';
@@ -91735,10 +90895,6 @@ export type GetOpenappaCoverageToolsResponses = {
             fallbackLine: number | null;
             unlisted: boolean;
             enforced: boolean;
-            agents: Array<{
-                id: string;
-                name: string;
-            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -93576,6 +92732,7 @@ export type RunOpenAppaPolicyTestsData = {
         }>;
         sourceVersion: string;
         directory?: string;
+        partial?: boolean;
     };
     path?: never;
     query?: never;
@@ -93659,6 +92816,7 @@ export type RunOpenAppaPolicyTestsResponses = {
         createdBy: string | null;
         createdAt: string;
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;
@@ -93689,7 +92847,6 @@ export type RunOpenAppaPolicyTestsResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     };
 };
 
@@ -93779,6 +92936,7 @@ export type GetOpenAppaPolicyTestRunsResponses = {
         createdBy: string | null;
         createdAt: string;
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;
@@ -93809,7 +92967,6 @@ export type GetOpenAppaPolicyTestRunsResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     }>;
 };
 
@@ -93903,6 +93060,7 @@ export type PreviewOpenAppaPolicyTestResponses = {
      */
     200: {
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;
@@ -93933,7 +93091,6 @@ export type PreviewOpenAppaPolicyTestResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     };
 };
 
@@ -95643,7 +94800,6 @@ export type GetOrganizationResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -95980,7 +95136,6 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -95991,7 +95146,6 @@ export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses
 export type UpdateSecuritySettingsData = {
     body: {
         allowChatFileUploads?: boolean;
-        appsHackathonRecorderEnabled?: boolean;
         newAppsDisabledByDefault?: boolean;
         newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
@@ -96195,7 +95349,6 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -96407,7 +95560,6 @@ export type UpdateMcpSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -96619,7 +95771,6 @@ export type UpdateSkillsSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -96832,7 +95983,6 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97067,7 +96217,6 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97315,7 +96464,6 @@ export type UpdateIntegrationSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97537,7 +96685,6 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97754,7 +96901,6 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97973,7 +97119,6 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -98182,7 +97327,6 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -98753,7 +97897,6 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -107088,6 +106231,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -108824,6 +107968,7 @@ export type CreateSiteNotificationData = {
     body: {
         content: string;
         expiresAt?: string;
+        isActive?: boolean;
     };
     path?: never;
     query?: never;
@@ -116296,306 +115441,6 @@ export type RemoveTeamExternalGroupResponses = {
 };
 
 export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
-
-export type GetTokensData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Annotate each token with worksWithProfile: whether it can authenticate against this profile
-         */
-        profileId?: string;
-    };
-    url: '/api/tokens';
-};
-
-export type GetTokensErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetTokensError = GetTokensErrors[keyof GetTokensErrors];
-
-export type GetTokensResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        tokens: Array<{
-            id: string;
-            name: string;
-            tokenStart: string;
-            isOrganizationToken: boolean;
-            team: {
-                id: string;
-                name: string;
-            } | null;
-            createdAt: string;
-            lastUsedAt: string | null;
-            /**
-             * Only set when the profileId query param is provided: whether this token can authenticate against that profile (org-scoped agents accept any team token; team-scoped agents only their teams'; personal agents none)
-             */
-            worksWithProfile?: boolean;
-        }>;
-        permissions: {
-            canAccessOrgToken: boolean;
-            canAccessTeamTokens: boolean;
-        };
-    };
-};
-
-export type GetTokensResponse = GetTokensResponses[keyof GetTokensResponses];
-
-export type GetTokenValueData = {
-    body?: never;
-    path: {
-        tokenId: string;
-    };
-    query?: never;
-    url: '/api/tokens/{tokenId}/value';
-};
-
-export type GetTokenValueErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetTokenValueError = GetTokenValueErrors[keyof GetTokenValueErrors];
-
-export type GetTokenValueResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        value: string;
-    };
-};
-
-export type GetTokenValueResponse = GetTokenValueResponses[keyof GetTokenValueResponses];
-
-export type RotateTokenData = {
-    body?: never;
-    path: {
-        tokenId: string;
-    };
-    query?: never;
-    url: '/api/tokens/{tokenId}/rotate';
-};
-
-export type RotateTokenErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type RotateTokenError = RotateTokenErrors[keyof RotateTokenErrors];
-
-export type RotateTokenResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        tokenStart: string;
-        isOrganizationToken: boolean;
-        team: {
-            id: string;
-            name: string;
-        } | null;
-        createdAt: string;
-        lastUsedAt: string | null;
-        /**
-         * Only set when the profileId query param is provided: whether this token can authenticate against that profile (org-scoped agents accept any team token; team-scoped agents only their teams'; personal agents none)
-         */
-        worksWithProfile?: boolean;
-        value: string;
-    };
-};
-
-export type RotateTokenResponse = RotateTokenResponses[keyof RotateTokenResponses];
 
 export type GetToolsData = {
     body?: never;

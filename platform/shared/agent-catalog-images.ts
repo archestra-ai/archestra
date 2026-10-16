@@ -1,5 +1,6 @@
 /** Maintained runtime image names shared by the catalog and background prefetch. */
 import AGENT_CATALOG_IMAGE_NAMES from "./agent-catalog-images.json";
+import { DEFAULT_CLAUDE_CODE_MODEL } from "./model-constants";
 
 export type AgentCatalogId = keyof typeof AGENT_CATALOG_IMAGE_NAMES;
 
@@ -99,7 +100,10 @@ export function buildAgentCatalogRuntime(params: {
     environment: null,
     credentials: [],
     ...(params.id === "claude-code" && {
-      claudeCode: { authentication: "subscription" as const },
+      claudeCode: {
+        authentication: "subscription" as const,
+        model: DEFAULT_CLAUDE_CODE_MODEL,
+      },
     }),
     ttlHours: null,
     maxCostUsd: null,

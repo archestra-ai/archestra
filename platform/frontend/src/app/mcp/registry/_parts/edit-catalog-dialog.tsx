@@ -112,7 +112,9 @@ export function EditCatalogContent({
   const showApproveBanner =
     !!isInstallAdmin && item.imageApprovalRequired === true && !approvedNow;
 
-  const { data: servers = [] } = useMcpServers();
+  const { data: servers = [] } = useMcpServers({
+    includeAssignedAgents: false,
+  });
   const affectedServerCount = servers.filter(
     (s) => s.catalogId === item.id,
   ).length;

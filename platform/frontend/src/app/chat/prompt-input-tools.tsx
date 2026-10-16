@@ -11,23 +11,21 @@ import {
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
-import { memo, useCallback, useEffect } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   PromptInputButton,
   PromptInputTools,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
-import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
 import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
+import { ChatModelButton } from "@/components/chat/chat-model-button";
+import { ChatSetupMenu } from "@/components/chat/chat-setup-menu";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
-import { ModelSelector } from "@/components/chat/model-selector";
-import { ModelSourceIndicator } from "@/components/chat/model-source-indicator";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
-import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -103,6 +101,8 @@ export interface ChatPromptInputToolsProps {
   onCompactConversation?: () => Promise<void> | void;
   /** A compaction is already running (manual or automatic) */
   isContextCompacting?: boolean;
+  /** Open the conversation's Files panel; absent before the chat exists */
+  onOpenFiles?: () => void;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
@@ -183,6 +183,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   lastCompaction,
   onCompactConversation,
   isContextCompacting = false,
+  onOpenFiles,
   agentLlmApiKeyId,
   selectorAgentId,
   onAgentChange,
@@ -203,7 +204,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   toolbarRef,
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const providerCatalog = useModelProviderCatalog();
+  // New chats expose their setup; existing conversations keep it in one menu.
+  const showOptionsMenu = !!conversationId || isNarrow;
+
+  const selectedApiKeyId = conversationId
+    ? (currentConversationChatApiKeyId ?? null)
+    : (initialApiKeyId ?? null);
   const providerToConnect = subscriptionProvider ?? currentProvider;
   const subscriptionKind = providerToConnect
     ? subscriptionKindForProvider(providerToConnect)
@@ -220,11 +228,26 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // and surfaced in the conversation's Files panel (and staged into the
   // sandbox when one is available), so the only gate is the org-level toggle.
   const showFileUploadButton = allowFileUploads;
-  const supportedTypesDescription = runtimeMode
-    ? "files are staged into the dedicated runtime before the Agent starts"
-    : sandboxAvailable
-      ? "any file type"
-      : "any file type (files this model can't read are saved to the chat's Files panel)";
+  // Short on purpose; the Files link only exists once the chat does.
+  const attachHint: ReactNode = runtimeMode ? (
+    "Attach files for the runtime"
+  ) : sandboxAvailable || !onOpenFiles ? (
+    "Attach any file"
+  ) : (
+    <>
+      <span className="block">Attach any file</span>
+      <span className="block">
+        Unreadable ones go to{" "}
+        <UnstyledButton
+          type="button"
+          onClick={onOpenFiles}
+          className="underline underline-offset-2 hover:no-underline"
+        >
+          Files
+        </UnstyledButton>
+      </span>
+    </>
+  );
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
@@ -299,6 +322,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     [focusTextarea, onAgentChange],
   );
 
+  const closeOptions = useCallback(() => {
+    setOptionsOpen(false);
+    focusTextarea();
+  }, [focusTextarea]);
+
   const handleSelectorOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
@@ -310,10 +338,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
+      {/* Not rendered visibly: it owns the key auto-selection and the
+          subscription connect/reconnect dialogs. The setup menu lists keys
+          itself, and a viewer without provider settings still needs the
+          connect flow. */}
       {!runtimeMode &&
-        canSeeFullView === false &&
-        subscriptionConnectRequired &&
-        (conversationId || onApiKeyChange) && (
+        (conversationId || onApiKeyChange) &&
+        (canShowProviderSettings ||
+          (canSeeFullView === false && subscriptionConnectRequired)) && (
           <div className="hidden">
             <LlmProviderApiKeySelector
               conversationId={conversationId}
@@ -332,165 +364,61 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             />
           </div>
         )}
-      {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
-      {isNarrow && (
-        <Popover>
+      {/* Existing chats always use the menu; new chats use it only when space is tight. */}
+      {showOptionsMenu && (
+        <Popover open={optionsOpen} onOpenChange={setOptionsOpen}>
           <PopoverTrigger asChild>
             <Button type="button" variant="ghost" size="icon-sm">
               <MoreVerticalIcon className="size-4" />
               <span className="sr-only">More options</span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent side="top" align="start" className="w-auto p-3">
-            <div className="flex flex-col gap-3">
-              {canSeeFullView &&
-                selectorAgentId !== undefined &&
-                onAgentChange && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                      Agent
-                    </p>
-                    <InitialAgentSelector
-                      currentAgentId={selectorAgentId}
-                      onAgentChange={handleAgentChange}
-                    />
-                  </div>
-                )}
-              {canShowProviderSettings && (
-                <>
-                  {modelSource && !subscriptionConnectRequired && (
-                    <div className="flex items-center gap-1.5">
-                      <ModelSourceIndicator
-                        source={modelSource}
-                        inConversation={!!conversationId}
-                        onReset={onResetModelOverride}
-                      />
-                    </div>
-                  )}
-                  {toolsUnavailable && (
-                    <div className="flex items-center gap-1.5">
-                      <NoToolsModelBadge />
-                    </div>
-                  )}
-                  {(conversationId || onApiKeyChange) && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Provider API Key
-                      </p>
-                      <LlmProviderApiKeySelector
-                        conversationId={conversationId}
-                        currentProvider={currentProvider}
-                        currentConversationChatApiKeyId={
-                          conversationId
-                            ? (currentConversationChatApiKeyId ?? null)
-                            : (initialApiKeyId ?? null)
-                        }
-                        onApiKeyChange={onApiKeyChange}
-                        onProviderChange={onProviderChange}
-                        isModelsLoading={isModelsLoading}
-                        agentLlmApiKeyId={agentLlmApiKeyId}
-                        suppressAutoSelect={agentRequiresPerUserConnect}
-                        connectRequestToken={subscriptionConnectRequest}
-                      />
-                      {subscriptionConnectRequired && onSubscriptionConnect && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          className="mt-2 gap-1.5"
-                          onClick={onSubscriptionConnect}
-                        >
-                          {subscriptionSignInTitle}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {!subscriptionConnectRequired && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Model
-                      </p>
-                      <ModelSelector
-                        selectedModel={selectedModel}
-                        onModelChange={onModelChange}
-                        apiKeyId={
-                          conversationId
-                            ? currentConversationChatApiKeyId
-                            : initialApiKeyId
-                        }
-                        suppressAutoSelect={agentRequiresPerUserConnect}
-                        fallbackModelName={agentModelDisplayName}
-                      />
-                      {onThinkingEffortChange && (
-                        <ThinkingEffortSelector
-                          selectedModel={selectedModel}
-                          apiKeyId={
-                            conversationId
-                              ? currentConversationChatApiKeyId
-                              : initialApiKeyId
-                          }
-                          value={thinkingEffort}
-                          onChange={onThinkingEffortChange}
-                          className="mt-2 w-fit"
-                        />
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-              {!runtimeMode &&
-                canSeeFullView === false &&
-                subscriptionConnectRequired &&
-                onSubscriptionConnect && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={onSubscriptionConnect}
-                  >
-                    {subscriptionSignInTitle}
-                  </Button>
-                )}
-              {tokensUsed > 0 && maxContextLength && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                    Context
-                  </p>
-                  <ContextWindowDialog
-                    breakdown={contextWindow ?? null}
-                    tokensUsed={tokensUsed}
-                    cachedTokens={cachedTokens}
-                    maxTokens={maxContextLength}
-                    lastCompaction={lastCompaction}
-                    onCompact={onCompactConversation}
-                    isCompacting={isContextCompacting}
-                  >
-                    <UnstyledButton
-                      type="button"
-                      aria-label="Context usage"
-                      data-testid={E2eTestId.ChatContextUsageTrigger}
-                      className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <ContextIndicator
-                        tokensUsed={tokensUsed}
-                        maxTokens={maxContextLength}
-                        size="sm"
-                      />
-                    </UnstyledButton>
-                  </ContextWindowDialog>
-                </div>
-              )}
-            </div>
+          <PopoverContent
+            side="top"
+            align="start"
+            collisionPadding={12}
+            className="w-auto overflow-hidden p-0"
+          >
+            <ChatSetupMenu
+              conversationId={conversationId}
+              close={closeOptions}
+              agentId={selectorAgentId}
+              onAgentChange={
+                canSeeFullView && selectorAgentId !== undefined
+                  ? handleAgentChange
+                  : undefined
+              }
+              canShowProviderSettings={canShowProviderSettings}
+              selectedModel={selectedModel}
+              onModelChange={onModelChange}
+              fallbackModelName={agentModelDisplayName}
+              modelSource={modelSource}
+              onResetModelOverride={onResetModelOverride}
+              suppressAutoSelect={agentRequiresPerUserConnect}
+              apiKeyId={selectedApiKeyId}
+              currentProvider={currentProvider}
+              canChangeCredential={
+                canShowProviderSettings && !!(conversationId || onApiKeyChange)
+              }
+              onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
+              subscriptionConnectRequired={subscriptionConnectRequired}
+              onSubscriptionConnect={onSubscriptionConnect}
+              subscriptionSignInTitle={subscriptionSignInTitle}
+              thinkingEffort={thinkingEffort}
+              onThinkingEffortChange={onThinkingEffortChange}
+              toolsUnavailable={toolsUnavailable}
+              notRecommendedForAgents={notRecommendedForAgents}
+            />
           </PopoverContent>
         </Popover>
       )}
 
-      {/* Rendered beside the three-dots menu the collapsed toolbar picked and
-          outside the RBAC gate: a warning that only exists inside a popover —
-          or only for users who can see provider settings — is a warning most
-          narrow-viewport users never get. The wide toolbar renders its own copy
-          below. */}
-      {!runtimeMode && isNarrow && notRecommendedForAgents && (
+      {/* Rendered beside the options menu and outside the RBAC gate: a
+          warning that only exists inside a popover — or only for users who can
+          see provider settings — is a warning most narrow-viewport users never
+          get. The wide toolbar renders its own copy below. */}
+      {!runtimeMode && showOptionsMenu && notRecommendedForAgents && (
         <NotRecommendedForAgentsNoticeBadge />
       )}
 
@@ -510,11 +438,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <span className="sr-only">Attach files</span>
             </Button>
           </TooltipTrigger>
-          {supportedTypesDescription && (
-            <TooltipContent side="top" sideOffset={4}>
-              Supports: {supportedTypesDescription}
-            </TooltipContent>
-          )}
+          <TooltipContent side="top" sideOffset={4}>
+            {attachHint}
+          </TooltipContent>
         </Tooltip>
       ) : (
         <Tooltip>
@@ -545,6 +471,33 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             )}
           </TooltipContent>
         </Tooltip>
+      )}
+
+      {/* Context usage sits beside the attachment button at every width, so
+          it stays one glance away once the setup moves into the menu. */}
+      {tokensUsed > 0 && maxContextLength && (
+        <ContextWindowDialog
+          breakdown={contextWindow ?? null}
+          tokensUsed={tokensUsed}
+          cachedTokens={cachedTokens}
+          maxTokens={maxContextLength}
+          lastCompaction={lastCompaction}
+          onCompact={onCompactConversation}
+          isCompacting={isContextCompacting}
+        >
+          <UnstyledButton
+            type="button"
+            aria-label="Context usage"
+            data-testid={E2eTestId.ChatContextUsageTrigger}
+            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ContextIndicator
+              tokensUsed={tokensUsed}
+              maxTokens={maxContextLength}
+              size="sm"
+            />
+          </UnstyledButton>
+        </ContextWindowDialog>
       )}
 
       {/* EncryptedChat toggle — placed with the always-visible controls (next to
@@ -595,7 +548,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           <PopoverContent
             side="top"
             align="start"
-            className="w-96 space-y-2 text-sm"
+            collisionPadding={12}
+            className="w-96 max-w-[calc(100vw-1.5rem)] space-y-2 text-sm"
           >
             <p className="font-medium">Encrypted chats</p>
             <p className="text-muted-foreground">
@@ -633,7 +587,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
       )}
 
       {/* Wide: inline toolbar items */}
-      {!isNarrow && (
+      {!showOptionsMenu && (
         <>
           {canSeeFullView && selectorAgentId !== undefined && onAgentChange && (
             <InitialAgentSelector
@@ -656,113 +610,39 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               </Button>
             )}
           {canShowProviderSettings && (
-            /* Same radius as the controls it clips: they are full-height and
-               sit flush against the group's end caps, so a wider group radius
-               rounds their outer corners while the inner ones keep the button
-               radius — a lopsided hover shape (T-1088). Let keyboard focus
-               escape that clipping and stack above adjacent controls so its
-               ring stays intact. */
-            <div className="flex items-center h-8 rounded-md bg-muted/50 overflow-hidden has-[:focus-visible]:overflow-visible [&_button:focus-visible]:relative [&_button:focus-visible]:z-10">
-              {(conversationId || onApiKeyChange) && (
-                <LlmProviderApiKeySelector
-                  conversationId={conversationId}
-                  currentProvider={currentProvider}
-                  currentConversationChatApiKeyId={
-                    conversationId
-                      ? (currentConversationChatApiKeyId ?? null)
-                      : (initialApiKeyId ?? null)
-                  }
-                  onApiKeyChange={onApiKeyChange}
-                  onProviderChange={onProviderChange}
-                  isModelsLoading={isModelsLoading}
-                  agentLlmApiKeyId={agentLlmApiKeyId}
-                  suppressAutoSelect={agentRequiresPerUserConnect}
-                  connectRequestToken={subscriptionConnectRequest}
-                  onOpenChange={handleSelectorOpenChange}
-                />
-              )}
-              {subscriptionConnectRequired && onSubscriptionConnect && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 text-primary hover:text-primary"
-                  onClick={onSubscriptionConnect}
-                >
-                  {subscriptionSignInTitle}
-                </Button>
-              )}
-              {!subscriptionConnectRequired && (
-                <ModelSelector
-                  selectedModel={selectedModel}
-                  onModelChange={onModelChange}
-                  onOpenChange={handleSelectorOpenChange}
-                  apiKeyId={
-                    conversationId
-                      ? currentConversationChatApiKeyId
-                      : initialApiKeyId
-                  }
-                  suppressAutoSelect={agentRequiresPerUserConnect}
-                  fallbackModelName={agentModelDisplayName}
-                />
-              )}
-              {!subscriptionConnectRequired && onThinkingEffortChange && (
-                <ThinkingEffortSelector
-                  selectedModel={selectedModel}
-                  apiKeyId={
-                    conversationId
-                      ? currentConversationChatApiKeyId
-                      : initialApiKeyId
-                  }
-                  value={thinkingEffort}
-                  onChange={onThinkingEffortChange}
-                  className="mr-1"
-                />
-              )}
-              {modelSource && !subscriptionConnectRequired && (
-                <ModelSourceIndicator
-                  source={modelSource}
-                  inConversation={!!conversationId}
-                  onReset={onResetModelOverride}
-                />
-              )}
-            </div>
+            <ChatModelButton
+              onOpenChange={handleSelectorOpenChange}
+              conversationId={conversationId}
+              agentId={selectorAgentId}
+              canShowProviderSettings={canShowProviderSettings}
+              selectedModel={selectedModel}
+              onModelChange={onModelChange}
+              fallbackModelName={agentModelDisplayName}
+              modelSource={modelSource}
+              onResetModelOverride={onResetModelOverride}
+              suppressAutoSelect={agentRequiresPerUserConnect}
+              apiKeyId={selectedApiKeyId}
+              currentProvider={currentProvider}
+              canChangeCredential={
+                canShowProviderSettings && !!(conversationId || onApiKeyChange)
+              }
+              onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
+              subscriptionConnectRequired={subscriptionConnectRequired}
+              onSubscriptionConnect={onSubscriptionConnect}
+              subscriptionSignInTitle={subscriptionSignInTitle}
+              thinkingEffort={thinkingEffort}
+              onThinkingEffortChange={onThinkingEffortChange}
+              toolsUnavailable={toolsUnavailable}
+              notRecommendedForAgents={notRecommendedForAgents}
+            />
           )}
           {!runtimeMode && toolsUnavailable && <NoToolsModelBadge />}
           {!runtimeMode && notRecommendedForAgents && (
             <NotRecommendedForAgentsNoticeBadge />
           )}
-          {tokensUsed > 0 && maxContextLength && (
-            <ContextWindowDialog
-              breakdown={contextWindow ?? null}
-              tokensUsed={tokensUsed}
-              cachedTokens={cachedTokens}
-              maxTokens={maxContextLength}
-              lastCompaction={lastCompaction}
-              onCompact={onCompactConversation}
-              isCompacting={isContextCompacting}
-            >
-              <UnstyledButton
-                type="button"
-                aria-label="Context usage"
-                data-testid={E2eTestId.ChatContextUsageTrigger}
-                className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <ContextIndicator
-                  tokensUsed={tokensUsed}
-                  maxTokens={maxContextLength}
-                  size="sm"
-                />
-              </UnstyledButton>
-            </ContextWindowDialog>
-          )}
         </>
       )}
-
-      {/* Apps Hackathon session recorder — a distinct cluster in the composer.
-          It records the whole chat (from scratch, even before the first message)
-          and opens the replay. Renders nothing when the feature is disabled. */}
-      <AppRecordingControls />
     </PromptInputTools>
   );
 });

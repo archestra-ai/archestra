@@ -38,7 +38,6 @@ import {
   getServerOauthLifetimeSeconds,
 } from "./_components/auth-settings-form";
 import { OAuthTokenLifetimeSection } from "./_components/oauth-token-lifetime-section";
-import { OrganizationTokenSection } from "./_components/organization-token-section";
 import { SessionLifetimeSection } from "./_components/session-lifetime-section";
 
 export default function AuthSettingsPage() {
@@ -232,8 +231,6 @@ export default function AuthSettingsPage() {
               />
             )}
           </SettingsBlock>
-
-          <OrganizationTokenSection />
 
           {/* Single save bar: every dirty auth field lands in one PATCH. */}
           <SettingsSaveBar

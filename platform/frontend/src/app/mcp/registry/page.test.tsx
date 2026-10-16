@@ -72,4 +72,16 @@ describe("McpRegistryPage", () => {
 
     expect(screen.getByTestId("mcp-registry-page")).toBeInTheDocument();
   });
+
+  it("prefetches installs without their agents, the shape the page's lists use", async () => {
+    getInternalMcpCatalogMock.mockResolvedValue({ data: [] });
+    getMcpServersMock.mockResolvedValue({ data: [] });
+
+    await McpRegistryPage();
+
+    // Building every install's agents is what kept the page from loading.
+    expect(getMcpServersMock).toHaveBeenCalledWith(
+      expect.objectContaining({ query: { includeAssignedAgents: false } }),
+    );
+  });
 });

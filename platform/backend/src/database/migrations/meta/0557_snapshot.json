@@ -1,5 +1,5 @@
 {
-  "id": "66b1911d-4f07-4623-850a-d08c65649760",
+  "id": "b6160e08-1881-4a96-8d99-02ecec413fcd",
   "prevId": "58ea45fc-5c74-468c-884d-620a9d2718ef",
   "version": "7",
   "dialect": "postgresql",
@@ -9691,7 +9691,13 @@
           "name": "user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "service_account_id": {
+          "name": "service_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "project_id": {
           "name": "project_id",
@@ -9783,6 +9789,21 @@
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "files_service_account_id_idx": {
+          "name": "files_service_account_id_idx",
+          "columns": [
+            {
+              "expression": "service_account_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -9931,6 +9952,84 @@
           "method": "btree",
           "with": {}
         },
+        "files_service_account_conversation_filename_uidx": {
+          "name": "files_service_account_conversation_filename_uidx",
+          "columns": [
+            {
+              "expression": "service_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "conversation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "filename",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"files\".\"service_account_id\" IS NOT NULL AND \"files\".\"project_id\" IS NULL AND \"files\".\"conversation_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "files_service_account_app_filename_uidx": {
+          "name": "files_service_account_app_filename_uidx",
+          "columns": [
+            {
+              "expression": "service_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "app_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "filename",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"files\".\"service_account_id\" IS NOT NULL AND \"files\".\"app_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "files_service_account_filename_orphan_uidx": {
+          "name": "files_service_account_filename_orphan_uidx",
+          "columns": [
+            {
+              "expression": "service_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "filename",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"files\".\"service_account_id\" IS NOT NULL AND \"files\".\"project_id\" IS NULL AND \"files\".\"conversation_id\" IS NULL AND \"files\".\"app_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "files_project_filename_uidx": {
           "name": "files_project_filename_uidx",
           "columns": [
@@ -9961,6 +10060,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "files_service_account_id_service_accounts_id_fk": {
+          "name": "files_service_account_id_service_accounts_id_fk",
+          "tableFrom": "files",
+          "tableTo": "service_accounts",
+          "columnsFrom": [
+            "service_account_id"
           ],
           "columnsTo": [
             "id"
@@ -10025,6 +10137,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "files_author_chk": {
+          "name": "files_author_chk",
+          "value": "num_nonnulls(\"files\".\"user_id\", \"files\".\"service_account_id\") = 1"
+        },
         "files_storage_payload_chk": {
           "name": "files_storage_payload_chk",
           "value": "(\n        (\"files\".\"storage_provider\" =  'db' AND \"files\".\"data\" IS NOT NULL AND \"files\".\"object_key\" IS NULL)\n        OR (\"files\".\"storage_provider\" <> 'db' AND \"files\".\"object_key\" IS NOT NULL AND \"files\".\"data\" IS NULL)\n      )"
@@ -11935,45 +12051,6 @@
           "tableTo": "kb_documents",
           "columnsFrom": [
             "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.kb_connector_document_counts": {
-      "name": "kb_connector_document_counts",
-      "schema": "",
-      "columns": {
-        "connector_id": {
-          "name": "connector_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "document_count": {
-          "name": "document_count",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "kb_connector_document_counts_connector_id_knowledge_base_connectors_id_fk": {
-          "name": "kb_connector_document_counts_connector_id_knowledge_base_connectors_id_fk",
-          "tableFrom": "kb_connector_document_counts",
-          "tableTo": "knowledge_base_connectors",
-          "columnsFrom": [
-            "connector_id"
           ],
           "columnsTo": [
             "id"
@@ -23165,7 +23242,13 @@
           "name": "user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "service_account_id": {
+          "name": "service_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "conversation_id": {
           "name": "conversation_id",
@@ -23228,6 +23311,21 @@
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "skill_sandboxes_service_account_id_idx": {
+          "name": "skill_sandboxes_service_account_id_idx",
+          "columns": [
+            {
+              "expression": "service_account_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -23323,6 +23421,62 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "skill_sandboxes_service_account_default_uidx": {
+          "name": "skill_sandboxes_service_account_default_uidx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "service_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "conversation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"skill_sandboxes\".\"is_default\" AND \"skill_sandboxes\".\"service_account_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "skill_sandboxes_service_account_app_default_uidx": {
+          "name": "skill_sandboxes_service_account_app_default_uidx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "service_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "app_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"skill_sandboxes\".\"is_default\" AND \"skill_sandboxes\".\"service_account_id\" IS NOT NULL AND \"skill_sandboxes\".\"app_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -23332,6 +23486,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_sandboxes_service_account_id_service_accounts_id_fk": {
+          "name": "skill_sandboxes_service_account_id_service_accounts_id_fk",
+          "tableFrom": "skill_sandboxes",
+          "tableTo": "service_accounts",
+          "columnsFrom": [
+            "service_account_id"
           ],
           "columnsTo": [
             "id"
@@ -23369,7 +23536,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "skill_sandboxes_owner_chk": {
+          "name": "skill_sandboxes_owner_chk",
+          "value": "num_nonnulls(\"skill_sandboxes\".\"user_id\", \"skill_sandboxes\".\"service_account_id\") = 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.skill_share_link_plugins": {

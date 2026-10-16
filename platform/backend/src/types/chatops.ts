@@ -357,13 +357,6 @@ export interface ChatOpsProvider {
   readonly typingRefreshIntervalMs?: number;
 
   /**
-   * The platform shows its own Stop control while the agent works (Slack
-   * agent sessions), and stopping also mutes the thread. Such providers need
-   * no text "mute" command and no one-time mute hint.
-   */
-  readonly hasNativeStopControl?: boolean;
-
-  /**
    * The agent this connection always answers as (a Slack bot pinned to one
    * agent). Such a connection skips channel agent assignment and inline
    * "Agent >" routing.

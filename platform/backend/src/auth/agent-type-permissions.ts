@@ -12,7 +12,7 @@ import {
   buildForbiddenErrorMessage,
 } from "@archestra/shared/access-control";
 import { ResourcePermissions } from "@/services/resource-permissions";
-import { type AgentScope, type AgentType, ApiError } from "@/types";
+import { type AgentType, ApiError } from "@/types";
 import { getPermissionsForUserContext, userHasPermission } from "./utils";
 
 /** @public — re-exported for testability */
@@ -93,7 +93,10 @@ export async function getAgentTypePermissionChecker(params: {
 }): Promise<AgentTypePermissionChecker> {
   const [permissions, grants] = await Promise.all([
     getPermissionsForUserContext(params),
-    ResourcePermissions.resolveAll(params),
+    ResourcePermissions.resolveAll({
+      ...params,
+      resources: ["agent", "mcpGateway"],
+    }),
   ]);
   const allowsScoped = (target: {
     agentType: AgentType;

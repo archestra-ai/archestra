@@ -219,7 +219,7 @@ test("workspace expiry stops the task with a specific reason, and the schedule c
   await reconciliation;
   await Promise.all(finalizations);
   const reason =
-    "The run's workspace reached its retention deadline before the run finished.";
+    "The run's saved files reached their retention deadline before the run finished.";
   expect(await A2ATaskModel.findById(task.id)).toMatchObject({
     state: "TASK_STATE_CANCELED",
     statusReason: reason,

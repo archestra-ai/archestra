@@ -8,6 +8,51 @@ import {
 import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
+  test("keeps the action menu open during a background list refresh", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const agent = makeAgent({ id: "refresh-agent", name: "Example agent" });
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "false" },
+        body: makeAgentCatalog({ agents: [agent] }),
+      },
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "true" },
+        body: makeAgentCatalog(),
+      },
+    ]);
+    await agentsPage.goto();
+    await expect(agentsPage.rowFor(agent.name)).toBeVisible();
+    await agentsPage.openRowMenu(agent.name);
+    const history = page.getByRole("menuitem", { name: "Version history" });
+    await expect(history).toBeVisible();
+
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "false" },
+      body: makeAgentCatalog({
+        agents: [{ ...agent, name: "Updated agent" }],
+      }),
+    });
+    // Returning to a stale tab refreshes the list while its menu is open.
+    await page.clock.setFixedTime(new Date(Date.now() + 120_000));
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(
+      agentsPage.table.getByText("Updated agent", { exact: true }),
+    ).toBeVisible();
+    await expect(history).toBeVisible();
+  });
+
   test("keeps count columns compact as the table grows", async ({
     page,
     agentsPage,

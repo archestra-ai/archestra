@@ -41,10 +41,10 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
-import TeamTokenModel from "@/models/team-token";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
@@ -950,6 +950,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
   },
 
+  // The latest notification is one organization settings slot, including inactive drafts.
+  "/api/site-notification": {
+    resourceType: "organization",
+    action: "organization.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: async (_id, orgId) =>
+      (await SiteNotificationModel.getLatest(orgId)) ?? null,
+  },
+
   // Organization (settings, onboarding, knowledge admin actions, members)
   "/api/organization": {
     resourceType: "organization",
@@ -980,13 +989,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     fetchById: (id, orgId) =>
       EnvironmentResourceDefaultModel.findByIdForAudit(id, orgId),
-  },
-  // Team / org tokens — rotation is semantically distinct from a generic update.
-  "/api/tokens/:tokenId/rotate": {
-    resourceType: "teamToken",
-    action: "teamToken.rotated",
-    resourceIdParam: "tokenId",
-    fetchById: (id, orgId) => TeamTokenModel.findByIdForAudit(id, orgId),
   },
   "/api/user-tokens/me/rotate": {
     resourceType: "userToken",

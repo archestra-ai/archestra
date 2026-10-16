@@ -882,6 +882,42 @@ class InteractionModel {
     }
   }
 
+  /**
+   * The prompt size of a chat conversation's latest turn, so its context
+   * indicator can show on load instead of waiting for the next reply.
+   * Adapters store uncached input apart from cache reads and writes, so the
+   * three add up to the whole prompt — the same figure the live stream sends.
+   */
+  static async findLatestChatContextUsage(
+    conversationId: string,
+  ): Promise<{ tokens: number; createdAt: Date } | null> {
+    const [row] = await db
+      .select({
+        inputTokens: schema.interactionsTable.inputTokens,
+        cacheReadTokens: schema.interactionsTable.cacheReadTokens,
+        cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,
+        createdAt: schema.interactionsTable.createdAt,
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.sessionId, conversationId),
+          eq(schema.interactionsTable.source, "chat"),
+          isNotNull(schema.interactionsTable.inputTokens),
+        ),
+      )
+      .orderBy(desc(schema.interactionsTable.createdAt))
+      .limit(1);
+    if (!row) return null;
+    return {
+      tokens:
+        (row.inputTokens ?? 0) +
+        (row.cacheReadTokens ?? 0) +
+        (row.cacheWriteTokens ?? 0),
+      createdAt: row.createdAt,
+    };
+  }
+
   static async findById(
     idOrScope: string | { id: string; organizationId: string },
     userId?: string,

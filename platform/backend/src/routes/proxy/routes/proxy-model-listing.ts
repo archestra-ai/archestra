@@ -129,7 +129,7 @@ function headerValue(value: string | string[] | undefined): string | undefined {
 export function extractBearerToken(
   authorization: string | string[] | undefined,
 ): string | undefined {
-  return headerValue(authorization)?.match(/^Bearer\s+(.+)$/i)?.[1];
+  return headerValue(authorization)?.match(/^Bearer\s+(\S.*)$/i)?.[1];
 }
 
 /**

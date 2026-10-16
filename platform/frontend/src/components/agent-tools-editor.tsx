@@ -77,8 +77,10 @@ import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-type CatalogTool =
-  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+type CatalogTool = Pick<
+  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number],
+  "id" | "name" | "description" | "createdAt" | "group"
+>;
 
 /**
  * Apps and built-in servers run in-process with no installed MCP server or stored
@@ -630,6 +632,7 @@ const AgentToolsEditorContent = forwardRef<
             "mcp-catalog",
             catalogId,
             "tools",
+            "picker",
           ]) ?? [];
         const allToolIds = new Set(tools.map((t) => t.id));
 
@@ -1001,7 +1004,11 @@ function McpServerPill({
 
   // Fetch tools for this catalog item
   const { data: allTools = [], isLoading: isLoadingTools } = useCatalogTools(
-    catalogItem.id,
+    open ||
+      initialPendingChanges?.selectAll ||
+      initialPendingChanges?.selectDefaults
+      ? catalogItem.id
+      : null,
   );
 
   // Org/deployment flags that compose the Archestra creation-default set. Read

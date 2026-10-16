@@ -15,7 +15,7 @@ import {
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
-import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
+import { EnvironmentModel, InternalMcpCatalogModel, ToolModel } from "@/models";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import SecretModel from "@/models/secret";
@@ -171,6 +171,76 @@ describe("internal MCP catalog routes", () => {
     expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
   });
 
+  test("picker metadata preserves visible tools and omits assignment and parameter bodies", async ({
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const agent = await makeAgent();
+    await seedAndAssignArchestraTools(agent.id);
+    await ToolModel.create({
+      catalogId: ARCHESTRA_MCP_CATALOG_ID,
+      name: "archestra__pending_example",
+      parameters: {},
+      clonedPendingDiscovery: true,
+    });
+
+    const full = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${ARCHESTRA_MCP_CATALOG_ID}/tools`,
+    });
+    const picker = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${ARCHESTRA_MCP_CATALOG_ID}/tools?view=picker`,
+    });
+    expect(full.statusCode).toBe(200);
+    expect(picker.statusCode).toBe(200);
+    const legacy = full.json();
+    expect(
+      legacy.some(
+        (tool: { assignedAgentCount: number }) => tool.assignedAgentCount > 0,
+      ),
+    ).toBe(true);
+    expect(picker.json()).toEqual(
+      legacy.map(
+        ({
+          parameters: _parameters,
+          assignedAgents: _assignedAgents,
+          assignedAgentCount: _assignedAgentCount,
+          ...tool
+        }: Record<string, unknown>) => tool,
+      ),
+    );
+    const names = picker.json().map((tool: { name: string }) => tool.name);
+    for (const hidden of [
+      "archestra__pending_example",
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      TOOL_RUN_TOOL_FULL_NAME,
+      TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+    ]) {
+      expect(names).not.toContain(hidden);
+    }
+  });
+
+  test("picker metadata excludes deleted catalog tools", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: policyAuthor,
+    });
+    await makeTool({ catalogId: catalog.id });
+    await ToolModel.softDeleteByCatalog(catalog.id, new Date());
+    for (const view of ["full", "picker"]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${catalog.id}/tools?view=${view}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([]);
+    }
+  });
+
   test("GET /api/internal_mcp_catalog/:id/tools lists stored tools with an unreadable catalog credential", async ({
     makeInternalMcpCatalog,
     makeTool,
@@ -235,10 +305,15 @@ describe("internal MCP catalog routes", () => {
       rawName: "lookup",
     });
 
-    for (const id of [catalog.id, crypto.randomUUID()]) {
+    for (const [id, suffix] of [catalog.id, crypto.randomUUID()].flatMap(
+      (id) => [
+        [id, ""],
+        [id, "?view=picker"],
+      ],
+    )) {
       const response = await app.inject({
         method: "GET",
-        url: `/api/internal_mcp_catalog/${id}/tools`,
+        url: `/api/internal_mcp_catalog/${id}/tools${suffix}`,
       });
       expect(response.statusCode).toBe(404);
     }

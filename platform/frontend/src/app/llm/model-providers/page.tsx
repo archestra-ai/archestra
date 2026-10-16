@@ -62,6 +62,7 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -356,12 +357,15 @@ export default function ApiKeysPage() {
     }
   });
 
+  // Virtual keys that map the key do not block deletion: their mappings are
+  // removed with it, and the dialog states that consequence instead.
+  const deleteBlocked =
+    isLoadingVirtualKeys ||
+    isLoadingOauthClients ||
+    (blockingOauthClientsData?.pagination.total ?? 0) > 0;
+
   const handleDelete = useCallback(async () => {
-    if (!selectedApiKey) return;
-    const hasBlockingAssociations =
-      (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-      (blockingOauthClientsData?.pagination.total ?? 0) > 0;
-    if (hasBlockingAssociations) return;
+    if (!selectedApiKey || deleteBlocked) return;
     try {
       await deleteMutation.mutateAsync(selectedApiKey.id);
       setIsDeleteDialogOpen(false);
@@ -369,12 +373,7 @@ export default function ApiKeysPage() {
     } catch {
       // Error already handled by mutation's handleApiError
     }
-  }, [
-    selectedApiKey,
-    blockingVirtualKeys,
-    blockingOauthClientsData,
-    deleteMutation,
-  ]);
+  }, [selectedApiKey, deleteBlocked, deleteMutation]);
 
   const openDeleteDialog = useCallback((apiKey: LlmProviderApiKeyResponse) => {
     setSelectedApiKey(apiKey);
@@ -936,6 +935,11 @@ export default function ApiKeysPage() {
             <DeleteApiKeyDescription
               apiKey={selectedApiKey}
               isSubscription={deletingSubscription}
+              providerLabel={
+                selectedApiKey
+                  ? providerCatalog.label(selectedApiKey.provider)
+                  : ""
+              }
               virtualKeys={blockingVirtualKeys?.data ?? []}
               totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
               oauthClients={blockingOauthClients}
@@ -947,12 +951,7 @@ export default function ApiKeysPage() {
           }
           isPending={deleteMutation.isPending}
           onConfirm={handleDelete}
-          confirmDisabled={
-            isLoadingVirtualKeys ||
-            isLoadingOauthClients ||
-            (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-            (blockingOauthClientsData?.pagination.total ?? 0) > 0
-          }
+          confirmDisabled={deleteBlocked}
           confirmLabel={deletingSubscription ? "Disconnect" : "Delete API Key"}
           pendingLabel={
             deletingSubscription ? "Disconnecting..." : "Deleting..."
@@ -964,7 +963,7 @@ export default function ApiKeysPage() {
           title="Delete API keys"
           description={`Delete ${selectedApiKeys.length} ${
             selectedApiKeys.length === 1 ? "API key" : "API keys"
-          }? This cannot be undone.`}
+          }? This cannot be undone. Virtual API keys that use any of them stop working for that provider until you map another key.`}
           isPending={bulkDeleteMutation.isPending}
           onConfirm={() => {
             bulkDeleteMutation.mutate(selectedApiKeys, {
@@ -991,6 +990,7 @@ export default function ApiKeysPage() {
 function DeleteApiKeyDescription({
   apiKey,
   isSubscription,
+  providerLabel,
   virtualKeys,
   totalVirtualKeys,
   oauthClients,
@@ -999,6 +999,7 @@ function DeleteApiKeyDescription({
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
   isSubscription: boolean;
+  providerLabel: string;
   virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
   totalVirtualKeys: number;
   oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"];
@@ -1009,9 +1010,7 @@ function DeleteApiKeyDescription({
     return null;
   }
 
-  const hasBlockingAssociations = totalVirtualKeys > 0 || totalOauthClients > 0;
-
-  if (!hasBlockingAssociations) {
+  if (totalVirtualKeys === 0 && totalOauthClients === 0) {
     // Distinct keys: the two branches share a tag, so without them React would
     // reconcile the element in place and remove its bare text nodes, which
     // crashes a machine-translated page.
@@ -1028,12 +1027,47 @@ function DeleteApiKeyDescription({
     );
   }
 
+  // OAuth-client mappings are JSON without a foreign key, so they still block
+  // removal. Virtual-key mappings are removed with the key, which only breaks
+  // requests through those virtual keys until they are remapped.
+  const blockedByOauthClients = totalOauthClients > 0;
+  const single = totalVirtualKeys === 1;
+  const usage = single
+    ? "1 virtual API key uses it."
+    : `${totalVirtualKeys} virtual API keys use it.`;
+  const pronoun = single ? "it" : "them";
+  const remedy = isSubscription
+    ? `connect again and map the new connection to ${pronoun}.`
+    : `map another ${providerLabel} key to ${pronoun}.`;
+  const consequence = `Requests through ${pronoun} to ${providerLabel} fail until you ${remedy}`;
+  const shownVirtualKeys = virtualKeys.slice(0, 5);
+  const moreVirtualKeys = totalVirtualKeys - shownVirtualKeys.length;
+
   return (
-    <div className="space-y-4 text-sm">
-      <p>
-        "{apiKey.name}" cannot be {isSubscription ? "disconnected" : "deleted"}{" "}
-        until it is removed from the credentials below.
-      </p>
+    <div
+      key={blockedByOauthClients ? "blocked" : "confirm"}
+      className="space-y-4 text-sm"
+    >
+      {blockedByOauthClients ? (
+        <p key="blocked-reason">
+          <span>
+            {`"${apiKey.name}" cannot be ${
+              isSubscription ? "disconnected" : "deleted"
+            } while OAuth clients use it. Remove it from the OAuth clients below first.`}
+          </span>
+        </p>
+      ) : (
+        <InlineNotice key="confirm-warning" variant="warning">
+          <AlertTriangle />
+          <InlineNoticeText>
+            <span>
+              {isSubscription
+                ? `Disconnect "${apiKey.name}"? ${usage} ${consequence}`
+                : `Delete "${apiKey.name}"? ${usage} ${consequence} This cannot be undone.`}
+            </span>
+          </InlineNoticeText>
+        </InlineNotice>
+      )}
 
       {isLoading && (
         <p className="text-muted-foreground">Checking credential mappings...</p>
@@ -1050,8 +1084,16 @@ function DeleteApiKeyDescription({
               View all
             </Link>
           </div>
+          {blockedByOauthClients && (
+            <InlineNotice variant="warning">
+              <AlertTriangle />
+              <InlineNoticeText>
+                <span>{`${usage} ${consequence}`}</span>
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
           <ul className="space-y-2">
-            {virtualKeys.slice(0, 5).map((key) => (
+            {shownVirtualKeys.map((key) => (
               <li
                 key={key.id}
                 className="rounded-md border bg-muted/30 px-3 py-2"
@@ -1063,20 +1105,15 @@ function DeleteApiKeyDescription({
               </li>
             ))}
           </ul>
-          {totalVirtualKeys > virtualKeys.length && (
+          {moreVirtualKeys > 0 && (
             <p className="text-muted-foreground">
-              <span>
-                {totalVirtualKeys - virtualKeys.length} more virtual API key
-              </span>
-              {totalVirtualKeys - virtualKeys.length === 1 ? null : (
-                <span>s</span>
-              )}
+              <span>{moreVirtualKeys} more virtual API key</span>
+              {moreVirtualKeys === 1 ? null : <span>s</span>}
               <span> matched.</span>
             </p>
           )}
         </div>
       )}
-
       {oauthClients.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">

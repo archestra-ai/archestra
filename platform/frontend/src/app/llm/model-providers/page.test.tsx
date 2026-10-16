@@ -8,6 +8,7 @@ const mockUseLlmProviderApiKey = vi.fn();
 const mockLlmProviderApiKeyForm = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockUseLlmOauthClients = vi.fn();
+const mockDeleteApiKey = vi.fn();
 const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
   () => ({
     useDataTableQueryParamsMock: vi.fn(),
@@ -50,7 +51,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     isPending: false,
   }),
   useDeleteLlmProviderApiKey: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockDeleteApiKey,
     isPending: false,
   }),
   useLlmProviderApiKey: (...args: unknown[]) =>
@@ -106,10 +107,22 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
   DeleteConfirmDialog: ({
     open,
     description,
+    onConfirm,
+    confirmDisabled,
   }: {
     open: boolean;
     description?: React.ReactNode;
-  }) => (open ? <div data-testid="delete-dialog">{description}</div> : null),
+    onConfirm: () => void;
+    confirmDisabled?: boolean;
+  }) =>
+    open ? (
+      <div data-testid="delete-dialog">
+        {description}
+        <button type="button" disabled={confirmDisabled} onClick={onConfirm}>
+          Confirm delete
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/external-docs-link", () => ({
@@ -642,6 +655,73 @@ describe("ApiKeysPage", () => {
       "/llm/proxy/virtual-keys?providerApiKeyId=provider-key-1",
       "/settings/oauth-clients?type=llm&providerApiKeyId=provider-key-1",
     ]);
+    // OAuth clients still block the delete; the virtual key is a consequence.
+    const dialog = screen.getByTestId("delete-dialog");
+    expect(dialog).toHaveTextContent(
+      '"Shared Anthropic credential" cannot be deleted while OAuth clients use it.',
+    );
+    expect(dialog).toHaveTextContent(
+      "1 virtual API key uses it. Requests through it to Anthropic fail until you map another Anthropic key to it.",
+    );
+    const confirm = screen.getByRole("button", { name: "Confirm delete" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(mockDeleteApiKey).not.toHaveBeenCalled();
+  });
+
+  it("lets a key that virtual keys use be deleted after stating the consequence", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "provider-key-1",
+          name: "Shared Anthropic credential",
+          provider: "anthropic",
+          scope: "org",
+        },
+      ],
+      isPending: false,
+    });
+    mockUseAllVirtualApiKeys.mockReturnValue({
+      data: {
+        data: Array.from({ length: 7 }, (_, index) => ({
+          id: `vk-${index}`,
+          name: `Service ${index}`,
+          tokenStart: "arch_abc",
+        })),
+        pagination: { total: 7 },
+      },
+      isPending: false,
+    });
+    mockDeleteApiKey.mockResolvedValue({ success: true });
+
+    render(<ApiKeysPage />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete Shared Anthropic credential",
+      }),
+    );
+
+    const dialog = await screen.findByTestId("delete-dialog");
+    expect(dialog).toHaveTextContent(
+      'Delete "Shared Anthropic credential"? 7 virtual API keys use it. Requests through them to Anthropic fail until you map another Anthropic key to them. This cannot be undone.',
+    );
+    expect(screen.getByText("Service 4")).toBeInTheDocument();
+    expect(screen.queryByText("Service 5")).not.toBeInTheDocument();
+    expect(dialog).toHaveTextContent("2 more virtual API keys matched.");
+    expect(
+      screen.getByRole("link", { name: "View all" }).getAttribute("href"),
+    ).toBe("/llm/proxy/virtual-keys?providerApiKeyId=provider-key-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("delete-dialog")).not.toBeInTheDocument();
+    });
+    expect(mockDeleteApiKey).toHaveBeenCalledTimes(1);
+    expect(mockDeleteApiKey).toHaveBeenCalledWith("provider-key-1");
   });
 
   it("opens Connect with provider-specific subscription defaults", () => {

@@ -149,10 +149,59 @@ describe("member subscription disconnect", () => {
     expect(deletes).toEqual([key.id]);
   });
 
-  it.each([
-    "llm-virtual-keys",
-    "llm-oauth-clients",
-  ])("refuses disconnect when %s still uses the credential", async (resource) => {
+  it("disconnects after confirming the consequence for virtual keys that use it", async () => {
+    const user = userEvent.setup();
+    const key = makeLlmProviderApiKey({
+      name: "Copilot subscription",
+      provider: "github-copilot",
+      userId: memberId,
+    });
+    let connected = true;
+    const deletes: string[] = [];
+    server.use(
+      http.get("/api/llm-provider-api-keys", () =>
+        HttpResponse.json(connected ? [key] : []),
+      ),
+      http.get("/api/llm-virtual-keys", () =>
+        HttpResponse.json({
+          ...emptyPage,
+          data: [
+            {
+              id: "dependent-virtual-key",
+              name: "Team proxy key",
+              tokenStart: "arch_abc",
+            },
+          ],
+          pagination: { ...emptyPage.pagination, total: 1 },
+        }),
+      ),
+      http.delete("/api/llm-provider-api-keys/:id", ({ params }) => {
+        deletes.push(String(params.id));
+        connected = false;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    renderPage();
+    const card = within(
+      await screen.findByTestId("subscription-provider-card-github-copilot"),
+    );
+    await user.click(await card.findByRole("button", { name: "Disconnect" }));
+    const dialogElement = screen.getByRole("dialog");
+    const dialog = within(dialogElement);
+    expect(await dialog.findByText("Team proxy key")).toBeVisible();
+    expect(dialogElement).toHaveTextContent(
+      'Disconnect "Copilot subscription"? 1 virtual API key uses it. Requests through it to GitHub Copilot fail until you connect again and map the new connection to it.',
+    );
+    const confirm = dialog.getByRole("button", { name: "Disconnect" });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(deletes).toEqual([key.id]);
+  });
+
+  it("refuses disconnect while an OAuth client still uses the credential", async () => {
     const user = userEvent.setup();
     const key = makeLlmProviderApiKey({
       provider: "github-copilot",
@@ -161,7 +210,7 @@ describe("member subscription disconnect", () => {
     const onDelete = vi.fn();
     server.use(
       http.get("/api/llm-provider-api-keys", () => HttpResponse.json([key])),
-      http.get(`/api/${resource}`, () =>
+      http.get("/api/llm-oauth-clients", () =>
         HttpResponse.json({
           ...emptyPage,
           data: [{ id: "dependent-credential", name: "Subscription client" }],

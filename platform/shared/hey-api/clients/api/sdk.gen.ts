@@ -6753,7 +6753,7 @@ export const reconnectLlmProviderApiKey = <ThrowOnError extends boolean = false>
 });
 
 /**
- * Delete several LLM provider API keys in one request. Keys outside the caller's organization, protected system keys, and keys that are still in use are reported in `failed` while the remaining keys are deleted.
+ * Delete several LLM provider API keys in one request. Keys outside the caller's organization, protected system keys, and keys that are still used by OAuth clients or knowledge base settings are reported in `failed` while the remaining keys are deleted. Virtual API key mappings to a deleted key are removed; the virtual keys remain.
  *
  * Authentication:
  *

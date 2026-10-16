@@ -604,7 +604,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentCatalog]: {},
   [RouteId.GetAllAgents]: {},
   [RouteId.GetAgentOptions]: {},
+  [RouteId.GetAgentOptionsPage]: {},
+  [RouteId.GetAgentOptionIds]: {},
   [RouteId.GetChatAgentRoster]: {},
+  [RouteId.GetChatAgentRosterPage]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).

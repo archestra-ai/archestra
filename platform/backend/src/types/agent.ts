@@ -405,6 +405,50 @@ export const AgentOptionSchema = SelectAgentSchema.pick({
 
 export type AgentOption = z.infer<typeof AgentOptionSchema>;
 
+/** Filters applied before a bounded selector page is fetched. */
+export const AgentOptionFiltersSchema = z.object({
+  search: z.string().max(512).optional(),
+  searchMode: z.enum(["name", "selector", "name_or_description"]).optional(),
+  sortBy: z.enum(["createdAt", "name"]).optional(),
+  exactName: z.string().optional(),
+  authorId: z.string().optional(),
+  excludeIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.uuid()),
+    )
+    .optional(),
+  runtimeCommand: z.string().optional(),
+  onlyOwnPersonalAgents: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+  excludePersonalGateways: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+  audienceVisibility: z
+    .enum(["none", "organization", "team", "user"])
+    .optional(),
+  audienceTeamIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.string()),
+    )
+    .optional(),
+  audienceUserIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.string()),
+    )
+    .optional(),
+  audienceEditorIsOwner: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+});
+export type AgentOptionFilters = z.infer<typeof AgentOptionFiltersSchema>;
+
 /** Paginated Agents-surface row with the current user's pin marker. */
 export const AgentListItemSchema = SelectAgentSchema.extend({
   pinnedAt: z.date().nullable(),

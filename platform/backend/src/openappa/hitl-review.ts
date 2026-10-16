@@ -374,7 +374,10 @@ type HitlDecision = {
   closure?: HitlClosureReason;
 };
 
-/** Observe a human ruling without spending the remedy's one-time approval. */
+/**
+ * Observe a human ruling without spending the remedy's one-time approval.
+ * @internal exported for tests
+ */
 export async function peekHitlRuling(params: {
   session: OpenAppaSession;
   offerId: string;

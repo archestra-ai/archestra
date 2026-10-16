@@ -85,7 +85,6 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /**
  * Max tool-name length accepted by the OpenAI/Anthropic tool-calling APIs and
@@ -2556,25 +2555,17 @@ class ToolModel {
   }
 
   /**
-   * Catalog entries, tools, and visible entities used by the OpenAPPA overview.
-   * The built-in catalog is included because its tools can be assigned.
-   * App catalogs are left out unless `includeAppCatalogs` is set.
-   * `catalogId` narrows catalogs, tools, and assignments to that one entry.
+   * Catalog entries and their tools, as the OpenAPPA coverage report reads
+   * them. The built-in catalog is included. App catalogs are left out unless
+   * `includeAppCatalogs` is set. `catalogId` narrows both to that one entry.
    */
   static async findCoverageInventory(
     organizationId: string,
     options: {
-      visibility?: {
-        userId: string;
-        agentTypes: Array<"agent" | "mcp_gateway">;
-        excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
-      };
       includeAppCatalogs?: boolean;
       catalogId?: string;
-      /** Bound server-only reports to visible catalogs or the selected page. */
+      /** Bound the report to visible catalogs or the selected page. */
       catalogIds?: string[];
-      /** Server counts and summary totals do not use agent assignments. */
-      includeAgentAssignments?: boolean;
     } = {},
   ): Promise<{
     catalogs: Array<Pick<InternalMcpCatalog, "id" | "name" | "scope" | "icon">>;
@@ -2585,94 +2576,12 @@ class ToolModel {
       /** The MCP `readOnlyHint` annotation; null when the server gave none. */
       readOnlyHint: boolean | null;
     }>;
-    assignments: Array<{
-      toolId: string;
-      agentId: string;
-      agentName: string;
-      agentType: "agent" | "mcp_gateway";
-    }>;
-    entities: Array<{
-      id: string;
-      name: string;
-      agentType: "agent" | "mcp_gateway";
-      scope: AgentScope;
-      icon: string | null;
-      accessAllTools: boolean;
-    }>;
   }> {
     const {
-      visibility,
       includeAppCatalogs = false,
       catalogId,
       catalogIds: selectedCatalogIds,
-      includeAgentAssignments = true,
     } = options;
-    const principals =
-      visibility && includeAgentAssignments
-        ? await ResourcePermissionSubjectModel.resolvePrincipals({
-            userId: visibility.userId,
-            organizationId,
-          })
-        : [];
-    const accessibleIds =
-      visibility && includeAgentAssignments
-        ? await AgentTeamModel.getUserAccessibleAgentIds(
-            visibility.userId,
-            false,
-            principals,
-          )
-        : undefined;
-    const entityRows = includeAgentAssignments
-      ? await db
-          .select({
-            id: schema.agentsTable.id,
-            organizationId: schema.agentsTable.organizationId,
-            name: schema.agentsTable.name,
-            agentType: schema.agentsTable.agentType,
-            scope: schema.agentsTable.scope,
-            icon: schema.agentsTable.icon,
-            accessAllTools: schema.agentsTable.accessAllTools,
-          })
-          .from(schema.agentsTable)
-          .where(
-            and(
-              eq(schema.agentsTable.organizationId, organizationId),
-              inArray(
-                schema.agentsTable.agentType,
-                visibility?.agentTypes ?? ["agent", "mcp_gateway"],
-              ),
-              eq(schema.agentsTable.builtIn, false),
-              notDeleted(schema.agentsTable),
-              ...(visibility
-                ? [
-                    inArray(schema.agentsTable.id, accessibleIds ?? []),
-                    ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
-                      ? [
-                          or(
-                            AgentModel.notOthersPersonalCondition({
-                              userId: visibility.userId,
-                              principals,
-                            }),
-                            notInArray(
-                              schema.agentsTable.agentType,
-                              visibility.excludeOtherPersonalTypes ?? [],
-                            ),
-                          ),
-                        ]
-                      : []),
-                  ]
-                : []),
-            ),
-          )
-      : [];
-    // The stored scope is retired; the audience comes from grants.
-    await AgentModel.populateGrantedScope(entityRows);
-    const entities = entityRows.flatMap(({ organizationId: _, ...row }) =>
-      row.agentType === "agent" || row.agentType === "mcp_gateway"
-        ? [{ ...row, agentType: row.agentType }]
-        : [],
-    );
-    const entityIds = entities.map((entity) => entity.id);
     const catalogRows = await db
       .select({
         id: schema.internalMcpCatalogTable.id,
@@ -2699,61 +2608,31 @@ class ToolModel {
       icon,
     }));
     const catalogIds = catalogs.map((catalog) => catalog.id);
-    if (catalogIds.length === 0)
-      return { catalogs, tools: [], assignments: [], entities };
-    const toolConditions = and(
-      inArray(schema.toolsTable.catalogId, catalogIds),
-      eq(schema.toolsTable.clonedPendingDiscovery, false),
-      notDeleted(schema.toolsTable),
-    );
-    const [tools, assignments] = await Promise.all([
-      db
-        .select({
-          id: schema.toolsTable.id,
-          catalogId: schema.toolsTable.catalogId,
-          name: schema.toolsTable.name,
-          // Servers write `meta` freely; anything but a JSON boolean reads as unknown.
-          readOnlyHint: sql<boolean | null>`case
-            when jsonb_typeof(${schema.toolsTable.meta} -> 'annotations' -> 'readOnlyHint') = 'boolean'
-            then (${schema.toolsTable.meta} -> 'annotations' ->> 'readOnlyHint')::boolean
-          end`,
-        })
-        .from(schema.toolsTable)
-        .where(toolConditions),
-      entityIds.length > 0
-        ? db
-            .select({
-              toolId: schema.agentToolsTable.toolId,
-              agentId: schema.agentsTable.id,
-              agentName: schema.agentsTable.name,
-              agentType: schema.agentsTable.agentType,
-            })
-            .from(schema.agentToolsTable)
-            .innerJoin(
-              schema.toolsTable,
-              eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
-            )
-            .innerJoin(
-              schema.agentsTable,
-              eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-            )
-            .where(
-              and(toolConditions, inArray(schema.agentsTable.id, entityIds)),
-            )
-        : Promise.resolve([]),
-    ]);
+    if (catalogIds.length === 0) return { catalogs, tools: [] };
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+        catalogId: schema.toolsTable.catalogId,
+        name: schema.toolsTable.name,
+        // Servers write `meta` freely; anything but a JSON boolean reads as unknown.
+        readOnlyHint: sql<boolean | null>`case
+          when jsonb_typeof(${schema.toolsTable.meta} -> 'annotations' -> 'readOnlyHint') = 'boolean'
+          then (${schema.toolsTable.meta} -> 'annotations' ->> 'readOnlyHint')::boolean
+        end`,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
+          notDeleted(schema.toolsTable),
+        ),
+      );
     return {
       catalogs,
       tools: tools.flatMap((tool) =>
         tool.catalogId === null ? [] : [{ ...tool, catalogId: tool.catalogId }],
       ),
-      assignments: assignments.flatMap((assignment) =>
-        assignment.agentType === "agent" ||
-        assignment.agentType === "mcp_gateway"
-          ? [{ ...assignment, agentType: assignment.agentType }]
-          : [],
-      ),
-      entities,
     };
   }
 

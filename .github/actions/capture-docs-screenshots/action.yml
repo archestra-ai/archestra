@@ -4,6 +4,12 @@ inputs:
   only:
     description: Optional publication subset; validation callers must omit this
     default: ""
+  platform-image:
+    description: Optional exact prebuilt platform image; empty keeps local build fallback
+    default: ""
+  mcp-server-base-image:
+    description: Optional exact MCP server base image for the screenshot stack
+    default: ""
 runs:
   using: composite
   steps:
@@ -28,6 +34,8 @@ runs:
     # Runtime, which has its own switch.
     - name: Start Archestra (e2e-lite stack)
       env:
+        PLATFORM_IMAGE: ${{ inputs.platform-image }}
+        MCP_SERVER_BASE_IMAGE: ${{ inputs.mcp-server-base-image }}
         ARCHESTRA_BETA: "true"
         ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
       shell: bash

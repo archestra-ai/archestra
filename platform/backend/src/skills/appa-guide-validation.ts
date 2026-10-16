@@ -4,7 +4,7 @@
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const VALIDATION_WORKFLOW = `# Validations (\`validate\`)
 
-A validation is a unit test for one case the operator cares about: a short \`.appa\` scenario of one or more calls and the decision the operator expects. Replay runs it offline against the policy; it executes no tools, models, or remote helpers. Saving a validation on its own never changes the policy or the enforcement switch. Approval follows **Save** below, not the policy's approval steps.
+A validation is a unit test for one case the operator cares about: a short \`.appa\` scenario of one or more calls and the decision the operator expects. Replay runs it against the policy; it executes no tools, but asks the policy's annotators, audience sources, and models live, as enforcement does. Saving a validation on its own never changes the policy or the enforcement switch. Approval follows **Save** below, not the policy's approval steps.
 
 ## When to offer one
 
@@ -39,7 +39,7 @@ Do not offer one after a first policy or \`init\`, for explain, review, or yell 
 2. Write exactly one file for the case, unless the operator asks for more, with a descriptive file name and one to three assertions. Its first line is a \`#\` comment naming the case in plain words, under 60 characters (for example \`# Data read from <server> can't be posted publicly\`, with the policy's own server and tool names): the Validations page shows it as the validation's name. Cover a variant of the same case (another read, another argument) as another assertion in that file, not a second file. For Git, its path is a direct \`.appa\` child of \`activeDirectory\`; locally, use the returned directory. Reuse an existing file that already covers the case instead of adding a duplicate.
 3. Expectations come from the operator's case, even when the policy fails it today. Ask only if a missing detail changes what should be allowed or blocked. If the case needs a starting state, a contract or the deployment's starting label must establish it; tool names and imagined results do not. If nothing does, explain the gap and ask for the setup.
 4. Preview with \`archestra__preview_guardrails_validation_change\`: explicit \`upsert\` and \`delete\`, \`expectedRevision\`, and \`expectedVersion\`. Preview checks syntax, then replays the files you add or edit against the saved policy. Its \`tests\` field holds each file's result. Fix \`.appa\` syntax errors in the file only and preview again.
-5. Explain in at most two sentences, without tool calls or \`.appa\` text: the situation, the expected decision, and whether the preview replay passed, failed, or could not run. Keep these distinct: \`cannot_run\` means replay could not decide offline, for example because the step needs a remote annotator; it is not a pass. If it failed, say the policy does not handle this case yet; saving the check is still the operator's call, and you can offer to change the policy (\`references/adjust.md\`). Never weaken an expectation to make it pass.
+5. Explain in at most two sentences, without tool calls or \`.appa\` text: the situation, the expected decision, and whether the preview replay passed, failed, or could not run. Keep these distinct: \`cannot_run\` means replay could not decide, for example because an annotator the step needs gave no answer; it is not a pass. If it failed, say the policy does not handle this case yet; saving the check is still the operator's call, and you can offer to change the policy (\`references/adjust.md\`). Never weaken an expectation to make it pass.
 6. End the turn with one \`archestra__ask_user\` question, "Save this validation?", with options "Save" and "Not now". A typed answer is a change: apply it, preview again, and ask again. Respect "don't save yet".
 
 ## Save
@@ -61,11 +61,11 @@ A specification is a UTF-8 .appa file with an ordered scenario. Every file start
 
 ## Resolve names and contracts once
 
-Scenario tool names must be canonical \`<family>/<namespace>/<tool>\` IDs, even when a policy rule uses a raw client name. For an ordinary Archestra MCP name, \`crm__search_records\` becomes \`mcp/crm/search_records\`. Never put the raw double-underscore name in a scenario.
+Scenario tool names must be canonical \`<family>/<namespace>/<tool>\` IDs, even when a policy rule uses a raw client name. The one exception is the replay-only \`appa/do_something\`. For an ordinary Archestra MCP name, \`crm__search_records\` becomes \`mcp/crm/search_records\`. Never put the raw double-underscore name in a scenario.
 
-Use the installed catalog namespace, not a battery's alias: if \`[server_aliases]\` maps \`mail = ["mail_prod"]\`, an installed \`mail_prod__send\` call is \`mcp/mail_prod/send\`, even though its battery rule is \`mcp/mail/send\`. Match it against the effective policy in declaration order: root rules first, then batteries. For native names or names containing additional \`__\` separators, load **Tool names** in \`references/archestra.md\` instead of guessing.
+Use the installed catalog namespace, not a battery's alias: if \`[aliases.mcp]\` maps \`mail = ["mail_prod"]\`, an installed \`mail_prod__send\` call is \`mcp/mail_prod/send\`, even though its battery rule is \`mcp/mail/send\`. Match it against the effective policy in declaration order: root rules first, then batteries. For native names or names containing additional \`__\` separators, load **Tool names** in \`references/archestra.md\` instead of guessing.
 
-Use concrete arguments appropriate to the behavior being tested. The effective policy's parameter schemas and selectors govern offline replay; installed tool schemas are not loaded. For an audience or trust check, satisfy unrelated policy parameter and selector requirements so they do not cause the refusal instead. Schema rejection, selector exclusion, and catch-all behavior can themselves be valid test targets. A missing helper leaves the decision untested. \`{}\` is appropriate only when the check needs no arguments.
+Use concrete arguments appropriate to the behavior being tested. The effective policy's parameter schemas and selectors govern replay; installed tool schemas are not loaded. For an audience or trust check, satisfy unrelated policy parameter and selector requirements so they do not cause the refusal instead. Schema rejection, selector exclusion, and catch-all behavior can themselves be valid test targets. A missing helper leaves the decision untested. \`{}\` is appropriate only when the check needs no arguments.
 
 ## Assert the requested behavior
 
@@ -83,11 +83,11 @@ expect deny
 
 Once the relevant contracts and arguments are known, preview the file to replay its decisions instead of simulating the engine in prose. Do not invent a state-changing prerequisite: a tool's name or imagined result does not establish a label.
 
-Add a matched control when claiming that a particular event caused a decision to change. For a read that restricts later sharing or lowers trust, load \`references/validation-read-restriction.md\` for a worked example. Otherwise this reference is sufficient.
+Add a matched control when claiming that a particular event caused a decision to change. For a read that restricts later sharing or lowers trust, load \`references/validation-read-restriction.md\` for a worked example. It also covers a requirement that names no later action, which uses the replay-only \`appa/do_something\` call. Otherwise this reference is sufficient.
 
 Argument blocks are not JSON objects: put each unquoted name on its own line, followed by a colon and one JSON value, without commas between argument lines. Inside a value, use ordinary JSON: quote object keys and keep arrays or objects on one line. Start with one file or a small pair. Preserve existing expectations; explain conflicts rather than rewriting them to force a pass. Do not invent call arguments from a Yell archive.
 
-Preview and runs replay offline with the same native policy engine as enforcement, against the saved composed policy. It executes no tools, models or remote helpers. The host's catch-all annotator (\`noop\`) answers offline; a step that needs any other annotator, such as \`archestra.run-command\`, or an audience lookup such as team membership reports cannot_run. Steps before a missing annotator still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. A policy with a model annotator other than \`archestra\`, a model profile, or an external authority or sanitizer cannot run at all. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration or provider behavior.
+Preview and runs replay with the same native policy engine as enforcement, against the saved composed policy. Each file replays in a fresh session, so labels from one file do not carry into the next. They execute no tools: every call gets an empty result, and arguments are checked only against the policy, not against the installed MCP server's schema, so a passing step does not prove the real tool accepts those arguments. Annotators, audience lookups, battery helpers, and models such as \`archestra\` or \`jev\` are asked live with the organization's credentials, as enforcement asks them, so a model's answer can differ between runs and each run spends its tokens. A step whose annotator gives no answer, for example because its key is not set or its helper is unreachable, reports cannot_run. Steps before it still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. No person is asked: as in \`appa replay\`, a step that expects an authority such as \`hitl\` takes the offer as approved and the file goes on, and a sanitizer returns the result unchanged. A policy with an external authority or sanitizer cannot run at all. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration.
 `;
 
 /** `references/validation-read-restriction.md`: Optional causal-check recipe. */
@@ -102,7 +102,7 @@ For "this read prevents this public write", check the exact same write before an
 This illustrative policy has a private read and a public send; adapt the names and contracts to the user's effective policy, never add these rules merely to make a validation pass:
 
 \`\`\`toml
-[server_aliases]
+[aliases.mcp]
 mail = ["mail_prod"]
 
 [policy]
@@ -136,4 +136,27 @@ mcp/mail_prod/send {
 expect deny
 \`\`\`
 
+## When the requirement names no later action
+
+A requirement such as "Slack data stays private" names the read but no later action. Do not choose a policy tool for the operator. Check the restriction with \`appa/do_something\`, a replay-only call. Its one argument, \`requires\`, is a contract's \`requires\` table written as JSON. The call never changes the session, so it can appear before and after the read.
+
+\`appa/do_something\` is less preferred than a real tool from the effective policy. A real tool also checks that its own contract enforces the restriction; \`appa/do_something\` shows only what the session allows at that point. Use a real tool whenever the requirement names the action. When reviewing an \`appa/do_something\` check, say that it does not prove every sending tool checks the restriction.
+
+\`\`\`appa
+# Channel content must not reach the public; the first call is the fresh-session control.
+appa/do_something {
+  requires: {"audience": {"contains": ["public"]}}
+}
+expect allow
+mcp/slack/read_channel {
+  channel_id: "C0123456789"
+}
+expect allow
+appa/do_something {
+  requires: {"audience": {"contains": ["public"]}}
+}
+expect deny
+\`\`\`
+
+For a trust restriction, use \`requires: {"trust": "trusted"}\` with the rank the requirement names. \`requires\` can name only \`public\`, \`self\`, \`internal\`, and the audiences, trust ranks, effects, and attention marks the policy names; it cannot read an argument such as \`$to\`. Anything else reports cannot_run, so check a concrete reader or group with a real tool instead.
 `;

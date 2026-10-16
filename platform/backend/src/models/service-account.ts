@@ -226,6 +226,7 @@ class ServiceAccountModel {
       name: serviceAccount.name,
       icon: serviceAccount.icon,
       role: serviceAccount.role,
+      teamId: serviceAccount.teamId,
       disabled: serviceAccount.disabled,
       tokenCount: serviceAccount.tokenCount,
       createdAt: serviceAccount.createdAt.toISOString(),
@@ -238,6 +239,7 @@ class ServiceAccountModel {
     name: string;
     icon?: string | null;
     role: string;
+    teamId?: string | null;
     labels?: LabelWithDetails[];
     /**
      * Required, but nullable: every interactive create knows its user, and
@@ -261,6 +263,7 @@ class ServiceAccountModel {
               name: params.name,
               icon: params.icon,
               role: params.role,
+              teamId: params.teamId ?? null,
               createdBy: params.createdBy,
             },
             userIdField: "createdBy",
@@ -311,7 +314,10 @@ class ServiceAccountModel {
     id: string,
     organizationId: string,
     data: Partial<
-      Pick<SelectServiceAccount, "name" | "icon" | "role" | "disabled">
+      Pick<
+        SelectServiceAccount,
+        "name" | "icon" | "role" | "disabled" | "teamId"
+      >
     > & {
       labels?: LabelWithDetails[];
     },
@@ -468,6 +474,24 @@ class ServiceAccountModel {
     return updated ? normalizeToken(updated) : null;
   }
 
+  /** The account row alone, without the keys {@link findById} lists. */
+  static async findAccount(
+    id: string,
+    organizationId: string,
+  ): Promise<SelectServiceAccount | null> {
+    const [row] = await db
+      .select()
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.id, id),
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   static async verifyToken(token: string): Promise<{
     serviceAccount: SelectServiceAccount;
     token: SelectServiceAccountToken;
@@ -544,6 +568,7 @@ function normalizeServiceAccount(
     name: serviceAccount.name,
     icon: serviceAccount.icon,
     role: serviceAccount.role,
+    teamId: serviceAccount.teamId,
     disabled: serviceAccount.disabled,
     createdAt: serviceAccount.createdAt,
     updatedAt: serviceAccount.updatedAt,

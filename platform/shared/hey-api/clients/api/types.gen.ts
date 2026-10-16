@@ -23126,192 +23126,6 @@ export type UpdateAgentRunResponses = {
 
 export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRunResponses];
 
-export type GetAgentRunOpenappaReviewData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/openappa-review';
-};
-
-export type GetAgentRunOpenappaReviewErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAgentRunOpenappaReviewError = GetAgentRunOpenappaReviewErrors[keyof GetAgentRunOpenappaReviewErrors];
-
-export type GetAgentRunOpenappaReviewResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        status: 'none' | 'pending' | 'no_reviewer';
-        canDecide: boolean;
-        offerId: string | null;
-        text: string | null;
-        tool: string | null;
-        arguments: string | null;
-    };
-};
-
-export type GetAgentRunOpenappaReviewResponse = GetAgentRunOpenappaReviewResponses[keyof GetAgentRunOpenappaReviewResponses];
-
-export type DecideAgentRunOpenappaReviewData = {
-    body: {
-        decision: 'approve' | 'deny';
-        offerId: string;
-    };
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/openappa-review';
-};
-
-export type DecideAgentRunOpenappaReviewErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DecideAgentRunOpenappaReviewError = DecideAgentRunOpenappaReviewErrors[keyof DecideAgentRunOpenappaReviewErrors];
-
-export type DecideAgentRunOpenappaReviewResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        decision: 'approve' | 'deny';
-        offerId: string;
-        steered: boolean;
-    };
-};
-
-export type DecideAgentRunOpenappaReviewResponse = DecideAgentRunOpenappaReviewResponses[keyof DecideAgentRunOpenappaReviewResponses];
-
 export type ContinueAgentRunData = {
     body: {
         message?: string;
@@ -82862,7 +82676,7 @@ export type GetMcpToolCallsResponses = {
             toolResult: unknown;
             userId: string | null;
             runId: string | null;
-            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
             source: 'api' | 'chat';
             createdAt: string;
@@ -82983,7 +82797,7 @@ export type GetMcpToolCallResponses = {
         toolResult: unknown;
         userId: string | null;
         runId: string | null;
-        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
         source: 'api' | 'chat';
         createdAt: string;
@@ -90414,12 +90228,6 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             } | null;
         };
         managedInGithub: boolean;
-        heldPull: {
-            contentHash: string;
-            sourceCommit: string;
-            reasons: Array<'drops_batteries' | 'changes_credentials'>;
-            message: string | null;
-        } | null;
         credentialBindings: Array<{
             variable: string;
             key: string;
@@ -91294,12 +91102,6 @@ export type SetOpenappaCredentialBindingResponses = {
             } | null;
         };
         managedInGithub: boolean;
-        heldPull: {
-            contentHash: string;
-            sourceCommit: string;
-            reasons: Array<'drops_batteries' | 'changes_credentials'>;
-            message: string | null;
-        } | null;
         credentialBindings: Array<{
             variable: string;
             key: string;
@@ -91505,10 +91307,10 @@ export type GetOpenappaCoverageEntitiesData = {
         limit?: number;
         offset?: number;
         search?: string;
-        type?: 'agent' | 'mcp_gateway' | 'mcp_server';
+        type?: 'mcp_server';
         entityId?: string;
         toolId?: string;
-        sortBy?: 'name' | 'type' | 'tools';
+        sortBy?: 'name' | 'tools';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/openappa/coverage/entities';
@@ -91590,13 +91392,12 @@ export type GetOpenappaCoverageEntitiesResponses = {
         data: Array<{
             id: string;
             name: string;
-            type: 'agent' | 'mcp_gateway' | 'mcp_server';
+            type: 'mcp_server';
             scope: 'personal' | 'team' | 'org';
             icon: string | null;
             toolCount: number;
             governedCount: number;
             fallbackCount: number;
-            builtInCount: number;
             rules: {
                 root: number;
                 battery: number;
@@ -91604,7 +91405,6 @@ export type GetOpenappaCoverageEntitiesResponses = {
                 catchAll: number;
                 notCovered: number;
             };
-            autoMode: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -91627,7 +91427,6 @@ export type GetOpenappaCoverageToolsData = {
         offset?: number;
         search?: string;
         catalogId?: string;
-        entityId?: string;
         governedBy?: 'battery' | 'root' | 'catchall' | 'not_covered';
         battery?: string;
         kind?: 'read' | 'write' | 'approval';
@@ -91746,10 +91545,6 @@ export type GetOpenappaCoverageToolsResponses = {
             fallbackLine: number | null;
             unlisted: boolean;
             enforced: boolean;
-            agents: Array<{
-                id: string;
-                name: string;
-            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -92114,10 +91909,6 @@ export type GetAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
-            declarationsPendingPublish: boolean;
-            heldContentHash: string | null;
-            heldSourceCommit: string | null;
-            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
@@ -92230,10 +92021,6 @@ export type UpdateAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
-            declarationsPendingPublish: boolean;
-            heldContentHash: string | null;
-            heldSourceCommit: string | null;
-            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
@@ -92348,10 +92135,6 @@ export type ConfigureAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
-            declarationsPendingPublish: boolean;
-            heldContentHash: string | null;
-            heldSourceCommit: string | null;
-            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
@@ -92468,10 +92251,6 @@ export type CreateAppaGithubRepositoryResponses = {
             setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
-            declarationsPendingPublish: boolean;
-            heldContentHash: string | null;
-            heldSourceCommit: string | null;
-            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
@@ -93211,215 +92990,6 @@ export type GetAppaGithubAppRepositoriesResponses = {
 };
 
 export type GetAppaGithubAppRepositoriesResponse = GetAppaGithubAppRepositoriesResponses[keyof GetAppaGithubAppRepositoriesResponses];
-
-export type GetHeldAppaGithubPullData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/openappa/github-sync/held';
-};
-
-export type GetHeldAppaGithubPullErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetHeldAppaGithubPullError = GetHeldAppaGithubPullErrors[keyof GetHeldAppaGithubPullErrors];
-
-export type GetHeldAppaGithubPullResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        sourceCommit: string | null;
-        reasons: Array<'drops_batteries' | 'changes_credentials'>;
-        grants: Array<{
-            battery: string;
-            variable: string;
-            key: string;
-        }>;
-        droppedBatteries: Array<string>;
-    } | null;
-};
-
-export type GetHeldAppaGithubPullResponse = GetHeldAppaGithubPullResponses[keyof GetHeldAppaGithubPullResponses];
-
-export type AcceptHeldAppaGithubPullData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/openappa/github-sync/accept-held';
-};
-
-export type AcceptHeldAppaGithubPullErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type AcceptHeldAppaGithubPullError = AcceptHeldAppaGithubPullErrors[keyof AcceptHeldAppaGithubPullErrors];
-
-export type AcceptHeldAppaGithubPullResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        contentHash: string;
-        sourceCommit: string;
-        reasons: Array<'drops_batteries' | 'changes_credentials'>;
-        droppedBatteries: Array<string>;
-        changedVariables: Array<string>;
-        status: {
-            enabled: boolean;
-            source: {
-                organizationId: string;
-                repo: string | null;
-                ref: string | null;
-                path: string | null;
-                interval: '15m' | '1h' | '1d' | null;
-                githubPatId: string | null;
-                githubAppConfigId: string | null;
-                gitlabTokenId: string | null;
-                revision: string;
-                sourceCommit: string | null;
-                setupPullRequestNumber: number | null;
-                lastSyncedAt: string | null;
-                lastSyncError: string | null;
-                declarationsPendingPublish: boolean;
-                heldContentHash: string | null;
-                heldSourceCommit: string | null;
-                heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
-            } | null;
-            hasPolicy: boolean;
-            validationDirectory: string;
-            githubWebUrl: string;
-            provider: 'github' | 'gitlab';
-        };
-    };
-};
-
-export type AcceptHeldAppaGithubPullResponse = AcceptHeldAppaGithubPullResponses[keyof AcceptHeldAppaGithubPullResponses];
 
 export type ConsultOpenappaBatteryHelperData = {
     body: {
@@ -107869,6 +107439,7 @@ export type GetServiceAccountsResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -107892,6 +107463,7 @@ export type CreateServiceAccountData = {
         name: string;
         icon?: string | null;
         role: string;
+        teamId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -108007,6 +107579,7 @@ export type CreateServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -108215,6 +107788,7 @@ export type GetServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -108247,6 +107821,7 @@ export type UpdateServiceAccountData = {
         name?: string;
         icon?: string | null;
         role?: string;
+        teamId?: string | null;
         disabled?: boolean;
         labels?: Array<{
             key: string;
@@ -108346,6 +107921,7 @@ export type UpdateServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -109054,6 +108630,7 @@ export type CreateSiteNotificationData = {
     body: {
         content: string;
         expiresAt?: string;
+        isActive?: boolean;
     };
     path?: never;
     query?: never;

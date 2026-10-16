@@ -23,7 +23,7 @@ export type CoverageEntitiesParams = NonNullable<
  * What the policy covers, read from the coverage endpoints: every key sits
  * under one prefix so a save, a pull or a tool sync refetches them all.
  */
-/** One page of visible agents, gateways, and registry servers with tool counts. */
+/** One page of visible registry servers with tool counts. */
 export function useCoverageEntities(
   params: CoverageEntitiesParams,
   { enabled = true }: { enabled?: boolean } = {},

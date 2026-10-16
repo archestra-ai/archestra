@@ -658,6 +658,7 @@ async function makeServiceAccount(
     name: string;
     role: string;
     disabled: boolean;
+    teamId: string | null;
     createdBy: string | null;
   }> = {},
 ) {

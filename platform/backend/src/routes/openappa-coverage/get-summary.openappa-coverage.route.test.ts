@@ -41,10 +41,14 @@ describe("GET /api/openappa/coverage/summary", () => {
         catchAll: 0,
       },
       // The default policy includes the archestra battery, which has no
-      // server to bind while the built-in catalog is not seeded.
+      // server to bind while the built-in catalog is not seeded, so the whole
+      // composition is refused, the claude-code battery with it.
       batteries: {
         active: [],
-        broken: [{ name: "archestra", status: "refused", tools: 0 }],
+        broken: [
+          { name: "archestra", status: "refused", tools: 0 },
+          { name: "claude-code", status: "refused", tools: 0 },
+        ],
         available: [],
       },
       // Nothing composed before that refusal, so nothing is enforced.

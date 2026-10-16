@@ -178,6 +178,47 @@ describe("chat composer typing performance", () => {
     expect(renderCounts.apiKeySelector).toBe(apiKeySelectorRendersAfterMount);
   });
 
+  it("shows the selected model inline by default when the toolbar has room", () => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+        currentProvider="openai"
+        modelSource="agent"
+      />,
+    );
+
+    expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Change model or provider" }),
+    ).toBeNull();
+  });
+
+  it("moves the model selector into the more-options menu when the toolbar is narrow", () => {
+    layoutState.isNarrow = true;
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+        currentProvider="openai"
+        modelSource="agent"
+      />,
+    );
+
+    expect(screen.queryByTestId("model-selector")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "More options" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows trust and audience as a static session readout", () => {
     statusState.data = { trust: "suspicious", audience: "internal" };
     render(

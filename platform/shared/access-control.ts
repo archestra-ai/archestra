@@ -535,8 +535,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StartAgentRun]: {},
   [RouteId.GetMyAgentRuns]: {},
   [RouteId.GetMyAgentRun]: {},
-  [RouteId.GetAgentRunOpenappaReview]: {},
-  [RouteId.DecideAgentRunOpenappaReview]: {},
   [RouteId.UpdateAgentRun]: {},
   [RouteId.CancelAgentRun]: {},
   [RouteId.ContinueAgentRun]: {},
@@ -1735,8 +1733,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaPolicyDeclarations]: { openappaPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
-  [RouteId.AcceptHeldAppaGithubPull]: { openappaPolicy: ["update"] },
-  [RouteId.GetHeldAppaGithubPull]: { openappaPolicy: ["read"] },
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},

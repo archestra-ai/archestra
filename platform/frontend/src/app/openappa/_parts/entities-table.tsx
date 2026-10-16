@@ -3,7 +3,6 @@
 import type { Column, ColumnDef, SortingState } from "@tanstack/react-table";
 import { Bot, ChevronDown, ChevronUp, TriangleAlert, X } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
 import {
   CollectionFilters,
   FilterBar,
@@ -297,9 +296,7 @@ function PolicyTargetDialog({
         <div ref={toolsRef} tabIndex={-1} className="outline-none">
           <ToolTable
             key={selected.id}
-            catalogId={selected.type === "mcp_server" ? selected.id : undefined}
-            entityId={selected.type === "mcp_server" ? undefined : selected.id}
-            autoMode={selected.autoMode}
+            catalogId={selected.id}
             target={targetOf(selected)}
           />
         </div>
@@ -312,17 +309,6 @@ function targetOf(entity: CoverageEntity) {
   return { kind: entity.type, id: entity.id, name: entity.name };
 }
 
-function entityTypeLabel(type: CoverageEntity["type"]): string {
-  switch (type) {
-    case "agent":
-      return "Agent";
-    case "mcp_gateway":
-      return "MCP gateway";
-    case "mcp_server":
-      return "MCP server";
-  }
-}
-
 function EntityIcon({
   entity,
   size,
@@ -330,24 +316,16 @@ function EntityIcon({
   entity: CoverageEntity;
   size: number;
 }) {
-  return entity.type === "mcp_server" ? (
+  return (
     <McpCatalogIcon icon={entity.icon} catalogId={entity.id} size={size} />
-  ) : (
-    <AgentIcon icon={entity.icon} fallbackType={entity.type} size={size} />
   );
 }
 
 // Rendered inside the dialog's description paragraph, so it sticks to inline
 // elements.
 function EntitySummary({ entity }: { entity: CoverageEntity }) {
-  const toolLabel =
-    entity.type === "mcp_server"
-      ? "synced tools"
-      : entity.autoMode
-        ? "tools reachable for you"
-        : "assigned tools";
   const stats = [
-    { value: entity.toolCount, label: toolLabel },
+    { value: entity.toolCount, label: "synced tools" },
     {
       value: entity.rules.root + entity.rules.battery + entity.rules.catchAll,
       label: "covered",
@@ -356,20 +334,11 @@ function EntitySummary({ entity }: { entity: CoverageEntity }) {
       value: entity.rules.notCovered,
       label: "no rule",
     },
-    ...(entity.builtInCount > 0
-      ? [
-          {
-            value: entity.builtInCount,
-            label:
-              entity.builtInCount === 1 ? "built-in tool" : "built-in tools",
-          },
-        ]
-      : []),
   ];
 
   return (
     <span className="flex flex-wrap items-baseline gap-x-1.5">
-      <span>{entityTypeLabel(entity.type)}</span>
+      <span>MCP server</span>
       {stats.map((stat) => (
         <span key={stat.label} className="flex items-baseline gap-1.5">
           <span aria-hidden>·</span>

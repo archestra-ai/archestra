@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -10,7 +10,7 @@ import {
 import { ProviderChannels } from "./provider-channels";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/agent.query", () => ({ useInternalAgents: vi.fn() }));
+vi.mock("@/lib/agent.query", () => ({ useInternalAgentOptions: vi.fn() }));
 vi.mock("@/lib/chatops/chatops.query", () => ({
   useAllChatOpsBindings: vi.fn(),
   useUpdateChatOpsBinding: vi.fn(),
@@ -61,12 +61,12 @@ beforeEach(() => {
     data: true,
     isPending: false,
   } as ReturnType<typeof useHasPermissions>);
-  vi.mocked(useInternalAgents).mockReturnValue({
+  vi.mocked(useInternalAgentOptions).mockReturnValue({
     data: [
       { id: "a1", name: "Marketing", agentType: "agent" },
       { id: "a2", name: "Support", agentType: "agent" },
     ],
-  } as unknown as ReturnType<typeof useInternalAgents>);
+  } as unknown as ReturnType<typeof useInternalAgentOptions>);
   vi.mocked(useUpdateChatOpsBinding).mockReturnValue({
     mutate: vi.fn(),
     mutateAsync: vi.fn(),

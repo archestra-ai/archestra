@@ -33,7 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -408,7 +408,7 @@ function ScheduleDialog({
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data: agents = [] } = useProfiles({
+  const { data: agents = [] } = useAgentOptions({
     filters: { agentType: "agent" },
     enabled: canReadAgents === true,
   });

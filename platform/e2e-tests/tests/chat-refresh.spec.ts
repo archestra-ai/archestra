@@ -22,7 +22,7 @@ test.describe.configure({ retries: 2 });
  * racing a stopwatch against them.
  */
 const FIRST_PAINT_ROUTES = [
-  "**/api/agents/all*",
+  "**/api/agents/chat-roster*",
   "**/api/agents/*/tools*",
   "**/api/agents/*/delegations*",
 ];

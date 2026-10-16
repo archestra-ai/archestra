@@ -24,6 +24,7 @@ const {
   mockUseAgentOptions,
   mockUseInternalMcpCatalog,
   mockUseSkillsList,
+  mockUseApps,
 } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   mockDeleteMutate: vi.fn(),
@@ -32,6 +33,7 @@ const {
   mockUseAgentOptions: vi.fn(),
   mockUseInternalMcpCatalog: vi.fn(),
   mockUseSkillsList: vi.fn(),
+  mockUseApps: vi.fn(),
 }));
 
 vi.mock("next/navigation");
@@ -101,6 +103,11 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 
 vi.mock("@/lib/skills/skill.query", () => ({
   useSkillsList: mockUseSkillsList,
+}));
+
+vi.mock("@/lib/app.query", () => ({
+  APPS_FIRST_PAGE: { limit: 100, offset: 0 },
+  useApps: mockUseApps,
 }));
 
 vi.mock("@/lib/secrets.query", () => ({
@@ -254,6 +261,7 @@ describe("ConversationSearchPalette", () => {
     mockUseAgentOptions.mockReturnValue({ data: [] });
     mockUseInternalMcpCatalog.mockReturnValue({ data: [] });
     mockUseSkillsList.mockReturnValue({ data: [] });
+    mockUseApps.mockReturnValue({ data: { data: [] } });
     capturedOnValueChange = null;
   });
 
@@ -604,6 +612,35 @@ describe("ConversationSearchPalette", () => {
       );
       fireEvent.click(screen.getByText("Invoice Parser"));
       expect(mockRouterPush).toHaveBeenCalledWith("/skills/skill-1");
+    });
+
+    it("finds an app through the server search and opens it on the Apps page", () => {
+      mockUseApps.mockReturnValue({
+        data: {
+          data: [
+            {
+              source: "owned",
+              id: "app-1",
+              name: "Expense Tracker",
+            },
+          ],
+        },
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "expense" },
+      });
+
+      expect(mockUseApps).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "expense" }),
+        expect.objectContaining({ enabled: true }),
+      );
+      expect(screen.getByText("Apps")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Expense Tracker"));
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/apps?search=Expense%20Tracker",
+      );
     });
 
     it("finds a settings tab by its label and by its path", () => {

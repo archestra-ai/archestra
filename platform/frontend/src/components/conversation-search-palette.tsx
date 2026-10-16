@@ -1,6 +1,7 @@
 "use client";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
+  AppWindow,
   Bot,
   type LucideIcon,
   MessageCircle,
@@ -49,6 +50,7 @@ import {
 } from "@/consts";
 import { useAgentOptions } from "@/lib/agent.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
+import { APPS_FIRST_PAGE, useApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -256,6 +258,15 @@ export function ConversationSearchPalette({
     enabled: open && isAuthenticated && canReadMcpRegistry === true,
   });
   const isSearchingEntities = debouncedSearch.trim().length > 0;
+  // Apps are searched by the server like skills; useApps already withholds
+  // the request from readers without app:read.
+  const { data: appsPage } = useApps(
+    { ...APPS_FIRST_PAGE, search: debouncedSearch },
+    {
+      enabled: open && isAuthenticated && isSearchingEntities,
+      toastOnError: false,
+    },
+  );
   const { data: skills = [] } = useSkillsList(
     { search: debouncedSearch },
     {
@@ -320,12 +331,14 @@ export function ConversationSearchPalette({
 
   // Skills are already filtered by the server's search, so no local pass.
   const matchingSkills = isSearchingEntities ? skills : [];
+  const matchingApps = isSearchingEntities ? (appsPage?.data ?? []) : [];
 
   const hasEntityMatches =
     matchingSettingsTabs.length > 0 ||
     matchingAgents.length > 0 ||
     matchingMcpCatalogItems.length > 0 ||
-    matchingSkills.length > 0;
+    matchingSkills.length > 0 ||
+    matchingApps.length > 0;
 
   // The server searches run titles. Filter cached pins too while their
   // independent browse feed is disabled during search.
@@ -789,7 +802,7 @@ export function ConversationSearchPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search or navigate"
-      description="Search chats, agents, skills, MCP servers and pages"
+      description="Search chats, agents, apps, skills, MCP servers and pages"
       className="max-w-2xl"
       shouldFilter={false}
       value={selectedValue}
@@ -854,6 +867,24 @@ export function ConversationSearchPalette({
                     href: `/skills/${skill.id}`,
                     label: skill.name,
                     icon: Sparkles,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingApps.length > 0 && (
+              <CommandGroup heading="Apps">
+                {matchingApps.map((app) =>
+                  renderLinkItem({
+                    key:
+                      app.source === "owned"
+                        ? `app-${app.id}`
+                        : `app-${app.mcpServerId}-${app.toolName}`,
+                    // The Apps page is the one place an app opens; its search
+                    // field shows the app.
+                    href: `/apps?search=${encodeURIComponent(app.name)}`,
+                    label: app.name,
+                    icon: AppWindow,
                   }),
                 )}
               </CommandGroup>

@@ -35,7 +35,7 @@ import {
   MASKED_KEY,
   MaskedCodeExample,
 } from "@/components/virtual-key-connection-guide";
-import { useProfile, useProfiles } from "@/lib/agent.query";
+import { useAgentOptions, useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
@@ -300,7 +300,7 @@ function useOauthClientStep(
     oauthClient: ["create"],
   });
   const { data: clients = [] } = useMcpOauthClients({ enabled });
-  const { data: resources = [] } = useProfiles({
+  const { data: resources = [] } = useAgentOptions({
     filters: { agentTypes: ["mcp_gateway", "agent"] },
   });
   const create = useCreateOauthClient();

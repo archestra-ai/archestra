@@ -1,3 +1,4 @@
+import { CONNECTION_SETUP_MAX_SKILLS } from "@archestra/shared/connection-setup";
 import { auth as betterAuth } from "@/auth/better-auth";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
@@ -47,11 +48,11 @@ type ResolveViewerResult =
   | { status: "forbidden" };
 
 /**
- * Upper bound on skills served from one static marketplace, mirroring the
- * per-share-link cap. Keeps a single clone bounded no matter how large the
+ * Upper bound on skills served from one static marketplace, the same cap as a
+ * setup and a share link. Keeps a single clone bounded no matter how large the
  * org's skill set grows; the overflow is logged, never silently dropped.
  */
-const MAX_MARKETPLACE_SKILLS = 500;
+const MAX_MARKETPLACE_SKILLS = CONNECTION_SETUP_MAX_SKILLS;
 
 export async function resolveMarketplaceViewer(params: {
   authorization: string | undefined;

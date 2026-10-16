@@ -79,6 +79,10 @@ import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import {
+  defaultMaxOutputTokens,
+  resolveModelOutputBudget,
+} from "@/utils/llm-resolution";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -166,16 +170,20 @@ export function createDirectLLMModel({
     resolvedBaseUrl && cfg.proxiedPathSuffix
       ? `${resolvedBaseUrl}${cfg.proxiedPathSuffix}`
       : resolvedBaseUrl;
-  return cfg.createModel({
-    apiKey,
-    modelName,
-    baseURL,
-    headers: providerHeaders(cfg),
-    // Direct OpenRouter models bypass the proxy adapter, so heal the request
-    // body here; the wrapper no-ops for non-healable requests.
-    fetch: provider === "openrouter" ? createResponseHealingFetch() : undefined,
-    direct: true,
-  });
+  return withCatalogOutputBudget(
+    cfg.createModel({
+      apiKey,
+      modelName,
+      baseURL,
+      headers: providerHeaders(cfg),
+      // Direct OpenRouter models bypass the proxy adapter, so heal the request
+      // body here; the wrapper no-ops for non-healable requests.
+      fetch:
+        provider === "openrouter" ? createResponseHealingFetch() : undefined,
+      direct: true,
+    }),
+    { provider, modelName },
+  );
 }
 
 /**
@@ -287,14 +295,17 @@ export function createLLMModel(params: {
     ? `${proxyBaseUrl}${cfg.proxiedPathSuffix}`
     : proxyBaseUrl;
 
-  return cfg.createModel({
-    apiKey,
-    modelName,
-    baseURL,
-    headers,
-    fetch: createTracedFetch(),
-    supportedEndpoints,
-  });
+  return withCatalogOutputBudget(
+    cfg.createModel({
+      apiKey,
+      modelName,
+      baseURL,
+      headers,
+      fetch: createTracedFetch(),
+      supportedEndpoints,
+    }),
+    { provider, modelName },
+  );
 }
 
 /**
@@ -1237,6 +1248,66 @@ function createOllamaNativeFetch(
 
     return baseFetch(input, { ...forwarded, body: JSON.stringify(body) });
   };
+}
+
+/**
+ * Default output budget for calls that set no `maxOutputTokens` (see
+ * defaultMaxOutputTokens), so a model that reasons by default never runs into
+ * a small provider or SDK default. Anthropic matters most: its SDK substitutes a per-model
+ * table that lags new model ids and Vertex `@` spellings (4096 for unknown
+ * ids on older SDKs, 128k on newer ones, which older models reject), so it
+ * gets the safe fallback. Explicit per-call values still win.
+ */
+function withCatalogOutputBudget(
+  model: LLMModel,
+  target: { provider: SupportedProvider; modelName: string },
+): LLMModel {
+  // Plain ids and v2 providers (Ollama) keep their provider default.
+  if (typeof model === "string" || model.specificationVersion !== "v3")
+    return model;
+  // OpenAI chat models take the cap as max_completion_tokens: the SDK maps
+  // maxOutputTokens to the legacy max_tokens for names its reasoning
+  // heuristic misses, which newer models reject (see the chat route). Other
+  // providers built on the OpenAI chat client (Perplexity) keep max_tokens.
+  const viaCompletionTokens =
+    target.provider === "openai" && model.provider === "openai.chat";
+  // One lookup per model instance, not per generation step.
+  let resolved: Promise<number | undefined> | undefined;
+  const resolveDefault = () => {
+    resolved ??= resolveModelOutputBudget(target).then((budget) =>
+      defaultMaxOutputTokens(target.provider, budget),
+    );
+    return resolved;
+  };
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      specificationVersion: "v3",
+      transformParams: async ({ params }) => {
+        if (!viaCompletionTokens) {
+          if (params.maxOutputTokens !== undefined) return params;
+          const maxOutputTokens = await resolveDefault();
+          return maxOutputTokens === undefined
+            ? params
+            : { ...params, maxOutputTokens };
+        }
+        const openai = params.providerOptions?.openai;
+        const maxCompletionTokens =
+          openai?.maxCompletionTokens ??
+          params.maxOutputTokens ??
+          (await resolveDefault());
+        if (maxCompletionTokens === undefined) return params;
+        return {
+          ...params,
+          maxOutputTokens: undefined,
+          providerOptions: {
+            ...params.providerOptions,
+            openai: { ...openai, maxCompletionTokens },
+          },
+        };
+      },
+    },
+  });
 }
 
 /**

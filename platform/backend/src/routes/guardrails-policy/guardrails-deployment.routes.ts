@@ -51,7 +51,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      return setGuardrailsDeployment(request.body);
+      return setGuardrailsDeployment(request.body, {
+        userId: request.user.id,
+      });
     },
   );
 };

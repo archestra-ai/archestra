@@ -63,7 +63,23 @@ describe("system chat agent visibility", () => {
     expect(included.json().map((agent: { id: string }) => agent.id)).toEqual(
       expect.arrayContaining([policy.id, compaction.id, ordinary.id]),
     );
+    const slim = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/chat-roster",
+    });
     const roster = await ctx.app.inject({ method: "GET", url: chatRosterUrl });
+    expect(slim.statusCode).toBe(200);
+    expect(
+      slim
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    ).toEqual(
+      roster
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    );
     expect(roster.statusCode).toBe(200);
     expect(
       roster
@@ -88,7 +104,23 @@ describe("system chat agent visibility", () => {
       agentType: "agent",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
     });
+    const slim = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/chat-roster",
+    });
     const roster = await ctx.app.inject({ method: "GET", url: chatRosterUrl });
+    expect(slim.statusCode).toBe(200);
+    expect(
+      slim
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    ).toEqual(
+      roster
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    );
     expect(roster.statusCode).toBe(200);
     expect(roster.json()).toEqual([
       expect.objectContaining({
@@ -139,7 +171,23 @@ describe("system chat agent visibility", () => {
       ).statusCode,
     ).toBe(200);
     config.openappa.enabled = false;
+    const slim = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/chat-roster",
+    });
     const roster = await ctx.app.inject({ method: "GET", url: chatRosterUrl });
+    expect(slim.statusCode).toBe(200);
+    expect(
+      slim
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    ).toEqual(
+      roster
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    );
     expect(roster.statusCode).toBe(200);
     expect(roster.json()).toEqual([]);
     expect(
@@ -181,7 +229,23 @@ describe("system chat agent visibility", () => {
       access: "personal",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
     });
+    const slim = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/chat-roster",
+    });
     const roster = await ctx.app.inject({ method: "GET", url: chatRosterUrl });
+    expect(slim.statusCode).toBe(200);
+    expect(
+      slim
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    ).toEqual(
+      roster
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort(),
+    );
     expect(roster.statusCode).toBe(200);
     expect(roster.json()).toEqual([]);
     const denied = await ctx.app.inject({

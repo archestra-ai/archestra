@@ -11,8 +11,10 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 vi.mock("next/navigation");
+vi.mock("sonner");
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -25,21 +27,25 @@ import { ConnectCommandPanel } from "./connect-command-panel";
 
 const {
   createSetupMock,
+  setupHookOptions,
   allSkillsMock,
   pluginsMock,
   skillsMarketplaceVisibleMock,
 } = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
+  setupHookOptions: {} as { onRefused?: (message: string) => void },
   allSkillsMock: vi.fn(),
   pluginsMock: vi.fn(),
   skillsMarketplaceVisibleMock: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/connection-setup.query", () => ({
-  useCreateConnectionSetup: () => ({
-    mutateAsync: createSetupMock,
-    isPending: false,
-  }),
+  useCreateConnectionSetup: (options?: {
+    onRefused?: (message: string) => void;
+  }) => {
+    setupHookOptions.onRefused = options?.onRefused;
+    return { mutateAsync: createSetupMock, isPending: false };
+  },
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({
@@ -1987,4 +1993,181 @@ describe("ConnectCommandPanel", () => {
       ).not.toBeInTheDocument();
     });
   });
+});
+
+describe("a setup over a delivery limit on the approval page", () => {
+  const PLUGIN_LIMIT_MESSAGE =
+    "556 plugins are selected, but one setup can install at most 555. Choose 555 or fewer in Setup options, or turn plugins off.";
+
+  it("explains too many plugins instead of sending a setup the backend refuses", async () => {
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled ? manyPlugins(556) : undefined,
+      isPending: false,
+    }));
+    const user = userEvent.setup();
+    const { finish } = renderApproval();
+    try {
+      await screen.findByText("ABCD-1234");
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        PLUGIN_LIMIT_MESSAGE,
+      );
+      expect(toast.error).toHaveBeenCalledWith(PLUGIN_LIMIT_MESSAGE, {
+        id: "connect-setup-limit",
+      });
+      await confirmCode(user);
+      expect(
+        screen.getByRole("button", { name: "Approve connection" }),
+      ).toBeDisabled();
+      expect(await approveTooltip(user)).toHaveTextContent(
+        PLUGIN_LIMIT_MESSAGE,
+      );
+      expect(createSetupMock).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      await user.click(screen.getByRole("switch", { name: "Plugins" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ pluginIds: [] }),
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Approve connection" }),
+        ).toBeEnabled(),
+      );
+      expect(screen.queryByText(PLUGIN_LIMIT_MESSAGE)).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("explains too many shared skills and connects once skills are off", async () => {
+    allSkillsMock.mockReturnValue({
+      data: Array.from({ length: 1112 }, (_, index) => ({
+        id: `skill-${index}`,
+        name: `skill-${index}`,
+        scope: "org",
+        teams: [],
+      })),
+    });
+    const message =
+      "1,112 skills are shared with you, but one setup can include at most 1,111. Turn skills off in Setup options to connect without them.";
+    const user = userEvent.setup();
+    const { finish } = renderApproval();
+    try {
+      expect(await screen.findByRole("alert")).toHaveTextContent(message);
+      expect(toast.error).toHaveBeenCalledWith(message, {
+        id: "connect-setup-limit",
+      });
+      expect(createSetupMock).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      await user.click(screen.getByRole("switch", { name: "Skills" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ skills: undefined, pluginIds: ["b1"] }),
+        ),
+      );
+    } finally {
+      finish();
+    }
+  });
+
+  it("shows the backend's reason when it refuses the setup", async () => {
+    createSetupMock.mockImplementationOnce(async () => {
+      setupHookOptions.onRefused?.(
+        "Plugin delivery is limited to 1110 MiB of plugin files",
+      );
+      return null;
+    });
+    const user = userEvent.setup();
+    const { finish } = renderApproval();
+    try {
+      await screen.findByText("ABCD-1234");
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(
+        "Could not prepare the setup: Plugin delivery is limited to 1110 MiB of plugin files.",
+      );
+      await confirmCode(user);
+      expect(await approveTooltip(user)).toHaveTextContent(
+        "Could not prepare the setup: Plugin delivery is limited to 1110 MiB of plugin files. Adjust Setup options, then select Retry setup.",
+      );
+
+      await user.click(
+        within(alert).getByRole("button", { name: "Retry setup" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Approve connection" }),
+        ).toBeEnabled(),
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  function renderApproval() {
+    const server = setupServer(
+      http.get("http://localhost:9000/api/client-connections/demo", () =>
+        HttpResponse.json({
+          clientId: "claude-code",
+          platform: "macos",
+          userCode: "ABCD-1234",
+          expiresAt: "2099-01-01T00:00:00Z",
+        }),
+      ),
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectRequest=demo&platform=macos") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectCommandPanel {...renderPanelProps()} />
+      </QueryClientProvider>,
+    );
+    return {
+      finish: () => {
+        view.unmount();
+        queryClient.clear();
+        server.close();
+        archestraApiClient.setConfig({ baseUrl: "" });
+      },
+    };
+  }
+
+  async function confirmCode(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "This code matches the code in my terminal.",
+      }),
+    );
+  }
+
+  async function approveTooltip(user: ReturnType<typeof userEvent.setup>) {
+    const approve = screen.getByRole("button", { name: "Approve connection" });
+    // A disabled button gets no pointer events; its wrapper carries the tooltip.
+    await user.hover(approve.parentElement as HTMLElement);
+    return screen.findByRole("tooltip");
+  }
+
+  function manyPlugins(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      id: `plugin-${index}`,
+      displayName: `Plugin ${index}`,
+      description: "",
+      clientType: "claude-code",
+      enabled: true,
+      contentHash: `hash-${index}`,
+      approvedContentHash: `hash-${index}`,
+      supportedPlatforms: ["posix"],
+    }));
+  }
 });

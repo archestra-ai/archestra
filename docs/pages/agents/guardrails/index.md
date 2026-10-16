@@ -47,7 +47,7 @@ The **Enforcement** card on **Overview** now shows **On**.
 What to know:
 
 - The starting policy covers only Archestra's own tools. Every other tool runs without restrictions. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled by your organization's default model before each command, so reading a credentials file narrows who can see the result. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
-- Enforcement applies to sessions that start while it is on. Start a new session after you turn it on.
+- Enforcement applies to sessions that start while it is on. Start a new session after you turn it on. The same holds for an [Agent Runtime](/docs/agents/runtime/handoff#hand-off-with-guardrails-on) run: one started while enforcement was off stays unchecked, so a checked session cannot read its results.
 - **Settings → Guardrails** holds four settings: **Enforce the policy**, which you can switch once a policy exists; **Break the glass**, which makes a [`yell`](/docs/reference/archestra-mcp-server#yell) also turn Guardrails off for the session that sends it (on by default); **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and Git sync.
 
 ## Validations

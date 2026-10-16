@@ -231,6 +231,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
  */
 export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
   const { data: servers } = useMcpServers({
+    includeAssignedAgents: false,
     catalogId: params?.catalogId,
     assignmentScope: params?.assignmentScope,
     assignmentTeamIds: params?.assignmentTeamIds,

@@ -81,7 +81,7 @@ import {
   type PluginListItem,
   usePlugins,
 } from "@/lib/plugins/plugin.query";
-import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
+import { type SkillName, useSkillNames } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
@@ -133,28 +133,24 @@ type EditableRow =
  * control the install does not have. Sharing a fixed subset is what a snapshot
  * link is for.
  */
-/**
- * How long the review step's skill list waits before it starts fetching.
- * Long enough for the setup command above it to render and settle, short
- * enough that the list is there by the time anyone scrolls to it.
- */
-const CONNECT_SKILLS_DEFER_MS = 750;
-
 export function useConnectSkills(enabled: boolean): {
   eligible: boolean;
-  skills: ConnectSkill[];
+  /** Up to the setup cap; `total` counts them all. */
+  skills: SkillName[];
+  total: number;
   loading: boolean;
 } {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  const { data: skills, isPending } = useAllSkills({
+  // One light request: the setup command waits on it, so it must not page
+  // the full list.
+  const { data, isPending } = useSkillNames({
     enabled: enabled && canReadSkills === true,
-    // Step 2's content, not step 1's: let the part of the page the user acts
-    // on first render before walking the catalogue.
-    deferMs: CONNECT_SKILLS_DEFER_MS,
   });
+  const total = data?.total ?? 0;
   return {
-    eligible: enabled && canReadSkills === true && (skills ?? []).length > 0,
-    skills: skills ?? [],
+    eligible: enabled && canReadSkills === true && total > 0,
+    skills: data?.data ?? [],
+    total,
     loading:
       enabled &&
       (canReadSkills === undefined || (canReadSkills && isPending === true)),
@@ -227,6 +223,7 @@ export function ConnectCommandPanel({
   const {
     eligible: skillsEligible,
     skills: allSkills,
+    total: skillsTotal,
     loading: skillsLoading,
   } = useConnectSkills(skillsEnabled && preparationEnabled);
   // Providers are named the way this organization names them, so a renamed
@@ -587,8 +584,8 @@ export function ConnectCommandPanel({
       pluginsEnabled && selectedPlugins.length > PLUGIN_DELIVERY_MAX_COUNT
         ? `${formatCount(selectedPlugins.length)} plugins are selected, but one setup can install at most ${formatCount(PLUGIN_DELIVERY_MAX_COUNT)}. Choose ${formatCount(PLUGIN_DELIVERY_MAX_COUNT)} or fewer${optionsPlace}, or turn plugins off.`
         : null,
-      includeSkills && selectedSkills.length > CONNECTION_SETUP_MAX_SKILLS
-        ? `${formatCount(selectedSkills.length)} skills are shared with you, but one setup can include at most ${formatCount(CONNECTION_SETUP_MAX_SKILLS)}. Turn skills off${optionsPlace} to connect without them.`
+      includeSkills && skillsTotal > CONNECTION_SETUP_MAX_SKILLS
+        ? `${formatCount(skillsTotal)} skills are shared with you, but one setup can include at most ${formatCount(CONNECTION_SETUP_MAX_SKILLS)}. Turn skills off${optionsPlace} to connect without them.`
         : null,
     ]
       .filter(Boolean)
@@ -1277,7 +1274,10 @@ export function ConnectCommandPanel({
                 changeTestId="connect-change-skills"
                 detail={
                   includeSkills ? (
-                    <SkillNamesLine skills={selectedSkills} />
+                    <SkillNamesLine
+                      skills={selectedSkills}
+                      total={skillsTotal}
+                    />
                   ) : undefined
                 }
               >
@@ -1286,8 +1286,8 @@ export function ConnectCommandPanel({
                     <span>Install </span>
                     <ResourceLink href="/skills">
                       <span>
-                        <span>{allSkills.length} shared skill</span>
-                        {allSkills.length === 1 ? null : <span>s</span>}
+                        <span>{skillsTotal} shared skill</span>
+                        {skillsTotal === 1 ? null : <span>s</span>}
                       </span>
                     </ResourceLink>
                   </>
@@ -1405,6 +1405,7 @@ export function ConnectCommandPanel({
                     setInclude: (value) =>
                       setSelectedSkillIds(value ? null : new Set()),
                     names: allSkills.map((skill) => skill.name),
+                    total: skillsTotal,
                   }
                 : null
             }
@@ -1949,9 +1950,15 @@ function ResourceLink({
 const SKILL_NAME_PREVIEW_LIMIT = 6;
 
 /** Names the skills the command will install, truncated past the limit. */
-function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
+function SkillNamesLine({
+  skills,
+  total,
+}: {
+  skills: SkillName[];
+  total: number;
+}) {
   const shown = skills.slice(0, SKILL_NAME_PREVIEW_LIMIT);
-  const more = skills.length - shown.length;
+  const more = total - shown.length;
   return (
     <p className="text-xs text-muted-foreground/80">
       {shown.map((s) => s.name).join(", ")}

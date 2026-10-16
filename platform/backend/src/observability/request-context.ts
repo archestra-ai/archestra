@@ -1,4 +1,5 @@
 import { context, createContextKey } from "@opentelemetry/api";
+import type { Span as ErrorTrackingSpan } from "@sentry/core";
 import type { RouteCategory } from "./tracing/attributes";
 
 /**
@@ -29,4 +30,24 @@ export function getActiveChatRouteCategory(): RouteCategory | undefined {
   return context.active().getValue(CHAT_ROUTE_CATEGORY_KEY) as
     | RouteCategory
     | undefined;
+}
+
+/**
+ * Error tracking opens its own HTTP server span for each incoming request, in a
+ * trace separate from the OpenTelemetry server span. The active context of the
+ * request handler does not lead to it, so it is kept here by request.
+ */
+const errorTrackingServerSpans = new WeakMap<object, ErrorTrackingSpan>();
+
+export function rememberErrorTrackingServerSpan(
+  span: ErrorTrackingSpan,
+  request: object,
+): void {
+  errorTrackingServerSpans.set(request, span);
+}
+
+export function getErrorTrackingServerSpan(
+  request: object,
+): ErrorTrackingSpan | undefined {
+  return errorTrackingServerSpans.get(request);
 }

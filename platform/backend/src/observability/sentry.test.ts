@@ -1,8 +1,12 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
-import type { ErrorEvent, EventHint } from "@sentry/core";
+import type { ErrorEvent, EventHint, TransactionEvent } from "@sentry/core";
 import { describe, expect, test } from "vitest";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
-import { buildRawProviderError, filterErrorEvent } from "./sentry";
+import {
+  buildRawProviderError,
+  filterErrorEvent,
+  filterTransactionEvent,
+} from "./sentry";
 
 function makeEvent(): ErrorEvent {
   return {} as ErrorEvent;
@@ -152,5 +156,46 @@ describe("filterErrorEvent", () => {
         hintFor(new Error("undefined is not a function")),
       ),
     ).toBe(event);
+  });
+});
+
+describe("filterTransactionEvent", () => {
+  function mcpGatewayTransaction(method?: string): TransactionEvent {
+    return {
+      type: "transaction",
+      transaction: "POST /v1/mcp/:profileId",
+      contexts: {
+        trace: {
+          trace_id: "0".repeat(32),
+          span_id: "0".repeat(16),
+          data: method ? { "mcp.method.name": method } : {},
+        },
+      },
+    };
+  }
+
+  test("drops a long-lived MCP stream", () => {
+    expect(
+      filterTransactionEvent(mcpGatewayTransaction("subscriptions/listen")),
+    ).toBeNull();
+  });
+
+  test("keeps ordinary MCP gateway requests on the same route", () => {
+    for (const event of [
+      mcpGatewayTransaction("tools/call"),
+      mcpGatewayTransaction("tools/list"),
+      mcpGatewayTransaction(),
+    ]) {
+      expect(filterTransactionEvent(event)).toBe(event);
+    }
+  });
+
+  test("still drops noisy transactions by name", () => {
+    expect(
+      filterTransactionEvent({
+        type: "transaction",
+        transaction: "GET /v1/mcp/:profileId",
+      }),
+    ).toBeNull();
   });
 });

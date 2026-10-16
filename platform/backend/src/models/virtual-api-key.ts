@@ -60,7 +60,7 @@ const FORCE_DB = true;
 const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
 
 /** Name of the per-user key the in-app chat authenticates with. */
-const CHAT_USER_KEY_NAME = "Chat";
+const CHAT_USER_KEY_NAME = "In-app chat";
 
 type TeamInfo = { id: string; name: string };
 type ProviderApiKeyInput = {

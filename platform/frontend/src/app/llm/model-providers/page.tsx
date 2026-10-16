@@ -62,7 +62,6 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { InlineTag } from "@/components/ui/inline-tag";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -1057,16 +1056,13 @@ function DeleteApiKeyDescription({
           </span>
         </p>
       ) : (
-        <InlineNotice key="confirm-warning" variant="warning">
-          <AlertTriangle />
-          <InlineNoticeText>
-            <span>
-              {isSubscription
-                ? `Disconnect "${apiKey.name}"? ${usage} ${consequence}`
-                : `Delete "${apiKey.name}"? ${usage} ${consequence} This cannot be undone.`}
-            </span>
-          </InlineNoticeText>
-        </InlineNotice>
+        <p key="confirm-lead">
+          <span>
+            {isSubscription
+              ? `Disconnect "${apiKey.name}"? ${usage} ${consequence}`
+              : `Delete "${apiKey.name}"? ${usage} ${consequence} This cannot be undone.`}
+          </span>
+        </p>
       )}
 
       {isLoading && (
@@ -1085,12 +1081,9 @@ function DeleteApiKeyDescription({
             </Link>
           </div>
           {blockedByOauthClients && (
-            <InlineNotice variant="warning">
-              <AlertTriangle />
-              <InlineNoticeText>
-                <span>{`${usage} ${consequence}`}</span>
-              </InlineNoticeText>
-            </InlineNotice>
+            <p className="text-muted-foreground">
+              <span>{`${usage} ${consequence}`}</span>
+            </p>
           )}
           <ul className="space-y-2">
             {shownVirtualKeys.map((key) => (

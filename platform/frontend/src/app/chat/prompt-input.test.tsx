@@ -296,12 +296,6 @@ vi.mock("@/components/chat/initial-agent-selector", () => ({
   ),
 }));
 
-// The Apps Hackathon recorder cluster is a self-contained feature with its own
-// tests; stub it here so the composer test needs no QueryClient/config context.
-vi.mock("@/components/app-session-recording/app-recording-controls", () => ({
-  AppRecordingControls: () => null,
-}));
-
 // Mock the Tooltip components to avoid Radix UI complexity
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,

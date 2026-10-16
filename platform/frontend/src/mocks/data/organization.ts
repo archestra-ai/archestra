@@ -23,7 +23,6 @@ export function makeOrganization(
     onlineSkillCatalogEnabled: true,
     skillMarketplaceAnonymousAccess: false,
     skillToolsEnabled: false,
-    appsHackathonRecorderEnabled: true,
     newAppsDisabledByDefault: false,
     newAppsLockedByDefault: false,
     allowChatFileUploads: false,

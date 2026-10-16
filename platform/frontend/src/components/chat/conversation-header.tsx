@@ -8,7 +8,6 @@ import {
   Globe,
   MoreHorizontal,
   MoreVertical,
-  PlayCircle,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -43,10 +42,6 @@ interface PanelControls {
   isArtifactOpen: boolean;
   isBrowserVisible: boolean;
   isAppsVisible: boolean;
-  /** Set for submission-review chats — enables (and highlights) the Replay tab. */
-  isReviewVisible: boolean;
-  /** Whether this chat has a submission under review (Replay tab is available). */
-  hasReview: boolean;
   showBrowserButton: boolean;
   onClose: () => void;
   onOpenTab: (tab: RightPanelTab) => void;
@@ -93,7 +88,6 @@ export function ConversationHeader({
   let resolvedTab: RightPanelTab = panel.activeTab;
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
   if (resolvedTab === "runs" && !panel.scheduledRun) resolvedTab = "files";
-  if (resolvedTab === "review" && !panel.hasReview) resolvedTab = "files";
 
   // Radix won't fire onValueChange when the clicked tab already equals the
   // controlled value, so collapsing on an active-tab click has to happen here,
@@ -230,16 +224,6 @@ export function ConversationHeader({
             }}
           >
             <TabsList className="h-8">
-              {panel.hasReview && (
-                <TabsTrigger
-                  value="review"
-                  className="text-xs px-3"
-                  onMouseDown={handleTabMouseDown("review")}
-                >
-                  <PlayCircle className="h-3 w-3" />
-                  Replay
-                </TabsTrigger>
-              )}
               {panel.scheduledRun && (
                 <TabsTrigger
                   value="runs"
@@ -290,20 +274,7 @@ export function ConversationHeader({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {actionItems}
-              {panel.hasReview && (
-                <DropdownMenuItem
-                  onSelect={() => {
-                    if (panel.isReviewVisible) {
-                      panel.onClose();
-                    } else {
-                      panel.onOpenTab("review");
-                    }
-                  }}
-                >
-                  <PlayCircle className="h-4 w-4" />
-                  {panel.isReviewVisible ? "Hide Replay" : "Show Replay"}
-                </DropdownMenuItem>
-              )}
+
               <DropdownMenuItem
                 onSelect={() => {
                   if (panel.isArtifactOpen) {

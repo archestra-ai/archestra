@@ -70,12 +70,6 @@ vi.mock("@/components/chat/chat-setup-menu", () => ({
   ChatSetupMenu: () => <div data-testid="chat-setup-menu" />,
 }));
 
-// The Apps Hackathon recorder cluster is a self-contained feature with its own
-// tests; stub it here so the composer test needs no QueryClient/config context.
-vi.mock("@/components/app-session-recording/app-recording-controls", () => ({
-  AppRecordingControls: () => null,
-}));
-
 vi.mock("@/lib/agent.query", () => ({
   useProfile: () => ({ data: null, isLoading: false, error: null }),
 }));

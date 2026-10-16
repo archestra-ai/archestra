@@ -37,7 +37,14 @@ allow queue entry but do not validate the combined merge-group commit.
    merge directly. Do not bypass the queue with `--admin`, change rules/secrets/
    runner variables, approve your own PR, or enqueue other PRs.
 4. Run relevant local checks using `archestra-dev-testing` and the skills for
-   the changed domain. For platform work, run from `platform/` using `pnpm`.
+   the changed domain. For platform work, run `pnpm preflight <headRefOid>`
+   from `platform/` in a clean checkout of the exact PR head immediately before
+   requesting queue entry, followed by the relevant focused tests. It checks
+   types, lint, unused exports, white-label copy, and frontend/shared unit tests;
+   builds, backend suites, Rust checks, browser suites and codegen stay in queue CI.
+   Run once per finished revision, not on every intermediate commit or push.
+   Fix failures and rerun after changes. This local check is enforced by the
+   agent workflow; GitHub does not require its result for queue admission.
    Address fixable PR policy failures. Missing reviews, access, a release freeze,
    or an intentionally draft PR need a concrete blocker report, not a bypass.
 5. Refresh the PR head immediately before enqueueing and use explicit PR/repo

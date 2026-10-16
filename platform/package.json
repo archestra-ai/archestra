@@ -10,6 +10,7 @@
     "prepare": "cd .. && husky platform/.husky || true",
     "ci:check": "turbo check:ci",
     "commit:check": "turbo check:commit",
+    "preflight": "node scripts/preflight.mjs",
     "dev": "turbo dev",
     "build": "turbo build",
     "start": "turbo start",

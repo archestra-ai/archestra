@@ -81,6 +81,11 @@ inputs:
     required: false
     default: "true"
 
+  builder-cache-key:
+    description: Optional persistent Blacksmith BuildKit cache key for trusted builds
+    required: false
+    default: ""
+
 outputs:
   digest:
     description: "Image digest"
@@ -121,6 +126,8 @@ runs:
     - name: Setup Docker Builder
       if: ${{ inputs.setup-builder == 'true' }}
       uses: ./.github/actions/setup-docker-builder
+      with:
+        cache-key: ${{ inputs.builder-cache-key }}
 
     - name: Build Docker image
       id: build

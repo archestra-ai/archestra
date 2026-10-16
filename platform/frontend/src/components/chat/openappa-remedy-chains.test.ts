@@ -179,6 +179,105 @@ describe("identifyRemedyChains", () => {
     expect(remedyChainPartIndices(chain)).toEqual([0, 1, 2]);
     expect(getRemedyChainStatus(chain)).toEqual({ state: "running" });
   });
+
+  it("holds a retry still streaming its arguments in the chain it retries", () => {
+    const parts = [
+      notice({ id: "c1", tool: "fs__read", args: { p: 1 } }),
+      remedy({ id: "c2", offerId: offerFor("c1") }),
+      {
+        type: "tool-fs__read",
+        toolCallId: "c3",
+        state: "input-streaming",
+        input: {},
+      },
+    ] as UIMessage["parts"];
+
+    const [chain] = identifyRemedyChains(parts, { getToolShortName });
+
+    expect(chain.finalAttempt?.part.toolCallId).toBe("c3");
+    expect(getRemedyChainStatus(chain).state).toBe("running");
+  });
+
+  it("splits a streamed retry out once its complete arguments differ", () => {
+    const parts = [
+      notice({ id: "c1", tool: "fs__read", args: { p: 1 } }),
+      remedy({ id: "c2", offerId: offerFor("c1") }),
+      {
+        type: "tool-fs__read",
+        toolCallId: "c3",
+        state: "input-available",
+        input: { p: 2 },
+      },
+    ] as UIMessage["parts"];
+
+    const [chain] = identifyRemedyChains(parts, { getToolShortName });
+
+    expect(chain.finalAttempt).toBeNull();
+    expect(remedyChainPartIndices(chain)).not.toContain(2);
+  });
+
+  it("does not hold a streaming call before the chain has a remedy", () => {
+    const parts = [
+      notice({ id: "c1", tool: "fs__read", args: { p: 1 } }),
+      {
+        type: "tool-fs__read",
+        toolCallId: "c2",
+        state: "input-streaming",
+        input: {},
+      },
+    ] as UIMessage["parts"];
+
+    const [chain] = identifyRemedyChains(parts, { getToolShortName });
+
+    expect(chain.finalAttempt).toBeNull();
+  });
+
+  it("keeps identical blocked calls of one step in separate chains", () => {
+    const parts = [
+      { type: "step-start" },
+      notice({ id: "a1", tool: "fs__read", args: { p: 1 } }),
+      notice({ id: "b1", tool: "fs__read", args: { p: 1 } }),
+      { type: "step-start" },
+      remedy({ id: "b2", offerId: offerFor("b1") }),
+      remedy({ id: "a2", offerId: offerFor("a1") }),
+      { type: "step-start" },
+      call({ id: "r1", toolName: "fs__read", input: { p: 1 } }),
+      call({ id: "r2", toolName: "fs__read", input: { p: 1 } }),
+    ] as UIMessage["parts"];
+
+    const chains = identifyRemedyChains(parts, { getToolShortName });
+
+    expect(
+      chains.map((chain) =>
+        [...chain.steps, chain.finalAttempt].map(
+          (member) => member?.part.toolCallId,
+        ),
+      ),
+    ).toEqual([
+      ["a1", "a2", "r1"],
+      ["b1", "b2", "r2"],
+    ]);
+  });
+
+  it("continues a chain when the call is blocked again in a later step", () => {
+    const parts = [
+      { type: "step-start" },
+      notice({ id: "c1", tool: "fs__read", args: { p: 1 } }),
+      { type: "step-start" },
+      remedy({ id: "c2", offerId: offerFor("c1") }),
+      { type: "step-start" },
+      notice({ id: "c3", tool: "fs__read", args: { p: 1 } }),
+    ] as UIMessage["parts"];
+
+    const chains = identifyRemedyChains(parts, { getToolShortName });
+
+    expect(chains).toHaveLength(1);
+    expect(chains[0].steps.map((step) => step.part.toolCallId)).toEqual([
+      "c1",
+      "c2",
+      "c3",
+    ]);
+  });
 });
 
 // === Fixtures ===

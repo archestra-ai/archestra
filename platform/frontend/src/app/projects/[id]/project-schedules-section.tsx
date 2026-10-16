@@ -209,10 +209,13 @@ function ProjectSchedulesSectionContent({
                 (schedule.actorUserId === session?.user.id ||
                   hasOversight("delete"))
               }
-              canRun={
-                canCreateSchedules === true &&
-                (schedule.actorUserId === session?.user.id ||
-                  hasOversight("use"))
+              runBlockedReason={
+                canCreateSchedules !== true
+                  ? "You can't run schedules. Ask an admin if you need to."
+                  : schedule.actorUserId === session?.user.id ||
+                      hasOversight("use")
+                    ? null
+                    : `Set up by ${schedule.actor?.name ?? "someone else"}. Only they or an admin can run it.`
               }
             />
           ))}
@@ -230,14 +233,15 @@ function ScheduleRow({
   onEdit,
   canEdit,
   canDelete,
-  canRun,
+  runBlockedReason,
 }: {
   projectId: string;
   schedule: ScheduleTrigger;
   onEdit: (schedule: ScheduleTrigger) => void;
   canEdit: boolean;
   canDelete: boolean;
-  canRun: boolean;
+  /** Why this person may not start the schedule now, or null when they may. */
+  runBlockedReason: string | null;
 }) {
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
@@ -348,11 +352,20 @@ function ScheduleRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={!canRun || runNow.isPending}
+              disabled={runBlockedReason !== null || runNow.isPending}
               onSelect={runNow.start}
             >
               <Play className="h-4 w-4" />
-              Run now
+              {runBlockedReason ? (
+                <span className="flex flex-col items-start gap-0.5">
+                  <span>Run now</span>
+                  <span className="text-xs text-muted-foreground">
+                    {runBlockedReason}
+                  </span>
+                </span>
+              ) : (
+                <span>Run now</span>
+              )}
             </DropdownMenuItem>
             {canDelete && (
               <DropdownMenuItem

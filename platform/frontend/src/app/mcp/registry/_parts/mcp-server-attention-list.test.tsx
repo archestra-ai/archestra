@@ -32,6 +32,11 @@ vi.mock("@/lib/auth/auth.query", () => ({
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServers: () => ({ data: [] }),
+  useMcpServersAssignedAgents: () => ({
+    agentsByServerId: new Map(),
+    isPending: false,
+    isError: false,
+  }),
   useDismissMcpServerAlerts: () => ({
     mutateAsync: dismissMutateAsync,
     isPending: false,

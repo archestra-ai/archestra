@@ -36,6 +36,11 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
     isPending: false,
   }),
   useDeleteMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useMcpServersAssignedAgents: () => ({
+    agentsByServerId: new Map(),
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 type Props = Parameters<typeof McpServerIssueNotice>[0];

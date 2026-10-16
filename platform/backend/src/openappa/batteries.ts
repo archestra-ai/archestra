@@ -1504,6 +1504,11 @@ class OpenAppaBatteriesService {
       helperBase: helperUrlBase(""),
       helperTokenEnv: openappaDeclarations.publishBridgeToken(),
       installs: new Set(params.installs.map((install) => install.id)),
+      // The next session opens under the effective policy: of the bindings
+      // earlier policies disagree on, its own is the one to keep.
+      lastActive: new Map(
+        extra ? [[extra.hash, Number.POSITIVE_INFINITY] as const] : [],
+      ),
     };
     const horizonDays = config.openappa.keptAnnotatorHorizonDays;
     const everything = retiredAnnotators({ ...inputs, live: null });
@@ -1526,7 +1531,17 @@ class OpenAppaBatteriesService {
     // The next session opens under the effective policy, so it counts as live.
     const live = new Set([...activity.keys(), ...(extra ? [extra.hash] : [])]);
     return {
-      ...retiredAnnotators({ ...inputs, live }),
+      ...retiredAnnotators({
+        ...inputs,
+        live,
+        lastActive: new Map([
+          ...[...activity].map(
+            ([key, { lastActivityAt }]) =>
+              [key, lastActivityAt.getTime()] as const,
+          ),
+          ...inputs.lastActive,
+        ]),
+      }),
       horizonDays,
       activity,
     };
@@ -1756,16 +1771,23 @@ class OpenAppaBatteriesService {
       snapshot: (await this.retirement(params.organizationId, { fresh: false }))
         .snapshot,
     });
+    const conflicts = new Map(
+      retired.conflicts.map(({ name, earlier }) => [name, earlier]),
+    );
     return {
       rebound: retired.rebound,
       warnings: [
-        ...retired.kept.flatMap(({ name, binding }) =>
-          declared.has(name)
-            ? [
-                `annotator "${name}" would no longer be declared; sessions opened under earlier policies still ask for it. The host keeps its previous binding (${binding}) for them.`,
-              ]
-            : [],
-        ),
+        ...retired.kept.flatMap(({ name, binding }) => {
+          if (!declared.has(name)) return [];
+          const others = conflicts.get(name);
+          return [
+            `annotator "${name}" would no longer be declared; sessions opened under earlier policies still ask for it. The host keeps its previous binding (${binding}) for them.${
+              others
+                ? ` Sessions opened under policies that bound it differently (${others.join("; ")}) are answered by that binding too.`
+                : ""
+            }`,
+          ];
+        }),
         ...retired.dropped.flatMap(({ name, reason }) =>
           declared.has(name)
             ? [
@@ -2621,9 +2643,10 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // (v4), rows without retained original annotator bindings (v5), rows a
 // same-name rebinding refused and pinned to an earlier composition (v6), and
 // rows whose retirement suffix covers credential keys but not the stored
-// opening policies (v7), rows that do not record what they serve (v8), and
-// rows that leave `yell` to the catch-all (v9).
-const COMPOSITION_VERSION = "v9:";
+// opening policies (v7), rows that do not record what they serve (v8),
+// rows that leave `yell` to the catch-all (v9), and rows that dropped a
+// retired name live opening policies bound differently (v10).
+const COMPOSITION_VERSION = "v10:";
 
 /**
  * How long a process reuses an organization's retirement snapshot on the
@@ -2936,7 +2959,7 @@ function hash(content: string): string {
 type Retirement = {
   kept: KeptAnnotator[];
   dropped: { name: string; reason: string }[];
-  conflicts: string[];
+  conflicts: Rebinding[];
   rebound: Rebinding[];
   /** Names only policies no conversation was active under lately route to. */
   inactive: InactiveAnnotator[];
@@ -3086,8 +3109,7 @@ function logComposition(params: {
 
 /**
  * Per recompose: one warning listing the annotators it keeps, one per name
- * it cannot keep, and one per declared name an earlier policy bound
- * differently.
+ * it cannot keep, and one per name an earlier policy bound differently.
  */
 function logRetired(
   params: Retirement & {
@@ -3126,10 +3148,10 @@ function logRetired(
       { organizationId, annotator: name, reason },
       "OpenAPPA cannot keep a retired annotator for sessions opened under earlier policies",
     );
-  if (conflicts.length > 0)
-    logger.info(
-      { organizationId, annotators: conflicts },
-      "OpenAPPA earlier opening policies require different bindings for a retired annotator; the name cannot be kept",
+  for (const { name, current, earlier } of conflicts)
+    logger.warn(
+      { organizationId, annotator: name, current, earlier },
+      "OpenAPPA earlier opening policies bound a kept annotator differently; sessions opened under them are answered by the binding it is kept at",
     );
 }
 

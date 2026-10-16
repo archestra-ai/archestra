@@ -13,7 +13,9 @@ import {
   groupInitialAgents,
 } from "@/components/chat/initial-agent-selector.utils";
 import {
-  useAgentCredentialReadiness,
+  useAgentCredentialReadinessPages,
+  useChatAgentPages,
+  useChatAgentReferences,
   useChatAgents,
   usePinnedAgentIds,
   useProfile,
@@ -26,6 +28,7 @@ import {
 } from "@/lib/chat/agent-connection-gate";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
@@ -72,6 +75,8 @@ export function useChatSetupOptions(params: {
   conversationId?: string;
   agentId: string | null | undefined;
   onAgentChange?: (agentId: string) => void;
+  /** The menu's query while the agent tab is open; searched server-side. */
+  agentSearch: string;
   selectedModel: string;
   onModelChange: (dbId: string) => void;
   fallbackModelName?: string;
@@ -87,26 +92,58 @@ export function useChatSetupOptions(params: {
   const { data: session } = useSession();
   const userId = session?.user?.id;
 
-  // ---- agents
-  const { data: roster = [] } = useChatAgents();
-  const { data: pinnedIds } = usePinnedAgentIds();
-  const { data: readiness } = useAgentCredentialReadiness({
-    enabled: !!params.onAgentChange,
+  // ---- agents: the same sources as the agent picker — the bounded roster,
+  // the user's pins, and server-side pages that load on scroll or search.
+  const agentsEnabled = !!params.onAgentChange;
+  const agentSearch = useDebouncedValue(params.agentSearch, 250);
+  const agentPages = useChatAgentPages({
+    search: agentSearch,
+    enabled: agentsEnabled,
+  });
+  const { data: roster = [] } = useChatAgents({ ids: [params.agentId] });
+  const { data: pinnedIds } = usePinnedAgentIds({ enabled: agentsEnabled });
+  const { data: pinnedAgents = [] } = useChatAgentReferences(
+    pinnedIds ?? [],
+    agentsEnabled,
+  );
+  const pagedAgents = useMemo(
+    () => agentPages.data?.pages.flatMap((page) => page?.data ?? []) ?? [],
+    [agentPages.data],
+  );
+  const allAgents = useMemo(
+    () => [
+      ...new Map(
+        [...roster, ...pinnedAgents, ...pagedAgents].map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ).values(),
+    ],
+    [roster, pinnedAgents, pagedAgents],
+  );
+  const { data: readiness } = useAgentCredentialReadinessPages({
+    enabled: agentsEnabled,
+    batches: [
+      [...roster, ...pinnedAgents].map((agent) => agent.id),
+      ...(agentPages.data?.pages.map(
+        (page) => page?.data.map((agent) => agent.id) ?? [],
+      ) ?? []),
+    ],
   });
   const readinessByAgent = useMemo(
     () => indexReadinessByAgent(readiness),
     [readiness],
   );
   const activeAgent =
-    roster.find((a) => a.id === params.agentId) ??
-    roster.find((a) => !a.builtIn && a.scope === "personal") ??
-    roster.find((a) => !a.builtIn);
+    allAgents.find((a) => a.id === params.agentId) ??
+    allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
+    allAgents.find((a) => !a.builtIn);
   const { data: agentDetail } = useProfile(activeAgent?.id);
   const agentGroups = useMemo(
     () =>
       groupInitialAgents({
         agents: filterAndSortInitialAgents({
-          allAgents: roster,
+          allAgents,
           currentAgentId: params.agentId ?? null,
           search: "",
           userId,
@@ -114,8 +151,18 @@ export function useChatSetupOptions(params: {
         userId,
         pinnedIds: pinnedIds ?? [],
       }),
-    [roster, params.agentId, userId, pinnedIds],
+    [allAgents, params.agentId, userId, pinnedIds],
   );
+  const loadMoreAgents = () => {
+    if (
+      params.agentSearch === agentSearch &&
+      agentPages.hasNextPage &&
+      !agentPages.isFetching &&
+      !agentPages.isError
+    ) {
+      void agentPages.fetchNextPage({ cancelRefetch: false });
+    }
+  };
   // Only the hydrated profile knows the agent's tools; never guess from the
   // roster, which omits them.
   const agentToolsSummary =
@@ -246,6 +293,7 @@ export function useChatSetupOptions(params: {
     agentToolsSummary,
     agentGroups,
     agentGate,
+    loadMoreAgents,
     selectAgent: (id: string) => {
       if (id !== params.agentId) params.onAgentChange?.(id);
     },
@@ -268,7 +316,6 @@ export function useChatSetupOptions(params: {
     supportsReasoning,
   };
 }
-
 
 // ============================================================================
 

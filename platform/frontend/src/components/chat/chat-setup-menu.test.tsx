@@ -84,9 +84,17 @@ vi.mock("@/lib/auth/auth.query", () => ({
 
 vi.mock("@/lib/agent.query", () => ({
   useChatAgents: () => ({ data: agents }),
+  useChatAgentPages: () => ({
+    data: undefined,
+    hasNextPage: false,
+    isFetching: false,
+    isError: false,
+    fetchNextPage: vi.fn(),
+  }),
+  useChatAgentReferences: () => ({ data: [] }),
   usePinnedAgentIds: () => ({ data: [] }),
   useProfile: () => ({ data: undefined }),
-  useAgentCredentialReadiness: () => ({ data: readiness }),
+  useAgentCredentialReadinessPages: () => ({ data: readiness }),
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({

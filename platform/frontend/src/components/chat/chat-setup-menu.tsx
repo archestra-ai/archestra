@@ -88,10 +88,13 @@ export interface ChatSetupMenuProps {
  * the model tab, since the key decides which models exist.
  */
 export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
-  const data = useChatSetupOptions(ctx);
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const [scopeState, setScopeState] = useState<Scope>("model");
+  const data = useChatSetupOptions({
+    ...ctx,
+    agentSearch: scopeState === "agent" ? query : "",
+  });
+  const router = useRouter();
   const [active, setActive] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -398,6 +401,11 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       <CommandList
         ref={listRef}
         label={TAB_LABEL[scope]}
+        onScroll={(event) => {
+          const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+          if (scope === "agent" && scrollHeight - scrollTop - clientHeight < 48)
+            data.loadMoreAgents();
+        }}
         className="max-h-[300px] scroll-py-1 p-1"
       >
         {elsewhere ? (

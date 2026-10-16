@@ -96,6 +96,7 @@ export const RouteId = {
   // Agent Delegation Routes (internal agents only)
   GetAgentDelegations: "getAgentDelegations",
   SyncAgentDelegations: "syncAgentDelegations",
+  CreateAgentDelegation: "createAgentDelegation",
   DeleteAgentDelegation: "deleteAgentDelegation",
   GetAgentA2aDelegations: "getAgentA2aDelegations",
   SyncAgentA2aDelegations: "syncAgentA2aDelegations",

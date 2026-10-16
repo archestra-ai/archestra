@@ -91,17 +91,20 @@ class AgentToolModel {
    * Assign a delegation to a target agent.
    * Creates the delegation tool if it doesn't exist, then creates the agent_tool assignment.
    */
-  static async assignDelegation(
-    agentId: string,
-    targetAgentId: string,
-  ): Promise<void> {
+  static async assignDelegation(params: {
+    agentId: string;
+    targetAgentId: string;
+    tx?: Transaction;
+  }): Promise<boolean> {
+    const { agentId, targetAgentId, tx } = params;
+    const dbx = tx ?? db;
     // Dynamically import to avoid circular dependency
     const { default: ToolModel } = await import("./tool");
 
     // Find or create the delegation tool for the target agent
-    const tool = await ToolModel.findOrCreateDelegationTool(targetAgentId);
+    const tool = await ToolModel.findOrCreateDelegationTool(targetAgentId, tx);
 
-    const [collision] = await db
+    const [collision] = await dbx
       .select({ id: schema.toolsTable.id })
       .from(schema.agentToolsTable)
       .innerJoin(
@@ -124,10 +127,19 @@ class AgentToolModel {
     }
 
     // Assign the tool to the source agent
-    await AgentToolModel.createIfNotExists(agentId, tool.id);
+    const [created] = await dbx
+      .insert(schema.agentToolsTable)
+      .values({ agentId, toolId: tool.id })
+      .onConflictDoNothing({
+        target: [schema.agentToolsTable.agentId, schema.agentToolsTable.toolId],
+      })
+      .returning({ id: schema.agentToolsTable.id });
 
     // Delegation assignment changes the agent's tool surface — fork a version.
-    await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    if (created && !tx) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
+    return !!created;
   }
 
   /**
@@ -221,7 +233,10 @@ class AgentToolModel {
 
     // Add new delegations
     for (const targetId of toAdd) {
-      await AgentToolModel.assignDelegation(agentId, targetId);
+      await AgentToolModel.assignDelegation({
+        agentId: agentId,
+        targetAgentId: targetId,
+      });
     }
 
     return {
@@ -796,7 +811,7 @@ class AgentToolModel {
       ...dynamic.map((row) => ({ ...row, pinned: false })),
     ]
       .filter((row) => {
-        const key = `${row.mcpServerId} ${row.agentId}`;
+        const key = `${row.mcpServerId}\0${row.agentId}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;

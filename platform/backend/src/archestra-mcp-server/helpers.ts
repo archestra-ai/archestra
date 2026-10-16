@@ -164,7 +164,10 @@ export async function assignSubAgentDelegations(
         results.push({ id: subAgentId, status: "self_delegation_blocked" });
         continue;
       }
-      await AgentToolModel.assignDelegation(agentId, subAgentId);
+      await AgentToolModel.assignDelegation({
+        agentId: agentId,
+        targetAgentId: subAgentId,
+      });
       results.push({ id: subAgentId, status: "success" });
     } catch (error) {
       logger.error(

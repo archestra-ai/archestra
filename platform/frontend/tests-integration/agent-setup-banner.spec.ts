@@ -74,7 +74,7 @@ test("spaces the setup track like the rest of the agent overview, and clears it 
   // Setup is done, so the checklist goes and the work sources are usable.
   await expect(notice).toHaveCount(0);
   await expect(workSources).not.toContainText(
-    "Available once setup above is done.",
+    "Runs start once setup above is done.",
   );
 
   await page.goto(`/agents/${AGENT.id}/edit`);

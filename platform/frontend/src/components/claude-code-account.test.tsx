@@ -41,7 +41,7 @@ describe("ClaudeCodeAccount setup", () => {
   it.each([
     "card",
     "compact",
-  ] as const)("guides an unconnected user from %s status to native sign-in", async (variant) => {
+  ] as const)("takes an unconnected user from %s status straight to native sign-in", async (variant) => {
     const user = userEvent.setup();
     let started = false;
     const status = () =>
@@ -66,13 +66,14 @@ describe("ClaudeCodeAccount setup", () => {
     expect(
       screen.getByRole("dialog", { name: "Connect Claude Code" }),
     ).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: "Sign in with Claude" }),
-    );
 
+    // The click that opened the dialog already started the flow.
     expect(
-      await screen.findByRole("link", { name: "Open Claude sign-in" }),
+      await screen.findByRole("link", { name: "Open Claude" }),
     ).toHaveAttribute("href", "https://claude.ai/oauth/authorize");
+    expect(
+      screen.queryByRole("button", { name: "Sign in with Claude" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Authorization code")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Complete sign-in" }),
@@ -117,7 +118,7 @@ function renderAccount(variant: "card" | "compact" = "card") {
   );
 }
 
-it("retries a failed sign-in and immediately exposes the authorization link", async () => {
+it("starts a fresh sign-in after a failed one and exposes the authorization link", async () => {
   const user = userEvent.setup();
   let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
     state: "failed",
@@ -135,12 +136,8 @@ it("retries a failed sign-in and immediately exposes the authorization link", as
   );
   renderAccount();
   await user.click(await screen.findByRole("button", { name: "Sign in" }));
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    "Sign-in did not complete",
-  );
-  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
   expect(
-    await screen.findByRole("link", { name: "Open Claude sign-in" }),
+    await screen.findByRole("link", { name: "Open Claude" }),
   ).toHaveAttribute("href", account.authorizationUrl);
   expect(screen.getByLabelText("Authorization code")).toBeVisible();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -180,7 +177,6 @@ it("updates every Agent after connecting and disconnecting the shared account", 
   await user.click(
     (await screen.findAllByRole("button", { name: "Sign in" }))[0],
   );
-  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
   await user.type(
     await screen.findByLabelText("Authorization code"),
     "example-code",
@@ -196,6 +192,44 @@ it("updates every Agent after connecting and disconnecting the shared account", 
     2,
   );
   expect(screen.queryByText("Signed in for you")).not.toBeInTheDocument();
+});
+
+it("signs in where it sits when inline, without opening a second dialog", async () => {
+  const user = userEvent.setup();
+  let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
+    state: "disconnected",
+  };
+  server.use(
+    http.get(accountUrl, () => HttpResponse.json(account)),
+    http.post(accountUrl, () => {
+      account = {
+        state: "awaiting_code",
+        flowId: "00000000-0000-4000-8000-000000000001",
+        authorizationUrl: "https://claude.ai/oauth/authorize",
+      };
+      return HttpResponse.json(account);
+    }),
+    http.post(`${accountUrl}/complete`, () => {
+      account = { state: "connected" };
+      return HttpResponse.json(account);
+    }),
+  );
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ClaudeCodeAccount agentId="agent-1" variant="inline" />
+    </QueryClientProvider>,
+  );
+
+  await user.click(
+    await screen.findByRole("button", { name: "Sign in with Claude" }),
+  );
+  expect(
+    await screen.findByRole("link", { name: "Open Claude" }),
+  ).toBeVisible();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("Authorization code"), "example-code");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(await screen.findByText("Signed in for you")).toBeVisible();
 });
 
 it("leaves the disconnected notice to the page banner while retaining connected account controls", async () => {

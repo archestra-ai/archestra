@@ -3845,6 +3845,41 @@ export function ChatPageContent({
                                     />
                                   </div>
                                 )}
+                                {/* Above the composer, like the connection
+                                    notice: what stops Send sits where the
+                                    reader looks before typing. */}
+                                <div className="mb-3 empty:hidden">
+                                  {isInitialRuntimeMode &&
+                                    runtimePreflight.data?.ready === false && (
+                                      <AgentRuntimeCredentialPrompt
+                                        agentId={initialAgentId ?? ""}
+                                        missing={[
+                                          ...runtimePreflight.data.missing,
+                                          ...runtimePreflight.data
+                                            .misconfigured,
+                                        ]}
+                                        declarations={
+                                          initialRuntimeAgent?.runtime
+                                            ?.credentials ?? []
+                                        }
+                                        incompatible={
+                                          runtimePreflight.data.incompatible
+                                        }
+                                        onConnected={() =>
+                                          runtimePreflight.refetch()
+                                        }
+                                      />
+                                    )}
+                                  {isInitialRuntimeMode &&
+                                    runtimePreflight.isError && (
+                                      <AgentRuntimePreflightError
+                                        error={runtimePreflight.error}
+                                        onRetry={() =>
+                                          void runtimePreflight.refetch()
+                                        }
+                                      />
+                                    )}
+                                </div>
                                 <ArchestraPromptInput
                                   drawerBelow
                                   onSubmit={handleInitialSubmit}
@@ -3961,41 +3996,6 @@ export function ChatPageContent({
                                   runtimeMode={isInitialRuntimeMode}
                                   runtimeAgentName={initialRuntimeAgent?.name}
                                 />
-                                {/* The runtime drawer overlays the space
-                                    under the composer, so these start below
-                                    it rather than under it. */}
-                                <div className="pt-7 empty:hidden">
-                                  {isInitialRuntimeMode &&
-                                    runtimePreflight.data?.ready === false && (
-                                      <AgentRuntimeCredentialPrompt
-                                        agentId={initialAgentId ?? ""}
-                                        missing={[
-                                          ...runtimePreflight.data.missing,
-                                          ...runtimePreflight.data
-                                            .misconfigured,
-                                        ]}
-                                        declarations={
-                                          initialRuntimeAgent?.runtime
-                                            ?.credentials ?? []
-                                        }
-                                        incompatible={
-                                          runtimePreflight.data.incompatible
-                                        }
-                                        onConnected={() =>
-                                          runtimePreflight.refetch()
-                                        }
-                                      />
-                                    )}
-                                  {isInitialRuntimeMode &&
-                                    runtimePreflight.isError && (
-                                      <AgentRuntimePreflightError
-                                        error={runtimePreflight.error}
-                                        onRetry={() =>
-                                          void runtimePreflight.refetch()
-                                        }
-                                      />
-                                    )}
-                                </div>
                               </>
                             )}
                           </div>

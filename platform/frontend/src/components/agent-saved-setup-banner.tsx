@@ -37,7 +37,8 @@ export function AgentSavedSetupBanner({
     includeKeyId: agent?.llmApiKeyId ?? undefined,
     toastOnError: false,
   });
-  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  // The credential whose Set up was clicked: its dialog asks for it alone.
+  const [credentialKey, setCredentialKey] = useState<string | null>(null);
   if (!runtime) {
     return <AgentSetupBanner key={agentId} items={[]} showReady={showReady} />;
   }
@@ -116,7 +117,7 @@ export function AgentSavedSetupBanner({
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setCredentialsOpen(true)}
+                  onClick={() => setCredentialKey(key)}
                 >
                   Set up
                 </Button>
@@ -220,12 +221,13 @@ export function AgentSavedSetupBanner({
           resetKey={`${agentId}:${runtime.command?.join(" ")}:${runtime.claudeCode?.authentication}:${JSON.stringify(runtime.credentials ?? [])}`}
         />
       )}
-      {credentialsOpen && (
+      {credentialKey && (
         <AgentRuntimeCredentialsDialog
           agentId={agentId}
           declarations={runtime.credentials ?? []}
           canEditAgent={canEditAgent}
-          onClose={() => setCredentialsOpen(false)}
+          onlyKeys={[credentialKey]}
+          onClose={() => setCredentialKey(null)}
         />
       )}
     </>

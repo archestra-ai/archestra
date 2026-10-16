@@ -200,7 +200,7 @@ describe("AgentWorkSources", () => {
       />,
     );
     expect(
-      screen.getByText("Available once setup above is done."),
+      screen.getByText("Runs start once setup above is done."),
     ).toBeVisible();
 
     mockSetupReady(true);
@@ -214,7 +214,7 @@ describe("AgentWorkSources", () => {
       />,
     );
     expect(
-      screen.queryByText("Available once setup above is done."),
+      screen.queryByText("Runs start once setup above is done."),
     ).toBeNull();
   });
 

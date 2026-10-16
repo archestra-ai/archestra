@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0-rc.48](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.47...platform-v1.4.0-rc.48) (2026-10-16)
+
+
+### Features
+
+* **openappa:** cache annotator prompts and attribute consults to their session ([#9012](https://github.com/archestra-ai/archestra/issues/9012)) ([6d30989](https://github.com/archestra-ai/archestra/commit/6d30989599eb0085ac86c8c7fa029ad90952590b))
+
+
+### Bug Fixes
+
+* **agents:** create delegation edges atomically ([#9038](https://github.com/archestra-ai/archestra/issues/9038)) ([d150e2c](https://github.com/archestra-ai/archestra/commit/d150e2cc840f12ab89b6d4de81985ed79ca73c5b))
+* **email:** verify sender authentication for private/internal incoming email ([#9036](https://github.com/archestra-ai/archestra/issues/9036)) ([8f95025](https://github.com/archestra-ai/archestra/commit/8f950257e2743c4895f3ac437c28d4c86cd7b052))
+* **openappa:** keep a removed annotator when earlier policies bound it differently ([#9027](https://github.com/archestra-ai/archestra/issues/9027)) ([fc1e300](https://github.com/archestra-ai/archestra/commit/fc1e3009cebece8e7558f4c49298e6af777945b7))
+
+
+### Code Refactoring
+
+* **agents:** replace the unbounded agent list with paginated search ([#9006](https://github.com/archestra-ai/archestra/issues/9006)) ([591e4b7](https://github.com/archestra-ai/archestra/commit/591e4b743d578ce31952297913a3b4742efb1af6))
+
 ## [1.4.0-rc.47](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.46...platform-v1.4.0-rc.47) (2026-10-16)
 
 

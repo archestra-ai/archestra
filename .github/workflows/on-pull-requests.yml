@@ -223,9 +223,12 @@ jobs:
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-ci[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
-    # Keep 16 vCPUs: turbo fans out six check tasks, and @frontend:check:ci
-    # runs tsc/vitest/knip/biome concurrently.
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    # On a 16-vcpu Blacksmith runner: turbo fans out six
+    # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
+    # concurrently — so it scales with cores: the same all-cache-miss
+    # check:ci measured 1m51s on 16 vcpu vs 10m16s on 4-vcpu ubuntu-latest
+    # (whole job 3 min avg vs 15.2 min avg).
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     # Backstop: on a turbo remote-cache hit every check here finishes well
     # under 10m, but leaked test-runner processes (vitest fork workers /
     # esbuild) occasionally orphan and hold the step's log pipe open, leaving
@@ -577,7 +580,7 @@ jobs:
     name: OpenAPPA Native Tests
     # Release bumps need the real runtime/ledger checks before human review.
     if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))
-    runs-on: ubicloud-standard-8-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
     timeout-minutes: 20
@@ -836,10 +839,10 @@ jobs:
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the
-  # two jobs partition the suite exactly once. This trades about four minutes
-  # of test-gate latency for much lower runner usage than the eight-job layout.
+  # three jobs partition the suite exactly once. Ubicloud's lower per-minute
+  # rate covers the extra shard setup while keeping the test gate responsive.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/3)
     needs: [backend-test-inputs, backend-test-dependencies]
     if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
     runs-on: ubicloud-standard-16-ubuntu-2404
@@ -856,7 +859,7 @@ jobs:
       # failure picture in one pass.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -901,9 +904,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/backend/node_modules/.vite/vitest
-          key: backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
+          key: backend-vitest-${{ runner.os }}-node24-shards3-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
           restore-keys: |
-            backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-
+            backend-vitest-${{ runner.os }}-node24-shards3-shard-${{ matrix.shard }}-
 
       # Node's compile cache persists V8 bytecode for the large module graph
       # that every Vitest fork imports. A same-host 2,616-test shard improved
@@ -914,16 +917,16 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/node-compile-cache
-          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
+          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shards3-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
           restore-keys: |
-            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-
+            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shards3-shard-${{ matrix.shard }}-
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 2)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 3)
         working-directory: ./platform/backend
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/2"
+        run: pnpm exec vitest run --shard="${SHARD}/3"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.
@@ -963,7 +966,7 @@ jobs:
     name: Frontend Integration Tests (MSW runner)
     if: github.event_name == 'merge_group'
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
     permissions:
       contents: read
     defaults:
@@ -1131,8 +1134,8 @@ jobs:
   # block the merge queue) for up to 24h. This watchdog polls this run's own
   # jobs; if no mac-mini job has made ANY progress within the grace window it
   # flips the MAC_MINI_CI kill switch off (routing every subsequent run back
-  # to Ubicloud) and cancels this run so the merge queue ejects the PR
-  # immediately — re-queueing then runs fully on Ubicloud. Re-enable with:
+  # to Blacksmith) and cancels this run so the merge queue ejects the PR
+  # immediately — re-queueing then runs fully on Blacksmith. Re-enable with:
   # gh variable set MAC_MINI_CI --body on
   mac-mini-watchdog:
     name: Mac Mini Watchdog
@@ -1158,7 +1161,7 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Fail over to Ubicloud if mac-mini-1 shows no progress
+      - name: Fail over to Blacksmith if mac-mini-1 shows no progress
         env:
           GH_TOKEN: ${{ github.token }}
           VAR_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -1195,7 +1198,7 @@ jobs:
             echo "Waiting: $total mac-mini jobs queued, none progressed, machine idle elsewhere..."
             sleep 20
           done
-          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Ubicloud. Re-enable with: gh variable set MAC_MINI_CI --body on"
+          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Blacksmith. Re-enable with: gh variable set MAC_MINI_CI --body on"
           GH_TOKEN="$VAR_TOKEN" gh variable set MAC_MINI_CI --body off --repo "$REPO" \
             || echo "::warning::Could not flip MAC_MINI_CI — flip it manually before re-queueing."
           gh run cancel "$RUN_ID" --repo "$REPO"

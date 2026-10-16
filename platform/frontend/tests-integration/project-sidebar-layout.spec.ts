@@ -118,12 +118,78 @@ test("opens project JSON as formatted code", async ({
   await expect(dialog).toBeVisible();
   const code = dialog.getByRole("region", { name: "Code sample, json" });
   await expect(code).toBeVisible();
+  // A short file should fit its content instead of reserving 90% of the viewport.
+  await expect
+    .poll(async () => (await dialog.boundingBox())?.height ?? 800)
+    .toBeLessThan(500);
   await expect.poll(() => code.textContent()).toContain('\n  "items": [\n');
   await expect(
     dialog.getByRole("button", { name: "Copy to clipboard" }),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog).not.toBeVisible();
+
+  await mswControl.use({
+    method: "get",
+    url: "/api/skill-sandbox/artifacts/json-preview",
+    body: {
+      rows: Array.from({ length: 150 }, (_, i) => ({
+        index: i,
+        value: "Example",
+      })),
+    },
+  });
+  await page.getByRole("button", { name: "report.json", exact: true }).click();
+  await expect(code).toBeVisible();
+  await expect
+    .poll(async () => (await dialog.boundingBox())?.height ?? 800)
+    .toBeLessThanOrEqual(721);
+  await expect.poll(() => code.textContent()).toContain('"index": 149');
+  // The long body scrolls while the dialog header and close action stay visible.
+  await expect(
+    dialog.getByRole("heading", { name: "report.json" }),
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole("button", { name: "Close", exact: true }),
+  ).toBeInViewport();
+});
+
+test("opens CSV in a table and fits the short preview", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  await mockProject(mswControl, request, { instructions: "", fileCount: 0 });
+  await mswControl.use({
+    method: "get",
+    url: `${PROJECT_PATH}/files`,
+    body: [
+      {
+        id: "csv-row",
+        downloadRef: "preview-fixture-report.csv",
+        filename: "report.csv",
+        mimeType: "text/csv",
+        sizeBytes: 100,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        downloadable: true,
+        projectId: PROJECT_ID,
+        projectName: "Release train",
+      },
+    ],
+  });
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await page.getByRole("button", { name: "report.csv", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "report.csv" });
+  await expect(dialog.getByRole("table")).toBeVisible();
+  await expect(
+    dialog.getByRole("cell", { name: "Example, Alpha", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("cell", { name: "Example Beta", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await dialog.boundingBox())?.height ?? 800)
+    .toBeLessThan(300);
 });
 
 function projectSidebar(page: Page) {

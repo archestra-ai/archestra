@@ -133,6 +133,16 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  // Byte-response fixture for the real project file preview (JSON overrides
+  // cannot represent a raw CSV response with quoted commas and newlines).
+  http.get("/api/skill-sandbox/artifacts/preview-fixture-report.csv", () =>
+    HttpResponse.text(
+      'Team,Total,Status\n"Example, Alpha",42,Ready\n"Example\nBeta",18,Pending',
+      {
+        headers: { "Content-Type": "text/csv" },
+      },
+    ),
+  ),
   ...getJson("/api/openappa/trust-audience", {
     trust: ["suspicious", "trusted"],
     audiences: [

@@ -835,6 +835,8 @@ function ProjectFilesSidebar({
           }}
           title={instructionsSelected ? "Instructions" : detailName}
           size="large"
+          // Reading a short file should not reserve an editor-sized canvas.
+          className={editing ? undefined : "h-auto max-h-[90dvh]"}
         >
           {previewing && instructionsSelected ? (
             <ProjectInstructionsPanel

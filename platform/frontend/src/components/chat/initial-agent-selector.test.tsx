@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -25,6 +31,8 @@ const {
   mockUseProfile,
   mockPinnedIds,
   mockSwitchAccess,
+  mockChatRoster,
+  mockFetchNextPage,
 } = vi.hoisted(() => ({
   agents: [
     {
@@ -102,6 +110,8 @@ const {
   })),
   mockPinnedIds: [] as string[],
   mockSwitchAccess: vi.fn((_params: unknown) => {}),
+  mockChatRoster: { hasNextPage: false },
+  mockFetchNextPage: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -126,9 +136,16 @@ vi.mock("@/lib/agent.query", () => ({
   }),
   useChatAgents: () => ({ data: agents }),
   useChatAgentPage: () => ({
-    data: { data: agents, pagination: { hasNext: false, nextCursor: null } },
+    data: {
+      pages: [
+        { data: agents, pagination: { hasNext: false, nextCursor: null } },
+      ],
+    },
     isPending: false,
-    isFetching: false,
+    isError: false,
+    isFetchingNextPage: false,
+    hasNextPage: mockChatRoster.hasNextPage,
+    fetchNextPage: mockFetchNextPage,
   }),
   useChatAgentReferences: (ids: string[]) => ({
     data: agents.filter((agent) => ids.includes(agent.id)),
@@ -342,6 +359,43 @@ describe("InitialAgentSelector keyboard navigation", () => {
     expect(mockUseAllProfileTools).not.toHaveBeenCalledWith(
       expect.objectContaining({ enabled: true }),
     );
+  });
+});
+
+describe("InitialAgentSelector agent paging", () => {
+  beforeEach(() => {
+    mockChatRoster.hasNextPage = false;
+    mockFetchNextPage.mockClear();
+  });
+
+  it("has no Previous or Next controls", async () => {
+    const user = userEvent.setup();
+    renderSelector();
+
+    await user.click(screen.getByRole("combobox"));
+    await screen.findByRole("combobox", { name: "Search agents" });
+
+    expect(screen.queryByRole("button", { name: "Previous" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  });
+
+  it("loads the next page only once the list is scrolled near its end", async () => {
+    mockChatRoster.hasNextPage = true;
+    const user = userEvent.setup();
+    renderSelector();
+
+    await user.click(screen.getByRole("combobox"));
+    const listbox = await screen.findByRole("listbox", { name: "Agents" });
+    Object.defineProperty(listbox, "scrollHeight", { value: 1000 });
+    Object.defineProperty(listbox, "clientHeight", { value: 320 });
+
+    Object.defineProperty(listbox, "scrollTop", { value: 0, writable: true });
+    fireEvent.scroll(listbox);
+    expect(mockFetchNextPage).not.toHaveBeenCalled();
+
+    Object.defineProperty(listbox, "scrollTop", { value: 600, writable: true });
+    fireEvent.scroll(listbox);
+    expect(mockFetchNextPage).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -138,17 +138,14 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
-  const [paging, setPaging] = useState<{
-    search: string;
-    cursors: (string | undefined)[];
-  }>({ search: "", cursors: [undefined] });
-  const pageCursors =
-    paging.search === debouncedSearch ? paging.cursors : [undefined];
   const page = useChatAgentPage({
-    cursor: pageCursors.at(-1),
     search: debouncedSearch,
     enabled: open,
   });
+  const pagedAgents = useMemo(
+    () => page.data?.pages.flatMap((pageData) => pageData?.data ?? []) ?? [],
+    [page.data],
+  );
   const { data: bootstrapAgents = [] } = useChatAgents({
     ids: [currentAgentId],
   });
@@ -184,12 +181,13 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const allAgents = useMemo(
     () => [
       ...new Map(
-        [...bootstrapAgents, ...pinnedAgents, ...(page.data?.data ?? [])].map(
-          (agent) => [agent.id, agent],
-        ),
+        [...bootstrapAgents, ...pinnedAgents, ...pagedAgents].map((agent) => [
+          agent.id,
+          agent,
+        ]),
       ).values(),
     ],
-    [bootstrapAgents, pinnedAgents, page.data],
+    [bootstrapAgents, pinnedAgents, pagedAgents],
   );
   const filteredAgents = useMemo(
     () =>
@@ -590,10 +588,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   aria-label="Search agents"
                   {...navigation.inputProps}
                   value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPaging({ search: e.target.value, cursors: [undefined] });
-                  }}
+                  onChange={(e) => setSearch(e.target.value)}
                   className="h-8 pl-8 text-sm rounded-lg bg-muted/50"
                   autoFocus
                 />
@@ -604,6 +599,14 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               role="listbox"
               aria-label="Agents"
               className="max-h-[320px] overflow-y-auto px-1.5 pb-1.5"
+              onScroll={(event) => {
+                const list = event.currentTarget;
+                const nearEnd =
+                  list.scrollHeight - list.scrollTop - list.clientHeight <
+                  SCROLL_LOAD_THRESHOLD_PX;
+                if (nearEnd && page.hasNextPage && !page.isFetchingNextPage)
+                  void page.fetchNextPage();
+              }}
             >
               {filteredAgents.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 px-4 py-6 text-center">
@@ -620,7 +623,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                       size="xs"
                       onClick={() => {
                         setSearch("");
-                        setPaging({ search: "", cursors: [undefined] });
                       }}
                     >
                       Clear search
@@ -674,45 +676,24 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 ))
               )}
             </div>
-            <div className="flex items-center justify-between border-t px-2 py-1.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={pageCursors.length === 1 || page.isFetching}
-                onClick={() =>
-                  setPaging({
-                    search: debouncedSearch,
-                    cursors: pageCursors.slice(0, -1),
-                  })
-                }
-              >
-                Previous
-              </Button>
-              {page.isError && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void page.refetch()}
-                >
-                  Retry
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={!page.data?.pagination.hasNext || page.isFetching}
-                onClick={() => {
-                  const next = page.data?.pagination.nextCursor;
-                  if (next)
-                    setPaging({
-                      search: debouncedSearch,
-                      cursors: [...pageCursors, next],
-                    });
-                }}
-              >
-                Next
-              </Button>
-            </div>
+            {(page.isFetchingNextPage || page.isError) && (
+              <div className="flex items-center justify-center gap-2 border-t px-2 py-1.5 text-xs text-muted-foreground">
+                {page.isFetchingNextPage ? (
+                  <span>Loading more agents…</span>
+                ) : (
+                  <>
+                    <span>Could not load more agents</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void page.fetchNextPage()}
+                    >
+                      Retry
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
             <div className="flex items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
                 <Link href={agentNewHref("agent")}>
@@ -1098,6 +1079,8 @@ function AgentPickerRow({
 // Internal: the tool icons beside the agent name
 // ============================================================================
 
+// Fetch the next agent page once the list is this close to its end.
+const SCROLL_LOAD_THRESHOLD_PX = 120;
 const MAX_VISIBLE_AVATARS = 3;
 
 type SummaryServer = { catalog: CatalogItem; name: string; toolCount: number };

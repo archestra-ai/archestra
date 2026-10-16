@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import {
   type QueryClient,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -870,25 +871,25 @@ export function useAgentCredentialReadiness(params: {
  * hydrated through useProfile when its full record is needed.
  */
 export function useChatAgentPage(params: {
-  cursor?: string;
   search?: string;
   enabled: boolean;
 }) {
   const query = {
     limit: 20,
-    cursor: params.cursor,
     search: params.search || undefined,
     sortBy: "chat" as const,
   };
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["agents", "chat-roster", "page", query],
-    queryFn: async () => {
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
       const { data, error } = await archestraApiSdk.getChatAgentRosterPage({
-        query,
+        query: { ...query, cursor: pageParam },
       });
       throwOnApiError(error, { toastOnError: false });
       return data;
     },
+    getNextPageParam: (page) => page?.pagination.nextCursor ?? undefined,
     enabled: params.enabled,
   });
 }
@@ -1104,11 +1105,20 @@ function findCachedChatAgent(client: QueryClient, id: string) {
   const cached = client.getQueriesData<
     | archestraApiTypes.GetChatAgentRosterResponses["200"]
     | { data: archestraApiTypes.GetChatAgentRosterResponses["200"] }
+    | {
+        pages: { data: archestraApiTypes.GetChatAgentRosterResponses["200"] }[];
+      }
   >({ queryKey: ["agents", "chat-roster"] });
   for (const [, value] of cached) {
-    const rows = Array.isArray(value) ? value : value?.data;
-    const row = rows?.find((agent) => agent.id === id);
-    if (row) return row;
+    const rowSets = Array.isArray(value)
+      ? [value]
+      : value && "pages" in value
+        ? value.pages.map((page) => page?.data ?? [])
+        : [value?.data];
+    for (const rows of rowSets) {
+      const row = rows?.find((agent) => agent.id === id);
+      if (row) return row;
+    }
   }
   return undefined;
 }

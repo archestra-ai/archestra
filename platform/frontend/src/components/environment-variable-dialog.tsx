@@ -339,7 +339,7 @@ export function EnvironmentVariableDialog({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="env-var-type">Type</Label>
             <Select
               value={draft.type}
@@ -347,7 +347,7 @@ export function EnvironmentVariableDialog({
             >
               <SelectTrigger
                 id="env-var-type"
-                className="w-full"
+                className="mt-auto w-full"
                 data-testid={E2eTestId.SelectEnvironmentVariableType}
               >
                 <SelectValue />

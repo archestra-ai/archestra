@@ -292,15 +292,6 @@ class OpenAppaBatteriesService {
       lastError: policy.lastError,
       composition,
       managedInGithub: sync?.interval != null,
-      heldPull:
-        sync?.heldContentHash && sync.heldSourceCommit
-          ? {
-              contentHash: sync.heldContentHash,
-              sourceCommit: sync.heldSourceCommit,
-              reasons: sync.heldReasons,
-              message: sync.lastSyncError,
-            }
-          : null,
       credentialBindings: bindings.map(({ variable, credentialKey }) => ({
         variable,
         key: credentialKey,
@@ -1003,11 +994,10 @@ class OpenAppaBatteriesService {
     contentHash: string;
   }): Promise<void> {
     const { organizationId, contentHash } = params;
-    const spelled = await this.spellsHash({ organizationId, contentHash });
-    if (spelled)
+    if (await this.spellsHash({ organizationId, contentHash }))
       throw new ApiError(
         409,
-        `Remove this package from the policy ${spelled} before deleting it`,
+        "Remove this package from the policy before deleting it",
       );
     // A refused text keeps an earlier composition enforced, and its helpers
     // run from the packages that composition used.
@@ -1085,27 +1075,20 @@ class OpenAppaBatteriesService {
     );
   }
 
-  /** Whether the latest revision, or a held pull, spells these bytes. */
+  /** Whether the latest revision spells these bytes. */
   private async spellsHash(params: {
     organizationId: string;
     contentHash: string;
-  }): Promise<string | null> {
+  }): Promise<boolean> {
     const { organizationId, contentHash } = params;
     const latest = await guardrailsPolicyService.get(organizationId);
-    const held = (await OpenAppaGithubSyncModel.find(organizationId))
-      ?.heldContent;
-    for (const [where, content] of [
-      ["policy", latest.content] as const,
-      ...(held ? [["held GitHub pull", held] as const] : []),
-    ]) {
-      const resolution = await openappaDeclarations.resolve({
-        organizationId,
-        content,
-      });
-      if (resolution.entries.some((entry) => entry.packageHash === contentHash))
-        return where;
-    }
-    return null;
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: latest.content,
+    });
+    return resolution.entries.some(
+      (entry) => entry.packageHash === contentHash,
+    );
   }
 
   private async recompose(organizationId: string): Promise<Recomposition> {

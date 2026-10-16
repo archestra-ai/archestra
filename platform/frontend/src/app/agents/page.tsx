@@ -64,6 +64,7 @@ export default async function AgentsPageServer() {
             sortDirection: DEFAULT_SORT_DIRECTION,
             pinned: true,
             access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+            includeBuiltIn: true,
           },
         }),
         canReadTeams

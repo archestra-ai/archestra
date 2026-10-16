@@ -1,5 +1,5 @@
 //! The declarations a root document makes about its batteries — the `include` list,
-//! the `[server_aliases]` bindings and the `[credentials]` table — read out of the
+//! the `[aliases.mcp]` bindings and the `[credentials]` table — read out of the
 //! authored text with the line each one sits on, and written back through the
 //! runtime's own comment-preserving editor.
 //!
@@ -14,7 +14,7 @@ pub(crate) struct IncludeDeclaration {
     pub line: u32,
 }
 
-/// One `[server_aliases]` binding: a battery namespace and the catalog tool prefixes
+/// One `[aliases.mcp]` (or legacy `[server_aliases]`) binding: a battery namespace and the catalog tool prefixes
 /// it names.
 pub(crate) struct AliasDeclaration {
     pub namespace: String,
@@ -138,15 +138,49 @@ fn read_include(content: &str, document: &Document<&str>, declarations: &mut Dec
     }
 }
 
+/// The MCP namespace bindings, under `[aliases.mcp]` or the legacy top-level
+/// `[server_aliases]` the runtime still loads. The runtime refuses a document with both,
+/// so the reader takes whichever the document spells.
 fn read_aliases(content: &str, document: &Document<&str>, declarations: &mut Declarations) {
-    let Some((key, item)) = document.get_key_value("server_aliases") else {
+    if let Some((key, item)) = document.get_key_value("server_aliases") {
+        read_bindings(
+            content,
+            "server_aliases",
+            line(content, key.span()),
+            item,
+            declarations,
+        );
+    }
+    let Some((key, aliases)) = document.get_key_value("aliases") else {
         return;
     };
     let at = line(content, key.span());
+    let Some(aliases) = aliases.as_table_like() else {
+        declarations
+            .errors
+            .push(format!("aliases (line {at}): must be a table"));
+        return;
+    };
+    if let Some(item) = aliases.get("mcp") {
+        let at = aliases
+            .key("mcp")
+            .and_then(|key| key.span())
+            .map_or(at, |span| line(content, Some(span)));
+        read_bindings(content, "aliases.mcp", at, item, declarations);
+    }
+}
+
+fn read_bindings(
+    content: &str,
+    path: &str,
+    at: u32,
+    item: &toml_edit::Item,
+    declarations: &mut Declarations,
+) {
     let Some(aliases) = item.as_table_like() else {
         declarations
             .errors
-            .push(format!("server_aliases (line {at}): must be a table"));
+            .push(format!("{path} (line {at}): must be a table"));
         return;
     };
     for (namespace, targets) in aliases.iter() {
@@ -156,7 +190,7 @@ fn read_aliases(content: &str, document: &Document<&str>, declarations: &mut Dec
             .map_or(at, |span| line(content, Some(span)));
         let Some(targets) = targets.as_array() else {
             declarations.errors.push(format!(
-                "server_aliases.{namespace} (line {at}): must be an array of strings"
+                "{path}.{namespace} (line {at}): must be an array of strings"
             ));
             continue;
         };
@@ -171,7 +205,7 @@ fn read_aliases(content: &str, document: &Document<&str>, declarations: &mut Dec
                 line: at,
             }),
             None => declarations.errors.push(format!(
-                "server_aliases.{namespace} (line {at}): every server must be a string"
+                "{path}.{namespace} (line {at}): every server must be a string"
             )),
         }
     }
@@ -457,6 +491,26 @@ version = 2
         let broken = parse("include = [\n");
         assert_eq!(broken.errors.len(), 1);
         assert!(broken.include.is_empty());
+    }
+
+    #[test]
+    fn aliases_mcp_bindings_read_like_the_legacy_table() {
+        let declarations = parse("[aliases.mcp]\ngithub = [\"github_prod\"]\n");
+        assert!(declarations.errors.is_empty());
+        assert_eq!(
+            declarations
+                .server_aliases
+                .iter()
+                .map(|alias| (alias.namespace.as_str(), alias.servers.clone(), alias.line))
+                .collect::<Vec<_>>(),
+            [("github", vec!["github_prod".to_string()], 2)]
+        );
+        let broken = parse("[aliases.mcp]\ngithub = \"github_prod\"\n");
+        assert!(
+            broken.errors[0].contains("aliases.mcp.github"),
+            "{:?}",
+            broken.errors
+        );
     }
 
     #[test]

@@ -194,11 +194,6 @@ export const guardrailsPolicyService = {
     };
   },
 
-  /** The no-op annotator endpoint and the answer it serves, for offline replay. */
-  noopAnnotator() {
-    return { url: noopAnnotatorUrl(), response: this.annotate() };
-  },
-
   /**
    * Check a document by composing it, the way a recompose composes it: the
    * batteries its `include` list names are resolved and composed under it, and the
@@ -233,7 +228,10 @@ export const guardrailsPolicyService = {
       params.resolved ??
       (await resolveBoth({ organizationId, content, previous }));
     const resolution = resolved.submitted;
-    const errors = [...resolution.errors];
+    const errors = [
+      ...resolution.errors,
+      ...(await openappaDeclarations.credentialErrors(content)),
+    ];
     const kept = new Set(resolved.previous.entries.map((entry) => entry.entry));
     const warnings: string[] = [];
     for (const entry of resolution.entries)

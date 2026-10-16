@@ -7,6 +7,7 @@ import {
   OPENAPPA_CONTEXT_HEADER,
   openappaAnnotatorContext,
 } from "@/openappa/encrypted-chat";
+import { openappaReplayOwner } from "@/openappa/replay-owner";
 import { openappaEnabled } from "@/openappa/service";
 import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError, constructResponseSchema } from "@/types";
@@ -60,11 +61,14 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
+      const context = request.headers[OPENAPPA_CONTEXT_HEADER] as
+        | string
+        | undefined;
+      const replay = openappaReplayOwner(context);
       const outcome = await openappaArchestraAnnotator.annotate(
         request.body,
-        openappaAnnotatorContext(
-          request.headers[OPENAPPA_CONTEXT_HEADER] as string | undefined,
-        ),
+        replay ? null : openappaAnnotatorContext(context),
+        replay,
       );
       switch (outcome.kind) {
         case "answered":

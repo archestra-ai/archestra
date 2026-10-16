@@ -12,7 +12,6 @@ import {
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import { memo, useCallback, useEffect } from "react";
-import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInputButton,
   PromptInputTools,
@@ -49,13 +48,10 @@ import {
 } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
-import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";
 
 export interface ChatPromptInputToolsProps {
@@ -208,23 +204,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
   const providerCatalog = useModelProviderCatalog();
-  // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
-  const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
-    useModelSelectorDisplay({ conversationId });
-
-  const selectedApiKeyId = conversationId
-    ? (currentConversationChatApiKeyId ?? null)
-    : (initialApiKeyId ?? null);
-  const { data: availableKeys } = useAvailableLlmProviderApiKeys({
-    includeKeyId: selectedApiKeyId ?? undefined,
-    toastOnError: false,
-  });
-  const selectedKeySubscriptionKind =
-    availableKeys?.find((key) => key.id === selectedApiKeyId)
-      ?.subscriptionKind ?? null;
-  const logoProvider = currentProvider
-    ? logoNameForProvider(currentProvider, selectedKeySubscriptionKind)
-    : null;
   const providerToConnect = subscriptionProvider ?? currentProvider;
   const subscriptionKind = providerToConnect
     ? subscriptionKindForProvider(providerToConnect)
@@ -354,178 +333,163 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </div>
         )}
       {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
-      {isNarrow &&
-        (showDefaultLogo &&
-        logoProvider &&
-        !subscriptionConnectRequired &&
-        (modelSource === "agent" || modelSource === "organization") ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Change model or provider"
-            onClick={expandModelSelector}
-          >
-            <ModelSelectorLogo provider={logoProvider} className="size-4" />
-          </Button>
-        ) : (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button type="button" variant="ghost" size="icon-sm">
-                <MoreVerticalIcon className="size-4" />
-                <span className="sr-only">More options</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent side="top" align="start" className="w-auto p-3">
-              <div className="flex flex-col gap-3">
-                {canSeeFullView &&
-                  selectorAgentId !== undefined &&
-                  onAgentChange && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Agent
-                      </p>
-                      <InitialAgentSelector
-                        currentAgentId={selectorAgentId}
-                        onAgentChange={handleAgentChange}
+      {isNarrow && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="ghost" size="icon-sm">
+              <MoreVerticalIcon className="size-4" />
+              <span className="sr-only">More options</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="start" className="w-auto p-3">
+            <div className="flex flex-col gap-3">
+              {canSeeFullView &&
+                selectorAgentId !== undefined &&
+                onAgentChange && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                      Agent
+                    </p>
+                    <InitialAgentSelector
+                      currentAgentId={selectorAgentId}
+                      onAgentChange={handleAgentChange}
+                    />
+                  </div>
+                )}
+              {canShowProviderSettings && (
+                <>
+                  {modelSource && !subscriptionConnectRequired && (
+                    <div className="flex items-center gap-1.5">
+                      <ModelSourceIndicator
+                        source={modelSource}
+                        inConversation={!!conversationId}
+                        onReset={onResetModelOverride}
                       />
                     </div>
                   )}
-                {canShowProviderSettings && (
-                  <>
-                    {modelSource && !subscriptionConnectRequired && (
-                      <div className="flex items-center gap-1.5">
-                        <ModelSourceIndicator
-                          source={modelSource}
-                          inConversation={!!conversationId}
-                          onReset={onResetModelOverride}
-                        />
-                      </div>
-                    )}
-                    {toolsUnavailable && (
-                      <div className="flex items-center gap-1.5">
-                        <NoToolsModelBadge />
-                      </div>
-                    )}
-                    {(conversationId || onApiKeyChange) && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Provider API Key
-                        </p>
-                        <LlmProviderApiKeySelector
-                          conversationId={conversationId}
-                          currentProvider={currentProvider}
-                          currentConversationChatApiKeyId={
-                            conversationId
-                              ? (currentConversationChatApiKeyId ?? null)
-                              : (initialApiKeyId ?? null)
-                          }
-                          onApiKeyChange={onApiKeyChange}
-                          onProviderChange={onProviderChange}
-                          isModelsLoading={isModelsLoading}
-                          agentLlmApiKeyId={agentLlmApiKeyId}
-                          suppressAutoSelect={agentRequiresPerUserConnect}
-                          connectRequestToken={subscriptionConnectRequest}
-                        />
-                        {subscriptionConnectRequired &&
-                          onSubscriptionConnect && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="xs"
-                              className="mt-2 gap-1.5"
-                              onClick={onSubscriptionConnect}
-                            >
-                              {subscriptionSignInTitle}
-                            </Button>
-                          )}
-                      </div>
-                    )}
-                    {!subscriptionConnectRequired && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                          Model
-                        </p>
-                        <ModelSelector
+                  {toolsUnavailable && (
+                    <div className="flex items-center gap-1.5">
+                      <NoToolsModelBadge />
+                    </div>
+                  )}
+                  {(conversationId || onApiKeyChange) && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        Provider API Key
+                      </p>
+                      <LlmProviderApiKeySelector
+                        conversationId={conversationId}
+                        currentProvider={currentProvider}
+                        currentConversationChatApiKeyId={
+                          conversationId
+                            ? (currentConversationChatApiKeyId ?? null)
+                            : (initialApiKeyId ?? null)
+                        }
+                        onApiKeyChange={onApiKeyChange}
+                        onProviderChange={onProviderChange}
+                        isModelsLoading={isModelsLoading}
+                        agentLlmApiKeyId={agentLlmApiKeyId}
+                        suppressAutoSelect={agentRequiresPerUserConnect}
+                        connectRequestToken={subscriptionConnectRequest}
+                      />
+                      {subscriptionConnectRequired && onSubscriptionConnect && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          className="mt-2 gap-1.5"
+                          onClick={onSubscriptionConnect}
+                        >
+                          {subscriptionSignInTitle}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {!subscriptionConnectRequired && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        Model
+                      </p>
+                      <ModelSelector
+                        selectedModel={selectedModel}
+                        onModelChange={onModelChange}
+                        apiKeyId={
+                          conversationId
+                            ? currentConversationChatApiKeyId
+                            : initialApiKeyId
+                        }
+                        suppressAutoSelect={agentRequiresPerUserConnect}
+                        fallbackModelName={agentModelDisplayName}
+                      />
+                      {onThinkingEffortChange && (
+                        <ThinkingEffortSelector
                           selectedModel={selectedModel}
-                          onModelChange={onModelChange}
                           apiKeyId={
                             conversationId
                               ? currentConversationChatApiKeyId
                               : initialApiKeyId
                           }
-                          suppressAutoSelect={agentRequiresPerUserConnect}
-                          fallbackModelName={agentModelDisplayName}
+                          value={thinkingEffort}
+                          onChange={onThinkingEffortChange}
+                          className="mt-2 w-fit"
                         />
-                        {onThinkingEffortChange && (
-                          <ThinkingEffortSelector
-                            selectedModel={selectedModel}
-                            apiKeyId={
-                              conversationId
-                                ? currentConversationChatApiKeyId
-                                : initialApiKeyId
-                            }
-                            value={thinkingEffort}
-                            onChange={onThinkingEffortChange}
-                            className="mt-2 w-fit"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-                {!runtimeMode &&
-                  canSeeFullView === false &&
-                  subscriptionConnectRequired &&
-                  onSubscriptionConnect && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="xs"
-                      onClick={onSubscriptionConnect}
-                    >
-                      {subscriptionSignInTitle}
-                    </Button>
+                      )}
+                    </div>
                   )}
-                {tokensUsed > 0 && maxContextLength && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                      Context
-                    </p>
-                    <ContextWindowDialog
-                      breakdown={contextWindow ?? null}
-                      tokensUsed={tokensUsed}
-                      cachedTokens={cachedTokens}
-                      maxTokens={maxContextLength}
-                      lastCompaction={lastCompaction}
-                      onCompact={onCompactConversation}
-                      isCompacting={isContextCompacting}
-                    >
-                      <UnstyledButton
-                        type="button"
-                        aria-label="Context usage"
-                        data-testid={E2eTestId.ChatContextUsageTrigger}
-                        className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <ContextIndicator
-                          tokensUsed={tokensUsed}
-                          maxTokens={maxContextLength}
-                          size="sm"
-                        />
-                      </UnstyledButton>
-                    </ContextWindowDialog>
-                  </div>
+                </>
+              )}
+              {!runtimeMode &&
+                canSeeFullView === false &&
+                subscriptionConnectRequired &&
+                onSubscriptionConnect && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={onSubscriptionConnect}
+                  >
+                    {subscriptionSignInTitle}
+                  </Button>
                 )}
-              </div>
-            </PopoverContent>
-          </Popover>
-        ))}
+              {tokensUsed > 0 && maxContextLength && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                    Context
+                  </p>
+                  <ContextWindowDialog
+                    breakdown={contextWindow ?? null}
+                    tokensUsed={tokensUsed}
+                    cachedTokens={cachedTokens}
+                    maxTokens={maxContextLength}
+                    lastCompaction={lastCompaction}
+                    onCompact={onCompactConversation}
+                    isCompacting={isContextCompacting}
+                  >
+                    <UnstyledButton
+                      type="button"
+                      aria-label="Context usage"
+                      data-testid={E2eTestId.ChatContextUsageTrigger}
+                      className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <ContextIndicator
+                        tokensUsed={tokensUsed}
+                        maxTokens={maxContextLength}
+                        size="sm"
+                      />
+                    </UnstyledButton>
+                  </ContextWindowDialog>
+                </div>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
 
-      {/* Rendered beside whichever control the collapsed toolbar picked (the
-          logo shortcut or the three-dots menu) and outside the RBAC gate: a
-          warning that only exists inside a popover — or only for users who can
-          see provider settings — is a warning most narrow-viewport users never
-          get. The wide toolbar renders its own copy below. */}
+      {/* Rendered beside the three-dots menu the collapsed toolbar picked and
+          outside the RBAC gate: a warning that only exists inside a popover —
+          or only for users who can see provider settings — is a warning most
+          narrow-viewport users never get. The wide toolbar renders its own copy
+          below. */}
       {!runtimeMode && isNarrow && notRecommendedForAgents && (
         <NotRecommendedForAgentsNoticeBadge />
       )}
@@ -691,20 +655,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 {subscriptionSignInTitle}
               </Button>
             )}
-          {!canShowProviderSettings ? null : showDefaultLogo &&
-            logoProvider &&
-            !subscriptionConnectRequired &&
-            (modelSource === "agent" || modelSource === "organization") ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Change model or provider"
-              onClick={expandModelSelector}
-            >
-              <ModelSelectorLogo provider={logoProvider} className="size-4" />
-            </Button>
-          ) : (
+          {canShowProviderSettings && (
             /* Same radius as the controls it clips: they are full-height and
                sit flush against the group's end caps, so a wider group radius
                rounds their outer corners while the inner ones keep the button

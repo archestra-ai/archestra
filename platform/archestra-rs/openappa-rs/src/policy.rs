@@ -20,7 +20,7 @@ use std::{
 /// helper bridge derives its own deadline from it.
 pub(crate) const CONSULT_TIMEOUT: Duration = Duration::from_millis(5000);
 
-fn defaults() -> HostDefaults {
+pub(crate) fn defaults() -> HostDefaults {
     HostDefaults {
         archestra: archestra_endpoint(),
         ..HostDefaults::new(CONSULT_TIMEOUT, host_max_body_bytes())

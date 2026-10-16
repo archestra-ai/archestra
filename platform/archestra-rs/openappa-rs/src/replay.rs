@@ -1,31 +1,29 @@
-//! Offline replay of host-supplied scenarios through OpenAPPA's parser and runner.
-//! The policy bytes are never rewritten. Annotators, context providers and audience
-//! sources are rebound to an in-process loopback stand-in: the host's own no-op
-//! annotator endpoint, bound without a token, gets the answer the host says it serves.
-//! Every other consult gets no answer, and the file ends `cannot_run` at the first step
-//! that answer could have decided. A deployment needing a model process, a model profile
-//! or an external remedy party is refused as a whole. Built-in human review
-//! remains unanswered if a scenario reaches it; merely declaring it is safe.
+//! Replay of host-supplied scenarios through OpenAPPA's parser and runner, as `appa replay`
+//! runs them. The effective policy compiles the way a dispatch compiles it, with the
+//! credential values the host resolved for it, so every annotator, context provider and
+//! audience source it declares is consulted live: the host's own endpoints, battery
+//! helpers, and model-backed annotators such as `archestra` or `jev`. No tool runs, and
+//! every trajectory stays in memory. A consult that gives no answer ends its file
+//! `cannot_run` at the first step that answer could have decided. Replay takes every
+//! remedy it is offered, so a policy naming an external authority or sanitizer is refused
+//! as a whole; built-in human review remains unanswered if a scenario reaches it.
 use appa_eventlog::{Backend, LogStore};
 use appa_runtime::{
     api::{ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Runtime},
-    config::{
-        ArchestraEndpoint, AudienceImplementation, Config, Endpoint, HostDefaults, Implementation,
-        Transport,
-    },
+    config::{Config, HostDefaults, Implementation},
     replay::{self, Expect, Got, StepOutcome, Trace, TraceReport, Verdict},
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     path::Path,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
-    time::Duration,
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+use crate::deployments::HostCredentials;
 
 pub(crate) const ENGINE_VERSION: &str =
-    "10aa0e09e32d8c6704bdb030dc3c66140bf81915:archestra-offline-v3";
+    "10aa0e09e32d8c6704bdb030dc3c66140bf81915:archestra-live-v1";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -36,17 +34,14 @@ const MAX_ASSERTIONS: usize = 1000;
 pub(crate) struct Request {
     content: String,
     files: Vec<File>,
+    /// The credential values the host resolved for the policy, variable → value, as a
+    /// dispatch carries them. Secrets: nothing here is logged or formatted.
     #[serde(default)]
-    noop_annotator: Option<NoopAnnotator>,
-}
-
-/// The host's own annotator endpoint whose answer does not depend on the call: an
-/// annotator bound to exactly this URL is answered with `response`, as the host serves it.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct NoopAnnotator {
-    url: String,
-    response: serde_json::Value,
+    credentials: BTreeMap<String, String>,
+    /// The capability the host's `archestra` annotator route resolves to whoever runs
+    /// this replay, so its model calls are filed under that organization.
+    #[serde(default)]
+    annotator_context: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -215,190 +210,46 @@ fn cannot_run(path: String, assertion_count: usize, error: String) -> FileResult
     }
 }
 
-/// The loopback stand-in every rebound consult reaches. Nothing it answers leaves the
-/// process; it stops when dropped.
-struct OfflineConsults {
-    noop_url: String,
-    refuse_url: String,
-    server: tokio::task::JoinHandle<()>,
-}
-
-impl Drop for OfflineConsults {
-    fn drop(&mut self) {
-        self.server.abort();
-    }
-}
-
-const NOOP_PATH: &str = "/noop";
-const MAX_CONSULT_BYTES: usize = 1024 * 1024;
-
-impl OfflineConsults {
-    async fn start(noop: Option<&NoopAnnotator>) -> Result<Self, String> {
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .map_err(|error| {
-                format!("Offline replay cannot start its consult stand-in: {error}")
-            })?;
-        let address = listener.local_addr().map_err(|error| {
-            format!("Offline replay cannot start its consult stand-in: {error}")
-        })?;
-        let noop: Option<Arc<[u8]>> = noop
-            .map(|noop| serde_json::to_vec(&noop.response).map(Arc::from))
-            .transpose()
-            .map_err(|_| "The no-op annotator response is not serializable".to_string())?;
-        let server = tokio::spawn(async move {
-            while let Ok((stream, _)) = listener.accept().await {
-                tokio::spawn(answer(stream, noop.clone()));
-            }
-        });
-        Ok(Self {
-            noop_url: format!("http://{address}{NOOP_PATH}"),
-            refuse_url: format!("http://{address}/refuse"),
-            server,
-        })
-    }
-}
-
-/// One consult, read in full before answering so the client never sees a reset: the
-/// no-op body on the no-op path when the host supplied one, 503 otherwise.
-async fn answer(mut stream: tokio::net::TcpStream, noop: Option<Arc<[u8]>>) {
-    let mut request = Vec::new();
-    let mut chunk = [0u8; 8192];
-    let head = loop {
-        if let Some(end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
-            break end + 4;
-        }
-        match stream.read(&mut chunk).await {
-            Ok(0) | Err(_) => return,
-            Ok(read) if request.len() + read <= MAX_CONSULT_BYTES => {
-                request.extend_from_slice(&chunk[..read])
-            }
-            Ok(_) => return,
-        }
-    };
-    let head_text = String::from_utf8_lossy(&request[..head]).into_owned();
-    let length = head_text
-        .lines()
-        .filter_map(|line| line.split_once(':'))
-        .find(|(name, _)| name.trim().eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, value)| value.trim().parse::<usize>().ok())
-        .unwrap_or(0);
-    if length > MAX_CONSULT_BYTES {
-        return;
-    }
-    while request.len() < head + length {
-        match stream.read(&mut chunk).await {
-            Ok(0) | Err(_) => return,
-            Ok(read) => request.extend_from_slice(&chunk[..read]),
-        }
-    }
-    let path = head_text.split_whitespace().nth(1);
-    let response = match (path, noop) {
-        (Some(NOOP_PATH), Some(body)) => {
-            let mut response = format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
-                body.len()
-            )
-            .into_bytes();
-            response.extend_from_slice(&body);
-            response
-        }
-        _ => b"HTTP/1.1 503 Service Unavailable\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
-            .to_vec(),
-    };
-    let _ = stream.write_all(&response).await;
-    let _ = stream.shutdown().await;
-}
-
-/// No env lookup, secrets, modules, disk config, or production storage enters replay.
-/// Every token a binding names reads as a placeholder, and every binding that could carry
-/// one is either rebound to the stand-in without a token or refused here.
-async fn offline_runtime(content: &str, noop: Option<&NoopAnnotator>) -> Result<Offline, String> {
-    let document: toml::Table = toml::from_str(content)
-        .map_err(|_| "The effective policy is not valid TOML".to_string())?;
-    if document
-        .get("externals")
-        .and_then(|externals| externals.get("claude_code"))
-        .is_some()
-    {
-        return Err("Offline replay cannot run a policy declaring a model process profile".into());
-    }
-    if let Some(builtin) = document
-        .get("policy")
-        .and_then(|policy| policy.get("annotator"))
-        .and_then(toml::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|annotator| annotator.get("builtin").and_then(toml::Value::as_str))
-        .find(|builtin| *builtin != "archestra")
-    {
-        return Err(format!(
-            "Offline replay cannot run a policy declaring a {builtin:?} annotator; live model inference is disabled"
-        ));
-    }
-    let consults = OfflineConsults::start(noop).await?;
-    let mut defaults =
-        HostDefaults::new(Duration::from_secs(1), crate::policy::host_max_body_bytes());
-    defaults.archestra = Some(ArchestraEndpoint::new(
-        consults.refuse_url.clone(),
-        "offline-replay".into(),
-    ));
-    let mut config = Config::hosted(content, defaults, |_| Some("offline-replay".into()))
-        .map_err(|error| format!("The effective policy cannot load offline: {error}"))?;
-    let externals = &mut config.externals;
+/// The runtime a replay runs on: the effective policy compiled as a dispatch compiles it,
+/// over a log that lives in memory for the run.
+fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying, String> {
+    let credentials = HostCredentials::new(request.credentials.clone());
+    let config = Config::hosted(&request.content, defaults, |var| credentials.lookup(var))
+        .map_err(|error| format!("The effective policy cannot load: {error}"))?;
+    let externals = &config.externals;
     // Replay opens without an elicitation channel or a supplied human ruling.
     // The hitl backend therefore abstains when invoked, never prompts or approves.
     let stock = |binding: &Implementation| matches!(binding, Implementation::Builtin(name) if matches!(name.as_str(), "approve" | "hitl" | "redact-email" | "redact-secrets"));
-    if externals.llm.is_some()
-        || externals.jev.is_some()
-        || externals
-            .authorities
-            .values()
-            .chain(externals.sanitizers.values())
-            .any(|binding| !stock(binding))
+    if externals
+        .authorities
+        .values()
+        .chain(externals.sanitizers.values())
+        .any(|binding| !stock(binding))
     {
-        return Err("Offline replay cannot run a policy with external authorities or sanitizers, or model profiles".into());
-    }
-    let stand_in = |url: &str| Transport::Url(Endpoint::new(url.into(), None));
-    for binding in externals.annotators.values_mut() {
-        let noop_bound = matches!(binding, Transport::Url(endpoint)
-            if endpoint.token.is_none() && noop.is_some_and(|noop| noop.url == endpoint.url));
-        *binding = stand_in(match noop_bound {
-            true => &consults.noop_url,
-            false => &consults.refuse_url,
-        });
-    }
-    for binding in externals.context.values_mut() {
-        *binding = stand_in(&consults.refuse_url);
-    }
-    for binding in externals.audience.values_mut() {
-        if !matches!(binding.implementation, AudienceImplementation::Readers(_)) {
-            binding.implementation = AudienceImplementation::Transport(Transport::Url(
-                Endpoint::new(consults.refuse_url.clone(), None),
-            ));
-        }
+        return Err("Replay cannot run a policy with an external authority or sanitizer: replay takes every remedy it is offered, which would act through that party".into());
     }
     let store = Arc::new(LogStore::open(Backend::Memory).map_err(|error| error.to_string())?);
     let unanswered = Arc::new(Unanswered::default());
-    let runtime = Runtime::open_with_store_as(config, store, None, crate::adapter::adapter())
-        .map_err(|error| error.to_string())?
-        .recording(unanswered.clone());
-    Ok(Offline {
+    let runtime =
+        crate::policy::open(config.with_do_something(), store)?.recording(unanswered.clone());
+    let runtime = match &request.annotator_context {
+        Some(context) => runtime.with_archestra_context(context.clone()),
+        None => runtime,
+    };
+    Ok(Replaying {
         runtime,
         unanswered,
-        _consults: consults,
     })
 }
 
-struct Offline {
+struct Replaying {
     runtime: Runtime,
     unanswered: Arc<Unanswered>,
-    _consults: OfflineConsults,
 }
 
 /// The audience sources that gave no answer, in order. An unanswered annotator refuses
 /// its call, which the runner already reports as `cannot_run`; an unanswered context
-/// provider leaves the annotator asked, and only the no-op answers offline. An unanswered
+/// provider leaves the annotator asked without its context. An unanswered
 /// audience source instead denies the call, which a `deny` expectation would take as a pass.
 #[derive(Default)]
 struct Unanswered(Mutex<Vec<String>>);
@@ -422,14 +273,14 @@ impl Unanswered {
 /// Replay one trace. A call needing an answer that did not come is not released, so after
 /// an unanswered audience source the first step whose call was not released as proposed
 /// cannot run and ends the file. Steps before it were released without one.
-async fn replay_trace(offline: &Offline, trace: &Trace) -> Vec<FileResult> {
-    let mark = offline.unanswered.entries().len();
-    let mut results: Vec<FileResult> = replay::run(&offline.runtime, std::slice::from_ref(trace))
+async fn replay_trace(replaying: &Replaying, trace: &Trace) -> Vec<FileResult> {
+    let mark = replaying.unanswered.entries().len();
+    let mut results: Vec<FileResult> = replay::run(&replaying.runtime, std::slice::from_ref(trace))
         .await
         .into_iter()
         .map(|report| result(trace, report))
         .collect();
-    let Some(source) = offline.unanswered.entries().get(mark).cloned() else {
+    let Some(source) = replaying.unanswered.entries().get(mark).cloned() else {
         return results;
     };
     for file in &mut results {
@@ -442,7 +293,7 @@ async fn replay_trace(offline: &Offline, trace: &Trace) -> Vec<FileResult> {
             step.status = Status::CannotRun;
             step.actual = None;
             step.error = Some(format!(
-                "audience source {source:?} gave no answer offline at or before this call, so replay cannot decide it"
+                "audience source {source:?} gave no answer at or before this call, so replay cannot decide it"
             ));
         }
         file.status = Status::CannotRun;
@@ -512,7 +363,12 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
 }
 
 pub(crate) async fn run(request: Request) -> Response {
-    let offline = offline_runtime(&request.content, request.noop_annotator.as_ref()).await;
+    run_with(request, crate::policy::defaults()).await
+}
+
+/// [`run`] under `defaults`, the host settings a dispatch compiles with.
+async fn run_with(request: Request, defaults: HostDefaults) -> Response {
+    let replaying = replay_runtime(&request, defaults);
     let mut files = Vec::with_capacity(request.files.len());
     let mut assertions = 0;
     for file in request.files {
@@ -527,21 +383,21 @@ pub(crate) async fn run(request: Request) -> Response {
         assertions += trace.steps.len();
         let runtime = if trace.steps.is_empty() || assertions > MAX_ASSERTIONS {
             Err("Scenarios need at least one assertion and at most 1000 assertions per run".into())
-        } else if let Some(step) = trace
-            .steps
-            .iter()
-            .find(|step| (crate::adapter::adapter().spell)(&step.tool).is_none())
-        {
+        } else if let Some(step) = trace.steps.iter().find(|step| {
+            step.tool
+                .canonical()
+                .is_some_and(|tool| (crate::adapter::adapter().spell)(tool).is_none())
+        }) {
             Err(format!(
                 "Line {}: {} cannot be dispatched through the Archestra adapter",
                 step.line, step.tool
             ))
         } else {
-            offline.as_ref().map_err(Clone::clone)
+            replaying.as_ref().map_err(Clone::clone)
         };
         match runtime {
             // Sequential files cap work and memory; each unique path opens a fresh root.
-            Ok(offline) => files.extend(replay_trace(offline, &trace).await),
+            Ok(replaying) => files.extend(replay_trace(replaying, &trace).await),
             Err(error) => files.push(cannot_run(file.path, trace.steps.len(), error)),
         }
     }
@@ -618,9 +474,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn model_annotators_and_remedy_parties_are_refused_without_dispatch() {
+    async fn external_remedy_parties_are_refused_without_dispatch() {
         for extra in [
-            "\n[[policy.annotator]]\nname = 'model'\nbuiltin = 'claude-code'\n",
             "\n[externals.authorities.remote]\nurl = 'https://example.test/authority'\n",
             "\n[externals.authorities.remote]\ncommand = ['touch', '/tmp/forbidden-replay']\n",
         ] {
@@ -634,7 +489,108 @@ mod tests {
         }
     }
 
-    const NOOP_URL: &str = "http://127.0.0.1:9/api/guardrails-policy/annotators/noop";
+    /// A consult endpoint on loopback: the no-op path answers with the host's no-op
+    /// annotation, every other path with 503. Each request's head is kept.
+    struct Consults {
+        base: String,
+        heads: Arc<Mutex<Vec<String>>>,
+        server: tokio::task::JoinHandle<()>,
+    }
+
+    impl Drop for Consults {
+        fn drop(&mut self) {
+            self.server.abort();
+        }
+    }
+
+    const NOOP_PATH: &str = "/api/guardrails-policy/annotators/noop";
+    const NOOP_ANSWER: &str = "{\"version\":1,\"answer\":{\"delta\":{},\"requires\":{\"history\":[],\"attention\":[]},\"emits\":[]}}";
+
+    impl Consults {
+        async fn start() -> Self {
+            // The helper bridge bearer the host publishes; the policy tests set the same.
+            unsafe { std::env::set_var("APPA_ARCHESTRA_BRIDGE_TOKEN", "bridge-token") };
+            let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+                .await
+                .expect("a loopback port");
+            let base = format!("http://{}", listener.local_addr().expect("bound"));
+            let heads = Arc::new(Mutex::new(Vec::new()));
+            let seen = heads.clone();
+            let server = tokio::spawn(async move {
+                while let Ok((stream, _)) = listener.accept().await {
+                    tokio::spawn(answer(stream, seen.clone()));
+                }
+            });
+            Self {
+                base,
+                heads,
+                server,
+            }
+        }
+
+        fn noop_url(&self) -> String {
+            format!("{}{NOOP_PATH}", self.base)
+        }
+
+        /// The settings a dispatch compiles with, the `archestra` builtin served here.
+        fn defaults(&self) -> HostDefaults {
+            HostDefaults {
+                archestra: Some(appa_runtime::config::ArchestraEndpoint::new(
+                    format!("{}/archestra", self.base),
+                    "bridge".into(),
+                )),
+                ..HostDefaults::new(
+                    crate::policy::CONSULT_TIMEOUT,
+                    crate::policy::host_max_body_bytes(),
+                )
+            }
+        }
+
+        fn heads(&self) -> Vec<String> {
+            self.heads.lock().unwrap().clone()
+        }
+    }
+
+    async fn answer(mut stream: tokio::net::TcpStream, heads: Arc<Mutex<Vec<String>>>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut request = Vec::new();
+        let mut chunk = [0u8; 8192];
+        let head = loop {
+            if let Some(end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+                break end + 4;
+            }
+            match stream.read(&mut chunk).await {
+                Ok(0) | Err(_) => return,
+                Ok(read) => request.extend_from_slice(&chunk[..read]),
+            }
+        };
+        let head_text = String::from_utf8_lossy(&request[..head]).into_owned();
+        let length = head_text
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .find(|(name, _)| name.trim().eq_ignore_ascii_case("content-length"))
+            .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        while request.len() < head + length {
+            match stream.read(&mut chunk).await {
+                Ok(0) | Err(_) => return,
+                Ok(read) => request.extend_from_slice(&chunk[..read]),
+            }
+        }
+        let response = match head_text.split_whitespace().nth(1) {
+            Some(NOOP_PATH) => format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{NOOP_ANSWER}",
+                NOOP_ANSWER.len()
+            ),
+            _ => {
+                "HTTP/1.1 503 Service Unavailable\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                    .to_string()
+            }
+        };
+        heads.lock().unwrap().push(head_text);
+        let _ = stream.write_all(response.as_bytes()).await;
+        let _ = stream.shutdown().await;
+    }
 
     /// The default policy's shape: a catch-all routed to the host's no-op endpoint, one
     /// tool labelled by the `archestra` model builtin, and an audience source on the
@@ -645,77 +601,161 @@ mod tests {
         )
     }
 
-    fn annotated_request(policy: &str, files: &[(&str, &str)]) -> Request {
-        Request::parse(
-            &serde_json::json!({
-                "content": policy,
-                "files": files.iter().map(|(path, content)| serde_json::json!({"path": path, "content": content})).collect::<Vec<_>>(),
-                "noopAnnotator": {
-                    "url": NOOP_URL,
-                    "response": {"version": 1, "answer": {"delta": {}, "requires": {"history": [], "attention": []}, "emits": []}},
-                },
-            })
-            .to_string(),
-        )
-        .expect("bounded request")
+    fn live_request(policy: &str, files: &[(&str, &str)], extra: serde_json::Value) -> Request {
+        let mut input = serde_json::json!({
+            "content": policy,
+            "files": files.iter().map(|(path, content)| serde_json::json!({"path": path, "content": content})).collect::<Vec<_>>(),
+        });
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        Request::parse(&input.to_string()).expect("bounded request")
     }
 
     #[tokio::test]
-    async fn the_host_noop_annotator_answers_offline_and_decisions_are_real() {
-        let response = run(annotated_request(
-            &annotated_policy(NOOP_URL),
-            &[
-                (
-                    "pass.appa",
-                    "mcp/notes/list {}\nexpect allow\nmcp/files/read {}\nexpect allow\nmcp/mail/send {}\nexpect deny",
-                ),
-                ("fail.appa", "mcp/notes/list {}\nexpect deny"),
-            ],
-        ))
+    async fn the_host_noop_annotator_is_consulted_and_decisions_are_real() {
+        let consults = Consults::start().await;
+        let response = run_with(
+            live_request(
+                &annotated_policy(&consults.noop_url()),
+                &[
+                    (
+                        "pass.appa",
+                        "mcp/notes/list {}\nexpect allow\nmcp/files/read {}\nexpect allow\nmcp/mail/send {}\nexpect deny",
+                    ),
+                    ("fail.appa", "mcp/notes/list {}\nexpect deny"),
+                ],
+                serde_json::json!({}),
+            ),
+            consults.defaults(),
+        )
         .await;
         assert_eq!(
             response.files[0].status,
             Status::Passed,
-            "{:?}",
+            "{:?} {:?}",
+            response.files[0].error,
             response.files[0]
                 .steps
                 .iter()
                 .map(|step| &step.error)
                 .collect::<Vec<_>>()
         );
-        assert_eq!(response.files[0].steps.len(), 3);
+        assert_eq!(
+            response.files[0].steps.len(),
+            3,
+            "{:?}",
+            response.files[0].error
+        );
         assert_eq!(response.files[1].status, Status::Failed);
         assert_eq!(response.files[1].steps[0].actual.as_deref(), Some("allow"));
+        assert!(
+            consults
+                .heads()
+                .iter()
+                .any(|head| head.starts_with(&format!("POST {NOOP_PATH} ")))
+        );
     }
 
     #[tokio::test]
-    async fn an_unanswered_annotator_stops_its_file_at_the_step_that_needs_it() {
-        for expect in ["allow", "deny"] {
-            let response = run(annotated_request(
-                &annotated_policy(NOOP_URL),
+    async fn the_archestra_annotator_is_asked_live_under_the_replay_context() {
+        let consults = Consults::start().await;
+        let response = run_with(
+            live_request(
+                &annotated_policy(&consults.noop_url()),
                 &[(
                     "model.appa",
-                    &format!("mcp/notes/list {{}}\nexpect allow\nmcp/shell/run_command {{}}\nexpect {expect}\nmcp/notes/list {{}}\nexpect allow"),
+                    "mcp/notes/list {}\nexpect allow\nmcp/shell/run_command {}\nexpect allow\nmcp/notes/list {}\nexpect allow",
                 )],
-            ))
-            .await;
-            let file = &response.files[0];
-            assert_eq!(file.status, Status::CannotRun);
-            assert_eq!(file.error, None);
-            assert_eq!(
-                file.steps
-                    .iter()
-                    .map(|step| step.status)
-                    .collect::<Vec<_>>(),
-                [Status::Passed, Status::CannotRun]
-            );
-            assert_eq!(file.steps[1].line, 3);
-            assert_eq!(file.steps[1].actual, None);
-        }
+                serde_json::json!({"annotatorContext": "replay-token"}),
+            ),
+            consults.defaults(),
+        )
+        .await;
+        let file = &response.files[0];
+        // The endpoint answered 503: the step it decides cannot run and ends the file.
+        assert_eq!(file.status, Status::CannotRun);
+        assert_eq!(
+            file.steps
+                .iter()
+                .map(|step| (step.line, step.status))
+                .collect::<Vec<_>>(),
+            [(1, Status::Passed), (3, Status::CannotRun)]
+        );
+        let asked: Vec<String> = consults
+            .heads()
+            .into_iter()
+            .filter(|head| head.starts_with("POST /archestra "))
+            .collect();
+        assert!(!asked.is_empty());
+        assert!(asked.iter().all(|head| {
+            head.to_ascii_lowercase()
+                .contains("x-archestra-openappa-context: replay-token")
+        }));
     }
 
     #[tokio::test]
-    async fn a_check_needing_audience_members_cannot_run_offline() {
+    async fn a_model_annotator_is_consulted_instead_of_refusing_the_run() {
+        let consults = Consults::start().await;
+        let policy = format!(
+            "{}\n[[policy.annotator]]\nname = 'classifier'\nbuiltin = 'jev'\nranks = ['suspicious', 'trusted']\naudiences = ['self', 'internal']\nmarks = []\neffects = []\n\n[externals.jev]\ntoken_env = 'APPA_PROVIDER_JEV_API_KEY'\n",
+            annotated_policy(&consults.noop_url()).replace(
+                "name = 'shell__run_command'\nannotator = 'run-command'",
+                "name = 'shell__run_command'\nannotator = 'classifier'",
+            )
+        );
+        // The classifier asks this endpoint, with the key the host resolved, in place of
+        // TypeSafe's; it answers 503, so the step it decides cannot run.
+        unsafe {
+            std::env::set_var(
+                "APPA_PROVIDER_JEV_API_URL",
+                format!("{}/jev", consults.base),
+            )
+        };
+        let response = run_with(
+            live_request(
+                &policy,
+                &[
+                    ("plain.appa", "mcp/notes/list {}\nexpect allow"),
+                    (
+                        "classified.appa",
+                        "mcp/notes/list {}\nexpect allow\nmcp/shell/run_command {}\nexpect allow",
+                    ),
+                ],
+                serde_json::json!({"credentials": {"APPA_PROVIDER_JEV_API_KEY": "jev-key"}}),
+            ),
+            consults.defaults(),
+        )
+        .await;
+        assert_eq!(
+            response.files[0].status,
+            Status::Passed,
+            "{:?}",
+            response.files[0].error
+        );
+        assert_eq!(response.files[1].status, Status::CannotRun);
+        assert_eq!(response.files[1].error, None);
+        assert_eq!(
+            response.files[1]
+                .steps
+                .iter()
+                .map(|step| step.status)
+                .collect::<Vec<_>>(),
+            [Status::Passed, Status::CannotRun]
+        );
+        let asked: Vec<String> = consults
+            .heads()
+            .into_iter()
+            .filter(|head| head.starts_with("POST /jev "))
+            .collect();
+        assert!(!asked.is_empty());
+        assert!(asked.iter().all(|head| head.contains("jev-key")));
+    }
+
+    #[tokio::test]
+    async fn a_check_needing_audience_members_cannot_run_without_an_answer() {
+        let consults = Consults::start().await;
         let statuses = |response: &Response| {
             response.files[0]
                 .steps
@@ -724,13 +764,17 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         for expect in ["allow", "deny"] {
-            let response = run(annotated_request(
-                &annotated_policy(NOOP_URL),
-                &[(
-                    "audience.appa",
-                    &format!("mcp/notes/share {{}}\nexpect allow\nmcp/files/internal {{}}\nexpect allow\nmcp/notes/share {{}}\nexpect {expect}\nmcp/notes/list {{}}\nexpect allow"),
-                )],
-            ))
+            let response = run_with(
+                live_request(
+                    &annotated_policy(&consults.noop_url()),
+                    &[(
+                        "audience.appa",
+                        &format!("mcp/notes/share {{}}\nexpect allow\nmcp/files/internal {{}}\nexpect allow\nmcp/notes/share {{}}\nexpect {expect}\nmcp/notes/list {{}}\nexpect allow"),
+                    )],
+                    serde_json::json!({}),
+                ),
+                consults.defaults(),
+            )
             .await;
             assert_eq!(response.files[0].status, Status::CannotRun);
             assert_eq!(
@@ -743,44 +787,22 @@ mod tests {
             );
         }
         // A denial earlier in the file may be the unanswered one: replay stops there.
-        let response = run(annotated_request(
-            &annotated_policy(NOOP_URL),
-            &[(
-                "earlier-deny.appa",
-                "mcp/files/read {}\nexpect allow\nmcp/mail/send {}\nexpect deny\nmcp/files/internal {}\nexpect allow\nmcp/notes/share {}\nexpect deny",
-            )],
-        ))
+        let response = run_with(
+            live_request(
+                &annotated_policy(&consults.noop_url()),
+                &[(
+                    "earlier-deny.appa",
+                    "mcp/files/read {}\nexpect allow\nmcp/mail/send {}\nexpect deny\nmcp/files/internal {}\nexpect allow\nmcp/notes/share {}\nexpect deny",
+                )],
+                serde_json::json!({}),
+            ),
+            consults.defaults(),
+        )
         .await;
         assert_eq!(
             statuses(&response),
             [(1, Status::Passed), (3, Status::CannotRun)]
         );
-    }
-
-    #[tokio::test]
-    async fn an_annotator_named_noop_elsewhere_is_not_the_host_noop() {
-        for request in [
-            annotated_request(
-                &annotated_policy("http://127.0.0.1:9/elsewhere"),
-                &[("other.appa", "mcp/notes/list {}\nexpect allow")],
-            ),
-            request(
-                &annotated_policy(NOOP_URL),
-                &[("unsupplied.appa", "mcp/notes/list {}\nexpect allow")],
-            ),
-            annotated_request(
-                &annotated_policy(NOOP_URL).replace(
-                    &format!("url = '{NOOP_URL}'"),
-                    &format!("url = '{NOOP_URL}'\ntoken_env = 'APPA_NOOP_TOKEN'"),
-                ),
-                &[("credential.appa", "mcp/notes/list {}\nexpect allow")],
-            ),
-        ] {
-            let response = run(request).await;
-            assert_eq!(response.files[0].status, Status::CannotRun);
-            assert_eq!(response.files[0].steps.len(), 1);
-            assert_eq!(response.files[0].steps[0].status, Status::CannotRun);
-        }
     }
 
     #[tokio::test]

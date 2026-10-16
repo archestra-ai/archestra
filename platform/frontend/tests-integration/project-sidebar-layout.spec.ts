@@ -82,6 +82,50 @@ test("separates the empty files state from the schedules divider", async ({
   expect(gap).toBeGreaterThanOrEqual(12);
 });
 
+test("opens project JSON as formatted code", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  await mockProject(mswControl, request, { instructions: "", fileCount: 0 });
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: `${PROJECT_PATH}/files`,
+      body: [
+        {
+          id: "json-row",
+          downloadRef: "json-preview",
+          filename: "report.json",
+          mimeType: "application/json",
+          sizeBytes: 64,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          downloadable: true,
+          projectId: PROJECT_ID,
+          projectName: "Release train",
+        },
+      ],
+    },
+    {
+      method: "get",
+      url: "/api/skill-sandbox/artifacts/json-preview",
+      body: { items: [{ count: 42 }], ok: true },
+    },
+  ]);
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await page.getByRole("button", { name: "report.json", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "report.json" });
+  await expect(dialog).toBeVisible();
+  const code = dialog.getByRole("region", { name: "Code sample, json" });
+  await expect(code).toBeVisible();
+  await expect.poll(() => code.textContent()).toContain('\n  "items": [\n');
+  await expect(
+    dialog.getByRole("button", { name: "Copy to clipboard" }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+});
+
 function projectSidebar(page: Page) {
   return page.locator("section", { hasText: "Instructions" }).locator("..");
 }

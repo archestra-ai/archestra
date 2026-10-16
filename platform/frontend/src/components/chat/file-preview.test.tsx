@@ -251,3 +251,46 @@ describe("FilePreview csv", () => {
     ).toEqual(["Beta\nCorp", "200", "Pending"]);
   });
 });
+
+describe("FilePreview json", () => {
+  it("renders compact JSON as readable code without rounding numbers", async () => {
+    server.use(
+      http.get(CSV_URL, () =>
+        HttpResponse.text('{"count":9007199254740993,"items":[true,null]}'),
+      ),
+    );
+    render(
+      <FilePreview
+        file={{
+          name: "report.json",
+          mimeType: "application/octet-stream",
+          contentUrl: CSV_URL,
+        }}
+      />,
+    );
+    const code = await screen.findByRole("region", {
+      name: "Code sample, json",
+    });
+    expect(code.textContent).toContain('\n  "count": 9007199254740993,\n');
+    expect(
+      await screen.findByRole("button", { name: "Copy to clipboard" }),
+    ).toBeVisible();
+  });
+
+  it("keeps invalid JSON readable as its original text", async () => {
+    server.use(http.get(CSV_URL, () => HttpResponse.text('{"unfinished":')));
+    render(
+      <FilePreview
+        file={{
+          name: "report.json",
+          mimeType: "application/json",
+          contentUrl: CSV_URL,
+        }}
+      />,
+    );
+    expect(await screen.findByText('{"unfinished":')).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Copy to clipboard" }),
+    ).toBeNull();
+  });
+});

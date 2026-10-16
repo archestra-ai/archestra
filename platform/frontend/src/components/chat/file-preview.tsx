@@ -4,6 +4,10 @@ import { EDITABLE_TEXT_FILE_MAX_BYTES } from "@archestra/shared";
 import { csvParseRows } from "d3-dsv";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { PlainTextEditor } from "@/components/chat/plain-text-editor";
 import { Button } from "@/components/ui/button";
@@ -15,6 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import { useAttachmentContentUrl } from "@/lib/chat/encrypted-chat-attachment";
 import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
+import { formatJsonPreview } from "@/lib/chat/format-json-preview";
 import { useUpdateFileContent } from "@/lib/skills-sandbox/use-update-file-content";
 
 /** Anything previewable: a display name, a MIME type, and a byte endpoint. */
@@ -130,8 +135,8 @@ export function FilePreview({
           className="h-full min-h-[60vh] w-full"
         />
       )}
-      {(kind === "text" || kind === "csv") && (
-        <FileTextPreview contentUrl={contentUrl} asTable={kind === "csv"} />
+      {(kind === "text" || kind === "csv" || kind === "json") && (
+        <FileTextPreview contentUrl={contentUrl} kind={kind} />
       )}
       {kind === "unsupported" && (
         <UnsupportedPreview name={file.name} contentUrl={contentUrl} />
@@ -434,10 +439,10 @@ function readAsDataUrl(blob: Blob): Promise<string> {
 
 function FileTextPreview({
   contentUrl,
-  asTable,
+  kind,
 }: {
   contentUrl: string;
-  asTable: boolean;
+  kind: "text" | "csv" | "json";
 }) {
   const { text, failed } = useFileText(contentUrl);
 
@@ -454,7 +459,19 @@ function FileTextPreview({
   if (text === "") {
     return <EmptyFileNotice />;
   }
-  if (asTable) {
+  if (kind === "json") {
+    const formatted = formatJsonPreview(text);
+    if (formatted !== null) {
+      return (
+        <div className="p-4">
+          <CodeBlock code={formatted} language="json" wrapLongLines>
+            <CodeBlockCopyButton title="Copy JSON" />
+          </CodeBlock>
+        </div>
+      );
+    }
+  }
+  if (kind === "csv") {
     const rows = csvParseRows(text);
     return (
       <div className="overflow-auto p-2">

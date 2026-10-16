@@ -398,16 +398,13 @@ jobs:
           source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
-      - name: Load the queue's MCP server base image
-        id: mcp-image
-        uses: ./.github/actions/load-mcp-server-base-image
-        with:
-          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
-          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
       - uses: ./.github/actions/capture-docs-screenshots
         with:
           platform-image: ${{ steps.platform-image.outputs.image-tag }}
-          mcp-server-base-image: ${{ steps.mcp-image.outputs.image-tag }}
+          # The embedded Kind cluster pulls this itself; a host-daemon pull
+          # would duplicate the transfer. Private mirrors keep the harness's
+          # existing public MCP-base fallback (their local tag is not pullable).
+          mcp-server-base-image: ${{ env.UNTRUSTED_PR != 'true' && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || '' }}
 
   docs-screenshot-validation:
     name: Docs Screenshot Validation
@@ -822,9 +819,11 @@ jobs:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    # The second Chromium shard is measured separately; retain the original
-    # runner for the first shard's additional API/identity-provider workload.
-    runs-on: ${{ matrix.name == 'chromium-2of2' && 'ubicloud-standard-8-ubuntu-2404' || 'blacksmith-8vcpu-ubuntu-2404' }}
+    # 8-vcpu Blacksmith, as before the runner migration. Each leg boots the
+    # full lite stack and then runs Playwright next to it: the pre-migration
+    # single lite job ran 6.9 min on 8 vcpu where the 4-vcpu legs ran 8-9
+    # min each.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     # Leave room for cold image pulls and platform startup.
     timeout-minutes: 45
     strategy:

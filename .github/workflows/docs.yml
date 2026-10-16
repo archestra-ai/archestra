@@ -118,7 +118,7 @@ jobs:
   docs-screenshot-capture:
     name: Capture Docs Screenshots (manual validation)
     if: github.event_name == 'workflow_dispatch' && inputs.validation_only
-    runs-on: ubicloud-standard-8-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 25
     permissions:
       contents: read
@@ -126,7 +126,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Default checkout is the synthetic queue commit on merge_group.
+          # Standalone validation checks the selected manual ref.
           fetch-depth: 1
       - uses: ./.github/actions/capture-docs-screenshots
         # No filter: every queue commit must exercise the entire manifest.
@@ -141,7 +141,7 @@ jobs:
        github.event.pull_request.user.login == 'archestra-ci[bot]' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        startsWith(github.event.pull_request.head.ref, 'release-please--'))
-    runs-on: ubicloud-standard-8-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 60
     permissions:
       contents: write # Required to push updated screenshots.

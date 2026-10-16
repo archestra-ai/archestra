@@ -50,7 +50,6 @@ import {
   peerProofAuthorizes,
   verifyPeerProof,
 } from "@/openappa/peer-claims";
-import { bindRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -1242,20 +1241,9 @@ const registry = defineArchestraTools([
             } else if (staged.status === "none") {
               reviewOutcome = reviewOutcomeFromClosure(staged.closure);
             } else if (context.mrtr) {
-              // External MCP clients reach their native question tool through ask_user.
-              // Stage the exact review first so the model cannot alter
-              // the question or bind an answer to a different offer.
-              try {
-                await bindRuntimeHitlReview({
-                  session: reviewSession,
-                  review: stagedReview,
-                });
-              } catch (error) {
-                logger.warn(
-                  { error, offerId: remedy.offer_id },
-                  "Could not index the runtime OpenAPPA review",
-                );
-              }
+              // External MCP clients reach their native question tool through
+              // ask_user. The review is already staged, so the model cannot
+              // alter the question or bind an answer to a different offer.
               return nativeReviewRequiredResult(remedy.offer_id);
             } else if (context.elicitation) {
               const prepared = await getHitlAskUserArguments({

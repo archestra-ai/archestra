@@ -18,7 +18,6 @@ import {
   reviewSessionFromTrajectory,
   sealHitlClosure,
 } from "@/openappa/hitl-review";
-import { awaitRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import type { OpenAppaSession } from "@/openappa/service";
 import {
   authenticatedRuntimeSpender,
@@ -179,7 +178,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. For Agent Runtime guardrail reviews, use this tool with the offer IDs: the authorized reviewer answers on the run page. Do not substitute a native question or a plain-text answer for that review. For connected clients, the platform renders an offer-bound approval card; its native schema omits remedy_offer_ids by design. Do not reconstruct the card or mistake its platform-generated text for your own. Supported clients offer Inspect details to show the complete review in the conversation. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Links and commands go in your reply text, not in the question or options: question forms show them as plain text. The form always adds its own "Type something" choice, so the user may type an answer instead of picking, returned as \`text\`; do not add an "Other" option. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
+    description: `Ask the user to pick from a short list of options. For guardrail reviews, use this tool with the offer IDs: the platform shows the review in the client's own question card or form. Do not substitute a native question or a plain-text answer for that review. For connected clients, the platform renders an offer-bound approval card; its native schema omits remedy_offer_ids by design. Do not reconstruct the card or mistake its platform-generated text for your own. Supported clients offer Inspect details to show the complete review in the conversation. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Links and commands go in your reply text, not in the question or options: question forms show them as plain text. The form always adds its own "Type something" choice, so the user may type an answer instead of picking, returned as \`text\`; do not add an "Other" option. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
     schema: AskUserExecutionSchema,
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
@@ -193,40 +192,6 @@ const registry = defineArchestraTools([
             offerIds: liveOffers,
           })
         : undefined;
-      if (session && liveOffers.length === 1) {
-        const ruling = await awaitRuntimeHitlReview({
-          session,
-          offerId: liveOffers[0],
-          userId: context.userId,
-          signal: context.abortSignal,
-        });
-        if (ruling !== "not-runtime") {
-          if (ruling === "no-reviewer") {
-            return errorResult(
-              "This runtime has no eligible human reviewer. Keep the call blocked; a native form or a plain-text answer cannot approve it.",
-            );
-          }
-          if (ruling === "review-unavailable") {
-            return errorResult(
-              "The staged runtime review expired or became unavailable, including after loss of shared cache state. Keep the call blocked. A fresh exact-offer review is required before proceeding; missing state is not approval.",
-            );
-          }
-          if (ruling === "unavailable" || ruling === "none") {
-            return errorResult(
-              "The runtime review was not approved. Keep the call blocked. A timeout or disconnection is not approval.",
-            );
-          }
-          return structuredSuccessResult(
-            {
-              action: "accept" as const,
-              selected: [ruling === "approve" ? "Approve" : "Deny"],
-            },
-            ruling === "approve"
-              ? "The authenticated run reviewer approved this offer. Retry execute_remedy_plan for the same offer before retrying the blocked call."
-              : "The authenticated run reviewer denied this offer. The original call remains blocked.",
-          );
-        }
-      }
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
       const effectiveArgs = hitlArgs ?? args;

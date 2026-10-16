@@ -244,7 +244,7 @@ function useReviewRecordingBundle(src: string | null | undefined) {
  * REAL read-only app-session player in the chat's right panel. A compact
  * submission header (app/author/PR/category + "Immutable review") frames the
  * player; the reviewer keeps the Hackathon agent's tools in the chat alongside.
- * Mirrors the full-page `/review` fetch, held to the same recording contract.
+ * Validates the fetched bundle before passing it to the player.
  * Exported so the chat page's inline mobile panel can mount it directly (the
  * same way it mounts `AppsPanelContent`), without the desktop resize frame.
  */

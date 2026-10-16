@@ -596,8 +596,8 @@ export function ChatPageContent({
   //   /chat/new?agent_id=…&user_prompt=…&review=<sub>&reviewSrc=<rawUrl>
   //            &pr=&repo=&app=&by=&name=&cat=
   // Present with `reviewSrc` (the raw recording.json URL). The `reviewSrc`/
-  // `review` names compose with agent_id/user_prompt; the full-page /review's
-  // `src`/`sub` are accepted as aliases. A one-shot signal, like user_prompt.
+  // `review` names compose with agent_id/user_prompt; `src`/`sub` are accepted
+  // as aliases. A one-shot signal, like user_prompt.
   const urlReviewContext = useMemo<ChatReviewContext | null>(() => {
     const src = searchParams.get("reviewSrc") || searchParams.get("src");
     if (!src) return null;

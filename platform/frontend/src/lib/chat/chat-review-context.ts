@@ -7,8 +7,7 @@ import { conversationStorageKeys } from "@/lib/chat/chat-utils";
  * replay player into the chat's right panel while the reviewer talks to the
  * Hackathon agent about that one submission.
  *
- * Mirrors the full-page `/review` link contract (`sub, src, pr, repo, app, by,
- * name, cat`). `src` is the raw recording.json URL the bundle is fetched from
+ * `src` is the raw recording.json URL the bundle is fetched from
  * (via `/api/app-recording/review?src=`); `prUrl` is derived from `repo`+`pr`.
  */
 export interface ChatReviewContext {

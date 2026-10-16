@@ -305,7 +305,7 @@ export function AuditLogTable() {
 
   // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.
   const { data: mcpServers } = useMcpServers();
-  const { data: teams } = useTeams();
+  const { data: teams } = useTeams({ includeRelations: false });
   const { data: rolesResponse } = useRolesPaginated({
     limit: ENTITY_FILTER_LIMIT,
     offset: 0,

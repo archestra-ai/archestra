@@ -19,6 +19,8 @@ export interface SkillAvailabilityContext {
   /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
   lookups?: RequestLookups;
+  /** Metadata consumers may omit native instruction bodies at the SQL boundary. */
+  includeContent?: boolean;
 }
 
 export type PolicyIndependentAvailableAgentSkill =
@@ -67,6 +69,7 @@ export async function listPolicyIndependentAvailableAgentSkills(
       userId: params.userId,
       environmentId,
       lookups: params.lookups,
+      includeContent: params.includeContent,
     }),
     config.mcpGateway.skillsEnabled
       ? listExternalMcpSkills({

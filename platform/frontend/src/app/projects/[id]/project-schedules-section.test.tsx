@@ -1,6 +1,25 @@
-import { render, screen, within } from "@testing-library/react";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import type { ReactElement } from "react";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 // Radix Select uses browser pointer-capture and scrolling APIs that jsdom omits.
 Element.prototype.scrollIntoView = vi.fn();
@@ -25,10 +44,6 @@ vi.mock("@/lib/schedule-trigger.query", () => ({
   useRunScheduleTriggerNow: vi.fn(),
 }));
 
-vi.mock("@/lib/agent.query", () => ({
-  useAgentOptions: vi.fn(() => ({ data: [] })),
-}));
-
 vi.mock("@/lib/hooks/use-dialog-url-param", () => ({
   useDialogUrlParam: vi.fn(() => ({
     entity: null,
@@ -42,7 +57,6 @@ vi.mock("@/components/scheduled-tasks/use-resolve-run-chat", () => ({
 }));
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -403,23 +417,6 @@ describe("ProjectSchedulesSection default agent", () => {
     vi.mocked(useUpdateScheduleTrigger).mockReturnValue(
       idleMutation as unknown as ReturnType<typeof useUpdateScheduleTrigger>,
     );
-    vi.mocked(useAgentOptions).mockReturnValue({
-      data: [
-        {
-          id: "agent-1",
-          name: "Reporter",
-          agentType: "agent",
-          scope: "org",
-          runtime: { credentials: [] },
-        },
-        {
-          id: "agent-2",
-          name: "Test1 Agent",
-          agentType: "agent",
-          scope: "org",
-        },
-      ],
-    } as unknown as ReturnType<typeof useAgentOptions>);
   });
 
   /** The dialog has several comboboxes (cron, timezone); scope to the agent's. */
@@ -450,7 +447,7 @@ describe("ProjectSchedulesSection default agent", () => {
       screen.getByRole("button", { name: /new schedule/i }),
     );
 
-    expect(agentPicker()).toHaveTextContent("Test1 Agent");
+    await waitFor(() => expect(agentPicker()).toHaveTextContent("Test1 Agent"));
     expect(schedulePicker()).toHaveTextContent("Manual");
     expect(screen.queryByText("Timezone")).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Name"), "On-demand report");
@@ -505,7 +502,7 @@ describe("ProjectSchedulesSection default agent", () => {
       />,
     );
 
-    expect(agentPicker()).toHaveTextContent("Reporter");
+    await waitFor(() => expect(agentPicker()).toHaveTextContent("Reporter"));
     expect(
       within(agentPicker()).getByLabelText("Dedicated runtime"),
     ).toBeInTheDocument();
@@ -536,3 +533,49 @@ describe("ProjectSchedulesSection default agent", () => {
     });
   });
 });
+
+const roster = [
+  {
+    id: "agent-1",
+    name: "Reporter",
+    agentType: "agent",
+    scope: "org",
+    runtime: { credentials: [] },
+  },
+  { id: "agent-2", name: "Test1 Agent", agentType: "agent", scope: "org" },
+];
+const agentServer = setupServer(
+  http.get("http://localhost:9000/api/agents/options", ({ request }) =>
+    HttpResponse.json(
+      roster.filter((agent) =>
+        new URL(request.url).searchParams
+          .get("ids")
+          ?.split(",")
+          .includes(agent.id),
+      ),
+    ),
+  ),
+  http.get("http://localhost:9000/api/agents/options/page", () =>
+    HttpResponse.json({
+      data: roster,
+      pagination: { limit: 20, hasNext: false, nextCursor: null },
+    }),
+  ),
+);
+beforeAll(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  agentServer.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => agentServer.resetHandlers());
+afterAll(() => {
+  agentServer.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
+}

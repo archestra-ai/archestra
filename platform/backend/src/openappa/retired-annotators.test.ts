@@ -82,6 +82,32 @@ describe("annotators earlier opening policies declare", () => {
     expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
   });
 
+  test("removing a name earlier policies bound differently warns that the current binding answers them all", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, userId } = await admin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await declare({ organizationId, userId, content: urlJudged("a", JUDGE_A) });
+    // A session opened when the name was bound elsewhere. Nothing says which
+    // session was active last, so the next one, under the current policy, is.
+    await OpenAppaPolicyFileModel.store(urlJudged("a", JUDGE_A0));
+
+    const preview = await guardrailsPolicyService.validate(
+      urlJudged("b", JUDGE_B),
+      { organizationId },
+    );
+
+    expect(preview.valid).toBe(true);
+    expect(preview.warnings).toEqual([
+      `annotator "a.tool-call" would no longer be declared; sessions opened under earlier policies still ask for it. The host keeps its previous binding (${JUDGE_A}) for them. Sessions opened under policies that bound it differently (${JUDGE_A0}) are answered by that binding too.`,
+    ]);
+  });
+
   test("with no session opened under the old policy nothing is kept", async ({
     makeOrganization,
     makeUser,
@@ -587,6 +613,7 @@ const MANDATE = {
   marks: [],
 };
 const JUDGE_A = "https://judge-a.test/annotate";
+const JUDGE_A0 = "https://judge-a0.test/annotate";
 const JUDGE_B = "https://judge-b.test/annotate";
 
 /** A root whose one URL-bound annotator `<prefix>.tool-call` judges every tool. */

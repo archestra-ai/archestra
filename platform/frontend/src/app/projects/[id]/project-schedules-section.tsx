@@ -9,7 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -33,7 +33,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -419,12 +418,6 @@ function ScheduleDialog({
   // The agent picker is a management capability; without `agent:read` the
   // dropdown is hidden and the run implicitly uses the org's default agent.
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
-  const { data: agents = [] } = useAgentOptions({
-    filters: { agentType: "agent" },
-    enabled: canReadAgents === true,
-  });
   const createSchedule = useCreateScheduleTrigger();
   const updateSchedule = useUpdateScheduleTrigger();
   const [enabled, setEnabled] = useState(schedule?.enabled ?? false);
@@ -438,16 +431,6 @@ function ScheduleDialog({
           messageTemplate: schedule.messageTemplate,
         }
       : { ...DEFAULT_FORM_STATE(), agentId: defaultAgentId ?? "" },
-  );
-
-  // Hide other people's personal agents, like the standalone scheduled page.
-  const selectableAgents = useMemo(
-    () =>
-      agents.filter(
-        (agent) =>
-          agent.scope !== "personal" || agent.authorId === currentUserId,
-      ),
-    [agents, currentUserId],
   );
 
   const update = (patch: Partial<ScheduleTriggerFormState>) =>
@@ -528,7 +511,9 @@ function ScheduleDialog({
           <AgentSelector
             mode="single"
             flat
-            agents={selectableAgents}
+            remote={{
+              filters: { agentType: "agent", onlyOwnPersonalAgents: true },
+            }}
             value={form.agentId}
             onValueChange={(value) => update({ agentId: value })}
             placeholder="Select an agent"

@@ -44,7 +44,7 @@ import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
 import { restore, softDelete } from "@/database/soft-delete";
@@ -2420,6 +2420,31 @@ class ToolModel {
     );
   }
 
+  /** Tool-picker metadata without parameter bodies or assignment fan-out. */
+  static async findPickerToolsByCatalogId(catalogId: string) {
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        createdAt: schema.toolsTable.createdAt,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          ToolModel.listableCatalogToolPredicate(),
+        ),
+      )
+      .orderBy(desc(schema.toolsTable.createdAt));
+    return tools.map((tool) => ({
+      ...tool,
+      group: getArchestraToolGroupId(
+        archestraMcpBranding.getToolShortName(tool.name),
+      ),
+    }));
+  }
+
   static async findByCatalogId(catalogId: string): Promise<
     Array<{
       id: string;
@@ -3373,48 +3398,56 @@ class ToolModel {
    */
   static async findOrCreateDelegationTool(
     targetAgentId: string,
+    transaction?: Transaction,
   ): Promise<Tool> {
-    // Check if delegation tool already exists
-    const [existingTool] = await db
-      .select()
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId))
-      .limit(1);
+    const run = async (tx: Transaction): Promise<Tool> => {
+      await AgentModel.lockRowForUpdate(targetAgentId, tx);
+      // Check if delegation tool already exists
+      const [existingTool] = await tx
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId))
+        .limit(1);
 
-    if (existingTool) {
-      return existingTool;
-    }
+      if (existingTool) {
+        return existingTool;
+      }
 
-    const targetAgent = await AgentModel.findDelegationTarget(targetAgentId);
+      const targetAgent = await AgentModel.findDelegationTarget(
+        targetAgentId,
+        tx,
+      );
 
-    if (!targetAgent) {
-      throw new Error(`Target agent not found: ${targetAgentId}`);
-    }
+      if (!targetAgent) {
+        throw new Error(`Target agent not found: ${targetAgentId}`);
+      }
 
-    // Create delegation tool
-    const toolName = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
-    const [tool] = await db
-      .insert(schema.toolsTable)
-      .values({
-        name: toolName,
-        description: `Delegate task to agent: ${targetAgent.name}`,
-        delegateToAgentId: targetAgentId,
-        agentId: null,
-        catalogId: null,
-        parameters: {
-          type: "object",
-          properties: {
-            message: {
-              type: "string",
-              description: "The task or message to send to the agent",
+      // Create delegation tool
+      const toolName = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
+      const [tool] = await tx
+        .insert(schema.toolsTable)
+        .values({
+          name: toolName,
+          description: `Delegate task to agent: ${targetAgent.name}`,
+          delegateToAgentId: targetAgentId,
+          agentId: null,
+          catalogId: null,
+          parameters: {
+            type: "object",
+            properties: {
+              message: {
+                type: "string",
+                description: "The task or message to send to the agent",
+              },
             },
+            required: ["message"],
           },
-          required: ["message"],
-        },
-      })
-      .returning();
+        })
+        .returning();
 
-    return tool;
+      return tool;
+    };
+    return transaction ? run(transaction) : withDbTransaction(run);
   }
 
   /**

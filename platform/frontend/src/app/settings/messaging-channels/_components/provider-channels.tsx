@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useInternalAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -43,7 +43,11 @@ export function ProviderChannels({
   provider: "ms-teams" | "telegram";
 }) {
   const bindings = useAllChatOpsBindings();
-  const { data: agents = [] } = useInternalAgentOptions();
+  const { data: agents = [] } = useAgentOptionsByIds({
+    ids: (bindings.data?.bindings ?? []).flatMap((binding) =>
+      binding.provider === provider && binding.agentId ? [binding.agentId] : [],
+    ),
+  });
   const { data: canEdit } = useHasPermissions({
     organizationSettings: ["update"],
   });
@@ -107,7 +111,7 @@ export function ProviderChannels({
               mode="single"
               flat
               compactTrigger
-              agents={agents}
+              remote={{ filters: { agentType: "agent", excludeBuiltIn: true } }}
               value={agentFilter}
               onValueChange={setAgentFilter}
               sentinelOption={{ value: ALL_AGENTS, label: "All agents" }}
@@ -187,7 +191,12 @@ export function ProviderChannels({
                           mode="single"
                           flat
                           compactTrigger
-                          agents={agents}
+                          remote={{
+                            filters: {
+                              agentType: "agent",
+                              excludeBuiltIn: true,
+                            },
+                          }}
                           value={binding.agentId ?? ""}
                           onValueChange={(agentId) =>
                             update.mutate({

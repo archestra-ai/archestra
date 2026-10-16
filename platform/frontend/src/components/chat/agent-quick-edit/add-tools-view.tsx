@@ -135,7 +135,7 @@ export function AddToolsView({
   );
   const toolQueries = useQueries({
     queries: connectedIds.map((id) => ({
-      queryKey: ["mcp-catalog", id, "tools"],
+      queryKey: ["mcp-catalog", id, "tools", "picker"],
       queryFn: () => fetchCatalogTools(id),
       staleTime: 60_000,
     })),

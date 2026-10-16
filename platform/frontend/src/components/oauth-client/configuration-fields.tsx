@@ -1,6 +1,7 @@
 "use client";
 import type { archestraApiTypes } from "@archestra/shared";
 import type { OAuthClientScope } from "@archestra/shared/oauth";
+import { useMutation } from "@tanstack/react-query";
 import { Bot, Network, Workflow } from "lucide-react";
 import { type UseFormReturn, useWatch } from "react-hook-form";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
@@ -16,6 +17,7 @@ import { RedirectUrisField } from "@/components/oauth-client-form-fields";
 import { ProviderAccessField } from "@/components/provider-access-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { fetchAgentOptionIds } from "@/lib/agent-options.query";
 import { useScopedCapabilities } from "@/lib/auth/auth.query";
 
 export type OAuthClientFormValues =
@@ -46,7 +48,9 @@ export const oauthCapabilities = [
 export function OAuthClientScopePicker({
   value,
   onChange,
+  disabled,
 }: {
+  disabled?: boolean;
   value: OAuthClientScope[];
   onChange: (value: OAuthClientScope[]) => void;
 }) {
@@ -65,6 +69,7 @@ export function OAuthClientScopePicker({
           >
             <Checkbox
               id={`oauth-scope-${scope}`}
+              disabled={disabled}
               checked={value.includes(scope)}
               onCheckedChange={(checked) =>
                 onChange(
@@ -94,12 +99,14 @@ export function OAuthClientScopePicker({
 export function OAuthClientAccessFields({
   form,
   gateways,
+  remoteGateways = false,
   providerApiKeys,
   showServiceAccount = true,
   providerAccessSurface = "edit",
 }: {
   form: UseFormReturn<OAuthClientFormValues>;
   gateways: AgentSelectorAgent[];
+  remoteGateways?: boolean;
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   showServiceAccount?: boolean;
   providerAccessSurface?: "create" | "edit";
@@ -152,6 +159,15 @@ export function OAuthClientAccessFields({
               : undefined
           }
           gateways={targets}
+          remoteFilters={
+            remoteGateways
+              ? {
+                  agentTypes: values.scopes.includes("mcp")
+                    ? ["mcp_gateway", "agent"]
+                    : ["agent"],
+                }
+              : undefined
+          }
           value={values.allowedGatewayIds ?? []}
           onValueChange={(value) =>
             form.setValue("allowedGatewayIds", value, { shouldDirty: true })
@@ -263,6 +279,45 @@ export function oauthClientFormBody(
   };
 }
 
+/** Scope changes need only IDs to remove gateway targets from an A2A-only grant. */
+export async function resolveOauthClientFormBody(
+  values: OAuthClientFormValues,
+  gateways?: AgentSelectorAgent[],
+) {
+  const body = oauthClientFormBody(values, gateways ?? []);
+  if (
+    gateways === undefined &&
+    values.scopes.includes("a2a") &&
+    !values.scopes.includes("mcp") &&
+    body.allowedGatewayIds?.length
+  ) {
+    const gatewaysOnly = new Set(
+      await fetchAgentOptionIds({ agentTypes: ["mcp_gateway"] }),
+    );
+    body.allowedGatewayIds = body.allowedGatewayIds.filter(
+      (id) => !gatewaysOnly.has(id),
+    );
+  }
+  return body;
+}
+
+export function useOauthClientScopeChange(
+  form: UseFormReturn<OAuthClientFormValues>,
+  gateways?: AgentSelectorAgent[],
+) {
+  const mutation = useMutation({
+    mutationFn: (scopes: OAuthClientScope[]) =>
+      resolveOauthClientFormBody({ ...form.getValues(), scopes }, gateways),
+    onSuccess: (body) => {
+      form.setValue("scopes", body.scopes, { shouldDirty: true });
+      form.setValue("allowedGatewayIds", body.allowedGatewayIds ?? [], {
+        shouldDirty: true,
+      });
+    },
+  });
+  return { change: mutation.mutate, isPending: mutation.isPending };
+}
+
 export function oauthClientFormReady(values: OAuthClientFormValues): boolean {
   if (!values.name.trim() || !values.scopes.length) return false;
   if (values.grantType === "authorization_code")
@@ -274,19 +329,6 @@ export function oauthClientFormReady(values: OAuthClientFormValues): boolean {
     (!values.scopes.some((scope) => scope === "mcp" || scope === "a2a") ||
       !!values.allowedGatewayIds?.length)
   );
-}
-
-export function setOauthClientScopes(
-  form: UseFormReturn<OAuthClientFormValues>,
-  scopes: OAuthClientScope[],
-  gateways: AgentSelectorAgent[],
-) {
-  const values = form.getValues();
-  form.setValue("scopes", scopes, { shouldDirty: true });
-  const body = oauthClientFormBody({ ...values, scopes }, gateways);
-  form.setValue("allowedGatewayIds", body.allowedGatewayIds ?? [], {
-    shouldDirty: true,
-  });
 }
 
 function OAuthClientProviderAccessFields({

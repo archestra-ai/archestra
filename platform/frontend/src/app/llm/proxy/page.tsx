@@ -66,7 +66,6 @@ import type {
   RequestCredential,
   RequestTarget,
 } from "@/components/virtual-key-request-example";
-import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
@@ -901,9 +900,6 @@ function OauthClientCreateFlow({
     enabled: open,
   });
   const llmCreate = useCreateOauthClient();
-  const { data: gateways = [] } = useAgentOptions({
-    filters: { agentTypes: ["mcp_gateway", "agent"] },
-  });
   const [createdCredentials, setCreatedCredentials] =
     useState<CreatedCredentials | null>(null);
 
@@ -913,7 +909,6 @@ function OauthClientCreateFlow({
         open={open}
         onOpenChange={onOpenChange}
         defaultClientType="llm"
-        gateways={gateways}
         providerApiKeys={providerApiKeys}
         onSubmit={async (values) => {
           const result = await llmCreate.mutateAsync(values);

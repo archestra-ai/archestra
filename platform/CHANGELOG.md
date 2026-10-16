@@ -1,5 +1,69 @@
 # Changelog
 
+## [1.4.0-rc.47](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.46...platform-v1.4.0-rc.47) (2026-10-16)
+
+
+### Bug Fixes
+
+* **credentials:** preserve GitLab host in list and updates ([#9033](https://github.com/archestra-ai/archestra/issues/9033)) ([46dc3a8](https://github.com/archestra-ai/archestra/commit/46dc3a8954d404404172bb7a2af2a2547bd6a584))
+
+## [1.4.0-rc.46](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.45...platform-v1.4.0-rc.46) (2026-10-16)
+
+
+### Bug Fixes
+
+* **api:** expose persisted labels on declarative resource reads ([#9032](https://github.com/archestra-ai/archestra/issues/9032)) ([636733d](https://github.com/archestra-ai/archestra/commit/636733dcd5fbfdb55e93cbd55c7b41eca93e3691))
+
+
+### Performance Improvements
+
+* avoid catalog hydration in metadata reads ([#9030](https://github.com/archestra-ai/archestra/issues/9030)) ([232aab7](https://github.com/archestra-ai/archestra/commit/232aab75a9ec98473e27565949f65c17e633a35f))
+
+## [1.4.0-rc.45](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.44...platform-v1.4.0-rc.45) (2026-10-16)
+
+
+### Features
+
+* **api:** read deployment environments by ID ([#9021](https://github.com/archestra-ai/archestra/issues/9021)) ([6fb81d9](https://github.com/archestra-ai/archestra/commit/6fb81d9436cc180a8869efe180c266562d6dd31d))
+
+
+### Bug Fixes
+
+* **agent-runtime:** honor configured workspace startup timeout ([#9026](https://github.com/archestra-ai/archestra/issues/9026)) ([da40c8e](https://github.com/archestra-ai/archestra/commit/da40c8ebf368b31a9d4a981eaa4425531940ebbb))
+
+
+### Performance Improvements
+
+* bound agent selectors and chat initialization ([#9028](https://github.com/archestra-ai/archestra/issues/9028)) ([b3ce6de](https://github.com/archestra-ai/archestra/commit/b3ce6de1362e1ee5334fc8d325a384a356d34f2c))
+
+## [1.4.0-rc.44](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.43...platform-v1.4.0-rc.44) (2026-10-16)
+
+
+### Features
+
+* **search:** find apps in the search palette ([#9010](https://github.com/archestra-ai/archestra/issues/9010)) ([b38e498](https://github.com/archestra-ai/archestra/commit/b38e4982778725d7fc10c1b189daec19b965b512))
+* **search:** find projects, knowledge bases, plugins, environments and teams in the palette ([#9013](https://github.com/archestra-ai/archestra/issues/9013)) ([3c163b6](https://github.com/archestra-ai/archestra/commit/3c163b68d275027a5bcbb51dc0c1d8c4be5d3eba))
+
+
+### Bug Fixes
+
+* **agent-runtime:** release a busy runtime's files once its tool call finishes ([#8998](https://github.com/archestra-ai/archestra/issues/8998)) ([ac0f42d](https://github.com/archestra-ai/archestra/commit/ac0f42d40834b29f6c229b25bfe79d8dc0178e79))
+* **connect:** raise the skill delivery cap to 1111 ([#9011](https://github.com/archestra-ai/archestra/issues/9011)) ([e88a488](https://github.com/archestra-ai/archestra/commit/e88a48887455f1aaae805467482d31cb94303340))
+* **connect:** show the plugins the copied command installs ([#9025](https://github.com/archestra-ai/archestra/issues/9025)) ([942b442](https://github.com/archestra-ai/archestra/commit/942b442748b8c34a608bd161dcff1f079c42c096))
+* **docker:** bump containerd to 2.2.7 for CVE-2026-95837 ([#9016](https://github.com/archestra-ai/archestra/issues/9016)) ([ac830bc](https://github.com/archestra-ai/archestra/commit/ac830bc122b33003af029e060a821dba96a225c3))
+* **openappa:** sign runtime reads made while Guardrails are off so they pass once back on ([#8999](https://github.com/archestra-ai/archestra/issues/8999)) ([28379aa](https://github.com/archestra-ai/archestra/commit/28379aab3340f380cf77e7a8fa47a7a3cc933a02))
+* preserve service account identity in runtime MCP sessions ([#9015](https://github.com/archestra-ai/archestra/issues/9015)) ([1bd2035](https://github.com/archestra-ai/archestra/commit/1bd2035586b0db3997cd194de5e7f2022dfe5fbf))
+* **teams:** migrate to Agents SDK and fix long-response timeouts ([#8987](https://github.com/archestra-ai/archestra/issues/8987)) ([a7cf76f](https://github.com/archestra-ai/archestra/commit/a7cf76f4cbc395b27bc3a2eaa885935eaa79f434))
+
+
+### Performance Improvements
+
+* bound MCP usage previews and automatic-agent pages ([#9004](https://github.com/archestra-ai/archestra/issues/9004)) ([35e36af](https://github.com/archestra-ai/archestra/commit/35e36afd3f8a29cd568bc486a9e448bb29028414))
+* **connect:** prepare the approval setup from one skill request and show progress ([#9024](https://github.com/archestra-ai/archestra/issues/9024)) ([f8487ad](https://github.com/archestra-ai/archestra/commit/f8487adc8c68da053fe7e213df869c1d5be7e9c1))
+* keep catalog tool picker reads compact ([#9018](https://github.com/archestra-ai/archestra/issues/9018)) ([924d3d1](https://github.com/archestra-ai/archestra/commit/924d3d1cb0f6cb7726bad25727a96235b40a5c1e))
+* keep chat and agent metadata reads compact ([#9000](https://github.com/archestra-ai/archestra/issues/9000)) ([d1d9c10](https://github.com/archestra-ai/archestra/commit/d1d9c10ddf1202bbd1556d95aec13c6963eadf73))
+* project selector fields before hydrating agent options ([#9008](https://github.com/archestra-ai/archestra/issues/9008)) ([7db8c84](https://github.com/archestra-ai/archestra/commit/7db8c84ec39dac9d2afbaf79b1cf8e8d9bd4a351))
+
 ## [1.4.0-rc.43](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.42...platform-v1.4.0-rc.43) (2026-10-15)
 
 

@@ -28,6 +28,8 @@ export async function listExternalMcpSkills(params: {
       params.isMcpServerAdmin,
       params.organizationId,
       params.environmentId,
+      undefined,
+      { includeAssignedAgents: false },
     )
   ).filter(
     (server) =>

@@ -362,8 +362,10 @@ export function useDeleteInternalMcpCatalogItem() {
   });
 }
 
-export type CatalogTool =
-  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+export type CatalogTool = Pick<
+  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number],
+  "id" | "name" | "description" | "createdAt" | "group"
+>;
 
 /** One `{ id, name, catalogId }` row from the batched catalog-tools route. */
 export type CatalogToolReference =
@@ -386,6 +388,7 @@ export async function fetchCatalogTools(
   try {
     const response = await getInternalMcpCatalogTools({
       path: { id: catalogId },
+      query: { view: "picker" },
     });
     return response.data ?? [];
   } catch (error) {
@@ -440,7 +443,7 @@ export function groupCatalogTools(
  */
 export function useCatalogTools(catalogId: string | null) {
   return useQuery({
-    queryKey: ["mcp-catalog", catalogId, "tools"],
+    queryKey: ["mcp-catalog", catalogId, "tools", "picker"],
     queryFn: async () => {
       if (!catalogId) return [];
       return fetchCatalogTools(catalogId);

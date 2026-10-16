@@ -38,6 +38,8 @@ type InitialChatMemberDefault = {
 type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   // ---- already-fetched data, passed in by the caller (NO queries inside) ----
   agents: TAgent[];
+  resolveAgent?: (id: string) => TAgent | undefined;
+  isAgentsLoading?: boolean;
   organization: InitialChatOrganization;
   defaultAgentId: string | null | undefined;
   modelsByProvider: Record<string, LlmModel[]>;
@@ -106,9 +108,11 @@ export type InitialChatModelState = {
  */
 export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   params: InitialChatModelStateParams<TAgent>,
-): InitialChatModelState {
+): InitialChatModelState & { selectedAgent: TAgent | null } {
   const {
     agents,
+    resolveAgent,
+    isAgentsLoading,
     organization,
     defaultAgentId,
     modelsByProvider,
@@ -126,6 +130,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   } = params;
 
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<TAgent | null>(null);
   const [modelId, setModelId] = useState<string>("");
   const [apiKeyId, setApiKeyId] = useState<string | null>(null);
   // Carried into the create request on first submit, so a choice made before
@@ -156,6 +161,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   const applyAgentSelection = useCallback(
     (agent: TAgent) => {
       setAgentId(agent.id);
+      setSelectedAgent(agent);
       resolvedAgentRef.current = agent;
 
       const resolved = resolveInitialAgentState({
@@ -193,7 +199,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   // Priority: URL param > project pin > personal default > org default >
   // saved pick > first.
   useEffect(() => {
-    if (agents.length === 0) return;
+    if (isAgentsLoading || agents.length === 0) return;
     // Wait for organization data to avoid a race where agents load before org,
     // causing the org default to be skipped.
     if (isOrgLoading) return;
@@ -247,6 +253,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     agentId,
     urlAgentId,
     agents,
+    isAgentsLoading,
     defaultAgentId,
     projectDefaultAgentId,
     organization?.defaultAgentId,
@@ -313,6 +320,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       })
     ) {
       setAgentId(null);
+      setSelectedAgent(null);
       setModelId("");
       setApiKeyId(null);
       modelInitializedRef.current = false;
@@ -372,12 +380,13 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 
   const onAgentChange = useCallback(
     (nextAgentId: string) => {
-      const agent = agents.find((a) => a.id === nextAgentId);
+      const agent =
+        agents.find((a) => a.id === nextAgentId) ?? resolveAgent?.(nextAgentId);
       if (!agent) return;
       applyAgentSelection(agent);
       saveAgent(agent.id);
     },
-    [agents, applyAgentSelection],
+    [agents, applyAgentSelection, resolveAgent],
   );
 
   // Reset to the agent/org default model (shown when on a custom model).
@@ -418,15 +427,16 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   }, [modelId, modelsByProvider]);
 
   const modelSource = useMemo(() => {
-    const agent = agents.find((a) => a.id === agentId);
+    const agent = agents.find((a) => a.id === agentId) ?? selectedAgent;
     return deriveModelSource({
       selectedModelId: modelId,
       agentModelId: agent?.modelId,
       orgModelId: organization?.defaultModelId,
     });
-  }, [modelId, agentId, agents, organization?.defaultModelId]);
+  }, [modelId, agentId, agents, selectedAgent, organization?.defaultModelId]);
 
   return {
+    selectedAgent,
     agentId,
     modelId,
     apiKeyId,

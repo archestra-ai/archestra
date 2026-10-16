@@ -1,11 +1,8 @@
-import {
-  type Activity,
-  CloudAdapter,
-  TeamsInfo,
-  TurnContext,
-} from "botbuilder";
+import { Activity } from "@microsoft/agents-activity";
+import { CloudAdapter, TurnContext } from "@microsoft/agents-hosting";
 import { type MockInstance, vi } from "vitest";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
 import { createFastifyInstance } from "@/fastify-instance";
 import A2AContextModel from "@/models/a2a/context";
@@ -19,7 +16,7 @@ import { msTeamsWebhookRoutes } from "./chatops";
 describe("Teams conversation addressing", () => {
   setupTestCacheManager();
   let replies: Partial<Activity>[];
-  let getMember: MockInstance<typeof TeamsInfo.getMember>;
+  let getMember: MockInstance<typeof msTeamsDirectory.getMember>;
 
   beforeEach(async ({ makeOrganization }) => {
     await makeOrganization();
@@ -36,7 +33,7 @@ describe("Teams conversation addressing", () => {
     await provider.initialize();
     vi.spyOn(chatOpsManager, "getMSTeamsProvider").mockReturnValue(provider);
 
-    // Replace only the authenticated Bot Framework transport boundary. The
+    // Replace only the authenticated Agents SDK transport boundary. The
     // real parser, webhook, addressing cache and database models still run.
     // JWT rejection is covered separately by the real CloudAdapter tests.
     vi.spyOn(CloudAdapter.prototype, "sendActivities").mockImplementation(
@@ -48,11 +45,13 @@ describe("Teams conversation addressing", () => {
     vi.spyOn(provider, "processActivity").mockImplementation(
       async (req, res, logic) => {
         const adapter = new CloudAdapter();
-        await logic(new TurnContext(adapter, req.body as Activity));
+        await logic(
+          new TurnContext(adapter, Activity.fromObject(req.body as object)),
+        );
         res.status(200).send();
       },
     );
-    getMember = vi.spyOn(TeamsInfo, "getMember").mockResolvedValue({
+    getMember = vi.spyOn(msTeamsDirectory, "getMember").mockResolvedValue({
       id: "sender",
       name: "Test Sender",
       email: "sender@example.com",

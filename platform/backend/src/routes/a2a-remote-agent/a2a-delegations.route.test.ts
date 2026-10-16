@@ -359,7 +359,10 @@ describe("outbound A2A subagent assignments", () => {
     });
     expect(response.statusCode).toBe(200);
 
-    await AgentToolModel.assignDelegation(parent.id, localTarget.id);
+    await AgentToolModel.assignDelegation({
+      agentId: parent.id,
+      targetAgentId: localTarget.id,
+    });
     expect(new Set(await assignedToolIds(parent.id))).toEqual(
       new Set([
         remote.toolId,

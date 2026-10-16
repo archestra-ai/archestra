@@ -21,7 +21,6 @@ import {
   OrganizationModel,
   ToolModel,
 } from "@/models";
-import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -198,13 +197,13 @@ describe("agent routes", () => {
 
     const allResponse = await app.inject({
       method: "GET",
-      url: `/api/agents/all?agentType=${agentType}`,
+      url: `/api/agents?agentType=${agentType}`,
     });
     expect(allResponse.statusCode).toBe(200);
     expect(
       allResponse
         .json()
-        .some((agent: { id: string }) => agent.id === created.id),
+        .data.some((agent: { id: string }) => agent.id === created.id),
     ).toBe(false);
   }
 
@@ -976,7 +975,10 @@ describe("agent routes", () => {
         authorId: user.id,
         agentType: "agent",
       });
-      await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+      await AgentToolModel.assignDelegation({
+        agentId: sourceAgent.id,
+        targetAgentId: targetAgent.id,
+      });
 
       const response = await app.inject({
         method: "PUT",
@@ -1192,13 +1194,13 @@ describe("agent routes", () => {
 
       const allResponse = await app.inject({
         method: "GET",
-        url: "/api/agents/all",
+        url: "/api/agents",
       });
       expect(allResponse.statusCode).toBe(200);
       expect(
         allResponse
           .json()
-          .some((agent: { id: string }) => agent.id === created.id),
+          .data.some((agent: { id: string }) => agent.id === created.id),
       ).toBe(false);
     });
 
@@ -1806,335 +1808,36 @@ describe("agent routes", () => {
     });
   });
 
-  describe("GET /api/agents/all", () => {
-    test("embeds tools as slim refs without parameter schemas", async ({
+  describe("GET /api/agents", () => {
+    test("returns the full agent row, icon and system prompt included", async ({
       makeAgent,
-      makeTool,
-      makeAgentTool,
     }) => {
+      const embeddedIcon = `data:image/png;base64,${"A".repeat(2_048)}`;
+      const systemPrompt = "Follow the configured operating instructions.";
       const agent = await makeAgent({
-        name: `Tool Ref Agent ${crypto.randomUUID().slice(0, 8)}`,
+        name: `Full Row Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
         authorId: user.id,
+        icon: embeddedIcon,
+        systemPrompt,
       });
-      const tool = await makeTool({
-        parameters: {
-          type: "object",
-          properties: { q: { type: "string", description: "query" } },
-        },
-      });
-      await makeAgentTool(agent.id, tool.id);
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
+        url: `/api/agents?ids=${agent.id}`,
       });
 
       expect(response.statusCode).toBe(200);
       const returned = response
         .json()
-        .find((a: { id: string }) => a.id === agent.id);
-      expect(returned).toBeDefined();
-      expect(returned.tools).toHaveLength(1);
-      expect(returned.tools[0]).toMatchObject({
-        id: tool.id,
-        name: tool.name,
-        rawName: tool.rawName,
-        catalogId: tool.catalogId,
-        delegateToAgentId: null,
-        description: tool.description,
-      });
-      // The whole point of the slim ref: no parameter JSON schemas or policy
-      // bookkeeping duplicated into every agent list response.
-      expect(returned.tools[0]).not.toHaveProperty("parameters");
-      expect(returned.tools[0]).not.toHaveProperty(
-        "policiesAutoConfiguredReasoning",
-      );
-      expect(returned.tools[0]).not.toHaveProperty("meta");
-    });
-
-    test("leaves the tools off when the caller asks for the roster alone", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      // Even as slim refs the tools carry a name and a description each, which
-      // on a real organization is the great majority of this response — and the
-      // new-chat screen, whose first paint waits on this list, draws none of
-      // them. Callers opt out; every other caller keeps today's response.
-      const agent = await makeAgent({
-        name: `Roster Only Agent ${crypto.randomUUID().slice(0, 8)}`,
-        organizationId,
-        authorId: user.id,
-      });
-      const tool = await makeTool({});
-      await makeAgentTool(agent.id, tool.id);
-
-      const findAgent = async (query: string) => {
-        const response = await app.inject({
-          method: "GET",
-          url: `/api/agents/all?excludeBuiltIn=true${query}`,
-        });
-        expect(response.statusCode).toBe(200);
-        return response.json().find((a: { id: string }) => a.id === agent.id);
-      };
-
-      const withoutTools = await findAgent("&includeTools=false");
-      expect(withoutTools).toBeDefined();
-      expect(withoutTools.name).toBe(agent.name);
-      expect(withoutTools.tools).toEqual([]);
-
-      // Opting out is the only thing that drops them.
-      expect((await findAgent("")).tools).toHaveLength(1);
-      expect((await findAgent("&includeTools=true")).tools).toHaveLength(1);
-    });
-
-    test("selector options preserve authorized identities without loading editing content", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const recipient = await makeUser();
-      const agent = await makeAgent({
-        organizationId,
-        agentType: "agent",
-        authorId: user.id,
-        name: "Selectable Agent",
-        access: { users: [recipient.id, user.id] },
-        systemPrompt: "Configuration content",
-        icon: `data:image/png;base64,${"A".repeat(2048)}`,
-      });
-      const tool = await makeTool({});
-      await makeAgentTool(agent.id, tool.id);
-      const hiddenBuiltIn = await makeAgent({
-        organizationId,
-        agentType: "agent",
-        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
-      });
-      const query = "?excludeBuiltIn=true&agentType=agent";
-      const full = await app.inject({
-        method: "GET",
-        url: `/api/agents/all${query}`,
-      });
-      const options = await app.inject({
-        method: "GET",
-        url: `/api/agents/options${query}`,
-      });
-      expect(options.statusCode, options.body).toBe(200);
-      expect(
-        options
-          .json()
-          .map((row: { id: string }) => row.id)
-          .sort(),
-      ).toEqual(
-        full
-          .json()
-          .map((row: { id: string }) => row.id)
-          .sort(),
-      );
-      expect(options.json().map((row: { id: string }) => row.id)).not.toContain(
-        hiddenBuiltIn.id,
-      );
-      const option = options
-        .json()
-        .find((row: { id: string }) => row.id === agent.id);
-      expect(option).toMatchObject({
-        id: agent.id,
-        name: agent.name,
-        scope: agent.scope,
-        icon: null,
-      });
-      const fullAgent = full
-        .json()
-        .find((row: { id: string }) => row.id === agent.id);
-      expect(option.users).toEqual(
-        fullAgent.users.map((recipient: { id: string }) => ({
-          id: recipient.id,
-        })),
-      );
-      expect(option.users).toEqual([{ id: recipient.id }]);
-      for (const field of [
-        "systemPrompt",
-        "tools",
-        "labels",
-        "knowledgeBaseIds",
-        "connectorIds",
-        "suggestedPrompts",
-      ])
-        expect(option).not.toHaveProperty(field);
-      expect(
-        full.json().find((row: { id: string }) => row.id === agent.id),
-      ).toMatchObject({ systemPrompt: "Configuration content" });
-      const foreignOrg = await makeOrganization();
-      const foreign = await makeAgent({
-        organizationId: foreignOrg.id,
-        agentType: "agent",
-      });
-      const selected = await app.inject({
-        method: "GET",
-        url: `/api/agents/options${query}&ids=${agent.id},${foreign.id}`,
-      });
-      expect(selected.statusCode, selected.body).toBe(200);
-      expect(selected.json().map((row: { id: string }) => row.id)).toEqual([
-        agent.id,
-      ]);
-    });
-
-    test("keeps the same authorized chat IDs for personal defaults and retained selections", async ({
-      makeUser,
-      makeOrganization,
-      makeAgent,
-    }) => {
-      const owner = await makeUser();
-      const personal = await makeAgent({
-        organizationId,
-        authorId: owner.id,
-        agentType: "agent",
-        access: "personal",
-      });
-      const otherOrganization = await makeOrganization();
-      const outside = await makeAgent({
-        organizationId: otherOrganization.id,
-        authorId: owner.id,
-        agentType: "agent",
-      });
-      const original = await app.inject({
-        method: "GET",
-        url: "/api/agents/all?agentType=agent&excludeBuiltIn=true&includeTools=false&view=chat",
-      });
-      const roster = await app.inject({
-        method: "GET",
-        url: "/api/agents/chat-roster",
-      });
-      expect(original.statusCode).toBe(200);
-      expect(roster.statusCode).toBe(200);
-      const originalIds = original
-        .json()
-        .map((row: { id: string }) => row.id)
-        .sort();
-      const rosterIds = roster
-        .json()
-        .map((row: { id: string }) => row.id)
-        .sort();
-      expect(rosterIds).toEqual(originalIds);
-      expect(rosterIds).toContain(personal.id);
-      expect(rosterIds).not.toContain(outside.id);
-    });
-
-    test("returns a compact roster for chat without changing the default response", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      const embeddedIcon = `data:image/png;base64,${"A".repeat(2_048)}`;
-      const systemPrompt = "Follow the configured operating instructions.";
-      const agent = await makeAgent({
-        name: `Compact Chat Agent ${crypto.randomUUID().slice(0, 8)}`,
-        organizationId,
-        authorId: user.id,
-        agentType: "agent",
+        .data.find((a: { id: string }) => a.id === agent.id);
+      expect(returned).toMatchObject({
         icon: embeddedIcon,
         systemPrompt,
       });
-      const tool = await makeTool({});
-      await makeAgentTool(agent.id, tool.id);
-      await AgentSuggestedPromptModel.syncForAgent({
-        agentId: agent.id,
-        prompts: [
-          {
-            summaryTitle: "Investigate",
-            prompt: "Investigate the latest incident.",
-          },
-        ],
-      });
-
-      const chatResponse = await app.inject({
-        method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true&view=chat",
-      });
-
-      expect(chatResponse.statusCode).toBe(200);
-      const chatAgent = chatResponse
-        .json()
-        .find((candidate: { id: string }) => candidate.id === agent.id);
-      expect(chatAgent).toMatchObject({
-        id: agent.id,
-        name: agent.name,
-        icon: null,
-        systemPrompt: null,
-        tools: [],
-        teams: [],
-        users: [],
-        labels: [],
-      });
-
-      const rosterResponse = await app.inject({
-        method: "GET",
-        url: "/api/agents/chat-roster",
-      });
-      expect(rosterResponse.statusCode).toBe(200);
-      const rosterAgent = rosterResponse
-        .json()
-        .find((row: { id: string }) => row.id === agent.id);
-      expect(rosterAgent).toMatchObject({
-        id: agent.id,
-        name: agent.name,
-        icon: null,
-        modelId: agent.modelId,
-        llmApiKeyId: agent.llmApiKeyId,
-      });
-      expect(Object.keys(rosterAgent).sort()).toEqual(
-        [
-          "id",
-          "organizationId",
-          "name",
-          "description",
-          "icon",
-          "scope",
-          "authorId",
-          "agentType",
-          "builtIn",
-          "builtInAgentConfig",
-          "runtime",
-          "modelId",
-          "llmApiKeyId",
-        ].sort(),
-      );
-      const detail = await app.inject({
-        method: "GET",
-        url: `/api/agents/${agent.id}`,
-      });
-      expect(detail.statusCode).toBe(200);
-      expect(detail.json()).toMatchObject({
-        icon: embeddedIcon,
-        systemPrompt,
-        suggestedPrompts: [
-          {
-            summaryTitle: "Investigate",
-            prompt: "Investigate the latest incident.",
-          },
-        ],
-      });
-
-      const defaultResponse = await app.inject({
-        method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
-      });
-
-      expect(defaultResponse.statusCode).toBe(200);
-      const fullAgent = defaultResponse
-        .json()
-        .find((candidate: { id: string }) => candidate.id === agent.id);
-      expect(fullAgent).toMatchObject({
-        icon: embeddedIcon,
-        systemPrompt,
-      });
-      expect(fullAgent.tools).toHaveLength(1);
     });
 
-    test("should exclude built-in agents when excludeBuiltIn=true", async ({
+    test("should exclude built-in agents by default", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -2148,11 +1851,11 @@ describe("agent routes", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all?excludeBuiltIn=true",
+        url: "/api/agents",
       });
 
       expect(response.statusCode).toBe(200);
-      const agents = response.json();
+      const agents = response.json().data;
       expect(Array.isArray(agents)).toBe(true);
       expect(agents.length).toBeGreaterThan(0);
 
@@ -2162,7 +1865,7 @@ describe("agent routes", () => {
       expect(builtInAgents).toHaveLength(0);
     });
 
-    test("should include built-in agents when excludeBuiltIn is not set", async ({
+    test("should include built-in agents when includeBuiltIn=true", async ({
       makeAgent,
       seedAndAssignArchestraTools,
     }) => {
@@ -2186,11 +1889,11 @@ describe("agent routes", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/agents/all",
+        url: "/api/agents?includeBuiltIn=true",
       });
 
       expect(response.statusCode).toBe(200);
-      const agents = response.json();
+      const agents = response.json().data;
       expect(Array.isArray(agents)).toBe(true);
       expect(agents.length).toBeGreaterThan(0);
 
@@ -2198,6 +1901,47 @@ describe("agent routes", () => {
         (a: { builtInAgentConfig?: unknown }) => a.builtInAgentConfig != null,
       );
       expect(builtInAgents.length).toBeGreaterThan(0);
+    });
+
+    test("keeps the same authorized chat IDs for personal defaults and retained selections", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const owner = await makeUser();
+      const personal = await makeAgent({
+        organizationId,
+        authorId: owner.id,
+        agentType: "agent",
+        access: "personal",
+      });
+      const otherOrganization = await makeOrganization();
+      const outside = await makeAgent({
+        organizationId: otherOrganization.id,
+        authorId: owner.id,
+        agentType: "agent",
+      });
+      const original = await app.inject({
+        method: "GET",
+        url: "/api/agents?agentType=agent&excludeBuiltIn=true&includeTools=false&view=chat&limit=100",
+      });
+      const roster = await app.inject({
+        method: "GET",
+        url: "/api/agents/chat-roster",
+      });
+      expect(original.statusCode).toBe(200);
+      expect(roster.statusCode).toBe(200);
+      const originalIds = original
+        .json()
+        .data.map((row: { id: string }) => row.id)
+        .sort();
+      const rosterIds = roster
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort();
+      expect(rosterIds).toEqual(originalIds);
+      expect(rosterIds).toContain(personal.id);
+      expect(rosterIds).not.toContain(outside.id);
     });
   });
 
@@ -2368,11 +2112,11 @@ describe("agent routes", () => {
         paginated.json().data.some((a: { id: string }) => a.id === proxy.id),
       ).toBe(false);
 
-      const all = await app.inject({ method: "GET", url: "/api/agents/all" });
+      const all = await app.inject({ method: "GET", url: "/api/agents" });
       expect(all.statusCode).toBe(200);
-      expect(all.json().some((a: { id: string }) => a.id === proxy.id)).toBe(
-        false,
-      );
+      expect(
+        all.json().data.some((a: { id: string }) => a.id === proxy.id),
+      ).toBe(false);
     });
   });
 

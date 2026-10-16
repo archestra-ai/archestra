@@ -29,7 +29,27 @@ it("loads tools only for visible rows and keeps selections while paging and sear
   const toolRequests = new Set<string>();
   const saved: string[][] = [];
   server.use(
-    http.get(`${origin}/api/agents/options`, () => HttpResponse.json(agents)),
+    http.get(`${origin}/api/agents/options/page`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      expect(params.get("limit")).toBe("20");
+      expect(params.get("excludeIds")).toBe("source");
+      const search = params.get("search")?.toLowerCase() ?? "";
+      const filtered = agents.filter(
+        (agent) =>
+          agent.name.toLowerCase().includes(search) ||
+          agent.description.toLowerCase().includes(search),
+      );
+      const offset = Number(params.get("cursor") ?? 0);
+      return HttpResponse.json({
+        data: filtered.slice(offset, offset + 20),
+        pagination: {
+          limit: 20,
+          hasNext: offset + 20 < filtered.length,
+          nextCursor:
+            offset + 20 < filtered.length ? String(offset + 20) : null,
+        },
+      });
+    }),
     http.get(`${origin}/api/agents/source/delegations`, () =>
       HttpResponse.json([{ id: "agent-44" }]),
     ),
@@ -80,7 +100,7 @@ it("loads tools only for visible rows and keeps selections while paging and sear
       </Dialog>
     </QueryClientProvider>,
   );
-  await screen.findByRole("checkbox", { name: /Agent 44/ });
+  await screen.findByRole("checkbox", { name: /Agent 00/ });
   await waitFor(() => expect(toolRequests.size).toBe(20));
   expect(screen.getAllByRole("checkbox")).toHaveLength(20);
   expect(toolRequests.has("agent-42")).toBe(false);
@@ -102,13 +122,21 @@ it("loads tools only for visible rows and keeps selections while paging and sear
   expect(screen.getAllByRole("checkbox")).toHaveLength(1);
   await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
   expect(
-    await screen.findByRole("checkbox", { name: /Agent 44/ }),
-  ).toBeChecked();
+    await screen.findByRole("checkbox", { name: /Agent 00/ }),
+  ).not.toBeChecked();
+  expect(screen.getByText(/2 selected/)).toBeVisible();
   expect(
     screen.getByRole("button", { name: "Previous agents" }),
   ).toBeDisabled();
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Search agents" }),
+    "Agent 44",
+  );
+  const savedChoice = await screen.findByRole("checkbox", { name: /Agent 44/ });
+  expect(savedChoice).toBeChecked();
+  await userEvent.click(savedChoice);
   await userEvent.click(screen.getByRole("button", { name: /^Save$/ }));
   await waitFor(() => expect(saved).toHaveLength(1));
-  expect(saved[0].sort()).toEqual(["agent-20", "agent-44"]);
+  expect(saved[0]).toEqual(["agent-20"]);
   queryClient.clear();
 });

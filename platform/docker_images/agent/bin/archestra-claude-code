@@ -284,7 +284,11 @@ fi
 HOOK
 chmod 0700 "${transcript_hook}"
 
-jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript_hook}" '{skipDangerousModePermissionPrompt:true,hooks:{
+# A question nobody answers would otherwise hold the run until its hard stop.
+# Claude's own timer ends it after 10 minutes, the same wait the MCP gateway
+# gives other clients' forms. tmux does not pass focus events, so the timer
+# runs whether or not the live terminal is open.
+jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript_hook}" '{skipDangerousModePermissionPrompt:true,askUserQuestionTimeout:"10m",hooks:{
   Notification:[{
     matcher:"permission_prompt|idle_prompt|elicitation_dialog|elicitation_complete|elicitation_response|auth_success",
     hooks:[{type:"command",command:$attention_cmd}]

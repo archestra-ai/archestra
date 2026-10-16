@@ -442,7 +442,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
             )
             .optional()
             .describe(
-              "Return only these users (comma-separated, at most 100), to check which of them are members.",
+              "Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both.",
             ),
         }),
         response: constructResponseSchema(

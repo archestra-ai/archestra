@@ -106,9 +106,9 @@ jobs:
       matrix:
         include:
           - name: Platform
-            # Keep 16 CPUs for compile-bound platform builds; registry caches
-            # and the same-run slim/full builder are shared across providers.
-            runner: ubicloud-standard-16-ubuntu-2404
+            # Docker builds use Blacksmith so BuildKit can retain sticky-disk
+            # layers and cache mounts across trusted queue commits.
+            runner: blacksmith-16vcpu-ubuntu-2404
             context: ./platform
             dockerfile: ""
             artifact-name: platform-docker-image
@@ -233,6 +233,8 @@ jobs:
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: ./.github/actions/build-docker-image
         with:
+          # Keep BuildKit layers and cache mounts between trusted builds.
+          builder-cache-key: ${{ github.repository }}-platform-e2e-linux-amd64-v1
           context: ${{ matrix.context }}
           push: "true"
           target: unified-slim
@@ -262,9 +264,11 @@ jobs:
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
           # Exact input-hash tags handle whole-image reuse; publisher mode=max caches
           # supply intermediate layers, so E2E only needs to export final layers.
-          # Exported from this first build on the fresh builder: exporting from
-          # the second build on the reused builder dropped the BuildKit
-          # connection (rpc EOF) after both images were already pushed.
+          # Only a fresh standard builder exports it, from this first build:
+          # exporting from reused BuildKit state (the second build, or the
+          # persistent builder's restored disk) dropped the BuildKit connection
+          # (rpc EOF) after the images were already pushed. The persistent
+          # builder skips the export and keeps its layers on its own disk.
           cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=min
 
       # Full image for the quickstart job: `unified` is `unified-slim` plus one

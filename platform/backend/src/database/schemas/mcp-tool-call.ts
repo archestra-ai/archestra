@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -90,6 +91,8 @@ const mcpToolCallsTable = pgTable(
      * platform made in-process, and for rows from before this was recorded.
      */
     source: varchar("source", { length: 20 }).$type<McpGatewayCallSource>(),
+    /** Elapsed request-processing time, excluding audit persistence. */
+    durationMs: integer("duration_ms"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

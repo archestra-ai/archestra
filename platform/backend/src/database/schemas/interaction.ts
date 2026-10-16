@@ -259,6 +259,8 @@ const interactionsTable = pgTable(
      * When no optimization: baselineModel = model (or null for backward compatibility)
      */
     baselineModel: varchar("baseline_model"),
+    /** Elapsed milliseconds from proxy handler entry to response processing completion. */
+    durationMs: integer("duration_ms"),
     inputTokens: integer("input_tokens"),
     inputTokensEstimated: boolean("input_tokens_estimated")
       .notNull()

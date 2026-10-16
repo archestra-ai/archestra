@@ -423,12 +423,22 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUniqueUserIds,
         description:
-          "Get user IDs represented in visible logs in the active organization. `log:read` returns the caller's identity; `log:admin` returns every represented user in the organization.",
+          "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. `log:read` returns only the caller; `log:admin` returns users from every log in the organization.",
         tags: ["Interaction"],
+        querystring: z.object({
+          search: z.string().optional(),
+          ids: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string().min(1)).max(100),
+            )
+            .optional(),
+          limit: z.coerce.number().int().min(1).max(100).default(20),
+        }),
         response: constructResponseSchema(z.array(UserInfoSchema)),
       },
     },
-    async ({ user, organizationId }, reply) => {
+    async ({ user, organizationId, query }, reply) => {
       const canSeeAllLogs = await userHasPermission(
         user.id,
         organizationId,
@@ -441,11 +451,14 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send([{ id: user.id, name: user.name }]);
       }
 
-      const userIds = await InteractionModel.getUniqueUserIds({
-        organizationId,
-      });
-
-      return reply.send(userIds);
+      return reply.send(
+        await InteractionModel.getUserFilterOptions({
+          organizationId,
+          search: query.search,
+          ids: query.ids,
+          limit: query.limit,
+        }),
+      );
     },
   );
 

@@ -6,8 +6,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
-import { AgentAdoptionOverview } from "./_components/agent-adoption";
-import { ConnectionLogTable } from "./_components/connection-log-table";
+import { ConnectionExplorer } from "./_components/connection-explorer";
 import type { ConnectionsWindow } from "./_components/connections-window";
 
 /** What the page shows until a range is picked. */
@@ -72,23 +71,8 @@ export default function ConnectionLogsPage() {
   );
 
   return (
-    <div className="space-y-8">
-      <ErrorBoundary>
-        <AgentAdoptionOverview window={window} />
-      </ErrorBoundary>
-      <section aria-labelledby="connection-log" className="space-y-3">
-        <div className="space-y-1">
-          <h2 id="connection-log" className="text-sm font-semibold">
-            Connection log
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Each setup downloaded from the Connect page, and each disconnect.
-          </p>
-        </div>
-        <ErrorBoundary>
-          <ConnectionLogTable window={window} />
-        </ErrorBoundary>
-      </section>
-    </div>
+    <ErrorBoundary>
+      <ConnectionExplorer window={window} />
+    </ErrorBoundary>
   );
 }

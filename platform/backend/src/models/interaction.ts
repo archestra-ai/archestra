@@ -30,7 +30,7 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
-import { LRUCacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import {
   decryptInteractionContent,
   encryptInteractionContent,
@@ -46,6 +46,7 @@ import {
   encodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import {
   resolveLogContentMode,
   withholdInteractionContent,
@@ -119,6 +120,15 @@ const GUARDRAIL_SKIP_SCAN_ROWS = 200;
  * means "no predicates" — returning that for a denial would list everything.
  */
 const SESSION_ACCESS_DENIED = Symbol("session-access-denied");
+
+/**
+ * The logs user filter's default list (most active users first) is cached per
+ * organization in the distributed cache, because computing it aggregates the
+ * organization's whole log. Stored at the endpoint's maximum size so every
+ * requested limit is a prefix of the same entry.
+ */
+const USER_FILTER_OPTIONS_CACHE_TTL_MS = 5 * TimeInMs.Minute;
+const USER_FILTER_OPTIONS_MAX = 100;
 
 const sessionTotalCache = new LRUCacheManager<number>({
   maxSize: 500,
@@ -787,6 +797,7 @@ class InteractionModel {
           cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,
           cost: schema.interactionsTable.cost,
           baselineCost: schema.interactionsTable.baselineCost,
+          durationMs: schema.interactionsTable.durationMs,
           createdAt: schema.interactionsTable.createdAt,
           source: schema.interactionsTable.source,
           requestType: sql<"main" | "subagent">`
@@ -1213,8 +1224,9 @@ class InteractionModel {
     requestingUserId?: string;
     isAgentAdmin?: boolean;
     organizationId?: string;
+    limit?: number;
   }): Promise<UserInfo[]> {
-    const { requestingUserId, isAgentAdmin, organizationId } = params;
+    const { requestingUserId, isAgentAdmin, organizationId, limit } = params;
     // Build where clause for access control
     const conditions: SQL[] = [isNotNull(schema.interactionsTable.userId)];
     if (organizationId) {
@@ -1250,7 +1262,7 @@ class InteractionModel {
       .where(and(...conditions))
       .groupBy(schema.interactionsTable.userId)
       .as("user_activity");
-    const result = await db
+    const query = db
       .select({
         userId: activity.userId,
         userName: schema.usersTable.name,
@@ -1261,7 +1273,9 @@ class InteractionModel {
         desc(activity.activityCount),
         asc(schema.usersTable.name),
         asc(activity.userId),
-      );
+      )
+      .$dynamic();
+    const result = await (limit === undefined ? query : query.limit(limit));
 
     return result
       .filter(
@@ -1271,6 +1285,39 @@ class InteractionModel {
         id: r.userId,
         name: r.userName,
       }));
+  }
+
+  /**
+   * Users for the logs user filter: at most `limit` users with at least one
+   * interaction in the organization.
+   *
+   * Without `search` or `ids`, returns the most active users first, from a
+   * per-organization cache (see USER_FILTER_OPTIONS_CACHE_TTL_MS). With them,
+   * matches users by name (by id when the name is empty), or by exact id, in
+   * byte order of name like the member picker (not locale order: non-ASCII
+   * names sort by their UTF-8 bytes). That path probes the log per
+   * candidate user through the `user_id` index instead of aggregating the
+   * whole log.
+   */
+  static async getUserFilterOptions(params: {
+    organizationId: string;
+    search?: string;
+    ids?: string[];
+    limit: number;
+  }): Promise<UserInfo[]> {
+    const limit = Math.min(params.limit, USER_FILTER_OPTIONS_MAX);
+    if (params.search?.trim() || params.ids) {
+      return InteractionModel.findUsersWithInteractions({
+        organizationId: params.organizationId,
+        search: params.search,
+        ids: params.ids,
+        limit,
+      });
+    }
+    const mostActive = await InteractionModel.getCachedMostActiveUsers(
+      params.organizationId,
+    );
+    return mostActive.slice(0, limit);
   }
 
   /**
@@ -2602,6 +2649,111 @@ class InteractionModel {
       );
 
     return Number(row?.activeUsers) || 0;
+  }
+
+  /**
+   * Concurrent misses for the same organization share one load, so a burst of
+   * page visits after the entry expires runs the aggregate once per process.
+   */
+  private static mostActiveUsersLoads = new Map<string, Promise<UserInfo[]>>();
+
+  private static getCachedMostActiveUsers(
+    organizationId: string,
+  ): Promise<UserInfo[]> {
+    const pending = InteractionModel.mostActiveUsersLoads.get(organizationId);
+    if (pending) {
+      return pending;
+    }
+    const load = InteractionModel.loadMostActiveUsers(organizationId).finally(
+      () => InteractionModel.mostActiveUsersLoads.delete(organizationId),
+    );
+    InteractionModel.mostActiveUsersLoads.set(organizationId, load);
+    return load;
+  }
+
+  private static async loadMostActiveUsers(
+    organizationId: string,
+  ): Promise<UserInfo[]> {
+    const key = `${CacheKey.InteractionUserOptions}-${organizationId}` as const;
+    const cached = await cacheManager.get<UserInfo[]>(key);
+    if (cached) {
+      return cached;
+    }
+    const users = await InteractionModel.getUniqueUserIds({
+      organizationId,
+      limit: USER_FILTER_OPTIONS_MAX,
+    });
+    try {
+      await cacheManager.set(key, users, USER_FILTER_OPTIONS_CACHE_TTL_MS);
+    } catch (error) {
+      // The list is still correct; the next request recomputes it.
+      logger.warn(
+        { error, organizationId },
+        "InteractionModel: could not cache the logs user filter options",
+      );
+    }
+    return users;
+  }
+
+  private static async findUsersWithInteractions(params: {
+    organizationId: string;
+    search?: string;
+    ids?: string[];
+    limit: number;
+  }): Promise<UserInfo[]> {
+    const users = schema.usersTable;
+    const search = params.search?.trim();
+    const candidates = db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(
+        and(
+          params.ids
+            ? sql`${users.id} = ANY(${sql.param(params.ids)}::text[])`
+            : undefined,
+          search
+            ? or(
+                buildTokenizedSearchFilter({
+                  query: search,
+                  columns: [users.name],
+                }),
+                and(
+                  eq(users.name, ""),
+                  buildTokenizedSearchFilter({
+                    query: search,
+                    columns: [users.id],
+                  }),
+                ),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(sql`${users.name} COLLATE "C"`, sql`${users.id} COLLATE "C"`);
+    // One indexed probe per candidate on `user_id`, stopping at the user's
+    // first interaction in the organization. It refers to the `candidates`
+    // alias of the outer query below, so it is valid only inside that query.
+    const probe = db
+      .select({ found: sql`1` })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          sql`${schema.interactionsTable.userId} = candidates.id`,
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .limit(1);
+    // Sort the matching users by name before probing the log, so the probes
+    // stop once `limit` users with logs are found. `OFFSET 0` keeps PostgreSQL
+    // from flattening the subquery, which would probe every candidate and
+    // sort afterwards. Drizzle omits a zero offset, hence the raw outer query.
+    const result = await db.execute<UserInfo>(sql`
+      SELECT candidates.id, candidates.name
+      FROM (${candidates} OFFSET 0) AS candidates
+      CROSS JOIN LATERAL (${probe}) AS probe
+      ORDER BY candidates.name COLLATE "C", candidates.id COLLATE "C"
+      LIMIT ${params.limit}
+    `);
+    return result.rows;
   }
 
   private static async distinctExternalAgentIds(where: SQL): Promise<string[]> {

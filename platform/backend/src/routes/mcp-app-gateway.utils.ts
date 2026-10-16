@@ -97,6 +97,7 @@ export async function createAppServer(
   if (!app) throw new Error(`App not found: ${appId}`);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const startedAt = Date.now();
     const tools = [
       buildAppLaunchTool(appId, app),
       ...(await buildPermittedAppToolList(appId, tokenAuth)),
@@ -109,6 +110,7 @@ export async function createAppServer(
         agentId: null,
         mcpServerName: "mcp-app-gateway",
         method: "tools/list",
+        durationMs: Math.max(0, Date.now() - startedAt),
         toolCall: null,
         // biome-ignore lint/suspicious/noExplicitAny: toolResult shape varies by method
         toolResult: { tools } as any,
@@ -143,6 +145,7 @@ export async function createAppServer(
   server.setRequestHandler(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }, extra) => {
+      const startedAt = Date.now();
       // The synthetic launch tool just points the host at the app's UI resource.
       if (name === APP_LAUNCH_TOOL_NAME) {
         return {
@@ -186,6 +189,7 @@ export async function createAppServer(
             agentId: null,
             mcpServerName: archestraMcpBranding.serverName,
             method: "tools/call",
+            durationMs: Math.max(0, Date.now() - startedAt),
             toolCall: { id: `app-${Date.now()}`, name, arguments: args || {} },
             toolResult: redactAppBuiltinAuditResult(name, response),
             userId: tokenAuth.userId ?? null,

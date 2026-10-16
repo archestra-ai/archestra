@@ -5,10 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import {
-  useInteractionSessions,
-  useUniqueUserIds,
-} from "@/lib/interactions/interaction.query";
+import { useInteractionSessions } from "@/lib/interactions/interaction.query";
 import LlmProxyLogsPage from "./page.client";
 
 // The cmdk-backed picker reaches for pointer-capture / scrollIntoView /
@@ -73,7 +70,6 @@ vi.mock("@/lib/interactions/interaction.query", async (importOriginal) => ({
     typeof import("@/lib/interactions/interaction.query")
   >()),
   useInteractionSessions: vi.fn(),
-  useUniqueUserIds: vi.fn(),
 }));
 
 // Two users can each name their own agent "My Agent", so the filter has to
@@ -170,9 +166,6 @@ describe("LlmProxyLogsPage proxy filter", () => {
     vi.mocked(useAgentOptions).mockReturnValue({
       data: [personalProxy, orgProxy],
     } as unknown as ReturnType<typeof useAgentOptions>);
-    vi.mocked(useUniqueUserIds).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useUniqueUserIds>);
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [], pagination: makePagination() },
       isFetching: false,
@@ -243,7 +236,6 @@ describe("LlmProxyLogsPage proxy filter", () => {
       "Agent",
       "Model",
       "Usage",
-      "Spend",
       "Last request",
     ]) {
       expect(
@@ -251,8 +243,11 @@ describe("LlmProxyLogsPage proxy filter", () => {
       ).toBeInTheDocument();
     }
     expect(screen.getByText("Summarize the quarterly report")).toBeVisible();
-    expect(screen.getByText("3 requests")).toBeVisible();
-    expect(screen.getByText("25% cache read")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /3 requests,.*100 input tokens/ }),
+    ).toBeVisible();
+    expect(screen.getByText("100 in")).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: "Spend" })).toBeNull();
     expect(screen.getByText("+1 more")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Details" })).toBeNull();

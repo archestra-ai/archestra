@@ -143,6 +143,7 @@ export {
   kbBm25TermStatsTable,
 } from "./kb-bm25-stats";
 export { default as kbChunksTable } from "./kb-chunk";
+export { default as kbConnectorDocumentCountsTable } from "./kb-connector-document-count";
 export { default as kbContainerAclsTable } from "./kb-container-acl";
 export { default as kbDirectoriesTable } from "./kb-directory";
 export { default as kbDirectoryTeamsTable } from "./kb-directory-team";

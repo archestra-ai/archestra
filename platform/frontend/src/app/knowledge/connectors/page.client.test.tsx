@@ -107,6 +107,7 @@ function makeConnector(overrides: Record<string, unknown>) {
     lastSyncAt: "2026-07-13T10:00:00.000Z",
     schedule: null,
     labels: [],
+    totalDocsIngested: 0,
     ...overrides,
   };
 }
@@ -189,8 +190,30 @@ describe("ConnectorsPage", () => {
     await screen.findByRole("columnheader", { name: "Connector" });
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["", "Connector", "Status", "Schedule", "Actions"]);
+    ).toEqual(["", "Connector", "Status", "Documents", "Schedule", "Actions"]);
     expect(screen.getByRole("button", { name: "View 1 label" })).toBeVisible();
+  });
+
+  it("shows each connector's document count on its card", async () => {
+    mockUseConnectorsPaginated.mockReturnValue({
+      data: {
+        data: [
+          makeConnector({ name: "Big Jira", totalDocsIngested: 21_534 }),
+          makeConnector({ name: "One Page", totalDocsIngested: 1 }),
+        ],
+        pagination: { total: 2 },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    });
+
+    render(<ConnectorsPage />);
+
+    expect((await screen.findByText("21,534")).parentElement).toHaveTextContent(
+      "21,534documents",
+    );
+    expect(screen.getByText("1").parentElement).toHaveTextContent("1document");
   });
 
   it("keeps the bulk bar visible while all matching connectors load", async () => {

@@ -18,13 +18,21 @@ import {
 import { buildUserSelectItem } from "@/components/user-select-option";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
+  useInteractionUserOptions,
+  useInteractionUserReferences,
+} from "@/lib/interactions/interaction.query";
+import {
   useMemberOptionsPage,
   useMemberOptionsReferences,
 } from "@/lib/member-options.query";
 
 import { cn } from "@/lib/utils/tailwind";
 
-/** A lazy directory picker whose search and navigation retain every candidate. */
+/**
+ * A lazy user picker whose search and navigation retain every candidate.
+ * `source` picks the users offered: organization members (paged), or users
+ * with LLM logs (most active first, capped; search finds the rest).
+ */
 export function RemoteUserSelect({
   value,
   onValueChange,
@@ -33,6 +41,7 @@ export function RemoteUserSelect({
   className,
   pinnedOption,
   searchMode = "name_or_email",
+  source = "members",
   disabled,
 }: {
   value: string;
@@ -42,31 +51,39 @@ export function RemoteUserSelect({
   className?: string;
   pinnedOption?: { value: string; label: string };
   searchMode?: "name" | "name_or_email";
+  source?: UserOptionSource;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const debouncedSearch = useDebouncedValue(search, 200);
-  const pageQuery = useMemberOptionsPage({
+  const pageQuery = useUserOptionPages({
+    source,
     search: debouncedSearch,
     searchMode,
     enabled: open,
   });
-  const selectedQuery = useMemberOptionsReferences({
+  const selectedQuery = useUserOptionReferences({
+    source,
     ids: value && value !== pinnedOption?.value ? [value] : [],
   });
-  const selected = selectedQuery.data?.find((row) => row.id === value);
+  // The row just picked labels the trigger until the lookup by id returns.
+  const [picked, setPicked] = useState<UserOption>();
+  const selected =
+    selectedQuery.data?.find((row) => row.id === value) ??
+    (picked?.id === value ? picked : undefined);
   const page = Math.min(
     pageIndex,
-    Math.max(0, (pageQuery.data?.pages.length ?? 1) - 1),
+    Math.max(0, (pageQuery.pages?.length ?? 1) - 1),
   );
   const rows =
-    search === debouncedSearch ? (pageQuery.data?.pages[page]?.data ?? []) : [];
+    search === debouncedSearch ? (pageQuery.pages?.[page] ?? []) : [];
   const hasNext =
     search === debouncedSearch &&
-    (page + 1 < (pageQuery.data?.pages.length ?? 0) || pageQuery.hasNextPage);
-  const select = (id: string) => {
+    (page + 1 < (pageQuery.pages?.length ?? 0) || pageQuery.hasNextPage);
+  const select = (id: string, row?: UserOption) => {
+    setPicked(row);
     onValueChange(id);
     setOpen(false);
     setSearch("");
@@ -141,7 +158,7 @@ export function RemoteUserSelect({
                     <CommandItem
                       key={row.id}
                       value={row.id}
-                      onSelect={() => select(row.id)}
+                      onSelect={() => select(row.id, row)}
                     >
                       {item.content}
                       {value === row.id && <Check />}
@@ -182,7 +199,7 @@ export function RemoteUserSelect({
               }
               onClick={async () => {
                 setPageIndex(page + 1);
-                if (page + 1 >= (pageQuery.data?.pages.length ?? 0))
+                if (page + 1 >= (pageQuery.pages?.length ?? 0))
                   await pageQuery.fetchNextPage();
               }}
             >
@@ -202,4 +219,75 @@ export function RemoteUserSelect({
       </PopoverContent>
     </Popover>
   );
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+type UserOptionSource = "members" | "logs";
+type UserOption = { id: string; name: string; email?: string };
+
+/** One shape for both sources, so the picker renders them the same way. */
+function useUserOptionPages({
+  source,
+  search,
+  searchMode,
+  enabled,
+}: {
+  source: UserOptionSource;
+  search: string;
+  searchMode: "name" | "name_or_email";
+  enabled: boolean;
+}) {
+  const members = useMemberOptionsPage({
+    search,
+    searchMode,
+    enabled: enabled && source === "members",
+  });
+  const logUsers = useInteractionUserOptions({
+    search,
+    enabled: enabled && source === "logs",
+  });
+  if (source === "logs") {
+    const rows: UserOption[] | undefined = logUsers.data;
+    return {
+      pages: rows ? [rows] : undefined,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: async () => {},
+      isPending: logUsers.isPending,
+      isError: logUsers.isError,
+      refetch: logUsers.refetch,
+    };
+  }
+  return {
+    pages: members.data?.pages.map((row): UserOption[] => row.data),
+    hasNextPage: members.hasNextPage,
+    isFetchingNextPage: members.isFetchingNextPage,
+    fetchNextPage: members.fetchNextPage,
+    isPending: members.isPending,
+    isError: members.isError,
+    refetch: members.refetch,
+  };
+}
+
+function useUserOptionReferences({
+  source,
+  ids,
+}: {
+  source: UserOptionSource;
+  ids: string[];
+}): {
+  data: UserOption[] | undefined;
+  isError: boolean;
+  refetch: () => unknown;
+} {
+  const members = useMemberOptionsReferences({
+    ids: source === "members" ? ids : [],
+  });
+  const logUsers = useInteractionUserReferences({
+    ids: source === "logs" ? ids : [],
+  });
+  return source === "logs" ? logUsers : members;
 }

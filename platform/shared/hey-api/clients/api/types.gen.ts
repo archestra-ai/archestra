@@ -50197,6 +50197,7 @@ export type GetInteractionsResponses = {
             type: 'openai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -50427,6 +50428,7 @@ export type GetInteractionsResponses = {
             type: 'openai:responses';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -50532,6 +50534,7 @@ export type GetInteractionsResponses = {
             type: 'openai:embeddings';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -50635,6 +50638,7 @@ export type GetInteractionsResponses = {
             type: 'gemini:embeddings';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -50738,6 +50742,7 @@ export type GetInteractionsResponses = {
             type: 'bedrock:embeddings';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -50841,6 +50846,7 @@ export type GetInteractionsResponses = {
             type: 'cohere:embeddings';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -50921,6 +50927,7 @@ export type GetInteractionsResponses = {
             type: 'gemini:generateContent';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -51003,6 +51010,7 @@ export type GetInteractionsResponses = {
             type: 'anthropic:messages';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -51526,6 +51534,7 @@ export type GetInteractionsResponses = {
             type: 'bedrock:converse';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52148,6 +52157,7 @@ export type GetInteractionsResponses = {
             type: 'bedrock:invoke';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52230,6 +52240,7 @@ export type GetInteractionsResponses = {
             type: 'cerebras:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52312,6 +52323,7 @@ export type GetInteractionsResponses = {
             type: 'mistral:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52394,6 +52406,7 @@ export type GetInteractionsResponses = {
             type: 'perplexity:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52476,6 +52489,7 @@ export type GetInteractionsResponses = {
             type: 'groq:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52558,6 +52572,7 @@ export type GetInteractionsResponses = {
             type: 'xai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52640,6 +52655,7 @@ export type GetInteractionsResponses = {
             type: 'openrouter:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52722,6 +52738,7 @@ export type GetInteractionsResponses = {
             type: 'vllm:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52804,6 +52821,7 @@ export type GetInteractionsResponses = {
             type: 'ollama:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52886,6 +52904,7 @@ export type GetInteractionsResponses = {
             type: 'ollama-native:chat';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -52968,6 +52987,7 @@ export type GetInteractionsResponses = {
             type: 'cohere:chat';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -53050,6 +53070,7 @@ export type GetInteractionsResponses = {
             type: 'zhipuai:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -53132,6 +53153,7 @@ export type GetInteractionsResponses = {
             type: 'deepseek:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -53928,6 +53950,7 @@ export type GetInteractionsResponses = {
             type: 'kimi:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -54724,6 +54747,7 @@ export type GetInteractionsResponses = {
             type: 'github-copilot:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -55520,6 +55544,7 @@ export type GetInteractionsResponses = {
             type: 'microsoft-365-copilot:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -55602,6 +55627,7 @@ export type GetInteractionsResponses = {
             type: 'minimax:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -55752,6 +55778,7 @@ export type GetInteractionsResponses = {
             type: 'azure:chatCompletions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -55941,6 +55968,7 @@ export type GetInteractionsResponses = {
             type: 'azure:responses';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -56130,6 +56158,7 @@ export type GetInteractionsResponses = {
             type: 'perplexity:responses';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -56319,6 +56348,7 @@ export type GetInteractionsResponses = {
             type: 'github-copilot:responses';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -56401,6 +56431,7 @@ export type GetInteractionsResponses = {
             type: 'jev:decisions';
             model: string | null;
             baselineModel: string | null;
+            durationMs: number | null;
             inputTokens: number | null;
             inputTokensEstimated: boolean;
             outputTokens: number | null;
@@ -56561,6 +56592,7 @@ export type GetInteractionSummariesResponses = {
             cacheWriteTokens: number | null;
             cost: string | null;
             baselineCost: string | null;
+            durationMs: number | null;
             createdAt: string;
             type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
@@ -56926,7 +56958,11 @@ export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsRespons
 export type GetUniqueUserIdsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+        ids?: Array<string>;
+        limit?: number;
+    };
     url: '/api/interactions/user-ids';
 };
 
@@ -57131,6 +57167,7 @@ export type GetInteractionResponses = {
         type: 'openai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -57361,6 +57398,7 @@ export type GetInteractionResponses = {
         type: 'openai:responses';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -57466,6 +57504,7 @@ export type GetInteractionResponses = {
         type: 'openai:embeddings';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -57569,6 +57608,7 @@ export type GetInteractionResponses = {
         type: 'gemini:embeddings';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -57672,6 +57712,7 @@ export type GetInteractionResponses = {
         type: 'bedrock:embeddings';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -57775,6 +57816,7 @@ export type GetInteractionResponses = {
         type: 'cohere:embeddings';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -57855,6 +57897,7 @@ export type GetInteractionResponses = {
         type: 'gemini:generateContent';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -57937,6 +57980,7 @@ export type GetInteractionResponses = {
         type: 'anthropic:messages';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -58460,6 +58504,7 @@ export type GetInteractionResponses = {
         type: 'bedrock:converse';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59082,6 +59127,7 @@ export type GetInteractionResponses = {
         type: 'bedrock:invoke';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59164,6 +59210,7 @@ export type GetInteractionResponses = {
         type: 'cerebras:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59246,6 +59293,7 @@ export type GetInteractionResponses = {
         type: 'mistral:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59328,6 +59376,7 @@ export type GetInteractionResponses = {
         type: 'perplexity:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59410,6 +59459,7 @@ export type GetInteractionResponses = {
         type: 'groq:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59492,6 +59542,7 @@ export type GetInteractionResponses = {
         type: 'xai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59574,6 +59625,7 @@ export type GetInteractionResponses = {
         type: 'openrouter:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59656,6 +59708,7 @@ export type GetInteractionResponses = {
         type: 'vllm:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59738,6 +59791,7 @@ export type GetInteractionResponses = {
         type: 'ollama:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59820,6 +59874,7 @@ export type GetInteractionResponses = {
         type: 'ollama-native:chat';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59902,6 +59957,7 @@ export type GetInteractionResponses = {
         type: 'cohere:chat';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -59984,6 +60040,7 @@ export type GetInteractionResponses = {
         type: 'zhipuai:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -60066,6 +60123,7 @@ export type GetInteractionResponses = {
         type: 'deepseek:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -60862,6 +60920,7 @@ export type GetInteractionResponses = {
         type: 'kimi:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -61658,6 +61717,7 @@ export type GetInteractionResponses = {
         type: 'github-copilot:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -62454,6 +62514,7 @@ export type GetInteractionResponses = {
         type: 'microsoft-365-copilot:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -62536,6 +62597,7 @@ export type GetInteractionResponses = {
         type: 'minimax:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -62686,6 +62748,7 @@ export type GetInteractionResponses = {
         type: 'azure:chatCompletions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -62875,6 +62938,7 @@ export type GetInteractionResponses = {
         type: 'azure:responses';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -63064,6 +63128,7 @@ export type GetInteractionResponses = {
         type: 'perplexity:responses';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -63253,6 +63318,7 @@ export type GetInteractionResponses = {
         type: 'github-copilot:responses';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -63335,6 +63401,7 @@ export type GetInteractionResponses = {
         type: 'jev:decisions';
         model: string | null;
         baselineModel: string | null;
+        durationMs: number | null;
         inputTokens: number | null;
         inputTokensEstimated: boolean;
         outputTokens: number | null;
@@ -69603,6 +69670,7 @@ export type GetConnectorsResponses = {
                 name: string;
                 agentType: string;
             }>;
+            totalDocsIngested: number;
         }>;
         pagination: {
             currentPage: number;
@@ -82044,6 +82112,7 @@ export type GetMcpToolCallsResponses = {
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
             source: 'api' | 'chat';
+            durationMs: number | null;
             createdAt: string;
             userName: string | null;
             appName: string | null;
@@ -82165,6 +82234,7 @@ export type GetMcpToolCallResponses = {
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
         source: 'api' | 'chat';
+        durationMs: number | null;
         createdAt: string;
         userName: string | null;
         appName: string | null;

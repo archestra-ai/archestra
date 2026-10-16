@@ -96,6 +96,8 @@
               "level": "error",
               "options": {
                 "paths": {
+                  "./__arena__": "design-arena: do not commit",
+                  "@/app/_parts/__arena__": "design-arena: do not commit",
                   "@/lib/utils": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
                   "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code."
                 },
@@ -126,6 +128,8 @@
               "level": "error",
               "options": {
                 "paths": {
+                  "./__arena__": "design-arena: do not commit",
+                  "@/app/_parts/__arena__": "design-arena: do not commit",
                   "@/lib/utils": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code.",
                   "@/lib/utils/index": "Import from the focused @/lib/utils module instead of the barrel, which eagerly loads date-fns and other unrelated code."
                 }

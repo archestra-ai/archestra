@@ -252386,8 +252386,8 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
               "default": "full",
+              "type": "string",
               "enum": [
                 "full",
                 "picker"

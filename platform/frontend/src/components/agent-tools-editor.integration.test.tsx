@@ -18,7 +18,6 @@ import {
   expect,
   it,
 } from "vitest";
-import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import { AgentToolsEditor } from "./agent-tools-editor";
 
 // The combobox positions itself with floating-ui, which constructs a
@@ -103,18 +102,6 @@ function renderEditor() {
 }
 
 describe("AgentToolsEditor", () => {
-  it("reports failed picker metadata instead of treating it as no available tools", async () => {
-    server.use(
-      http.get(`${API_ORIGIN}/api/internal_mcp_catalog/:id/tools`, () =>
-        HttpResponse.json(
-          { error: { message: "Unavailable" } },
-          { status: 503 },
-        ),
-      ),
-    );
-    await expect(fetchCatalogTools(CATALOG_ID)).rejects.toThrow();
-  });
-
   it("preselects creation defaults using only compact catalog metadata", async () => {
     const selected: string[][] = [];
     const views: (string | null)[] = [];

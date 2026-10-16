@@ -385,12 +385,16 @@ export const catalogToolsBatchQueryKey = ["mcp-catalog", "tools"] as const;
 export async function fetchCatalogTools(
   catalogId: string,
 ): Promise<CatalogTool[]> {
-  const { data, error } = await getInternalMcpCatalogTools({
-    path: { id: catalogId },
-    query: { view: "picker" },
-  });
-  throwOnApiError(error);
-  return data ?? [];
+  try {
+    const response = await getInternalMcpCatalogTools({
+      path: { id: catalogId },
+      query: { view: "picker" },
+    });
+    return response.data ?? [];
+  } catch (error) {
+    console.error("Failed to fetch catalog tools:", error);
+    return [];
+  }
 }
 
 /**

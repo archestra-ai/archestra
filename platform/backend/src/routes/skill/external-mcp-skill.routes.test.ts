@@ -70,6 +70,9 @@ describe("external MCP Skill routes", () => {
       ctx.user.id,
       false,
       ctx.organizationId,
+      undefined,
+      undefined,
+      { includeAssignedAgents: true },
     );
     expect(
       fullServers.find((row) => row.id === server.id)?.assignedAgents,

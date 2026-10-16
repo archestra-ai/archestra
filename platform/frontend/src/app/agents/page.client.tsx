@@ -7,6 +7,7 @@ import {
   MAX_BULK_IDS,
 } from "@archestra/shared";
 import type {
+  CellContext,
   Column,
   ColumnDef,
   RowSelectionState,
@@ -21,7 +22,16 @@ import {
   Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
@@ -336,6 +346,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     enabled: !isDeletedView,
     ...catalogFilters,
     status: undefined,
+    // A pinned built-in agent shows without the Built-in filter on.
+    includeBuiltIn: true,
     pinned: true,
   });
   const scopedCapabilities = useScopedCapabilities();
@@ -869,15 +881,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       enableHiding: false,
       // Pin, then Edit, Chat and the menu as one group.
       size: 156,
-      cell: ({ row }) => (
-        // The whole cell, so a disabled action's tooltip wrapper cannot let
-        // the click through to the row either.
-        <RowClickShield>
-          {row.original.type === "external"
-            ? renderExternalAgentActions(row.original.value)
-            : renderAgentActions(row.original.value)}
-        </RowClickShield>
-      ),
+      cell: AgentRowActionsCell,
     },
   ];
 
@@ -923,62 +927,70 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   }) => (
     <section className="space-y-3">
       <TableSectionHeading title={title} bulkActions={bulkActions} />
-      <DataTable
-        columns={columns}
-        tableClassName="table-fixed"
-        fixedWidthColumnIds={[
-          "toolsCount",
-          "subagentsCount",
-          "lastUsedAt",
-          "team",
-          "provider",
-          "environment",
-        ]}
-        flexibleColumnIds={["name"]}
-        columnDropOrder={[
-          "environment",
-          "provider",
-          "lastUsedAt",
-          "subagentsCount",
-          "toolsCount",
-        ]}
-        data={sectionRows}
-        isLoading={showLoading}
-        getRowId={getAgentListRowId}
-        rowSelection={effectiveRowSelection}
-        onRowSelectionChange={onRowSelectionChange}
-        rangeSelection={rangeSelection}
-        hideSelectedCount
-        sorting={sorting}
-        onSortingChange={handleSortingChange}
-        manualSorting
-        manualPagination
-        pagination={sectionPagination}
-        onPaginationChange={
-          sectionPagination ? handlePaginationChange : undefined
+      <AgentRowActionsContext.Provider
+        value={(row) =>
+          row.type === "external"
+            ? renderExternalAgentActions(row.value)
+            : renderAgentActions(row.value)
         }
-        onRowClick={
-          isDeletedView
-            ? undefined
-            : (row, event) =>
-                openRowOnPlainClick(event, () => {
-                  if (row.type === "external") {
-                    openExternalAgent(row.value);
-                  } else {
-                    router.push(agentDetailHref("agent", row.value.id));
-                  }
-                })
-        }
-        emptyIcon={Bot}
-        emptyMessage="No agents found"
-        hasActiveFilters={hasActiveFilters}
-        filteredEmptyMessage={
-          isDeletedView
-            ? "No deleted agents found."
-            : "No agents match your filters"
-        }
-        onClearFilters={clearFilters}
-      />
+      >
+        <DataTable
+          columns={columns}
+          tableClassName="table-fixed"
+          fixedWidthColumnIds={[
+            "toolsCount",
+            "subagentsCount",
+            "lastUsedAt",
+            "team",
+            "provider",
+            "environment",
+          ]}
+          flexibleColumnIds={["name"]}
+          columnDropOrder={[
+            "environment",
+            "provider",
+            "lastUsedAt",
+            "subagentsCount",
+            "toolsCount",
+          ]}
+          data={sectionRows}
+          isLoading={showLoading}
+          getRowId={getAgentListRowId}
+          rowSelection={effectiveRowSelection}
+          onRowSelectionChange={onRowSelectionChange}
+          rangeSelection={rangeSelection}
+          hideSelectedCount
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
+          manualSorting
+          manualPagination
+          pagination={sectionPagination}
+          onPaginationChange={
+            sectionPagination ? handlePaginationChange : undefined
+          }
+          onRowClick={
+            isDeletedView
+              ? undefined
+              : (row, event) =>
+                  openRowOnPlainClick(event, () => {
+                    if (row.type === "external") {
+                      openExternalAgent(row.value);
+                    } else {
+                      router.push(agentDetailHref("agent", row.value.id));
+                    }
+                  })
+          }
+          emptyIcon={Bot}
+          emptyMessage="No agents found"
+          hasActiveFilters={hasActiveFilters}
+          filteredEmptyMessage={
+            isDeletedView
+              ? "No deleted agents found."
+              : "No agents match your filters"
+          }
+          onClearFilters={clearFilters}
+        />
+      </AgentRowActionsContext.Provider>
     </section>
   );
 
@@ -1044,7 +1056,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   <ResourceAccessFilter
                     resource="agent"
                     noun="agents"
-                    offerBuiltIn
+                    offerAdminAccess={false}
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ResourceScopeFilter
@@ -1325,4 +1337,16 @@ function SortableHeader({
       <SortIcon isSorted={column.getIsSorted()} />
     </Button>
   );
+}
+
+// TanStack renders cells as components. Keep this type stable across list
+// refreshes while context supplies the latest permissions and action handlers.
+const AgentRowActionsContext = createContext<
+  ((row: AgentListRow) => ReactNode) | null
+>(null);
+
+function AgentRowActionsCell({ row }: CellContext<AgentListRow, unknown>) {
+  const renderActions = useContext(AgentRowActionsContext);
+  // Shield the whole cell, including disabled actions' tooltip wrappers.
+  return <RowClickShield>{renderActions?.(row.original)}</RowClickShield>;
 }

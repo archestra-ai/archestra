@@ -206,7 +206,7 @@ for (const config of testConfigs) {
       await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
       await modelSelectorTrigger.click();
 
-      const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+      const modelDialog = page.getByTestId(E2eTestId.ChatSetupMenu);
       await expect(modelDialog).toBeVisible({ timeout: 5_000 });
 
       await selectRuntimeModelFromDialog(page, runtimeModel);
@@ -272,7 +272,7 @@ test.describe("Chat active run reconnect", () => {
     await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
     await modelSelectorTrigger.click();
 
-    const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+    const modelDialog = page.getByTestId(E2eTestId.ChatSetupMenu);
     await expect(modelDialog).toBeVisible({ timeout: 5_000 });
     await selectRuntimeModelFromDialog(page, runtimeModel);
 
@@ -347,7 +347,7 @@ test.describe("Chat thinking block layout", () => {
     await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
     await modelSelectorTrigger.click();
 
-    const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+    const modelDialog = page.getByTestId(E2eTestId.ChatSetupMenu);
     await expect(modelDialog).toBeVisible({ timeout: 5_000 });
     await selectRuntimeModelFromDialog(page, runtimeModel);
 

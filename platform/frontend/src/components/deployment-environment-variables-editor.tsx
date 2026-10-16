@@ -24,7 +24,6 @@ interface DeploymentEnvironmentVariablesEditorProps {
   staticLabel: string;
   installationDescription?: string;
   staticDescription?: string;
-  installationCalloutTitle: string;
   requiredDescription: string;
   promptedValueLabel: string;
   deferStaticSecretValue?: boolean;
@@ -55,7 +54,6 @@ export function DeploymentEnvironmentVariablesEditor({
   staticLabel,
   installationDescription,
   staticDescription,
-  installationCalloutTitle,
   requiredDescription,
   promptedValueLabel,
   deferStaticSecretValue = false,
@@ -256,7 +254,6 @@ export function DeploymentEnvironmentVariablesEditor({
         staticLabel={staticLabel}
         installationDescription={installationDescription}
         staticDescription={staticDescription}
-        installationCalloutTitle={installationCalloutTitle}
         requiredDescription={requiredDescription}
         deferStaticSecretValue={deferStaticSecretValue}
         installationOnlyForSecrets={installationOnlyForSecrets}

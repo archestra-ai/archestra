@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const http = require("node:http");
 const test = require("node:test");
 const { replayOpenappaPolicy, getOpenappaReplayEngineVersion, inspectOpenappaPolicyTests } = require("./index.cjs");
 
@@ -14,7 +15,7 @@ delta = {}
 requires = { trust = "trusted" }
 `;
 
-test("native replay returns versioned decisions and refuses live configuration without production initialization", async () => {
+test("native replay returns versioned decisions and refuses a policy naming an external remedy party", async () => {
   const result = JSON.parse(await replayOpenappaPolicy(JSON.stringify({
     content,
     files: [
@@ -28,7 +29,7 @@ test("native replay returns versioned decisions and refuses live configuration w
   assert.equal(result.files[1].status, "failed");
   assert.equal(result.files[1].steps[0].actual, "allow");
   const unavailable = JSON.parse(await replayOpenappaPolicy(JSON.stringify({
-    content: `${content}\n[[policy.annotator]]\nname = "model"\nbuiltin = "claude-code"`,
+    content: `${content}\n[externals.authorities.remote]\nurl = "https://example.test/authority"`,
     files: [{ path: "static.appa", content: "mcp/files/read {}\nexpect allow" }],
   })));
   assert.equal(unavailable.files[0].status, "cannot_run");
@@ -51,9 +52,19 @@ test("native replay honors the policy's helper response cap over the host defaul
     if (priorLimit === undefined) delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
     else process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = priorLimit;
   });
-  const url = "http://127.0.0.1:9/api/guardrails-policy/annotators/noop";
   const response = { version: 1, answer: { delta: {}, requires: { history: [], attention: [] }, emits: [] } };
   const responseBytes = Buffer.byteLength(JSON.stringify(response));
+  // Replay consults the annotator live, as a dispatch does.
+  const server = http.createServer((request, reply) => {
+    request.resume();
+    request.on("end", () => {
+      reply.writeHead(200, { "content-type": "application/json" });
+      reply.end(JSON.stringify(response));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const url = `http://127.0.0.1:${server.address().port}/api/guardrails-policy/annotators/noop`;
   const policy = `[policy]
 version = 2
 [[policy.annotator]]
@@ -74,7 +85,6 @@ url = "${url}"
     const result = JSON.parse(await replayOpenappaPolicy(JSON.stringify({
       content: capped,
       files: [{ path: "helper-cap.appa", content: "mcp/files/read {}\nexpect allow" }],
-      noopAnnotator: { url, response },
     })));
     assert.equal(result.files[0].status, expected, `helper cap ${limit}: ${JSON.stringify(result.files[0])}`);
   }

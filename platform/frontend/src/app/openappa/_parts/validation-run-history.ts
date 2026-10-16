@@ -5,12 +5,22 @@ type RecordedRun = {
   id: string;
   createdAt: string;
   executionError?: string | null;
-  validation: { valid: boolean };
+  trigger?: "manual" | "github_sync" | "policy_change";
+  partial?: boolean;
+  validation: { valid: boolean; errors?: string[] };
   files: {
     path: string;
     contentHash: string;
     status: ValidationRunStatus;
     error?: string | null;
+    steps?: {
+      line: number;
+      tool: string;
+      expected: string;
+      actual: string | null;
+      status: ValidationRunStatus;
+      error?: string | null;
+    }[];
   }[];
 };
 
@@ -61,70 +71,159 @@ export function validationRunBars(runs: RecordedRun[]): ValidationRunBar[] {
     .reverse();
 }
 
-/** A current validation file, with the SHA-256 hex of its content as runs record it. */
-type CurrentFile = { path: string; contentHash: string };
+/** A current validation file. */
+type CurrentFile = { path: string };
 
 export type ValidationFileState = {
   status: ValidationRunStatus | "not_run";
-  /** When the run that replayed this exact content was recorded. */
+  /** When the run that last replayed this file was recorded. */
   runAt: string | null;
+  /** What kind of run recorded the result, e.g. "Single file run". */
+  runLabel: string | null;
   error: string | null;
 };
 
+/** The kind of run, as run history names it. */
+export function validationRunLabel(
+  run: Pick<RecordedRun, "trigger" | "partial">,
+) {
+  if (run.partial) return "Single file run";
+  if (run.trigger === "github_sync") return "Git sync run";
+  if (run.trigger === "policy_change") return "Policy change run";
+  return "Manual run";
+}
+
 /**
- * Each file's result from the newest run that replayed its current content.
- * A run of an older version of the file, or of a file since deleted, says
- * nothing about it: such a file is not run.
+ * The newest run that replayed this file, with its result for it. An edit
+ * does not clear it: the file keeps its last result until it runs again.
  */
+export function latestFileResult<Run extends RecordedRun>(
+  file: CurrentFile,
+  runs: Run[],
+): { run: Run; result: Run["files"][number] } | null {
+  for (const run of runs) {
+    const result = run.files.find((item) => item.path === file.path);
+    if (result) return { run, result };
+  }
+  return null;
+}
+
+/** Each file's result from the newest run that replayed it; never run, not run. */
 export function validationFileStates(
   files: CurrentFile[],
   runs: RecordedRun[],
 ): Map<string, ValidationFileState> {
   return new Map(
     files.map((file): [string, ValidationFileState] => {
-      for (const run of runs) {
-        const result = run.files.find(
-          (item) =>
-            item.path === file.path && item.contentHash === file.contentHash,
-        );
+      const latest = latestFileResult(file, runs);
+      if (latest) {
+        const { run, result } = latest;
         // A refused policy or a failed run decided nothing about the file.
-        if (result)
-          return [
-            file.path,
-            {
-              status:
-                run.executionError || !run.validation.valid
-                  ? "cannot_run"
-                  : result.status,
-              runAt: run.createdAt,
-              error: result.error || run.executionError || null,
-            },
-          ];
+        return [
+          file.path,
+          {
+            status:
+              run.executionError || !run.validation.valid
+                ? "cannot_run"
+                : result.status,
+            runAt: run.createdAt,
+            runLabel: validationRunLabel(run),
+            error:
+              [
+                result.error || run.executionError,
+                ...(run.validation.valid ? [] : (run.validation.errors ?? [])),
+              ]
+                .filter(Boolean)
+                .join("\n") ||
+              stepError(result.steps) ||
+              null,
+          },
+        ];
       }
-      return [file.path, { status: "not_run", runAt: null, error: null }];
+      return [
+        file.path,
+        { status: "not_run", runAt: null, runLabel: null, error: null },
+      ];
     }),
   );
 }
 
-/**
- * The newest run, when it replayed exactly the current files or failed before
- * replaying any; otherwise none, because its counts would describe files that
- * changed or no longer exist.
- */
-export function currentValidationRun<Run extends RecordedRun>(
-  files: CurrentFile[],
-  runs: Run[],
-): Run | null {
-  const latest = runs[0];
-  if (latest?.executionError && !latest.files.length) return latest;
-  if (!latest || !files.length) return null;
-  const covers = files.every((file) =>
-    latest.files.some(
-      (item) =>
-        item.path === file.path && item.contentHash === file.contentHash,
-    ),
+/** The first step that did not pass, as a one-line reason. */
+function stepError(steps: RecordedRun["files"][number]["steps"]) {
+  const step = steps?.find((item) => item.status !== "passed");
+  if (!step) return null;
+  return (
+    step.error ||
+    `Line ${step.line} · ${step.tool}: expected ${step.expected}, got ${step.actual ?? "no decision"}`
   );
-  return covers && latest.files.length === files.length ? latest : null;
+}
+
+export type ValidationSuiteSummary = {
+  status: ValidationRunStatus | "not_run";
+  passed: number;
+  total: number;
+  notRun: number;
+  /** The newest run behind any current result. */
+  runAt: string;
+  /** Set when that run failed before replaying any file. */
+  error: string | null;
+};
+
+/**
+ * The current files' results added up, each from the newest run that replayed
+ * it, so it always agrees with the per-file statuses. A newer run that failed
+ * before replaying any file (say, the Git source was unreadable) overrides
+ * them: it is what happened last. Null when no current file has a result.
+ */
+export function validationSuiteSummary(
+  files: CurrentFile[],
+  runs: RecordedRun[],
+): ValidationSuiteSummary | null {
+  const states = [...validationFileStates(files, runs).values()];
+  const runAt = states
+    .map((state) => state.runAt)
+    .filter((at): at is string => at !== null)
+    .sort()
+    .at(-1);
+  const latest = runs[0];
+  if (
+    latest?.executionError &&
+    !latest.files.length &&
+    (!runAt || latest.createdAt > runAt)
+  )
+    return {
+      status: "cannot_run",
+      passed: 0,
+      total: files.length,
+      notRun: files.length,
+      runAt: latest.createdAt,
+      error: latest.executionError,
+    };
+  if (!runAt) return null;
+  const count = (status: ValidationFileState["status"]) =>
+    states.filter((state) => state.status === status).length;
+  const status = count("failed")
+    ? "failed"
+    : count("cannot_run")
+      ? "cannot_run"
+      : count("not_run")
+        ? "not_run"
+        : "passed";
+  return {
+    status,
+    passed: count("passed"),
+    total: files.length,
+    notRun: count("not_run"),
+    runAt,
+    error: null,
+  };
+}
+
+/** "2 of 3 passed · 1 not run", or why the last run could not start. */
+export function validationSummaryText(summary: ValidationSuiteSummary) {
+  if (summary.error) return "Cannot run";
+  const replayed = summary.total - summary.notRun;
+  return `${summary.passed} of ${replayed} passed${summary.notRun ? ` · ${summary.notRun} not run` : ""}`;
 }
 
 /** The name the file's author gave it: its first `#` comment line, else its file name. */
@@ -137,15 +236,4 @@ export function validationName(file: { path: string; content: string }) {
     break;
   }
   return file.path.split("/").pop() || file.path;
-}
-
-/** The SHA-256 hex of a file's content, the hash the backend records per run file. */
-export async function validationContentHash(content: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(content),
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
 }

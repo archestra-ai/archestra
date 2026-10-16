@@ -33,8 +33,6 @@ function makePanel(overrides: Partial<Panel> = {}): Panel {
     isArtifactOpen: false,
     isBrowserVisible: false,
     isAppsVisible: false,
-    isReviewVisible: false,
-    hasReview: false,
     showBrowserButton: true,
     onClose: vi.fn(),
     onOpenTab: vi.fn(),

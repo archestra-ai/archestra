@@ -88,22 +88,6 @@ export function useBatteryPolicySource(entry: string) {
   });
 }
 
-/** Publish a held GitHub pull under the accepting user's permissions. */
-export function useAcceptHeldPull() {
-  return useBatteryMutation<
-    void,
-    archestraApiTypes.AcceptHeldAppaGithubPullResponses["200"]
-  >(
-    async () => settled(await archestraApiSdk.acceptHeldAppaGithubPull()),
-    (accepted) =>
-      toast.success(
-        accepted.droppedBatteries.length > 0
-          ? `Repository changes approved. Removed: ${accepted.droppedBatteries.join(", ")}`
-          : "Repository changes approved",
-      ),
-  );
-}
-
 /** Every battery the organization can install, bundled and uploaded, with its installs. */
 export function useBatteries(enabled = true) {
   return useQuery({ ...batteriesQuery, enabled });

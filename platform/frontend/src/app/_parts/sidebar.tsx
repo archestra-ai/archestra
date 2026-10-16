@@ -21,8 +21,7 @@ import {
   Slack,
   Star,
 } from "lucide-react";
-import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import React, { useSyncExternalStore } from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
@@ -35,6 +34,7 @@ import {
   type NavItem,
 } from "@/app/_parts/studio-nav";
 import { AppLogo } from "@/components/app-logo";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
@@ -751,63 +751,21 @@ export function AppSidebar() {
  * prefetch keeps intentional navigation fast without competing with initial
  * page API requests.
  */
-function SidebarPrefetchLink({
-  href,
-  onFocus,
-  onMouseEnter,
-  ...props
-}: React.ComponentProps<typeof Link>) {
-  const router = useRouter();
+function SidebarPrefetchLink(
+  props: Omit<React.ComponentProps<typeof IntentPrefetchLink>, "onPrefetch">,
+) {
   const queryClient = useQueryClient();
 
-  const prefetch = () => {
-    const prefetchHref = getPrefetchHref(href);
-    if (!prefetchHref) return;
-    router.prefetch(prefetchHref);
-    // Route prefetch doesn't mount client query hooks. Start the matching
-    // first page alongside it, not after the destination's JavaScript loads.
-    if (prefetchHref === "/apps") void prefetchApps(queryClient);
-  };
-
   return (
-    <Link
-      href={href}
-      prefetch={false}
-      onFocus={(event) => {
-        prefetch();
-        onFocus?.(event);
-      }}
-      onMouseEnter={(event) => {
-        prefetch();
-        onMouseEnter?.(event);
-      }}
+    <IntentPrefetchLink
       {...props}
+      onPrefetch={(href) => {
+        // Route prefetch doesn't mount client query hooks. Start the matching
+        // first page alongside it, not after the destination's JavaScript loads.
+        if (href === "/apps") void prefetchApps(queryClient);
+      }}
     />
   );
-}
-
-/**
- * Converts a Next.js Link href into the string URL required by router.prefetch.
- * Sidebar links currently pass strings, but this keeps manual prefetch safe if
- * a future item uses a UrlObject with query or hash fields.
- */
-function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
-  if (typeof href === "string") return href;
-  if (!href.pathname) return null;
-
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of Object.entries(href.query ?? {})) {
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item != null) searchParams.append(key, String(item));
-      }
-      continue;
-    }
-    if (value != null) searchParams.set(key, String(value));
-  }
-
-  const query = searchParams.toString();
-  return `${href.pathname}${query ? `?${query}` : ""}${href.hash ?? ""}`;
 }
 
 const NO_UNSEEN_KEYS: Set<NavDotKey> = new Set();

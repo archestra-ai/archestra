@@ -15,6 +15,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { secretManager } from "@/secrets-manager";
 import {
   guardrailsPolicyService,
@@ -32,6 +33,7 @@ import routes from "./openappa-github-sync.routes";
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture, not a React hook
 const server = useMswServer();
 const commit = "a".repeat(40);
+const NOTARY_TOKEN = "APPA_PROVIDER_NOTARY_TOKEN";
 const policy =
   '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n[externals]\ntimeout_ms = 2000\nmax_body_bytes = 65536\n';
 const source = {
@@ -233,12 +235,24 @@ describe("APPA GitHub sync", () => {
     expect(response.statusCode, response.body).toBe(400);
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
   });
-  /** The state the declaration migration leaves: declarations the repository never learned. */
-  const flagDeclarationsPendingPublish = () =>
-    db
-      .update(schema.openappaGithubSyncTable)
-      .set({ declarationsPendingPublish: true })
-      .where(eq(schema.openappaGithubSyncTable.organizationId, organizationId));
+  /** An uploaded battery whose one helper reads NOTARY_TOKEN. */
+  const uploadNotary = () =>
+    openappaBatteriesService.uploadPackage({
+      userId: adminId,
+      organizationId,
+      name: "notary",
+      files: [
+        {
+          path: "appa-package.toml",
+          text: 'schema = 1\nname = "notary"\ndescription = "Checks every call"\n\n[battery]\npolicy = "appa.toml"\nhosts = ["claude-code"]\nhelpers = ["check.py"]\n',
+        },
+        {
+          path: "appa.toml",
+          text: `[policy]\nversion = 2\n\n[[policy.annotator]]\nname = "notary.check"\nranks = ["suspicious", "trusted"]\naudiences = ["self"]\nmarks = []\n\n[externals.annotators."notary.check"]\ncommand = ["python3", "check.py"]\ntoken_env = "${NOTARY_TOKEN}"\n`,
+        },
+        { path: "check.py", text: "print('{}')\n" },
+      ],
+    });
 
   test("saves, audits and pulls a pinned, natively validated policy without exposing its content", async () => {
     expect((await configure()).statusCode).toBe(200);
@@ -1087,139 +1101,32 @@ describe("APPA GitHub sync", () => {
     );
   };
 
-  test("a pull handing a battery a credential is held, and accepting it takes credential update", async ({
-    makeUser,
-    makeCustomRole,
-    makeMember,
-  }) => {
+  test("a pull whose text names a credential is refused with what to change", async () => {
     await configure();
     await syncAppaGithubPolicy(organizationId);
-    const granted = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
-    const grantedHash = createHash("sha256").update(granted).digest("hex");
-    const second = "b".repeat(40);
-    upstream(granted, second);
+    const lined = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
+    upstream(lined, "b".repeat(40));
     await syncAppaGithubPolicy(organizationId);
-
-    expect(
-      (
-        await db
-          .select()
-          .from(schema.tasksTable)
-          .where(eq(schema.tasksTable.taskType, "openappa_policy_validation"))
-      ).some(
-        (job) =>
-          job.payload.policyHash === grantedHash &&
-          job.payload.policyRevision === 2,
-      ),
-    ).toBe(false);
-    // The bytes are kept, not published: the repository cannot grant this.
     expect(
       await GuardrailsPolicyModel.findLatest(organizationId),
     ).toMatchObject({ content: policy, revision: 1 });
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldContent: granted,
-      heldSourceCommit: second,
-      heldReasons: ["changes_credentials"],
-      sourceCommit: commit,
-      lastSyncError:
-        "The repository's policy gives the github battery the github-token credential.",
-    });
-    const status = await app.inject({
-      method: "GET",
-      url: "/api/openappa/github-sync",
-    });
-    expect(status.json().source).not.toHaveProperty("heldContent");
+    const row = await OpenAppaGithubSyncModel.find(organizationId);
+    expect(row?.lastSyncError).toContain(
+      "remove APPA_PROVIDER_GITHUB_TOKEN from the policy text and bind it with bind_guardrails_credential",
+    );
 
-    const manager = await makeUser();
-    const role = await makeCustomRole(organizationId, {
-      permission: {
-        organizationSettings: ["update"],
-        openappaPolicy: ["read", "update"],
-      },
-    });
-    await makeMember(manager.id, organizationId, { role: role.role });
-    const managerApp = createFastifyInstance();
-    managerApp.addHook("onRequest", async (request) => {
-      Object.assign(request, { user: manager, organizationId });
-    });
-    registerRoutePermissions(managerApp);
-    await managerApp.register(routes);
-    try {
-      // Reading the policy is enough to review the hold, itemized.
-      const held = await managerApp.inject({
-        method: "GET",
-        url: "/api/openappa/github-sync/held",
-      });
-      expect(held.statusCode, held.body).toBe(200);
-      expect(held.json()).toEqual({
-        sourceCommit: second,
-        reasons: ["changes_credentials"],
-        grants: [
-          {
-            battery: "github",
-            variable: "APPA_PROVIDER_GITHUB_TOKEN",
-            key: "github-token",
-          },
-        ],
-        droppedBatteries: [],
-      });
-      expect(
-        (
-          await managerApp.inject({
-            method: "POST",
-            url: "/api/openappa/github-sync/accept-held",
-          })
-        ).statusCode,
-      ).toBe(403);
-    } finally {
-      await managerApp.close();
-    }
+    const profiled = `${policy}\n[externals.jev]\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`;
+    upstream(profiled, "c".repeat(40));
+    await syncAppaGithubPolicy(organizationId);
+    expect(
+      (await OpenAppaGithubSyncModel.find(organizationId))?.lastSyncError,
+    ).toContain('remove token_env = "APPA_PROVIDER_JEV_API_KEY"');
     expect(
       await GuardrailsPolicyModel.findLatest(organizationId),
-    ).toMatchObject({ revision: 1 });
-
-    const accepted = await app.inject({
-      method: "POST",
-      url: "/api/openappa/github-sync/accept-held",
-    });
-    expect(accepted.statusCode, accepted.body).toBe(200);
-    expect(
-      (
-        await db
-          .select()
-          .from(schema.tasksTable)
-          .where(eq(schema.tasksTable.taskType, "openappa_policy_validation"))
-      ).some(
-        (job) =>
-          job.payload.policyHash === grantedHash &&
-          job.payload.policyRevision === 2,
-      ),
-    ).toBe(true);
-    expect(accepted.json()).toMatchObject({
-      sourceCommit: second,
-      reasons: ["changes_credentials"],
-      changedVariables: ["APPA_PROVIDER_GITHUB_TOKEN"],
-    });
-    expect(
-      await GuardrailsPolicyModel.findLatest(organizationId),
-    ).toMatchObject({ content: granted, revision: 2, updatedBy: adminId });
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldContent: null,
-      heldReasons: [],
-      content: granted,
-      sourceCommit: second,
-    });
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/api/openappa/github-sync/accept-held",
-        })
-      ).statusCode,
-    ).toBe(409);
+    ).toMatchObject({ content: policy, revision: 1 });
   });
 
-  test("a pull is measured against the stored bindings: including a reader of one is held, spelling its own key is not", async () => {
+  test("a pull including a bundled battery that reads a stored binding publishes", async () => {
     await configure();
     await syncAppaGithubPolicy(organizationId);
     await OpenAppaCredentialBindingModel.upsert({
@@ -1231,221 +1138,38 @@ describe("APPA GitHub sync", () => {
     const included = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
     upstream(included, "b".repeat(40));
     await syncAppaGithubPolicy(organizationId);
-    // The text names no credential, but the battery it includes reads a bound one.
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldContent: included,
-      heldReasons: ["changes_credentials"],
-    });
     expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/api/openappa/github-sync/accept-held",
-        })
-      ).statusCode,
-    ).toBe(200);
-
-    const spelled = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
-    upstream(spelled, "c".repeat(40));
-    await syncAppaGithubPolicy(organizationId);
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldContent: null,
-      heldReasons: [],
-      content: spelled,
-    });
+      (await OpenAppaGithubSyncModel.find(organizationId))?.lastSyncError,
+    ).toBeNull();
     expect(
       await GuardrailsPolicyModel.findLatest(organizationId),
-    ).toMatchObject({ content: spelled, revision: 3 });
+    ).toMatchObject({ content: included, revision: 2 });
   });
 
-  test("a pull handing a root profile a credential is held", async () => {
+  test("a pull including an uploaded battery that reads a stored binding is refused", async () => {
     await configure();
     await syncAppaGithubPolicy(organizationId);
-    const granted = `${policy}\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = "jev-key"\n[externals.jev]\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`;
-    upstream(granted, "b".repeat(40));
-    await syncAppaGithubPolicy(organizationId);
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldContent: granted,
-      heldReasons: ["changes_credentials"],
-    });
-    expect(
-      await GuardrailsPolicyModel.findLatest(organizationId),
-    ).toMatchObject({ content: policy, revision: 1 });
-  });
-
-  test("accepting a held pull takes credential update for a grant a binding made since the hold", async ({
-    makeUser,
-    makeCustomRole,
-    makeMember,
-  }) => {
-    await configure();
-    const declared = `include = ["batteries/github/appa.toml", "batteries/jev/appa.toml"]\n\n${policy}`;
-    upstream(declared, commit);
-    await syncAppaGithubPolicy(organizationId);
-    await flagDeclarationsPendingPublish();
-    // The pull drops jev and points the root jev profile at the github battery's
-    // variable, which nothing binds yet: it is held only for the dropped battery.
-    const pulled = `include = ["batteries/github/appa.toml"]\n\n${policy}\n[externals.jev]\ntoken_env = "APPA_PROVIDER_GITHUB_TOKEN"\n`;
-    upstream(pulled, "c".repeat(40));
-    await syncAppaGithubPolicy(organizationId);
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldContent: pulled,
-      heldReasons: ["drops_batteries"],
-      lastSyncError:
-        "The repository's policy removes batteries added here: jev.",
-    });
+    const { entry } = await uploadNotary();
     await OpenAppaCredentialBindingModel.upsert({
       organizationId,
-      variable: "APPA_PROVIDER_GITHUB_TOKEN",
-      credentialKey: "github-token",
+      variable: NOTARY_TOKEN,
+      credentialKey: "notary-token",
       updatedBy: adminId,
     });
-
-    const manager = await makeUser();
-    const role = await makeCustomRole(organizationId, {
-      permission: {
-        organizationSettings: ["update"],
-        openappaPolicy: ["read", "update"],
-      },
-    });
-    await makeMember(manager.id, organizationId, { role: role.role });
-    const managerApp = createFastifyInstance();
-    managerApp.addHook("onRequest", async (request) => {
-      Object.assign(request, { user: manager, organizationId });
-    });
-    registerRoutePermissions(managerApp);
-    await managerApp.register(routes);
-    try {
-      expect(
-        (
-          await managerApp.inject({
-            method: "POST",
-            url: "/api/openappa/github-sync/accept-held",
-          })
-        ).statusCode,
-      ).toBe(403);
-    } finally {
-      await managerApp.close();
-    }
-    expect(
-      await GuardrailsPolicyModel.findLatest(organizationId),
-    ).toMatchObject({ content: declared, revision: 1 });
-
-    const accepted = await app.inject({
-      method: "POST",
-      url: "/api/openappa/github-sync/accept-held",
-    });
-    expect(accepted.statusCode, accepted.body).toBe(200);
-    expect(
-      await GuardrailsPolicyModel.findLatest(organizationId),
-    ).toMatchObject({ content: pulled, revision: 2 });
-  });
-
-  test("a pull dropping a battery this deployment has not published yet is held", async () => {
-    await configure();
-    const declared = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
-    upstream(declared, commit);
+    upstream(`include = ["${entry}"]\n\n${policy}`, "b".repeat(40));
     await syncAppaGithubPolicy(organizationId);
     expect(
-      await GuardrailsPolicyModel.findLatest(organizationId),
-    ).toMatchObject({ content: declared, revision: 1 });
-    // Declarations written here are not in the repository yet, so a pull that
-    // lacks them is a rollback nobody asked for.
-    await flagDeclarationsPendingPublish();
-    const second = "c".repeat(40);
-    upstream(policy, second);
-    await syncAppaGithubPolicy(organizationId);
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldContent: policy,
-      heldSourceCommit: second,
-      heldReasons: ["drops_batteries"],
-    });
-    expect(
-      await GuardrailsPolicyModel.findLatest(organizationId),
-    ).toMatchObject({ content: declared, revision: 1 });
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/api/openappa/github-sync/held",
-        })
-      ).json(),
-    ).toMatchObject({ grants: [], droppedBatteries: ["github"] });
-    // Accepting it is the operator's call, and it clears the pending flag.
-    const accepted = await app.inject({
-      method: "POST",
-      url: "/api/openappa/github-sync/accept-held",
-    });
-    expect(accepted.statusCode, accepted.body).toBe(200);
-    // Nothing is left to review once it is accepted.
-    const after = await app.inject({
-      method: "GET",
-      url: "/api/openappa/github-sync/held",
-    });
-    expect(after.statusCode).toBe(200);
-    expect(after.json()).toBeNull();
-    // What the repository drops is named, in the answer and in the record.
-    expect(accepted.json()).toMatchObject({
-      reasons: ["drops_batteries"],
-      droppedBatteries: ["github"],
-    });
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      declarationsPendingPublish: false,
-      heldContent: null,
-    });
-    await vi.waitFor(async () => {
-      const records = await db
-        .select()
-        .from(schema.auditLogsTable)
-        .where(
-          and(
-            eq(schema.auditLogsTable.organizationId, organizationId),
-            eq(schema.auditLogsTable.action, "organization.updated"),
-          ),
-        );
-      expect(
-        records.some((record) =>
-          (
-            (record.after as { droppedBatteries?: string[] })
-              ?.droppedBatteries ?? []
-          ).includes("github"),
-        ),
-      ).toBe(true);
-    });
-  });
-
-  test("a disconnect drops the held pull with the schedule that fetched it", async () => {
-    await configure();
-    await syncAppaGithubPolicy(organizationId);
-    const granted = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
-    upstream(granted, "d".repeat(40));
-    await syncAppaGithubPolicy(organizationId);
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldReasons: ["changes_credentials"],
-    });
-
-    expect((await action({ action: "disconnect" })).statusCode).toBe(200);
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
-      heldContent: null,
-      heldReasons: [],
-    });
-    // Nothing is left to accept, and the text is its authors' again.
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/api/openappa/github-sync/accept-held",
-        })
-      ).statusCode,
-    ).toBe(409);
+      (await OpenAppaGithubSyncModel.find(organizationId))?.lastSyncError,
+    ).toBe(
+      `The repository's policy would hand ${NOTARY_TOKEN} to the uploaded notary battery. A pull cannot give a credential to new code; remove the include, or unbind the variable.`,
+    );
     expect(
       await GuardrailsPolicyModel.findLatest(organizationId),
     ).toMatchObject({ content: policy, revision: 1 });
   });
 
-  test("a pull that loses the revision race publishes nothing and keeps the declarations pending", async () => {
+  test("a pull that loses the revision race publishes nothing", async () => {
     await configure();
-    await flagDeclarationsPendingPublish();
     server.use(
       http.get(
         "https://api.github.com/repos/example/policies/contents/guardrails/appa.toml",
@@ -1462,7 +1186,6 @@ describe("APPA GitHub sync", () => {
     expect(await GuardrailsPolicyModel.findLatest(organizationId)).toBeNull();
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       content: null,
-      declarationsPendingPublish: true,
     });
   });
 

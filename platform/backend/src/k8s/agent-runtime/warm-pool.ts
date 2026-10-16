@@ -53,7 +53,8 @@ export async function readWorkspaceSandbox(params: {
           condition.reason ?? "",
         ),
     );
-    if (failure) throw new Error(`Workspace claim rejected: ${failure.reason}`);
+    if (failure)
+      throw new Error(`Agent allocation rejected: ${failure.reason}`);
     const assigned = claim.status?.sandbox?.name;
     if (!assigned) throw error;
     const sandbox = (await api.getNamespacedCustomObject({
@@ -68,7 +69,7 @@ export async function readWorkspaceSandbox(params: {
           owner.uid === claim.metadata.uid && owner.kind === "SandboxClaim",
       )
     )
-      throw new Error("Sandbox does not belong to this workspace claim");
+      throw new Error("Sandbox does not belong to this Agent allocation");
     return sandbox;
   }
 }

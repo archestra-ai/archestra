@@ -4,7 +4,10 @@ import { encryptedChatDekFingerprint } from "@/content-encryption/encrypted-chat
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
 
 import type { ServerResponse } from "node:http";
-import { extractMcpHumanRuling } from "@archestra/shared";
+import {
+  ENCRYPTED_CHAT_REDACTED_MARKER,
+  extractMcpHumanRuling,
+} from "@archestra/shared";
 import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -489,7 +492,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           tokenValue: "test-token",
           tokenId: "test-token-id",
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
         },
         repeatTracker: new ToolCallRepeatTracker(),
         modelAcceptsImageToolResults: false,
@@ -2099,7 +2102,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       { provider: "anthropic" },
     );
     const { value: virtualKey } = await VirtualApiKeyModel.create({
-      name: "guardrail-source-spoof",
+      name: "guardrail-virtual-key",
       providerApiKeys: [
         { provider: providerKey.provider, providerApiKeyId: providerKey.id },
       ],
@@ -2113,13 +2116,47 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           authorization: `Bearer ${virtualKey}`,
           "anthropic-version": "2023-06-01",
           "x-archestra-source": "guardrail:annotator",
-          ...internalCallHeader(),
         },
         payload: payload(false) as Record<string, unknown>,
       });
       expect(response.statusCode, response.body).toBe(400);
     }
     expect(providerRequests).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  test("keeps a guardrail call on a virtual key out of the session it names", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      name: "guardrail-virtual-key",
+      providerApiKeys: [
+        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+      ],
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        authorization: `Bearer ${virtualKey}`,
+        "anthropic-version": "2023-06-01",
+        "x-archestra-source": "guardrail:annotator",
+        "x-appa-session-id": "chat-session",
+        ...internalCallHeader(),
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
     expect(events).toHaveLength(0);
   });
 
@@ -2258,6 +2295,101 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     await encrypt(sessionId);
     const fresh = await postChat();
     expect(fresh.statusCode, fresh.body).toBe(409);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("records an encrypted chat refused for want of a key and escrow as a redacted failed interaction (stream=%s)", async (stream) => {
+    await db
+      .update(database.schema.conversationsTable)
+      .set({ encryptedChat: true })
+      .where(eq(database.schema.conversationsTable.id, sessionId));
+    const response = await post(payload(stream), {
+      "x-archestra-session-id": sessionId,
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json()).toEqual({
+      error: {
+        message:
+          "Encrypted chat key and escrow are required for policy storage",
+        type: "api_conflict_error",
+      },
+    });
+    expect(response.headers["x-should-retry"]).toBeUndefined();
+    expect(providerRequests).toEqual([]);
+    const rows = await db
+      .select()
+      .from(database.schema.interactionsTable)
+      .where(eq(database.schema.interactionsTable.profileId, agent.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      sessionId,
+      request: ENCRYPTED_CHAT_REDACTED_MARKER,
+      response: ENCRYPTED_CHAT_REDACTED_MARKER,
+      processedRequest: null,
+    });
+  });
+
+  const unenforcedRecords = async () => [
+    ...(await db
+      .select()
+      .from(database.schema.openappaUnenforcedSessionsTable)
+      .where(
+        eq(
+          database.schema.openappaUnenforcedSessionsTable.organizationId,
+          agent.organizationId,
+        ),
+      )),
+    ...(await db
+      .select()
+      .from(database.schema.openappaUnenforcedCallsTable)
+      .where(
+        eq(
+          database.schema.openappaUnenforcedCallsTable.organizationId,
+          agent.organizationId,
+        ),
+      )),
+  ];
+
+  // A delegated child presents the parent's session; only a valid binding
+  // names its own trajectory.
+  const invalidSubagentBinding = { "x-archestra-appa-subagent": "expired" };
+
+  test("serves a child with an invalid subagent binding while OpenAPPA is off", async () => {
+    config.openappa.enabled = false;
+    const response = await post(payload(false), invalidSubagentBinding);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    expect(events).toEqual([]);
+    expect(await unenforcedRecords()).toEqual([]);
+  });
+
+  test("serves a child with an invalid subagent binding while only observing, without observing it under its parent", async () => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const child = await post(payload(false), invalidSubagentBinding);
+
+    expect(child.statusCode, child.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    expect(events).toEqual([]);
+    expect(await unenforcedRecords()).toEqual([]);
+
+    // The parent's own request is observed.
+    const parent = await post(payload(false));
+    expect(parent.statusCode, parent.body).toBe(200);
+    expect(await unenforcedRecords()).not.toEqual([]);
+  });
+
+  test("refuses a child with an invalid subagent binding while enforcing", async () => {
+    const response = await post(payload(false), invalidSubagentBinding);
+
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json().error.message).toBe(
+      "The subagent binding is invalid or expired",
+    );
+    expect(providerRequests).toEqual([]);
   });
 
   test.each([
@@ -4141,6 +4273,65 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     expect(toolEcho.statusCode, toolEcho.body).toBe(200);
     expect(toolEcho.body).not.toContain("protected session");
+  });
+
+  test.for([
+    { decision: "release" as const },
+    { decision: "replace" as const },
+  ])("records a buffered stream's session receipt as issued only on release ($decision)", async ({
+    decision,
+  }) => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-context-secret-with-32-characters",
+    };
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const unregister = registerLlmProxyPlugin({
+      id: "test-buffered-receipt",
+      buffersModelResponse: () => true,
+      async onBufferedModelResponse() {
+        return decision === "replace"
+          ? { decision, responseText: "REPLACED ANSWER" }
+          : { decision };
+      },
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.278 (external, cli)",
+          "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
+        },
+        payload: payload(true),
+      });
+      await drainBackgroundWork();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body.includes("REPLACED ANSWER")).toBe(
+        decision === "replace",
+      );
+      expect(response.body.includes("protected session")).toBe(
+        decision === "release",
+      );
+      const sessions = await db
+        .select()
+        .from(database.schema.openappaSessionsTable)
+        .where(
+          eq(
+            database.schema.openappaSessionsTable.organizationId,
+            agent.organizationId,
+          ),
+        );
+      expect(sessions.some((row) => row.receiptToken !== null)).toBe(true);
+      expect(sessions.some((row) => row.receiptIssuedAt !== null)).toBe(
+        decision === "release",
+      );
+    } finally {
+      unregister();
+    }
   });
 
   test("keeps the session mark off a client's tool-less side call", async () => {
@@ -13375,6 +13566,8 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       );
       expect(response.body).not.toContain("call_subscription_partial");
       expect(response.body).not.toContain("finished subagent");
+      if (child)
+        expect(response.body).not.toContain("Partial subscription answer");
       const frames =
         stream && response.statusCode === 200
           ? response.body
@@ -13394,9 +13587,16 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
             ),
           ).toHaveLength(1);
           expect(frames.some((frame) => frame.error)).toBe(false);
+          if (!child) {
+            expect(
+              frames
+                .map((frame) => frame.choices?.[0]?.delta?.content ?? "")
+                .join(""),
+            ).toContain("Partial subscription answer");
+          }
         } else {
           expect(response.json().choices[0]).toMatchObject({
-            message: { content: "Partial subscription answer" },
+            message: { content: child ? "" : "Partial subscription answer" },
             finish_reason: reason,
           });
         }
@@ -13503,7 +13703,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       onError: error,
       onCleanup: cleanup,
     });
-    const reasoning = { id: "rs_partial", type: "reasoning", summary: [] };
+    const reasoning = {
+      id: "rs_partial",
+      type: "reasoning",
+      summary: [{ type: "summary_text", text: "PARTIAL_REASONING_MARKER" }],
+    };
     const message = {
       id: "msg_partial",
       type: "message",
@@ -13716,10 +13920,20 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
           };
         }
       }
-      expect(released).toMatchObject({
+      const persisted = {
         ...terminal,
         output: stream ? [reasoning, releasedMessage] : [],
-      });
+      };
+      // A buffered child's failed generation was never admitted, so its text
+      // stays off the wire while the provider's partial is still recorded.
+      const withheld = stream && child;
+      expect(released).toMatchObject(
+        withheld ? { ...persisted, output: [] } : persisted,
+      );
+      if (child) {
+        expect(response.body).not.toContain("Partial answer");
+        expect(response.body).not.toContain("PARTIAL_REASONING_MARKER");
+      }
       expect(response.body).not.toContain("UNADMITTED_RAW_SEARCH_MARKER");
       expect(response.body).not.toContain("UNADMITTED_SEARCH_DERIVED_MARKER");
       expect(response.body).not.toContain("finished subagent");
@@ -13753,7 +13967,8 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       await expect.poll(findInteractions).toHaveLength(1);
       const recorded = await findInteractions();
       expect(recorded).toHaveLength(1);
-      expect(recorded[0].response).toEqual(released);
+      if (withheld) expect(recorded[0].response).toMatchObject(persisted);
+      else expect(recorded[0].response).toEqual(released);
       expect(JSON.stringify(recorded[0].response)).not.toContain("UNADMITTED_");
       expect(recorded[0].processedRequest).not.toBeNull();
       if (status === "incomplete") {
@@ -13781,13 +13996,13 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
           url: `/api/interactions/${recorded[0].id}`,
         });
         expect(detail.statusCode, detail.body).toBe(200);
-        expect(detail.json().response).toEqual(released);
+        expect(detail.json().response).toEqual(recorded[0].response);
         const list = await readApp.inject({
           method: "GET",
           url: `/api/interactions?profileId=${agent.id}`,
         });
         expect(list.statusCode, list.body).toBe(200);
-        expect(list.json().data[0].response).toEqual(released);
+        expect(list.json().data[0].response).toEqual(recorded[0].response);
       } finally {
         await readApp.close();
       }
@@ -13816,6 +14031,125 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
           feedback: expect.stringContaining("Search results are not admitted"),
         },
       ]);
+    } finally {
+      unregister();
+    }
+  });
+
+  test.for(
+    (["incomplete", "failed"] as const).flatMap((status) =>
+      [false, true].map((child) => ({ status, child })),
+    ),
+  )("withholds a buffered child's failed non-stream Responses text (status=$status, child=$child)", async ({
+    status,
+    child,
+  }) => {
+    const unadmitted = vi.fn(async () => undefined);
+    const error = vi.fn(async () => undefined);
+    const cleanup = vi.fn(async () => undefined);
+    const unregister = registerLlmProxyPlugin({
+      id: "test-non-stream-terminal-text",
+      buffersModelResponse: () => child,
+      onBufferedModelResponse: unadmitted,
+      onModelResponse: unadmitted,
+      onComplete: unadmitted,
+      onError: error,
+      onCleanup: cleanup,
+    });
+    const reasoning = {
+      id: "rs_text_only",
+      type: "reasoning",
+      summary: [{ type: "summary_text", text: "PARTIAL_REASONING_MARKER" }],
+    };
+    const message = {
+      id: "msg_text_only",
+      type: "message",
+      role: "assistant",
+      status: "incomplete",
+      content: [
+        {
+          type: "output_text",
+          text: "PARTIAL_TEXT_ONLY_MARKER",
+          annotations: [],
+        },
+      ],
+    };
+    const usage = {
+      input_tokens: 10,
+      input_tokens_details: { cached_tokens: 3 },
+      output_tokens: 7,
+      output_tokens_details: { reasoning_tokens: 5 },
+      total_tokens: 17,
+    };
+    const terminal = {
+      id: "resp_text_only",
+      object: "response",
+      created_at: 123,
+      model: "gpt-5.5",
+      status,
+      output: [reasoning, message],
+      incomplete_details:
+        status === "incomplete" ? { reason: "max_output_tokens" } : null,
+      error:
+        status === "failed"
+          ? { code: "server_error", message: "Provider failed" }
+          : null,
+      usage,
+    };
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        new OpenAIProvider({
+          apiKey: "test-key",
+          baseURL: "https://native-responses.test/v1",
+          maxRetries: 0,
+          fetch: async () => HttpResponse.json(terminal),
+        }),
+    );
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        remoteAddress: "127.0.0.1",
+        headers: codexHeaders(),
+        payload: {
+          ...codexPayload({
+            session_id: CODEX_SESSION,
+            thread_id: child ? CODEX_FORK_THREAD : CODEX_THREAD,
+            ...(child ? { parent_thread_id: CODEX_THREAD } : {}),
+          }),
+          stream: false,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        ...terminal,
+        output: child ? [] : [reasoning, message],
+      });
+      if (child) {
+        expect(response.body).not.toContain("PARTIAL_TEXT_ONLY_MARKER");
+        expect(response.body).not.toContain("PARTIAL_REASONING_MARKER");
+      }
+      expect(error).toHaveBeenCalledOnce();
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(unadmitted).not.toHaveBeenCalled();
+      expect(
+        events.filter((event) =>
+          ["child_end", "turn_end"].includes(String(event.event)),
+        ),
+      ).toEqual([]);
+      const recorded = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(recorded).toHaveLength(1);
+      expect(recorded[0].response).toMatchObject({
+        ...terminal,
+        output: [reasoning, message],
+      });
+      expect(recorded[0]).toMatchObject({
+        inputTokens: 7,
+        outputTokens: 7,
+        cacheReadTokens: 3,
+      });
     } finally {
       unregister();
     }

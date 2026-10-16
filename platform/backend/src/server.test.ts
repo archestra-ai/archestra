@@ -1155,35 +1155,17 @@ describe("buildSandboxFrameAncestors", () => {
       buildSandboxFrameAncestors({
         allowedOrigins: [],
         sandboxDomain: null,
-        recorderFrameAncestors: [],
       }),
     ).toBe("*");
   });
 
-  test("the recorder cannot restrict an otherwise-open deployment", () => {
-    // The renderer's frame ancestors fall back to a guessed http://localhost:3000
-    // when nothing is configured. Adding that guess to an empty list used to
-    // turn "embeddable anywhere" into "embeddable on loopback:3000 only".
-    expect(
-      buildSandboxFrameAncestors({
-        allowedOrigins: [],
-        sandboxDomain: null,
-        recorderFrameAncestors: [
-          "http://localhost:3000",
-          "http://127.0.0.1:3000",
-        ],
-      }),
-    ).toBe("*");
-  });
-
-  test("declared origins restrict the policy, and the recorder widens it", () => {
+  test("declared origins restrict the policy", () => {
     expect(
       buildSandboxFrameAncestors({
         allowedOrigins: ["https://archestra.example.com"],
         sandboxDomain: null,
-        recorderFrameAncestors: ["http://renderer.internal:3000"],
       }),
-    ).toBe("https://archestra.example.com http://renderer.internal:3000");
+    ).toBe("https://archestra.example.com");
   });
 
   test("a sandbox domain alone is a declared restriction", () => {
@@ -1191,7 +1173,6 @@ describe("buildSandboxFrameAncestors", () => {
       buildSandboxFrameAncestors({
         allowedOrigins: [],
         sandboxDomain: "mcp.example.com",
-        recorderFrameAncestors: [],
       }),
     ).toBe("*.mcp.example.com");
   });
@@ -1199,9 +1180,11 @@ describe("buildSandboxFrameAncestors", () => {
   test("deduplicates repeated sources", () => {
     expect(
       buildSandboxFrameAncestors({
-        allowedOrigins: ["https://archestra.example.com"],
+        allowedOrigins: [
+          "https://archestra.example.com",
+          "https://archestra.example.com",
+        ],
         sandboxDomain: null,
-        recorderFrameAncestors: ["https://archestra.example.com"],
       }),
     ).toBe("https://archestra.example.com");
   });

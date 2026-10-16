@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
@@ -292,6 +293,36 @@ describe("hasAnyAgentTypeAdminPermission", () => {
 });
 
 describe("getAgentTypePermissionChecker", () => {
+  test("keeps scoped update grants for agents and gateways when filtering policy resources", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: MEMBER_ROLE_NAME });
+    for (const agentType of ["agent", "profile", "mcp_gateway"] as const) {
+      const agent = await makeAgent({
+        organizationId: org.id,
+        authorId: user.id,
+        agentType,
+        access: "personal",
+      });
+      const checker = await getAgentTypePermissionChecker({
+        organizationId: org.id,
+        userId: user.id,
+      });
+      expect(checker.isAdmin(agentType)).toBe(false);
+      expect(
+        checker.allowsScoped({
+          agentId: agent.id,
+          agentType,
+          action: "update",
+        }),
+      ).toBe(true);
+    }
+  });
   test("require() does not throw when permission is present", async ({
     makeUser,
     makeOrganization,

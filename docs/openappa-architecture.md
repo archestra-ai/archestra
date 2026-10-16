@@ -49,9 +49,9 @@ Without enforcement, the proxy and the MCP gateway apply no tool-call guardrails
 
 The HTTP API and policy tools share validation and revision checks. Edits compile without calling external services. The next dispatch loads the latest saved revision under the runtime lock. New conversations use it, while existing conversations keep their recorded policy snapshot.
 
-The editor accepts `[policy]`, `[server_aliases]`, `[credentials]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. Reference tokens through `token_env`. Policy documents must not contain raw secrets.
+The editor accepts `[policy]`, `[aliases]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. For now the text names no credentials: validation refuses a `[credentials]` table and a root `token_env`, and every save path (UI, agent tools, GitHub sync) runs that check. Battery credentials are stored bindings (`openappa_credential_bindings`), set from the Batteries page or `bind_guardrails_credential`. This is a temporary rule until credentials and Git sync are designed together.
 
-Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra battery, an Archestra server alias, `internal = ["archestra:members"]`, `context_control = true`, and a local wildcard annotator (`noop`). The wildcard annotator adds no restrictions to uncovered tools. Explicit tool rules always take precedence over the wildcard.
+Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra and Claude Code batteries, an Archestra server alias under `[aliases.mcp]`, a `claude-code = ["archestra"]` host alias that rebinds the Claude Code battery's rules onto the client built-ins Archestra derives as `host/archestra/<name>`, `internal = ["archestra:members"]`, `context_control = true`, and a wildcard annotator (`archestra.undeclared-tool`) that asks the organization's default model about every uncovered tool. The battery's two shell annotators are re-declared at the root with `builtin = "archestra"`, so the default model answers them instead of a local `claude` process. Without a configured default model these annotators cannot answer and their calls are refused. Explicit tool rules always take precedence over the wildcard.
 
 Saving revision `1` through MCP local publication can auto-enable enforcement if the caller has `organizationSettings:update`, the same permission the explicit deployment toggle API checks. Direct HTTP PUT saves and GitHub imports do not auto-enable enforcement.
 
@@ -69,7 +69,7 @@ While connected, the policy editor and Batteries panel are read-only, and direct
 
 Stopping sync keeps the active policy and re-enables local editing. Existing conversations keep their original policy snapshot.
 
-The system *holds* a pull instead of publishing it if the file drops a declared battery (while `declarations_pending_publish` is set) or modifies a `[credentials]` grant. The database stores the held text, its hash, the commit, and the hold reasons (`drops_batteries` or `changes_credentials`). To accept held text, call `POST /api/openappa/github-sync/accept-held`. This call requires `openappaPolicy:update`, plus `credential:update` if credentials changed.
+A pulled file is refused, and the active policy stays, if it names a credential or would hand a stored binding to an uploaded battery. Bindings reach bundled batteries without review. The refusal is the sync error.
 
 An invalid download preserves the current revision. If composition fails on a new revision, the runtime continues serving the previous effective policy.
 
@@ -81,7 +81,8 @@ A battery packages OpenAPPA policies for one tool provider. It contains a policy
 
 Your organization policy text owns battery declarations:
 - `include`: names bundled batteries (`batteries/<name>/appa.toml`) or uploaded packages (`batteries/<name>@sha256-<64 hex>/appa.toml`).
-- `[server_aliases]`: maps battery namespaces to catalog tool prefixes.
+- `[aliases.mcp]`: maps battery namespaces to catalog tool prefixes. The legacy top-level `[server_aliases]` table still reads the same; a document may not use both.
+- `[aliases.host]`: maps a bundled client battery's host namespace onto this host's client built-ins (`claude-code = ["archestra"]`).
 - `[credentials]`: maps `APPA_PROVIDER_*` variables to runtime credential keys.
 
 Resolution is exact. Bundled names always resolve to bundled packages, and uploads never shadow them. You can include a battery name only once. Declarations in `openappa_battery_installs` form a derived read model. Recomposition updates these rows while preserving their IDs. Removing an `include` line removes that battery. Removing an alias keeps the battery included, moving its status to `server_missing`.
@@ -366,7 +367,7 @@ A child `SessionStart` can return contract instructions rather than a refusal. T
 
 OpenCode's generated handoff plugin adds onboarding guidance only to a verified native root session. Child sessions do not inherit that root-only system instruction. The proxy also removes root-only handoff guidance from child requests. Missing native identity omits the optional guidance rather than modifying returned model text.
 
-Incomplete and failed Responses generations retain their original terminal status, errors, details, usage, and safe output. Partial executable calls and unadmitted hosted-tool content are withheld. Streaming retains text captured before the hosted boundary. A failed final snapshot cannot establish when its message text was generated. The proxy drops ambiguous hosted-derived output, including `output_text`.
+Incomplete and failed Responses generations retain their original terminal status, errors, details, usage, and safe output. Partial executable calls and unadmitted hosted-tool content are withheld. Streaming retains text captured before the hosted boundary. A failed final snapshot cannot establish when its message text was generated. The proxy drops ambiguous hosted-derived output, including `output_text`. A buffered child's or compaction session's failed generation releases no model text to the client, because `ChildEnd` admission never ran; its status, details, usage, and the recorded partial remain.
 
 Translated subscription failures skip successful lifecycle hooks, including `RootEnd` and `ChildEnd`. The failure lifecycle still releases request resources and records the interaction once.
 
@@ -782,13 +783,13 @@ Receipt readers stream PostgreSQL rows and refuse histories exceeding 10,000 rec
 
 ### Runtime Human Reviews
 
-Runtime human reviews use the run page rather than native forms that may auto-decline. Shared-cache entries retain separate offers for ten minutes. Only the run's user owner can record a ruling for its exact stored trajectory and offer. Native-form callers also atomically claim their pending stage. Duplicate approvals cannot grant twice. Genuine denial can revoke an unspent approval.
+Runtime human reviews use the client's own question card in the run's terminal (Claude Code's AskUserQuestion) or its MCP elicitation form, the same as outside the runtime. Only the run's creator can attach to that terminal. A client with neither keeps the call blocked. Native-form callers atomically claim their pending stage. Duplicate approvals cannot grant twice. Genuine denial can revoke an unspent approval.
 
 Exact review context remains readable for native continuation only while approval is unspent. It does not reopen the pending claim. `ask_user` waits without consuming approval. The remedy retry spends it. Denial, timeout, disconnection, or the absence of an eligible reviewer leaves the call blocked.
 
 Native delivered and returned values are bounded to 8 MiB. Model-facing crossing refusals omit internal diagnostics. Existing non-runtime elicitation is unchanged.
 
-Sources: [`runtime-crossing.ts`](../platform/backend/src/services/agent-runtime/runtime-crossing.ts), [`runtime-identity.ts`](../platform/backend/src/services/agent-runtime/runtime-identity.ts), [`runtime-hitl-review.ts`](../platform/backend/src/openappa/runtime-hitl-review.ts), [`runtime-tool-claims.ts`](../platform/backend/src/openappa/runtime-tool-claims.ts).
+Sources: [`runtime-crossing.ts`](../platform/backend/src/services/agent-runtime/runtime-crossing.ts), [`runtime-identity.ts`](../platform/backend/src/services/agent-runtime/runtime-identity.ts), [`runtime-tool-claims.ts`](../platform/backend/src/openappa/runtime-tool-claims.ts).
 
 ## Persistence and current limits
 

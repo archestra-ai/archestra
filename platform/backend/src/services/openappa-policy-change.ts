@@ -410,18 +410,6 @@ export async function refuseCredentialLines(params: {
   });
 }
 
-/** The validation warning for `[credentials]` lines that override a stored binding. */
-export async function credentialLineWarnings(
-  organizationId: string,
-  content: string,
-): Promise<string[]> {
-  const lines = await batteryCredentialLines(organizationId, content);
-  if (lines.size === 0) return [];
-  return [
-    `[credentials] in the policy text overrides the stored binding for ${[...lines.keys()].join(", ")}. Prefer bind_guardrails_credential; a text line locks the key in the Batteries dialog.`,
-  ];
-}
-
 async function githubJson<T = unknown>(params: {
   /** Full API URL; the base comes from the source's credential. */
   path: string;
@@ -728,18 +716,6 @@ async function assertRegularGitPaths(params: {
       }
     }
   }
-}
-
-/** The text's `[credentials]` lines for variables an included battery reads. */
-async function batteryCredentialLines(
-  organizationId: string,
-  content: string,
-): Promise<Map<string, string>> {
-  const { entries, credentials } = await openappaDeclarations.resolve({
-    organizationId,
-    content,
-  });
-  return batteryLines(entries, credentials);
 }
 
 function batteryLines(

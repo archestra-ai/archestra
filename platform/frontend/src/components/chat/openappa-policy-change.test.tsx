@@ -254,10 +254,6 @@ test.each([
           setupPullRequestNumber: null,
           lastSyncedAt: null,
           lastSyncError: null,
-          declarationsPendingPublish: false,
-          heldContentHash: null,
-          heldSourceCommit: null,
-          heldReasons: [],
         },
       };
     },

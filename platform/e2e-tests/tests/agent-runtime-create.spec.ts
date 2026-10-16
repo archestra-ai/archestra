@@ -113,11 +113,12 @@ test("creates Claude Code from the catalog and explains the account connection a
     // Creating opens the agent's own page, which lists the missing Claude
     // account before the agent can run.
     await expect(page).toHaveURL(new RegExp(`/agents/${agentId}$`));
+    const setup = page.getByRole("status", { name: "Agent setup" });
     await expect(
-      page.getByText("Connect your Claude subscription", { exact: true }),
+      setup.getByText("Claude subscription", { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Sign in with Claude", exact: true }),
+      setup.getByRole("button", { name: "Sign in with Claude", exact: true }),
     ).toBeVisible();
   } finally {
     if (agentId) await deleteAgent(request, agentId);

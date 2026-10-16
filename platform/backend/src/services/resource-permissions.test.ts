@@ -7,12 +7,114 @@ import AgentRunModel from "@/models/agent-run";
 import ConversationModel from "@/models/conversation";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import ServiceAccountModel from "@/models/service-account";
 import TeamModel from "@/models/team";
 import { describe, expect, test } from "@/test";
 import { ResourcePermissions } from "./resource-permissions";
 
 describe("resource permissions", () => {
+  test("resource-filtered capabilities retain user, team, role and wildcard grants without crossing organizations", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeAgent,
+    makeSkill,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, user.id);
+    await TeamModel.addMember(team.id, user.id);
+    const personal = await makeAgent({
+      organizationId: org.id,
+      authorId: user.id,
+      agentType: "agent",
+      access: "personal",
+    });
+    const shared = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      access: { teams: [team.id], level: "use" },
+    });
+    const skill = await makeSkill(org.id, { authorId: user.id });
+    await replacePolicy({
+      organizationId: org.id,
+      resource: "agent",
+      scope: "*",
+      revision: 0,
+      grants: [{ subject: { type: "role", id: "member" }, actions: ["read"] }],
+    });
+    const foreign = await makeAgent({
+      organizationId: other.id,
+      authorId: user.id,
+      agentType: "agent",
+      access: "personal",
+    });
+    const context = { organizationId: org.id, userId: user.id };
+    const all = await ResourcePermissions.resolveAll(context);
+    const agents = await ResourcePermissions.resolveAll({
+      ...context,
+      resources: ["agent"],
+    });
+    expect(agents.some((grant) => grant.scope === foreign.id)).toBe(false);
+    expect(agents.every((grant) => grant.organizationId === org.id)).toBe(true);
+    expect(agents).toHaveLength(
+      all.filter((grant) => grant.resource === "agent").length,
+    );
+    expect(agents).toEqual(
+      expect.arrayContaining(all.filter((grant) => grant.resource === "agent")),
+    );
+    for (const scope of [personal.id, shared.id, "*"]) {
+      expect(agents).toContainEqual({
+        organizationId: org.id,
+        resource: "agent",
+        scope,
+        action: "read",
+      });
+    }
+    const skills = await ResourcePermissions.resolveAll({
+      ...context,
+      resources: ["skill"],
+    });
+    expect(skills).toHaveLength(
+      all.filter((grant) => grant.resource === "skill").length,
+    );
+    expect(skills).toEqual(
+      expect.arrayContaining(all.filter((grant) => grant.resource === "skill")),
+    );
+    expect(skills).toContainEqual({
+      organizationId: org.id,
+      resource: "skill",
+      scope: skill.id,
+      action: "read",
+    });
+    const { subjects } =
+      await ResourcePermissionSubjectModel.resolvePrincipal(context);
+    expect(
+      await ResourcePermissions.resolveAll({
+        organizationId: org.id,
+        subjects,
+        resources: ["agent", "skill"],
+      }),
+    ).toEqual(
+      expect.arrayContaining(
+        all.filter((grant) => ["agent", "skill"].includes(grant.resource)),
+      ),
+    );
+    expect(
+      await ResourcePermissions.resolveAll({ ...context, resources: [] }),
+    ).toEqual([]);
+    expect(
+      await ResourcePermissions.resolveAll({
+        organizationId: org.id,
+        subjects: [],
+        resources: ["agent"],
+      }),
+    ).toEqual([]);
+  });
   test("retired team-relative policies cannot upgrade direct team access or leak into capabilities", async ({
     makeOrganization,
     makeUser,

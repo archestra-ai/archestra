@@ -345,7 +345,7 @@ type ResolvedInstallIdentity = Pick<
 >;
 
 type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
-  Partial<Pick<TokenAuthContext, "teamId">>;
+  Partial<Pick<TokenAuthContext, "teamId" | "serviceAccountId">>;
 
 /**
  * Identity fields attached to every persisted tool call and returned result:
@@ -2646,7 +2646,8 @@ class McpClient {
   // Picks which of a catalog's installs the calling identity routes through, using
   // the runtime credential-resolution scope priority: a user token prefers its own
   // personal install, then a team the user belongs to, then an org-scoped install;
-  // a team token prefers the team's install, then org-scoped. Returns undefined when
+  // a service account or team token prefers the team's install, then
+  // org-scoped. Returns undefined when
   // none match. Shared by dynamic resolution and by a retained static assignment
   // whose pinned install was uninstalled (its mcpServerId is null).
   private async pickInstallForCaller(
@@ -2673,7 +2674,9 @@ class McpClient {
     if (tokenAuth?.teamId) {
       const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
       if (teamServer) return teamServer;
+    }
 
+    if (tokenAuth?.teamId || tokenAuth?.serviceAccountId) {
       const orgServer = allServers.find((s) => s.scope === "org");
       if (orgServer) return orgServer;
     }
@@ -3966,6 +3969,8 @@ class McpClient {
 
   private formatAuthContext(tokenAuth?: TokenAuthContext): string {
     if (tokenAuth?.userId) return `user: ${tokenAuth.userId}`;
+    if (tokenAuth?.serviceAccountId)
+      return `service account: ${tokenAuth.serviceAccountId}`;
     if (tokenAuth?.teamId) return `team: ${tokenAuth.teamId}`;
     return "organization";
   }

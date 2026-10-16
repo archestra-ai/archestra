@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { appaGitHost } from "./appa-git-host";
-import { type HeldPull, HeldPullNotice } from "./held-pull-notice";
 
 type AppaGithubSyncStatus = NonNullable<
   ReturnType<typeof useAppaGithubSync>["data"]
@@ -19,28 +18,18 @@ type AppaGithubSyncStatus = NonNullable<
 
 export function GithubManagedPolicyNotice({
   validationDirectory,
-  held: heldFromPolicy,
+  hideHealthy = false,
 }: {
   validationDirectory?: string;
-  /** The hold as the policy reports it, for viewers who can't read sync settings. */
-  held?: HeldPull | null;
+  /** The page links to the repository elsewhere; show only states that ask for something. */
+  hideHealthy?: boolean;
 } = {}) {
   const { data } = useAppaGithubSync();
   const git = appaGitHost(data);
   const source = data?.source;
   const failed = Boolean(source?.lastSyncError);
   const validations = validationDirectory !== undefined;
-  const href =
-    validations && source?.repo
-      ? `${data?.githubWebUrl}/${source.repo}${gitPathSeparator(data)}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
-      : githubPolicyFileUrl(data, "blob");
-
-  // A pull waiting for approval is not a failure: say what it waits for.
-  const held: HeldPull | null = source?.heldReasons?.length
-    ? { reasons: source.heldReasons, message: source.lastSyncError }
-    : (heldFromPolicy ?? null);
-  if (held?.reasons.length)
-    return <HeldPullNotice held={held} batteriesLink={!heldFromPolicy} />;
+  const href = managedSourceUrl(data, validationDirectory);
 
   // Setup isn't finished until its pull (merge) request merges: ask for that.
   if (!failed && source?.repo && source.setupPullRequestNumber)
@@ -68,6 +57,7 @@ export function GithubManagedPolicyNotice({
 
   // A healthy sync asks for nothing, so it is a chip, not a banner.
   if (!failed && !(validations && validationDirectory === "")) {
+    if (hideHealthy) return null;
     const content = (
       <>
         <LockKeyhole aria-hidden />
@@ -142,6 +132,26 @@ export function GithubManagedPolicyNotice({
       </InlineNoticeText>
     </InlineNotice>
   );
+}
+
+/** Where the validations (or, without a directory, the policy file) live in the repository. */
+function managedSourceUrl(
+  sync: AppaGithubSyncStatus | null | undefined,
+  validationDirectory?: string,
+) {
+  const source = sync?.source;
+  return validationDirectory !== undefined && source?.repo
+    ? `${sync?.githubWebUrl}/${source.repo}${gitPathSeparator(sync)}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
+    : githubPolicyFileUrl(sync, "blob");
+}
+
+/** "Managed in GitHub" and the repository link, for a menu item standing in for the chip. */
+export function useManagedValidationsLink(validationDirectory: string) {
+  const { data } = useAppaGithubSync();
+  return {
+    label: `Managed in ${appaGitHost(data).label}`,
+    href: managedSourceUrl(data, validationDirectory),
+  };
 }
 
 /** The synced policy file on GitHub or GitLab, to read (`blob`) or to change (`edit`). */

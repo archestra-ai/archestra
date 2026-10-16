@@ -3,6 +3,7 @@ import {
   isEditableTextFile,
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
+import { serviceAccountIdFromUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import type { Transaction } from "@/database";
 import logger from "@/logging";
@@ -1218,6 +1219,18 @@ class FileStore {
     conversationId: string | null = null,
     appId: string | null = null,
   ): Promise<OwnerScope | null> {
+    // A service account has no email; its folder name has no "@", so it can
+    // never be a person's folder.
+    const serviceAccountId = serviceAccountIdFromUserId(userId);
+    if (serviceAccountId) {
+      return {
+        kind: "user",
+        userId,
+        label: `service-account-${serviceAccountId}`,
+        conversationId,
+        appId,
+      };
+    }
     const email = await UserModel.getEmailById(userId);
     return email
       ? { kind: "user", userId, label: email, conversationId, appId }

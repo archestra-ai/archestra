@@ -2,11 +2,9 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
-  acceptHeldAppaGithubPull,
   configureAppaGithubSync,
   createAppaGithubRepository,
   getAppaGithubSync,
-  getHeldAppaGithubPull,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
@@ -23,12 +21,10 @@ import {
   StartAppaGithubAppSchema,
 } from "@/types/openappa-github-app-setup";
 import {
-  AcceptedHeldPullSchema,
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
   CreateAppaGithubRepositorySchema,
-  HeldPullDetailsSchema,
 } from "@/types/openappa-github-sync";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -266,47 +262,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           ...request.body,
         }),
       );
-    },
-  );
-  app.get(
-    "/api/openappa/github-sync/held",
-    {
-      schema: {
-        operationId: RouteId.GetHeldAppaGithubPull,
-        description:
-          "Itemize the pull waiting for approval: the credentials it gives batteries and the batteries it removes",
-        tags: ["OpenAPPA"],
-        response: constructResponseSchema(HeldPullDetailsSchema.nullable()),
-      },
-    },
-    async (request, reply) =>
-      reply.send(await getHeldAppaGithubPull(request.organizationId)),
-  );
-  app.post(
-    "/api/openappa/github-sync/accept-held",
-    {
-      schema: {
-        operationId: RouteId.AcceptHeldAppaGithubPull,
-        tags: ["OpenAPPA"],
-        response: constructResponseSchema(AcceptedHeldPullSchema),
-      },
-    },
-    async (request, reply) => {
-      const { accepted, status } = await acceptHeldAppaGithubPull({
-        organizationId: request.organizationId,
-        userId: request.user.id,
-      });
-      // What the repository's text changes that it could not authorize itself
-      // belongs in the audit record, named, not only in the sync row.
-      request.auditBefore = { heldPull: accepted.sourceCommit };
-      request.auditAfter = {
-        acceptedPull: accepted.sourceCommit,
-        contentHash: accepted.contentHash,
-        reasons: accepted.reasons,
-        droppedBatteries: accepted.droppedBatteries,
-        changedVariables: accepted.changedVariables,
-      };
-      return reply.send({ ...accepted, status });
     },
   );
 };

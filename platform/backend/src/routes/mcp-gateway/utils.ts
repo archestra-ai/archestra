@@ -93,7 +93,6 @@ import {
   MemberModel,
   OAuthAccessTokenModel,
   TeamModel,
-  TeamTokenModel,
   ToolModel,
   UserModel,
   UserTokenModel,
@@ -139,7 +138,6 @@ import {
   agentOwner,
   type CommonToolCall,
   type GatewayAgent,
-  type SelectTeamToken,
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
@@ -269,7 +267,6 @@ type TokenHashes = {
 };
 
 type ResolvedArchestraToken =
-  | { type: "team"; token: SelectTeamToken }
   | { type: "user"; token: SelectUserToken }
   | {
       type: "serviceAccount";
@@ -1580,55 +1577,6 @@ export function extractPassthroughHeaders(
 }
 
 /**
- * Validate a platform-managed token for a specific profile
- * Returns token auth info if valid, null otherwise
- *
- * Validates that:
- * 1. The token is valid (exists and matches)
- * 2. The profile is accessible via this token:
- *    - Org token: profile must belong to the same organization
- *    - Team token: profile must be assigned to that team
- */
-export async function validateTeamToken(
-  profileId: string,
-  tokenValue: string,
-  agentAccessContext?: AgentAccessContext | null,
-): Promise<TokenAuthResult | null> {
-  // Validate the token itself
-  const token = await TeamTokenModel.validateToken(tokenValue);
-  if (!token) {
-    return null;
-  }
-
-  return validateResolvedTeamToken({
-    profileId,
-    token,
-    agentAccessContext,
-  });
-}
-
-async function validateResolvedTeamToken(params: {
-  profileId: string;
-  token: SelectTeamToken;
-  agentAccessContext?: AgentAccessContext | null;
-}): Promise<TokenAuthResult | null> {
-  const { profileId, token } = params;
-  const hasAccess = await AgentTeamModel.credentialHasAgentAccess({
-    organizationId: token.organizationId,
-    agentId: profileId,
-    teamId: token.isOrganizationToken ? null : token.teamId,
-  });
-  if (!hasAccess) return null;
-
-  return {
-    tokenId: token.id,
-    teamId: token.teamId,
-    isOrganizationToken: token.isOrganizationToken,
-    organizationId: token.organizationId,
-  };
-}
-
-/**
  * Validate a user token for a specific profile
  * Returns token auth info if valid, null otherwise
  *
@@ -1930,6 +1878,8 @@ async function validateServiceAccountGatewayAccess(params: {
   profileId: string;
   serviceAccountId: string;
   organizationId: string;
+  /** Team the account acts for; call-time credentials prefer its installs. */
+  teamId: string | null;
   tokenId: string;
 }): Promise<TokenAuthResult | null> {
   const id = serviceAccountUserId(params.serviceAccountId);
@@ -1948,7 +1898,7 @@ async function validateServiceAccountGatewayAccess(params: {
     tokenId: params.tokenId,
     serviceAccountId: params.serviceAccountId,
     organizationId: params.organizationId,
-    teamId: null,
+    teamId: params.teamId,
     isOrganizationToken: false,
   };
 }
@@ -2026,6 +1976,7 @@ async function validateMcpClientAccessToken(params: {
       profileId,
       serviceAccountId: account.id,
       organizationId,
+      teamId: account.teamId,
       tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
     }))
   )
@@ -2033,7 +1984,7 @@ async function validateMcpClientAccessToken(params: {
   return {
     ...(account ? { serviceAccountId: account.id } : {}),
     tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-    teamId: null,
+    teamId: account?.teamId ?? null,
     isOrganizationToken: false,
     organizationId,
     oauthClientId: accessToken.clientId,
@@ -2163,26 +2114,13 @@ export async function authenticateMCPGatewayRequest(
         profileId,
         serviceAccountId: resolvedToken.serviceAccount.id,
         organizationId: resolvedToken.serviceAccount.organizationId,
+        teamId: resolvedToken.serviceAccount.teamId,
         tokenId: resolvedToken.token.id,
       });
       return result
         ? { result, reason: null }
         : { result: null, reason: "invalid_token" };
     }
-    if (resolvedToken?.type === "team") {
-      const teamTokenResult = await validateResolvedTeamToken({
-        profileId,
-        token: resolvedToken.token,
-        agentAccessContext: resolvedToken.token.isOrganizationToken
-          ? null
-          : await getAgentAccessContext(),
-      });
-      if (teamTokenResult) {
-        cacheTokenAuthResult(authCacheKey, teamTokenResult);
-        return { result: teamTokenResult, reason: null };
-      }
-    }
-
     if (resolvedToken?.type === "user") {
       const userTokenResult = await validateResolvedUserToken({
         profileId,
@@ -2536,16 +2474,6 @@ async function resolveArchestraToken(
   const cached = getCachedRawArchestraToken(rawTokenHash);
   if (cached !== undefined) {
     return cached;
-  }
-
-  const teamToken = await TeamTokenModel.validateToken(tokenValue);
-  if (teamToken) {
-    const result: ResolvedArchestraToken = {
-      type: "team",
-      token: teamToken,
-    };
-    cacheRawArchestraToken(rawTokenHash, result);
-    return result;
   }
 
   const userToken = await UserTokenModel.validateToken(tokenValue);

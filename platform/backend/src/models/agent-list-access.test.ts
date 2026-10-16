@@ -75,4 +75,49 @@ describe("agent list access", () => {
       );
     }
   });
+
+  test("chat pickers offer an admin only their own and shared agents", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    const author = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    await makeMember(author.id, org.id, { role: "member" });
+    const otherTeam = await makeTeam(org.id, author.id);
+    const mine = await makeInternalAgent({
+      organizationId: org.id,
+      authorId: admin.id,
+      access: "personal",
+    });
+    const sharedWithMe = await makeInternalAgent({
+      organizationId: org.id,
+      authorId: author.id,
+      access: { users: [admin.id] },
+    });
+    const orgWide = await makeInternalAgent({
+      organizationId: org.id,
+      authorId: author.id,
+    });
+    // Reachable only through the admin's access to every agent.
+    await makeInternalAgent({
+      organizationId: org.id,
+      authorId: author.id,
+      access: { teams: [otherTeam.id] },
+    });
+
+    const agents = await AgentModel.findUsableChatopsAgents({
+      organizationId: org.id,
+      userId: admin.id,
+      includePersonal: true,
+    });
+
+    expect(agents.map((agent) => agent.id).sort()).toEqual(
+      [mine.id, sharedWithMe.id, orgWide.id].sort(),
+    );
+  });
 });

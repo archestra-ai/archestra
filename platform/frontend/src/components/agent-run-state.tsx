@@ -116,6 +116,9 @@ const CHIP_CLASS = {
 };
 
 function formatRunStatusReason(reason: string): string {
+  if (reason.trim() === "[object Object]") {
+    return "No readable failure details were recorded for this run. Try resuming the run. If it fails again, check the new run's failure details.";
+  }
   const bodyMarker = "Body: ";
   const bodyStart = reason.indexOf(bodyMarker);
   if (bodyStart === -1) return reason;

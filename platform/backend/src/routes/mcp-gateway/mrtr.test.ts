@@ -220,7 +220,7 @@ describe("deriveStatePrincipal", () => {
     ).toBe("user:u1");
   });
 
-  test("falls back to the token for org and team tokens", () => {
+  test("falls back to the token for service account tokens", () => {
     expect(deriveStatePrincipal({ tokenId: "t1", organizationId: "o1" })).toBe(
       "token:t1",
     );

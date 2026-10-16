@@ -579,18 +579,13 @@ function AgentDetails({
             // The owner rides in the chip: who it reaches and who to ask,
             // read together. A built-in record belongs to nobody.
             <AudienceChip
+              compact={kind === "agent"}
               audience={audience}
               owner={isBuiltIn ? null : agent.createdBy}
             />
           )}
-          {/* Hidden below sm: the header is one clipped line, and the Start
-              run button below already carries the glyph. */}
           {hasAgentRuntime && (
-            <RuntimeCapableIndicator
-              variant="pill"
-              runtime={agent.runtime}
-              className="hidden font-normal sm:inline-flex"
-            />
+            <RuntimeCapableIndicator variant="icon" runtime={agent.runtime} />
           )}
           {kind === "mcp_gateway" && environmentName && (
             <Badge variant="outline" className="font-normal">

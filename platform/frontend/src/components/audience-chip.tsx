@@ -2,6 +2,7 @@
 "use client";
 
 import type { CreatedBy, ResourceVisibilityScope } from "@archestra/shared";
+import { Building2, UserRound, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { CreatorAvatar, creatorLabel } from "@/components/created-by-cell";
 import { SCOPE_META } from "@/components/scope-vocabulary";
@@ -22,17 +23,23 @@ import { cn } from "@/lib/utils/tailwind";
  * (a built-in record, or no owner recorded) shows the audience alone. On
  * phones the owner shrinks to their avatar; the full name stays in the
  * accessible label and the tooltip.
+ *
+ * `compact` is the icon beside a record's title: the owner's avatar with a
+ * small audience badge, naming both on hover.
  */
 export function AudienceChip({
   audience,
   owner,
   className,
+  compact = false,
 }: {
   audience: ResourceVisibilityScope;
   owner?: CreatedBy | null;
   className?: string;
+  compact?: boolean;
 }) {
   const audienceLabel = AUDIENCE_LABELS[audience];
+  const Icon = { personal: UserRound, team: Users, org: Building2 }[audience];
   const ownerName = owner ? creatorLabel(owner) : null;
   const ownerDetail =
     owner && ownerName
@@ -42,6 +49,52 @@ export function AudienceChip({
           ? `${ownerName} · ${owner.email}`
           : ownerName
       : null;
+
+  if (compact) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <UnstyledButton
+            aria-label={
+              ownerName
+                ? `Audience: ${audienceLabel}, Owner: ${ownerName}`
+                : `Audience: ${audienceLabel}`
+            }
+            data-testid="audience-chip"
+            className={cn(
+              "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              className,
+            )}
+          >
+            {owner ? (
+              <span className="relative inline-flex">
+                <CreatorAvatar
+                  createdBy={owner}
+                  className="size-5"
+                  fallbackClassName="text-[9px] font-medium"
+                />
+                <span className="absolute -right-1 -bottom-1 inline-flex size-3 items-center justify-center rounded-full bg-background ring-1 ring-border">
+                  <Icon className="size-2" strokeWidth={2.5} aria-hidden />
+                </span>
+              </span>
+            ) : (
+              <Icon className="size-4" aria-hidden />
+            )}
+          </UnstyledButton>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="px-2.5 py-1">
+          {ownerName ? (
+            <span className="flex flex-col leading-snug">
+              <span className="font-medium">{ownerName}</span>
+              <span className="text-muted-foreground">{audienceLabel}</span>
+            </span>
+          ) : (
+            <span>{audienceLabel}</span>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <Tooltip>

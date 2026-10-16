@@ -1,4 +1,8 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import {
+  ownerColumnsFromUserId,
+  userIdFromOwnerColumns,
+} from "@/auth/service-account-user-id";
 import db, { schema, type Transaction } from "@/database";
 import type {
   PersistedFile,
@@ -6,6 +10,7 @@ import type {
   SkillSandboxFileStorageProvider,
 } from "@/types";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
+import { ownedBy } from "./principal-owner";
 
 type PersistedFileMeta = {
   id: string;
@@ -57,13 +62,13 @@ class FileModel {
     data: Buffer | null;
     objectKey: string | null;
   }): Promise<PersistedFile> {
-    let row: PersistedFile | undefined;
+    let row: FileRow | undefined;
     try {
       [row] = await db
         .insert(schema.filesTable)
         .values({
           organizationId: params.organizationId,
-          userId: params.userId,
+          ...ownerColumnsFromUserId(params.userId),
           projectId: params.projectId,
           conversationId: params.conversationId,
           appId: params.appId ?? null,
@@ -83,7 +88,7 @@ class FileModel {
       throw error;
     }
     if (!row) throw new Error("failed to insert file");
-    return normalizeByteaField(row, "data");
+    return toPersistedFile(row);
   }
 
   /**
@@ -118,7 +123,7 @@ class FileModel {
         ),
       )
       .returning();
-    return row ? normalizeByteaField(row, "data") : null;
+    return row ? toPersistedFile(row) : null;
   }
 
   static async findById(id: string): Promise<PersistedFile | null> {
@@ -126,7 +131,7 @@ class FileModel {
       .select()
       .from(schema.filesTable)
       .where(eq(schema.filesTable.id, id));
-    return row ? normalizeByteaField(row, "data") : null;
+    return row ? toPersistedFile(row) : null;
   }
 
   /**
@@ -146,7 +151,7 @@ class FileModel {
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
-          eq(schema.filesTable.userId, params.userId),
+          ownedBy(schema.filesTable, params.userId),
           eq(schema.filesTable.filename, params.filename),
           isNull(schema.filesTable.projectId),
           isNull(schema.filesTable.conversationId),
@@ -155,7 +160,7 @@ class FileModel {
           isNull(schema.filesTable.appId),
         ),
       );
-    return row ? normalizeByteaField(row, "data") : null;
+    return row ? toPersistedFile(row) : null;
   }
 
   /**
@@ -176,12 +181,12 @@ class FileModel {
       .where(
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
-          eq(schema.filesTable.userId, params.userId),
+          ownedBy(schema.filesTable, params.userId),
           eq(schema.filesTable.appId, params.appId),
           eq(schema.filesTable.filename, params.filename),
         ),
       );
-    return row ? normalizeByteaField(row, "data") : null;
+    return row ? toPersistedFile(row) : null;
   }
 
   /**
@@ -205,7 +210,7 @@ class FileModel {
           eq(schema.filesTable.filename, params.filename),
         ),
       );
-    return row ? normalizeByteaField(row, "data") : null;
+    return row ? toPersistedFile(row) : null;
   }
 
   /** Files belonging to one project (newest first), any author; org-scoped. */
@@ -245,7 +250,7 @@ class FileModel {
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
           eq(schema.filesTable.appId, params.appId),
-          eq(schema.filesTable.userId, params.userId),
+          ownedBy(schema.filesTable, params.userId),
         ),
       )
       .orderBy(desc(schema.filesTable.createdAt));
@@ -269,7 +274,7 @@ class FileModel {
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
           eq(schema.filesTable.conversationId, params.conversationId),
-          eq(schema.filesTable.userId, params.userId),
+          ownedBy(schema.filesTable, params.userId),
           isNull(schema.filesTable.projectId),
         ),
       )
@@ -314,7 +319,7 @@ class FileModel {
         and(
           eq(schema.filesTable.organizationId, params.organizationId),
           eq(schema.filesTable.conversationId, params.conversationId),
-          eq(schema.filesTable.userId, params.userId),
+          ownedBy(schema.filesTable, params.userId),
         ),
       )
       .orderBy(desc(schema.filesTable.createdAt));
@@ -365,6 +370,16 @@ export class FileNameExistsError extends Error {
 }
 
 // === internal ===
+
+type FileRow = typeof schema.filesTable.$inferSelect;
+
+function toPersistedFile(row: FileRow): PersistedFile {
+  const { serviceAccountId: _serviceAccountId, ...rest } = row;
+  return normalizeByteaField(
+    { ...rest, userId: userIdFromOwnerColumns(row) },
+    "data",
+  );
+}
 
 /** Postgres unique_violation, as surfaced by the pg and PGlite drivers. */
 function isUniqueViolation(error: unknown): boolean {

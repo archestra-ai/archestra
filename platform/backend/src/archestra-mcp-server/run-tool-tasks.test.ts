@@ -81,7 +81,9 @@ describe("run_tool - Tasks integration", () => {
       tokenAuth: {
         tokenId: "token-1",
         teamId: null,
-        isOrganizationToken: true,
+        isOrganizationToken: false,
+        isUserToken: true,
+        userId,
         organizationId,
       },
       taskBridge: bridge,

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -7,12 +7,15 @@ import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
+import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { OpenappaCredentialError } from "@/openappa/failure";
 import {
   githubPolicyTestVersion,
   policyTestFilesHash,
 } from "@/openappa/policy-test-hashes";
+import { withOpenappaReplayOwner } from "@/openappa/replay-owner";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { loadAppaGithubPolicyTests } from "@/services/openappa-github-sync";
 import { ApiError } from "@/types";
@@ -149,6 +152,30 @@ export async function updateOpenAppaPolicyTests(params: {
     error: null,
   };
 }
+/**
+ * The credential values a dispatch would carry for `content`, so replay asks
+ * its annotators with the same keys. An unset key leaves the consults that
+ * need it unanswered, as a dispatch's would be; a bound key the organization
+ * must fix stops the run.
+ */
+async function replayCredentials(
+  organizationId: string,
+  content: string,
+): Promise<{ values: Record<string, string> } | { error: string }> {
+  try {
+    const { credentials } = await openappaDeclarations.dispatchPolicy({
+      organizationId,
+      content,
+    });
+    return { values: credentials };
+  } catch (error) {
+    if (error instanceof OpenappaCredentialError)
+      return {
+        error: `Replay cannot run: ${error.message}; fix the binding in OpenAPPA credentials`,
+      };
+    throw error;
+  }
+}
 async function evaluateOpenAppaPolicyTests(
   params: {
     organizationId: string;
@@ -263,37 +290,58 @@ async function evaluateOpenAppaPolicyTests(
   const native = await import("@archestra/openappa-rs");
   let engineVersion = native.getOpenappaReplayEngineVersion();
   let files: PolicyTestRunResult["files"];
-  const replayInput = JSON.stringify({
-    content: effective.content,
-    files: params.files,
-    noopAnnotator: guardrailsPolicyService.noopAnnotator(),
-  });
-  const capacityError =
-    Buffer.byteLength(effective.content) > 262144
-      ? "The effective policy exceeds the offline replay limit of 256 KiB; configuration validation succeeded but this validation run cannot execute"
-      : Buffer.byteLength(replayInput) > 2097152
-        ? "The encoded replay request exceeds the 2 MiB limit"
-        : null;
-  if (!validation.valid || capacityError) {
-    files = params.files.map((file) => ({
+  // A dispatch evaluates the composition with every command tool's spelling.
+  const content = expandCommandExecutionPolicyRules(effective.content);
+  const cannotRun = (error: string) =>
+    params.files.map((file) => ({
       path: file.path,
       contentHash: hash(file.content),
       assertionCount: 0,
-      status: "cannot_run",
-      error: !validation.valid
-        ? "Policy configuration validation failed"
-        : capacityError,
+      status: "cannot_run" as const,
+      error,
       steps: [],
     }));
+  const credentials =
+    validation.valid && params.files.length
+      ? await replayCredentials(params.organizationId, effective.content)
+      : { values: {} };
+  const replayInput = (annotatorContext?: string) =>
+    JSON.stringify({
+      content,
+      files: params.files,
+      credentials: "values" in credentials ? credentials.values : {},
+      annotatorContext,
+    });
+  const capacityError =
+    Buffer.byteLength(content) > 262144
+      ? "The effective policy exceeds the replay limit of 256 KiB; configuration validation succeeded but this validation run cannot execute"
+      : // A capability adds a fixed-size UUID.
+        Buffer.byteLength(replayInput(randomUUID())) > 2097152
+        ? "The encoded replay request exceeds the 2 MiB limit"
+        : null;
+  if (!validation.valid) {
+    files = cannotRun("Policy configuration validation failed");
+  } else if (capacityError) {
+    files = cannotRun(capacityError);
   } else if (!params.files.length) {
     files = [];
+  } else if ("error" in credentials) {
+    files = cannotRun(credentials.error);
   } else {
+    // Replay consults the helper bridge and the archestra annotator as a
+    // dispatch does, so it reads the same host variables.
+    openappaDeclarations.publishBridgeToken();
+    const output = await withOpenappaReplayOwner(
+      { organizationId: params.organizationId, userId: params.userId },
+      (annotatorContext) =>
+        native.replayOpenappaPolicy(replayInput(annotatorContext)),
+    );
     const response = z
       .object({
         engineVersion: z.string(),
         files: z.array(PolicyTestResultSchema.omit({ contentHash: true })),
       })
-      .parse(JSON.parse(await native.replayOpenappaPolicy(replayInput)));
+      .parse(JSON.parse(output));
     engineVersion = response.engineVersion;
     files = response.files.map((file) => ({
       ...file,
@@ -383,13 +431,7 @@ export async function previewOpenAppaPolicyTest(
   },
 ) {
   const { result } = await evaluateOpenAppaPolicyTests(params);
-  return {
-    ...result,
-    stale: isPolicyTestRunStale(
-      result,
-      await currentPolicyTestRunContext(params.organizationId),
-    ),
-  };
+  return result;
 }
 export async function runOpenAppaPolicyTests(
   params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
@@ -423,6 +465,7 @@ export async function runOpenAppaPolicyTests(
     params,
     collection,
   );
+  if (params.partial) result.partial = true;
   const saved = await OpenAppaPolicyTestsModel.saveRun(
     params.organizationId,
     params.userId,
@@ -439,10 +482,6 @@ export async function runOpenAppaPolicyTests(
     createdAt: saved.createdAt,
     createdBy: saved.createdBy,
     ...result,
-    stale: isPolicyTestRunStale(
-      result,
-      await currentPolicyTestRunContext(params.organizationId),
-    ),
   };
 }
 export async function runAutomaticOpenAppaPolicyTests(
@@ -596,9 +635,9 @@ async function executeAutomaticPolicyValidation(
     }
     if (
       error instanceof Error &&
-      error.message === "An OpenAPPA replay is already running; retry later"
+      error.message === "Too many OpenAPPA replays are running; retry later"
     )
-      throw new Error("Offline policy replay is busy; retry validation");
+      throw new Error("Policy replay is busy; retry validation");
     const message = "Could not run informational policy validation";
     const saved = await recordFailure(message, collection.files);
     if (saved) throw new Error(message);
@@ -631,27 +670,6 @@ async function executeAutomaticPolicyValidation(
     "Informational policy validation completed",
   );
 }
-async function currentPolicyTestRunContext(organizationId: string) {
-  const [root, effective, source, suite] = await Promise.all([
-    guardrailsPolicyService.get(organizationId),
-    openappaBatteriesService.getEffectivePolicy(organizationId),
-    OpenAppaGithubSyncModel.find(organizationId),
-    OpenAppaPolicyTestsModel.find(organizationId),
-  ]);
-  const native = await import("@archestra/openappa-rs");
-  const engineVersion = native.getOpenappaReplayEngineVersion();
-  const githubVersion =
-    source?.interval && suite?.sourceCommit === source.sourceCommit
-      ? githubPolicyTestVersion({
-          repo: source.repo,
-          commit: source.sourceCommit,
-          directory: suite.directory,
-          files: suite.files,
-        })
-      : null;
-  return { root, effective, source, suite, engineVersion, githubVersion };
-}
-
 function assertCurrentCollection(
   collection: PolicyTestCollection,
   version: string,
@@ -668,34 +686,9 @@ function assertCurrentCollection(
       "The validation source changed; reload before running",
     );
 }
-function isPolicyTestRunStale(
-  result: PolicyTestRunResult,
-  context: Awaited<ReturnType<typeof currentPolicyTestRunContext>>,
-) {
-  const { root, effective, source, suite, engineVersion, githubVersion } =
-    context;
-  return (
-    engineVersion !== result.engineVersion ||
-    root.contentHash !== result.policyHash ||
-    effective.contentHash !== result.effectivePolicyHash ||
-    (source?.interval
-      ? result.source !== "github" ||
-        source.sourceCommit !== result.sourceCommit ||
-        (result.executionError &&
-        result.sourceVersion.startsWith("unavailable:")
-          ? result.sourceVersion !==
-            `unavailable:${source.repo}:${source.sourceCommit}:${suite?.directory ?? "traces"}`
-          : githubVersion !== result.sourceVersion)
-      : result.source !== "local" ||
-        (suite?.version ?? "empty") !== result.sourceVersion)
-  );
-}
 export async function getOpenAppaPolicyTestRuns(organizationId: string) {
   enabled();
-  const [rows, context] = await Promise.all([
-    OpenAppaPolicyTestsModel.listRuns(organizationId),
-    currentPolicyTestRunContext(organizationId),
-  ]);
+  const rows = await OpenAppaPolicyTestsModel.listRuns(organizationId);
   return rows.map((row) => {
     const result = PolicyTestRunResultSchema.parse(row.result);
     return {
@@ -703,7 +696,6 @@ export async function getOpenAppaPolicyTestRuns(organizationId: string) {
       createdAt: row.createdAt,
       createdBy: row.createdBy,
       ...result,
-      stale: isPolicyTestRunStale(result, context),
     };
   });
 }

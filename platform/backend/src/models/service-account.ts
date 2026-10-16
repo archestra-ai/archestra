@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { CreatedBy } from "@archestra/shared";
 import {
+  ALL_ARCHESTRA_TOKEN_PREFIXES,
   ARCHESTRA_TOKEN_PREFIX,
   MEMBER_ROLE_NAME,
   type Permissions,
@@ -226,6 +227,7 @@ class ServiceAccountModel {
       name: serviceAccount.name,
       icon: serviceAccount.icon,
       role: serviceAccount.role,
+      teamId: serviceAccount.teamId,
       disabled: serviceAccount.disabled,
       tokenCount: serviceAccount.tokenCount,
       createdAt: serviceAccount.createdAt.toISOString(),
@@ -238,6 +240,7 @@ class ServiceAccountModel {
     name: string;
     icon?: string | null;
     role: string;
+    teamId?: string | null;
     labels?: LabelWithDetails[];
     /**
      * Required, but nullable: every interactive create knows its user, and
@@ -261,6 +264,7 @@ class ServiceAccountModel {
               name: params.name,
               icon: params.icon,
               role: params.role,
+              teamId: params.teamId ?? null,
               createdBy: params.createdBy,
             },
             userIdField: "createdBy",
@@ -311,7 +315,10 @@ class ServiceAccountModel {
     id: string,
     organizationId: string,
     data: Partial<
-      Pick<SelectServiceAccount, "name" | "icon" | "role" | "disabled">
+      Pick<
+        SelectServiceAccount,
+        "name" | "icon" | "role" | "disabled" | "teamId"
+      >
     > & {
       labels?: LabelWithDetails[];
     },
@@ -468,11 +475,88 @@ class ServiceAccountModel {
     return updated ? normalizeToken(updated) : null;
   }
 
+  /** The account row alone, without the keys {@link findById} lists. */
+  static async findAccount(
+    id: string,
+    organizationId: string,
+  ): Promise<SelectServiceAccount | null> {
+    const [row] = await db
+      .select()
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.id, id),
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Adopt an existing token value as one of the account's keys, so a client
+   * already configured with it keeps working. Returns false when that value
+   * already belongs to a service account, which makes re-running an import a
+   * no-op.
+   */
+  static async importToken(params: {
+    serviceAccountId: string;
+    name: string;
+    value: string;
+    lastUsedAt: Date | null;
+    createdAt: Date;
+  }): Promise<boolean> {
+    const inserted = await db
+      .insert(schema.serviceAccountTokensTable)
+      .values({
+        serviceAccountId: params.serviceAccountId,
+        name: params.name,
+        tokenHash: hashToken(params.value),
+        tokenStart: params.value.slice(0, 16),
+        lastUsedAt: params.lastUsedAt,
+        createdAt: params.createdAt,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.serviceAccountTokensTable.id });
+    return inserted.length > 0;
+  }
+
+  static async isNameTaken(
+    organizationId: string,
+    name: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.serviceAccountsTable.id })
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+          eq(schema.serviceAccountsTable.name, name),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
+
+  static async isTokenImported(value: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.serviceAccountTokensTable.id })
+      .from(schema.serviceAccountTokensTable)
+      .where(eq(schema.serviceAccountTokensTable.tokenHash, hashToken(value)))
+      .limit(1);
+    return Boolean(row);
+  }
+
   static async verifyToken(token: string): Promise<{
     serviceAccount: SelectServiceAccount;
     token: SelectServiceAccountToken;
   } | null> {
-    if (!token.startsWith(ARCHESTRA_TOKEN_PREFIX)) return null;
+    // Imported team and organization tokens keep their original value, which
+    // may carry a legacy prefix.
+    if (
+      !ALL_ARCHESTRA_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix))
+    )
+      return null;
 
     const tokenHash = hashToken(token);
     const [row] = await db
@@ -544,6 +628,7 @@ function normalizeServiceAccount(
     name: serviceAccount.name,
     icon: serviceAccount.icon,
     role: serviceAccount.role,
+    teamId: serviceAccount.teamId,
     disabled: serviceAccount.disabled,
     createdAt: serviceAccount.createdAt,
     updatedAt: serviceAccount.updatedAt,

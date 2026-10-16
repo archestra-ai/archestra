@@ -113,7 +113,6 @@ const run = {
   effectivePolicyHash: "effective-v2",
   engineVersion: "engine-v1",
   draft: false,
-  stale: false,
   files: [
     {
       path: scenario.path,
@@ -304,7 +303,7 @@ test("a source refresh preserves the active draft and prevents saving against th
   expect(
     screen.getByRole("button", { name: "Save validation" }),
   ).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Run file" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Test draft" })).toBeDisabled();
 });
 
 test("a rename save completing after leaving the editor does not navigate back into it", async () => {
@@ -592,7 +591,7 @@ test.each([
   ).toBeDisabled();
 });
 
-test("Git editor previews run without local save and become stale after edits", async () => {
+test("Git editor previews run without local save and are dropped after edits", async () => {
   let payload: unknown;
   server.use(
     http.get(endpoint, () =>
@@ -618,7 +617,7 @@ test("Git editor previews run without local save and become stale after edits", 
   fireEvent.change(editor, {
     target: { value: "mcp/files/read {value:1}\nexpect allow\n" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Run file" }));
+  fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
   await waitFor(() =>
     expect(payload).toEqual({
       files: [
@@ -634,7 +633,8 @@ test("Git editor previews run without local save and become stale after edits", 
   fireEvent.change(editor, {
     target: { value: "mcp/files/read {}\nexpect deny\n" },
   });
-  expect(screen.getByText("Stale result")).toBeVisible();
+  expect(screen.queryByText("Passed")).not.toBeInTheDocument();
+  expect(screen.getByText("Not run")).toBeVisible();
 });
 
 test("file previews show draft diagnostics without changing suite results or history", async () => {
@@ -667,10 +667,7 @@ test("file previews show draft diagnostics without changing suite results or his
     }),
   );
   showPage();
-  const summary = await screen.findByRole("status", {
-    name: "Last validation run",
-  });
-  expect(await within(summary).findByText("1 of 1 passed")).toBeVisible();
+  expect(await findLastRun()).toHaveTextContent("1 of 1 passed");
   fireEvent.click(screen.getByRole("link", { name: scenario.path }));
   const editor = await screen.findByRole("textbox", {
     name: "Policy validation scenario.appa",
@@ -679,8 +676,8 @@ test("file previews show draft diagnostics without changing suite results or his
     target: { value: "mcp/files/read {}\nexpect deny\n" },
   });
   const readsBeforePreview = historyReads;
-  fireEvent.click(screen.getByRole("button", { name: "Run file" }));
-  expect(await screen.findByText("Editor test")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
+  expect(await screen.findByText(/assertions evaluated/)).toBeVisible();
   expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
   expect(previewPayload).toEqual({
     files: [{ ...scenario, content: "mcp/files/read {}\nexpect deny\n" }],
@@ -693,11 +690,8 @@ test("file previews show draft diagnostics without changing suite results or his
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
-  const unchangedSummary = await screen.findByRole("status", {
-    name: "Last validation run",
-  });
-  expect(within(unchangedSummary).getByText("1 of 1 passed")).toBeVisible();
-  fireEvent.click(screen.getByRole("link", { name: "Run history" }));
+  expect(await findLastRun()).toHaveTextContent("1 of 1 passed");
+  await openRunHistory();
   await waitFor(() => expect(screen.getByText("Revision 2")).toBeVisible());
   expect(
     screen.getAllByRole("button", {
@@ -723,38 +717,15 @@ test("file preview failures preserve editor text and can be retried", async () =
   });
   const draft = `${scenario.content}# editor draft\n`;
   fireEvent.change(editor, { target: { value: draft } });
-  fireEvent.click(screen.getByRole("button", { name: "Run file" }));
+  fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
   expect(await screen.findByText("File test could not run")).toBeVisible();
   expect(editor).toHaveValue(draft);
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Run file" })).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "Test draft" })).toBeEnabled(),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Run file" }));
-  expect(await screen.findByText("Editor test")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
+  expect(await screen.findByText(/assertions evaluated/)).toBeVisible();
   expect(screen.queryByText("File test could not run")).not.toBeInTheDocument();
-});
-
-test.each([
-  "root",
-  "effective",
-])("file preview becomes stale when the %s policy changes", async (changed) => {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  server.use(http.post(`${endpoint}/preview`, () => HttpResponse.json(run)));
-  showPage(client);
-  await openValidationFile(scenario.path);
-  await screen.findByRole("textbox", {
-    name: "Policy validation scenario.appa",
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Run file" }));
-  await screen.findByText("Editor test");
-  const key =
-    changed === "root" ? ["guardrails-policy"] : ["openappa-effective-policy"];
-  await waitFor(() => expect(client.getQueryData(key)).toBeDefined());
-  act(() => client.setQueryData(key, { contentHash: "changed-policy-hash" }));
-  expect(await screen.findByText("Stale result")).toBeVisible();
-  expect(screen.getByText("Stale inputs")).toBeVisible();
 });
 
 test("file preview uses the editor draft and Run all uses persisted files after discard", async () => {
@@ -781,8 +752,8 @@ test("file preview uses the editor draft and Run all uses persisted files after 
     }),
     { target: { value: draft.content } },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Run file" }));
-  await screen.findByText("Editor test");
+  fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
+  await screen.findByText(/assertions evaluated/);
   expect(submitted).toEqual({
     files: [draft],
     sourceVersion: collection.version,
@@ -919,12 +890,18 @@ test("Git directory configuration lives in source settings; browser refresh stil
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
+  await screen.findByRole("link", { name: scenario.path });
+  expect(screen.queryByText("Managed in GitHub")).not.toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "More validation actions" }),
+  );
   expect(
-    await screen.findByRole("link", { name: /Managed in GitHub/ }),
+    await screen.findByRole("menuitem", { name: /Managed in GitHub/ }),
   ).toHaveAttribute(
     "href",
     "https://github.com/example/policies/tree/main/traces",
   );
+  await userEvent.keyboard("{Escape}");
   expect(
     screen.queryByRole("textbox", { name: "Repository validation directory" }),
   ).not.toBeInTheDocument();
@@ -999,7 +976,7 @@ test("duplicate filenames block saving until repaired, and a saved rename update
   ).toHaveValue("second contents");
 });
 
-test("list retains full totals across search and pagination", async () => {
+test("the last-run line adds up the searched rows, not just the current page", async () => {
   const files = Array.from({ length: 12 }, (_, i) => ({
     path: `scenario-${String(i + 1).padStart(3, "0")}.appa`,
     content: scenario.content,
@@ -1026,10 +1003,7 @@ test("list retains full totals across search and pagination", async () => {
     ).toBeVisible(),
   );
   expect(screen.getAllByText("Page 1 of 2")[0]).toBeVisible();
-  const summary = await screen.findByRole("status", {
-    name: "Last validation run",
-  });
-  expect(within(summary).getByText("6 of 12 passed")).toBeVisible();
+  expect(await findLastRun()).toHaveTextContent("6 of 12 passed");
   fireEvent.click(
     screen.getAllByRole("button", { name: "Go to next page" })[0],
   );
@@ -1038,6 +1012,7 @@ test("list retains full totals across search and pagination", async () => {
       screen.getByRole("link", { name: "scenario-011.appa" }),
     ).toBeVisible(),
   );
+  expect(await findLastRun()).toHaveTextContent("6 of 12 passed");
   fireEvent.change(screen.getByPlaceholderText("Search validations…"), {
     target: { value: "scenario-001" },
   });
@@ -1046,7 +1021,9 @@ test("list retains full totals across search and pagination", async () => {
       screen.getByRole("link", { name: "scenario-001.appa" }),
     ).toBeVisible(),
   );
-  expect(within(summary).getByText("6 of 12 passed")).toBeVisible();
+  await waitFor(async () =>
+    expect(await findLastRun()).toHaveTextContent("1 of 1 passed"),
+  );
   expect(screen.getAllByText("Page 1 of 1")[0]).toBeVisible();
   expect(
     screen.getAllByRole("button", { name: "Go to next page" })[0],
@@ -1080,10 +1057,9 @@ test("status filters keep failures, execution failures and unrun files apart and
       screen.getByRole("link", { name: "not_run.appa" }).closest("tr"),
     ).toHaveTextContent("Not run"),
   );
-  // The run skipped not_run.appa, so its counts do not describe the current files.
-  expect(
-    screen.queryByRole("status", { name: "Last validation run" }),
-  ).not.toBeInTheDocument();
+  // The run skipped not_run.appa: the summary counts it as not run rather
+  // than reporting the run's own totals.
+  expect(await findLastRun()).toHaveTextContent("1 of 3 passed · 1 not run");
   for (const [value, label] of [
     ["passed", "Passed"],
     ["failed", "Failed"],
@@ -1114,6 +1090,19 @@ test("status filters keep failures, execution failures and unrun files apart and
     }
   }
   fireEvent.click(screen.getByRole("link", { name: "cannot_run.appa" }));
+  // A saved file shows its recorded result without running it again.
+  await screen.findByRole("textbox", {
+    name: "Policy validation cannot_run.appa",
+  });
+  expect(
+    await screen.findByRole("link", {
+      name: `${formatDate({ date: run.createdAt, dateFormat: "MM/dd HH:mm" })} · Manual run`,
+    }),
+  ).toHaveAttribute("href", "/openappa/validation/history");
+  expect(screen.getAllByText("Cannot run").length).toBeGreaterThan(0);
+  expect(screen.getByText("Unknown tool in this policy")).toBeVisible();
+  expect(screen.queryByText("Not run")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Run file" })).toBeEnabled();
   fireEvent.click(
     await screen.findByRole("link", { name: "Back to validation" }),
   );
@@ -1122,21 +1111,15 @@ test("status filters keep failures, execution failures and unrun files apart and
   );
 });
 
-test("changed inputs retain the historical outcome and show its run time without stale statuses", async () => {
+test("changed inputs retain the historical outcome and show its run time", async () => {
   currentHref = "/openappa/validation?status=passed";
-  server.use(
-    http.get(`${endpoint}/runs`, () =>
-      HttpResponse.json([{ ...run, stale: true }]),
-    ),
-  );
+  server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json([run])));
   showPage();
   await waitFor(() => {
     const row = screen.getByRole("link", { name: scenario.path }).closest("tr");
     expect(row).toHaveTextContent("Passed");
     expect(row).toHaveTextContent(formatDate({ date: run.createdAt }));
   });
-  expect(screen.queryByText("Stale inputs")).not.toBeInTheDocument();
-  expect(screen.queryByText("Stale result")).not.toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("combobox", { name: "Filter by validation status" }),
   );
@@ -1154,12 +1137,14 @@ test("each file shows its own most recent run when it is absent from the latest 
     ),
     http.get(`${endpoint}/runs`, () =>
       HttpResponse.json([
-        run,
+        // A newer single-file run replaced scenario.appa's result.
+        { ...run, partial: true },
         {
           ...run,
           id: "older",
           createdAt,
           files: [
+            { ...run.files[0], status: "failed" },
             {
               ...run.files[0],
               path: older.path,
@@ -1180,9 +1165,29 @@ test("each file shows its own most recent run when it is absent from the latest 
     expect(olderRow).toHaveTextContent(formatDate({ date: createdAt }));
     expect(olderRow).toHaveTextContent("Expected deny, received allow");
   });
-  expect(
-    screen.getByRole("link", { name: scenario.path }).closest("tr"),
-  ).toHaveTextContent(formatDate({ date: run.createdAt }));
+  const newerRow = screen
+    .getByRole("link", { name: scenario.path })
+    .closest("tr");
+  expect(newerRow).toHaveTextContent(formatDate({ date: run.createdAt }));
+  expect(newerRow).toHaveTextContent("Passed");
+  // The summary adds up both files' newest results, not either run's totals.
+  const lastRun = await findLastRun();
+  expect(lastRun).toHaveTextContent("1 of 2 passed");
+  expect(lastRun).toHaveTextContent(
+    formatDate({ date: run.createdAt, dateFormat: "MM/dd HH:mm" }),
+  );
+  await userEvent.click(
+    within(
+      screen
+        .getByRole("link", { name: older.path })
+        .closest("tr") as HTMLElement,
+    ).getByRole("button", { name: "Failed: show why" }),
+  );
+  const why = await screen.findByRole("dialog");
+  expect(why).toHaveTextContent("Expected deny, received allow");
+  expect(why).toHaveTextContent(
+    `Manual run · ${formatDate({ date: createdAt, dateFormat: "MM/dd HH:mm" })}`,
+  );
 });
 
 test("page selection can expand across pages and remains stable across filters", async () => {
@@ -1210,15 +1215,10 @@ test("page selection can expand across pages and remains stable across filters",
     within(pageActions).queryByRole("button", { name: "Add validation" }),
   ).not.toBeInTheDocument();
   expect(
-    within(pageActions).queryByRole("button", {
-      name: "Write a validation",
-    }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "Write a validation" }),
+    within(pageActions).getByRole("button", { name: "Write a validation" }),
   ).toBeVisible();
   expect(
-    screen.getByRole("button", { name: "Explain validations" }),
+    within(pageActions).getByRole("button", { name: "Explain validations" }),
   ).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Write validations" }),
@@ -1371,14 +1371,14 @@ test("last-run summary links to paginated history and returns to the filtered co
   }));
   server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json(runs)));
   showPage();
-  const summary = await screen.findByRole("status", {
-    name: "Last validation run",
-  });
-  expect(await within(summary).findByText("1 of 1 passed")).toBeVisible();
-  expect(summary).toHaveTextContent(formatDate({ date: run.createdAt }));
+  const lastRun = await findLastRun();
+  expect(lastRun).toHaveTextContent("1 of 1 passed");
+  expect(lastRun).toHaveTextContent(
+    formatDate({ date: run.createdAt, dateFormat: "MM/dd HH:mm" }),
+  );
   expect(screen.getAllByRole("table")).toHaveLength(1);
   expect(screen.queryByText("Revision 20")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("link", { name: "Run history" }));
+  fireEvent.click(lastRun);
   expect(currentHref).toBe("/openappa/validation/history");
   await waitFor(() => expect(screen.getByText("Revision 20")).toBeVisible());
   expect(screen.getByText("Revision 11")).toBeVisible();
@@ -1408,9 +1408,9 @@ test("empty history stays reachable from the page actions", async () => {
   showPage();
   await screen.findByRole("link", { name: scenario.path });
   expect(
-    screen.queryByRole("status", { name: "Last validation run" }),
+    screen.queryByRole("link", { name: /^Last run/ }),
   ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("link", { name: "Run history" }));
+  await openRunHistory();
   expect(await screen.findByText("No runs yet.")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Go to next page" }),
@@ -1421,7 +1421,7 @@ test("empty history stays reachable from the page actions", async () => {
   );
 });
 
-test("last-run summary counts the current files and retains draft markers and policy diagnostics", async () => {
+test("last-run summary adds up the per-file statuses, so a refused policy passes none", async () => {
   server.use(
     http.get(endpoint, () =>
       HttpResponse.json({
@@ -1438,7 +1438,6 @@ test("last-run summary counts the current files and retains draft markers and po
         {
           ...run,
           draft: true,
-          stale: true,
           files: [
             run.files[0],
             { ...run.files[0], path: "failed.appa", status: "failed" },
@@ -1454,20 +1453,21 @@ test("last-run summary counts the current files and retains draft markers and po
     ),
   );
   showPage();
-  const summary = await screen.findByRole("status", {
-    name: "Last validation run",
-  });
-  expect(await within(summary).findByText("1 of 3 passed")).toBeVisible();
-  expect(within(summary).getByText("Draft run")).toBeVisible();
-  expect(within(summary).queryByText("Stale inputs")).not.toBeInTheDocument();
-  expect(screen.getAllByText("Missing tool contract").length).toBeGreaterThan(
-    0,
-  );
-  expect(screen.getByText("Unused rule")).toBeVisible();
-  // A refused policy decided nothing about any file.
+  // A refused policy decided nothing about any file, so the summary agrees
+  // with the Status column instead of repeating the run's raw counts.
+  expect(await findLastRun()).toHaveTextContent("0 of 3 passed");
   const row = screen.getByRole("link", { name: scenario.path }).closest("tr");
   expect(row).toHaveTextContent("Cannot run");
   expect(row).toHaveTextContent(formatDate({ date: run.createdAt }));
+  expect(row).toHaveTextContent("Missing tool contract");
+  await userEvent.click(
+    within(row as HTMLElement).getByRole("button", {
+      name: "Cannot run: show why",
+    }),
+  );
+  expect(await screen.findByRole("dialog")).toHaveTextContent(
+    "Missing tool contract",
+  );
 });
 
 test.each([
@@ -1490,12 +1490,7 @@ test.each([
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   if (href.endsWith("/history"))
     await waitFor(() => expect(screen.getByText("Revision 2")).toBeVisible());
-  else
-    expect(
-      await within(
-        await screen.findByRole("status", { name: "Last validation run" }),
-      ).findByText("1 of 1 passed"),
-    ).toBeVisible();
+  else expect(await findLastRun()).toHaveTextContent("1 of 1 passed");
 });
 
 test("the new validation editor creates only after submission", async () => {
@@ -1762,7 +1757,14 @@ test("policy readers cannot select directories or edit files", async () => {
     ),
   );
   showPage();
-  expect(await screen.findByText("Managed in GitHub")).toBeVisible();
+  await screen.findByRole("link", { name: scenario.path });
+  await userEvent.click(
+    screen.getByRole("button", { name: "More validation actions" }),
+  );
+  expect(
+    await screen.findByRole("menuitem", { name: /Managed in GitHub/ }),
+  ).toBeVisible();
+  await userEvent.keyboard("{Escape}");
   expect(
     screen.queryByRole("button", { name: "Use directory" }),
   ).not.toBeInTheDocument();
@@ -1772,6 +1774,7 @@ test("policy readers cannot select directories or edit files", async () => {
       name: "Policy validation scenario.appa",
     }),
   ).toHaveAttribute("readonly");
+  expect(screen.getByText("Managed in GitHub")).toBeVisible();
   expect(screen.getByRole("button", { name: "Run file" })).toBeDisabled();
 });
 
@@ -1782,6 +1785,19 @@ test("inventory rows open files while selection and compact actions stay indepen
       mutations: { retry: false },
     },
   });
+  const files = [scenario, { ...scenario, path: "other.appa" }];
+  const submissions: unknown[] = [];
+  let finishRun: () => void = () => undefined;
+  server.use(
+    http.get(endpoint, () => HttpResponse.json({ ...collection, files })),
+    http.post(`${endpoint}/run`, async ({ request }) => {
+      submissions.push(await request.json());
+      await new Promise<void>((resolve) => {
+        finishRun = resolve;
+      });
+      return HttpResponse.json({ ...run, partial: true });
+    }),
+  );
   showPage(client);
   await screen.findByRole("link", { name: scenario.path });
   fireEvent.click(
@@ -1791,9 +1807,9 @@ test("inventory rows open files while selection and compact actions stay indepen
   fireEvent.click(
     screen.getByRole("checkbox", { name: `Select ${scenario.path}` }),
   );
-  const statusCell = await screen.findByRole("cell", {
-    name: /Not run|Passed/,
-  });
+  const statusCell = (
+    await screen.findAllByRole("cell", { name: /Not run|Passed/ })
+  )[0];
   fireEvent.click(statusCell, { ctrlKey: true });
   expect(currentHref).toBe("/openappa/validation");
   fireEvent.click(statusCell);
@@ -1802,30 +1818,72 @@ test("inventory rows open files while selection and compact actions stay indepen
       name: "Policy validation scenario.appa",
     }),
   ).toBeVisible();
+  const mutationsBeforeBack = new Set(client.getMutationCache().getAll());
   fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
   await screen.findByRole("link", { name: scenario.path });
-  expect(
-    screen.queryByRole("button", { name: `Run ${scenario.path}` }),
-  ).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: `Run ${scenario.path}` }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: `Run ${scenario.path}` }));
   expect(currentHref).toBe("/openappa/validation");
-  // Inspection replaces the row actions, so wait for its result before opening
-  // the menu rather than clicking a menu item that can be unmounted mid-click.
+  await waitFor(() =>
+    expect(submissions).toEqual([
+      {
+        files: [scenario],
+        sourceVersion: collection.version,
+        directory: "traces",
+        partial: true,
+      },
+    ]),
+  );
+  expect(
+    screen.getByRole("link", { name: scenario.path }).closest("tr"),
+  ).toHaveTextContent("Running");
+  expect(
+    screen.getByRole("link", { name: "other.appa" }).closest("tr"),
+  ).not.toHaveTextContent("Running");
+  finishRun();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("link", { name: scenario.path }).closest("tr"),
+    ).not.toHaveTextContent("Running"),
+  );
+  // Inspection replaces the row actions, so wait for the inspection the
+  // reopened list started before opening the menu, rather than clicking a menu
+  // item that can be unmounted mid-click. The run succeeds too, so tell the
+  // inspection apart by its variables: it sends only the files.
   await waitFor(
     () =>
       expect(
         client
           .getMutationCache()
           .getAll()
-          .some((mutation) => mutation.state.status === "success"),
+          .some(
+            (mutation) =>
+              !mutationsBeforeBack.has(mutation) &&
+              mutation.state.status === "success" &&
+              Object.keys(mutation.state.variables ?? {}).join() === "files",
+          ),
       ).toBe(true),
     { timeout: 5000 },
   );
-  await userEvent.click(
-    screen.getByRole("button", { name: `More actions ${scenario.path}` }),
+  // A late re-render can still swap the row's actions and close the menu
+  // under load, so open it until Delete is there to click.
+  await waitFor(
+    async () => {
+      if (!screen.queryByRole("menu"))
+        await userEvent.click(
+          screen.getByRole("button", {
+            name: `More actions ${scenario.path}`,
+          }),
+        );
+      expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+    },
+    { timeout: 5000 },
   );
-  await userEvent.click(
-    await screen.findByRole("menuitem", { name: "Delete" }),
-  );
+  await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });
@@ -1877,6 +1935,20 @@ test("failed confirmed deletion retains the file and allows retry", async () => 
     ).not.toBeInTheDocument();
   });
 });
+
+/** The compact last-run line beside the filters; it links to run history. */
+function findLastRun() {
+  return screen.findByRole("link", { name: /^Last run/ });
+}
+
+async function openRunHistory() {
+  await userEvent.click(
+    screen.getByRole("button", { name: "More validation actions" }),
+  );
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: "Run history" }),
+  );
+}
 
 async function openValidationFile(path: string) {
   await screen.findByRole("link", { name: path });
@@ -1939,23 +2011,27 @@ function showPage(
   );
 }
 
-test("policy change results are identified in the last run and history", async () => {
+test("policy change and single-file runs are identified in run history", async () => {
   server.use(
     http.get(`${endpoint}/runs`, () =>
       HttpResponse.json([
         { ...run, trigger: "policy_change", createdBy: null },
+        {
+          ...run,
+          id: "single",
+          createdAt: "2026-10-05T10:00:00.000Z",
+          policyRevision: 1,
+          partial: true,
+        },
       ]),
     ),
   );
   showPage();
-  const summary = await screen.findByRole("status", {
-    name: "Last validation run",
-  });
-  expect(await within(summary).findByText("Policy change run")).toBeVisible();
-  fireEvent.click(screen.getByRole("link", { name: "Run history" }));
+  fireEvent.click(await findLastRun());
   await waitFor(() =>
     expect(screen.getByText("Policy change run")).toBeVisible(),
   );
+  expect(screen.getByText("Single file run")).toBeVisible();
 });
 
 test("a refreshed automatic result replaces an older manual run in the inventory", async () => {
@@ -1986,9 +2062,9 @@ test("a refreshed automatic result replaces an older manual run in the inventory
     client.invalidateQueries({ queryKey: ["openappa-policy-test-runs"] }),
   );
   await waitFor(() => {
-    const summary = screen.getByRole("status", { name: "Last validation run" });
-    expect(within(summary).getByText("Git sync run")).toBeVisible();
-    expect(within(summary).getByText("0 of 1 passed")).toBeVisible();
+    expect(screen.getByRole("link", { name: /^Last run/ })).toHaveTextContent(
+      "0 of 1 passed",
+    );
     expect(
       screen.getByRole("link", { name: scenario.path }).closest("tr"),
     ).toHaveTextContent("Failed");
@@ -2008,16 +2084,14 @@ test("unavailable automatic runs explain the problem in the summary and saved de
   await waitFor(() =>
     expect(screen.getAllByText(message).length).toBeGreaterThan(0),
   );
-  const summary = await screen.findByRole("status", {
-    name: "Last validation run",
-  });
-  expect(within(summary).getByText("Cannot run")).toBeVisible();
-  expect(within(summary).getByText("Git sync run")).toBeVisible();
+  const lastRun = await findLastRun();
+  expect(lastRun).toHaveTextContent("Cannot run");
+  expect(lastRun).not.toHaveTextContent(/passed/);
+  expect(screen.getByText("Validation could not run")).toBeVisible();
   // The run stopped before replaying any file, so no file has a result.
   const row = screen.getByRole("link", { name: scenario.path }).closest("tr");
   expect(row).toHaveTextContent("Not run");
-  expect(within(summary).queryByText(/passed/)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("link", { name: "Run history" }));
+  fireEvent.click(lastRun);
   await screen.findByText("Revision 2");
   fireEvent.click(screen.getByText("Revision 2"));
   const dialog = await screen.findByRole("dialog", {

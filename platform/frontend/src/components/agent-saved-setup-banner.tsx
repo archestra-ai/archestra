@@ -37,7 +37,8 @@ export function AgentSavedSetupBanner({
     includeKeyId: agent?.llmApiKeyId ?? undefined,
     toastOnError: false,
   });
-  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  // The credential whose Set up was clicked: its dialog asks for it alone.
+  const [credentialKey, setCredentialKey] = useState<string | null>(null);
   if (!runtime) {
     return <AgentSetupBanner key={agentId} items={[]} showReady={showReady} />;
   }
@@ -108,7 +109,7 @@ export function AgentSavedSetupBanner({
             }
           : {
               id: key,
-              label: `Provide ${label}`,
+              label,
               description: `This agent needs ${label} in its container. Set a value, or connect it.`,
               status: "now",
               action: (
@@ -116,7 +117,7 @@ export function AgentSavedSetupBanner({
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setCredentialsOpen(true)}
+                  onClick={() => setCredentialKey(key)}
                 >
                   Set up
                 </Button>
@@ -126,7 +127,7 @@ export function AgentSavedSetupBanner({
   if (needsClaudeAccount) {
     items.unshift({
       id: "CLAUDE_CODE_ACCOUNT",
-      label: "Connect your Claude subscription",
+      label: "Claude subscription",
       description:
         "Runs use your own Pro or Max plan. Each person who uses this agent connects their own; nobody shares yours.",
       status: "now",
@@ -220,12 +221,13 @@ export function AgentSavedSetupBanner({
           resetKey={`${agentId}:${runtime.command?.join(" ")}:${runtime.claudeCode?.authentication}:${JSON.stringify(runtime.credentials ?? [])}`}
         />
       )}
-      {credentialsOpen && (
+      {credentialKey && (
         <AgentRuntimeCredentialsDialog
           agentId={agentId}
           declarations={runtime.credentials ?? []}
           canEditAgent={canEditAgent}
-          onClose={() => setCredentialsOpen(false)}
+          onlyKeys={[credentialKey]}
+          onClose={() => setCredentialKey(null)}
         />
       )}
     </>

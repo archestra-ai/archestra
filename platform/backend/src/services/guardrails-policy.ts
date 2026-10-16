@@ -166,6 +166,9 @@ function rebindingWarning(rebinding: Rebinding): string {
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
 
+/** The model annotator the default policy routes every call no rule names to. */
+export const UNDECLARED_TOOL_ANNOTATOR = "archestra.undeclared-tool";
+
 export const guardrailsPolicyService = {
   async get(organizationId: string): Promise<GuardrailsPolicy> {
     requireEnabled();
@@ -192,11 +195,6 @@ export const guardrailsPolicyService = {
         emits: [],
       },
     };
-  },
-
-  /** The no-op annotator endpoint and the answer it serves, for offline replay. */
-  noopAnnotator() {
-    return { url: noopAnnotatorUrl(), response: this.annotate() };
   },
 
   /**
@@ -233,7 +231,10 @@ export const guardrailsPolicyService = {
       params.resolved ??
       (await resolveBoth({ organizationId, content, previous }));
     const resolution = resolved.submitted;
-    const errors = [...resolution.errors];
+    const errors = [
+      ...resolution.errors,
+      ...(await openappaDeclarations.credentialErrors(content)),
+    ];
     const kept = new Set(resolved.previous.entries.map((entry) => entry.entry));
     const warnings: string[] = [];
     for (const entry of resolution.entries)
@@ -368,6 +369,7 @@ function requireEnabled() {
   if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
+const CLAUDE_CODE_BATTERY = "claude-code";
 function noopAnnotatorUrl() {
   return `http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}`;
 }
@@ -378,14 +380,25 @@ function hash(content: string) {
 /**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
- * carry in this deployment, reads the organization's members as `internal`, and
- * has the organization's default model label each sandbox command.
+ * carry in this deployment, and the bundled `claude-code` battery over the
+ * client built-ins this host derives as `host/archestra/<name>`. It reads the
+ * organization's members as `internal`, and has the organization's default
+ * model label each sandbox command, each shell command the client battery
+ * routes to a model, and each tool no rule names.
  */
 export function initialPolicy(): string {
-  return `include = ["${bundledEntry(ARCHESTRA_BATTERY)}"]
+  return `include = [
+  "${bundledEntry(ARCHESTRA_BATTERY)}",
+  "${bundledEntry(CLAUDE_CODE_BATTERY)}",
+]
 
-[server_aliases]
+[aliases.mcp]
 ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
+
+# The client battery's rules name Claude Code's tools; here they govern the
+# built-ins of whichever client runs through this deployment.
+[aliases.host]
+${CLAUDE_CODE_BATTERY} = ["archestra"]
 
 [policy]
 version = 2
@@ -405,6 +418,8 @@ on = ["tool_output"]
 [policy.sanitizer.permits]
 trust = { from = "suspicious", to = "trusted" }
 
+# The earlier default's catch-all, kept declared so conversations opened under
+# it are still served.
 [[policy.annotator]]
 name = "noop"
 
@@ -422,24 +437,58 @@ effects = []
 name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
 annotator = "archestra.run-command"
 
+# The client battery's shell annotators, with the battery's own mandate, asked
+# of the organization's default model instead of a local claude process.
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
+builtin = "archestra"
+hint = "\`context.github\` is the deployment's finding about the repository and pull request or issue the command reaches. A push, pull request, issue, release, or comment into a public repository, or one it does not establish, requires audience public; into a private or internal one, internal. A read keeps the session's audience."
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
+builtin = "archestra"
+
+# Labels each call no rule names with the organization's default model.
+[[policy.annotator]]
+name = "${UNDECLARED_TOOL_ANNOTATOR}"
+builtin = "archestra"
+hint = "No rule names this tool. A client built-in runs on the user's machine with the user's access; an MCP tool here has no battery describing it."
+ranks = ["suspicious", "trusted"]
+marks = ["human-approval"]
+
 # Questions carry no data: they keep an empty label even if the catch-all
 # below is made stricter. search_tools gets the same from the archestra battery.
 [[policy.tool]]
 name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
 delta = {}
 
-# Tools without a specific rule have no additional restrictions.
+# Starting a subagent opens a child trajectory under this deployment's context
+# control; what the subagent hands back is checked when it returns.
+[[policy.tool]]
+name = "host/archestra/Agent"
+delta = {}
+
+# \`Task\` is the earlier name of \`Agent\`.
+[[policy.tool]]
+name = "host/archestra/Task"
+delta = {}
+
 [[policy.tool]]
 name = "*"
-annotator = "noop"
+annotator = "${UNDECLARED_TOOL_ANNOTATOR}"
 
-# Review one exact call that explicitly requires human approval.
+# Review one exact call for any attention mark, trust or audience gap.
 [[policy.authority]]
 name = "hitl"
 hint = "Ask the person running this session to approve this exact call."
 
 [policy.authority.permits]
-attention = ["human-approval"]
+trust_below = "trusted"
+audience_missing = ["public"]
+attention = ["*"]
+
+[externals]
+timeout_ms = 20000
 
 [externals.authorities.hitl]
 builtin = "hitl"

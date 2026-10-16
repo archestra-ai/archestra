@@ -1,8 +1,16 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
-import type { ErrorEvent, EventHint } from "@sentry/core";
+import { SpanKind } from "@opentelemetry/api";
+import { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
+import type { ErrorEvent, EventHint, TransactionEvent } from "@sentry/core";
+import * as Sentry from "@sentry/node";
+import { SentrySampler, SentrySpanProcessor } from "@sentry/opentelemetry";
 import { describe, expect, test } from "vitest";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
-import { buildRawProviderError, filterErrorEvent } from "./sentry";
+import {
+  buildRawProviderError,
+  filterErrorEvent,
+  filterTransactionEvent,
+} from "./sentry";
 
 function makeEvent(): ErrorEvent {
   return {} as ErrorEvent;
@@ -33,6 +41,44 @@ describe("buildRawProviderError", () => {
 });
 
 describe("filterErrorEvent", () => {
+  test("removes request content while retaining error diagnostics", () => {
+    const event: ErrorEvent = {
+      type: undefined,
+      message: "Request failed",
+      tags: { component: "api" },
+      request: {
+        method: "POST",
+        url: "https://app.example.com/api/chat?token=private-query#private-fragment",
+        headers: {
+          Authorization: "Bearer private-token",
+          authorization: "private-key",
+          Cookie: "session=private-session",
+          "X-Api-Key": "private-api-key",
+        },
+        cookies: { session: "private-session" },
+        data: { messages: [{ content: "Private conversation" }] },
+        query_string: "token=private-query",
+      },
+    };
+
+    const result = filterErrorEvent(
+      event,
+      hintFor(new Error("Request failed")),
+    );
+
+    expect(result).toMatchObject({
+      message: "Request failed",
+      tags: { component: "api" },
+      request: { method: "POST", url: "https://app.example.com/api/chat" },
+    });
+    expect(result?.request).toEqual({
+      method: "POST",
+      url: "https://app.example.com/api/chat",
+    });
+    expect(JSON.stringify(result)).not.toContain("private-");
+    expect(JSON.stringify(result)).not.toContain("Private conversation");
+  });
+
   test("drops an upstream provider client error (4xx)", () => {
     // 429 rate limit, 401 invalid credentials, 403 provider block — all
     // reflect the request/config, not a bug in our code.
@@ -152,5 +198,116 @@ describe("filterErrorEvent", () => {
         hintFor(new Error("undefined is not a function")),
       ),
     ).toBe(event);
+  });
+});
+
+describe("filterTransactionEvent", () => {
+  test("strips request content from retained transactions", () => {
+    const event: TransactionEvent = {
+      type: "transaction",
+      transaction: "POST /api/chat",
+      request: {
+        method: "POST",
+        url: "/api/chat?token=private-token#private-fragment",
+        headers: { Authorization: "Bearer private-token" },
+        data: { content: "Private request body" },
+        cookies: { session: "private-session" },
+        query_string: "token=private-token",
+      },
+    };
+
+    const result = filterTransactionEvent(event);
+
+    expect(result?.transaction).toBe("POST /api/chat");
+    expect(result?.request).toEqual({ method: "POST", url: "/api/chat" });
+  });
+
+  function mcpGatewayTransaction(method?: string): TransactionEvent {
+    return {
+      type: "transaction",
+      transaction: "POST /v1/mcp/:profileId",
+      contexts: {
+        trace: {
+          trace_id: "0".repeat(32),
+          span_id: "0".repeat(16),
+          data: method ? { "mcp.method.name": method } : {},
+        },
+      },
+    };
+  }
+
+  test("drops a long-lived MCP stream", () => {
+    expect(
+      filterTransactionEvent(mcpGatewayTransaction("subscriptions/listen")),
+    ).toBeNull();
+  });
+
+  test("keeps ordinary MCP gateway requests on the same route", () => {
+    for (const event of [
+      mcpGatewayTransaction("tools/call"),
+      mcpGatewayTransaction("tools/list"),
+      mcpGatewayTransaction(),
+    ]) {
+      expect(filterTransactionEvent(event)).toBe(event);
+    }
+  });
+
+  // Runs server spans through the SDK's own span-to-transaction export. An SDK
+  // upgrade that moves span attributes out of `contexts.trace.data` fails here
+  // instead of silently sending the streams again.
+  test("reads the method from the transaction the SDK builds for a server span", async () => {
+    const decisions: Array<[unknown, boolean]> = [];
+    const client = new Sentry.NodeClient({
+      dsn: "http://public@127.0.0.1:9/1",
+      integrations: [],
+      tracesSampleRate: 1,
+      stackParser: Sentry.defaultStackParser,
+      transport: (options) =>
+        Sentry.createTransport(options, async () => ({ statusCode: 200 })),
+      beforeSendTransaction: (event) => {
+        decisions.push([
+          event.contexts?.trace?.data?.["mcp.method.name"],
+          filterTransactionEvent(event) === null,
+        ]);
+        return null;
+      },
+    });
+    const provider = new BasicTracerProvider({
+      sampler: new SentrySampler(client),
+      spanProcessors: [new SentrySpanProcessor()],
+    });
+    Sentry.setCurrentClient(client);
+    client.init();
+    try {
+      const tracer = provider.getTracer("test");
+      for (const method of ["subscriptions/listen", "tools/call"]) {
+        const span = tracer.startSpan("POST /v1/mcp/:profileId", {
+          kind: SpanKind.SERVER,
+          attributes: { "sentry.op": "http.server" },
+        });
+        span.setAttribute("mcp.method.name", method);
+        span.end();
+      }
+      await provider.forceFlush();
+      await client.flush(2_000);
+    } finally {
+      Sentry.getCurrentScope().setClient(undefined);
+      await client.close();
+      await provider.shutdown();
+    }
+
+    expect(decisions).toEqual([
+      ["subscriptions/listen", true],
+      ["tools/call", false],
+    ]);
+  });
+
+  test("still drops noisy transactions by name", () => {
+    expect(
+      filterTransactionEvent({
+        type: "transaction",
+        transaction: "GET /v1/mcp/:profileId",
+      }),
+    ).toBeNull();
   });
 });

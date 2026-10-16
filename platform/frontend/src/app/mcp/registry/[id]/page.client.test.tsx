@@ -107,9 +107,26 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
       "useMcpDeploymentStatuses",
       "useDismissMcpServerAlerts",
       "useRestoreMcpServerAlerts",
+      "useMcpServersAssignedAgents",
     ],
     {
       useMcpServers: () => useMcpServers(),
+      // Stands in for GET /api/mcp_server/:id, which returns the same install
+      // with its agents.
+      useMcpServersAssignedAgents: ({ serverIds }: { serverIds: string[] }) => {
+        const servers: Array<{ id: string; assignedAgents?: unknown[] }> =
+          useMcpServers()?.data ?? [];
+        return {
+          agentsByServerId: new Map(
+            serverIds.map((id) => [
+              id,
+              servers.find((server) => server.id === id)?.assignedAgents ?? [],
+            ]),
+          ),
+          isPending: false,
+          isError: false,
+        };
+      },
       useAutoModeAgents: () => ({ data: [] }),
       useMcpDeploymentStatuses: () => useMcpDeploymentStatuses(),
       useMcpInstallationStatusCacheSync: () => {},

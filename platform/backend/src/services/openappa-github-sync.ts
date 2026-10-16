@@ -14,7 +14,6 @@ import {
 } from "@/openappa/declarations";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
-import { CredentialAccess } from "@/services/credential-access";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   resolveOpenAppaGithubAccess,
@@ -22,10 +21,7 @@ import {
 } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
-import type {
-  AppaGithubSource,
-  HeldPullReason,
-} from "@/types/openappa-github-sync";
+import type { AppaGithubSource } from "@/types/openappa-github-sync";
 
 export async function getAppaGithubSync(organizationId: string) {
   const [row, suite] = await Promise.all([
@@ -47,9 +43,8 @@ export async function getAppaGithubSync(organizationId: string) {
       githubWebUrl,
       provider,
     };
-  // Neither the accepted bytes nor the held ones leave the database: the panel
-  // reads a held pull by its hash, its commit and its reasons.
-  const { content, heldContent, ...source } = row;
+  // The accepted bytes never leave the database.
+  const { content, ...source } = row;
   return {
     enabled: enterpriseTier.isOpenappaActive(),
     source,
@@ -86,8 +81,7 @@ export async function configureAppaGithubSync(params: {
  * Make an existing repository's policy file the organization's policy source
  * and pull it before answering, so the caller learns at once whether the
  * repository, file and credential work. A first pull that fails leaves the
- * sync stopped and the current policy in force; a held pull stays connected
- * for an operator to accept.
+ * sync stopped and the current policy in force.
  */
 export async function connectAppaGithubRepository(params: {
   organizationId: string;
@@ -108,7 +102,7 @@ export async function connectAppaGithubRepository(params: {
   await saveSource(params);
   await syncAppaGithubPolicy(params.organizationId);
   const row = await OpenAppaGithubSyncModel.find(params.organizationId);
-  if (row?.lastSyncError && !row.heldContentHash) {
+  if (row?.lastSyncError) {
     await OpenAppaGithubSyncModel.setInterval(params.organizationId, null);
     throw new ApiError(
       400,
@@ -503,92 +497,6 @@ export async function updateAppaGithubSync(params: {
   return getAppaGithubSync(params.organizationId);
 }
 
-/**
- * Publish a held pull on an operator's authority. Each reason the hold names
- * carries its own permission, since a hold is exactly the authorization a pull
- * cannot give itself: `drops_batteries` takes the permissions a policy write
- * takes, `changes_credentials` the one a credential grant takes.
- */
-export async function getHeldAppaGithubPull(organizationId: string) {
-  assertEnabled();
-  const row = await OpenAppaGithubSyncModel.find(organizationId);
-  if (!row?.heldContent) return null;
-  const local = await guardrailsPolicyService.get(organizationId);
-  const changes = heldChanges({
-    ...(await resolvePair({
-      organizationId,
-      local: local.content,
-      pulled: row.heldContent,
-    })),
-    pendingPublish:
-      row.declarationsPendingPublish ||
-      row.heldReasons.includes("drops_batteries"),
-  });
-  return {
-    sourceCommit: row.heldSourceCommit,
-    reasons: row.heldReasons,
-    grants: changes.granted,
-    droppedBatteries: changes.dropped,
-  };
-}
-
-export async function acceptHeldAppaGithubPull(params: {
-  organizationId: string;
-  userId: string;
-}) {
-  assertEnabled();
-  const { organizationId, userId } = params;
-  const row = await OpenAppaGithubSyncModel.find(organizationId);
-  if (!row?.heldContent || !row.heldContentHash)
-    throw new ApiError(409, "There is no held pull to accept");
-  const local = await guardrailsPolicyService.get(organizationId);
-  const changes = heldChanges({
-    ...(await resolvePair({
-      organizationId,
-      local: local.content,
-      pulled: row.heldContent,
-    })),
-    // The record of what was accepted has to name the batteries the pull drops,
-    // whatever the flag says by now: the hold is why they are being named.
-    pendingPublish:
-      row.declarationsPendingPublish ||
-      row.heldReasons.includes("drops_batteries"),
-  });
-  // Bindings can change while a pull is held, so the grants are judged as they
-  // stand now as well as by the reasons recorded at hold time.
-  if (
-    row.heldReasons.includes("changes_credentials") ||
-    changes.granted.length > 0
-  )
-    await CredentialAccess.requireOnEvery({
-      organizationId,
-      userId,
-      action: "use",
-      message:
-        "Use access to every credential is required: this pull changes which credentials batteries or the root policy read",
-    });
-  const published = await OpenAppaGithubSyncModel.publishHeld({
-    organizationId,
-    userId,
-    heldContentHash: row.heldContentHash,
-    revision: row.revision,
-  });
-  if (!published) throw new ApiError(409, "There is no held pull to accept");
-  await openappaBatteriesService.recompileOrganizations([organizationId]);
-  if (local.revision === 0 || local.contentHash !== published.contentHash)
-    await queuePolicyValidation(organizationId, published.contentHash);
-  return {
-    accepted: {
-      contentHash: published.contentHash,
-      sourceCommit: published.sourceCommit,
-      reasons: row.heldReasons,
-      droppedBatteries: changes.dropped,
-      changedVariables: changes.granted.map((grant) => grant.variable),
-    },
-    status: await getAppaGithubSync(organizationId),
-  };
-}
-
 export async function syncAppaGithubPolicy(organizationId: string) {
   if (!enterpriseTier.isOpenappaActive()) return;
   const row = await OpenAppaGithubSyncModel.find(organizationId);
@@ -631,6 +539,11 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     const { content } = read;
     const commit = { sha: read.commitSha };
     const local = await guardrailsPolicyService.get(organizationId);
+    // Named on its own: the generic refusal below would hide what to change.
+    const credentialErrors =
+      await openappaDeclarations.credentialErrors(content);
+    if (credentialErrors.length > 0)
+      throw new ApiError(400, credentialErrors.join("\n"));
     const resolved = await resolvePair({
       organizationId,
       local: local.content,
@@ -654,23 +567,20 @@ export async function syncAppaGithubPolicy(organizationId: string) {
         400,
         "APPA rejected this policy. Use a valid, self-contained TOML policy whose battery includes this deployment can answer.",
       );
-    const changes = heldChanges({
-      ...resolved,
-      pendingPublish: row.declarationsPendingPublish,
-    });
+    const granted = uploadedGrants(resolved);
+    if (granted.length > 0)
+      throw new ApiError(
+        400,
+        `The repository's policy would hand ${granted
+          .map(
+            (grant) =>
+              `${grant.variable} to the uploaded ${grant.battery} battery`,
+          )
+          .join(
+            ", and ",
+          )}. A pull cannot give a credential to new code; remove the include, or unbind the variable.`,
+      );
     const contentHash = createHash("sha256").update(content).digest("hex");
-    if (changes.reasons.length > 0) {
-      await OpenAppaGithubSyncModel.hold({
-        organizationId,
-        revision: row.revision,
-        content,
-        contentHash,
-        sourceCommit: commit.sha,
-        reasons: changes.reasons,
-        error: holdMessage(changes),
-      });
-      return;
-    }
     const published = await OpenAppaGithubSyncModel.finish({
       organizationId,
       revision: row.revision,
@@ -725,34 +635,27 @@ export async function checkDueAppaGithubSyncs() {
 }
 
 /**
- * What a pulled document changes that the repository cannot authorize on its own:
- * a credential grant it adds or rekeys, and — while this deployment's own
- * declarations are not in the repository yet — a battery it would drop.
+ * The stored bindings a pull would newly hand to an uploaded battery. The
+ * pulled text names no credential (`credentialErrors` refuses it), so every
+ * grant is a binding reaching an included battery. A bundled battery is code
+ * this deployment ships and the binding was set for it; an uploaded package
+ * reading a bound variable is code the repository chose, so the pull is
+ * refused rather than left for someone to approve.
  */
-function heldChanges(params: {
+function uploadedGrants(params: {
   local: PolicyResolution;
   pulled: PolicyResolution;
-  pendingPublish?: boolean;
-}): {
-  reasons: HeldPullReason[];
-  granted: Array<{ battery: string; variable: string; key: string }>;
-  dropped: string[];
-} {
+}): Array<{ battery: string; variable: string; key: string }> {
   const { local, pulled } = params;
-  const granted = addedGrants(
+  const uploaded = new Set(
+    pulled.entries
+      .filter((entry) => entry.source !== "bundled")
+      .map((entry) => entry.name),
+  );
+  return addedGrants(
     openappaDeclarations.grants(local),
     openappaDeclarations.grants(pulled),
-  );
-  const included = new Set(pulled.entries.map((entry) => entry.name));
-  const dropped = params.pendingPublish
-    ? local.entries
-        .map((entry) => entry.name)
-        .filter((name) => !included.has(name))
-    : [];
-  const reasons: HeldPullReason[] = [];
-  if (dropped.length > 0) reasons.push("drops_batteries");
-  if (granted.length > 0) reasons.push("changes_credentials");
-  return { reasons, granted, dropped };
+  ).filter((grant) => uploaded.has(grant.battery));
 }
 
 /**
@@ -776,27 +679,6 @@ async function resolvePair(params: {
     }),
   ]);
   return { local: local.resolution, pulled: pulled.resolution };
-}
-
-function holdMessage(changes: {
-  reasons: HeldPullReason[];
-  granted: Array<{ battery: string; key: string }>;
-  dropped: string[];
-}): string {
-  const sentences: string[] = [];
-  if (changes.reasons.includes("changes_credentials"))
-    sentences.push(
-      `The repository's policy gives ${changes.granted
-        .map(
-          (grant) => `the ${grant.battery} battery the ${grant.key} credential`,
-        )
-        .join(", and ")}.`,
-    );
-  if (changes.reasons.includes("drops_batteries"))
-    sentences.push(
-      `${sentences.length ? "It also removes" : "The repository's policy removes"} batteries added here: ${changes.dropped.join(", ")}.`,
-    );
-  return sentences.join(" ");
 }
 
 async function saveSource(params: {

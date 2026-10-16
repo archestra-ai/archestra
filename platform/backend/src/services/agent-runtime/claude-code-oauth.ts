@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { DEFAULT_CLAUDE_CODE_MODEL } from "@archestra/shared/model-constants";
 import { z } from "zod";
 import { ApiError } from "@/types/api";
 
@@ -90,8 +91,13 @@ export const claudeCodeOAuth = {
       throw new ApiError(502, "Claude returned an invalid model list.");
     return [
       {
+        value: DEFAULT_CLAUDE_CODE_MODEL,
+        displayName: "Opus",
+        description: "Default for new Claude Code runs",
+      },
+      {
         value: "default",
-        displayName: "Default",
+        displayName: "Claude account default",
         description: "Claude Code's default model for your account",
       },
       ...result.data.data.map((model) => ({

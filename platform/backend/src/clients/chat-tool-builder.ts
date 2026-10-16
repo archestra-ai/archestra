@@ -71,11 +71,14 @@ import { agentOwner } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
-  tokenValue: string;
+  /** Bearer value for the loopback gateway; null when tools are listed in-process */
+  tokenValue: string | null;
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;
   isUserToken?: boolean;
+  /** Set when the caller acts as a service account */
+  serviceAccountId?: string;
 }
 
 /**
@@ -968,7 +971,7 @@ interface ToolExecutionContext {
   isolationKey?: string;
   mcpGwToken: Pick<
     McpGatewayToken,
-    "tokenId" | "teamId" | "isOrganizationToken"
+    "tokenId" | "teamId" | "isOrganizationToken" | "serviceAccountId"
   > | null;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
@@ -1096,6 +1099,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         tokenId: mcpGwToken.tokenId,
         teamId: mcpGwToken.teamId,
         isOrganizationToken: mcpGwToken.isOrganizationToken,
+        serviceAccountId: mcpGwToken.serviceAccountId,
         organizationId,
         userId,
       }
@@ -1454,6 +1458,7 @@ function buildTokenAuthContext({
     organizationId,
     isUserToken: mcpGwToken.isUserToken,
     userId: mcpGwToken.isUserToken ? userId : undefined,
+    serviceAccountId: mcpGwToken.serviceAccountId,
   };
 }
 

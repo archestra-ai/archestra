@@ -34,9 +34,9 @@ export function getFrontendBrowserSentryOptions(
     environment: params.environment,
     tracesSampleRate: FRONTEND_BROWSER_TRACES_SAMPLE_RATE,
     enableLogs: true,
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0,
-    sendDefaultPii: true,
+    replaysSessionSampleRate: 0,
+    replaysOnErrorSampleRate: 0,
+    sendDefaultPii: false,
   };
 }
 
@@ -48,7 +48,7 @@ export function getFrontendServerSentryOptions(
     environment: params.environment,
     tracesSampleRate: FRONTEND_SERVER_TRACES_SAMPLE_RATE,
     enableLogs: true,
-    sendDefaultPii: true,
+    sendDefaultPii: false,
   };
 }
 
@@ -60,6 +60,6 @@ export function getFrontendEdgeSentryOptions(
     environment: params.environment,
     tracesSampleRate: FRONTEND_SERVER_TRACES_SAMPLE_RATE,
     enableLogs: true,
-    sendDefaultPii: true,
+    sendDefaultPii: false,
   };
 }

@@ -21,14 +21,7 @@ if (telemetryEnabled) {
       environment,
     });
 
-    Sentry.init({
-      ...browserOptions,
-      // Preserve the default browser integrations and add Replay on top.
-      integrations: [
-        ...Sentry.getDefaultIntegrations(browserOptions),
-        Sentry.replayIntegration(),
-      ],
-    });
+    Sentry.init(browserOptions);
   });
 }
 

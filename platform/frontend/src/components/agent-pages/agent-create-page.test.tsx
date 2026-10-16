@@ -353,7 +353,7 @@ describe("AgentCreatePage", () => {
           runtime: expect.objectContaining({
             command: ["archestra-claude-code"],
             credentials: [],
-            claudeCode: { authentication: "subscription" },
+            claudeCode: { authentication: "subscription", model: "opus" },
           }),
         }),
       }),

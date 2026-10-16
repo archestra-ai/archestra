@@ -48,14 +48,17 @@ export function RemedyChainCard({
   chain,
   collapsible = false,
   canExpandToolCalls = true,
+  turnActive = false,
   onToolApprovalResponse,
 }: {
   chain: RemedyChain;
   collapsible?: boolean;
+  /** Its turn is still running: the header reads Running, like the peel. */
+  turnActive?: boolean;
   canExpandToolCalls?: boolean;
   onToolApprovalResponse?: ToolApprovalResponse;
 }) {
-  const status = getRemedyChainStatus(chain);
+  const status = getRemedyChainStatus(chain, { turnActive });
   const input = chain.targetArguments;
   const hasInput =
     typeof input === "object" &&

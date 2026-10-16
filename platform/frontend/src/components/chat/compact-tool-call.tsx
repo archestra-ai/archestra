@@ -380,8 +380,11 @@ export function CompactToolGroup({
   canExpandToolCalls = true,
   onToolApprovalResponse,
   appContext,
+  turnActive = false,
 }: {
   tools: CompactEntry[];
+  /** The row's turn is still running, so guarded calls read as running. */
+  turnActive?: boolean;
   toolIconMap?: ToolIconMap;
   canExpandToolCalls?: boolean;
   onToolApprovalResponse?: (params: {
@@ -496,7 +499,9 @@ export function CompactToolGroup({
             entry.remedyChain &&
             !(entry.kind === "app" && appRenders.has(entry.key))
           ) {
-            const status = getRemedyChainStatus(entry.remedyChain);
+            const status = getRemedyChainStatus(entry.remedyChain, {
+              turnActive,
+            });
             return (
               <CompactCircle
                 key={entry.key}
@@ -670,6 +675,7 @@ export function CompactToolGroup({
           ) : (
             <EntryToolCard
               entry={expandedEntry}
+              turnActive={turnActive}
               onToolApprovalResponse={onToolApprovalResponse}
             />
           )}
@@ -710,6 +716,7 @@ export function CompactToolGroup({
                 toolDetails={
                   <EntryToolCard
                     entry={entry}
+                    turnActive={turnActive}
                     onToolApprovalResponse={onToolApprovalResponse}
                   />
                 }
@@ -751,9 +758,11 @@ function releasedCall(
  */
 function EntryToolCard({
   entry,
+  turnActive,
   onToolApprovalResponse,
 }: {
   entry: CompactToolEntry | CompactAppEntry;
+  turnActive: boolean;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
@@ -774,6 +783,7 @@ function EntryToolCard({
     return (
       <RemedyChainCard
         chain={chain}
+        turnActive={turnActive}
         onToolApprovalResponse={onToolApprovalResponse}
       />
     );

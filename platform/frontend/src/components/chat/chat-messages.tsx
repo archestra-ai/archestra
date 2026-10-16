@@ -702,6 +702,12 @@ export function ChatMessages({
                   className={cn(isDimmed && "opacity-40 transition-opacity")}
                 >
                   {(() => {
+                    // Guarded calls in the turn still running read as
+                    // running until they settle.
+                    const turnActive =
+                      isResponseInProgress &&
+                      message.role === "assistant" &&
+                      idx === messages.length - 1;
                     const { groupMap, consumedIndices, remedyChainCards } =
                       identifyCompactToolGroups(message.parts, {
                         nonCompactToolNames,
@@ -796,6 +802,7 @@ export function ChatMessages({
                             toolIconMap={toolIconMap}
                             canExpandToolCalls={canExpandToolCalls}
                             onToolApprovalResponse={onToolApprovalResponse}
+                            turnActive={turnActive}
                             appContext={{
                               agentId,
                               earlyToolUiStarts,
@@ -878,6 +885,7 @@ export function ChatMessages({
                             key={partKey}
                             chain={remedyChain}
                             collapsible
+                            turnActive={turnActive}
                             canExpandToolCalls={canExpandToolCalls}
                             onToolApprovalResponse={onToolApprovalResponse}
                           />

@@ -121,7 +121,7 @@ export function identifyRemedyChains(
     const shortName = getToolShortName(toolName);
 
     if (shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME) {
-      const notice = parseNotice(part.input);
+      const notice = parseNotice(part.input, part.state === "input-streaming");
       if (!notice) continue;
       const rulingText = `${notice.ruling}\n${outputText(resultPart?.output ?? part.output)}`;
       const continued = chains.findLast(
@@ -185,15 +185,28 @@ export function identifyRemedyChains(
   );
 }
 
-/** The chain's state as one call of its target tool. */
-export function getRemedyChainStatus(chain: RemedyChain): RemedyChainStatus {
+/**
+ * The chain's state as one call of its target tool. While its turn is still
+ * active, a chain the model has not released reads as running, so the peel
+ * does not flicker through the negotiation's intermediate states; only the
+ * released attempt, or the turn ending, settles it.
+ */
+export function getRemedyChainStatus(
+  chain: RemedyChain,
+  options: { turnActive?: boolean } = {},
+): RemedyChainStatus {
   const { finalAttempt } = chain;
   if (finalAttempt) {
+    const state = getCompactToolState(finalAttempt);
     return {
-      state: getCompactToolState(finalAttempt),
-      label: getHumanRulingDisplay(finalAttempt)?.label,
+      state,
+      label:
+        state === "running"
+          ? undefined
+          : getHumanRulingDisplay(finalAttempt)?.label,
     };
   }
+  if (options.turnActive) return { state: "running" };
   if (chain.steps.some((step) => getCompactToolState(step) === "running")) {
     return { state: "running" };
   }
@@ -238,10 +251,24 @@ function isStepStartPart(part: unknown): boolean {
   );
 }
 
+/**
+ * A notice still streaming its input counts as soon as it names its target,
+ * so its circle shows the target from the start.
+ */
 function parseNotice(
   input: unknown,
+  streaming = false,
 ): { tool: string; arguments: unknown; ruling: string } | null {
   if (typeof input !== "object" || input === null) return null;
+  if (streaming) {
+    const { tool, arguments: args, ruling } = input as Record<string, unknown>;
+    if (typeof tool !== "string" || tool.length === 0) return null;
+    return {
+      tool,
+      arguments: parseArguments(args),
+      ruling: typeof ruling === "string" ? ruling : "",
+    };
+  }
   const {
     tool,
     arguments: args,

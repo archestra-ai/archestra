@@ -2102,7 +2102,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       { provider: "anthropic" },
     );
     const { value: virtualKey } = await VirtualApiKeyModel.create({
-      name: "guardrail-source-spoof",
+      name: "guardrail-virtual-key",
       providerApiKeys: [
         { provider: providerKey.provider, providerApiKeyId: providerKey.id },
       ],
@@ -2116,13 +2116,47 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           authorization: `Bearer ${virtualKey}`,
           "anthropic-version": "2023-06-01",
           "x-archestra-source": "guardrail:annotator",
-          ...internalCallHeader(),
         },
         payload: payload(false) as Record<string, unknown>,
       });
       expect(response.statusCode, response.body).toBe(400);
     }
     expect(providerRequests).toHaveLength(0);
+    expect(events).toHaveLength(0);
+  });
+
+  test("keeps a guardrail call on a virtual key out of the session it names", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      agent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const { value: virtualKey } = await VirtualApiKeyModel.create({
+      name: "guardrail-virtual-key",
+      providerApiKeys: [
+        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
+      ],
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        authorization: `Bearer ${virtualKey}`,
+        "anthropic-version": "2023-06-01",
+        "x-archestra-source": "guardrail:annotator",
+        "x-appa-session-id": "chat-session",
+        ...internalCallHeader(),
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
     expect(events).toHaveLength(0);
   });
 

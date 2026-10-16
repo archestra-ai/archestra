@@ -250,7 +250,10 @@ export function createLLMModel(params: {
   }
   if (sessionId) {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
-    if (openappaEnabled()) clientHeaders[APPA_SESSION_HEADER] = sessionId;
+    // A platform guardrail call is filed under the chat's session for logs,
+    // but must not become a turn of that chat's OpenAPPA trajectory.
+    if (openappaEnabled() && !params.internalCall)
+      clientHeaders[APPA_SESSION_HEADER] = sessionId;
   }
   if (openappaEnabled() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;

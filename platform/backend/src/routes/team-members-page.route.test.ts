@@ -81,9 +81,9 @@ describe("single team and team member pages", () => {
       method: "GET",
       url: `/api/teams/${team.id}/members/page?userIds=${users[0].id},${outsider.id}`,
     });
-    expect(byIds.json().data.map((m: { userId: string }) => m.userId)).toEqual(
-      [users[0].id],
-    );
+    expect(byIds.json().data.map((m: { userId: string }) => m.userId)).toEqual([
+      users[0].id,
+    ]);
     expect(loadAllMembers).not.toHaveBeenCalled();
   });
 

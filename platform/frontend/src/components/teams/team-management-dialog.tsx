@@ -63,6 +63,7 @@ import {
 } from "@/lib/teams/team-hierarchy";
 import { throwOnApiError } from "@/lib/utils/api";
 import { formatRoleName } from "@/lib/utils/role";
+import { cn } from "@/lib/utils/tailwind";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamResponses["200"];

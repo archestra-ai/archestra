@@ -8,6 +8,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import { describe, expect, test } from "@/test";
+import type { AgentRunActorKind } from "@/types/agent-runtime";
 import {
   issueRuntimeBinding,
   resolveGatewayRuntimeSession,
@@ -25,7 +26,7 @@ const SECRET = "test-runtime-binding-secret-32chars";
 async function persistWorkspace(params: {
   organizationId: string;
   agentId: string;
-  actorKind: "user" | "team" | "organization" | "system" | "oauthClient";
+  actorKind: AgentRunActorKind;
   actorId: string;
   actorUserId?: string | null;
   workloadName?: string;
@@ -468,6 +469,66 @@ describe("runtime OpenAPPA identity", () => {
         bindingToken: binding,
         secret: SECRET,
         now: Date.now() + 120_000,
+      }),
+    ).toMatchObject({ kind: "reject" });
+  });
+
+  test("a service account acting for a team owns its own run, never the team's", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const teamId = randomUUID();
+    const serviceAccountId = randomUUID();
+    const bindingFor = async (
+      actorKind: "team" | "serviceAccount",
+      actorId: string,
+    ) => {
+      const { workspace, task } = await persistWorkspace({
+        organizationId: org.id,
+        agentId: agent.id,
+        actorKind,
+        actorId,
+      });
+      const binding = issueRuntimeBinding({
+        secret: SECRET,
+        organizationId: org.id,
+        workspaceId: workspace.id,
+        workloadName: workspace.workloadName,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind,
+        actorId,
+        expiresAt: Date.now() + 60_000,
+      });
+      if (!binding) throw new Error("runtime binding was not issued");
+      return { binding, workspace, task };
+    };
+    const own = await bindingFor("serviceAccount", serviceAccountId);
+    const team = await bindingFor("team", teamId);
+    const token = { serviceAccountId, teamId, isOrganizationToken: false };
+
+    expect(
+      await resolveGatewayRuntimeSession({
+        organizationId: org.id,
+        agentId: agent.id,
+        token,
+        bindingToken: own.binding,
+        secret: SECRET,
+        sessionName: own.workspace.workloadName,
+        runTaskId: own.task.id,
+      }),
+    ).toMatchObject({ kind: "session" });
+    expect(
+      await resolveGatewayRuntimeSession({
+        organizationId: org.id,
+        agentId: agent.id,
+        token,
+        bindingToken: team.binding,
+        secret: SECRET,
+        sessionName: team.workspace.workloadName,
+        runTaskId: team.task.id,
       }),
     ).toMatchObject({ kind: "reject" });
   });

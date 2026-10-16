@@ -496,14 +496,16 @@ function tokenOwnsActor(
   if (token.userId) {
     return claims.actorKind === "user" && claims.actorId === token.userId;
   }
-  if (token.teamId && !token.isOrganizationToken) {
-    return claims.actorKind === "team" && claims.actorId === token.teamId;
-  }
+  // Before the team check: an account acting for a team carries its teamId
+  // but is never the team.
   if (token.serviceAccountId) {
     return (
       claims.actorKind === "serviceAccount" &&
       claims.actorId === token.serviceAccountId
     );
+  }
+  if (token.teamId && !token.isOrganizationToken) {
+    return claims.actorKind === "team" && claims.actorId === token.teamId;
   }
   if (token.oauthClientId) {
     return (

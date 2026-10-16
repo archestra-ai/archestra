@@ -3,12 +3,16 @@ import type {
   EventHint,
   Integration,
   TracesSamplerSamplingContext,
+  TransactionEvent,
 } from "@sentry/core";
 import * as Sentry from "@sentry/node";
 import config from "@/config";
 import logger from "@/logging";
 import { classifyErrorForTracking } from "./error-tracking-policy";
+import { rememberErrorTrackingServerSpan } from "./request-context";
+import { ATTR_MCP_METHOD_NAME } from "./tracing/attributes";
 import {
+  isLongLivedMcpStream,
   isNoiseRoute,
   isNoisyMcpGatewayGetRoute,
   isNoisyTransactionName,
@@ -115,6 +119,31 @@ export function filterErrorEvent(
 }
 
 /**
+ * Sentry `beforeSendTransaction` filter. Drops transactions for traffic that
+ * is not worth tracing (health, metrics, OAuth discovery, MCP gateway GETs)
+ * and for long-lived MCP streams.
+ *
+ * A long-lived MCP stream shares its route with ordinary MCP requests, so only
+ * the method recorded on its request spans identifies it. Its duration is how
+ * long the connection lived, and would skew request latency.
+ *
+ * @public — exported for testability
+ */
+export function filterTransactionEvent(
+  event: TransactionEvent,
+): TransactionEvent | null {
+  if (event.transaction && isNoisyTransactionName(event.transaction)) {
+    return null;
+  }
+  if (
+    isLongLivedMcpStream(event.contexts?.trace?.data?.[ATTR_MCP_METHOD_NAME])
+  ) {
+    return null;
+  }
+  return event;
+}
+
+/**
  * Safely load the profiling integration.
  * The @sentry/profiling-node package contains native bindings that can fail to load
  * on some systems (particularly Windows or certain Mac configurations).
@@ -150,6 +179,12 @@ const initSentry = async (): Promise<void> => {
 
   // Build integrations array, only including profiling if it loaded successfully
   const integrations: Integration[] = [
+    // Replaces the default HTTP integration, with the same options, to keep the
+    // server span of each request. Request handlers mark it, for example with
+    // the MCP method that {@link filterTransactionEvent} reads.
+    Sentry.httpIntegration({
+      incomingRequestSpanHook: rememberErrorTrackingServerSpan,
+    }),
     // Add Pino integration to send logs to Sentry
     // https://docs.sentry.io/platforms/javascript/guides/fastify/logs/#pino-integration
     Sentry.pinoIntegration(),
@@ -224,13 +259,7 @@ const initSentry = async (): Promise<void> => {
       return tracesSampleRate;
     },
 
-    beforeSendTransaction(event) {
-      if (event.transaction && isNoisyTransactionName(event.transaction)) {
-        return null;
-      }
-
-      return event;
-    },
+    beforeSendTransaction: filterTransactionEvent,
   });
 
   logger.info(

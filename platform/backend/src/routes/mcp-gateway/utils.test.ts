@@ -50,6 +50,7 @@ import {
   AgentTeamModel,
   McpCatalogLabelModel,
   McpToolCallModel,
+  ServiceAccountModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
@@ -319,6 +320,75 @@ describe("validateMCPGatewayToken", () => {
       expect(validateTeamTokenSpy).toHaveBeenCalledTimes(1);
 
       validateTeamTokenSpy.mockRestore();
+    });
+  });
+
+  describe("service account team link", () => {
+    async function makeKey(serviceAccountId: string, organizationId: string) {
+      const { token } = await ServiceAccountModel.createToken({
+        serviceAccountId,
+        organizationId,
+        name: "test key",
+      });
+      return token;
+    }
+
+    test("an account linked to a team reaches a gateway shared only with that team", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+      makeServiceAccount,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team.id] },
+      });
+      const account = await makeServiceAccount(org.id, { teamId: team.id });
+
+      const result = await validateMCPGatewayToken(
+        agent.id,
+        await makeKey(account.id, org.id),
+      );
+
+      expect(result?.serviceAccountId).toBe(account.id);
+      // Call-time credentials prefer the team's installs.
+      expect(result?.teamId).toBe(team.id);
+    });
+
+    test("an account without the team cannot reach a team-only gateway", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+      makeServiceAccount,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team2.id] },
+      });
+      const unlinked = await makeServiceAccount(org.id);
+      const otherTeam = await makeServiceAccount(org.id, { teamId: team1.id });
+
+      expect(
+        await validateMCPGatewayToken(
+          agent.id,
+          await makeKey(unlinked.id, org.id),
+        ),
+      ).toBeNull();
+      expect(
+        await validateMCPGatewayToken(
+          agent.id,
+          await makeKey(otherTeam.id, org.id),
+        ),
+      ).toBeNull();
     });
   });
 

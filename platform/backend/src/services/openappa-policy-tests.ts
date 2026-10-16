@@ -7,6 +7,7 @@ import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
+import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { OpenappaCredentialError } from "@/openappa/failure";
@@ -289,6 +290,8 @@ async function evaluateOpenAppaPolicyTests(
   const native = await import("@archestra/openappa-rs");
   let engineVersion = native.getOpenappaReplayEngineVersion();
   let files: PolicyTestRunResult["files"];
+  // A dispatch evaluates the composition with every command tool's spelling.
+  const content = expandCommandExecutionPolicyRules(effective.content);
   const cannotRun = (error: string) =>
     params.files.map((file) => ({
       path: file.path,
@@ -304,13 +307,13 @@ async function evaluateOpenAppaPolicyTests(
       : { values: {} };
   const replayInput = (annotatorContext?: string) =>
     JSON.stringify({
-      content: effective.content,
+      content,
       files: params.files,
       credentials: "values" in credentials ? credentials.values : {},
       annotatorContext,
     });
   const capacityError =
-    Buffer.byteLength(effective.content) > 262144
+    Buffer.byteLength(content) > 262144
       ? "The effective policy exceeds the replay limit of 256 KiB; configuration validation succeeded but this validation run cannot execute"
       : // A capability adds a fixed-size UUID.
         Buffer.byteLength(replayInput(randomUUID())) > 2097152

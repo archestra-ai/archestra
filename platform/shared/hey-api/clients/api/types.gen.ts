@@ -82676,7 +82676,7 @@ export type GetMcpToolCallsResponses = {
             toolResult: unknown;
             userId: string | null;
             runId: string | null;
-            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
             source: 'api' | 'chat';
             createdAt: string;
@@ -82797,7 +82797,7 @@ export type GetMcpToolCallResponses = {
         toolResult: unknown;
         userId: string | null;
         runId: string | null;
-        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
         source: 'api' | 'chat';
         createdAt: string;
@@ -91307,10 +91307,10 @@ export type GetOpenappaCoverageEntitiesData = {
         limit?: number;
         offset?: number;
         search?: string;
-        type?: 'agent' | 'mcp_gateway' | 'mcp_server';
+        type?: 'mcp_server';
         entityId?: string;
         toolId?: string;
-        sortBy?: 'name' | 'type' | 'tools';
+        sortBy?: 'name' | 'tools';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/openappa/coverage/entities';
@@ -91392,13 +91392,12 @@ export type GetOpenappaCoverageEntitiesResponses = {
         data: Array<{
             id: string;
             name: string;
-            type: 'agent' | 'mcp_gateway' | 'mcp_server';
+            type: 'mcp_server';
             scope: 'personal' | 'team' | 'org';
             icon: string | null;
             toolCount: number;
             governedCount: number;
             fallbackCount: number;
-            builtInCount: number;
             rules: {
                 root: number;
                 battery: number;
@@ -91406,7 +91405,6 @@ export type GetOpenappaCoverageEntitiesResponses = {
                 catchAll: number;
                 notCovered: number;
             };
-            autoMode: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -91429,7 +91427,6 @@ export type GetOpenappaCoverageToolsData = {
         offset?: number;
         search?: string;
         catalogId?: string;
-        entityId?: string;
         governedBy?: 'battery' | 'root' | 'catchall' | 'not_covered';
         battery?: string;
         kind?: 'read' | 'write' | 'approval';
@@ -91548,10 +91545,6 @@ export type GetOpenappaCoverageToolsResponses = {
             fallbackLine: number | null;
             unlisted: boolean;
             enforced: boolean;
-            agents: Array<{
-                id: string;
-                name: string;
-            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -107446,6 +107439,7 @@ export type GetServiceAccountsResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -107469,6 +107463,7 @@ export type CreateServiceAccountData = {
         name: string;
         icon?: string | null;
         role: string;
+        teamId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -107584,6 +107579,7 @@ export type CreateServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -107792,6 +107788,7 @@ export type GetServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -107824,6 +107821,7 @@ export type UpdateServiceAccountData = {
         name?: string;
         icon?: string | null;
         role?: string;
+        teamId?: string | null;
         disabled?: boolean;
         labels?: Array<{
             key: string;
@@ -107923,6 +107921,7 @@ export type UpdateServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;

@@ -5,7 +5,7 @@ import {
   USER_ID_HEADER,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import { HttpResponse, http } from "msw";
+import { HttpResponse, http, passthrough } from "msw";
 import { takeInternalCall } from "@/clients/internal-call";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -545,6 +545,48 @@ describe("archestra annotator", () => {
     expect(response.json().error.message).toBe(
       `The model call failed: openai/gpt-4o-mini with key "Revoked OpenAI" (${key.id}) was rejected upstream with 401: API key is invalid.`,
     );
+  });
+
+  test("cancels its LLM proxy call when the runtime hangs up", async () => {
+    await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
+    let reach = () => {};
+    const reached = new Promise<void>((resolve) => {
+      reach = resolve;
+    });
+    let abort = () => {};
+    const upstreamAborted = new Promise<void>((resolve) => {
+      abort = resolve;
+    });
+    server.use(
+      http.post(
+        `http://127.0.0.1:${config.api.port}/v1/openai/${agentId}/chat/completions`,
+        ({ request: proxied }) => {
+          reach();
+          return new Promise<Response>((_, reject) =>
+            proxied.signal.addEventListener("abort", () => {
+              abort();
+              reject(proxied.signal.reason);
+            }),
+          );
+        },
+      ),
+    );
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+    const url = `${address}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
+    server.use(http.post(url, () => passthrough()));
+
+    const runtime = new AbortController();
+    const consult = fetch(url, {
+      method: "POST",
+      headers: { authorization: bearer(), "content-type": "application/json" },
+      body: JSON.stringify(request),
+      signal: runtime.signal,
+    }).catch(() => null);
+    await reached;
+    runtime.abort();
+
+    await upstreamAborted;
+    expect(await consult).toBeNull();
   });
 
   test("refuses without a call when no LLM key is configured", async () => {

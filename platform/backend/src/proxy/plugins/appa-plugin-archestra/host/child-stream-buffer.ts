@@ -61,12 +61,13 @@ export class BufferedChildStream {
     this.policyEvents.push(...events);
   }
 
-  flushModel(): void {
-    for (const event of this.modelEvents) this.write(event);
+  /** A failed generation was never admitted; the adapter keeps its record for persistence. */
+  dropModel(): void {
+    this.modelEvents.length = 0;
   }
 
   flushAll(): void {
-    this.flushModel();
+    for (const event of this.modelEvents) this.write(event);
     for (const event of this.policyEvents) this.write(event);
   }
 

@@ -87,7 +87,6 @@ beforeEach(() => {
           // unconditional rules, consistently with the bar and overview.
           governedCount: 3,
           fallbackCount: 1,
-          builtInCount: 1,
           rules: {
             root: 1,
             battery: 1,
@@ -95,7 +94,6 @@ beforeEach(() => {
             notCovered: 1,
             catchAll: 0,
           },
-          autoMode: false,
         },
         {
           id: serverId,
@@ -106,7 +104,6 @@ beforeEach(() => {
           toolCount: 19,
           governedCount: 4,
           fallbackCount: 15,
-          builtInCount: 0,
           rules: {
             root: 0,
             battery: 4,
@@ -114,15 +111,8 @@ beforeEach(() => {
             notCovered: 15,
             catchAll: 0,
           },
-          autoMode: false,
         },
       ];
-      inventory.push({
-        ...inventory[0],
-        id: "research-gateway",
-        name: "Research gateway",
-        type: "mcp_gateway",
-      });
       const data = inventory.filter(
         (entity) => !params.get("type") || entity.type === params.get("type"),
       );
@@ -213,7 +203,6 @@ test("lists MCP servers including Archestra, warns where under half the tools ha
 
   const targets = screen;
   expect(await targets.findByText("Archestra")).toBeVisible();
-  expect(targets.queryByText("Research gateway")).toBeNull();
   expect(targets.getByText("2 MCP servers")).toBeVisible();
   expect(entityRequests[0]?.get("sortBy")).toBe("name");
   expect(entityRequests[0]?.get("type")).toBe("mcp_server");
@@ -270,7 +259,6 @@ test("lists MCP servers including Archestra, warns where under half the tools ha
   expect(
     githubSummary.getByText("synced tools").parentElement,
   ).toHaveTextContent("19synced tools");
-  expect(githubSummary.queryByText(/built-in tool/)).not.toBeInTheDocument();
   expect(await screen.findByText("get_issue")).toBeVisible();
 });
 
@@ -653,7 +641,7 @@ test("does not offer source links for a refused composition", async () => {
   expect(screen.getAllByText("Not enforced")).toHaveLength(2);
 });
 
-test("sorts by name, type, or tool count from the headers, kept in the URL", async () => {
+test("sorts by name or tool count from the headers, kept in the URL", async () => {
   const push = vi.fn();
   vi.mocked(useRouter).mockReturnValue({
     push,
@@ -676,7 +664,6 @@ test("sorts by name, type, or tool count from the headers, kept in the URL", asy
 
   expect(await screen.findByText("Archestra")).toBeVisible();
   expect(entityRequests[0]?.get("type")).toBe("mcp_server");
-  expect(screen.queryByText("Research gateway")).toBeNull();
   expect(entityRequests[0]?.get("sortBy")).toBe("tools");
   expect(entityRequests[0]?.get("sortDirection")).toBe("asc");
   expect(

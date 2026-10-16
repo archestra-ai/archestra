@@ -1046,7 +1046,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   <ResourceAccessFilter
                     resource="agent"
                     noun="agents"
-                    offerBuiltIn
+                    offerAdminAccess={false}
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ResourceScopeFilter

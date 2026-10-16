@@ -84,11 +84,13 @@ import {
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
+import { ServiceAccountTeamSelect } from "./service-account-team-select";
 
 type ServiceAccountFormValues = {
   name: string;
   role: string;
   icon: string | null;
+  teamId: string | null;
 };
 
 type TokenFormValues = {
@@ -179,6 +181,7 @@ export function ServiceAccountDialog({
       name: account.name,
       role: account.role,
       icon: account.icon ?? null,
+      teamId: account.teamId,
     },
   });
 
@@ -400,6 +403,11 @@ export function ServiceAccountDialog({
           name: values.name.trim(),
           icon: values.icon,
           role: values.role,
+          // Only when changed: linking is checked against team admin rights,
+          // which someone editing just the name may not hold.
+          ...(values.teamId !== account.teamId
+            ? { teamId: values.teamId }
+            : {}),
           labels: finalLabels,
         },
       })
@@ -578,6 +586,13 @@ export function ServiceAccountDialog({
               <RoleAssignmentBlockedNotice
                 error={updateMutation.error}
                 name={formatRoleName(editForm.watch("role"))}
+              />
+              <ServiceAccountTeamSelect
+                id="edit-service-account-team"
+                value={editForm.watch("teamId")}
+                onChange={(teamId) =>
+                  editForm.setValue("teamId", teamId, { shouldDirty: true })
+                }
               />
             </fieldset>
           ) : activeTab === "keys" ? (

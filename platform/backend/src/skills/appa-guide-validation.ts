@@ -63,7 +63,7 @@ A specification is a UTF-8 .appa file with an ordered scenario. Every file start
 
 Scenario tool names must be canonical \`<family>/<namespace>/<tool>\` IDs, even when a policy rule uses a raw client name. The one exception is the replay-only \`appa/do_something\`. For an ordinary Archestra MCP name, \`crm__search_records\` becomes \`mcp/crm/search_records\`. Never put the raw double-underscore name in a scenario.
 
-Use the installed catalog namespace, not a battery's alias: if \`[server_aliases]\` maps \`mail = ["mail_prod"]\`, an installed \`mail_prod__send\` call is \`mcp/mail_prod/send\`, even though its battery rule is \`mcp/mail/send\`. Match it against the effective policy in declaration order: root rules first, then batteries. For native names or names containing additional \`__\` separators, load **Tool names** in \`references/archestra.md\` instead of guessing.
+Use the installed catalog namespace, not a battery's alias: if \`[aliases.mcp]\` maps \`mail = ["mail_prod"]\`, an installed \`mail_prod__send\` call is \`mcp/mail_prod/send\`, even though its battery rule is \`mcp/mail/send\`. Match it against the effective policy in declaration order: root rules first, then batteries. For native names or names containing additional \`__\` separators, load **Tool names** in \`references/archestra.md\` instead of guessing.
 
 Use concrete arguments appropriate to the behavior being tested. The effective policy's parameter schemas and selectors govern replay; installed tool schemas are not loaded. For an audience or trust check, satisfy unrelated policy parameter and selector requirements so they do not cause the refusal instead. Schema rejection, selector exclusion, and catch-all behavior can themselves be valid test targets. A missing helper leaves the decision untested. \`{}\` is appropriate only when the check needs no arguments.
 
@@ -87,7 +87,7 @@ Add a matched control when claiming that a particular event caused a decision to
 
 Argument blocks are not JSON objects: put each unquoted name on its own line, followed by a colon and one JSON value, without commas between argument lines. Inside a value, use ordinary JSON: quote object keys and keep arrays or objects on one line. Start with one file or a small pair. Preserve existing expectations; explain conflicts rather than rewriting them to force a pass. Do not invent call arguments from a Yell archive.
 
-Preview and runs replay with the same native policy engine as enforcement, against the saved composed policy. They execute no tools: every call gets an empty result. Annotators, audience lookups, battery helpers, and models such as \`archestra\` or \`jev\` are asked live with the organization's credentials, as enforcement asks them, so a model's answer can differ between runs and each run spends its tokens. A step whose annotator gives no answer, for example because its key is not set or its helper is unreachable, reports cannot_run. Steps before it still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. A policy with an external authority or sanitizer cannot run at all, because replay takes every remedy it is offered. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration.
+Preview and runs replay with the same native policy engine as enforcement, against the saved composed policy. They execute no tools: every call gets an empty result. Annotators, audience lookups, battery helpers, and models such as \`archestra\` or \`jev\` are asked live with the organization's credentials, as enforcement asks them, so a model's answer can differ between runs and each run spends its tokens. A step whose annotator gives no answer, for example because its key is not set or its helper is unreachable, reports cannot_run. Steps before it still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. No person is asked: as in \`appa replay\`, a step that expects an authority such as \`hitl\` takes the offer as approved and the file goes on, and a sanitizer returns the result unchanged. A policy with an external authority or sanitizer cannot run at all. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration.
 `;
 
 /** `references/validation-read-restriction.md`: Optional causal-check recipe. */
@@ -102,7 +102,7 @@ For "this read prevents this public write", check the exact same write before an
 This illustrative policy has a private read and a public send; adapt the names and contracts to the user's effective policy, never add these rules merely to make a validation pass:
 
 \`\`\`toml
-[server_aliases]
+[aliases.mcp]
 mail = ["mail_prod"]
 
 [policy]

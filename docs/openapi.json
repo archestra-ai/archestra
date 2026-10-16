@@ -354053,6 +354053,9 @@
                     "minLength": 1,
                     "maxLength": 240,
                     "pattern": "^[a-zA-Z0-9_.-]+(?:\\/[a-zA-Z0-9_.-]+)*$"
+                  },
+                  "partial": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -354092,6 +354095,9 @@
                         "github_sync",
                         "policy_change"
                       ]
+                    },
+                    "partial": {
+                      "type": "boolean"
                     },
                     "executionError": {
                       "type": "string"
@@ -354542,6 +354548,9 @@
                           "github_sync",
                           "policy_change"
                         ]
+                      },
+                      "partial": {
+                        "type": "boolean"
                       },
                       "executionError": {
                         "type": "string"
@@ -355029,6 +355038,9 @@
                         "github_sync",
                         "policy_change"
                       ]
+                    },
+                    "partial": {
+                      "type": "boolean"
                     },
                     "executionError": {
                       "type": "string"

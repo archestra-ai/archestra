@@ -93382,6 +93382,7 @@ export type RunOpenAppaPolicyTestsData = {
         }>;
         sourceVersion: string;
         directory?: string;
+        partial?: boolean;
     };
     path?: never;
     query?: never;
@@ -93465,6 +93466,7 @@ export type RunOpenAppaPolicyTestsResponses = {
         createdBy: string | null;
         createdAt: string;
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;
@@ -93585,6 +93587,7 @@ export type GetOpenAppaPolicyTestRunsResponses = {
         createdBy: string | null;
         createdAt: string;
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;
@@ -93709,6 +93712,7 @@ export type PreviewOpenAppaPolicyTestResponses = {
      */
     200: {
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;

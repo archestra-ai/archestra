@@ -1,11 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
-  currentValidationRun,
   validationContentHash,
   validationFileStates,
   validationName,
   validationRunBars,
   validationRunStatus,
+  validationSuiteSummary,
+  validationSummaryText,
 } from "./validation-run-history";
 
 type Status = "passed" | "failed" | "cannot_run";
@@ -13,12 +14,18 @@ type Status = "passed" | "failed" | "cannot_run";
 const run = (
   id: string,
   files: [path: string, hash: string, status: Status][],
-  extra: { executionError?: string; valid?: boolean } = {},
+  extra: {
+    executionError?: string;
+    valid?: boolean;
+    partial?: boolean;
+    errors?: string[];
+  } = {},
 ) => ({
   id,
   createdAt: `2026-10-0${id}T00:00:00.000Z`,
   executionError: extra.executionError ?? null,
-  validation: { valid: extra.valid ?? true },
+  partial: extra.partial,
+  validation: { valid: extra.valid ?? true, errors: extra.errors ?? [] },
   files: files.map(([path, contentHash, status]) => ({
     path,
     contentHash,
@@ -100,40 +107,90 @@ describe("validationFileStates", () => {
     expect(states.get("new.appa")).toEqual({
       status: "not_run",
       runAt: null,
+      runLabel: null,
       error: null,
+    });
+  });
+
+  test("names the run that recorded the result and keeps a refused policy's reasons", () => {
+    const states = validationFileStates(
+      [
+        { path: "a.appa", contentHash: "h-a" },
+        { path: "b.appa", contentHash: "h-b" },
+      ],
+      [
+        run("2", [["a.appa", "h-a", "passed"]], { partial: true }),
+        run("1", [["b.appa", "h-b", "cannot_run"]], {
+          valid: false,
+          errors: ["unknown battery slack"],
+        }),
+      ],
+    );
+    expect(states.get("a.appa")).toMatchObject({
+      status: "passed",
+      runLabel: "Single file run",
+    });
+    expect(states.get("b.appa")).toMatchObject({
+      status: "cannot_run",
+      runLabel: "Manual run",
+      error: "unknown battery slack",
     });
   });
 });
 
-describe("currentValidationRun", () => {
-  const files = [{ path: "a.appa", contentHash: "h-a" }];
+describe("validationSuiteSummary", () => {
+  const files = [
+    { path: "a.appa", contentHash: "h-a" },
+    { path: "b.appa", contentHash: "h-b" },
+    { path: "c.appa", contentHash: "h-c" },
+  ];
 
-  test("the newest run counts only when it replayed exactly the current files", () => {
-    const latest = run("2", [["a.appa", "h-a", "passed"]]);
-    expect(currentValidationRun(files, [latest])).toBe(latest);
-  });
-
-  test.each([
-    [
-      "a deleted file",
-      run("2", [
-        ["a.appa", "h-a", "passed"],
-        ["gone.appa", "h", "passed"],
+  test("adds a newer single-file result to the last run of all files", () => {
+    const summary = validationSuiteSummary(files, [
+      run("2", [["a.appa", "h-a", "passed"]], { partial: true }),
+      run("1", [
+        ["a.appa", "h-a", "failed"],
+        ["b.appa", "h-b", "failed"],
+        ["c.appa", "h-c", "passed"],
       ]),
-    ],
-    ["an edited file", run("2", [["a.appa", "h-old", "passed"]])],
-  ])("a run that also covers %s is not current", (_, latest) => {
-    expect(currentValidationRun(files, [latest])).toBeNull();
+    ]);
+    expect(summary).toMatchObject({
+      status: "failed",
+      passed: 2,
+      total: 3,
+      notRun: 0,
+      runAt: "2026-10-02T00:00:00.000Z",
+    });
+    expect(summary && validationSummaryText(summary)).toBe("2 of 3 passed");
   });
 
-  test("a run that failed before replaying any file stays current", () => {
-    const failed = run("2", [], { executionError: "GitHub denied access" });
-    expect(currentValidationRun(files, [failed])).toBe(failed);
+  test("counts files without a result as not run", () => {
+    const summary = validationSuiteSummary(files, [
+      run("1", [["a.appa", "h-a", "passed"]]),
+    ]);
+    expect(summary).toMatchObject({ status: "not_run", passed: 1, notRun: 2 });
+    expect(summary && validationSummaryText(summary)).toBe(
+      "1 of 1 passed · 2 not run",
+    );
   });
 
-  test("no files or no runs means no current run", () => {
-    expect(currentValidationRun([], [run("1", [])])).toBeNull();
-    expect(currentValidationRun(files, [])).toBeNull();
+  test("a newer run that failed before replaying any file wins", () => {
+    const summary = validationSuiteSummary(files, [
+      run("2", [], { executionError: "GitHub denied access" }),
+      run("1", [["a.appa", "h-a", "passed"]]),
+    ]);
+    expect(summary).toMatchObject({
+      status: "cannot_run",
+      error: "GitHub denied access",
+    });
+    expect(summary && validationSummaryText(summary)).toBe("Cannot run");
+  });
+
+  test("no result for any current file means no summary", () => {
+    expect(
+      validationSuiteSummary(files, [run("1", [["a.appa", "old", "passed"]])]),
+    ).toBeNull();
+    expect(validationSuiteSummary(files, [])).toBeNull();
   });
 });
 

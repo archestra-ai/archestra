@@ -471,6 +471,7 @@ export async function runOpenAppaPolicyTests(
     params,
     collection,
   );
+  if (params.partial) result.partial = true;
   const saved = await OpenAppaPolicyTestsModel.saveRun(
     params.organizationId,
     params.userId,

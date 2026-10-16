@@ -373,6 +373,60 @@ describe("policy replay runs", () => {
     });
     expect(after.json()).toEqual(before.json());
   });
+  test("a partial run records one saved file and refuses its unsaved draft", async () => {
+    const sourceVersion = await saveFiles();
+    const single = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: { files: [files[1]], sourceVersion, partial: true },
+    });
+    expect(single.statusCode, single.body).toBe(200);
+    expect(single.json()).toMatchObject({
+      partial: true,
+      files: [{ path: files[1].path, status: "passed" }],
+    });
+    const draft = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: {
+        files: [{ ...files[1], content: `${files[1].content}# draft\n` }],
+        sourceVersion,
+        partial: true,
+      },
+    });
+    expect(draft.statusCode, draft.body).toBe(409);
+    const runs = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/policy-tests/runs",
+    });
+    expect(runs.json()).toHaveLength(1);
+  });
+  test("keeps each saved file's newest result past the 20 most recent runs", async () => {
+    const sourceVersion = await saveFiles();
+    const suite = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: { files, sourceVersion },
+    });
+    expect(suite.statusCode, suite.body).toBe(200);
+    for (let index = 0; index < 21; index++) {
+      const single = await ctx.app.inject({
+        method: "POST",
+        url: "/api/openappa/policy-tests/run",
+        payload: { files: [files[1]], sourceVersion, partial: true },
+      });
+      expect(single.statusCode, single.body).toBe(200);
+    }
+    const runs = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/policy-tests/runs",
+    });
+    const ids = runs.json().map((run: { id: string }) => run.id);
+    // 20 single-file runs plus the suite run, still the newest result for
+    // the two files no later run replayed.
+    expect(ids).toHaveLength(21);
+    expect(ids.at(-1)).toBe(suite.json().id);
+  });
   test("keeps empty scenario files as cannot-run rather than false passing coverage", async () => {
     const emptyFiles = [{ path: "empty.appa", content: "# no assertions\n" }];
     const sourceVersion = await saveFiles(emptyFiles);

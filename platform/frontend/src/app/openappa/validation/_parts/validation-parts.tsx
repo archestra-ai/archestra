@@ -1,9 +1,12 @@
 "use client";
 import {
-  Clock,
+  ExternalLink,
   History,
   Info,
+  Loader2,
+  LockKeyhole,
   MessageCircle,
+  MoreHorizontal,
   Play,
   TriangleAlert,
 } from "lucide-react";
@@ -11,6 +14,13 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   Table,
@@ -23,19 +33,25 @@ import {
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
-import { GithubManagedPolicyNotice } from "../../_parts/github-managed-policy-notice";
+import {
+  GithubManagedPolicyNotice,
+  useManagedValidationsLink,
+} from "../../_parts/github-managed-policy-notice";
 import { OpenAppaChatButton } from "../../_parts/openappa-chat-button";
 import { useValidationFileHashes } from "../../_parts/use-validation-file-hashes";
 import {
-  currentValidationRun,
-  validationRunStatus,
+  validationSuiteSummary,
+  validationSummaryText,
 } from "../../_parts/validation-run-history";
 import { useValidation } from "./validation-context";
 
 export function ValidationNotices({
   sourceChanged: editorSourceChanged = false,
+  hideManagedChip = false,
 }: {
   sourceChanged?: boolean;
+  /** The page links to the repository from its ⋯ menu instead. */
+  hideManagedChip?: boolean;
 } = {}) {
   const {
     github,
@@ -73,6 +89,7 @@ export function ValidationNotices({
       {github && (
         <GithubManagedPolicyNotice
           validationDirectory={collection.activeDirectory}
+          hideHealthy={hideManagedChip}
         />
       )}
       {collection.error && !awaitingSetupMerge && (
@@ -105,10 +122,13 @@ export function ValidationNotices({
   );
 }
 
-export function ValidationActions() {
-  const { busy } = useValidation();
+/** The page header: the agent prompts, Run all, and the rarely used links behind ⋯. */
+export function ValidationPageActions() {
+  const { files, runnable, runAll, runningAll, busy, github, collection } =
+    useValidation();
+  const managed = useManagedValidationsLink(collection.activeDirectory);
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <OpenAppaChatButton
         size="sm"
         variant="outline"
@@ -128,62 +148,101 @@ export function ValidationActions() {
         <MessageCircle />
         <span>Write a validation</span>
       </OpenAppaChatButton>
-    </div>
-  );
-}
-
-export function ValidationRunAction() {
-  const { files, runnable, runAll } = useValidation();
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant="outline" asChild>
-        <Link href="/openappa/validation/history">
-          <History />
-          <span>Run history</span>
-        </Link>
-      </Button>
       <Button size="sm" disabled={!runnable || !files.length} onClick={runAll}>
-        <Play />
+        {runningAll ? <Loader2 className="animate-spin" /> : <Play />}
         <span>Run all</span>
       </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon-sm"
+            variant="outline"
+            aria-label="More validation actions"
+          >
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href="/openappa/validation/history">
+              <History />
+              <span>Run history</span>
+            </Link>
+          </DropdownMenuItem>
+          {github && managed.href && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <a
+                  href={managed.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <LockKeyhole />
+                  <span>{managed.label}</span>
+                  <ExternalLink className="ml-auto" />
+                  <span className="sr-only">(opens in new tab)</span>
+                </a>
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
 
+const summaryTextColor = {
+  passed: "text-green-700 dark:text-green-400",
+  failed: "text-red-700 dark:text-red-400",
+  cannot_run: "text-yellow-800 dark:text-yellow-300",
+  not_run: undefined,
+} as const;
+
+/**
+ * One line adding up the per-file statuses, linking to run history. It reads
+ * the same results as the Status column, so the two always agree.
+ */
 export function ValidationLastRun() {
   const { files, history } = useValidation();
   const hashes = useValidationFileHashes(files);
-  const run = hashes.data
-    ? currentValidationRun(hashes.data, history.data ?? [])
-    : null;
-  const passed = run?.files.filter((file) => file.status === "passed").length;
+  const summary =
+    hashes.data && history.data
+      ? validationSuiteSummary(hashes.data, history.data)
+      : null;
+  if (!summary) return null;
+  const outcome = validationSummaryText(summary);
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="font-normal text-muted-foreground"
+      asChild
+    >
+      <Link
+        href="/openappa/validation/history"
+        aria-label={`Last run ${formatDate({ date: summary.runAt })}, ${outcome}. Open run history`}
+      >
+        <History />
+        <span>{`Last run ${formatDate({ date: summary.runAt, dateFormat: "MM/dd HH:mm" })}`}</span>
+        <span aria-hidden>·</span>
+        <span className={summaryTextColor[summary.status]}>{outcome}</span>
+      </Link>
+    </Button>
+  );
+}
+
+/** What the per-file statuses cannot say: history did not load, or the last run never started. */
+export function ValidationRunNotices() {
+  const { files, history } = useValidation();
+  const hashes = useValidationFileHashes(files);
+  const summary =
+    hashes.data && history.data
+      ? validationSuiteSummary(hashes.data, history.data)
+      : null;
+  if (!history.isError && !summary?.error) return null;
   return (
     <div className="space-y-2">
-      {run && (
-        <InlineNotice
-          variant="neutral"
-          role="status"
-          aria-label="Last validation run"
-        >
-          <Clock />
-          <span className="font-medium">Last run</span>
-          <InlineNoticeText>
-            {formatDate({ date: run.createdAt })}
-          </InlineNoticeText>
-          <ValidationStatusBadge status={validationRunStatus(run)}>
-            {run.files.length
-              ? `${passed} of ${run.files.length} passed`
-              : "Cannot run"}
-          </ValidationStatusBadge>
-          {run.trigger === "github_sync" && (
-            <Badge variant="outline">Git sync run</Badge>
-          )}
-          {run.trigger === "policy_change" && (
-            <Badge variant="outline">Policy change run</Badge>
-          )}
-          {run.draft && <Badge variant="secondary">Draft run</Badge>}
-        </InlineNotice>
-      )}
       {history.isError && (
         <InlineNotice variant="error">
           <TriangleAlert />
@@ -198,7 +257,13 @@ export function ValidationLastRun() {
           </Button>
         </InlineNotice>
       )}
-      {run && <ValidationRunDiagnostics run={run} />}
+      {summary?.error && (
+        <InlineNotice variant="warning">
+          <TriangleAlert />
+          <span className="font-medium">Validation could not run</span>
+          <InlineNoticeText>{summary.error}</InlineNoticeText>
+        </InlineNotice>
+      )}
     </div>
   );
 }

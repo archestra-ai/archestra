@@ -156,7 +156,7 @@ function show() {
   };
 }
 /** The status badge, not the chart legend that shares its words. */
-const statusBadge = { selector: '[data-slot="badge"] > span' };
+const statusBadge = { selector: '[data-slot="badge"]' };
 
 test("the dashboard summarizes the latest run time and validation count with a direct link", async () => {
   revision = 1;
@@ -223,25 +223,6 @@ test.each([
   );
   show();
   expect(await screen.findByText(status, statusBadge)).toBeVisible();
-});
-
-test("draft and stale results are visibly qualified", async () => {
-  revision = 1;
-  server.use(
-    http.get(`${api}/openappa/policy-tests/runs`, () =>
-      HttpResponse.json([{ ...validationRun, draft: true, stale: true }]),
-    ),
-  );
-  show();
-  const summary = await screen.findByRole("region", {
-    name: "Last validation run",
-  });
-  expect(await screen.findByText("Failed (draft)")).toBeVisible();
-  expect(screen.queryByText(/outdated/)).not.toBeInTheDocument();
-  expect(summary).toHaveTextContent(
-    formatDate({ date: validationRun.createdAt }),
-  );
-  expect(summary).not.toHaveTextContent("Draft run");
 });
 
 test("unavailable runs show cannot run without detailed errors or invented counts", async () => {

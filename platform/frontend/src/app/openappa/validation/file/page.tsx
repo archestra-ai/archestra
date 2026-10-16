@@ -1,6 +1,14 @@
 "use client";
 
-import { Download, Play, Save, Trash2, TriangleAlert } from "lucide-react";
+import {
+  Download,
+  Loader2,
+  Play,
+  Save,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -26,7 +34,13 @@ import {
   type PolicyTestPreview,
   usePreviewOpenAppaPolicyTest,
 } from "@/lib/openappa-policy-tests.query";
+import { formatDate } from "@/lib/utils/date-time";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
+import { useValidationFileHashes } from "../../_parts/use-validation-file-hashes";
+import {
+  latestFileResult,
+  validationFileStates,
+} from "../../_parts/validation-run-history";
 import { useValidationHistoryGuard } from "../_parts/use-validation-history-guard";
 import {
   useValidation,
@@ -132,9 +146,22 @@ function ValidationFileEditor({ path }: { path: string }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
   const previewRun = preview?.run;
+  // A saved file shows its newest recorded result until an editor test of a
+  // draft replaces it.
+  const savedHash = useValidationFileHashes(baselineFile ? [baselineFile] : []);
+  const recorded =
+    !previewRun && !fileDirty && savedHash.data?.[0] && suite.history.data
+      ? {
+          latest: latestFileResult(savedHash.data[0], suite.history.data),
+          state: validationFileStates(savedHash.data, suite.history.data).get(
+            path,
+          ),
+        }
+      : null;
+  const running = suite.runningPath === path;
   const policy = useGuardrailsPolicy();
   const effectivePolicy = useEffectivePolicy(Boolean(previewRun), 10000);
-  const result = previewRun?.files[0];
+  const result = previewRun?.files[0] ?? recorded?.latest?.result;
   const stale = Boolean(
     previewRun &&
       (previewRun.stale ||
@@ -222,8 +249,22 @@ function ValidationFileEditor({ path }: { path: string }) {
                 readOnly={suite.github || !suite.canWrite || busy}
               />
               <ValidationStatusBadge
-                status={result ? (stale ? "stale" : result.status) : "not_run"}
+                status={
+                  previewRun
+                    ? stale
+                      ? "stale"
+                      : (result?.status ?? "not_run")
+                    : (recorded?.state?.status ?? "not_run")
+                }
               />
+              {recorded?.state?.runAt && (
+                <Link
+                  href="/openappa/validation/history"
+                  className="whitespace-nowrap text-sm text-muted-foreground hover:text-foreground"
+                >
+                  {`${formatDate({ date: recorded.state.runAt, dateFormat: "MM/dd HH:mm" })} · ${recorded.state.runLabel}`}
+                </Link>
+              )}
               {fileDirty && <Badge variant="secondary">Unsaved draft</Badge>}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -265,6 +306,13 @@ function ValidationFileEditor({ path }: { path: string }) {
                 size="sm"
                 disabled={!runnable}
                 onClick={() => {
+                  // A saved file runs for real and lands in run history; a
+                  // draft can only be tried in the editor.
+                  if (!fileDirty) {
+                    setPreview(null);
+                    suite.runFile(path);
+                    return;
+                  }
                   const captured = structuredClone(file);
                   setPreview(null);
                   previewMutation.mutate(
@@ -281,11 +329,33 @@ function ValidationFileEditor({ path }: { path: string }) {
                   );
                 }}
               >
-                <Play />
-                <span>Run file</span>
+                {running || previewMutation.isPending ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Play />
+                )}
+                <span>{fileDirty ? "Test draft" : "Run file"}</span>
               </Button>
             </div>
           </div>
+          {/* Why the file did not pass, above the tall editor so it is seen. */}
+          {result && (recorded ? recorded.state?.error : result.error) && (
+            <InlineNotice
+              variant={
+                (recorded?.state?.status ?? result.status) === "failed"
+                  ? "error"
+                  : "warning"
+              }
+            >
+              <TriangleAlert />
+              <span className="font-medium">
+                {statusLabel(recorded?.state?.status ?? result.status)}
+              </span>
+              <InlineNoticeText className="whitespace-pre-wrap">
+                {recorded ? recorded.state?.error : result.error}
+              </InlineNoticeText>
+            </InlineNotice>
+          )}
           <Card className="overflow-hidden py-0">
             <CardContent className="px-0">
               <Controller
@@ -316,15 +386,6 @@ function ValidationFileEditor({ path }: { path: string }) {
               </InlineNoticeText>
             </InlineNotice>
           )}
-          {previewRun && (
-            <InlineNotice variant="neutral">
-              <Play />
-              <span className="font-medium">Editor test</span>
-              <InlineNoticeText>
-                This temporary result does not update the suite or run history.
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
           {previewRun && <ValidationRunDiagnostics run={previewRun} />}
           {result && (
             <div className="space-y-3">
@@ -337,17 +398,6 @@ function ValidationFileEditor({ path }: { path: string }) {
                     These results belong to different policy or validation
                     inputs. Run again to validate this draft.
                   </InlineNoticeText>
-                </InlineNotice>
-              )}
-              {result.error && (
-                <InlineNotice
-                  variant={result.status === "cannot_run" ? "warning" : "error"}
-                >
-                  <TriangleAlert />
-                  <span className="font-medium">
-                    {statusLabel(result.status)}
-                  </span>
-                  <InlineNoticeText>{result.error}</InlineNoticeText>
                 </InlineNotice>
               )}
               {result.steps.length > 0 && <StepResults steps={result.steps} />}

@@ -3346,6 +3346,7 @@ Required RBAC permission: `update` on the credential (granted per item)
 | `changes` | `object` | Yes |  |
 | `changes.name` | `string` | No |  |
 | `changes.githubUrl` | `string \| null` | No |  |
+| `changes.gitlabUrl` | `string \| null` | No |  |
 | `changes.appId` | `string \| null` | No |  |
 | `changes.installationId` | `string \| null` | No |  |
 | `changes.githubClientId` | `string \| null` | No |  |

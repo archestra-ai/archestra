@@ -401057,6 +401057,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "gitlabUrl": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "appId": {
                         "nullable": true,
                         "type": "string"
@@ -401109,6 +401113,7 @@
                       "id",
                       "kind",
                       "githubUrl",
+                      "gitlabUrl",
                       "appId",
                       "installationId",
                       "githubClientId",
@@ -402281,6 +402286,10 @@
                     "type": "string"
                   },
                   "githubUrl": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "gitlabUrl": {
                     "nullable": true,
                     "type": "string"
                   },

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import {
@@ -22,6 +23,13 @@ let guardrailsEnabled = false;
 vi.mock("@/lib/guardrails-deployment.query", () => ({
   useGuardrailsDeployment: () => ({ data: { enabled: guardrailsEnabled } }),
 }));
+vi.mock("next/navigation");
+
+beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    prefetch: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+});
 
 type EnforcementStatus =
   | "verified-enforced"

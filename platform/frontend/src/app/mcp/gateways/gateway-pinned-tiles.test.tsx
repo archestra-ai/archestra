@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -10,6 +11,13 @@ vi.mock("@/lib/agent.query", () => ({
   useDefaultMcpGateway: vi.fn(),
   useProfile: vi.fn(),
 }));
+vi.mock("next/navigation");
+
+beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    prefetch: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+});
 
 type Gateway = Parameters<typeof GatewayPinnedTiles>[0]["pinned"][number];
 

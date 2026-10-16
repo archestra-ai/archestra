@@ -45,7 +45,6 @@ import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
   isSessionId,
   useInteractionSessions,
-  useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ErrorBoundary } from "../../_parts/error-boundary";
@@ -268,7 +267,6 @@ function SessionsTable() {
     toastOnError: false,
   });
 
-  const { data: uniqueUsers } = useUniqueUserIds();
   const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
 
   const sessions = sessionsResponse?.data ?? [];
@@ -587,7 +585,7 @@ function SessionsTable() {
             <UserFilterSelect
               value={userFilter}
               onValueChange={handleUserFilterChange}
-              users={uniqueUsers}
+              source="logs"
             />
           ) : null}
 

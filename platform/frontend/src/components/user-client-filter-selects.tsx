@@ -2,53 +2,33 @@
 
 import { CLIENT_FILTER_OPTIONS, type ClientFilter } from "@archestra/shared";
 import { FilterSelect, filterControlClass } from "@/components/filter-bar";
-import {
-  ClientFilterOption,
-  UserFilterOption,
-} from "@/components/log-filter-option";
+import { ClientFilterOption } from "@/components/log-filter-option";
 import { RemoteUserSelect } from "@/components/remote-user-select";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 
 /**
- * The shared "Filter by User" dropdown used by the LLM logs and Guardrails
- * pages. `value` is a user id or the "all" sentinel (DEFAULT_FILTER_ALL).
+ * The shared "Filter by User" picker used by the LLM and MCP logs pages.
+ * `value` is a user id or the "all" sentinel (DEFAULT_FILTER_ALL). `source`
+ * picks the users offered: users with LLM logs, or organization members.
  */
 export function UserFilterSelect({
   value,
   onValueChange,
-  users,
-  remote = false,
+  source,
 }: {
   value: string;
   onValueChange: (value: string) => void;
-  users?: Array<{ id: string; name: string }>;
-  remote?: boolean;
+  source: "logs" | "members";
 }) {
-  if (remote)
-    return (
-      <RemoteUserSelect
-        value={value}
-        onValueChange={onValueChange}
-        placeholder="Filter by User"
-        className={filterControlClass({ active: value !== DEFAULT_FILTER_ALL })}
-        searchMode="name"
-        pinnedOption={{ value: DEFAULT_FILTER_ALL, label: "All Users" }}
-      />
-    );
   return (
-    <FilterSelect
+    <RemoteUserSelect
       value={value}
       onValueChange={onValueChange}
       placeholder="Filter by User"
-      items={[
-        { value: DEFAULT_FILTER_ALL, label: "All Users" },
-        ...(users?.map((user) => ({
-          value: user.id,
-          label: user.name || user.id,
-          content: <UserFilterOption name={user.name || user.id} />,
-          selectedContent: <UserFilterOption name={user.name || user.id} />,
-        })) || []),
-      ]}
+      className={filterControlClass({ active: value !== DEFAULT_FILTER_ALL })}
+      searchMode="name"
+      source={source}
+      pinnedOption={{ value: DEFAULT_FILTER_ALL, label: "All Users" }}
     />
   );
 }

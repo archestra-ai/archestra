@@ -59,6 +59,9 @@ const FORCE_DB = true;
  */
 const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
 
+/** Name of the per-user key the in-app chat authenticates with. */
+const CHAT_USER_KEY_NAME = "Chat";
+
 type TeamInfo = { id: string; name: string };
 type ProviderApiKeyInput = {
   provider: SupportedProvider;
@@ -312,6 +315,66 @@ class VirtualApiKeyModel {
       .limit(1);
 
     return row ?? null;
+  }
+
+  /**
+   * Personal, user-visible virtual key the in-app chat sends to the LLM proxy
+   * as its platform credential. Created on first use and reused afterwards.
+   * It is mapped to the chat's provider key, so the proxy resolves that key's
+   * per-key configuration from the mapping instead of a loopback header.
+   * Returns the token value, which is read back from the key's secret.
+   */
+  static async ensureUserChatKey(params: {
+    organizationId: string;
+    userId: string;
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }): Promise<{ virtualKeyId: string; value: string }> {
+    const [existing] = await db
+      .select({
+        id: schema.virtualApiKeysTable.id,
+        secretId: schema.virtualApiKeysTable.secretId,
+      })
+      .from(schema.virtualApiKeysTable)
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.organizationId, params.organizationId),
+          eq(schema.virtualApiKeysTable.authorId, params.userId),
+          eq(schema.virtualApiKeysTable.name, CHAT_USER_KEY_NAME),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      const created = await VirtualApiKeyModel.create({
+        organizationId: params.organizationId,
+        name: CHAT_USER_KEY_NAME,
+        scope: "personal",
+        authorId: params.userId,
+        providerApiKeys: [
+          {
+            provider: params.provider,
+            providerApiKeyId: params.providerApiKeyId,
+          },
+        ],
+      });
+      return { virtualKeyId: created.virtualKey.id, value: created.value };
+    }
+
+    await VirtualApiKeyModel.ensureProviderMapping({
+      virtualApiKeyId: existing.id,
+      provider: params.provider,
+      providerApiKeyId: params.providerApiKeyId,
+    });
+
+    const secret = existing.secretId
+      ? await secretManager().getSecret(existing.secretId)
+      : null;
+    const value = (secret?.secret as { token?: string } | undefined)?.token;
+    if (!value) {
+      throw new Error("Chat virtual key secret is missing its token value");
+    }
+    return { virtualKeyId: existing.id, value };
   }
 
   /**

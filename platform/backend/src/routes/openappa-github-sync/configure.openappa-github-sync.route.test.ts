@@ -1161,7 +1161,7 @@ describe("APPA GitHub sync", () => {
     expect(
       (await OpenAppaGithubSyncModel.find(organizationId))?.lastSyncError,
     ).toBe(
-      `The repository's policy would hand ${NOTARY_TOKEN} to the uploaded notary battery. A pull cannot give a credential to new code; remove the include, or unbind the variable in Archestra.`,
+      `The repository's policy would hand ${NOTARY_TOKEN} to the uploaded notary battery. A pull cannot give a credential to new code; remove the include, or unbind the variable.`,
     );
     expect(
       await GuardrailsPolicyModel.findLatest(organizationId),

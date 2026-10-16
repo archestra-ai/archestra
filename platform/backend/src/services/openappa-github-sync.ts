@@ -578,7 +578,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
           )
           .join(
             ", and ",
-          )}. A pull cannot give a credential to new code; remove the include, or unbind the variable in Archestra.`,
+          )}. A pull cannot give a credential to new code; remove the include, or unbind the variable.`,
       );
     const contentHash = createHash("sha256").update(content).digest("hex");
     const published = await OpenAppaGithubSyncModel.finish({

@@ -152,6 +152,28 @@ describe("hitlReviewCard", () => {
     expect(preview).toContain("exact tool call.");
   });
 
+  test("counts a combining mark as no column and keeps it on its letter's line", () => {
+    // A decomposed "é", as macOS writes file names: a letter and U+0301.
+    const accented = "e\u0301";
+    const previewFor = (count: number) =>
+      previewOf(
+        cardFor({
+          tool: "Bash",
+          arguments: JSON.stringify({ name: accented.repeat(count) }),
+          text: COVERAGE,
+        }).card,
+        "Deny",
+      );
+    // "name: " and 28 letters take the pane's 34 columns.
+    expect(previewFor(28)).toBe(`name: ${accented.repeat(28)}`);
+    const lines = previewFor(40).split("\n");
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines) {
+      expect(line.trimStart().startsWith("\u0301")).toBe(false);
+      expect(line.replaceAll("\u0301", "").length).toBeLessThanOrEqual(34);
+    }
+  });
+
   test("replaces a value too long for the pane with a pointer that states its size", () => {
     const command = `echo ${"exact-payload ".repeat(400)}`;
     const { card, approve } = cardFor({

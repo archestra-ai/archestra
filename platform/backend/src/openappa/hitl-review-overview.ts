@@ -224,8 +224,10 @@ const CONTINUATION = "    ";
 const POINTER = /^\(\d[\d,]* characters, see Inspect\)$/;
 /** A line Claude Code takes for a fence switches the whole pane to markdown. */
 const FENCE_LINE = /^ {0,3}`{3,}/m;
-// Emoji and East Asian wide characters take two columns.
+// Emoji and East Asian wide characters take two columns. A combining mark
+// takes none: it draws over the character before it.
 const WIDE = /\p{Extended_Pictographic}|[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/u;
+const COMBINING = /[\p{Mn}\p{Me}]/u;
 
 /** One argument, or one side of an edit, as preview lines. */
 type CardEntry = {
@@ -407,7 +409,8 @@ function summaryEntry(summary: string): CardEntry {
  * Gives values way to pointers until the Allow preview fits: the summary
  * first, then long values from the end, then any value a pointer shortens.
  * Returns false when even that leaves no room for the scope; values past the
- * room left are then counted instead of shown.
+ * room left are then counted instead of shown. It sets `use` on the layout's
+ * own entries, so a layout is fitted once and then rendered.
  */
 function fitLayout(layout: CardLayout): boolean {
   const fits = (withScope: boolean) =>
@@ -668,7 +671,8 @@ function wordWidth(chars: string[], from: number): number {
 /** Monospace columns the text takes. */
 function displayWidth(text: string): number {
   let width = 0;
-  for (const char of text) width += WIDE.test(char) ? 2 : 1;
+  for (const char of text)
+    width += COMBINING.test(char) ? 0 : WIDE.test(char) ? 2 : 1;
   return width;
 }
 // Characters the client pane withholds or the terminal would act on.

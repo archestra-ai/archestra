@@ -544,7 +544,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       });
       expect(denied.statusCode, denied.body).toBe(400);
       expect(denied.json().error.message).toBe(
-        "OpenAPPA runtime credential does not match this workspace",
+        "OpenAPPA runtime credential does not match this run",
       );
       for (const credential of [
         runtimeToken.token,

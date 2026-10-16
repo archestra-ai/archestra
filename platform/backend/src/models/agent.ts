@@ -2239,10 +2239,6 @@ class AgentModel {
   }
 
   /**
-   * Build the regular-agent list predicate shared by the standard endpoint and
-   * the Agents-page catalog candidate query.
-   */
-  /**
    * Each listed agent's tool and subagent counts, as its `tools` would give
    * them, without loading the tools: subagents are delegation tools, and the
    * knowledge search tool counts only for an agent with knowledge sources, as
@@ -2254,7 +2250,9 @@ class AgentModel {
     if (agents.length === 0) return new Map();
     const name = schema.toolsTable.name;
     const delegate = schema.toolsTable.delegateToAgentId;
-    // Bare, or after a server prefix of at least one character.
+    // Bare, or after a server prefix of at least one character. The leading
+    // `_%` is the only wildcard: the separator and name are escaped and match
+    // literally.
     const prefixedKnowledgeTool = `_%${escapeLikePattern(
       `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
     )}`;
@@ -2303,6 +2301,10 @@ class AgentModel {
     );
   }
 
+  /**
+   * Build the regular-agent list predicate shared by the standard endpoint and
+   * the Agents-page catalog candidate query.
+   */
   private static async buildListWhereClause(params: {
     filters?: AgentListFilters;
     userId?: string;

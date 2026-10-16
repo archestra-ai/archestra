@@ -63,6 +63,42 @@ describe("POST /api/credentials", () => {
     allowOrganization: false,
   };
 
+  test("GitLab credential host survives create, list and update", async () => {
+    const created = await create({
+      ...personal,
+      key: "gitlab-test-token",
+      kind: "gitlab_token",
+      gitlabUrl: "https://gitlab.example.invalid",
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    expect(created.json().gitlabUrl).toBe("https://gitlab.example.invalid");
+
+    const listed = await app.inject({ url: "/api/credentials" });
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(listed.json()).toEqual([
+      expect.objectContaining({
+        key: "gitlab-test-token",
+        gitlabUrl: "https://gitlab.example.invalid",
+      }),
+    ]);
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: "/api/credentials/gitlab-test-token",
+      payload: { gitlabUrl: "https://updated.gitlab.example.invalid" },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    expect(updated.json().gitlabUrl).toBe(
+      "https://updated.gitlab.example.invalid",
+    );
+    const refreshed = await app.inject({ url: "/api/credentials" });
+    expect(refreshed.statusCode, refreshed.body).toBe(200);
+    expect(refreshed.json()[0].gitlabUrl).toBe(
+      "https://updated.gitlab.example.invalid",
+    );
+    expect(await listedKeys(otherMember)).not.toContain("gitlab-test-token");
+  });
+
   test("a member adds a credential only they can reach", async () => {
     const created = await create(personal);
     expect(created.statusCode, created.body).toBe(200);

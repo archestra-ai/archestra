@@ -44,6 +44,7 @@ const credentials: RuntimeCredentialDefinition[] = Array.from(
   (_, index) => ({
     id: `definition-${index}`,
     githubUrl: null,
+    gitlabUrl: null,
     appId: null,
     installationId: null,
     githubClientId: null,

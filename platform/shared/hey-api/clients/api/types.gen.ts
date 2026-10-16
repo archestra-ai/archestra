@@ -105375,6 +105375,7 @@ export type ListRuntimeCredentialsResponses = {
         id: string;
         kind: 'secret' | 'github_app' | 'github_app_user' | 'gitlab_token';
         githubUrl: string | null;
+        gitlabUrl: string | null;
         appId: string | null;
         installationId: string | null;
         githubClientId: string | null;
@@ -105718,6 +105719,7 @@ export type UpdateRuntimeCredentialData = {
     body: {
         name?: string;
         githubUrl?: string | null;
+        gitlabUrl?: string | null;
         appId?: string | null;
         installationId?: string | null;
         githubClientId?: string | null;

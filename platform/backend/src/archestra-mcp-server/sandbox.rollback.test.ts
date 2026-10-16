@@ -236,7 +236,7 @@ describe("sandbox tools (runtime enabled)", () => {
       });
     });
 
-    test("refuses a service account cleanly instead of creating a sandbox", async ({
+    test("a service account runs in its own default sandbox, which nobody else can reach", async ({
       makeServiceAccount,
     }) => {
       const account = await makeServiceAccount(organizationId, {
@@ -249,23 +249,48 @@ describe("sandbox tools (runtime enabled)", () => {
         agentId: agent.id,
         title: "Test",
       });
+      const accountCtx = {
+        ...context,
+        userId: accountUserId,
+        conversationId: conversation.id,
+      };
       const runSpy = stubRunCommand("sbx-1");
 
-      const result = await executeArchestraTool(
+      const first = await executeArchestraTool(
         TOOL_RUN_COMMAND_FULL_NAME,
         { command: "echo hi" },
-        { ...context, userId: accountUserId, conversationId: conversation.id },
+        accountCtx,
+      );
+      const second = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo again" },
+        accountCtx,
       );
 
-      expect(result.isError).toBe(true);
-      expect(textOf(result)).toContain("not available to service accounts");
-      expect(runSpy).not.toHaveBeenCalled();
-      expect(
-        await SkillSandboxModel.listForConversation({
-          conversationId: conversation.id,
-          organizationId,
+      expect(first.isError).toBe(false);
+      expect(second.isError).toBe(false);
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: conversation.id,
+        organizationId,
+      });
+      // one default, reused, owned by the account
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].userId).toBe(accountUserId);
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sandboxId: sandboxes[0].id,
+          caller: { organizationId, userId: accountUserId, agentId: agent.id },
         }),
-      ).toHaveLength(0);
+      );
+
+      // a person cannot reach the account's sandbox by id
+      const personResult = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: sandboxes[0].id } },
+        { ...context, conversationId: conversation.id },
+      );
+      expect(personResult.isError).toBe(true);
+      expect(textOf(personResult)).toContain("No accessible sandbox");
     });
 
     test("routes an unbound agent to its organization's default engine when no BYO host is set", async () => {

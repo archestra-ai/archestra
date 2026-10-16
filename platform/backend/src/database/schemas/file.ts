@@ -14,6 +14,7 @@ import type { SkillSandboxFileStorageProvider } from "@/types/skill-sandbox";
 import appsTable from "./app";
 import conversationsTable from "./conversation";
 import projectsTable from "./project";
+import serviceAccountsTable from "./service-account";
 import skillSandboxesTable from "./skill-sandbox";
 import usersTable from "./user";
 
@@ -28,8 +29,8 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
  * `save_file` produce.
  *
  * Ownership is direct, no folder indirection:
- *   - `user_id` — the AUTHOR (always set). A file with no `project_id` is the
- *     author's own personal file.
+ *   - `user_id` / `service_account_id` — the AUTHOR (exactly one is set). A
+ *     file with no `project_id` is the author's own personal file.
  *   - `project_id` — when set, the file belongs to that PROJECT; access is the
  *     project's membership (not the author). Deleting the project deletes the
  *     file (cascade).
@@ -48,10 +49,18 @@ const filesTable = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
-    /** Author — whoever produced the file; their deletion removes it. */
-    userId: text("user_id")
-      .notNull()
-      .references(() => usersTable.id, { onDelete: "cascade" }),
+    /**
+     * Author — whoever produced the file; their deletion removes it. Null when
+     * a service account authored it.
+     */
+    userId: text("user_id").references(() => usersTable.id, {
+      onDelete: "cascade",
+    }),
+    /** Authoring service account; null when a person authored the file. */
+    serviceAccountId: uuid("service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "cascade" },
+    ),
     /** Owning project; null = the author's own file. Project delete cascades. */
     projectId: uuid("project_id").references(() => projectsTable.id, {
       onDelete: "cascade",
@@ -84,6 +93,7 @@ const filesTable = pgTable(
   (table) => [
     index("files_organization_id_idx").on(table.organizationId),
     index("files_user_id_idx").on(table.userId),
+    index("files_service_account_id_idx").on(table.serviceAccountId),
     index("files_project_id_idx").on(table.projectId),
     index("files_conversation_id_idx").on(table.conversationId),
     index("files_sandbox_id_idx").on(table.sandboxId),
@@ -115,9 +125,30 @@ const filesTable = pgTable(
       .where(
         sql`${table.projectId} IS NULL AND ${table.conversationId} IS NULL AND ${table.appId} IS NULL`,
       ),
+    // The same three author scopes for a service account, whose rows have a
+    // NULL user_id that the indexes above treat as distinct.
+    uniqueIndex("files_service_account_conversation_filename_uidx")
+      .on(table.serviceAccountId, table.conversationId, table.filename)
+      .where(
+        sql`${table.serviceAccountId} IS NOT NULL AND ${table.projectId} IS NULL AND ${table.conversationId} IS NOT NULL`,
+      ),
+    uniqueIndex("files_service_account_app_filename_uidx")
+      .on(table.serviceAccountId, table.appId, table.filename)
+      .where(
+        sql`${table.serviceAccountId} IS NOT NULL AND ${table.appId} IS NOT NULL`,
+      ),
+    uniqueIndex("files_service_account_filename_orphan_uidx")
+      .on(table.serviceAccountId, table.filename)
+      .where(
+        sql`${table.serviceAccountId} IS NOT NULL AND ${table.projectId} IS NULL AND ${table.conversationId} IS NULL AND ${table.appId} IS NULL`,
+      ),
     uniqueIndex("files_project_filename_uidx")
       .on(table.projectId, table.filename)
       .where(sql`${table.projectId} IS NOT NULL`),
+    check(
+      "files_author_chk",
+      sql`num_nonnulls(${table.userId}, ${table.serviceAccountId}) = 1`,
+    ),
     // exactly one byte location per row; provider-agnostic so adding an
     // external backend later needs no CHECK migration.
     check(

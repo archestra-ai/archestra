@@ -7,7 +7,6 @@ import {
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { dynamicAccessContext } from "@/archestra-mcp-server/dynamic-tools";
-import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { ToolModel } from "@/models";
@@ -39,8 +38,6 @@ export async function isSkillSandboxAvailableForAgent(params: {
   if (!config.skillsSandbox.enabled) return false;
   if (!params.userId) return false;
   if (!params.agentId) return false;
-  // Sandboxes are owned by a `users` row; a service account has none.
-  if (isServiceAccountUserId(params.userId)) return false;
 
   const allowed = await userHasPermission(
     params.userId,

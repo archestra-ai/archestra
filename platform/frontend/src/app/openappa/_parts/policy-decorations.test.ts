@@ -20,7 +20,6 @@ function declarations(
       refusal: null,
     },
     managedInGithub: false,
-    heldPull: null,
     credentialBindings: [],
     ...overrides,
   };

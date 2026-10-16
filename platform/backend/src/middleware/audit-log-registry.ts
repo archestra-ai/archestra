@@ -844,12 +844,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
-  // A POST walk-up is discarded, so the accept action registers its own path.
-  "/api/openappa/github-sync/accept-held": {
-    resourceType: "organization",
-    action: "organization.updated",
-    resourceIdSource: "organizationContext",
-  },
   "/api/openappa/battery-installs": {
     resourceType: "openappaBatteryInstall",
     fetchById: (id, orgId) =>

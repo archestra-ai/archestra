@@ -90414,12 +90414,6 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             } | null;
         };
         managedInGithub: boolean;
-        heldPull: {
-            contentHash: string;
-            sourceCommit: string;
-            reasons: Array<'drops_batteries' | 'changes_credentials'>;
-            message: string | null;
-        } | null;
         credentialBindings: Array<{
             variable: string;
             key: string;
@@ -91294,12 +91288,6 @@ export type SetOpenappaCredentialBindingResponses = {
             } | null;
         };
         managedInGithub: boolean;
-        heldPull: {
-            contentHash: string;
-            sourceCommit: string;
-            reasons: Array<'drops_batteries' | 'changes_credentials'>;
-            message: string | null;
-        } | null;
         credentialBindings: Array<{
             variable: string;
             key: string;
@@ -92114,10 +92102,6 @@ export type GetAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
-            declarationsPendingPublish: boolean;
-            heldContentHash: string | null;
-            heldSourceCommit: string | null;
-            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
@@ -92230,10 +92214,6 @@ export type UpdateAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
-            declarationsPendingPublish: boolean;
-            heldContentHash: string | null;
-            heldSourceCommit: string | null;
-            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
@@ -92348,10 +92328,6 @@ export type ConfigureAppaGithubSyncResponses = {
             setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
-            declarationsPendingPublish: boolean;
-            heldContentHash: string | null;
-            heldSourceCommit: string | null;
-            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
@@ -92468,10 +92444,6 @@ export type CreateAppaGithubRepositoryResponses = {
             setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
-            declarationsPendingPublish: boolean;
-            heldContentHash: string | null;
-            heldSourceCommit: string | null;
-            heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
@@ -93211,215 +93183,6 @@ export type GetAppaGithubAppRepositoriesResponses = {
 };
 
 export type GetAppaGithubAppRepositoriesResponse = GetAppaGithubAppRepositoriesResponses[keyof GetAppaGithubAppRepositoriesResponses];
-
-export type GetHeldAppaGithubPullData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/openappa/github-sync/held';
-};
-
-export type GetHeldAppaGithubPullErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetHeldAppaGithubPullError = GetHeldAppaGithubPullErrors[keyof GetHeldAppaGithubPullErrors];
-
-export type GetHeldAppaGithubPullResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        sourceCommit: string | null;
-        reasons: Array<'drops_batteries' | 'changes_credentials'>;
-        grants: Array<{
-            battery: string;
-            variable: string;
-            key: string;
-        }>;
-        droppedBatteries: Array<string>;
-    } | null;
-};
-
-export type GetHeldAppaGithubPullResponse = GetHeldAppaGithubPullResponses[keyof GetHeldAppaGithubPullResponses];
-
-export type AcceptHeldAppaGithubPullData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/openappa/github-sync/accept-held';
-};
-
-export type AcceptHeldAppaGithubPullErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type AcceptHeldAppaGithubPullError = AcceptHeldAppaGithubPullErrors[keyof AcceptHeldAppaGithubPullErrors];
-
-export type AcceptHeldAppaGithubPullResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        contentHash: string;
-        sourceCommit: string;
-        reasons: Array<'drops_batteries' | 'changes_credentials'>;
-        droppedBatteries: Array<string>;
-        changedVariables: Array<string>;
-        status: {
-            enabled: boolean;
-            source: {
-                organizationId: string;
-                repo: string | null;
-                ref: string | null;
-                path: string | null;
-                interval: '15m' | '1h' | '1d' | null;
-                githubPatId: string | null;
-                githubAppConfigId: string | null;
-                gitlabTokenId: string | null;
-                revision: string;
-                sourceCommit: string | null;
-                setupPullRequestNumber: number | null;
-                lastSyncedAt: string | null;
-                lastSyncError: string | null;
-                declarationsPendingPublish: boolean;
-                heldContentHash: string | null;
-                heldSourceCommit: string | null;
-                heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
-            } | null;
-            hasPolicy: boolean;
-            validationDirectory: string;
-            githubWebUrl: string;
-            provider: 'github' | 'gitlab';
-        };
-    };
-};
-
-export type AcceptHeldAppaGithubPullResponse = AcceptHeldAppaGithubPullResponses[keyof AcceptHeldAppaGithubPullResponses];
 
 export type ConsultOpenappaBatteryHelperData = {
     body: {

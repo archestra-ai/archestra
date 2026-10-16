@@ -7,12 +7,6 @@ import { PolicyTestDirectorySchema } from "./openappa-policy-tests";
 const AppaSyncIntervalSchema = z.enum(["15m", "1h", "1d"]);
 export type AppaSyncInterval = z.infer<typeof AppaSyncIntervalSchema>;
 
-/** Why a pulled document is held instead of published. */
-export const HeldPullReasonSchema = z.enum([
-  "drops_batteries",
-  "changes_credentials",
-]);
-export type HeldPullReason = z.infer<typeof HeldPullReasonSchema>;
 const AppaGithubRefSchema = z
   .string()
   .trim()
@@ -109,9 +103,7 @@ export const CreateAppaGithubRepositorySchema = z
   );
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
   interval: z.union([AppaSyncIntervalSchema, z.null()]),
-  heldReasons: z.array(HeldPullReasonSchema),
-  // Held bytes stay in the database like the accepted ones; the hash identifies the pull.
-}).omit({ content: true, heldContent: true });
+}).omit({ content: true });
 export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),
@@ -121,27 +113,6 @@ export const AppaGithubSyncStatusSchema = z.object({
   githubWebUrl: z.string(),
   /** Which host the source lives on; links and wording follow it. */
   provider: GitProviderSchema,
-});
-/**
- * A held pull, itemized for review: each credential it would hand a battery and
- * each battery it would remove. Judged against the current policy, as accepting is.
- */
-export const HeldPullDetailsSchema = z.object({
-  sourceCommit: z.string().nullable(),
-  reasons: z.array(HeldPullReasonSchema),
-  grants: z.array(
-    z.object({ battery: z.string(), variable: z.string(), key: z.string() }),
-  ),
-  droppedBatteries: z.array(z.string()),
-});
-/** What accepting a held pull published, and what it changed to publish it. */
-export const AcceptedHeldPullSchema = z.object({
-  contentHash: z.string(),
-  sourceCommit: z.string(),
-  reasons: z.array(HeldPullReasonSchema),
-  droppedBatteries: z.array(z.string()),
-  changedVariables: z.array(z.string()),
-  status: AppaGithubSyncStatusSchema,
 });
 export const AppaGithubSyncActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sync") }).strict(),

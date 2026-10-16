@@ -15,10 +15,6 @@ const source = {
   setupPullRequestNumber: 7,
   lastSyncedAt: null,
   lastSyncError: null,
-  declarationsPendingPublish: false,
-  heldContentHash: null,
-  heldSourceCommit: null,
-  heldReasons: [],
 };
 
 describe("setupPullRequestOutcome", () => {

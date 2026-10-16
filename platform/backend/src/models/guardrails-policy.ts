@@ -72,14 +72,9 @@ class GuardrailsPolicyModel {
    * Insert the revision the install-declaration migration authors, with no user
    * behind it. Same advisory lock and same `expectedRevision` check as `save`,
    * and unlike `save` it writes while the organization's GitHub sync is on: the
-   * declarations it carries are the legacy install rows, which the repository
-   * text does not hold yet and which the first recompose after the deploy would
-   * otherwise delete. It is the migration's own path — every user-driven write
-   * goes through `guardrailsPolicyService.update`, which authorizes the grants
-   * it adds; this one authors none that the install rows did not already serve.
-   *
-   * The revision and the flag that marks it unpublished are one write: a crash
-   * between them would leave declarations the repository never learns about.
+   * declarations it carries are the legacy install rows, which the first
+   * recompose after the deploy would otherwise delete. It is the migration's own
+   * path — every user-driven write goes through `guardrailsPolicyService.update`.
    */
   static async saveDeclarationMigration(params: {
     organizationId: string;
@@ -89,10 +84,7 @@ class GuardrailsPolicyModel {
   }): Promise<GuardrailsPolicy | null> {
     return db.transaction(async (tx) => {
       await lockGuardrailsPolicy(tx, params.organizationId);
-      const saved = await insertRevision(tx, { ...params, updatedBy: null });
-      if (saved)
-        await markDeclarationsPendingPublish(tx, params.organizationId);
-      return saved;
+      return insertRevision(tx, { ...params, updatedBy: null });
     });
   }
 
@@ -126,25 +118,6 @@ export async function lockGuardrailsPolicy(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`guardrails-policy:${organizationId}`}, 0))`,
   );
-}
-
-/**
- * Mark the organization's declarations as not yet in its repository, creating
- * the sync row when it configured no source: the flag is what keeps the next
- * pull from dropping batteries the repository text does not know about.
- */
-async function markDeclarationsPendingPublish(
-  tx: Transaction,
-  organizationId: string,
-) {
-  const sync = schema.openappaGithubSyncTable;
-  // A pull that read the row before this flag was set must not clear it: the
-  // revision it keys its write on changes here.
-  const flagged = { declarationsPendingPublish: true, revision: randomUUID() };
-  await tx
-    .insert(sync)
-    .values({ organizationId, ...flagged })
-    .onConflictDoUpdate({ target: sync.organizationId, set: flagged });
 }
 
 /** The revision after `expectedRevision`, or nothing when that race was lost. */

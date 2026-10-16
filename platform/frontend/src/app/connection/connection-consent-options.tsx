@@ -79,7 +79,9 @@ export function ConnectionConsentOptions({
   skills: {
     include: boolean;
     setInclude: (value: boolean) => void;
+    /** The first names, up to the setup cap; `total` counts every skill. */
     names: string[];
+    total: number;
   } | null;
   plugins: {
     all: PluginListItem[];
@@ -181,9 +183,9 @@ export function ConnectionConsentOptions({
               label="Skills"
               summary={skillsSummary(skills)}
               toggle={{
-                checked: skills.include && skills.names.length > 0,
+                checked: skills.include && skills.total > 0,
                 onChange: skills.setInclude,
-                disabled: skills.names.length === 0,
+                disabled: skills.total === 0,
               }}
             />
           )}
@@ -484,11 +486,11 @@ function proxySummary(
 function skillsSummary(
   skills: NonNullable<Parameters<typeof ConnectionConsentOptions>[0]["skills"]>,
 ): string {
-  const { names, include } = skills;
-  if (names.length === 0) return "None available";
-  if (!include) return `${names.length} available, not installed`;
+  const { names, total, include } = skills;
+  if (total === 0) return "None available";
+  if (!include) return `${total} available, not installed`;
   const head = names.slice(0, 2).join(", ");
-  const rest = names.length - 2;
+  const rest = total - Math.min(names.length, 2);
   return rest > 0 ? `${head} +${rest}` : head;
 }
 

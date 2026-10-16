@@ -60,6 +60,7 @@ import { useStartAgentRun } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
@@ -613,6 +614,7 @@ function ProjectFilesSidebar({
   const [instructionsTruncated, setInstructionsTruncated] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [previewSummary, setPreviewSummary] = useState<string | null>(null);
 
   useEffect(() => {
     const preview = instructionsPreview.current;
@@ -663,6 +665,7 @@ function ProjectFilesSidebar({
     });
 
   const openFile = (id: string) => {
+    setPreviewSummary(null);
     setSelectedId(id);
     const file = items.find((item) => item.id === id);
     setEditing(
@@ -835,8 +838,22 @@ function ProjectFilesSidebar({
           }}
           title={instructionsSelected ? "Instructions" : detailName}
           size="large"
+          headerExtra={
+            previewSummary ? (
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                {previewSummary}
+              </span>
+            ) : undefined
+          }
           // Reading a short file should not reserve an editor-sized canvas.
-          className={editing ? undefined : "h-auto max-h-[90dvh]"}
+          className={
+            editing
+              ? undefined
+              : selected &&
+                  getFilePreviewKind(selected.mimeType, selected.name) === "csv"
+                ? "h-auto max-h-[90dvh] max-w-3xl"
+                : "h-auto max-h-[90dvh]"
+          }
         >
           {previewing && instructionsSelected ? (
             <ProjectInstructionsPanel
@@ -850,6 +867,7 @@ function ProjectFilesSidebar({
               // Per-file key: drop any editor state when the previewed file changes.
               key={selected.id}
               file={selected}
+              onPreviewSummaryChange={setPreviewSummary}
               onClose={deselect}
               // The row id, or the `obj_` ref of a hand-placed object; the
               // content route edits either in place.

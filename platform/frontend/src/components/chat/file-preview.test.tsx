@@ -240,6 +240,11 @@ describe("FilePreview csv", () => {
     const rows = await screen.findAllByRole("row");
     expect(rows).toHaveLength(3);
     expect(
+      within(rows[0])
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Customer", "Amount", "Status"]);
+    expect(
       within(rows[1])
         .getAllByRole("cell")
         .map((cell) => cell.textContent),

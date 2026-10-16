@@ -133,6 +133,36 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  http.get("/api/skill-sandbox/artifacts/preview-fixture-wide.csv", () => {
+    const headers = [
+      "Team",
+      "Region",
+      "Owner",
+      "Status",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "Notes",
+    ];
+    const rows = Array.from({ length: 150 }, (_, i) =>
+      [
+        `Example team ${i + 1}`,
+        "North America",
+        `Owner ${i + 1}`,
+        i % 2 ? "Pending" : "Ready",
+        ...Array.from({ length: 8 }, (_, m) => String((i + 1) * (m + 3))),
+        `Synthetic comparison row ${i + 1}: a longer note that keeps its full text`,
+      ].join(","),
+    );
+    return HttpResponse.text([headers.join(","), ...rows].join("\n"), {
+      headers: { "Content-Type": "text/csv" },
+    });
+  }),
   // Byte-response fixture for the real project file preview (JSON overrides
   // cannot represent a raw CSV response with quoted commas and newlines).
   http.get("/api/skill-sandbox/artifacts/preview-fixture-report.csv", () =>

@@ -189,7 +189,69 @@ test("opens CSV in a table and fits the short preview", async ({
   ).toBeVisible();
   await expect
     .poll(async () => (await dialog.boundingBox())?.height ?? 800)
-    .toBeLessThan(300);
+    .toBeLessThan(350);
+});
+
+test("keeps a long wide CSV inside the viewport with a sticky header", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  await mockProject(mswControl, request, { instructions: "", fileCount: 0 });
+  await mswControl.use({
+    method: "get",
+    url: `${PROJECT_PATH}/files`,
+    body: [
+      {
+        id: "wide-csv-row",
+        downloadRef: "preview-fixture-wide.csv",
+        filename: "wide-report.csv",
+        mimeType: "text/csv",
+        sizeBytes: 10000,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        downloadable: true,
+        projectId: PROJECT_ID,
+        projectName: "Release train",
+      },
+    ],
+  });
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await page
+    .getByRole("button", { name: "wide-report.csv", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "wide-report.csv" });
+  await expect(dialog.getByText("150 rows · 13 columns")).toBeVisible();
+  await expect(
+    dialog.getByRole("columnheader", { name: "Team", exact: true }),
+  ).toBeVisible();
+  const scroller = dialog.locator('[data-slot="table-container"]');
+  await expect
+    .poll(() =>
+      scroller.evaluate(
+        (el) =>
+          el.scrollWidth > el.clientWidth && el.scrollHeight > el.clientHeight,
+      ),
+    )
+    .toBe(true);
+  await scroller.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+    el.scrollLeft = el.scrollWidth;
+  });
+  await expect(
+    dialog.getByRole("columnheader", { name: "Notes", exact: true }),
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole("cell", {
+      name: "Synthetic comparison row 150: a longer note that keeps its full text",
+      exact: true,
+    }),
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole("heading", { name: "wide-report.csv", exact: true }),
+  ).toBeInViewport();
+  const box = await dialog.boundingBox();
+  expect(box?.height).toBeLessThanOrEqual(721);
+  expect(box?.width).toBeLessThanOrEqual(1280);
 });
 
 function projectSidebar(page: Page) {

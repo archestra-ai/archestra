@@ -65,6 +65,10 @@ class McpGatewayTaskReaper {
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.OpenAppaHitlReviewHistory,
       );
+      // A runtime that never makes another request leaves its pinned files.
+      await cacheManager.deleteExpiredByPrefix(
+        CacheKey.AgentRuntimePendingExports,
+      );
       if (failed > 0 || purged > 0) {
         logger.info(
           { failed, purged },

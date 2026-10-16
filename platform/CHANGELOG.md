@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.4.0-rc.45](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.44...platform-v1.4.0-rc.45) (2026-10-16)
+
+
+### Features
+
+* **api:** read deployment environments by ID ([#9021](https://github.com/archestra-ai/archestra/issues/9021)) ([6fb81d9](https://github.com/archestra-ai/archestra/commit/6fb81d9436cc180a8869efe180c266562d6dd31d))
+
+
+### Bug Fixes
+
+* **agent-runtime:** honor configured workspace startup timeout ([#9026](https://github.com/archestra-ai/archestra/issues/9026)) ([da40c8e](https://github.com/archestra-ai/archestra/commit/da40c8ebf368b31a9d4a981eaa4425531940ebbb))
+
+
+### Performance Improvements
+
+* bound agent selectors and chat initialization ([#9028](https://github.com/archestra-ai/archestra/issues/9028)) ([b3ce6de](https://github.com/archestra-ai/archestra/commit/b3ce6de1362e1ee5334fc8d325a384a356d34f2c))
+
 ## [1.4.0-rc.44](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.43...platform-v1.4.0-rc.44) (2026-10-16)
 
 

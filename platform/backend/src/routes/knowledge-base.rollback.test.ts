@@ -902,6 +902,41 @@ describe("knowledge base routes", () => {
     });
   });
 
+  describe("POST /api/connectors/:id/force-resync", () => {
+    test("stores zero documents for the connector it empties", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "resync-total",
+        connectorId: connector.id,
+        title: "resync",
+        content: "resync",
+        contentHash: "hash-resync-total",
+      });
+      const totalOnPage = async () =>
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/connectors/${connector.id}`,
+          })
+        ).json().totalDocsIngested;
+      expect(await totalOnPage()).toBe(1);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/force-resync`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(await totalOnPage()).toBe(0);
+    });
+  });
+
   describe("GET /api/knowledge-bases", () => {
     test("lists knowledge bases with pagination", async () => {
       await KnowledgeBaseModel.create({ organizationId, name: "KB A" });

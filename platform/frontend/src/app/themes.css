@@ -824,7 +824,7 @@ html.theme-cosmic-night {
   --primary-foreground: oklch(1.00 0 0);
   --secondary: oklch(0.92 0.04 292.69);
   --secondary-foreground: oklch(0.41 0.10 288.17);
-  --muted: oklch(0.96 0.01 286.15);
+  --muted: oklch(0.91 0.02 286.15);
   --muted-foreground: oklch(0.54 0.05 284.74);
   --accent: oklch(0.92 0.04 262.14);
   --accent-foreground: oklch(0.30 0.06 282.42);

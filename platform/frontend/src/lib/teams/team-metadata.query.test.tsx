@@ -144,3 +144,45 @@ it("loads compact teams and preserves vault choices when the BYOS picker opens",
   expect(teamQueries[0].get("includeRelations")).toBe("false");
   expect(vaultRequests).toBe(1);
 });
+
+it("waits for a known enabled BYOS feature before loading the default vault picker", async () => {
+  const context = setup();
+  context.client.removeQueries({ queryKey: ["config"], exact: true });
+  let releaseConfig: (() => void) | undefined;
+  const deferredConfig = new Promise<void>((resolve) => {
+    releaseConfig = resolve;
+  });
+  let configStarted = false;
+  let teamRequests = 0;
+  let vaultRequests = 0;
+  server.use(
+    http.get(`${origin}/api/config`, async () => {
+      configStarted = true;
+      await deferredConfig;
+      return HttpResponse.json({ features: { byosEnabled: true } });
+    }),
+    http.get(`${origin}/api/teams`, () => {
+      teamRequests++;
+      return HttpResponse.json({ data: [team] });
+    }),
+    http.get(`${origin}/api/teams/:id/vault-folder`, () => {
+      vaultRequests++;
+      return HttpResponse.json({ vaultPath: "shared/operations" });
+    }),
+  );
+  const { result } = renderHook(() => useTeamsWithVaultFolders(), context);
+  try {
+    await waitFor(() => expect(configStarted).toBe(true));
+    expect(teamRequests).toBe(0);
+    expect(vaultRequests).toBe(0);
+  } finally {
+    releaseConfig?.();
+  }
+  await waitFor(() =>
+    expect(result.current.data).toEqual([
+      { ...team, vaultPath: "shared/operations" },
+    ]),
+  );
+  expect(teamRequests).toBe(1);
+  expect(vaultRequests).toBe(1);
+});

@@ -159,7 +159,7 @@ export function useTeamsPaginated(params: TeamsPaginatedParams) {
  */
 export function useTeamsWithVaultFolders(params?: { enabled?: boolean }) {
   const byosEnabled = useFeature("byosEnabled");
-  const enabled = (params?.enabled ?? true) && byosEnabled;
+  const enabled = (params?.enabled ?? true) && byosEnabled === true;
   const { data: teams, isLoading: isLoadingTeams } = useTeams({
     includeRelations: false,
     enabled,

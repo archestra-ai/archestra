@@ -836,6 +836,8 @@ builtin = "hitl"
     assert.equal(next.decision, 'allow_call', JSON.stringify(next));
     const held = await hook(child, { event: 'child_return', operation_id: 'runtime-return:task:pending', output: 'must not settle read-next' });
     assert.equal(held.decision, 'block', JSON.stringify(held));
+    // The host keeps a busy runtime's file pending on this mark, not on the text.
+    assert.equal(held.busy, true, JSON.stringify(held));
     await result(child, 'read-next', 'private report');
     const admittedSecond = await cross('second', 'runtime result two');
     const latest = await native.loadChildReturns(organization_id, parent.session_id, {

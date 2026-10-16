@@ -403,6 +403,8 @@ export const AgentOptionSchema = SelectAgentSchema.pick({
   ),
 });
 
+export type AgentOption = z.infer<typeof AgentOptionSchema>;
+
 /** Paginated Agents-surface row with the current user's pin marker. */
 export const AgentListItemSchema = SelectAgentSchema.extend({
   pinnedAt: z.date().nullable(),

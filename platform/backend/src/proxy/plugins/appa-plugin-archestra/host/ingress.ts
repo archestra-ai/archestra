@@ -1,4 +1,8 @@
-import { OPENCODE_AGENT_HEADER } from "@archestra/shared";
+import {
+  APPA_SESSION_HEADER,
+  type InteractionSource,
+  OPENCODE_AGENT_HEADER,
+} from "@archestra/shared";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import type { FastifyRequest } from "fastify";
 import {
@@ -15,6 +19,11 @@ import {
   collectDelegationMarkers,
   stripDelegationMarkers,
 } from "@/openappa/delegation";
+import {
+  isAppaChatSource,
+  isWellFormedAppaId,
+  openappaEnabled,
+} from "@/openappa/service";
 import type { TrajectoryStamp } from "@/openappa/trajectory-stamp";
 import {
   appaWireFamily,
@@ -28,6 +37,7 @@ import { parseJsonHeader } from "@/proxy/plugins/appa-plugin-archestra/adapters/
 import { APPA_CLIENT_ADAPTERS } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { getHeaderValue } from "@/routes/proxy/utils/headers/meta-header";
+import type { SessionInfo } from "@/routes/proxy/utils/headers/session-id";
 import { ApiError } from "@/types";
 import { asRecord } from "@/utils/as-record";
 
@@ -125,9 +135,37 @@ export function scrubOpenappaIngress(params: {
   };
 }
 
+/**
+ * An external client's explicit OpenAPPA session names the runtime's root
+ * for this request, under the credential's scope, and the proxy log follows
+ * the id as the client sent it, so the two records join by that id under
+ * the runtime's scope prefix. Chat's header is its conversation id, which the
+ * ordinary path already records. Only while OpenAPPA is on: off, the header
+ * names nothing. A malformed header is left to the OpenAPPA session check,
+ * which refuses it.
+ */
+export function followAppaSessionHeader(params: {
+  headers: Record<string, string | string[] | undefined>;
+  source: InteractionSource;
+  ordinarySession: SessionInfo;
+}): SessionInfo {
+  const { ordinarySession } = params;
+  const appaSessionHeader =
+    openappaEnabled() && !isAppaChatSource(params.source)
+      ? params.headers[APPA_SESSION_HEADER.toLowerCase()]
+      : undefined;
+  // The platform's own requests carry the same id in both headers, and keep
+  // their ordinary provenance; only a client that names its session in the
+  // OpenAPPA header alone is followed there.
+  return isWellFormedAppaId(appaSessionHeader) &&
+    ordinarySession.sessionId !== appaSessionHeader
+    ? { sessionId: appaSessionHeader, sessionSource: "appa_header" }
+    : ordinarySession;
+}
+
 // ===
 
-type OpenappaIngress = {
+export type OpenappaIngress = {
   /** Read from the body as the client sent it, before any scrubbing. */
   clientCompaction: boolean;
   strippedReceiptCodes: string[];

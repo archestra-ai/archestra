@@ -2,7 +2,6 @@ import logger from "@/logging";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import { appendChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { wrapCompactionResponse } from "@/openappa/compaction-carrier";
-import type { OpenAppaSession } from "@/openappa/service";
 import { formatSessionReceipt } from "@/openappa/session-token";
 import {
   type AppaWireFamily,
@@ -10,6 +9,7 @@ import {
   appendSessionReceiptToResponse,
   declaredToolEntries,
 } from "@/openappa/wire";
+import type { OpenappaAdmission } from "@/proxy/plugins/appa-plugin-archestra/host/admission";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
   type AppaChildTrajectoryReceiptOutput,
@@ -44,23 +44,21 @@ export class OpenappaReceipts {
   static async prepare(params: {
     context: LlmProxyRequestContext;
     body: unknown;
-    session: OpenAppaSession | undefined;
-    callerId: string | undefined;
-    family: AppaWireFamily | undefined;
-    hasNativeClientSession: boolean;
-    isInternalChat: boolean;
+    admission: OpenappaAdmission;
     clientCompaction: boolean;
   }): Promise<OpenappaReceipts | undefined> {
-    const { context, body, session, family, clientCompaction } = params;
+    const { context, body, clientCompaction } = params;
+    const governed =
+      params.admission.kind === "governed" ? params.admission : undefined;
+    const family = governed?.family;
     const issued = context.resources.get(APPA_CHILD_TRAJECTORY_RECEIPT) as
       | AppaChildTrajectoryReceiptOutput
       | undefined;
     let sessionReceipt: SessionReceipt | undefined;
     if (
       !issued &&
-      session &&
-      params.hasNativeClientSession &&
-      !params.isInternalChat &&
+      governed?.hasNativeClientSession &&
+      governed.facts.chatSource === undefined &&
       !hasStructuredOutputConstraint(body) &&
       // The agent loop declares its tools. A client's side calls (Claude
       // Code's auto-mode classifier, its quota check, its next-prompt
@@ -69,9 +67,10 @@ export class OpenappaReceipts {
       (clientCompaction ||
         (declaredToolEntries(body).length > 0 &&
           !isClientPromptSuggestion(body))) &&
-      params.callerId &&
+      governed.callerId &&
       family
     ) {
+      const { session } = governed;
       const receipt = await OpenAppaSessionModel.ensureReceiptToken({
         organizationId: context.organizationId,
         sessionId: session.session_id,

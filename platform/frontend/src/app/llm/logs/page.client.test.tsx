@@ -243,7 +243,6 @@ describe("LlmProxyLogsPage proxy filter", () => {
       "Agent",
       "Model",
       "Usage",
-      "Spend",
       "Last request",
     ]) {
       expect(
@@ -251,8 +250,11 @@ describe("LlmProxyLogsPage proxy filter", () => {
       ).toBeInTheDocument();
     }
     expect(screen.getByText("Summarize the quarterly report")).toBeVisible();
-    expect(screen.getByText("3 requests")).toBeVisible();
-    expect(screen.getByText("25% cache read")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /3 requests,.*100 input tokens/ }),
+    ).toBeVisible();
+    expect(screen.getByText("100 in")).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: "Spend" })).toBeNull();
     expect(screen.getByText("+1 more")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Details" })).toBeNull();

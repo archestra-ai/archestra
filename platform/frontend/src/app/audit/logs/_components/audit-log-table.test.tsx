@@ -9,7 +9,7 @@ import { ALL_ACTOR_TYPES, ALL_OUTCOMES } from "./audit-log-action-labels";
 import { AuditLogTable } from "./audit-log-table";
 
 /**
- * Contract: AuditLogTable — compact columns (Activity / Actor / Resource / Time),
+ * Contract: AuditLogTable — compact columns (Resource / Actor / Time),
  * with network metadata reserved for the detail dialog,
  * resource NAME shown in grid (denormalized, snapshot fallback) for the
  * high-signal picker types only, while the raw resource id stays hidden,
@@ -197,10 +197,10 @@ describe("AuditLogTable", () => {
 
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.getByText("Agent updated")).toBeInTheDocument();
-    expect(screen.getByText("Success")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Success" })).toBeInTheDocument();
     expect(screen.getByText("Agent")).toBeInTheDocument();
     expect(
-      screen.getByRole("columnheader", { name: "Activity" }),
+      screen.getByRole("columnheader", { name: "Resource" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Time/ })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Where" })).toBeNull();
@@ -236,7 +236,7 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    expect(screen.getByText("Denied")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Denied" })).toBeInTheDocument();
   });
 
   it("falls back to 'Deleted user' when the actor is null", () => {

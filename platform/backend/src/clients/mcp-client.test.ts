@@ -748,6 +748,40 @@ describe("McpClient", () => {
     });
   });
 
+  test.each([
+    false,
+    true,
+  ])("persists processing latency for an upstream call (failure=%s)", async (failure) => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+    let now = 1000;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    mockCallTool.mockImplementation(async () => {
+      now += 386;
+      if (failure) throw new Error("Invalid tool arguments");
+      return { content: [{ type: "text", text: "ok" }], isError: false };
+    });
+    try {
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "timed-call", name: tool.name, arguments: {} },
+        agentOwner(agentId),
+      );
+      expect(result.isError).toBe(failure);
+      const [row] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+      expect(row.durationMs).toBe(386);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   test("rethrows an aborted call instead of retrying it", async () => {
     const tool = await ToolModel.createToolIfNotExists({
       name: "github-mcp-server__list_repos",

@@ -217,6 +217,7 @@ describe("interaction routes", () => {
       profileId: agent.id,
       sessionId: "summary-session",
       model: "gpt-4",
+      durationMs: 1240,
       inputTokens: 12,
       outputTokens: 7,
       request: {
@@ -244,10 +245,17 @@ describe("interaction routes", () => {
         id: interaction.id,
         sessionId: "summary-session",
         model: "gpt-4",
+        durationMs: 1240,
         inputTokens: 12,
         outputTokens: 7,
       }),
     ]);
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().durationMs).toBe(1240);
     expect(response.json().data[0]).not.toHaveProperty("request");
     expect(response.json().data[0]).not.toHaveProperty("response");
   });

@@ -9,6 +9,7 @@ import {
   FilterBar,
   FilterSelect,
 } from "@/components/filter-bar";
+import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
@@ -24,14 +25,10 @@ import {
   useExportExternalConsults,
   useExternalConsults,
 } from "@/lib/openappa/external-consults.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
 import { ConsultDetailSheet } from "./consult-detail-sheet";
 import { type ConsultView, toConsultView } from "./consult-details";
-import {
-  ALL_OUTCOMES,
-  ConsultOutcomeBadge,
-  OUTCOME_LABEL,
-} from "./consult-outcome-badge";
+import { ALL_OUTCOMES, OUTCOME_LABEL } from "./consult-outcome-badge";
+import { ConsultServiceCell } from "./consult-service-cell";
 
 export function ConsultsTable() {
   const { searchParams, updateQueryParams: updateUrlParams } =
@@ -129,7 +126,7 @@ export function ConsultsTable() {
           search={
             <SearchInput
               paramName="externalName"
-              placeholder="External name"
+              placeholder="Service name"
               paginationMode="cursor"
               onSearchChange={cursorPagination.goNewest}
               isLoading={isFetching}
@@ -173,6 +170,8 @@ export function ConsultsTable() {
 
       <DataTable<ConsultView, unknown>
         columns={COLUMNS}
+        fixedWidthColumnIds={["tool", "createdAt"]}
+        flexibleColumnIds={["service"]}
         data={rows}
         hideSelectedCount
         cursorPagination={
@@ -224,76 +223,40 @@ function parseOutcome(
   return ALL_OUTCOMES.find((outcome) => outcome === value);
 }
 
-function formatDuration(ms: number): string {
-  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
-}
-
-const Muted = () => <span className="text-xs text-muted-foreground">—</span>;
-
 const COLUMNS: ColumnDef<ConsultView>[] = [
   {
-    id: "createdAt",
-    header: "Time",
-    size: 180,
-    cell: ({ row }) => (
-      <div className="min-w-0">
-        <div className="text-sm">
-          {formatRelativeTimeFromNow(row.original.consult.createdAt)}
-        </div>
-        <div className="truncate font-mono text-[11px] text-muted-foreground">
-          {formatDate({
-            date: row.original.consult.createdAt,
-            dateFormat: "MMM d, yyyy · HH:mm:ss",
-          })}
-        </div>
-      </div>
-    ),
-  },
-  {
-    id: "externalName",
-    header: "External",
-    size: 160,
-    cell: ({ row }) => (
-      <span
-        className="block truncate font-mono text-xs"
-        title={row.original.consult.externalName}
-      >
-        {row.original.consult.externalName}
-      </span>
-    ),
+    id: "service",
+    header: "Service",
+    accessorFn: (view) => view.consult.externalName,
+    size: 280,
+    minSize: 190,
+    cell: ({ row }) => <ConsultServiceCell consult={row.original.consult} />,
   },
   {
     id: "tool",
     header: "Tool",
-    size: 320,
-    cell: ({ row }) =>
-      row.original.toolCall ? (
-        <span
-          className="block truncate font-mono text-xs"
-          title={row.original.toolCall.name}
-        >
-          {row.original.toolCall.name}
-        </span>
-      ) : (
-        <Muted />
-      ),
-  },
-  {
-    id: "duration",
-    header: "Duration",
-    size: 100,
+    accessorFn: (view) => view.toolCall?.name ?? "",
+    size: 260,
+    minSize: 180,
     cell: ({ row }) => (
-      <span className="text-sm tabular-nums">
-        {formatDuration(row.original.consult.durationMs)}
+      <span
+        className="block truncate font-mono text-xs text-muted-foreground"
+        title={row.original.toolCall?.name}
+      >
+        {row.original.toolCall?.name ?? "No tool context"}
       </span>
     ),
   },
   {
-    id: "outcome",
-    header: "Outcome",
-    size: 140,
+    id: "createdAt",
+    header: "Time",
+    size: 154,
+    minSize: 145,
     cell: ({ row }) => (
-      <ConsultOutcomeBadge outcome={row.original.consult.outcome} />
+      <LogTime
+        timestamp={row.original.consult.createdAt}
+        durationMs={row.original.consult.durationMs}
+      />
     ),
   },
 ];

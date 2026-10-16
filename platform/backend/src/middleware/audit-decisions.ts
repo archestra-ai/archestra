@@ -799,7 +799,7 @@ export const AUDIT_DECISIONS = {
   kbConnectorDocumentCountsTable: {
     audited: false,
     reason:
-      "derived per-connector document counts; maintained by kb_documents triggers, never edited by a user",
+      "derived per-connector document totals; written by sync runs, document deletes and uploads, or the first read, never edited by a user",
   },
   kbContainerAclsTable: {
     audited: false,

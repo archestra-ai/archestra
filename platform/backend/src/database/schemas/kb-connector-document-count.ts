@@ -2,27 +2,24 @@ import { bigint, pgTable, uuid } from "drizzle-orm/pg-core";
 import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
 
 /**
- * Stored number of `kb_documents` rows per connector.
+ * Stored number of `kb_documents` rows per connector, so listings do not count
+ * every document on each request.
  *
- * Maintained entirely by triggers on `kb_documents` (see the migration that
- * creates this table): statement-level INSERT/DELETE/TRUNCATE triggers with
- * transition tables, plus a row-level trigger for the rare UPDATE that moves a
- * document to another connector. Application code only reads it, so the
- * knowledge base listing does not have to count every document on each
- * request.
+ * A connector has no row until it is first counted (the "not counted yet"
+ * state). Rows are written when a sync run ends, after documents are deleted or
+ * uploaded outside a sync, and lazily by the first read that finds no row.
+ * Every write stores the connector's current total, never an increment, so a
+ * repeated or out-of-order write cannot make the count drift: the next write
+ * corrects it.
  *
- * Kept off `knowledge_base_connectors` so connector rows (rewritten by every
- * sync checkpoint) do not also churn on each document write, and so the
- * connector API schemas stay unchanged. A connector with no row has 0
- * documents.
+ * Kept off `knowledge_base_connectors` so the connector API schemas and their
+ * declarative reads stay unchanged.
  */
 const kbConnectorDocumentCountsTable = pgTable("kb_connector_document_counts", {
   connectorId: uuid("connector_id")
     .primaryKey()
     .references(() => knowledgeBaseConnectorsTable.id, { onDelete: "cascade" }),
-  documentCount: bigint("document_count", { mode: "number" })
-    .notNull()
-    .default(0),
+  documentCount: bigint("document_count", { mode: "number" }).notNull(),
 });
 
 export default kbConnectorDocumentCountsTable;

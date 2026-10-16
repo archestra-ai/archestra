@@ -42,6 +42,7 @@ import {
   AgentModel,
   InteractionModel,
   InternalMcpCatalogModel,
+  KbConnectorDocumentCountModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   LlmProviderApiKeyModel,
@@ -948,6 +949,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Delete all KB documents (chunks cascade via FK)
       await KbDocumentModel.deleteByOrganization(organizationId);
+      await KbConnectorDocumentCountModel.refreshForOrganization({
+        organizationId,
+      });
 
       // Reset connector checkpoints so next sync does a full re-ingest
       await KnowledgeBaseConnectorModel.resetCheckpointsByOrganization(

@@ -859,6 +859,47 @@ describe("knowledge base routes", () => {
       expect(await KbDocumentModel.findById(document.id)).toBeNull();
       expect(await KbChunkModel.findByDocument(document.id)).toEqual([]);
     });
+
+    test("updates the connector's document total shown on its page", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          access: "org",
+        },
+      );
+      const documents = await Promise.all(
+        ["first", "second"].map((name) =>
+          KbDocumentModel.create({
+            organizationId,
+            sourceId: `total-${name}`,
+            connectorId: connector.id,
+            title: name,
+            content: name,
+            contentHash: `hash-total-${name}`,
+          }),
+        ),
+      );
+      const totalOnPage = async () =>
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/connectors/${connector.id}`,
+          })
+        ).json().totalDocsIngested;
+      expect(await totalOnPage()).toBe(2);
+
+      await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/documents/${documents[0].id}`,
+      });
+
+      expect(await totalOnPage()).toBe(1);
+    });
   });
 
   describe("GET /api/knowledge-bases", () => {
@@ -1710,6 +1751,46 @@ describe("knowledge base routes", () => {
   });
 
   describe("GET /api/connectors", () => {
+    test("returns each connector's document total", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+      const kb = await makeKnowledgeBase(organizationId);
+      const withDocuments = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+      );
+      const empty = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      for (const name of ["one", "two", "three"]) {
+        await KbDocumentModel.create({
+          organizationId,
+          sourceId: `list-total-${name}`,
+          connectorId: withDocuments.id,
+          title: name,
+          content: name,
+          contentHash: `hash-list-total-${name}`,
+        });
+      }
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=50&offset=0",
+      });
+
+      expect(list.statusCode).toBe(200);
+      const totals = new Map(
+        list
+          .json()
+          .data.map((c: { id: string; totalDocsIngested: number }) => [
+            c.id,
+            c.totalDocsIngested,
+          ]),
+      );
+      expect(totals.get(withDocuments.id)).toBe(3);
+      expect(totals.get(empty.id)).toBe(0);
+    });
+
     test("shows permission-sync connectors to members with connector grants", async ({
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,

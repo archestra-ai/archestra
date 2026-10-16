@@ -1,5 +1,5 @@
 {
-  "id": "56202367-f319-429d-a864-ce93544d32f9",
+  "id": "66b1911d-4f07-4623-850a-d08c65649760",
   "prevId": "58ea45fc-5c74-468c-884d-620a9d2718ef",
   "version": "7",
   "dialect": "postgresql",
@@ -11963,8 +11963,7 @@
           "name": "document_count",
           "type": "bigint",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": true
         }
       },
       "indexes": {},

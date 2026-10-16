@@ -10,6 +10,8 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import KbConnectorDocumentCountModel from "@/models/kb-connector-document-count";
+import KbDocumentModel from "@/models/kb-document";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
@@ -2193,6 +2195,49 @@ describe("organization routes", () => {
         success: false,
         error: "Reranker could not be reached.",
       });
+    });
+  });
+
+  describe("POST /api/organization/knowledge-settings/drop-embedding", () => {
+    test("stores zero documents for every connector it emptied", async ({
+      makeSecret,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      await OrganizationModel.patch(organizationId, {
+        embeddingChatApiKeyId: apiKey.id,
+        embeddingModel: "gemini-embedding-001",
+      });
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      await KbDocumentModel.create({
+        organizationId,
+        connectorId: connector.id,
+        sourceId: "dropped",
+        title: "Dropped",
+        content: "dropped",
+        contentHash: "hash-dropped",
+      });
+      await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/drop-embedding",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]),
+      ).toEqual(new Map([[connector.id, 0]]));
     });
   });
 });

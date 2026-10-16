@@ -1,6 +1,6 @@
 import { withoutChildReturnMarker } from "@/openappa/child-return";
+import { asRecord } from "@/utils/as-record";
 import type { AppaPeerTrailer, AppaRelayArrival } from "../types";
-import { asRecord } from "./trajectory";
 
 const PEER_MESSAGE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

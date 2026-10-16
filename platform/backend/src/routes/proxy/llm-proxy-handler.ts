@@ -8,7 +8,6 @@ import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 
 import {
   APP_ID_HEADER,
-  APPA_SESSION_HEADER,
   ArchestraInternalErrorCode,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
@@ -50,12 +49,10 @@ import logger from "@/logging";
 import {
   AgentTeamModel,
   AppModel,
-  ConversationModel,
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
-  OpenAppaSessionModel,
   TeamModel,
   UserModel,
 } from "@/models";
@@ -77,113 +74,31 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
-import { scopedSessionId } from "@/openappa/actor";
-import {
-  type CollectedChildReturns,
-  collectAndStripChildReturns,
-} from "@/openappa/child-return";
-import {
-  type AppaChildTrajectoryReceipt,
-  appendChildTrajectoryReceipt,
-  stripChildTrajectoryReceipts,
-} from "@/openappa/child-trajectory-receipt";
-import {
-  unwrapCompactionCarriersFromRequest,
-  wrapCompactionResponse,
-} from "@/openappa/compaction-carrier";
-import {
-  type AppaDelegationMarker,
-  collectDelegationMarkers,
-  stripDelegationMarkers,
-} from "@/openappa/delegation";
-import { forkedSession } from "@/openappa/lineage";
-import {
-  prepareAppaRequest,
-  sanitizeProviderBoundRequest,
-} from "@/openappa/request";
-import {
-  APPA_PARENT_HEADER,
-  isAppaChatSource,
-  isAppaDelegatedRun,
-  isWellFormedAppaId,
-  type OpenAppaSession,
-  openappaEnabled,
-  sessionFromHeaders,
-} from "@/openappa/service";
-import { formatSessionReceipt } from "@/openappa/session-token";
-import {
-  APPA_SUBAGENT_BINDING_HEADER,
-  verifySubagentBinding,
-} from "@/openappa/subagent-binding";
-import {
-  APPA_THREAD_RECORD,
-  clientKeepsThreadPairing,
-  echoedCallsMessage,
-  readThreadRequest,
-  type ThreadRecord,
-  threadAlreadyContinuedBody,
-  threadNotFoundBody,
-  threadStates,
-  threadToolsOf,
-  threadUnsupportedBody,
-  toolSkeletonOf,
-} from "@/openappa/thread-state";
-import {
-  restoreTrajectoryStampText,
-  stampedSessions,
-  withoutTrajectoryStamp,
-} from "@/openappa/trajectory-stamp";
+import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
+import { sanitizeProviderBoundRequest } from "@/openappa/request";
+import { isAppaChatSource } from "@/openappa/service";
+import type { GovernedThread } from "@/openappa/thread-state";
+import { restoreTrajectoryStampText } from "@/openappa/trajectory-stamp";
 import { startedUnenforced } from "@/openappa/unenforced";
+import { appaWireFamily } from "@/openappa/wire";
 import {
-  type AppaSessionIdentity,
-  appaWireFamily,
-  appendChildTrajectoryReceiptToResponse,
-  appendSessionReceiptToResponse,
-  declaredToolEntries,
-  providerWire,
-  restoreTrajectoryStamps,
-  restoreTrajectoryStampsInText,
-  sessionReceiptEvidence,
-  stripChildTrajectoryReceiptsFromRequest,
-  stripSessionReceiptsFromRequest,
-} from "@/openappa/wire";
+  admitOpenappaRequest,
+  type OpenappaAdmission,
+  resolveInstallerSetupBypass,
+} from "@/proxy/plugins/appa-plugin-archestra/host/admission";
+import { BufferedChildStream } from "@/proxy/plugins/appa-plugin-archestra/host/child-stream-buffer";
+import { prepareOpenappaRequest } from "@/proxy/plugins/appa-plugin-archestra/host/governed-request";
 import {
-  asRecord,
-  parseJsonHeader,
-} from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
-import {
-  APPA_CLIENT_ADAPTERS,
-  appaTrajectory,
-  extractAppaSessionIdentity,
-  nativeSpawnParentId,
-} from "@/proxy/plugins/appa-plugin-archestra/session-identity";
-import {
-  APPA_CHILD_TRAJECTORY_RECEIPT,
-  APPA_PLUGIN_TRUSTED_CONTEXT,
-  type AppaChildTrajectoryReceiptOutput,
-  type AppaTrustedContext,
-} from "@/proxy/plugins/appa-plugin-archestra/types";
+  followAppaSessionHeader,
+  scrubOpenappaIngress,
+} from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
+import { OpenappaReceipts } from "@/proxy/plugins/appa-plugin-archestra/host/receipts";
 import {
   getLlmProxyPluginRegistry,
   type LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
-import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
-import {
-  RUNTIME_BINDING_HEADER,
-  resolveRuntimeIdentityByVirtualKeys,
-  resolveRuntimeSessionForWorkspace,
-  runtimeBindingAuthorizes,
-  runtimeSessionConflicts,
-} from "@/services/agent-runtime/runtime-identity";
-import {
-  carriesConnectionSetupReference,
-  connectionProxySetupContext,
-  readVerifiedConnectionProxySetup,
-} from "@/services/connection-proxy-setup-context";
-import { claimConnectionSetupConversation } from "@/services/connection-setup-conversation-claim";
-import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -200,7 +115,7 @@ import {
   type OpenAiCodexPassthrough,
   type ToolCallBlock,
 } from "@/types";
-import { trackBackgroundWork } from "@/utils/background-work";
+import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
@@ -266,14 +181,10 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   connectionVerification?: boolean;
-  openappaSession?: OpenAppaSession;
-  connectionSetupBypass: boolean;
-  sessionReceipt?: SessionReceiptOutput;
-  childTrajectoryReceipt?: ChildTrajectoryReceiptOutput;
-  childCompactionContext?: string;
+  appaReceipts?: OpenappaReceipts;
+  governedThread?: GovernedThread;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
-  /** Captured by the host after binding an authenticated APPA session. */
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -331,19 +242,6 @@ export interface LLMProxyContext<TRequest> {
    */
   streamTiming: StreamTiming;
 }
-
-type SessionReceiptOutput = {
-  family: NonNullable<ReturnType<typeof appaWireFamily>>;
-  organizationId: string;
-  sessionId: string;
-  code: string;
-  footer: string;
-};
-
-type ChildTrajectoryReceiptOutput = {
-  family: NonNullable<ReturnType<typeof appaWireFamily>>;
-  footer: string;
-};
 
 export interface StreamTiming {
   requestReceivedAt: number;
@@ -485,160 +383,6 @@ function isBoundedHeaderValue(
   );
 }
 
-function markSessionReceiptIssued(receipt: {
-  organizationId: string;
-  sessionId: string;
-}): void {
-  trackBackgroundWork(
-    OpenAppaSessionModel.markReceiptIssued({
-      organizationId: receipt.organizationId,
-      sessionId: receipt.sessionId,
-    }).catch((error) => {
-      logger.warn(
-        { err: error, sessionId: receipt.sessionId },
-        "OpenAPPA failed to record session receipt issuance",
-      );
-    }),
-  );
-}
-
-/**
- * Detects Claude Code compaction summary requests. Claude Code puts the
- * instruction on a user turn (sometimes also in `system`); scan those text
- * sites only so a large tool result cannot trigger a false re-issue and so
- * the body is never serialized just to search it.
- */
-/**
- * Claude Code's next-prompt suggestion: after an answer, it asks the model
- * what the user might type next, with the session's tools and history, and
- * shows the reply as a hint in the input box. Its last user message carries
- * this fixed instruction.
- */
-function isClientPromptSuggestion(body: unknown): boolean {
-  const messages = asRecord(body)?.messages;
-  if (!Array.isArray(messages)) return false;
-  const content = asRecord(messages.at(-1))?.content;
-  const texts =
-    typeof content === "string"
-      ? [content]
-      : Array.isArray(content)
-        ? content.map((part) => asRecord(part)?.text)
-        : [];
-  return texts.some(
-    (text) =>
-      typeof text === "string" &&
-      text.trimStart().startsWith(PROMPT_SUGGESTION_INSTRUCTION),
-  );
-}
-
-const PROMPT_SUGGESTION_INSTRUCTION = "[SUGGESTION MODE:";
-
-function isClientCompactionRequest(params: {
-  body: unknown;
-  headers: Record<string, string | string[] | undefined>;
-  url: string;
-}): boolean {
-  const { body, headers } = params;
-  if (params.url.split("?")[0].endsWith("/responses/compact")) return true;
-  const header = (name: string) =>
-    utils.headers.metaHeader.getHeaderValue(headers, name);
-  if (
-    header(OPENCODE_AGENT_HEADER) === "compaction" ||
-    header("x-openai-subagent") === "compact"
-  )
-    return true;
-  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
-  const request = body as Record<string, unknown>;
-  const metadata =
-    asRecord(request.client_metadata) ?? asRecord(request.metadata);
-  const nestedTurn = metadata?.["x-codex-turn-metadata"];
-  if (
-    [
-      metadata,
-      asRecord(metadata?.turn_metadata),
-      asRecord(metadata?.turn),
-      typeof nestedTurn === "string"
-        ? parseJsonHeader(
-            { "x-codex-turn-metadata": nestedTurn },
-            "x-codex-turn-metadata",
-          )
-        : asRecord(nestedTurn),
-      parseJsonHeader(headers, "x-codex-turn-metadata"),
-    ].some((turn) => turn?.request_kind === "compaction")
-  )
-    return true;
-  if (containsCompactionInstruction(request.system)) return true;
-  if (!Array.isArray(request.messages)) return false;
-  for (let index = request.messages.length - 1; index >= 0; index--) {
-    const message = request.messages[index];
-    if (!message || typeof message !== "object" || Array.isArray(message)) {
-      continue;
-    }
-    const role = (message as Record<string, unknown>).role;
-    if (role !== "user") continue;
-    const content = (message as Record<string, unknown>).content;
-    const texts =
-      typeof content === "string"
-        ? [content]
-        : Array.isArray(content)
-          ? content.flatMap((part) => {
-              const text = asRecord(part)?.text;
-              return typeof text === "string" ? [text] : [];
-            })
-          : [];
-    // A model spawn prompt can request a summary.
-    // The delegation marker distinguishes it from client compaction.
-    if (texts.some((text) => text.includes("[appa] delegated trajectory ")))
-      return false;
-    return containsCompactionInstruction(content);
-  }
-  return false;
-}
-
-function containsCompactionInstruction(value: unknown): boolean {
-  if (typeof value === "string") {
-    const text = value.trimStart();
-    return (
-      text.startsWith(CLAUDE_COMPACTION_INSTRUCTION) ||
-      text.startsWith(
-        `CRITICAL: Respond with TEXT ONLY. ${CLAUDE_COMPACTION_INSTRUCTION}`,
-      )
-    );
-  }
-  if (!Array.isArray(value)) return false;
-  for (const block of value) {
-    if (!block || typeof block !== "object" || Array.isArray(block)) continue;
-    const text = (block as Record<string, unknown>).text;
-    if (typeof text === "string" && containsCompactionInstruction(text)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-const CLAUDE_COMPACTION_INSTRUCTION =
-  "Your task is to create a detailed summary of the conversation so far";
-
-/** Returns true if the request requires JSON-only structured output. */
-function hasStructuredOutputConstraint(body: unknown): boolean {
-  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
-  const request = body as Record<string, unknown>;
-  const format =
-    request.response_format ??
-    (request.text && typeof request.text === "object"
-      ? (request.text as Record<string, unknown>).format
-      : undefined) ??
-    (request.output_config && typeof request.output_config === "object"
-      ? (request.output_config as Record<string, unknown>).format
-      : undefined) ??
-    request.output_format;
-  if (!format || typeof format !== "object" || Array.isArray(format)) {
-    return false;
-  }
-  const type = (format as Record<string, unknown>).type;
-  return type === "json_schema" || type === "json_object";
-}
-
 /**
  * The subset of a proxied request body we read for session-id and client-app
  * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
@@ -685,85 +429,11 @@ export async function handleLLMProxy<
   const hasProxyPlugins = pluginRegistry.hasPlugins();
   let pluginContext: LlmProxyRequestContext | undefined;
   let pluginSessionInitialized = false;
-  const clientCompaction = isClientCompactionRequest({
+  const appaIngress = scrubOpenappaIngress({
+    request,
     body,
-    headers: headers as Record<string, string | string[] | undefined>,
-    url: request.url,
-  });
-
-  // Removes receipts and delegation markers before forwarding requests.
-  // Markers must not reach providers or logs, even when OpenAPPA is off.
-  // When active, OpenAPPA resolves extracted markers into lineage evidence.
-  // A child return the proxy cannot read is withheld from a governed parent
-  // only, and the proxy does not know yet whether OpenAPPA governs this
-  // request. Until it does, the first refusal waits here and that return stays
-  // as the client sent it.
-  let childReturnRefusal: ApiError | undefined;
-  const requestWireFamily = appaWireFamily(provider.interactionType);
-  let strippedReceiptCodes: string[] = [];
-  let delegationMarkers: AppaDelegationMarker[] | undefined;
-  let childReturns: CollectedChildReturns | undefined;
-  let childTrajectoryReceipts: AppaChildTrajectoryReceipt[] | undefined;
-  if (requestWireFamily) {
-    strippedReceiptCodes = stripSessionReceiptsFromRequest({
-      family: requestWireFamily,
-      body,
-    });
-    const opaqueProofs =
-      requestWireFamily === "openai:responses"
-        ? unwrapCompactionCarriersFromRequest(body)
-        : [];
-    childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
-      family: requestWireFamily,
-      body,
-    });
-    childTrajectoryReceipts.push(
-      ...opaqueProofs.flatMap(
-        (proof) => stripChildTrajectoryReceipts(proof).receipts,
-      ),
-    );
-    // A route that translated the wire first collected the markers from the
-    // client's own wire; the translated text may no longer end with them.
-    delegationMarkers =
-      collectedDelegationMarkers(request) ??
-      collectDelegationMarkers({
-        family: requestWireFamily,
-        body,
-      });
-    stripDelegationMarkers({ family: requestWireFamily, body });
-    const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
-      adapter.matches({
-        headers: headers as Record<string, string | string[] | undefined>,
-        requestBody: body,
-      }),
-    );
-    const childReturnOptions = {
-      // Kilo Code frames its background tasks as OpenCode does.
-      openCodeBackgroundReturns:
-        !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
-      codexMailboxReturns: nativeClient?.id === "codex",
-      onRefusal: (refusal: ApiError) => {
-        childReturnRefusal ??= refusal;
-      },
-    };
-    try {
-      childReturns = collectAndStripChildReturns(body, childReturnOptions);
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.statusCode !== 400) throw error;
-      childReturnRefusal = error;
-      childReturns = { completions: [] };
-    }
-  }
-  // Restores original provider call IDs before request processing, logging,
-  // or plugin rulings: the trajectory stamps first, then any stamp a
-  // client copied into text. Neither needs an OpenAPPA session, so no id the
-  // proxy gave a client reaches a provider with Guardrails off either.
-  const trajectoryStamps = restoreTrajectoryStamps({
     interactionType: provider.interactionType,
-    body,
   });
-  const wire = providerWire(provider.interactionType);
-  if (wire) restoreTrajectoryStampsInText({ wire, body });
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -859,29 +529,15 @@ export async function handleLLMProxy<
 
   // Session extraction reuses the resolved client attribution above to gate
   // OpenCode- and Codex-specific signals, so client identification lives in one place.
-  // An external client's explicit OpenAPPA session names the runtime's root
-  // for this request, under the credential's scope, and the proxy log follows
-  // the id as the client sent it, so the two records join by that id under
-  // the runtime's scope prefix. Chat's
-  // header is its conversation id, which the ordinary path already records. Only while OpenAPPA is on: off, the header names nothing.
-  // A malformed header is left to the OpenAPPA session check, which refuses it.
-  const appaSessionHeader =
-    openappaEnabled() && !isAppaChatSource(source)
-      ? headersForExtraction[APPA_SESSION_HEADER.toLowerCase()]
-      : undefined;
-  const ordinarySession = utils.headers.sessionId.extractSessionInfo({
+  const { sessionId, sessionSource } = followAppaSessionHeader({
     headers: headersForExtraction,
-    body: bodyForExtraction,
-    externalAgentId,
+    source,
+    ordinarySession: utils.headers.sessionId.extractSessionInfo({
+      headers: headersForExtraction,
+      body: bodyForExtraction,
+      externalAgentId,
+    }),
   });
-  // The platform's own requests carry the same id in both headers, and keep
-  // their ordinary provenance; only a client that names its session in the
-  // OpenAPPA header alone is followed there.
-  const { sessionId, sessionSource } =
-    isWellFormedAppaId(appaSessionHeader) &&
-    ordinarySession.sessionId !== appaSessionHeader
-      ? { sessionId: appaSessionHeader, sessionSource: "appa_header" as const }
-      : ordinarySession;
 
   // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
@@ -1337,23 +993,6 @@ export async function handleLLMProxy<
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
-  // A redacted audit context cannot retain an enforceable trajectory safely.
-  if (
-    appaActive &&
-    encryptedChat.kind === "redact" &&
-    !(
-      sessionId &&
-      (await startedUnenforced({
-        organization_id: resolvedAgent.organizationId,
-        session_id: sessionId,
-      }))
-    )
-  ) {
-    throw new ApiError(
-      409,
-      "Encrypted chat key and escrow are required for policy storage",
-    );
-  }
   enterOpenappaEncryptedChat(
     encryptedChat.kind === "encrypt" && userId
       ? {
@@ -1366,8 +1005,25 @@ export async function handleLLMProxy<
 
   const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
-  // Check usage limits
   try {
+    // A redacted audit context cannot retain an enforceable trajectory safely.
+    if (
+      appaActive &&
+      encryptedChat.kind === "redact" &&
+      !(
+        sessionId &&
+        (await startedUnenforced({
+          organization_id: resolvedAgent.organizationId,
+          session_id: sessionId,
+        }))
+      )
+    ) {
+      throw new ApiError(
+        409,
+        "Encrypted chat key and escrow are required for policy storage",
+      );
+    }
+    // Check usage limits
     logger.debug(
       { resolvedAgentId },
       `[${providerName}Proxy] Checking usage limits`,
@@ -1576,444 +1232,42 @@ export async function handleLLMProxy<
     let pluginToolResultsOutcome:
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
-    let openappaSession: OpenAppaSession | undefined;
-    // Set when a thread continue was given its tools back for the ruling.
-    let hydratedThreadTools = false;
-    let continuingThread = false;
-    let threadDeltaSystem: unknown;
-    let threadEchoedCalls: object | undefined;
-    // The session a request has while enforcement is off, for the records
-    // OpenAPPA reads once it turns on. Nothing governs it.
-    let observedSession: OpenAppaSession | undefined;
-    let sessionReceipt: SessionReceiptOutput | undefined;
-    let childTrajectoryReceipt: ChildTrajectoryReceiptOutput | undefined;
-    let childCompactionContext: string | undefined;
-    let appaIdentity: AppaSessionIdentity = {};
-    let hasNativeClientSession = false;
-    const approvedProxySetupContext = connectionProxySetupContext(request.raw);
-    let verifiedProxySetup: ReturnType<typeof readVerifiedConnectionProxySetup>;
-    if (approvedProxySetupContext) {
-      for (const keyId of [virtualKeyId, passthroughVirtualKeyId]) {
-        if (!keyId) continue;
-        verifiedProxySetup = readVerifiedConnectionProxySetup({
-          token: approvedProxySetupContext,
-          organizationId: resolvedAgent.organizationId,
-          virtualApiKeyId: keyId,
-          proxyAgentId: resolvedAgent.id,
-          secret: config.auth.secret,
-        });
-        if (verifiedProxySetup) break;
-      }
-    }
-    const approvedProxySetup = verifiedProxySetup !== undefined;
-    // The setup URL stays in the client's settings for the whole window, so
-    // sessions started after the setup send it too. The reference must be in
-    // this request, and the first well-formed native conversation to present
-    // it owns the exemption until the token expires.
-    const carriesReference =
-      approvedProxySetup &&
-      !!approvedProxySetupContext &&
-      carriesConnectionSetupReference({
-        token: approvedProxySetupContext,
-        requestBody: body,
-        secret: config.auth.secret,
-      });
-    const installerConversation =
-      carriesReference &&
-      verifiedProxySetup !== undefined &&
-      (await claimConnectionSetupConversation({
-        organizationId: verifiedProxySetup.organizationId,
-        setupId: verifiedProxySetup.setupId,
-        expiresAt: verifiedProxySetup.expiresAt,
-        headers: headersForExtraction,
-        requestBody: body,
-      }));
-    const installerSetupBypass = appaActive && installerConversation;
-    if (installerSetupBypass) {
-      logger.info(
-        { profileId: resolvedAgent.id, proof: "approved-installer" },
-        "Connection setup APPA bypass active",
-      );
-    } else if (appaActive && approvedProxySetup) {
-      logger.info(
-        { profileId: resolvedAgent.id },
-        "Connection setup URL outside the installer's conversation; Guardrails apply",
-      );
-    }
-    let appaCallerId: string | undefined;
-    let appaFamily: ReturnType<typeof appaWireFamily>;
-    let forkOf: string | undefined;
-    // Captures raw client headers before conversion to X-Appa-* headers.
-    // Child trajectory validation checks against these original claims.
-    const appaClaims = {
-      sessionId: firstHeaderValue(
-        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()],
-      ),
-      parentId: firstHeaderValue(
-        headersForExtraction[APPA_PARENT_HEADER.toLowerCase()],
-      ),
-    };
+    let admission: OpenappaAdmission = { kind: "ungoverned" };
+    let governedThread: GovernedThread | undefined;
+    let appaReceipts: OpenappaReceipts | undefined;
+    const installerSetupBypass = await resolveInstallerSetupBypass({
+      request,
+      body,
+      agent: resolvedAgent,
+      virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
+      appaActive,
+    });
     if (hasProxyPlugins) {
-      // APPA recognizes Chat only after the loopback caller's owner,
-      // organization, profile, and conversation root have been bound below.
-      // Internal agents (Chat, Slack, A2A, etc.) share the loopback boundary.
-      // External clients still need platform authentication; a session ID or
-      // user attribution header alone is not a credential.
-      const isInternalRequest = isLoopbackRequest(request);
-      if (
-        appaActive &&
-        !isInternalRequest &&
-        !authenticatedUserId &&
-        !authenticatedApp &&
-        !virtualKeyId
-      ) {
-        throw new ApiError(
-          401,
-          "OpenAPPA requires an authenticated proxy request",
-        );
-      }
-      // The person behind the request, when the platform authenticated one.
-      // A platform request over loopback names its user in a header the
-      // platform itself wrote; a request that brings a credential of its own
-      // is a client's, and its user is what that credential proves, not what
-      // a header says: over the frontend's loopback rewrite the header is
-      // anyone's to write. Chat keeps the header: its conversation is
-      // ownership-checked against it below.
-      const appaUserId =
-        authenticatedUserId ??
-        (isInternalRequest &&
-        (isInternalChat || (!authenticatedApp && !virtualKeyId))
-          ? userId
-          : undefined);
-      // A delegated run an OpenAPPA spawn bound to a child trajectory carries
-      // the executor's signed binding; its turns run on that trajectory.
-      const subagentToken = isInternalRequest
-        ? firstHeaderValue(
-            headersForExtraction[APPA_SUBAGENT_BINDING_HEADER.toLowerCase()],
-          )
-        : undefined;
-      const subagentBinding = subagentToken
-        ? verifySubagentBinding(subagentToken, {
-            organizationId: resolvedAgent.organizationId,
-            agentId: resolvedAgent.id,
-          })
-        : null;
-      // A child that claims a trajectory it cannot prove must not run unbound.
-      if (subagentToken && !subagentBinding) {
-        throw new ApiError(403, "The subagent binding is invalid or expired");
-      }
-      // Other delegated A2A runs share the parent's logging session, but have
-      // no APPA child-return lifecycle. Keep their events out of that
-      // trajectory; the existing guardrails still evaluate the child
-      // independently. Only the trusted internal executor's agent chain
-      // selects this path.
-      const delegatedRun =
-        !subagentBinding &&
-        isInternalRequest &&
-        isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
-      const runtimeLookup =
-        (appaActive || appaObserving) &&
-        (virtualKeyId || passthroughVirtualKeyId)
-          ? await resolveRuntimeIdentityByVirtualKeys({
-              virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
-              organizationId: resolvedAgent.organizationId,
-            })
-          : { status: "unbound" as const };
-      if (
-        appaActive &&
-        !installerSetupBypass &&
-        runtimeLookup.status === "conflict"
-      ) {
-        throw new ApiError(
-          400,
-          "OpenAPPA runtime credentials do not name one workspace",
-        );
-      }
-      const runtimeIdentity =
-        runtimeLookup.status === "bound" ? runtimeLookup.identity : null;
-      if (
-        runtimeIdentity?.actorKind === "user" &&
-        appaUserId &&
-        appaUserId !== runtimeIdentity.actorId
-      ) {
-        throw new ApiError(
-          401,
-          "OpenAPPA runtime credential does not match the authenticated user",
-        );
-      }
-      const presentedRuntimeSession = appaClaims.sessionId;
-      if (
-        appaActive &&
-        !installerSetupBypass &&
-        runtimeIdentity &&
-        runtimeSessionConflicts({
-          workloadName: runtimeIdentity.workloadName,
-          presentedSession: presentedRuntimeSession,
-        })
-      ) {
-        throw new ApiError(
-          400,
-          "OpenAPPA session does not match the authenticated runtime workspace",
-        );
-      }
-      const runtimeBindingToken = firstHeaderValue(
-        headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
-      );
-      const runtimeBindingMatches =
-        runtimeIdentity !== null &&
-        runtimeBindingAuthorizes({
-          token: runtimeBindingToken,
-          secret: config.openappa.offerSigningSecret,
-          identity: runtimeIdentity,
-        });
-      if (
-        appaActive &&
-        !installerSetupBypass &&
-        runtimeIdentity &&
-        !runtimeBindingMatches
-      ) {
-        // An image whose client predates the binding sends none. Only that
-        // case is named: why a presented binding failed stays undisclosed.
-        const bindingMissing = !runtimeBindingToken;
-        logger.warn(
-          {
-            agentId: runtimeIdentity.agentId,
-            workspaceId: runtimeIdentity.workspaceId,
-            taskId: runtimeIdentity.taskId,
-            reason: bindingMissing ? "missing" : "invalid",
-          },
-          "OpenAPPA rejected a runtime request without a verified binding",
-        );
-        throw new ApiError(
-          400,
-          bindingMissing
-            ? "This run's image did not send the X-Archestra-Runtime-Binding header that Guardrails require. Rebuild the image on a current maintained agent image, or send ARCHESTRA_AGENT_RUNTIME_BINDING in that header. Then start a new run."
-            : "OpenAPPA runtime binding does not match this run",
-        );
-      }
-      const runtimeSession =
-        runtimeIdentity && runtimeBindingMatches
-          ? (
-              await resolveRuntimeSessionForWorkspace({
-                organizationId: runtimeIdentity.organizationId,
-                workspaceId: runtimeIdentity.workspaceId,
-              })
-            )?.session
-          : undefined;
-      // A bound subagent ends its turns the way a runtime workspace does: its
-      // return is keyed by the spawn call that opened it.
-      const runtimeSessionId =
-        runtimeSession?.session_id ?? subagentBinding?.session.session_id;
-      const runtimeTaskId = runtimeSession
-        ? runtimeIdentity?.taskId
-        : subagentBinding?.spawnCallId;
-      // Enforcement rejects conflicts above; observing and setup-bypass paths
-      // must also avoid adopting the conflicting workspace's authority.
-      const boundRuntimeIdentity =
-        runtimeIdentity &&
-        runtimeBindingMatches &&
-        !runtimeSessionConflicts({
-          workloadName: runtimeIdentity.workloadName,
-          presentedSession: presentedRuntimeSession,
-        })
-          ? runtimeIdentity
-          : null;
-      if (
-        (appaActive || appaObserving) &&
-        boundRuntimeIdentity &&
-        presentedRuntimeSession === undefined
-      ) {
-        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
-          boundRuntimeIdentity.workloadName;
-      }
-      const callerId = appaUserId
-        ? `user:${appaUserId}`
-        : boundRuntimeIdentity
-          ? boundRuntimeIdentity.principal
-          : authenticatedApp
-            ? `app:${authenticatedApp.id}`
-            : virtualKeyId
-              ? `virtual-key:${virtualKeyId}`
-              : undefined;
-      // A platform request over loopback that brings no credential of its own.
-      // Only such a request may name an unscoped session in the header.
-      const platformLoopback =
-        isInternalRequest &&
-        !authenticatedUserId &&
-        !authenticatedApp &&
-        !virtualKeyId;
-      const unsupportedClient =
-        appaActive &&
-        !installerSetupBypass &&
-        !isInternalChat &&
-        !delegatedRun &&
-        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
-        headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] === undefined &&
-        !APPA_CLIENT_ADAPTERS.some((adapter) =>
-          adapter.matches({ headers: headersForExtraction, requestBody: body }),
-        );
-      // The platform's own guardrail models bypass instead of being blocked.
-      if (
-        unsupportedClient &&
-        unsupportedClientAction === "block" &&
-        !(platformLoopback && internalCall)
-      ) {
-        throw new ApiError(
-          400,
-          "Guardrails do not recognize this client, so the proxy blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",
-        );
-      }
-      if (
-        appaActive &&
-        !installerSetupBypass &&
-        !delegatedRun &&
-        !(platformLoopback && internalCall) &&
-        !unsupportedClient
-      ) {
-        appaCallerId = callerId;
-        // Extract client-native session metadata into APPA session identity.
-        // Client adapters resolve resume, fork, and compaction semantics
-        // before falling back to generic wire properties.
-        const incomingAppaSessionHeader =
-          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()];
-        appaFamily = appaWireFamily(provider.interactionType);
-        appaIdentity = appaFamily
-          ? extractAppaSessionIdentity({
-              family: appaFamily,
-              body,
-              headers: headersForExtraction,
-            })
-          : {};
-        hasNativeClientSession =
-          nativeSetupClientFromProvenance(appaIdentity.provenance) !==
-          undefined;
-        if (
-          hasNativeClientSession &&
-          appaIdentity.sessionId !== undefined &&
-          !isWellFormedAppaId(appaIdentity.sessionId)
-        ) {
-          throw new ApiError(
-            400,
-            "OpenAPPA requires a valid client-native session ID",
-          );
-        }
-        // Receipts were stripped from history above, before any forwarding or
-        // logging. APPA now resolves the collected codes into lineage evidence
-        // owned by this caller.
-        const receiptSessions = callerId
-          ? await sessionReceiptEvidence({
-              organizationId: resolvedAgent.organizationId,
-              callerId,
-              codes: strippedReceiptCodes,
-            })
-          : [];
-        // History carrying verified stamps or session receipts identifies
-        // parent context. A new session opens as a fork of its deepest ancestor.
-        const traceable =
-          appaCallerId &&
-          appaIdentity.sessionId &&
-          appaFamily &&
-          !isInternalChat &&
-          !incomingAppaSessionHeader &&
-          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] &&
-          !nativeSpawnParentId({
-            headers: headersForExtraction,
-            body,
-            sessionId: appaIdentity.sessionId,
-          });
-        const stamped =
-          traceable && callerId
-            ? stampedSessions({
-                stamps: trajectoryStamps,
-                organizationId: resolvedAgent.organizationId,
-                callerId,
-                secret: config.openappa.offerSigningSecret,
-              })
-            : [];
-        // `forkedSession` identifies a single lineage head across stamps and text envelopes.
-        const traced = traceable ? [...stamped, ...receiptSessions] : [];
-        forkOf =
-          traced.length > 0 && callerId && appaIdentity.sessionId
-            ? await forkedSession({
-                organizationId: resolvedAgent.organizationId,
-                sessionId: appaIdentity.sessionId,
-                traced,
-                scope: (session) => scopedSessionId(callerId, session),
-              })
-            : undefined;
-        fillAppaSessionHeaders(headersForExtraction, appaIdentity);
-        openappaSession = sessionFromHeaders({
-          headers: headersForExtraction,
-          organizationId: resolvedAgent.organizationId,
-          callerId,
-          // Chat sessions use conversation IDs with verified ownership.
-          ...(isInternalChat
-            ? {}
-            : {
-                // Scope external sessions to the authenticated principal.
-                scope:
-                  platformLoopback && incomingAppaSessionHeader !== undefined
-                    ? undefined
-                    : callerId,
-                // Bind fallback root if no session was provided.
-                fallbackSessionId: callerId
-                  ? `${callerId}@${resolvedAgent.id}`
-                  : undefined,
-              }),
-        });
-        // The executor signed the trajectory its spawn bound; the child's own
-        // headers name the parent conversation and carry no authority here.
-        if (subagentBinding) openappaSession = subagentBinding.session;
-        if (runtimeSession) {
-          if (openappaSession?.session_id !== runtimeSession.session_id) {
-            throw new ApiError(
-              400,
-              "The runtime request does not match its bound workspace",
-            );
-          }
-          // The launcher stored the authenticated parent before giving the pod data.
-          openappaSession = runtimeSession;
-        }
-        if (!openappaSession)
-          throw new ApiError(
-            400,
-            "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
-          );
-        if (forkOf && callerId && openappaSession)
-          openappaSession = {
-            ...openappaSession,
-            fork_of: scopedSessionId(callerId, forkOf),
-          };
-        if (
-          callerId &&
-          openappaSession?.session_id === `${callerId}@${resolvedAgent.id}`
-        ) {
-          // Every conversation of this credential on this agent now shares one
-          // root: a turn ending in one releases the offers of the others.
-          logger.warn(
-            { agentId: resolvedAgent.id, callerId },
-            "OpenAPPA bound a fallback root because the client reported no session",
-          );
-        }
-      } else if (
-        appaObserving &&
-        !delegatedRun &&
-        !subagentBinding &&
-        (isInternalRequest ||
-          authenticatedUserId ||
-          authenticatedApp ||
-          virtualKeyId)
-      ) {
-        observedSession = observedAppaSession({
-          headers: headersForExtraction,
-          body,
-          interactionType: provider.interactionType,
-          organizationId: resolvedAgent.organizationId,
-          callerId,
-          isInternalChat,
-          platformLoopback,
-        });
-      }
+      admission = await admitOpenappaRequest({
+        request,
+        body,
+        originalRequest: requestAdapter.getOriginalRequest(),
+        interactionType: provider.interactionType,
+        agent: resolvedAgent,
+        principal: {
+          authenticatedUserId,
+          authenticatedApp,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          userId,
+        },
+        deployment: {
+          active: appaActive,
+          observing: appaObserving,
+          unsupportedClientAction,
+        },
+        chatSource: isInternalChat ? source : undefined,
+        externalAgentId,
+        internalCall,
+        installerSetupBypass,
+        ingress: appaIngress,
+        toolIdentity,
+      });
       pluginContext = {
         requestId: request.id,
         organizationId: resolvedAgent.organizationId,
@@ -2027,229 +1281,26 @@ export async function handleLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
-      // The facts that bind a child trajectory. Read without preparing the
-      // request for enforcement, which changes the body and refuses tool
-      // shapes that OpenAPPA cannot govern. Built only for an OpenAPPA session.
-      const lineageRequest = (): AppaTrustedContext["request"] => ({
-        tools: undefined,
-        session: appaIdentity,
-        customTools: new Set(),
-        declaredTools: [],
-        ...(delegationMarkers
-          ? { delegation: { markers: delegationMarkers } }
-          : {}),
-        ...(childReturns ? { childReturns } : {}),
-        ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
-          ? { childTrajectoryReceipts }
-          : {}),
-      });
-      if (
-        openappaSession &&
-        (await startedUnenforced(
-          appaTrajectory({
-            adapters: APPA_CLIENT_ADAPTERS,
-            headers: pluginContext.headers,
-            requestBody: pluginContext.requestBody,
-            trustedContext: {
-              session: openappaSession,
-              profileId: resolvedAgent.id,
-              toolIdentity,
-              request: lineageRequest(),
-              claims: appaClaims,
-              ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
-              ...(isInternalChat ? { chatSource: source } : {}),
-            },
-          }).session,
-        ))
-      ) {
-        // The session started while enforcement was off, or a person
-        // superyelled it. OpenAPPA never governs it: the request goes on as
-        // if enforcement were off.
-        logger.info(
-          { sessionId: openappaSession.session_id },
-          "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
-        );
-        openappaSession = undefined;
-      }
-      if (openappaSession) {
-        // A Chat session is a conversation, and the request must name the
-        // user whose conversation it is: without one there is nothing to
-        // check the binding against, so the request is refused rather than
-        // bound unchecked.
-        if (isInternalChat && !appaUserId)
-          throw new ApiError(
-            403,
-            "OpenAPPA Chat session requires the conversation's user",
-          );
-        if (isInternalChat && appaUserId) {
-          const conversationAgentId = await ConversationModel.getAgentIdForUser(
-            openappaSession.session_id,
-            appaUserId,
-            resolvedAgent.organizationId,
-          );
-          if (
-            !conversationAgentId ||
-            (source !== "chat:compaction" &&
-              conversationAgentId !== resolvedAgent.id)
-          ) {
-            throw new ApiError(
-              403,
-              "OpenAPPA Chat session does not match the authenticated conversation",
-            );
-          }
-        }
-        // Restores this request's denial notices and resolves its APPA tools,
-        // in the request body the adapters read from, before the provider
-        // request and the tool results are built from it.
-        // Unsupported declarations are rejected; proxy-only clients without
-        // gateway remedies are still governed and receive text refusals.
-        // A provider-side thread continue carries no tools: the proxy rules
-        // with the ones the thread was created with, and never sends them.
-        let appaToolIdentity = toolIdentity;
-        // A stored response keeps the conversation (and tools) at the provider,
-        // so the request in hand is only a delta that the ruling cannot read.
-        // Refused rather than ruled on blind.
-        if (
-          provider.interactionType.endsWith(":responses") &&
-          (body as { previous_response_id?: unknown }).previous_response_id
-        ) {
-          throw new ApiError(
-            400,
-            "OpenAPPA cannot govern a Responses request that continues a stored response (previous_response_id). Send the whole conversation as input instead.",
-          );
-        }
-        const threadRequest =
-          provider.interactionType === "anthropic:messages"
-            ? readThreadRequest(body)
-            : undefined;
-        if (threadRequest) {
-          const declaresTools = declaredToolEntries(body).length > 0;
-          const previousMessageId =
-            threadRequest.type === "continue"
-              ? threadRequest.previousMessageId
-              : undefined;
-          const found =
-            threadRequest.type === "continue"
-              ? await threadStates.forContinue({
-                  organizationId: resolvedAgent.organizationId,
-                  sessionId: openappaSession.session_id,
-                  previousMessageId: threadRequest.previousMessageId,
-                })
-              : undefined;
-          if (found && !found.ok) {
-            logger.info(
-              {
-                sessionId: openappaSession.session_id,
-                reason: found.reason,
-                proxyRequestId: `req_archestra_${request.id}`,
-              },
-              "OpenAPPA forces a governed thread to replay",
-            );
-            // Sent as is: the client reads the provider's own error shape,
-            // which the route's error schema would reduce to message and type.
-            // A store that cannot be read makes the client go stateless.
-            const serialize = (payload: unknown) => JSON.stringify(payload);
-            if (found.reason === "unavailable")
-              return reply
-                .status(400)
-                .serializer(serialize)
-                .send(threadUnsupportedBody(request.id));
-            if (found.reason === "consumed")
-              return reply
-                .status(400)
-                .serializer(serialize)
-                .send(threadAlreadyContinuedBody(request.id));
-            return reply
-              .status(404)
-              .serializer(serialize)
-              .send(threadNotFoundBody(request.id));
-          }
-          const state = found?.ok ? found : undefined;
-          let threadRecord: ThreadRecord;
-          if (state) {
-            // The system prompt of a continue is the client's own delta.
-            continuingThread = true;
-            threadDeltaSystem = structuredClone(
-              (body as { system?: unknown }).system,
-            );
-            // The results answer calls the thread holds: put them back, as a
-            // full request would carry them, for the ruling only.
-            const messages = (body as { messages?: unknown }).messages;
-            if (state.calls.length > 0 && Array.isArray(messages)) {
-              threadEchoedCalls = echoedCallsMessage(state.calls);
-              messages.unshift(threadEchoedCalls);
-            }
-          }
-          if (state && !declaresTools) {
-            (body as { tools?: unknown }).tools = toolSkeletonOf(state.tools);
-            hydratedThreadTools = true;
-            appaToolIdentity =
-              await utils.gatewayToolNames.resolveGatewayToolIdentity({
-                organizationId: resolvedAgent.organizationId,
-                declarations: state.tools,
-                internalChat: isInternalChat,
-                clientBindings,
-              });
-            threadRecord = {
-              organizationId: resolvedAgent.organizationId,
-              sessionId: openappaSession.session_id,
-              rootMessageId: state.rootMessageId,
-              ...(previousMessageId ? { previousMessageId } : {}),
-            };
-          } else {
-            // A create, or a continue that sends changed tools: they become
-            // the thread's tools from this response on.
-            threadRecord = {
-              organizationId: resolvedAgent.organizationId,
-              sessionId: openappaSession.session_id,
-              tools: threadToolsOf({
-                declarations: gatewayToolDeclarations,
-                types: declaredToolEntries(body).map(
-                  (entry) => (entry.tool as { type?: string } | null)?.type,
-                ),
-              }),
-              ...(previousMessageId ? { previousMessageId } : {}),
-            };
-          }
-          pluginContext.resources.set(APPA_THREAD_RECORD, threadRecord);
-        }
-        const appaRequest = prepareAppaRequest({
+      if (admission.kind !== "ungoverned") {
+        const prepared = await prepareOpenappaRequest({
+          admission,
+          context: pluginContext,
           body,
-          interactionType: provider.interactionType,
-          session: appaIdentity,
-          identity: appaToolIdentity,
-          trustBarePlatformTools: isInternalChat,
-          ...(delegationMarkers ? { delegationMarkers } : {}),
-          ...(childReturns ? { childReturns } : {}),
-          ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
-            ? { childTrajectoryReceipts }
-            : {}),
+          ingress: appaIngress,
+          tools: {
+            identity: toolIdentity,
+            declarations: gatewayToolDeclarations,
+            clientBindings,
+          },
         });
-        pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
-          session: openappaSession,
-          profileId: resolvedAgent.id,
-          toolIdentity: appaToolIdentity,
-          request: appaRequest,
-          claims: appaClaims,
-          ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
-          compaction: clientCompaction && !isInternalChat,
-          enforcement: "active",
-          childReturnRefusal,
-          ...(threadRequest ? { thread: threadRequest.type } : {}),
-          ...(isInternalChat ? { chatSource: source } : {}),
-        } satisfies AppaTrustedContext);
-      } else if (observedSession) {
-        pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
-          session: observedSession,
-          profileId: resolvedAgent.id,
-          toolIdentity,
-          request: lineageRequest(),
-          claims: appaClaims,
-          ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
-          compaction: clientCompaction && !isInternalChat,
-          enforcement: "inactive",
-          ...(isInternalChat ? { chatSource: source } : {}),
-        } satisfies AppaTrustedContext);
+        if (prepared.kind === "replay")
+          // Sent as is: the client reads the provider's own error shape,
+          // which the route's error schema would reduce to message and type.
+          return reply
+            .status(prepared.status)
+            .serializer((payload: unknown) => JSON.stringify(payload))
+            .send(prepared.body);
+        governedThread = prepared.thread;
       }
       await pluginRegistry.onSessionInit(pluginContext);
       pluginSessionInitialized = true;
@@ -2259,50 +1310,13 @@ export async function handleLLMProxy<
         // content explicitly so APPA cannot inspect a blocked/raw version.
         toolResults: requestAdapter.getToolResults(),
       });
-      const issued = pluginContext.resources.get(
-        APPA_CHILD_TRAJECTORY_RECEIPT,
-      ) as AppaChildTrajectoryReceiptOutput | undefined;
-      childCompactionContext = issued?.footer;
-      if (
-        !issued &&
-        openappaSession &&
-        hasNativeClientSession &&
-        !isInternalChat &&
-        !hasStructuredOutputConstraint(body) &&
-        // The agent loop declares its tools. A client's side calls (Claude
-        // Code's auto-mode classifier, its quota check, its next-prompt
-        // suggestion) are never shown as the session's reply, so the mark
-        // would be lost there and would alter what the client parses.
-        (clientCompaction ||
-          (declaredToolEntries(body).length > 0 &&
-            !isClientPromptSuggestion(body))) &&
-        appaCallerId &&
-        appaFamily
-      ) {
-        const receipt = await OpenAppaSessionModel.ensureReceiptToken({
-          organizationId: resolvedAgent.organizationId,
-          sessionId: openappaSession.session_id,
-        });
-        if (receipt && (receipt.receiptIssuedAt == null || clientCompaction)) {
-          sessionReceipt = {
-            family: appaFamily,
-            organizationId: resolvedAgent.organizationId,
-            sessionId: openappaSession.session_id,
-            code: receipt.token,
-            footer: formatSessionReceipt(receipt.token),
-          };
-        }
-      }
-      if (issued && appaFamily && (!issued.inHistory || clientCompaction)) {
-        childTrajectoryReceipt = {
-          family: appaFamily,
-          footer: issued.footer,
-        };
-      }
+      appaReceipts = await OpenappaReceipts.prepare({
+        context: pluginContext,
+        body,
+        admission,
+        clientCompaction: appaIngress.clientCompaction,
+      });
     }
-    // The connection-setup bypass: the approved-installer proof, settled
-    // before the guards and not mutated past them.
-    const connectionSetupBypass = installerSetupBypass;
     // Nothing OpenAPPA wrote for the client and the gateway goes on to the
     // provider, whether or not this request has a session (deployment switch
     // off, a connection-setup or unsupported-client bypass, a delegated run)
@@ -2319,7 +1333,7 @@ export async function handleLLMProxy<
         {
           resolvedAgentId,
           rewrites: providerBoundRewrites,
-          openappaSession: openappaSession !== undefined,
+          openappaSession: admission.kind === "governed",
         },
         `[${providerName}Proxy] Removed OpenAPPA transport members from the provider-bound request`,
       );
@@ -2472,24 +1486,7 @@ export async function handleLLMProxy<
 
     // Build final request
     const builtRequest = requestAdapter.toProviderRequest();
-    // The provider thread owns the tools of a continue; the ruling only borrowed them.
-    if (continuingThread) {
-      const thread = builtRequest as {
-        tools?: unknown;
-        system?: unknown;
-        messages: unknown[];
-      };
-      if (hydratedThreadTools) delete thread.tools;
-      // The thread keeps the system prompt it was created with, guidance
-      // included. A continue sends only its own system blocks, as the client
-      // wrote them: guidance the ruling added to them would repeat in the thread.
-      if (threadDeltaSystem === undefined) delete thread.system;
-      else thread.system = threadDeltaSystem;
-      // The adapters may hand back copies, so the echo is found by its place
-      // (first) and its content (the same call ids), not by identity.
-      if (threadEchoedCalls && isEchoOf(thread.messages[0], threadEchoedCalls))
-        thread.messages = thread.messages.slice(1);
-    }
+    governedThread?.restoreProviderRequest(builtRequest);
 
     // Repair unpaired UTF-16 surrogates before the body leaves for the
     // provider. Half a surrogate pair has no UTF-8 encoding, so a provider
@@ -2542,11 +1539,8 @@ export async function handleLLMProxy<
 
     const ctx: LLMProxyContext<TRequest> = {
       connectionVerification,
-      openappaSession,
-      connectionSetupBypass,
-      ...(sessionReceipt ? { sessionReceipt } : {}),
-      ...(childTrajectoryReceipt ? { childTrajectoryReceipt } : {}),
-      ...(childCompactionContext ? { childCompactionContext } : {}),
+      ...(appaReceipts ? { appaReceipts } : {}),
+      ...(governedThread ? { governedThread } : {}),
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -2790,9 +1784,7 @@ async function handleStreaming<
     streamTiming,
     pluginRegistry,
     pluginContext,
-    sessionReceipt,
-    childTrajectoryReceipt,
-    childCompactionContext,
+    appaReceipts,
   } = ctx;
 
   const providerName = provider.provider;
@@ -2802,25 +1794,9 @@ async function handleStreaming<
   if (pluginContext && pluginRegistry?.governsHostedToolCalls(pluginContext)) {
     streamAdapter.withholdHostedToolCalls?.();
   }
-  let sessionReceiptPrepared = false;
-  if (childCompactionContext) {
-    streamAdapter.setCompactionContext?.(childCompactionContext);
-  }
-  if (sessionReceipt || childTrajectoryReceipt) {
-    streamAdapter.setTextSuffix?.((text) => {
-      if (text.length === 0 && !childTrajectoryReceipt) return "";
-      const parts: string[] = [];
-      if (childTrajectoryReceipt) {
-        parts.push(childTrajectoryReceipt.footer);
-      }
-      if (sessionReceipt && text.length > 0) {
-        sessionReceiptPrepared = true;
-        if (!bufferModelResponse) markSessionReceiptIssued(sessionReceipt);
-        parts.push(sessionReceipt.footer);
-      }
-      return parts.join("\n");
-    });
-  }
+  appaReceipts?.attachToStream(streamAdapter, {
+    buffered: bufferModelResponse,
+  });
   let billingMode = initialBillingMode;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
@@ -2877,46 +1853,10 @@ async function handleStreaming<
     reply.raw.write(data);
     keepAlive.touch();
   };
-  const MAX_BUFFERED_CHILD_STREAM_BYTES = 10 * 1024 * 1024;
-  let bufferedChildBytes = 0;
-  const bufferedModelEvents: (string | Uint8Array)[] = [];
-  const bufferedPolicyEvents: (string | Uint8Array)[] = [];
-  const emitModelEvent = (
-    data: string | Uint8Array,
-    isResponsePreamble = false,
-  ) => {
-    if (
-      bufferModelResponse &&
-      !(isResponsePreamble && !preambleSseCarriesContent(data))
-    ) {
-      bufferedChildBytes +=
-        typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
-      if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
-        throw new ApiError(
-          413,
-          "OpenAPPA child stream exceeded response buffer limit",
-        );
-      }
-      bufferedModelEvents.push(data);
-      return;
-    }
-    writeToClient(data);
-  };
-  const emitPolicyEvent = (data: string | Uint8Array) => {
-    if (bufferModelResponse) {
-      bufferedChildBytes +=
-        typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
-      if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
-        throw new ApiError(
-          413,
-          "OpenAPPA child stream exceeded response buffer limit",
-        );
-      }
-      bufferedPolicyEvents.push(data);
-      return;
-    }
-    writeToClient(data);
-  };
+  const childStream = new BufferedChildStream({
+    enabled: bufferModelResponse,
+    write: writeToClient,
+  });
   // Providers whose transport can't self-instrument duration (Bedrock) rely on
   // us to record llm_request_duration_seconds. Guard against a second (error-path)
   // observation once the stream has been established.
@@ -3077,7 +2017,7 @@ async function handleStreaming<
           // branch still do; zhipuai.ts guards it), as does one whose terminal
           // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {
-            emitModelEvent(result.sseData, result.isResponsePreamble);
+            childStream.emitModel(result.sseData, result.isResponsePreamble);
           }
 
           if (result.isFinal) {
@@ -3191,9 +2131,7 @@ async function handleStreaming<
         );
       }
       const failureEvents = streamAdapter.formatToolCallsSSE([]);
-      if (bufferModelResponse) {
-        for (const event of bufferedModelEvents) writeToClient(event);
-      }
+      childStream.flushModel();
       for (const event of failureEvents) writeToClient(event);
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
@@ -3231,7 +2169,7 @@ async function handleStreaming<
       );
       if (!reply.raw.destroyed) {
         for (const event of heldEvents) {
-          emitPolicyEvent(event);
+          childStream.emitPolicy(event);
         }
       }
     }
@@ -3299,8 +2237,7 @@ async function handleStreaming<
       );
     }
 
-    await recordGovernedThreadResponse({
-      context: ctx.pluginContext,
+    await ctx.governedThread?.recordResponse({
       messageId: streamAdapter.state.responseId,
       providerCalls: toolCalls,
       clientCalls: toolInvocationRefusal
@@ -3315,20 +2252,16 @@ async function handleStreaming<
         toolInvocationRefusal;
 
       const fullContentMessage =
-        !bufferModelResponse && childTrajectoryReceipt
-          ? `${childTrajectoryReceipt.footer}\n\n${contentMessage}`
-          : contentMessage;
-      if (bufferModelResponse) {
-        streamAdapter.prepareResponseReplacement?.();
-        bufferedModelEvents.length = 0;
-        bufferedPolicyEvents.length = 0;
-      }
+        appaReceipts?.prefixRefusal(contentMessage, {
+          buffered: bufferModelResponse,
+        }) ?? contentMessage;
+      childStream.discard(streamAdapter);
       // Drop the held tool-call events and use the existing refusal format.
       // Its text comes from APPA when enabled.
       const refusalEvents =
         streamAdapter.formatCompleteTextSSE(fullContentMessage);
       for (const event of refusalEvents) {
-        emitPolicyEvent(event);
+        childStream.emitPolicy(event);
       }
 
       recordBlockedToolCallMetrics({
@@ -3375,7 +2308,7 @@ async function handleStreaming<
           );
         }
         for (const event of allEvents) {
-          emitPolicyEvent(event);
+          childStream.emitPolicy(event);
         }
       }
     }
@@ -3395,17 +2328,11 @@ async function handleStreaming<
           stripChildTrajectoryReceipts(streamAdapter.state.text).text,
       });
       if (bufferedOutcome.decision === "replace") {
-        streamAdapter.prepareResponseReplacement?.();
-        bufferedModelEvents.length = 0;
-        bufferedPolicyEvents.length = 0;
-        bufferedPolicyEvents.push(
-          ...streamAdapter.formatCompleteTextSSE(
-            childTrajectoryReceipt
-              ? appendChildTrajectoryReceipt(
-                  bufferedOutcome.responseText,
-                  childTrajectoryReceipt.footer,
-                )
-              : bufferedOutcome.responseText,
+        childStream.discard(streamAdapter);
+        childStream.replaceResponse(
+          streamAdapter.formatCompleteTextSSE(
+            appaReceipts?.appendToReplacement(bufferedOutcome.responseText) ??
+              bufferedOutcome.responseText,
           ),
         );
         response = streamAdapter.toProviderResponse();
@@ -3426,15 +2353,8 @@ async function handleStreaming<
     }
 
     if (bufferModelResponse && !reply.raw.destroyed) {
-      for (const event of bufferedModelEvents) writeToClient(event);
-      for (const event of bufferedPolicyEvents) writeToClient(event);
-      if (
-        sessionReceipt &&
-        sessionReceiptPrepared &&
-        bufferedOutcome.decision === "release"
-      ) {
-        markSessionReceiptIssued(sessionReceipt);
-      }
+      childStream.flushAll();
+      appaReceipts?.markReleased(bufferedOutcome.decision);
     }
 
     // Stream end events
@@ -3527,9 +2447,7 @@ async function handleStreaming<
     }
     if (codexError?.isIncompleteTerminal) {
       // Preserve Chat's legal partial terminal only after failure cleanup.
-      if (bufferModelResponse) {
-        for (const event of bufferedModelEvents) writeToClient(event);
-      }
+      childStream.flushModel();
       const terminal = streamAdapter.processChunk({
         id: codexError.completion.id,
         object: "chat.completion.chunk",
@@ -3780,9 +2698,7 @@ async function handleNonStreaming<
     userTeams,
     pluginRegistry,
     pluginContext,
-    sessionReceipt,
-    childTrajectoryReceipt,
-    childCompactionContext,
+    appaReceipts,
   } = ctx;
 
   const providerName = provider.provider;
@@ -4003,8 +2919,7 @@ async function handleNonStreaming<
   let blockedToolCalls: readonly { reason: string }[] =
     hostedHold?.blocked ?? [];
   if (toolCalls.length === 0) {
-    await recordGovernedThreadResponse({
-      context: ctx.pluginContext,
+    await ctx.governedThread?.recordResponse({
       messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
       providerCalls: [],
       clientCalls: [],
@@ -4039,8 +2954,7 @@ async function handleNonStreaming<
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
     const toolInvocationRefusal = policyOutcome.refusal;
-    await recordGovernedThreadResponse({
-      context: ctx.pluginContext,
+    await ctx.governedThread?.recordResponse({
       messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
       providerCalls: toolCalls,
       clientCalls: toolInvocationRefusal
@@ -4350,42 +3264,11 @@ async function handleNonStreaming<
       response: clientResponse,
     });
   }
-  if (childCompactionContext) {
-    clientResponse = wrapCompactionResponse(
-      clientResponse,
-      childCompactionContext,
-    );
-    const response = asRecord(clientResponse);
-    if (
-      response?.object === "response.compaction" ||
-      (Array.isArray(response?.output) &&
-        response.output.length > 0 &&
-        response.output.every((item) => asRecord(item)?.type === "compaction"))
-    ) {
-      // Opaque clients keep the compaction item itself, not synthetic messages.
-      return sendResponse(clientResponse);
-    }
-  }
-  if (!sessionReceipt && !childTrajectoryReceipt) {
-    return sendResponse(clientResponse);
-  }
-  const outboundResponse = structuredClone(clientResponse);
-  if (childTrajectoryReceipt) {
-    appendChildTrajectoryReceiptToResponse({
-      family: childTrajectoryReceipt.family,
-      response: outboundResponse,
-      footer: childTrajectoryReceipt.footer,
-    });
-  }
-  if (sessionReceipt) {
-    const appended = appendSessionReceiptToResponse({
-      family: sessionReceipt.family,
-      response: outboundResponse,
-      code: sessionReceipt.code,
-    });
-    if (appended) markSessionReceiptIssued(sessionReceipt);
-  }
-  return sendResponse(outboundResponse);
+  return sendResponse(
+    appaReceipts
+      ? appaReceipts.decorateResponse(clientResponse)
+      : clientResponse,
+  );
 }
 
 class RecordedCodexGenerationFailure extends ApiError {
@@ -4433,228 +3316,6 @@ async function failResponsesGeneration(params: {
     }
   }
   return true;
-}
-
-// Verifies that preamble frames carry no content before release without buffering.
-// Envelopes like message_start or response.created can contain text.
-// Any frame that cannot be proven content-free is treated as content.
-function preambleSseCarriesContent(data: string | Uint8Array): boolean {
-  const text =
-    typeof data === "string" ? data : Buffer.from(data).toString("utf8");
-  let sawDataLine = false;
-  for (const line of text.split("\n")) {
-    if (!line.startsWith("data:")) continue;
-    sawDataLine = true;
-    let frame: unknown;
-    try {
-      frame = JSON.parse(line.slice("data:".length).trim());
-    } catch {
-      return true;
-    }
-    const payload = asRecord(frame);
-    if (!payload) return true;
-    // Anthropic envelope: message_start carries the initial Message object.
-    if (payload.type === "message_start") {
-      const content = asRecord(payload.message)?.content;
-      if (Array.isArray(content) && content.length > 0) return true;
-      continue;
-    }
-    // OpenAI/Azure Responses envelope: response.created and
-    // response.in_progress carry the in-flight Response object.
-    if (
-      typeof payload.type === "string" &&
-      payload.type.startsWith("response.")
-    ) {
-      const output = asRecord(payload.response)?.output;
-      if (Array.isArray(output) && output.length > 0) return true;
-      continue;
-    }
-    // OpenAI chat chunk: only a role-only delta is content-free.
-    if (Array.isArray(payload.choices)) {
-      for (const choice of payload.choices) {
-        const delta = asRecord(asRecord(choice)?.delta);
-        if (
-          delta?.content ||
-          delta?.reasoning_content ||
-          delta?.refusal ||
-          delta?.tool_calls
-        ) {
-          return true;
-        }
-      }
-      continue;
-    }
-    return true;
-  }
-  return !sawDataLine;
-}
-
-/**
- * Fills the APPA session and parent headers from the client's own session
- * identity when the request did not send them. The enforced path and the
- * observer both use it, so they read the same session from a request.
- */
-function fillAppaSessionHeaders(
-  headers: Record<string, string | string[] | undefined>,
-  identity: AppaSessionIdentity,
-): void {
-  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
-  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
-  if (
-    identity.sessionId &&
-    isWellFormedAppaId(identity.sessionId) &&
-    !headers[sessionHeader]
-  )
-    headers[sessionHeader] = identity.sessionId;
-  if (
-    identity.parentId &&
-    isWellFormedAppaId(identity.parentId) &&
-    !headers[parentHeader]
-  )
-    headers[parentHeader] = identity.parentId;
-}
-
-/**
- * The session a request has while enforcement is off: the one the enforced
- * path binds, without a fork source. Undefined for a client that OpenAPPA
- * cannot govern, or a request that names no valid session of its own. A
- * fallback root is shared by all conversations of a credential, so it is
- * never one session. Never throws, because enforcement is off.
- */
-function observedAppaSession(params: {
-  headers: Record<string, string | string[] | undefined>;
-  body: unknown;
-  interactionType: Parameters<typeof appaWireFamily>[0];
-  organizationId: string;
-  callerId: string | undefined;
-  isInternalChat: boolean;
-  /** A platform request over loopback with no credential of its own. */
-  platformLoopback: boolean;
-}): OpenAppaSession | undefined {
-  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
-  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
-  const incoming = params.headers[sessionHeader];
-  const governable =
-    params.isInternalChat ||
-    incoming !== undefined ||
-    params.headers[parentHeader] !== undefined ||
-    APPA_CLIENT_ADAPTERS.some((adapter) =>
-      adapter.matches({ headers: params.headers, requestBody: params.body }),
-    );
-  if (!governable) return undefined;
-  try {
-    const family = appaWireFamily(params.interactionType);
-    const identity = family
-      ? extractAppaSessionIdentity({
-          family,
-          body: params.body,
-          headers: params.headers,
-        })
-      : {};
-    const headers = { ...params.headers };
-    fillAppaSessionHeaders(headers, identity);
-    return sessionFromHeaders({
-      headers,
-      organizationId: params.organizationId,
-      callerId: params.callerId,
-      ...(params.isInternalChat
-        ? {}
-        : {
-            scope:
-              params.platformLoopback && incoming !== undefined
-                ? undefined
-                : params.callerId,
-          }),
-    });
-  } catch (error) {
-    // Enforcement is off, so the request goes on either way. A request
-    // without a usable session id is expected; anything else is not.
-    const details = {
-      error: error instanceof Error ? error.message : String(error),
-    };
-    if (error instanceof ApiError)
-      logger.debug(
-        details,
-        "OpenAPPA does not record a request without a usable session id while Guardrails enforcement is off",
-      );
-    else
-      logger.warn(
-        details,
-        "OpenAPPA could not read the session of a request while Guardrails enforcement is off",
-      );
-    return undefined;
-  }
-}
-
-/**
- * Whether `message` is the echoed calls the ruling borrowed: an assistant
- * message with the same tool call ids, in the same order.
- */
-function isEchoOf(message: unknown, echo: object): boolean {
-  const ids = (value: unknown): unknown[] => {
-    const content = (value as { content?: unknown } | undefined)?.content;
-    return Array.isArray(content)
-      ? content.map((block) => (block as { id?: unknown } | undefined)?.id)
-      : [];
-  };
-  if ((message as { role?: string } | undefined)?.role !== "assistant")
-    return false;
-  const found = ids(message);
-  const expected = ids(echo);
-  return (
-    expected.length > 0 &&
-    found.length === expected.length &&
-    found.every((id, index) => id === expected[index])
-  );
-}
-
-function parseCallArguments(args: unknown): Record<string, unknown> {
-  if (args && typeof args === "object") return args as Record<string, unknown>;
-  try {
-    const parsed = typeof args === "string" ? JSON.parse(args) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * Keeps what a governed provider thread was ruled on, so its next continue can
- * be ruled on too. A response the client holds a rewrite of that the provider
- * cannot continue from is kept as diverged: the continue is answered with a
- * replay request.
- */
-async function recordGovernedThreadResponse(params: {
-  context: LlmProxyRequestContext | undefined;
-  messageId: string | undefined;
-  providerCalls: readonly { id: string }[];
-  clientCalls: readonly { id: string; name: string; arguments?: unknown }[];
-  refused: boolean;
-  held: boolean;
-}): Promise<void> {
-  const record = params.context?.resources.get(APPA_THREAD_RECORD) as
-    | ThreadRecord
-    | undefined;
-  if (!record) return;
-  await threadStates.record({
-    record,
-    messageId: params.messageId,
-    calls: params.refused
-      ? []
-      : params.clientCalls.map((call) => ({
-          id: call.id,
-          name: call.name,
-          input: parseCallArguments(call.arguments),
-        })),
-    diverged: !clientKeepsThreadPairing({
-      providerCallIds: params.providerCalls.map((call) => call.id),
-      clientCallIds: params.clientCalls.map((call) =>
-        withoutTrajectoryStamp(call.id),
-      ),
-      refused: params.refused,
-      held: params.held,
-    }),
-  });
 }
 
 async function evaluateProxyPluginToolCalls(
@@ -4806,12 +3467,6 @@ function planDispatchRewrites(params: {
     );
   }
   return rewritten;
-}
-
-function firstHeaderValue(
-  value: string | string[] | undefined,
-): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
 }
 
 function logUpstreamRetry(params: {

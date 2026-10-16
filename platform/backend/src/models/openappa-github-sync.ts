@@ -2,18 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { lockGuardrailsPolicy } from "@/models/guardrails-policy";
-import type {
-  AppaGithubSource,
-  HeldPullReason,
-} from "@/types/openappa-github-sync";
-
-/** The held pull emptied: a row carries either held bytes or none of them. */
-const NO_HOLD = {
-  heldContent: null,
-  heldContentHash: null,
-  heldSourceCommit: null,
-  heldReasons: [] as HeldPullReason[],
-};
+import type { AppaGithubSource } from "@/types/openappa-github-sync";
 
 const table = schema.openappaGithubSyncTable;
 
@@ -46,8 +35,6 @@ class OpenAppaGithubSyncModel {
       sourceCommit: null,
       lastSyncedAt: null,
       lastSyncError: null,
-      // Held bytes belong to the source they came from.
-      ...NO_HOLD,
     };
     await db.transaction(async (tx) => {
       await lockGuardrailsPolicy(tx, organizationId);
@@ -78,11 +65,7 @@ class OpenAppaGithubSyncModel {
         .onConflictDoUpdate({ target: table.organizationId, set: values });
     });
   }
-  /**
-   * Change or stop the schedule. A held pull belongs to the schedule that
-   * fetched it: changing that schedule hands the text back to its authors, so
-   * the held bytes go rather than wait to land on a later manual edit.
-   */
+  /** Change or stop the schedule. */
   static async setInterval(
     organizationId: string,
     interval: AppaGithubSource["interval"] | null,
@@ -91,7 +74,7 @@ class OpenAppaGithubSyncModel {
       await lockGuardrailsPolicy(tx, organizationId);
       await tx
         .update(table)
-        .set({ interval, revision: randomUUID(), ...NO_HOLD })
+        .set({ interval, revision: randomUUID() })
         .where(
           and(
             eq(table.organizationId, organizationId),
@@ -102,8 +85,8 @@ class OpenAppaGithubSyncModel {
   }
   /**
    * Record a pull's outcome, answering whether it was still the pull this row
-   * expected: a download that raced a source edit, a disconnect or a declaration
-   * migration records nothing, and its caller must not act as though it had.
+   * expected: a download that raced a source edit or a disconnect records
+   * nothing, and its caller must not act as though it had.
    */
   static async finish(params: {
     organizationId: string;
@@ -125,11 +108,6 @@ class OpenAppaGithubSyncModel {
                 content: outcome.content,
                 sourceCommit: outcome.sourceCommit,
                 lastSyncError: null,
-                // A pull that publishes supersedes whatever was held, and it
-                // carried every declaration the flag was guarding: a migration
-                // that flagged more since rotated the revision this write keys on.
-                declarationsPendingPublish: false,
-                ...NO_HOLD,
               }),
           lastSyncedAt: new Date(),
           // A writer that read this revision has had its turn; whatever else
@@ -166,107 +144,6 @@ class OpenAppaGithubSyncModel {
     });
   }
 
-  /**
-   * Record a pull that was fetched but not published. Same optimistic rule as
-   * `finish`: a download racing a source edit or a disconnect records nothing.
-   */
-  static async hold(params: {
-    organizationId: string;
-    revision: string;
-    content: string;
-    contentHash: string;
-    sourceCommit: string;
-    reasons: HeldPullReason[];
-    error: string;
-  }): Promise<boolean> {
-    const { organizationId, revision, ...held } = params;
-    return db.transaction(async (tx) => {
-      await lockGuardrailsPolicy(tx, organizationId);
-      const [row] = await tx
-        .update(table)
-        .set({
-          heldContent: held.content,
-          heldContentHash: held.contentHash,
-          heldSourceCommit: held.sourceCommit,
-          heldReasons: held.reasons,
-          lastSyncError: held.error,
-          lastSyncedAt: new Date(),
-          revision: randomUUID(),
-        })
-        .where(
-          and(
-            eq(table.organizationId, organizationId),
-            eq(table.revision, revision),
-            isNotNull(table.interval),
-          ),
-        )
-        .returning({ organizationId: table.organizationId });
-      return row !== undefined;
-    });
-  }
-
-  /**
-   * Publish the held bytes as a new revision authored by the user accepting
-   * them, and clear the hold and the pending flag. Held bytes never reach the
-   * policy any other way, and `GuardrailsPolicyModel.save` refuses a write while
-   * syncing is on, which is exactly when a pull can be held.
-   */
-  static async publishHeld(params: {
-    organizationId: string;
-    userId: string;
-    /** The held bytes the accepting user saw; anything else is a newer pull. */
-    heldContentHash: string;
-    /** The row revision the acceptance was authorized against. */
-    revision: string;
-  }): Promise<{ contentHash: string; sourceCommit: string } | null> {
-    const { organizationId, userId } = params;
-    return db.transaction(async (tx) => {
-      await lockGuardrailsPolicy(tx, organizationId);
-      const [row] = await tx
-        .select()
-        .from(table)
-        .where(eq(table.organizationId, organizationId));
-      // Syncing off means the text belongs to its authors again: bytes the
-      // schedule fetched may not land on top of what they wrote since.
-      if (!row?.interval) return null;
-      if (!row.heldContent || !row.heldContentHash || !row.heldSourceCommit)
-        return null;
-      if (row.heldContentHash !== params.heldContentHash) return null;
-      if (row.revision !== params.revision) return null;
-      const policies = schema.guardrailsPolicyRevisionsTable;
-      const [current] = await tx
-        .select()
-        .from(policies)
-        .where(eq(policies.organizationId, organizationId))
-        .orderBy(desc(policies.revision))
-        .limit(1);
-      if (current?.contentHash !== row.heldContentHash)
-        await tx.insert(policies).values({
-          organizationId,
-          revision: (current?.revision ?? 0) + 1,
-          content: row.heldContent,
-          contentHash: row.heldContentHash,
-          updatedBy: userId,
-        });
-      await tx
-        .update(table)
-        .set({
-          setupPullRequestNumber: null,
-          content: row.heldContent,
-          sourceCommit: row.heldSourceCommit,
-          lastSyncError: null,
-          declarationsPendingPublish: false,
-          revision: randomUUID(),
-          ...NO_HOLD,
-        })
-        .where(eq(table.organizationId, organizationId));
-      return {
-        contentHash: row.heldContentHash,
-        sourceCommit: row.heldSourceCommit,
-      };
-    });
-  }
-
   // The interval paces policy downloads. A pending setup pull request is
   // checked every minute instead: an operator is waiting on that merge, and
   // the check reads one pull request rather than the policy.
@@ -296,12 +173,8 @@ class OpenAppaGithubSyncModel {
     if (id !== organizationId) return null;
     const row = await OpenAppaGithubSyncModel.find(organizationId);
     if (!row) return null;
-    const { content, heldContent, ...metadata } = row;
-    return {
-      ...metadata,
-      hasPolicy: content !== null,
-      hasHeldPull: heldContent !== null,
-    };
+    const { content, ...metadata } = row;
+    return { ...metadata, hasPolicy: content !== null };
   }
 }
 export default OpenAppaGithubSyncModel;

@@ -18,6 +18,7 @@ import {
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useOrganization } from "@/lib/organization.query";
@@ -38,8 +39,8 @@ const {
   getAgentCredentialReadiness,
   getAgentDefaultSuggestedPrompts,
   getAgents,
-  getAllAgents,
   getAgentOptions,
+  getChatAgentRoster,
   getDefaultMcpGateway,
   getAgent,
   importAgent,
@@ -54,41 +55,33 @@ const {
   unpinAgent,
 } = archestraApiSdk;
 
-/**
- * The roster, without each agent's tools. No consumer of this list reads them
- * — the pickers that show tools fetch them per agent — while the refs carry
- * every tool's name and description, which on an organization of any size is
- * the great majority of the response. Dropping them is what lets the new-chat
- * screen, whose first paint is gated on this list, stop waiting on megabytes
- * it does not draw.
- */
-const internalAgentsQuery = {
-  agentType: "agent",
-  excludeBuiltIn: true,
-  includeTools: false,
-} as const;
-
-const chatAgentsQuery = {
-  ...internalAgentsQuery,
-  view: "chat",
-} as const;
-
-export const internalAgentsQueryKey = [
+const chatAgentsQueryKey = [
   "agents",
-  "all",
-  internalAgentsQuery,
+  "chat-roster",
+  "bootstrap",
+  "v3",
 ] as const;
 
-const chatAgentsQueryKey = ["agents", "chat-roster", chatAgentsQuery] as const;
-
-export async function fetchInternalAgents() {
-  const { data, error } = await getAllAgents({ query: internalAgentsQuery });
+/** Metadata-only internal agents for selectors and runtime labels. */
+export async function fetchInternalAgentOptions() {
+  const { data, error } = await getAgentOptions({
+    query: { agentType: "agent", excludeBuiltIn: true },
+  });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
 }
 
+export function useInternalAgentOptions(params?: { enabled?: boolean }) {
+  return useAgentOptions({
+    filters: { agentType: "agent", excludeBuiltIn: true },
+    enabled: params?.enabled,
+  });
+}
+
 async function fetchChatAgents() {
-  const { data, error } = await getAllAgents({ query: chatAgentsQuery });
+  const { data, error } = await getChatAgentRoster({
+    query: { bootstrap: true },
+  });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
 }
@@ -99,44 +92,54 @@ const delegationTargetAgentsQuery = {
 } as const;
 
 export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ["agents", "all", delegationTargetAgentsQuery],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({
-        query: delegationTargetAgentsQuery,
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+  return useAgentOptions({
+    filters: delegationTargetAgentsQuery,
     enabled: params?.enabled,
-    // No staleTime override: inherit the client default so several components
-    // mounting this hook during one page load share a single fetch instead of
-    // each observer refetching the whole roster. Agent mutations invalidate
-    // ["agents"] queries, so edits still show up immediately.
   });
 }
 
-// Returns all agents as an array
+/**
+ * Agents per request for every roster. The list is paginated on the server, so
+ * a roster never loads the whole organization.
+ */
+export const AGENT_PAGE_SIZE = 100;
+
+/** One page of agents, with the server-side name search applied. */
+async function fetchAgentPage(
+  query: archestraApiTypes.GetAgentsData["query"],
+): Promise<
+  Array<
+    Omit<
+      archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+      "pinnedAt"
+    >
+  >
+> {
+  const { data, error } = await getAgents({ query });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.data ?? [];
+}
+
+// Returns one page of agents as an array
 export function useProfiles(
   params: {
-    initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
-    filters?: archestraApiTypes.GetAllAgentsData["query"];
+    initialData?: Array<
+      Omit<
+        archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+        "pinnedAt"
+      >
+    >;
+    filters?: archestraApiTypes.GetAgentsData["query"];
     enabled?: boolean;
   } = {},
 ) {
   const filters = {
-    excludeBuiltIn: true,
-    // Roster consumers use metadata; selected-agent tools load from detail queries.
-    includeTools: false,
+    limit: AGENT_PAGE_SIZE,
     ...params?.filters,
-  } satisfies archestraApiTypes.GetAllAgentsData["query"];
+  } satisfies archestraApiTypes.GetAgentsData["query"];
   return useQuery({
     queryKey: ["agents", "all", filters],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({ query: filters });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: () => fetchAgentPage(filters),
     initialData: params?.initialData,
     enabled: params?.enabled,
   });
@@ -150,9 +153,18 @@ export function useAgentOptions(
   } = {},
 ) {
   const filters = { excludeBuiltIn: true, ...params.filters };
+  if (
+    filters.agentTypes?.length === 1 &&
+    (filters.agentType === undefined ||
+      filters.agentType === filters.agentTypes[0])
+  ) {
+    filters.agentType = filters.agentTypes[0];
+    delete filters.agentTypes;
+  }
   return useQuery({
     queryKey: ["agents", "options", filters],
     queryFn: async () => {
+      if (filters.ids?.length === 0) return [];
       const { data, error } = await getAgentOptions({ query: filters });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
@@ -502,7 +514,7 @@ export function useProfile(
      * resolve on the first render and the rest fetch immediately, rather than
      * one round trip later.
      *
-     * Safe because findCachedAgent excludes the compact chat roster; the
+     * Safe because findCachedAgent excludes compact and tool-free rosters; the
      * remaining list endpoints serialise whole agents with the same
      * `SelectAgentSchema` this route returns. `initialDataUpdatedAt` carries
      * the list's age across, so a stale row still revalidates on its normal
@@ -828,34 +840,27 @@ export function useUpdateDefaultAgentId() {
  * they are missing. Only agents whose author moved them off the default
  * "allow" behavior appear here, so an empty result is the common case.
  */
-export function useAgentCredentialReadiness(params?: { enabled?: boolean }) {
+export function useAgentCredentialReadiness(params: {
+  enabled?: boolean;
+  ids: string[];
+}) {
+  const ids = [...new Set(params.ids)].sort();
   return useQuery({
-    queryKey: ["agents", "credential-readiness"],
+    queryKey: ["agents", "credential-readiness", ids],
     queryFn: async () => {
-      const { data, error } = await getAgentCredentialReadiness();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
+      if (ids.length === 0) return [];
+      const rows: archestraApiTypes.GetAgentCredentialReadinessResponses["200"] =
+        [];
+      for (let offset = 0; offset < ids.length; offset += 200) {
+        const { data, error } = await getAgentCredentialReadiness({
+          query: { ids: ids.slice(offset, offset + 200) },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        rows.push(...(data ?? []));
+      }
+      return rows;
     },
     enabled: params?.enabled,
-  });
-}
-
-export function useInternalAgents(params?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: internalAgentsQueryKey,
-    queryFn: fetchInternalAgents,
-    enabled: params?.enabled,
-    // No staleTime override: inherit the client default so several components
-    // mounting this hook during one page load share a single fetch instead of
-    // each observer refetching the whole roster. Agent mutations invalidate
-    // ["agents"] queries, so edits still show up immediately.
-    //
-    // Restored on refresh because the new-chat screen cannot draw without it:
-    // which agent a new chat starts on is resolved from this roster, so an
-    // unrestored copy is a full-area spinner rather than a stale name. It is
-    // names and labels the picker already shows, and carries no credential (an
-    // agent references its key by id).
-    meta: PERSISTED_QUERY_META,
   });
 }
 
@@ -864,33 +869,128 @@ export function useInternalAgents(params?: { enabled?: boolean }) {
  * editing-only fields stay out of this query; the selected/edited agent is
  * hydrated through useProfile when its full record is needed.
  */
-export function useChatAgents(params?: { enabled?: boolean }) {
+export function useChatAgentPage(params: {
+  cursor?: string;
+  search?: string;
+  enabled: boolean;
+}) {
+  const query = {
+    limit: 20,
+    cursor: params.cursor,
+    search: params.search || undefined,
+    sortBy: "chat" as const,
+  };
+  return useQuery({
+    queryKey: ["agents", "chat-roster", "page", query],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getChatAgentRosterPage({
+        query,
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled: params.enabled,
+  });
+}
+
+export function useChatAgentReferences(
+  ids: (string | null | undefined)[],
+  enabled = true,
+) {
+  const client = useQueryClient();
+  const stableIds = [...new Set(ids.filter((id): id is string => !!id))].sort();
+  const cachedRows = stableIds.map((id) => findCachedChatAgent(client, id));
+  const initialData = cachedRows.every((row) => row !== undefined)
+    ? cachedRows
+    : undefined;
+  return useQuery({
+    queryKey: ["agents", "chat-roster", "references", stableIds],
+    initialData,
+    queryFn: async () => {
+      const rows: archestraApiTypes.GetChatAgentRosterResponses["200"] = [];
+      for (let offset = 0; offset < stableIds.length; offset += 100) {
+        const { data, error } = await getChatAgentRoster({
+          query: { ids: stableIds.slice(offset, offset + 100) },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        rows.push(...(data ?? []));
+      }
+      return rows;
+    },
+    enabled,
+    retry: BOOTSTRAP_QUERY_RETRY,
+  });
+}
+
+export function useChatAgentBootstrap(enabled = true) {
   return useQuery({
     queryKey: chatAgentsQueryKey,
     queryFn: fetchChatAgents,
-    enabled: params?.enabled,
-    // The new-chat composer resolves its default agent (and, in turn, its
-    // default model) from this roster. Recover from a transient fetch failure
-    // rather than latching an empty roster into "Select agent" (T-1317).
+    enabled,
     retry: BOOTSTRAP_QUERY_RETRY,
     meta: PERSISTED_QUERY_META,
   });
 }
 
-export function useOrgScopedAgents() {
-  return useQuery({
-    queryKey: [
-      "agents",
-      "all",
-      { agentType: "agent", excludeBuiltIn: true, scope: "org" as const },
+export function useChatAgents(params?: {
+  enabled?: boolean;
+  ids?: (string | null | undefined)[];
+}) {
+  const client = useQueryClient();
+  const organization = useOrganization();
+  const memberDefault = useDefaultAgentId();
+  const savedId = getSavedAgent();
+  const enabled = params?.enabled ?? true;
+  const bootstrap = useChatAgentBootstrap(enabled);
+  const references = useChatAgentReferences(
+    [
+      ...(params?.ids ?? []),
+      organization.data?.defaultAgentId,
+      memberDefault.data,
+      savedId,
     ],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({
-        query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    enabled && !organization.isPending && !memberDefault.isPending,
+  );
+  const defaultsFailed =
+    (organization.isError && !organization.data) ||
+    (memberDefault.isError && memberDefault.data === undefined);
+  const isPending =
+    !defaultsFailed &&
+    (bootstrap.isPending ||
+      references.isPending ||
+      organization.isPending ||
+      memberDefault.isPending);
+  const data = useMemo(() => {
+    if (isPending || defaultsFailed || !references.data || !bootstrap.data)
+      return undefined;
+    const rows = [...(bootstrap.data ?? []), ...(references.data ?? [])];
+    return [...new Map(rows.map((row) => [row.id, row])).values()];
+  }, [bootstrap.data, references.data, isPending, defaultsFailed]);
+  return {
+    ...bootstrap,
+    data,
+    isPending,
+    isLoading: isPending,
+    isError:
+      bootstrap.isError ||
+      references.isError ||
+      organization.isError ||
+      memberDefault.isError,
+    isSuccess: !defaultsFailed && bootstrap.isSuccess && references.isSuccess,
+    resolveAgent: (id: string) => findCachedChatAgent(client, id),
+    refetch: async () =>
+      Promise.all([
+        bootstrap.refetch(),
+        references.refetch(),
+        organization.refetch(),
+        memberDefault.refetch(),
+      ]),
+  };
+}
+
+export function useOrgScopedAgents() {
+  return useAgentOptions({
+    filters: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
   });
 }
 
@@ -961,8 +1061,10 @@ function findCachedAgent(
       continue;
     // A list fetched without tools would seed a detail with no tools, which
     // reads as "this agent has none" until the seed goes stale.
-    const params = query.queryKey[2] as { includeTools?: boolean } | undefined;
-    if (params?.includeTools === false) continue;
+    const params = query.queryKey[2] as
+      | { includeTools?: boolean; view?: string }
+      | undefined;
+    if (params?.includeTools === false || params?.view === "chat") continue;
     const cached: unknown = query.state.data;
     const rows = Array.isArray(cached)
       ? cached
@@ -997,3 +1099,16 @@ const memberAgentsQuery = {
     };
   },
 };
+
+function findCachedChatAgent(client: QueryClient, id: string) {
+  const cached = client.getQueriesData<
+    | archestraApiTypes.GetChatAgentRosterResponses["200"]
+    | { data: archestraApiTypes.GetChatAgentRosterResponses["200"] }
+  >({ queryKey: ["agents", "chat-roster"] });
+  for (const [, value] of cached) {
+    const rows = Array.isArray(value) ? value : value?.data;
+    const row = rows?.find((agent) => agent.id === id);
+    if (row) return row;
+  }
+  return undefined;
+}

@@ -959,6 +959,42 @@ describe("OpenAPPA tool execution", () => {
     expect(executeSpy.mock.calls[0][0]).not.toHaveProperty("precheckRefusal");
   });
 
+  test("chat client: a consumed human approval appends its provenance after the untouched result", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this issue?",
+      session_id: "session-1",
+      tool: "github__create_issue",
+      arguments: "{}",
+    });
+    vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+      result: { content: [{ type: "text", text: "Authorized" }] },
+      known: true,
+    });
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        ...{ offer_id: "offer-hitl", trajectory: trajectory() },
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    // The native result block stays first and unchanged; the provenance note
+    // follows it so the model does not mistake the card for its own doing.
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0]).toEqual({ type: "text", text: "Authorized" });
+    expect(content).toHaveLength(2);
+    expect(content[1].text).toContain("reviewer selected Approve");
+    expect(content[1].text).toMatch(/offer IDs? by design/);
+    expect(extractMcpHumanRuling(result)).toBe("approve");
+  });
+
   test("chat client: a form decline is not a human denial", async () => {
     vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
       offer_id: "offer-hitl",

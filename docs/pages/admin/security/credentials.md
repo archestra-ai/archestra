@@ -41,6 +41,8 @@ People who can open **Settings → Credentials** connect their own values, and a
 
 **The organization** means an administrator connects one shared value. Scheduled skill, plugin, and Knowledge syncs use organization credentials.
 
+Only people who can manage organization settings can run an agent that uses an organization credential. Everyone else sees **Only admins can run this agent**.
+
 Create separate definitions when the same service needs both ownership policies. A personal MCP credential cannot be used by an organization installation.
 
 ## Who Can Manage a Credential

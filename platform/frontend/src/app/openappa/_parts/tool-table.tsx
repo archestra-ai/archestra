@@ -154,6 +154,7 @@ export function ToolTable({
     return (
       <QueryLoadError
         title="Could not load the tools"
+        error={tools.error}
         onRetry={() => tools.refetch()}
         className="rounded-md border py-10"
       />

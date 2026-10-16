@@ -160,7 +160,7 @@ beforeEach(() => {
       >,
   );
   server.use(
-    http.get(`${origin}/api/agents/all`, () => HttpResponse.json([])),
+    http.get(`${origin}/api/agents/chat-roster`, () => HttpResponse.json([])),
     http.get(`${origin}/api/openappa/github-sync`, () =>
       HttpResponse.json({
         enabled: true,

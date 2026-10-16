@@ -144,6 +144,7 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
         <QueryLoadError
           className="border"
           title="Couldn't load this external A2A agent"
+          error={query.error}
           onRetry={() => query.refetch()}
         />
       </DetailShell>

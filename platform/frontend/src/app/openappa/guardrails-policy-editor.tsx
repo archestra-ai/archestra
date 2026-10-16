@@ -172,6 +172,7 @@ function RootPolicySource({
     return (
       <QueryLoadError
         title="Could not load policy"
+        error={policy.error}
         onRetry={() => policy.refetch()}
       />
     );

@@ -8,6 +8,7 @@ import {
 import { verifyDelegatedPrompt } from "@/openappa/delegation";
 import { isWellFormedAppaId } from "@/openappa/service";
 import { ApiError } from "@/types";
+import { asRecord } from "@/utils/as-record";
 import type { AppaChildTrajectory, AppaMatchContext } from "../types";
 import { readHeader, withCallerScope, withoutCallerScope } from "../utils";
 
@@ -272,12 +273,6 @@ export function stripRecordFields(
   for (const key of keys) {
     delete record[key];
   }
-}
-
-export function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
 
 export function stringField(value: unknown): string | undefined {

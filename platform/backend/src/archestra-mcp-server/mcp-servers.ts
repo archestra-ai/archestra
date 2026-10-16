@@ -374,6 +374,12 @@ const GetMcpServersToolArgsSchema = z
 const GetMcpServerToolsToolArgsSchema = z
   .object({
     mcpServerId: UuidIdSchema.describe("The catalog ID of the MCP server."),
+    view: z
+      .enum(["full", "picker"])
+      .optional()
+      .describe(
+        "Picker metadata excludes parameter bodies and assigned-agent lists; defaults to full.",
+      ),
   })
   .strict();
 
@@ -780,7 +786,10 @@ async function handleGetMcpServerTools(
     ) {
       return errorResult("You do not have permission to view this MCP server.");
     }
-    const tools = await ToolModel.findByCatalogId(args.mcpServerId);
+    const tools =
+      args.view === "picker"
+        ? await ToolModel.findPickerToolsByCatalogId(args.mcpServerId)
+        : await ToolModel.findByCatalogId(args.mcpServerId);
     return structuredSuccessResult({ tools }, JSON.stringify(tools, null, 2));
   } catch (error) {
     return catchError(error, "getting MCP server tools");

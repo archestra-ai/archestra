@@ -276,7 +276,9 @@ export function LocalServerInstallDialog({
   >({});
 
   const byosEnabled = useFeature("byosEnabled");
-  const { data: teamsWithVault } = useTeamsWithVaultFolders();
+  const { data: teamsWithVault } = useTeamsWithVaultFolders({
+    enabled: isOpen,
+  });
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
 
   // Sync vaultTeamId from selectedTeamId when in team mode, reset when switching to personal

@@ -31,7 +31,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import config from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -63,11 +63,14 @@ export function ConnectionSettingsForm() {
   const { data: organization } = useOrganization();
   const appName = useAppName();
   const defaultInstructions = defaultRuntimeHandoffInstructions(appName);
-  const { data: mcpGateways } = useProfiles({
-    filters: { agentTypes: ["profile", "mcp_gateway"] },
-  });
 
   const [gatewayId, setGatewayId] = useState<string | null>(null);
+  const { data: mcpGateways } = useAgentOptions({
+    filters: {
+      agentTypes: ["profile", "mcp_gateway"],
+      ids: gatewayId ? [gatewayId] : [],
+    },
+  });
   const [defaultClientId, setDefaultClientId] = useState<string | null>(null);
   // UI stores the set of visible clients/providers; null in DB = show all.
   const [shownClientIds, setShownClientIds] =
@@ -331,6 +334,12 @@ export function ConnectionSettingsForm() {
                   flat
                   className="w-60"
                   agents={gatewayItems}
+                  remote={{
+                    filters: {
+                      agentTypes: ["profile", "mcp_gateway"],
+                      excludePersonalGateways: true,
+                    },
+                  }}
                   value={gatewayId ?? DEFAULT_VALUE}
                   onValueChange={(value) =>
                     setGatewayId(value === DEFAULT_VALUE ? null : value)

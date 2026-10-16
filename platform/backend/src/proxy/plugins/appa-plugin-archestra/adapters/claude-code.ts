@@ -3,6 +3,7 @@ import type { AppaSessionIdentity } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
+import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
@@ -22,7 +23,6 @@ import {
 } from "./claude-code-relay";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
-  asRecord,
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,

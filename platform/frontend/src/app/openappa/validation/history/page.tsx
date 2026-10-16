@@ -54,6 +54,7 @@ export default function ValidationHistoryPage() {
       {history.isError ? (
         <QueryLoadError
           title="Could not load run history"
+          error={history.error}
           onRetry={() => history.refetch()}
         />
       ) : (

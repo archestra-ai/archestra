@@ -44,11 +44,9 @@ import { AgentPageShell } from "./agent-page-shell";
  */
 export function AgentCreatePage({
   kind,
-  canAddExternalAgent = false,
   canCreateAgent = false,
 }: {
   kind: AgentPageKind;
-  canAddExternalAgent?: boolean;
   canCreateAgent?: boolean;
 }) {
   const config = AGENT_PAGE_CONFIGS[kind];
@@ -217,7 +215,6 @@ export function AgentCreatePage({
         </Empty>
       ) : isChoosingSource ? (
         <AgentCatalog
-          canAddExternalAgent={canAddExternalAgent}
           canCreateAgent={canCreateAgent}
           onStartFromScratch={() => {
             setSelectedTemplate(null);

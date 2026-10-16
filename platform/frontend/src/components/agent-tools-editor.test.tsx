@@ -18,11 +18,8 @@ function createMockTools(count: number) {
     id: `tool-${i + 1}`,
     name: `server__tool_${i + 1}`,
     description: `Description for tool ${i + 1}`,
-    parameters: {},
     createdAt: new Date().toISOString(),
     group: null,
-    assignedAgentCount: 0,
-    assignedAgents: [],
   }));
 }
 
@@ -35,11 +32,8 @@ function createMockTool(
     id,
     name,
     description,
-    parameters: {},
     createdAt: new Date().toISOString(),
     group: null,
-    assignedAgentCount: 0,
-    assignedAgents: [],
   };
 }
 
@@ -530,11 +524,8 @@ describe("ToolChecklist", () => {
         id,
         name: `archestra__${shortName}`,
         description: `Description for ${shortName}`,
-        parameters: {},
         createdAt: new Date().toISOString(),
         group,
-        assignedAgentCount: 0,
-        assignedAgents: [],
       };
     }
 

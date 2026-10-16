@@ -31,6 +31,7 @@ import {
   clearHitlReview,
   closureFromReviewOutcome,
   consumeHitlRuling,
+  getHitlAskUserArguments,
   getHitlReviewResult,
   type HitlReviewOutcome,
   peekHitlDecision,
@@ -94,7 +95,6 @@ import {
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import {
-  credentialLineWarnings,
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
   refuseCredentialLines,
@@ -527,7 +527,7 @@ const registry = defineArchestraTools([
     shortName: "sync_guardrails_repository",
     title: "Sync OpenAPPA policy repository",
     description:
-      "Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. Call it after the user says the pull request is merged. It changes nothing in the repository. Report `source.lastSyncError` when it is set, and a held pull (`source.heldContentHash`) as waiting for an operator to accept it in the guardrails panel. Without a connected repository it fails; point the user to Git sync setup in the guardrails settings.",
+      "Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. Call it after the user says the pull request is merged. It changes nothing in the repository. Report `source.lastSyncError` when it is set. Without a connected repository it fails; point the user to Git sync setup in the guardrails settings.",
     schema: z.strictObject({}),
     async handler({ context }) {
       const { organizationId } = organizationUser(context);
@@ -595,7 +595,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. A `[credentials]` line in the text overrides that binding; do not add one. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       const organizationId = organization(context);
@@ -769,7 +769,7 @@ const registry = defineArchestraTools([
     title: "List OpenAPPA batteries that fit",
     annotations: { readOnlyHint: true },
     description:
-      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. Omit mcpServerId for all visible servers. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[server_aliases]`, the credential variables to bind to a runtime credential key with bind_guardrails_credential (not with a `[credentials]` line, which would override the binding), `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
+      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. Omit mcpServerId for all visible servers. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[server_aliases]`, the credential variables to bind to a runtime credential key with bind_guardrails_credential (the policy text may not hold a `[credentials]` line), `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
     schema: z.strictObject({
       mcpServerId: UuidIdSchema.nullish().describe(
         "The catalog ID of one MCP server. Omit it for every server you can see.",
@@ -795,17 +795,11 @@ const registry = defineArchestraTools([
       "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. The text is also composed as this deployment would compose it, with every battery held back by a missing server, credential or package composed as empty: a refusal the text introduces is an error, and one the current revision already meets is a warning naming the held-back battery to fix. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
     schema: ValidateGuardrailsPolicySchema,
     async handler({ args, context }) {
-      const organizationId = organization(context);
-      const [validation, credentialWarnings] = await Promise.all([
-        guardrailsPolicyService.validate(args.content, {
-          organizationId,
+      return result(
+        await guardrailsPolicyService.validate(args.content, {
+          organizationId: organization(context),
         }),
-        credentialLineWarnings(organizationId, args.content),
-      ]);
-      return result({
-        ...validation,
-        warnings: [...validation.warnings, ...credentialWarnings],
-      });
+      );
     },
   }),
   defineArchestraTool({
@@ -1097,7 +1091,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
+      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. The platform renders the approval card itself and binds it to the offer server-side; the card intentionally omits the offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. An authorized result means the policy permits the plan; a narrower policy can authorize without any human review, so authorization alone is not proof the user approved. When the reviewer did approve, their selection stands over any earlier prediction of their answer. After the plan is authorized, retry the original call with exactly the authorized arguments, never regenerated or corrected ones, or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
     // The proxy alone writes these members. They have no `.describe()` text,
     // so no rendering of the full schema can show the model their prose:
     // - execution: retry identity and history restoration; it does not authorize.
@@ -1264,9 +1258,13 @@ const registry = defineArchestraTools([
               }
               return nativeReviewRequiredResult(remedy.offer_id);
             } else if (context.elicitation) {
+              const prepared = await getHitlAskUserArguments({
+                session: reviewSession,
+                offerIds: [remedy.offer_id],
+              });
               const outcome = await context.elicitation.elicit({
                 toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-                message: review.text,
+                message: prepared?.question ?? review.text,
                 requestedSchema: HITL_RULING_SCHEMA,
                 kind: "openappa_review",
                 ...(review.tool ? { reviewedTool: review.tool } : {}),
@@ -1379,8 +1377,19 @@ const registry = defineArchestraTools([
       if (!ruling || !byOffer.known) return byOffer.result;
       // Display-only: the chat card displays the human ruling.
       // `_meta` does not reach the model; the model reads the ruling from result text.
+      const content =
+        ruling === "approve" && Array.isArray(byOffer.result.content)
+          ? [
+              ...byOffer.result.content,
+              {
+                type: "text" as const,
+                text: "[appa] Human review receipt: the reviewer selected Approve for this exact server-held review. The approval card was platform-rendered; its native schema omits offer IDs by design. This confirms the human decision, not execution or a permission bypass. Follow the runtime outcome above and the current user instructions. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
+              },
+            ]
+          : byOffer.result.content;
       return {
         ...byOffer.result,
+        content,
         _meta: {
           ...byOffer.result._meta,
           [MCP_HUMAN_RULING_META_KEY]: ruling,
@@ -1696,7 +1705,7 @@ function nativeReviewRequiredResult(offerId: string): CallToolResult {
     outcome: "review_required",
     offer_id: offerId,
     instruction:
-      "The policy needs the user's approval for this plan. Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with fixed Approve and Deny choices in the client's question interface when one is available. Call execute_remedy_plan again only after the user approves.",
+      "The policy needs the user's approval for this plan. Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform replaces that call with its own approval card — fixed Approve and Deny choices, plus Inspect details where the client can show the complete review as conversation text — bound to this offer server-side; the card does not carry the offer ID, which is expected. Call execute_remedy_plan again only after the user approves.",
   });
 }
 

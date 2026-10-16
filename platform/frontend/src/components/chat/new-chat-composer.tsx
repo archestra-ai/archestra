@@ -3,7 +3,10 @@
 import type { FileUIPart } from "ai";
 import { useMemo } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
-import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
+import {
+  AgentRuntimeCredentialPrompt,
+  AgentRuntimePreflightError,
+} from "@/components/agent-run-credential-prompt";
 import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
 import {
   runtimePreflightDisabledReason,
@@ -59,7 +62,11 @@ export function NewChatComposer({
   isProjectLoading?: boolean;
   isSubmitting?: boolean;
 }) {
-  const { data: internalAgents = [] } = useChatAgents();
+  const {
+    data: internalAgents = [],
+    isPending: isLoadingAgents,
+    resolveAgent,
+  } = useChatAgents({ ids: [projectDefaultAgentId] });
   const { data: defaultAgentId } = useDefaultAgentId();
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider();
@@ -73,6 +80,7 @@ export function NewChatComposer({
 
   const {
     agentId,
+    selectedAgent,
     modelId,
     apiKeyId,
     provider,
@@ -84,6 +92,8 @@ export function NewChatComposer({
     onResetModelOverride,
   } = useInitialChatModelState({
     agents: internalAgents,
+    resolveAgent,
+    isAgentsLoading: isLoadingAgents,
     organization: organization ?? null,
     defaultAgentId,
     projectDefaultAgentId,
@@ -104,20 +114,17 @@ export function NewChatComposer({
   }, [modelId, chatModels]);
 
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const runtimeAgent = runtimeEnabled
-    ? internalAgents.find(
-        (agent) => agent.id === agentId && agent.runtime !== null,
-      )
-    : undefined;
+  const currentAgent =
+    internalAgents.find((agent) => agent.id === agentId) ?? selectedAgent;
+  const runtimeAgent =
+    runtimeEnabled && currentAgent?.runtime ? currentAgent : undefined;
   const isRuntimeMode = !!runtimeAgent;
   const runtimePreflight = useAgentRuntimePreflight(
     agentId ?? "",
     isRuntimeMode,
   );
 
-  const agentLlmApiKeyId = internalAgents.find(
-    (a) => a.id === agentId,
-  )?.llmApiKeyId;
+  const agentLlmApiKeyId = currentAgent?.llmApiKeyId;
   // Keys shared only to read cannot run a chat; the agent's own key can.
   const hasNoUsableKey =
     !isRuntimeMode &&
@@ -198,6 +205,12 @@ export function NewChatComposer({
             declarations={runtimeAgent?.runtime?.credentials ?? []}
             incompatible={runtimePreflight.data.incompatible}
             onConnected={() => runtimePreflight.refetch()}
+          />
+        )}
+        {isRuntimeMode && runtimePreflight.isError && (
+          <AgentRuntimePreflightError
+            error={runtimePreflight.error}
+            onRetry={() => void runtimePreflight.refetch()}
           />
         )}
       </div>

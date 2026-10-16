@@ -136,6 +136,9 @@ const NativeDecisionSchema = z
     z.object({
       decision: z.literal("block"),
       feedback: z.string().optional(),
+      // Set by the binding on a child return held only because the child
+      // has a call open: retryable, not a ruling.
+      busy: z.literal(true).optional(),
       ...ResultDecisionFields,
     }),
     z.object({
@@ -223,6 +226,8 @@ type ChildEndOutcome =
       decision: "replace";
       content: string;
       crossed: boolean;
+      /** Held only because the child has a tool call open. */
+      busy?: true;
     };
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
@@ -540,9 +545,7 @@ function withholdConsultContent(): boolean {
 async function sessionPrincipal(
   session: OpenAppaSession,
 ): Promise<{ principal?: string }> {
-  const userId = session.caller_id?.startsWith(USER_CALLER_PREFIX)
-    ? session.caller_id.slice(USER_CALLER_PREFIX.length)
-    : undefined;
+  const userId = callerUserId(session.caller_id);
   if (!userId) return {};
   const member = await MemberModel.findByIdOrEmail(
     userId,
@@ -552,6 +555,15 @@ async function sessionPrincipal(
 }
 
 const USER_CALLER_PREFIX = "user:";
+
+/** The user a caller id names; app and virtual-key callers name none. */
+export function callerUserId(
+  callerId: string | null | undefined,
+): string | undefined {
+  return callerId?.startsWith(USER_CALLER_PREFIX)
+    ? callerId.slice(USER_CALLER_PREFIX.length)
+    : undefined;
+}
 
 /** Executes a callback with the loaded native runtime and organization policy. */
 async function withRuntime(
@@ -1551,13 +1563,20 @@ export async function endChild(params: {
   return crossChildValue({ ...params, event: "child_end" });
 }
 
-/** Cross a value without ending the runtime or settling its pending calls. */
+/**
+ * Cross a value without ending the runtime or settling its pending calls.
+ *
+ * `busy` marks the one hold that is not a ruling: the child has a tool call
+ * open, so its label is not settled and nothing can cross until that call
+ * reports. The same value can cross once the child is idle again.
+ */
 export async function returnRuntimeValue(params: {
   session: OpenAppaSession;
   operationId: string;
   value: string;
 }): Promise<
-  { kind: "admitted"; value: string } | { kind: "held"; reason: string }
+  | { kind: "admitted"; value: string }
+  | { kind: "held"; reason: string; busy?: true }
 > {
   const outcome = await crossChildValue({
     session: params.session,
@@ -1568,8 +1587,9 @@ export async function returnRuntimeValue(params: {
   if (outcome.decision === "release") {
     return { kind: "admitted", value: params.value };
   }
-  return outcome.crossed
-    ? { kind: "admitted", value: outcome.content }
+  if (outcome.crossed) return { kind: "admitted", value: outcome.content };
+  return outcome.busy
+    ? { kind: "held", reason: outcome.content, busy: true }
     : { kind: "held", reason: outcome.content };
 }
 
@@ -2206,6 +2226,8 @@ async function crossChildValue(params: {
       decision: "replace",
       content: decisionMessage(decision),
       crossed: false,
+      // The binding marks the one retryable hold, an open call in the child.
+      ...(decision.busy ? { busy: true } : {}),
     };
   }
   if (decision.decision === "refuse") {

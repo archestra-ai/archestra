@@ -52,7 +52,6 @@ const declarations = {
   lastError: null,
   composition: current,
   managedInGithub: false,
-  heldPull: null,
 };
 function battery(
   name: string,

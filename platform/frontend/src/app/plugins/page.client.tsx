@@ -132,6 +132,7 @@ function PluginsList() {
     isPending,
     isFetching,
     isLoadingError,
+    error: pluginsError,
     refetch,
   } = usePlugins(true, {
     labels: labelsFilter,
@@ -426,6 +427,7 @@ function PluginsList() {
       <PageLayout title="Plugins" description={PLUGINS_DESCRIPTION}>
         <QueryLoadError
           title="Couldn't load your plugins"
+          error={pluginsError}
           onRetry={() => refetch()}
         />
       </PageLayout>

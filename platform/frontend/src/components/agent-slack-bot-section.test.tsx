@@ -1,7 +1,19 @@
-import { render, screen, within } from "@testing-library/react";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render as renderUI, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInternalAgents } from "@/lib/agent.query";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -20,7 +32,6 @@ import { SlackBotEditDialog } from "./slack-bot-edit-dialog";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/agent.query", () => ({ useInternalAgents: vi.fn() }));
 vi.mock("@/lib/chatops/chatops.query", () => ({
   useAllChatOpsBindings: vi.fn(),
   useUpdateChatOpsBinding: vi.fn(),
@@ -32,6 +43,47 @@ vi.mock("@/lib/chatops/chatops-config.query", () => ({
   useSlackAgentBots: vi.fn(),
   useSlackRouterBotChannels: vi.fn(),
 }));
+
+const agentServer = setupServer(
+  http.get("http://localhost:9000/api/agents/options", ({ request }) => {
+    const query = new URL(request.url).searchParams;
+    const ids = [...query.getAll("ids"), ...query.getAll("ids[]")].flatMap(
+      (value) => value.split(","),
+    );
+    return HttpResponse.json(
+      [
+        { id: "a1", name: "Marketing" },
+        { id: "a2", name: "Coding" },
+      ].filter((agent) => ids.includes(agent.id)),
+    );
+  }),
+  http.get("http://localhost:9000/api/agents/options/page", () =>
+    HttpResponse.json({
+      data: [
+        { id: "a1", name: "Marketing" },
+        { id: "a2", name: "Coding" },
+      ],
+      pagination: { hasNext: false, nextCursor: null },
+    }),
+  ),
+);
+beforeAll(() => agentServer.listen({ onUnhandledRequest: "error" }));
+afterEach(() => agentServer.resetHandlers());
+afterAll(() => {
+  agentServer.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+function render(children: React.ReactNode) {
+  return renderUI(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      {children}
+    </QueryClientProvider>,
+  );
+}
 
 const join = vi.fn();
 const update = vi.fn();
@@ -107,6 +159,7 @@ function setup(params: {
 }
 
 beforeEach(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   join.mockReset();
   update.mockReset();
   vi.mocked(useAppName).mockReturnValue("Archestra");
@@ -114,12 +167,7 @@ beforeEach(() => {
     data: true,
     isPending: false,
   } as ReturnType<typeof useHasPermissions>);
-  vi.mocked(useInternalAgents).mockReturnValue({
-    data: [
-      { id: "a1", name: "Marketing" },
-      { id: "a2", name: "Coding" },
-    ],
-  } as unknown as ReturnType<typeof useInternalAgents>);
+
   vi.mocked(useJoinSlackAgentBotChannel).mockReturnValue({
     mutate: join,
     isPending: false,
@@ -319,7 +367,7 @@ describe("AgentSlackBotSection", () => {
     );
 
     expect(
-      within(screen.getByRole("listitem", { name: "eng" })).getByText(
+      await within(screen.getByRole("listitem", { name: "eng" })).findByText(
         "Default agent: Coding",
       ),
     ).toBeVisible();

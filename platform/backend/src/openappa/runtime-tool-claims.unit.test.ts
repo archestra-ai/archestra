@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
   stripRuntimeToolProofs,
@@ -46,6 +47,37 @@ describe("runtime tool origin proofs", () => {
       toolCallId: "call-start",
       spawn: true,
     });
+  });
+
+  it("carries that a call was signed while enforcement was off, and only then", () => {
+    const observed = { ...request, spawn: false, observed: true as const };
+    expect(
+      verifyRuntimeToolProof({
+        proof: signRuntimeToolProof(observed),
+        organizationId: session.organization_id,
+        callerId: session.caller_id,
+        action: request.action,
+        arguments: request.arguments,
+        secret: request.secret,
+      }),
+    ).toEqual({
+      session,
+      toolCallId: "call-start",
+      spawn: false,
+      observed: true,
+    });
+    expect(verify()).not.toHaveProperty("observed");
+  });
+
+  it("refuses a proof whose observed claim was added after signing", () => {
+    const proof = signRuntimeToolProof({ ...request, spawn: false });
+    if (!proof) throw new Error("no proof");
+    const [payload, mac] = proof.split(".");
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+    const forged = `${Buffer.from(
+      JSON.stringify({ ...claims, observed: true }),
+    ).toString("base64url")}.${mac}`;
+    expect(verify({ proof: forged })).toBeNull();
   });
 
   it("tolerates key ordering but binds all nested attachment bytes", () => {
@@ -181,5 +213,24 @@ describe("runtime tool origin proofs", () => {
     expect(() =>
       stripRuntimeToolProofs({ arguments: JSON.stringify(args) }),
     ).toThrow("too deep");
+  });
+});
+
+describe("runtime reads signed while enforcement is off", () => {
+  it("names reads only, so a new transfer direction is not one", () => {
+    const transfer = (args: Record<string, unknown>) =>
+      isObservedRead({ action: "transfer_workspace_file", args });
+
+    expect(isObservedRead({ action: "get_run", args: {} })).toBe(true);
+    expect(isObservedRead({ action: "read_workspace_file", args: {} })).toBe(
+      true,
+    );
+    expect(transfer({ direction: "download" })).toBe(true);
+    expect(transfer({ direction: "upload" })).toBe(false);
+    expect(transfer({ direction: "sync" })).toBe(false);
+    expect(transfer({})).toBe(false);
+    for (const action of ["start_run", "steer_run", "write_workspace_file"]) {
+      expect(isObservedRead({ action, args: {} })).toBe(false);
+    }
   });
 });

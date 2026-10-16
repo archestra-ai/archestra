@@ -86,6 +86,12 @@ export function IncludeDialog({
                   flat
                   className="w-full"
                   agents={data.gateways}
+                  remote={{
+                    filters: {
+                      agentTypes: ["profile", "mcp_gateway"],
+                      excludeOtherPersonalAgents: true,
+                    },
+                  }}
                   value={data.gateway.id}
                   onValueChange={(id) =>
                     onChange({

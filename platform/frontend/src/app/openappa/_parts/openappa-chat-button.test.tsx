@@ -82,9 +82,8 @@ function show(
 
 test("launch resolves the system agent from the chat roster rather than a user-created copy", async () => {
   server.use(
-    http.get(`${api}/api/agents/all`, ({ request }) => {
-      const query = new URL(request.url).searchParams;
-      if (query.get("view") !== "chat") return HttpResponse.json([]);
+    http.get(`${api}/api/agents/chat-roster`, ({ request }) => {
+      expect(new URL(request.url).searchParams.get("bootstrap")).toBe("true");
       return HttpResponse.json([
         makeAgent({
           id: "copy",
@@ -107,7 +106,7 @@ test("launch resolves the system agent from the chat roster rather than a user-c
 
 test("without a prompt the chat opens on the agent's suggested prompts", async () => {
   server.use(
-    http.get(`${api}/api/agents/all`, () => HttpResponse.json([agent])),
+    http.get(`${api}/api/agents/chat-roster`, () => HttpResponse.json([agent])),
   );
   show({ promptKey: undefined, children: "Ask about the policy" });
   expect(
@@ -116,7 +115,9 @@ test("without a prompt the chat opens on the agent's suggested prompts", async (
 });
 
 test("an unavailable agent does not fall back to the user's default chat", async () => {
-  server.use(http.get(`${api}/api/agents/all`, () => HttpResponse.json([])));
+  server.use(
+    http.get(`${api}/api/agents/chat-roster`, () => HttpResponse.json([])),
+  );
   show();
   await waitFor(() =>
     expect(
@@ -131,7 +132,7 @@ test("an unavailable agent does not fall back to the user's default chat", async
 test("a failed agent lookup can be retried from the CTA", async () => {
   let available = false;
   server.use(
-    http.get(`${api}/api/agents/all`, () => {
+    http.get(`${api}/api/agents/chat-roster`, () => {
       return !available
         ? HttpResponse.json(
             { error: "temporarily unavailable" },
@@ -167,7 +168,7 @@ test.each([
   },
 ])("$children lists only missing permissions and cannot navigate", async (props) => {
   server.use(
-    http.get(`${api}/api/agents/all`, () => HttpResponse.json([agent])),
+    http.get(`${api}/api/agents/chat-roster`, () => HttpResponse.json([agent])),
     http.get(`${api}/api/user/permissions`, () =>
       HttpResponse.json({
         chat: ["read"],

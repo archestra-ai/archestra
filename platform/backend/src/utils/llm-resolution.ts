@@ -10,6 +10,7 @@ import {
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
@@ -23,6 +24,7 @@ import {
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import type { Model } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /** A fully dereferenced selection ready for an LLM call. */
@@ -458,6 +460,85 @@ export async function resolveAgentLlmOrDefault(params: {
 
   return resolveDefaultLlmSelection(params);
 }
+
+/** Output-token budget for a one-off call on `modelName`; see modelOutputBudget. */
+export async function resolveModelOutputBudget(params: {
+  provider: SupportedProvider;
+  modelName: string;
+  unknownOutputLength?: number;
+}): Promise<ModelOutputBudget> {
+  return modelOutputBudget({
+    provider: params.provider,
+    model: await ModelModel.findByProviderAndModelId(
+      params.provider,
+      params.modelName,
+    ),
+    unknownOutputLength: params.unknownOutputLength,
+  });
+}
+
+/**
+ * Output-token budget for a one-off call on a catalog row: the model's output
+ * cap clamped by the operator ceiling, or a safe fallback when the catalog has
+ * none. Never exceeds a known cap, so a provider that forwards `max_tokens`
+ * unchanged never rejects it.
+ */
+function modelOutputBudget(params: {
+  provider: SupportedProvider;
+  model: Model | null;
+  /** Output cap to assume when the catalog has none for the model. */
+  unknownOutputLength?: number;
+}): ModelOutputBudget {
+  const { model } = params;
+  const outputLength = model
+    ? ModelModel.resolveEffectiveOutputLength(model)
+    : null;
+  const contextLength = model
+    ? ModelModel.resolveEffectiveContextLength(model)
+    : null;
+  const tokens = resolveAgentMaxOutputTokens({
+    outputLength: outputLength ?? params.unknownOutputLength ?? null,
+    contextLength,
+    ceiling: config.chat.maxOutputTokensCeiling,
+    rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
+    provider: params.provider,
+  });
+  if (outputLength === null) return { kind: "uncatalogued", tokens };
+  return contextLength !== null && outputLength >= contextLength
+    ? { kind: "shared-window", tokens }
+    : { kind: "catalogued", tokens };
+}
+
+/**
+ * The output cap to send for a call that set none, or undefined to leave the
+ * provider's own default, which can spend whatever window the prompt leaves.
+ * Only a cap separate from the context window is safe to reserve; Anthropic
+ * always gets one, since its API requires `max_tokens` and its SDK's own
+ * fallback table lags new model ids.
+ */
+export function defaultMaxOutputTokens(
+  provider: SupportedProvider,
+  budget: ModelOutputBudget,
+): number | undefined {
+  switch (budget.kind) {
+    case "catalogued":
+      return budget.tokens;
+    case "shared-window":
+    case "uncatalogued":
+      return provider === "anthropic" ? budget.tokens : undefined;
+  }
+}
+
+/**
+ * `catalogued`: the catalog knows an output cap separate from the context
+ * window. `shared-window`: the output draws on the prompt's window, so any
+ * fixed reservation can push a long prompt over it. `uncatalogued`: the
+ * catalog has no output cap, so `tokens` is a fallback.
+ */
+type ModelOutputBudget = {
+  kind: "catalogued" | "shared-window" | "uncatalogued";
+  tokens: number;
+};
 
 /**
  * Resolve the default LLM for built-in subagent operations that have nothing

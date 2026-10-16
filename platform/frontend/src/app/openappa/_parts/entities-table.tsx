@@ -180,6 +180,7 @@ export function EntitiesTable() {
       {entities.isLoadingError ? (
         <QueryLoadError
           title="Could not load MCP servers"
+          error={entities.error}
           onRetry={() => entities.refetch()}
           className="rounded-md border py-10"
         />

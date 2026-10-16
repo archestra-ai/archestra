@@ -81,15 +81,20 @@ export function readOpeningPolicy(
 }
 
 /**
- * A name the composition still declares that an earlier opening policy bound
- * differently. The runtime answers consults by name from the served policy,
- * so sessions opened under that earlier policy are answered by `current`.
+ * A name served with one binding that an earlier opening policy bound
+ * differently: one the composition still declares, or a kept name live
+ * opening policies disagree on. The runtime answers consults by name from the
+ * served policy, so sessions opened under that earlier policy are answered by
+ * `current`.
  */
 export type Rebinding = {
   name: string;
   /** What answers it now, as `KeptAnnotator.binding` spells it. */
   current: string;
-  /** What answered it under earlier policies, distinct, in hash order. */
+  /**
+   * What answered it under earlier policies, distinct: in hash order for a
+   * declared name, the most recently active first for a kept one.
+   */
   earlier: string[];
 };
 
@@ -133,16 +138,21 @@ export function unservedAnnotator(params: {
 
 /**
  * Every annotator an opening policy declares that `composed` does not, with
- * the externals tables and credentials that answered it there. Two opening
- * policies binding a name differently cannot be safely served by one binding.
- * A name is dropped, with the reason, when a credential it needs
- * is not readable now or its helper URL names an install that is gone.
+ * the externals tables and credentials that answered it there. A name is
+ * dropped, with the reason, when a credential it needs is not readable now or
+ * its helper URL names an install that is gone.
  *
- * A name `composed` still declares is never kept, since one name has one
- * binding: it is reported in `rebound` when an opening policy bound it
- * differently. This host's own helper URLs compare by external name, so a
- * battery helper served under a new install id, port or token variable is
- * the same binding and not a rebinding.
+ * One name has one binding. When live opening policies bind a name
+ * differently, the binding a conversation was active under most recently is
+ * kept, or the next one when it cannot be, and sessions opened under the
+ * others are answered by it: the name is reported in `conflicts`. Refusing
+ * the name would stop every one of those conversations instead.
+ *
+ * A name `composed` still declares is never kept: it is reported in
+ * `rebound` when an opening policy bound it differently. This host's own
+ * helper URLs compare by external name, so a battery helper served under a
+ * new install id, port or token variable is the same binding and not a
+ * rebinding.
  */
 export function retiredAnnotators(params: {
   openings: readonly OpeningPolicy[];
@@ -160,10 +170,17 @@ export function retiredAnnotators(params: {
    * name only other policies route to is not kept. Null counts every policy.
    */
   live: ReadonlySet<string> | null;
+  /**
+   * When a conversation under each opening policy was last active, in epoch
+   * milliseconds, by hash. Conflicting bindings rank by it; a policy it does
+   * not name ranks last, in ledger order.
+   */
+  lastActive: ReadonlyMap<string, number>;
 }): {
   kept: KeptAnnotator[];
   dropped: { name: string; reason: string }[];
-  conflicts: string[];
+  /** Kept names live opening policies bound differently, with the binding kept. */
+  conflicts: Rebinding[];
   rebound: Rebinding[];
   inactive: InactiveAnnotator[];
 } {
@@ -173,8 +190,12 @@ export function retiredAnnotators(params: {
   const declared = new Map(
     composed.annotators.map((table) => [table.name, table]),
   );
-  const winners = new Map<string, KeptAnnotator>();
-  const conflicts = new Set<string>();
+  // Each distinct binding of a name, with when a conversation under it was
+  // last active.
+  const found = new Map<
+    string,
+    { annotator: KeptAnnotator; lastActive: number }[]
+  >();
   const rebound = new Map<string, Rebinding>();
   const inactive = new Map<string, InactiveAnnotator>();
   const ordered = [...params.openings].sort((a, b) =>
@@ -218,52 +239,89 @@ export function retiredAnnotators(params: {
         inactive.set(name, entry);
         continue;
       }
-      const earlier = winners.get(name);
-      if (
-        earlier &&
-        sameBinding({ a: earlier, b: candidate, helperBase: params.helperBase })
-      ) {
-        // Snapshots of one helper differ only in what the host generated:
-        // keep the one whose install still answers.
-        const openingHashes = [...earlier.openingHashes, opening.hash];
-        winners.set(
-          name,
-          !helperAnswers({ ...params, annotator: earlier }) &&
-            helperAnswers({ ...params, annotator: candidate })
-            ? { ...candidate, openingHashes }
-            : { ...earlier, openingHashes },
-        );
+      const lastActive = params.lastActive.get(opening.hash) ?? 0;
+      const variants = found.get(name) ?? [];
+      found.set(name, variants);
+      const index = variants.findIndex(({ annotator }) =>
+        sameBinding({
+          a: annotator,
+          b: candidate,
+          helperBase: params.helperBase,
+        }),
+      );
+      if (index === -1) {
+        variants.push({ annotator: candidate, lastActive });
         continue;
       }
-      if (earlier) conflicts.add(name);
-      winners.set(name, candidate);
+      // Snapshots of one helper differ only in what the host generated:
+      // keep the one whose install still answers.
+      const earlier = variants[index].annotator;
+      const openingHashes = [...earlier.openingHashes, opening.hash];
+      variants[index] = {
+        annotator:
+          !helperAnswers({ ...params, annotator: earlier }) &&
+          helperAnswers({ ...params, annotator: candidate })
+            ? { ...candidate, openingHashes }
+            : { ...earlier, openingHashes },
+        lastActive: Math.max(variants[index].lastActive, lastActive),
+      };
     }
   const kept: KeptAnnotator[] = [];
   const dropped: { name: string; reason: string }[] = [];
+  const conflicts: Rebinding[] = [];
   let bindings = composed;
-  for (const candidate of winners.values()) {
-    const reason = conflicts.has(candidate.name)
-      ? "earlier sessions require different bindings for this name"
-      : unkeepable({ ...params, candidate, composed: bindings });
-    if (reason) dropped.push({ name: candidate.name, reason });
-    else {
-      kept.push(atThisHost({ ...params, annotator: candidate }));
-      // Retained names can share a builtin profile too. Do not let the next
-      // candidate replace a dependency already kept for another old name.
-      bindings =
-        readOpeningPolicy(
-          "",
-          withKeptAnnotators(params.composed, kept) ?? params.composed,
-        ) ?? composed;
+  for (const [name, variants] of found) {
+    // The most recently active first; the sort is stable, so ties keep
+    // ledger order.
+    const ranked = [...variants].sort((a, b) =>
+      a.lastActive === b.lastActive ? 0 : a.lastActive > b.lastActive ? -1 : 1,
+    );
+    const reasons: string[] = [];
+    let chosen: (typeof ranked)[number] | null = null;
+    for (const variant of ranked) {
+      const reason = unkeepable({
+        ...params,
+        candidate: variant.annotator,
+        composed: bindings,
+      });
+      if (reason === null) {
+        chosen = variant;
+        break;
+      }
+      reasons.push(reason);
     }
+    if (!chosen) {
+      // A name enters `found` with its first binding, so a name none of its
+      // bindings can answer has a reason for each: report the most recently
+      // active one's.
+      dropped.push({ name, reason: reasons[0] });
+      continue;
+    }
+    const annotator = atThisHost({ ...params, annotator: chosen.annotator });
+    kept.push(annotator);
+    if (ranked.length > 1)
+      conflicts.push({
+        name,
+        current: described(annotator),
+        earlier: ranked
+          .filter((variant) => variant !== chosen)
+          .map((variant) => described(variant.annotator)),
+      });
+    // Retained names can share a builtin profile too. Do not let the next
+    // candidate replace a dependency already kept for another old name.
+    bindings =
+      readOpeningPolicy(
+        "",
+        withKeptAnnotators(params.composed, kept) ?? params.composed,
+      ) ?? composed;
   }
   return {
     kept,
     dropped,
-    conflicts: [...conflicts],
+    conflicts,
     rebound: [...rebound.values()],
     // A name some live policy still needs is answered above, not retired.
-    inactive: [...inactive.values()].filter(({ name }) => !winners.has(name)),
+    inactive: [...inactive.values()].filter(({ name }) => !found.has(name)),
   };
 }
 

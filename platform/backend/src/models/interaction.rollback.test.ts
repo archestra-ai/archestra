@@ -1418,6 +1418,98 @@ describe("InteractionModel", () => {
       expect(session.lastUserMessagePreview).toBe(longMessage.slice(0, 200));
       expect(session).not.toHaveProperty("lastInteractionRequest");
     });
+
+    test("previews a guardrail's call only when the session has nothing else", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      const baseTime = Date.now();
+      // A consult quotes the call it judges, here a title-generation request.
+      const judged =
+        '{"tool":"Task","prompt":"Please write a 5-10 word title"}';
+      const turn = (params: {
+        sessionId: string;
+        content: string;
+        source: "api" | "guardrail:annotator";
+        seconds: number;
+      }) =>
+        InteractionModel.create({
+          profileId: agent.id,
+          sessionId: params.sessionId,
+          source: params.source,
+          createdAt: new Date(baseTime + params.seconds * 1000),
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: params.content }],
+          },
+          response: {
+            id: "r1",
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
+      // Four turns, then more guardrail calls than even the deep re-read holds.
+      for (const n of [1, 2, 3, 4])
+        await turn({
+          sessionId: "mixed",
+          content: `turn ${n}`,
+          source: "api",
+          seconds: n,
+        });
+      for (let n = 5; n < 30; n++)
+        await turn({
+          sessionId: "mixed",
+          content: `annotate call ${n}`,
+          source: "guardrail:annotator",
+          seconds: n,
+        });
+      await turn({
+        sessionId: "guardrail-only",
+        content: judged,
+        source: "guardrail:annotator",
+        seconds: 8,
+      });
+
+      const preview = async (sessionId: string) => {
+        const sessions = await InteractionModel.getSessions(
+          { limit: 100, offset: 0 },
+          admin.id,
+          true,
+          { sessionId },
+        );
+        return sessions.data.map((s) => s.lastUserMessagePreview);
+      };
+
+      expect(await preview("mixed")).toEqual(["turn 4"]);
+      expect(await preview("guardrail-only")).toEqual([judged]);
+      const detail = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: "mixed" },
+      );
+      expect(
+        new Set(
+          detail.data.map(
+            (i) =>
+              `${i.source} ${(i as unknown as { requestType: string }).requestType}`,
+          ),
+        ),
+      ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
+      const summaries = await InteractionModel.findSummariesPaginated({
+        pagination: { limit: 100, offset: 0 },
+        filters: { sessionId: "mixed" },
+      });
+      expect(
+        new Set(summaries.data.map((i) => `${i.source} ${i.requestType}`)),
+      ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
+    });
   });
 
   describe("getSessions delta-encoded previews across many sessions", () => {

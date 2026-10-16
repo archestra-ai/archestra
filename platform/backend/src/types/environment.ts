@@ -145,6 +145,10 @@ export const SelectEnvironmentSchema = createSelectSchema(
   trustedImageRegistries: TrustedImageRegistriesSchema.nullable(),
 });
 
+export const ReadEnvironmentSchema = SelectEnvironmentSchema.extend({
+  labels: z.array(LabelWithDetailsSchema),
+});
+
 /**
  * Listing response shape — row columns plus the number of catalog items
  * currently assigned to this environment, for delete-confirmation UI, and

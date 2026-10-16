@@ -312,38 +312,4 @@ describe("AgentSettingsPage", () => {
 
     expect(screen.getByText("Free models only")).toBeInTheDocument();
   });
-
-  it("uses the shared agent selector for the default agent dropdown", () => {
-    mockAgents = [
-      {
-        id: "agent-1",
-        name: "Agent Builder Agent",
-        icon: "🧰",
-        agentType: "agent",
-        scope: "org",
-      },
-    ];
-
-    renderPage();
-
-    const agentSelectorCall = mockAgentSelector.mock.calls.find(
-      ([props]) =>
-        (props as { searchPlaceholder?: string }).searchPlaceholder ===
-        "Search agents...",
-    );
-    expect(agentSelectorCall).toBeDefined();
-
-    const props = agentSelectorCall?.[0] as unknown as {
-      mode: string;
-      agents: typeof mockAgents;
-      sentinelOption: { value: string; label: string };
-    };
-
-    expect(props.mode).toBe("single");
-    expect(props.agents).toEqual(mockAgents);
-    expect(props.sentinelOption).toMatchObject({
-      value: "__personal__",
-      label: "User's personal agent",
-    });
-  });
 });

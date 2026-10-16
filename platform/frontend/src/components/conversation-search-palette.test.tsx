@@ -24,6 +24,12 @@ const {
   mockUseAgentOptions,
   mockUseInternalMcpCatalog,
   mockUseSkillsList,
+  mockUseApps,
+  mockUseProjects,
+  mockUseKnowledgeBases,
+  mockUsePlugins,
+  mockUseEnvironments,
+  mockUseTeams,
 } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   mockDeleteMutate: vi.fn(),
@@ -32,6 +38,54 @@ const {
   mockUseAgentOptions: vi.fn(),
   mockUseInternalMcpCatalog: vi.fn(),
   mockUseSkillsList: vi.fn(),
+  mockUseApps: vi.fn(),
+  mockUseProjects: vi.fn(),
+  mockUseKnowledgeBases: vi.fn(),
+  mockUsePlugins: vi.fn(),
+  mockUseEnvironments: vi.fn(),
+  mockUseTeams: vi.fn(),
+}));
+
+// Legacy behavior fixtures remain local; real HTTP paging is covered by the
+// remote-selector integration suite.
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: (params: unknown) => mockUseAgentOptions(params),
+  useAgentOptionIds: () => ({
+    data: (mockUseAgentOptions({}).data ?? []).map(
+      (row: { id: string }) => row.id,
+    ),
+    isSuccess: true,
+  }),
+  useAgentOptionsPage: (params: { search?: string }) => {
+    const result = mockUseAgentOptions(params);
+    const search = params.search?.trim().toLowerCase() ?? "";
+    const rows = (result.data ?? []).filter(
+      (row: {
+        name?: string;
+        description?: string | null;
+        authorEmail?: string | null;
+      }) =>
+        !search ||
+        [row.name, row.description, row.authorEmail].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+    );
+    return {
+      data: {
+        pages: [
+          { data: rows, pagination: { hasNext: false, nextCursor: null } },
+        ],
+      },
+      isSuccess: true,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("next/navigation");
@@ -101,6 +155,31 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 
 vi.mock("@/lib/skills/skill.query", () => ({
   useSkillsList: mockUseSkillsList,
+}));
+
+vi.mock("@/lib/app.query", () => ({
+  APPS_FIRST_PAGE: { limit: 100, offset: 0 },
+  useApps: mockUseApps,
+}));
+
+vi.mock("@/lib/projects/projects.query", () => ({
+  useProjects: mockUseProjects,
+}));
+
+vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
+  useKnowledgeBases: mockUseKnowledgeBases,
+}));
+
+vi.mock("@/lib/plugins/plugin.query", () => ({
+  usePlugins: mockUsePlugins,
+}));
+
+vi.mock("@/lib/environment.query", () => ({
+  useEnvironments: mockUseEnvironments,
+}));
+
+vi.mock("@/lib/teams/team.query", () => ({
+  useTeams: mockUseTeams,
 }));
 
 vi.mock("@/lib/secrets.query", () => ({
@@ -254,6 +333,12 @@ describe("ConversationSearchPalette", () => {
     mockUseAgentOptions.mockReturnValue({ data: [] });
     mockUseInternalMcpCatalog.mockReturnValue({ data: [] });
     mockUseSkillsList.mockReturnValue({ data: [] });
+    mockUseApps.mockReturnValue({ data: { data: [] } });
+    mockUseProjects.mockReturnValue({ data: [] });
+    mockUseKnowledgeBases.mockReturnValue({ data: [] });
+    mockUsePlugins.mockReturnValue({ data: [] });
+    mockUseEnvironments.mockReturnValue({ data: { environments: [] } });
+    mockUseTeams.mockReturnValue({ data: [] });
     capturedOnValueChange = null;
   });
 
@@ -604,6 +689,64 @@ describe("ConversationSearchPalette", () => {
       );
       fireEvent.click(screen.getByText("Invoice Parser"));
       expect(mockRouterPush).toHaveBeenCalledWith("/skills/skill-1");
+    });
+
+    it("finds an app through the server search and opens it on the Apps page", () => {
+      mockUseApps.mockReturnValue({
+        data: {
+          data: [
+            {
+              source: "owned",
+              id: "app-1",
+              name: "Expense Tracker",
+            },
+          ],
+        },
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "expense" },
+      });
+
+      expect(mockUseApps).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "expense" }),
+        expect.objectContaining({ enabled: true }),
+      );
+      expect(screen.getByText("Apps")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Expense Tracker"));
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/apps?search=Expense%20Tracker",
+      );
+    });
+
+    it("finds a project by its name and opens it", () => {
+      mockUseProjects.mockReturnValue({
+        data: [{ id: "proj-1", name: "Quarterly Review" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "quarterly" },
+      });
+
+      expect(screen.getByText("Projects")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Quarterly Review"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/projects/proj-1");
+    });
+
+    it("finds a plugin by its display name and opens it", () => {
+      mockUsePlugins.mockReturnValue({
+        data: [{ id: "plug-1", displayName: "Jira Helper" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "jira" },
+      });
+
+      fireEvent.click(screen.getByText("Jira Helper"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/plugins/plug-1");
     });
 
     it("finds a settings tab by its label and by its path", () => {

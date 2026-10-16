@@ -141,7 +141,11 @@ import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
-import { RemedyChainCard } from "./openappa-remedy-chain-card";
+import {
+  RemedyChainCard,
+  RemedyGuardrailsSteps,
+} from "./openappa-remedy-chain-card";
+import type { RemedyChain } from "./openappa-remedy-chains";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -768,12 +772,12 @@ export function ChatMessages({
                                       remedyChain: entry.remedyChain,
                                       nestedToolCalls:
                                         subagentParentToolCallIds.has(
-                                          entry.part.toolCallId ?? "",
+                                          entryCallId(entry),
                                         ) ? (
                                           <SubagentToolCalls
-                                            parentToolCallId={
-                                              entry.part.toolCallId ?? ""
-                                            }
+                                            parentToolCallId={entryCallId(
+                                              entry,
+                                            )}
                                             subagentToolCalls={
                                               subagentToolCalls
                                             }
@@ -805,6 +809,69 @@ export function ChatMessages({
                       // A guarded call that needs the full card (e.g. an
                       // approval) still renders as one card of its target.
                       const remedyChain = remedyChainCards.get(i);
+                      const releasedAttempt = remedyChain?.finalAttempt;
+                      if (remedyChain && releasedAttempt) {
+                        const releasedId = releasedAttempt.part.toolCallId;
+                        return (
+                          <MessageTool
+                            key={partKey}
+                            part={{ ...releasedAttempt.part }}
+                            toolResultPart={releasedAttempt.toolResultPart}
+                            toolName={releasedAttempt.toolName}
+                            agentId={agentId}
+                            canExpandToolCalls={canExpandToolCalls}
+                            onToolApprovalResponse={onToolApprovalResponse}
+                            onInstallMcp={
+                              orchestrator.triggerInstallByCatalogId
+                            }
+                            onReauthMcp={
+                              orchestrator.triggerReauthByCatalogIdAndServerId
+                            }
+                            connectedCatalogIds={
+                              orchestrator.connectedCatalogIds
+                            }
+                            getToolShortName={getToolShortName}
+                            toolIconMap={toolIconMap}
+                            earlyToolUiData={
+                              releasedId
+                                ? earlyToolUiStarts[releasedId]
+                                : undefined
+                            }
+                            onSendMessage={(text) =>
+                              session?.sendMessage({
+                                role: "user",
+                                parts: [{ type: "text", text }],
+                                metadata: {
+                                  createdAt: new Date().toISOString(),
+                                },
+                              })
+                            }
+                            nestedToolCalls={
+                              <>
+                                <RemedyGuardrailsSteps
+                                  steps={remedyChain.steps}
+                                  onToolApprovalResponse={
+                                    onToolApprovalResponse
+                                  }
+                                />
+                                {releasedId &&
+                                subagentParentToolCallIds.has(releasedId) ? (
+                                  <SubagentToolCalls
+                                    parentToolCallId={releasedId}
+                                    subagentToolCalls={subagentToolCalls}
+                                    canExpandToolCalls={canExpandToolCalls}
+                                    connectedCatalogIds={
+                                      orchestrator.connectedCatalogIds
+                                    }
+                                    getToolShortName={getToolShortName}
+                                    toolIconMap={toolIconMap}
+                                  />
+                                ) : null}
+                              </>
+                            }
+                          />
+                        );
+                      }
                       if (remedyChain) {
                         return (
                           <RemedyChainCard
@@ -1672,6 +1739,18 @@ export function ChatMessages({
         <McpInstallDialogs orchestrator={orchestrator} />
       </Conversation>
     </McpTaskProvider>
+  );
+}
+
+/** The call whose subagent tool calls nest under an entry: a guarded call's released attempt. */
+function entryCallId(entry: {
+  part: DynamicToolUIPart | ToolUIPart;
+  remedyChain?: RemedyChain;
+}): string {
+  return (
+    entry.remedyChain?.finalAttempt?.part.toolCallId ??
+    entry.part.toolCallId ??
+    ""
   );
 }
 

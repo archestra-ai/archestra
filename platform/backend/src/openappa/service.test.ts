@@ -2170,6 +2170,49 @@ describe("APPA feature boundary", () => {
     });
   }
 
+  test("marks a runtime value held as busy only when the binding says so", async () => {
+    const child = {
+      ...session,
+      session_id: "runtime",
+      parent_id: session.session_id,
+    };
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        reason:
+          "the child has a call still open; report its outcome before the child ends",
+        busy: true,
+      }),
+    );
+    await expect(
+      returnRuntimeValue({
+        session: child,
+        operationId: "file-read:busy",
+        value: "progress",
+      }),
+    ).resolves.toEqual({
+      kind: "held",
+      reason:
+        "the child has a call still open; report its outcome before the child ends",
+      busy: true,
+    });
+    // The text alone does not make a hold busy: the binding decides.
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        reason:
+          "the child has a call still open; report its outcome before the child ends",
+      }),
+    );
+    await expect(
+      returnRuntimeValue({
+        session: child,
+        operationId: "file-read:ruled",
+        value: "progress",
+      }),
+    ).resolves.not.toHaveProperty("busy");
+  });
+
   test("withholds a runtime value with an open call instead of ending the child", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({

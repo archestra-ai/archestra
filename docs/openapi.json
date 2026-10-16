@@ -347058,8 +347058,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "agent",
-                "mcp_gateway",
                 "mcp_server"
               ]
             },
@@ -347092,7 +347090,6 @@
               "type": "string",
               "enum": [
                 "name",
-                "type",
                 "tools"
               ]
             },
@@ -347137,8 +347134,6 @@
                           "type": {
                             "type": "string",
                             "enum": [
-                              "agent",
-                              "mcp_gateway",
                               "mcp_server"
                             ]
                           },
@@ -347165,11 +347160,6 @@
                             "maximum": 9007199254740991
                           },
                           "fallbackCount": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "builtInCount": {
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
@@ -347211,9 +347201,6 @@
                               "notCovered"
                             ],
                             "additionalProperties": false
-                          },
-                          "autoMode": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -347225,9 +347212,7 @@
                           "toolCount",
                           "governedCount",
                           "fallbackCount",
-                          "builtInCount",
-                          "rules",
-                          "autoMode"
+                          "rules"
                         ],
                         "additionalProperties": false
                       }
@@ -347575,16 +347560,6 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "query",
-            "name": "entityId",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string",
               "enum": [
                 "battery",
                 "root",
@@ -347820,25 +347795,6 @@
                           },
                           "enforced": {
                             "type": "boolean"
-                          },
-                          "agents": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "name": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "id",
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
                           }
                         },
                         "required": [
@@ -347855,8 +347811,7 @@
                           "rule",
                           "fallbackLine",
                           "unlisted",
-                          "enforced",
-                          "agents"
+                          "enforced"
                         ],
                         "additionalProperties": false
                       }

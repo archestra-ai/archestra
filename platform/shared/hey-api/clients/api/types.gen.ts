@@ -91493,10 +91493,10 @@ export type GetOpenappaCoverageEntitiesData = {
         limit?: number;
         offset?: number;
         search?: string;
-        type?: 'agent' | 'mcp_gateway' | 'mcp_server';
+        type?: 'mcp_server';
         entityId?: string;
         toolId?: string;
-        sortBy?: 'name' | 'type' | 'tools';
+        sortBy?: 'name' | 'tools';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/openappa/coverage/entities';
@@ -91578,13 +91578,12 @@ export type GetOpenappaCoverageEntitiesResponses = {
         data: Array<{
             id: string;
             name: string;
-            type: 'agent' | 'mcp_gateway' | 'mcp_server';
+            type: 'mcp_server';
             scope: 'personal' | 'team' | 'org';
             icon: string | null;
             toolCount: number;
             governedCount: number;
             fallbackCount: number;
-            builtInCount: number;
             rules: {
                 root: number;
                 battery: number;
@@ -91592,7 +91591,6 @@ export type GetOpenappaCoverageEntitiesResponses = {
                 catchAll: number;
                 notCovered: number;
             };
-            autoMode: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -91615,7 +91613,6 @@ export type GetOpenappaCoverageToolsData = {
         offset?: number;
         search?: string;
         catalogId?: string;
-        entityId?: string;
         governedBy?: 'battery' | 'root' | 'catchall' | 'not_covered';
         battery?: string;
         kind?: 'read' | 'write' | 'approval';
@@ -91734,10 +91731,6 @@ export type GetOpenappaCoverageToolsResponses = {
             fallbackLine: number | null;
             unlisted: boolean;
             enforced: boolean;
-            agents: Array<{
-                id: string;
-                name: string;
-            }>;
         }>;
         pagination: {
             currentPage: number;

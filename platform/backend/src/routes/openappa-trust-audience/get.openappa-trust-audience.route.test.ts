@@ -100,7 +100,7 @@ describe("GET /api/openappa/trust-audience", () => {
     expect(audience(body, "self")).toEqual({ name: "self", kind: "builtin" });
   });
 
-  test("an audience rules name but nothing maps is unmapped", async () => {
+  test("self needs no mapping when rules name it: the session's requester reads it", async () => {
     const content = `[policy]
 version = 2
 trust_chain = ["untrusted", "reviewed", "trusted"]
@@ -126,7 +126,7 @@ delta = { trust = "untrusted", audience = ["public"] }
     const body = await view();
 
     expect(body.trust).toEqual(["untrusted", "reviewed", "trusted"]);
-    expect(audience(body, "self")).toEqual({ name: "self", kind: "unmapped" });
+    expect(audience(body, "self")).toEqual({ name: "self", kind: "builtin" });
     expect(audience(body, "internal")).toMatchObject({
       kind: "mapped",
       from: [],
@@ -144,11 +144,11 @@ trust_chain = ["untrusted", "trusted"]
 
 [[policy.tool]]
 name = "mail__send"
-forwards = { audience = ["self"] }
+forwards = { audience = ["internal"] }
 `);
 
-    expect(audience(await view(), "self")).toEqual({
-      name: "self",
+    expect(audience(await view(), "internal")).toEqual({
+      name: "internal",
       kind: "unmapped",
     });
   });

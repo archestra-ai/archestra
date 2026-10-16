@@ -10,7 +10,7 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 
 export const GITHUB_ROSTER_ROOT = `include = ["batteries/github/appa.toml"]
 
-[server_aliases]
+[aliases.mcp]
 github = ["github_prod"]
 
 [policy]

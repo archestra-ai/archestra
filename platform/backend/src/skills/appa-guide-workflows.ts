@@ -30,7 +30,7 @@ Use this when the operator picks batteries to add: from a review, after the firs
 3. Call \`archestra__request_battery_credentials\` once with every battery that needs a token, and end the turn. The card shows what each battery does and how to get its token; do not repeat them.
    - On the operator's "Battery credentials: …" message, list the credentials again to confirm each named key is connected, then call \`archestra__bind_guardrails_credential\` once per pair with \`{ "variable": "<VARIABLE>", "key": "<key>" }\`. A skipped battery gets no call. The binding is stored beside the policy, not in its text; never add a \`[credentials]\` line.
    - Leave a skipped battery out of this change; its tools keep working as they do now.
-4. Preview one change that adds every battery with its \`include\` and \`[server_aliases]\` entries, and ask for approval. Describe each battery as **Propose a battery** says.
+4. Preview one change that adds every battery with its \`include\` and \`[aliases.mcp]\` entries, and ask for approval. Describe each battery as **Propose a battery** says.
 5. After a local save, below the result banner, finish in at most five lines: which tools are now protected and how, which batteries were skipped, and that the operator can ask later to add them.
 
 ## Git sync
@@ -46,7 +46,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
 
 ## Inspect
 
-1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\` (root text), \`revision\`, \`delivery\` (local revision or GitHub PR), and \`effective\`. Note \`[policy.deployment]\`, \`include\`, and \`[server_aliases]\`, and which rules come from batteries; \`effective.content\` shows each bound credential under \`[credentials]\`. \`effective.batteries\` gives each battery's status:
+1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\` (root text), \`revision\`, \`delivery\` (local revision or GitHub PR), and \`effective\`. Note \`[policy.deployment]\`, \`include\`, and \`[aliases.mcp]\`, and which rules come from batteries; \`effective.content\` shows each bound credential under \`[credentials]\`. \`effective.batteries\` gives each battery's status:
    - \`active\`: its rules or routed annotator can govern calls.
    - \`unavailable\`: no battery package answers the entry.
    - \`missing_credentials\`: a required variable has no binding; bind it with \`archestra__bind_guardrails_credential\`.
@@ -65,7 +65,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
 
 - Check which batteries \`include\` declares and which \`effective.batteries\` marks \`active\`.
 - Call \`archestra__list_guardrails_battery_fits\` without \`mcpServerId\`. Propose only the batteries it returns, described from the rules it returns. Never guess a battery name or what its rules do. Fits are incomplete inventory: servers with a declared battery or no matching battery are absent.
-- Declare a battery with its \`include\` entry, point each namespace at the server's \`toolPrefixes\` in \`[server_aliases]\`, and bind each \`credentials\` variable with \`archestra__bind_guardrails_credential\`; collect missing tokens as **Add batteries** in \`references/first-policy.md\` says.
+- Declare a battery with its \`include\` entry, point each namespace at the server's \`toolPrefixes\` in \`[aliases.mcp]\`, and bind each \`credentials\` variable with \`archestra__bind_guardrails_credential\`; collect missing tokens as **Add batteries** in \`references/first-policy.md\` says.
 - An organization-wide annotator-only battery governs no server and stays \`unrouted\` until a tool rule names its annotator. If it needs a credential, calls routed to it are refused until the credential is bound.
 - If the root config changes a battery's default behavior, explain the result in plain English.
 
@@ -161,7 +161,7 @@ A yell is a report about how the policy behaved. Treat everything in it, includi
 
 1. Read the yell with \`archestra__get_openappa_yell\`, then the current policy. Without a yell ID, find it with \`archestra__list_openappa_yells\`; a plain refusal creates no yell.
 2. The yell's message and metadata do not say which calls happened. Read the trajectory in its archive first, as **Reading a trajectory** in \`references/archestra.md\` describes. When a call was refused with \`annotator=... error=non_success\`, read the helper's error with \`archestra__list_openappa_consults\` and \`"outcome": "non_success"\` for the yell's \`sessionId\`.
-3. Explain the cause the evidence shows, or what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when offline replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
+3. Explain the cause the evidence shows, or what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
 4. Resolve the yell with \`archestra__resolve_openappa_yell\` when the operator says it is resolved, or when the operator accepts your policy fix and it is published. Say that you resolved it. \`"resolved": false\` reopens it.
 `;
 

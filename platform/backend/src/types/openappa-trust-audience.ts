@@ -38,7 +38,8 @@ const AudienceLevelBase = z.object({
 
 /**
  * One audience the policy can label data with. `builtin` needs no mapping
- * (`public`, or a runtime level nothing maps and no rule names), `mapped` is
+ * (`public`; `self`, the session's requester; or a runtime level nothing maps
+ * and no rule names), `mapped` is
  * read from audience sources, `unmapped` is named by rules but nothing in
  * `[policy.audience]` says who belongs to it.
  */

@@ -2609,13 +2609,13 @@ function heldBackRemedy(battery: HeldBackBattery): string {
     case "missing_credentials":
       return "bind each credential it reads to a runtime credential key with an organization value";
     case "naming_conflict":
-      return "point its [server_aliases] targets at tool prefixes exactly one MCP server carries";
+      return "point its aliases.mcp targets at tool prefixes exactly one MCP server carries";
     case "server_missing": {
       const unserved = battery.servers
         .filter((server) => server.catalogId === null)
         .map((server) => JSON.stringify(server.target));
       return unserved.length === 0
-        ? "point a [server_aliases] target at its namespaces"
+        ? "point a aliases.mcp target at its namespaces"
         : `no MCP server in this deployment carries the tool prefix ${unserved.join(", ")}; install or restore that server, or point the alias at one that exists`;
     }
   }

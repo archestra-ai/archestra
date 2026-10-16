@@ -336,6 +336,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     enabled: !isDeletedView,
     ...catalogFilters,
     status: undefined,
+    // A pinned built-in agent shows without the Built-in filter on.
+    includeBuiltIn: true,
     pinned: true,
   });
   const scopedCapabilities = useScopedCapabilities();

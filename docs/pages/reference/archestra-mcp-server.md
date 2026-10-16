@@ -2977,7 +2977,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `update_guardrails_policy` | Publish a change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `bind_guardrails_credential` | Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_openappa_policy_tests` | Read the authoritative .appa validation files, their version, configured directory and accepted Git commit. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `run_openappa_policy_tests` | Replay saved validations offline against the current policy and record the result in validation run history. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
+| `run_openappa_policy_tests` | Replay saved validations against the current policy and record the result in validation run history. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `preview_guardrails_validation_change` | Validate a proposed change to the .appa validation files and replay it. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `update_guardrails_validation` | Save a change to the .appa validation files. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |

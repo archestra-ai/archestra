@@ -1247,6 +1247,29 @@ describe("createLLMModel", () => {
     }
   });
 
+  test("keeps an internal call's session out of OpenAPPA", () => {
+    config.llmProxy.plugins = ["appa"];
+    config.openappa = {
+      ...config.openappa,
+      enabled: true,
+      yellEnabled: false,
+      offerSigningSecret: "",
+    };
+    createLLMModel({
+      provider: "openai",
+      apiKey: "test",
+      agentId: "agent",
+      modelName: "gpt-4",
+      baseUrl: null,
+      source: "guardrail:annotator",
+      internalCall: true,
+      sessionId: "session",
+    });
+    const headers = new Headers(capturedCreateOpenAIOptions.headers);
+    expect(headers.get(SESSION_ID_HEADER)).toBe("session");
+    expect(headers.has("X-Appa-Session-ID")).toBe(false);
+  });
+
   test("sends keyless Bedrock chat to the proxy without signing or a placeholder credential", async () => {
     vi.stubEnv("AWS_ACCESS_KEY_ID", undefined);
     vi.stubEnv("AWS_SECRET_ACCESS_KEY", undefined);

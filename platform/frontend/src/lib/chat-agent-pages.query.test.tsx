@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import {
   useAgentCredentialReadiness,
-  useChatAgentPage,
+  useChatAgentPages,
   useChatAgentReferences,
   useChatAgents,
 } from "./agent.query";
@@ -144,9 +144,9 @@ it("fetches only explicit pages and preserves an off-page manual selection from 
   );
   const { wrapper } = setup();
   const { result, rerender } = renderHook(
-    ({ enabled, cursor, search }) => {
+    ({ enabled, search }) => {
       const roster = useChatAgents();
-      const page = useChatAgentPage({ enabled, cursor, search });
+      const page = useChatAgentPages({ enabled, search });
       const state = useInitialChatModelState({
         agents: roster.data ?? [],
         resolveAgent: roster.resolveAgent,
@@ -166,14 +166,13 @@ it("fetches only explicit pages and preserves an off-page manual selection from 
       wrapper,
       initialProps: {
         enabled: false,
-        cursor: undefined as string | undefined,
         search: "",
       },
     },
   );
   await waitFor(() => expect(result.current.state.agentId).toBe("fallback"));
   expect(requests).toHaveLength(0);
-  rerender({ enabled: true, cursor: undefined, search: "description match" });
+  rerender({ enabled: true, search: "description match" });
   await waitFor(() => expect(result.current.page.isSuccess).toBe(true));
   expect(requests).toHaveLength(1);
   expect(requests[0].searchParams.get("limit")).toBe("20");
@@ -187,7 +186,9 @@ it("fetches only explicit pages and preserves an off-page manual selection from 
   expect(result.current.state.selectedAgent?.runtime).toEqual({
     credentials: [],
   });
-  rerender({ enabled: true, cursor: "next-page", search: "description match" });
+  await act(async () => {
+    await result.current.page.fetchNextPage();
+  });
   await waitFor(() => expect(requests).toHaveLength(2));
   expect(requests[1].searchParams.get("cursor")).toBe("next-page");
 });

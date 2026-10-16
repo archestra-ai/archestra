@@ -3968,11 +3968,12 @@ describe("McpClient", () => {
         expect(result?.isError).toBeFalsy();
       });
 
-      test("returns install URL with team context when a team service account has no server", async ({
+      test("returns install URL naming the service account when a team-linked account has no server", async ({
         makeUser,
         makeTeam,
         makeOrganization,
       }) => {
+        const serviceAccountId = randomUUID();
         const org = await makeOrganization();
         const testUser = await makeUser({ email: "teamauth@example.com" });
         const team = await makeTeam(org.id, testUser.id, {
@@ -4013,24 +4014,26 @@ describe("McpClient", () => {
             tokenId: "team-service-account-token",
             teamId: team.id,
             isOrganizationToken: false,
-            serviceAccountId: randomUUID(),
+            serviceAccountId,
           },
         );
 
         expect(result).toMatchObject({
           isError: true,
         });
-        expect(result?.error).toContain(`team: ${team.id}`);
+        // A team-linked account is named as itself, never as its team.
+        expect(result?.error).toContain(`service account: ${serviceAccountId}`);
         expect(result?.error).toContain(
           `${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
         );
       });
 
-      test("returns auth-required error with team context when servers exist but no owner is in team", async ({
+      test("returns auth-required error naming the service account when no owner is in its team", async ({
         makeUser,
         makeTeam,
         makeOrganization,
       }) => {
+        const serviceAccountId = randomUUID();
         const org = await makeOrganization();
         // Two users: one owns the server, the other is in the team
         const serverOwner = await makeUser({
@@ -4093,7 +4096,7 @@ describe("McpClient", () => {
             tokenId: "team-service-account-token-no-cred",
             teamId: team.id,
             isOrganizationToken: false,
-            serviceAccountId: randomUUID(),
+            serviceAccountId,
           },
         );
 
@@ -4101,7 +4104,8 @@ describe("McpClient", () => {
         expect(result?.error).toContain(
           `Authentication required for "slack-mcp-server"`,
         );
-        expect(result?.error).toContain(`team: ${team.id}`);
+        // A team-linked account is named as itself, never as its team.
+        expect(result?.error).toContain(`service account: ${serviceAccountId}`);
         expect(result?.error).toContain(
           `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
         );

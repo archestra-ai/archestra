@@ -975,7 +975,10 @@ describe("agent routes", () => {
         authorId: user.id,
         agentType: "agent",
       });
-      await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+      await AgentToolModel.assignDelegation({
+        agentId: sourceAgent.id,
+        targetAgentId: targetAgent.id,
+      });
 
       const response = await app.inject({
         method: "PUT",

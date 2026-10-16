@@ -1162,6 +1162,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Delegation routes: agent-type permission checked dynamically in handler
   [RouteId.GetAgentDelegations]: {},
   [RouteId.SyncAgentDelegations]: {},
+  [RouteId.CreateAgentDelegation]: {},
   [RouteId.DeleteAgentDelegation]: {},
   [RouteId.GetAgentA2aDelegations]: {},
   [RouteId.SyncAgentA2aDelegations]: {},

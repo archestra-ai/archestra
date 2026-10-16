@@ -2681,6 +2681,29 @@ class AgentModel {
     return result?.agentType ?? null;
   }
 
+  /** Lock active participants in UUID order for shared-target and callable-name checks. */
+  static async lockDelegationParticipants(params: {
+    ids: string[];
+    organizationId: string;
+    tx: Transaction;
+  }) {
+    return params.tx
+      .select({
+        id: schema.agentsTable.id,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          inArray(schema.agentsTable.id, params.ids),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.id))
+      .for("update");
+  }
+
   /**
    * Lock the agent row (SELECT ... FOR UPDATE) inside a transaction,
    * serializing writers that maintain the agent's child tables (e.g. the
@@ -2937,8 +2960,9 @@ class AgentModel {
 
   static async findDelegationTarget(
     id: string,
+    tx?: Transaction,
   ): Promise<Pick<Agent, "id" | "name" | "agentType"> | null> {
-    const [targetAgent] = await db
+    const [targetAgent] = await (tx ?? db)
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,

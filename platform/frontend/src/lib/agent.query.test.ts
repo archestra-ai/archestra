@@ -30,7 +30,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     archestraApiSdk: {
       ...actual.archestraApiSdk,
       createAgent: vi.fn(),
-      getAllAgents: vi.fn(),
+      getAgents: vi.fn(),
       getChatAgentRoster: vi.fn(),
       getAgent: vi.fn(),
       getChatAgentMcpTools: vi.fn(),
@@ -206,9 +206,9 @@ describe("agent write mutations", () => {
     };
     const oldGateway = { ...savedGateway, toolExposureMode: "full" };
     sdk.updateAgent.mockResolvedValue({ data: savedGateway } as never);
-    sdk.getAllAgents
-      .mockResolvedValueOnce({ data: [oldGateway] } as never)
-      .mockResolvedValue({ data: [savedGateway] } as never);
+    sdk.getAgents
+      .mockResolvedValueOnce({ data: { data: [oldGateway] } } as never)
+      .mockResolvedValue({ data: { data: [savedGateway] } } as never);
     sdk.getChatAgentMcpTools
       .mockResolvedValueOnce({
         data: [{ name: "tools", tokens: 13000 }],

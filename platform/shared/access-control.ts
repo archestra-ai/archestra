@@ -602,7 +602,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
   [RouteId.GetAgentCatalog]: {},
-  [RouteId.GetAllAgents]: {},
   [RouteId.GetAgentOptions]: {},
   [RouteId.GetAgentOptionsPage]: {},
   [RouteId.GetAgentOptionIds]: {},

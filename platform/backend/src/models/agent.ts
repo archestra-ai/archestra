@@ -166,6 +166,8 @@ type AgentListFilters = {
    * them: they have no author and are listed only to agent admins.
    */
   includeBuiltIn?: boolean;
+  /** `chat` keeps the system chat assistant in the list for chat selection. */
+  view?: "chat";
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
@@ -2297,6 +2299,8 @@ class AgentModel {
 
     const includeBuiltIn =
       filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
+    const chatAssistant =
+      filters?.view === "chat" && enterpriseTier.isOpenappaActive();
     if (filters?.scope === "built_in") {
       whereConditions.push(eq(schema.agentsTable.builtIn, true));
     } else if (
@@ -2309,9 +2313,23 @@ class AgentModel {
         eq(schema.agentsTable.builtIn, false),
       );
     } else if (!includeBuiltIn) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+      // Chat selection keeps the system assistant visible to every member; the
+      // platform's other built-in agents stay hidden.
+      if (chatAssistant) {
+        whereConditions.push(
+          or(
+            eq(schema.agentsTable.builtIn, false),
+            eq(
+              sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+            ),
+          ) as SQL,
+        );
+      } else {
+        whereConditions.push(eq(schema.agentsTable.builtIn, false));
+      }
     }
-    if (!isAgentAdmin) {
+    if (!isAgentAdmin && !chatAssistant) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
     if (filters?.teamIds?.length) {

@@ -39,7 +39,6 @@ const {
   getAgentCredentialReadiness,
   getAgentDefaultSuggestedPrompts,
   getAgents,
-  getAllAgents,
   getAgentOptions,
   getChatAgentRoster,
   getDefaultMcpGateway,
@@ -99,27 +98,48 @@ export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
   });
 }
 
-// Returns all agents as an array
+/**
+ * Agents per request for every roster. The list is paginated on the server, so
+ * a roster never loads the whole organization.
+ */
+export const AGENT_PAGE_SIZE = 100;
+
+/** One page of agents, with the server-side name search applied. */
+async function fetchAgentPage(
+  query: archestraApiTypes.GetAgentsData["query"],
+): Promise<
+  Array<
+    Omit<
+      archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+      "pinnedAt"
+    >
+  >
+> {
+  const { data, error } = await getAgents({ query });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.data ?? [];
+}
+
+// Returns one page of agents as an array
 export function useProfiles(
   params: {
-    initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
-    filters?: archestraApiTypes.GetAllAgentsData["query"];
+    initialData?: Array<
+      Omit<
+        archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+        "pinnedAt"
+      >
+    >;
+    filters?: archestraApiTypes.GetAgentsData["query"];
     enabled?: boolean;
   } = {},
 ) {
   const filters = {
-    excludeBuiltIn: true,
-    // Roster consumers use metadata; selected-agent tools load from detail queries.
-    includeTools: false,
+    limit: AGENT_PAGE_SIZE,
     ...params?.filters,
-  } satisfies archestraApiTypes.GetAllAgentsData["query"];
+  } satisfies archestraApiTypes.GetAgentsData["query"];
   return useQuery({
     queryKey: ["agents", "all", filters],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({ query: filters });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: () => fetchAgentPage(filters),
     initialData: params?.initialData,
     enabled: params?.enabled,
   });

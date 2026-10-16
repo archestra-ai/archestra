@@ -136,6 +136,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             name: z.string().optional().describe("Filter by agent name"),
+            includeBuiltIn: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val === "true" : val),
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Include built-in agents, so ids assigned elsewhere still resolve. Only agent admins see them; ignored with `scope`.",
+              ),
+            view: z
+              .enum(["chat"])
+              .optional()
+              .describe(
+                "`chat` keeps the system chat assistant in the list for chat selection.",
+              ),
             agentType: z
               .enum(["profile", "mcp_gateway", "agent"])
               .optional()
@@ -272,6 +287,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       {
         query: {
           name,
+          includeBuiltIn,
+          view,
           agentType,
           agentTypes,
           scope,
@@ -331,6 +348,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             baseReadTypes: checker.getAgentTypesWithPermission("read"),
           },
           name,
+          includeBuiltIn,
+          view,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
@@ -400,28 +419,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ ok: true as const });
     },
   );
-
-  fastify.get(
-    "/api/agents/all",
-    {
-      schema: {
-        operationId: RouteId.GetAllAgents,
-        description: "Get all agents without pagination",
-        tags: ["Agents"],
-        querystring: AgentRosterQuerySchema,
-        response: constructResponseSchema(z.array(SelectAgentSchema)),
-      },
-    },
-    async ({ query, user, organizationId }, reply) =>
-      reply.send(
-        await findPermittedAgentRoster({
-          query,
-          userId: user.id,
-          organizationId,
-        }),
-      ),
-  );
-
   fastify.get(
     "/api/agents/chat-roster",
     {

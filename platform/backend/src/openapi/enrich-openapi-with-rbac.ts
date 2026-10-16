@@ -277,8 +277,6 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Requires `agent:read`; when `status=deleted`, requires `agent:delete`. External A2A rows are limited to agents visible to the caller unless they have `organizationSettings:update`; when `selectableOnly=true`, external rows are omitted unless the caller has that permission.",
   [RouteId.GetAgents]:
     "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
-  [RouteId.GetAllAgents]:
-    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
   [RouteId.GetAgentOptions]:
     "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
   [RouteId.GetChatAgentRoster]:

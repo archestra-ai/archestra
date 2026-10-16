@@ -471,7 +471,6 @@ export const handlers: HttpHandler[] = [
       return HttpResponse.json(makeAgentCatalog({ agents }));
     }),
   ),
-  ...getJson("/api/agents/all", []),
   ...getJson("/api/agents/chat-roster", []),
   ...getJson("/api/agents/credential-readiness", []),
   ...getJson("/api/agents/options/page", {

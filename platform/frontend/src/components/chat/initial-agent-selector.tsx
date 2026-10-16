@@ -1202,7 +1202,7 @@ function AgentToolIcons({
           side="top"
           align="start"
           collisionPadding={8}
-          className="w-80 max-h-(--radix-hover-card-content-available-height) overflow-y-auto p-3"
+          className="w-max min-w-48 max-w-80 max-h-(--radix-hover-card-content-available-height) overflow-y-auto p-3"
         >
           {subagents.length > 0 && (
             <SummaryGroup title="Subagents">

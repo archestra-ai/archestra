@@ -180,6 +180,7 @@ export function YellsTable() {
       {yells.isError ? (
         <QueryLoadError
           title="Could not load yells"
+          error={yells.error}
           onRetry={() => yells.refetch()}
         />
       ) : (

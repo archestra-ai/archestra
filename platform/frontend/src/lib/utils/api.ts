@@ -76,7 +76,26 @@ export function getApiErrorInternalCode(error: unknown): string | undefined {
 export function toApiError(error: ApiSdkError): Error {
   const unwrapped = unwrapApiError(error);
   if (unwrapped instanceof Error) return unwrapped;
-  return new Error(getApiErrorMessage(error));
+  // Keep the API error as the cause, so a screen showing the failure can
+  // still tell a refusal from an outage (see getApiRefusal).
+  return new Error(getApiErrorMessage(error), { cause: unwrapped });
+}
+
+/**
+ * Why the API turned the caller away, if it did: `"forbidden"` for a 403 (the
+ * caller lacks access), `"signed-out"` for a 401 (the session ended).
+ * Accepts the raw SDK error or the Error a query threw for it via
+ * throwOnApiError.
+ */
+export function getApiRefusal(
+  error: unknown,
+): "forbidden" | "signed-out" | undefined {
+  const type =
+    getApiErrorType(error) ??
+    (error instanceof Error ? getApiErrorType(error.cause) : undefined);
+  if (type === "api_authorization_error") return "forbidden";
+  if (type === "api_authentication_error") return "signed-out";
+  return undefined;
 }
 
 /**

@@ -151,6 +151,7 @@ function OauthClientsTable() {
     return (
       <QueryLoadError
         title="Couldn't load OAuth clients"
+        error={query.error}
         onRetry={() => query.refetch()}
       />
     );

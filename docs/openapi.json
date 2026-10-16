@@ -95803,6 +95803,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "baseVersion": {
+                    "description": "Expected current content version. A stale value rejects the entire update with 409 before any changes persist.",
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -100737,7 +100743,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "List the tools assigned to an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "List the tools assigned to an app, including each assignment's stored server pin and credential resolution mode.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -100857,6 +100863,20 @@
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "mcpServerId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "credentialResolutionMode": {
+                        "type": "string",
+                        "enum": [
+                          "static",
+                          "dynamic",
+                          "enterprise_managed"
+                        ]
                       }
                     },
                     "required": [
@@ -100872,7 +100892,9 @@
                       "clonedPendingDiscovery",
                       "createdAt",
                       "updatedAt",
-                      "deletedAt"
+                      "deletedAt",
+                      "mcpServerId",
+                      "credentialResolutionMode"
                     ],
                     "additionalProperties": false
                   }

@@ -27260,6 +27260,10 @@ export type GetAppResponse = GetAppResponses[keyof GetAppResponses];
 
 export type UpdateAppData = {
     body: {
+        /**
+         * Expected current content version. A stale value rejects the entire update with 409 before any changes persist.
+         */
+        baseVersion?: number;
         name?: string;
         slug?: string;
         description?: string | null;
@@ -28737,6 +28741,8 @@ export type GetAppToolsResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        mcpServerId: string | null;
+        credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
     }>;
 };
 

@@ -9,6 +9,7 @@ import {
   AlertTriangleIcon,
   ArrowRightIcon,
   BoxIcon,
+  BrainIcon,
   CheckIcon,
   KeyRoundIcon,
   LogInIcon,
@@ -46,6 +47,7 @@ import {
 } from "@/lib/chat/use-chat-setup-options";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import { formatPricePerMillion } from "@/lib/model-price-format";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -116,6 +118,8 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     () => data.modelSections.flatMap((s) => s.models),
     [data.modelSections],
   );
+  // The price unit is spelled out once, on the first priced row.
+  const firstPricedModelId = allModels.find((m) => modelPrice(m))?.dbId;
   const allAgents = useMemo(
     () => data.agentGroups.flatMap((g) => g.agents),
     [data.agentGroups],
@@ -316,7 +320,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
 
   if (!scope) {
     return (
-      <div className="flex h-10 w-[380px] max-w-[calc(100vw-2rem)] items-center px-3 text-xs text-muted-foreground">
+      <div className="flex h-10 w-[400px] max-w-[calc(100vw-2rem)] items-center px-3 text-xs text-muted-foreground">
         Nothing to change in this chat
       </div>
     );
@@ -331,7 +335,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       filter={(value, search, keywords) =>
         defaultFilter(keywords?.length ? keywords.join(" ") : value, search)
       }
-      className="w-[380px] max-w-[calc(100vw-2rem)] rounded-none bg-transparent"
+      className="w-[400px] max-w-[calc(100vw-2rem)] rounded-none bg-transparent"
     >
       <div className="flex h-10 items-center gap-2.5 border-b pr-2 pl-3">
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -344,6 +348,12 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
           aria-label={placeholder}
           className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
         />
+        {showReasoning && (
+          <BrainIcon
+            aria-hidden
+            className="size-3.5 shrink-0 text-muted-foreground/70"
+          />
+        )}
         {showReasoning && (
           <Segmented
             groupRef={reasoningRef}
@@ -491,6 +501,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                     <ModelEntry
                       key={m.dbId}
                       model={m}
+                      withPriceUnit={m.dbId === firstPricedModelId}
                       keywords={modelKeywords(m, data.providerLabel)}
                       selected={isCurrent}
                       warning={isCurrent && !searching ? warning : null}
@@ -605,37 +616,108 @@ const ITEM =
 
 function ModelRow({
   model,
+  withPriceUnit,
   keywords,
   selected,
   onSelect,
 }: {
   model: LlmModel;
+  withPriceUnit: boolean;
   keywords: string[];
   selected: boolean;
   onSelect: () => void;
 }) {
-  const needsConnect = model.requiresUserConnection && !model.isConnected;
+  const needsConnect = !!model.requiresUserConnection && !model.isConnected;
   return (
     <CommandItem
       value={modelValue(model.dbId)}
       keywords={keywords}
       onSelect={onSelect}
-      className={ITEM}
+      // Two lines: the logo drops 2px to center on the name line.
+      className={cn(
+        ITEM,
+        "h-auto min-h-11 items-start py-1 [&>img:first-child]:mt-0.5",
+      )}
     >
       <ModelSelectorLogo
         provider={logoNameForProvider(model.provider)}
         className="size-4 shrink-0"
       />
-      <span className="min-w-0 flex-1 truncate">{model.displayName}</span>
-      <Meta>
-        {needsConnect ? (
-          <span className="text-primary/80">Connect</span>
-        ) : (
-          modelMeta(model)
-        )}
-      </Meta>
-      <Selected on={selected} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex h-5 min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate">{model.displayName}</span>
+          {model.isBest && (
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              Recommended
+            </span>
+          )}
+          <span className="flex-1" />
+          {needsConnect && (
+            <span className="shrink-0 text-xs text-primary/80">Connect</span>
+          )}
+          <Selected on={selected} />
+        </div>
+        <div className="truncate text-xs leading-4 text-muted-foreground tabular-nums">
+          <ModelSpecs
+            model={model}
+            showPrice={!needsConnect}
+            withPriceUnit={withPriceUnit}
+          />
+        </div>
+      </div>
     </CommandItem>
+  );
+}
+
+/** Context · price · what it reads and does, in a fixed order. */
+function ModelSpecs({
+  model,
+  showPrice,
+  withPriceUnit,
+}: {
+  model: LlmModel;
+  showPrice: boolean;
+  withPriceUnit: boolean;
+}) {
+  const caps = model.capabilities;
+  const parts: { key: string; node: ReactNode }[] = [];
+  const context = formatContext(caps?.contextLength);
+  if (context) parts.push({ key: "context", node: `${context} context` });
+  const price = modelPrice(model);
+  if (showPrice && model.isFree) parts.push({ key: "price", node: "Free" });
+  else if (showPrice && price) {
+    parts.push({
+      key: "price",
+      node: (
+        <span
+          title={`${price.input} input / ${price.output} output per million tokens`}
+        >
+          {price.input} / {price.output}
+          {withPriceUnit && <span className="opacity-70"> per M</span>}
+        </span>
+      ),
+    });
+  }
+  const inputs = caps?.inputModalities ?? [];
+  for (const [modality, label] of INPUT_LABELS) {
+    if (inputs.includes(modality)) parts.push({ key: modality, node: label });
+  }
+  if (caps?.supportsToolCalling === true)
+    parts.push({ key: "tools", node: "Tools" });
+  // A null means no source claimed reasoning support, so only `true` counts.
+  if (caps?.supportsReasoningEffort === true)
+    parts.push({ key: "reasoning", node: "Reasoning" });
+  // Never leave the line blank: fall back to the provider's model id.
+  if (parts.length === 0) return <>{model.id}</>;
+  return (
+    <>
+      {parts.map((part, index) => (
+        <span key={part.key}>
+          {index > 0 && <span className="px-1 opacity-60">·</span>}
+          {part.node}
+        </span>
+      ))}
+    </>
   );
 }
 
@@ -904,20 +986,29 @@ function keyValue(id: string) {
   return `key:${id}`;
 }
 
+const INPUT_LABELS = [
+  ["image", "Vision"],
+  ["pdf", "PDF"],
+  ["audio", "Audio"],
+  ["video", "Video"],
+] as const;
+
+function modelPrice(model: LlmModel) {
+  const input = formatPrice(model.capabilities?.pricePerMillionInput);
+  const output = formatPrice(model.capabilities?.pricePerMillionOutput);
+  return input && output ? { input, output } : null;
+}
+
+/** "$10" rather than "$10.00"; sub-dollar precision is kept. */
+function formatPrice(price: string | null | undefined) {
+  if (price == null || price.trim() === "") return null;
+  const formatted = formatPricePerMillion(price);
+  if (!Number.isFinite(Number(formatted))) return null;
+  return `$${formatted.replace(/\.00$/, "")}`;
+}
+
 function formatContext(n: number | null | undefined) {
   if (!n) return null;
   if (n >= 1_000_000) return `${Number((n / 1_000_000).toFixed(1))}M`;
   return `${Math.round(n / 1000)}K`;
-}
-
-function modelMeta(model: LlmModel) {
-  return joinMeta([
-    formatContext(model.capabilities?.contextLength),
-    model.isFree ? "Free" : null,
-  ]);
-}
-
-function joinMeta(parts: (string | false | null | undefined)[]) {
-  const kept = parts.filter((p): p is string => !!p);
-  return kept.length ? kept.join(" · ") : null;
 }

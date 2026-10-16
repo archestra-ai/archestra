@@ -37,7 +37,14 @@ const { agents, models, keys, readiness, mutateConversation } = vi.hoisted(
         isFree: false,
         requiresUserConnection: false,
         isConnected: true,
-        capabilities: { contextLength: 128_000, supportsReasoningEffort: true },
+        capabilities: {
+          contextLength: 128_000,
+          supportsReasoningEffort: true,
+          supportsToolCalling: true,
+          inputModalities: ["text", "image"],
+          pricePerMillionInput: "3",
+          pricePerMillionOutput: "15",
+        },
       },
       {
         dbId: "model-plain",
@@ -145,6 +152,10 @@ describe("ChatSetupMenu", () => {
     ).toHaveAttribute("aria-selected", "true");
     within(tabs).getByRole("tab", { name: "Agent: My Assistant" });
     within(tabs).getByRole("tab", { name: /^Key: Org vLLM/ });
+
+    expect(screen.getByRole("option", { name: /Qwen3 32B/ })).toHaveTextContent(
+      "128K context·$3 / $15 per M·Vision·Tools·Reasoning",
+    );
 
     await user.click(screen.getByRole("option", { name: /Llama 3 8B/ }));
 

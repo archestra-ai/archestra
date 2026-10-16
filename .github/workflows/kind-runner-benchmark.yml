@@ -1,0 +1,362 @@
+# Temporary correction: preserve production tagged Kind import; verify same digest.
+name: Kind Runner Benchmark
+'on':
+  pull_request:
+    branches:
+    - main
+    paths:
+    - .github/workflows/kind-runner-benchmark.yml
+permissions: {}
+concurrency:
+  group: kind-runner-benchmark-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+env:
+  PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  PLATFORM_IMAGE_NAME: platform
+  MCP_SERVER_BASE_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
+  UNTRUSTED_PR: 'false'
+jobs:
+  images:
+    name: Pin existing verified-run images
+    runs-on: ubuntu-24.04
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.repository.private
+    permissions:
+      contents: read
+    outputs:
+      platform-full: ${{ steps.images.outputs.platform-full }}
+      platform-slim: ${{ steps.images.outputs.platform-slim }}
+      mcp-base: ${{ steps.images.outputs.mcp-base }}
+      mcp-base-tag: ${{ steps.images.outputs.mcp-base-tag }}
+    steps:
+    - name: Checkout benchmark source
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        ref: 52e58e213bd2e3e49e77f5afe5288b82b7d9008e
+    - name: Resolve shared immutable images
+      id: images
+      env:
+        SOURCE_SHA: 52e58e213bd2e3e49e77f5afe5288b82b7d9008e
+      run: "set -euo pipefail\nresolve() {\n  local tag=\"$1\" output=\"$2\" file digest\n  file=$(mktemp)\n  docker buildx imagetools inspect \"$tag\" --raw > \"\
+        $file\"\n  jq -e '.schemaVersion == 2' \"$file\" >/dev/null\n  digest=\"sha256:$(sha256sum \"$file\" | awk '{print $1}')\"\n  rm \"$file\"\n  printf '%s=%s@%s\n\
+        ' \"$output\" \"${tag%:*}\" \"$digest\" >> \"$GITHUB_OUTPUT\"\n  printf 'Pinned %s@%s\n' \"${tag%:*}\" \"$digest\"\n}\nresolve \"${PLATFORM_IMAGE_REGISTRY}/${PLATFORM_IMAGE_NAME}:${SOURCE_SHA}-e2e\"\
+        \ platform-full\nresolve \"${PLATFORM_IMAGE_REGISTRY}/${PLATFORM_IMAGE_NAME}:${SOURCE_SHA}-e2e-slim\" platform-slim\nresolve \"${MCP_SERVER_BASE_IMAGE_REGISTRY}/${MCP_SERVER_BASE_IMAGE_NAME}:${SOURCE_SHA}\"\
+        \ mcp-base\nprintf 'mcp-base-tag=%s\\n' \"${MCP_SERVER_BASE_IMAGE_REGISTRY}/${MCP_SERVER_BASE_IMAGE_NAME}:${SOURCE_SHA}\" >> \"$GITHUB_OUTPUT\"\n"
+  platform-e2e-k8s-tests:
+    name: platform-e2e-k8s-tests (${{ matrix.name || 'single' }}, ${{ matrix.provider }})
+    needs:
+    - images
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.repository.private
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    steps:
+    - name: Reclaim disk space (background)
+      run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+    - name: Checkout repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        ref: 52e58e213bd2e3e49e77f5afe5288b82b7d9008e
+    - name: Record runner identity
+      run: 'node -e ''const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem()}))''
+
+        git rev-parse HEAD
+
+        docker version --format ''{{.Server.Version}}''
+
+        '
+    - name: Verify tagged Kind import is the shared immutable image
+      env:
+        IMPORT_TAG: ${{ needs.images.outputs.mcp-base-tag }}
+        EXPECTED_IMAGE: ${{ needs.images.outputs.mcp-base }}
+      run: 'set -euo pipefail
+
+        manifest=$(mktemp)
+
+        docker buildx imagetools inspect "$IMPORT_TAG" --raw > "$manifest"
+
+        digest="sha256:$(sha256sum "$manifest" | awk ''{print $1}'')"
+
+        rm "$manifest"
+
+        test "${IMPORT_TAG%:*}@${digest}" = "$EXPECTED_IMAGE"
+
+        echo "Tagged Kind import matches shared image digest."
+
+        '
+    - name: Setup environment
+      uses: ./.github/actions/setup-env
+      with:
+        working-directory: ./platform
+    - name: Load platform image (untrusted PRs, from artifact)
+      if: ${{ env.UNTRUSTED_PR == 'true' }}
+      uses: ./.github/actions/load-platform-image
+      with:
+        source: artifact
+        image-tag: archestra-platform:${{ '52e58e213bd2e3e49e77f5afe5288b82b7d9008e' }}
+        wait-timeout-seconds: '60'
+    - name: Load MCP server base image (untrusted PRs, from artifact)
+      if: ${{ env.UNTRUSTED_PR == 'true' }}
+      uses: ./.github/actions/load-mcp-server-base-image
+      with:
+        source: artifact
+        image-tag: mcp-server-base:${{ '52e58e213bd2e3e49e77f5afe5288b82b7d9008e' }}
+        wait-timeout-seconds: '60'
+    - name: Prepare blob report workspace
+      run: 'rm -rf platform/e2e-tests/blob-report platform/e2e-tests/blob-reports
+
+        mkdir -p platform/e2e-tests/blob-reports
+
+        '
+    - name: Setup Archestra Platform
+      id: setup-platform
+      uses: ./.github/actions/setup-archestra-platform
+      with:
+        kind-config-path: .github/kind.yaml
+        kind-cluster-name: archestra-ci-cluster
+        helm-values-path: .github/values-ci.yaml
+        deploy-e2e-dependencies: 'true'
+        e2e-dependencies-install-mode: foreground
+        e2e-dependencies-extra-helm-set: vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default
+        e2e-dependencies-wait-for-vault: 'true'
+        build-platform-image: 'false'
+        platform-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', '52e58e213bd2e3e49e77f5afe5288b82b7d9008e') || needs.images.outputs.platform-slim
+          }}
+        platform-context: ./platform
+        platform-image-in-cluster-pull: ${{ env.UNTRUSTED_PR == 'true' && 'false' || 'true' }}
+        mcp-server-base-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('mcp-server-base:{0}', '52e58e213bd2e3e49e77f5afe5288b82b7d9008e') || needs.images.outputs.mcp-base-tag
+          }}
+        image-pull-timeout-seconds: '60'
+    - name: Run K8s-bound E2E tests
+      id: e2e
+      continue-on-error: true
+      uses: ./.github/actions/run-e2e-tests
+      with:
+        projects: api-k8s --project=vault-k8s
+        timeout: '20'
+    - name: Upload blob report
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      uses: ./.github/actions/github-upload-artifact
+      with:
+        name: blob-report-k8s-${{ matrix.provider }}
+        path: platform/e2e-tests/blob-report/
+        retention-days: 1
+    - name: Show logs on failure or flaky tests
+      if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
+      run: "echo \"=== Kubernetes Pods ===\"\nkubectl get pods -o wide || true\n\necho \"=== Kubernetes Services ===\"\nkubectl get services || true\n\necho \"===\
+        \ Archestra Platform Logs (main container) ===\"\nkubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=200 2>/dev/null ||\
+        \ true\n\n# The external-IdP validation logs (validateExternalIdpToken /\n# \"JWKS JWT validation failed\") fire mid-run, well before this dump,\n# so the\
+        \ --tail=200 above misses them. Grep the full backend log so a\n# flaky JWKS-gateway 401 can be traced to the branch that rejected\n# the token. --tail=-1\
+        \ is required: with a label selector, kubectl\n# logs otherwise caps output at the last 10 lines.\necho \"=== External IdP validation (full-log grep) ===\"\
+        \nkubectl logs -l app.kubernetes.io/name=archestra-platform \\\n  -c archestra-platform --tail=-1 2>/dev/null \\\n  | grep -iE 'validateExternalIdpToken|JWKS\
+        \ JWT validation failed|Invalid token for this profile' \\\n  || echo \"(no external-IdP validation log found)\"\n\necho \"=== Platform Init Container: vault-secrets\
+        \ ===\"\nkubectl logs -l app.kubernetes.io/name=archestra-platform -c vault-secrets --tail=200 2>/dev/null || true\n\necho \"=== Platform Init Container:\
+        \ setup-postgres-extensions ===\"\nkubectl logs -l app.kubernetes.io/name=archestra-platform -c setup-postgres-extensions --tail=200 2>/dev/null || true\n\
+        \necho \"=== Platform Init Container: wait-for-postgres ===\"\nkubectl logs -l app.kubernetes.io/name=archestra-platform -c wait-for-postgres --tail=200 2>/dev/null\
+        \ || true\n\necho \"=== PostgreSQL Logs ===\"\nkubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || true\n\necho \"=== WireMock Logs ===\"\nkubectl\
+        \ logs -l app=e2e-tests-wiremock --tail=200 2>/dev/null || true\n\necho \"=== Keycloak Logs ===\"\nkubectl logs -l app.kubernetes.io/name=keycloak --tail=200\
+        \ 2>/dev/null || true\n\necho \"=== Vault Logs ===\"\nkubectl logs -l app.kubernetes.io/name=vault --tail=200 2>/dev/null || true\n\necho \"=== MCP Example\
+        \ OAuth Server Logs ===\"\nkubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 2>/dev/null || true\n\necho \"=== Describe Platform Pod ===\"\
+        \nkubectl describe pod -l app.kubernetes.io/name=archestra-platform || true\n\necho \"=== Describe PostgreSQL Pod ===\"\nkubectl describe pod -l app.kubernetes.io/name=postgresql\
+        \ || true\n\necho \"=== PostgreSQL StatefulSet & PVCs ===\"\nkubectl get statefulset,pvc -l app.kubernetes.io/name=postgresql -o wide || true\n\necho \"===\
+        \ Recent Cluster Events ===\"\nkubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -60 || true\n"
+    - name: Fail if K8s-bound E2E tests failed
+      if: ${{ always() && steps.e2e.outcome == 'failure' }}
+      run: exit 1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - name: single
+          provider: Blacksmith
+          runner: blacksmith-8vcpu-ubuntu-2404
+        - name: single
+          provider: Ubicloud
+          runner: ubicloud-standard-8-ubuntu-2404
+  platform-e2e-hibernation-tests:
+    name: platform-e2e-hibernation-tests (${{ matrix.name || 'single' }}, ${{ matrix.provider }})
+    needs:
+    - images
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.repository.private
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - name: capacity
+          spec: tests/mcp-hibernation-capacity.spec.ts
+          provider: Blacksmith
+          runner: blacksmith-16vcpu-ubuntu-2404
+        - name: capacity
+          spec: tests/mcp-hibernation-capacity.spec.ts
+          provider: Ubicloud
+          runner: ubicloud-standard-16-ubuntu-2404
+        - name: capacity
+          spec: tests/mcp-hibernation-capacity.spec.ts
+          provider: GitHub
+          runner: ubuntu-24.04
+        - name: recovery
+          spec: tests/mcp-hibernation-recovery.spec.ts
+          provider: Blacksmith
+          runner: blacksmith-16vcpu-ubuntu-2404
+        - name: recovery
+          spec: tests/mcp-hibernation-recovery.spec.ts
+          provider: Ubicloud
+          runner: ubicloud-standard-16-ubuntu-2404
+        - name: recovery
+          spec: tests/mcp-hibernation-recovery.spec.ts
+          provider: GitHub
+          runner: ubuntu-24.04
+        - name: topology
+          spec: tests/mcp-hibernation-topology.spec.ts
+          provider: Blacksmith
+          runner: blacksmith-16vcpu-ubuntu-2404
+        - name: topology
+          spec: tests/mcp-hibernation-topology.spec.ts
+          provider: Ubicloud
+          runner: ubicloud-standard-16-ubuntu-2404
+        - name: topology
+          spec: tests/mcp-hibernation-topology.spec.ts
+          provider: GitHub
+          runner: ubuntu-24.04
+        - name: wake
+          spec: tests/mcp-hibernation.spec.ts
+          provider: Blacksmith
+          runner: blacksmith-16vcpu-ubuntu-2404
+        - name: wake
+          spec: tests/mcp-hibernation.spec.ts
+          provider: Ubicloud
+          runner: ubicloud-standard-16-ubuntu-2404
+        - name: wake
+          spec: tests/mcp-hibernation.spec.ts
+          provider: GitHub
+          runner: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    steps:
+    - name: Reclaim disk space (background)
+      run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+    - name: Checkout repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        ref: 52e58e213bd2e3e49e77f5afe5288b82b7d9008e
+    - name: Record runner identity
+      run: 'node -e ''const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem()}))''
+
+        git rev-parse HEAD
+
+        docker version --format ''{{.Server.Version}}''
+
+        '
+    - name: Verify tagged Kind import is the shared immutable image
+      env:
+        IMPORT_TAG: ${{ needs.images.outputs.mcp-base-tag }}
+        EXPECTED_IMAGE: ${{ needs.images.outputs.mcp-base }}
+      run: 'set -euo pipefail
+
+        manifest=$(mktemp)
+
+        docker buildx imagetools inspect "$IMPORT_TAG" --raw > "$manifest"
+
+        digest="sha256:$(sha256sum "$manifest" | awk ''{print $1}'')"
+
+        rm "$manifest"
+
+        test "${IMPORT_TAG%:*}@${digest}" = "$EXPECTED_IMAGE"
+
+        echo "Tagged Kind import matches shared image digest."
+
+        '
+    - name: Setup environment
+      uses: ./.github/actions/setup-env
+      with:
+        working-directory: ./platform
+    - name: Load platform image (untrusted PRs, from artifact)
+      if: ${{ env.UNTRUSTED_PR == 'true' }}
+      uses: ./.github/actions/load-platform-image
+      with:
+        source: artifact
+        image-tag: archestra-platform:${{ '52e58e213bd2e3e49e77f5afe5288b82b7d9008e' }}
+        wait-timeout-seconds: '60'
+    - name: Load MCP server base image (untrusted PRs, from artifact)
+      if: ${{ env.UNTRUSTED_PR == 'true' }}
+      uses: ./.github/actions/load-mcp-server-base-image
+      with:
+        source: artifact
+        image-tag: mcp-server-base:${{ '52e58e213bd2e3e49e77f5afe5288b82b7d9008e' }}
+        wait-timeout-seconds: '60'
+    - name: Setup Archestra Platform
+      id: setup-platform
+      uses: ./.github/actions/setup-archestra-platform
+      with:
+        kind-config-path: .github/kind.yaml
+        kind-cluster-name: archestra-ci-cluster
+        helm-values-path: .github/values-ci.yaml
+        deploy-e2e-dependencies: 'true'
+        e2e-dependencies-install-mode: foreground
+        e2e-dependencies-extra-helm-set: keycloak.enabled=false,mcpServerJwks.enabled=false,mcpExampleOAuth.enabled=false,mcpServerIdJag.enabled=false,vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default
+        e2e-dependencies-wait-for-vault: 'true'
+        e2e-dependencies-minimal: 'true'
+        build-platform-image: 'false'
+        platform-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', '52e58e213bd2e3e49e77f5afe5288b82b7d9008e') || needs.images.outputs.platform-slim
+          }}
+        platform-context: ./platform
+        platform-image-in-cluster-pull: ${{ env.UNTRUSTED_PR == 'true' && 'false' || 'true' }}
+        mcp-server-base-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('mcp-server-base:{0}', '52e58e213bd2e3e49e77f5afe5288b82b7d9008e') || needs.images.outputs.mcp-base-tag
+          }}
+        image-pull-timeout-seconds: '60'
+        extra-helm-set: archestra.orchestrator.mcpIdleHibernationSeconds=8
+    - name: Run hibernation E2E tests
+      id: e2e
+      continue-on-error: true
+      uses: ./.github/actions/run-e2e-tests
+      with:
+        projects: api-k8s-hibernation
+        extra_args: ${{ format('--workers=1 {0}', matrix.spec) }}
+        timeout: '30'
+        env_file: .github/e2e-hibernation.env
+        blob_report_dir: blob-report-hibernation-${{ matrix.name }}
+    - name: Upload hibernation blob report
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      uses: ./.github/actions/github-upload-artifact
+      with:
+        name: blob-report-k8s-hibernation-${{ matrix.name }}-${{ matrix.provider }}
+        path: platform/e2e-tests/blob-report-hibernation-${{ matrix.name }}/
+        if-no-files-found: error
+        retention-days: 1
+    - name: Show hibernation logs on failure or flaky tests
+      if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
+      run: 'echo "=== Kubernetes Pods ==="
+
+        kubectl get pods -A -o wide || true
+
+        echo "=== Archestra Platform Logs ==="
+
+        kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=500 2>/dev/null || true
+
+        echo "=== PostgreSQL Logs ==="
+
+        kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 2>/dev/null || true
+
+        echo "=== Recent Cluster Events ==="
+
+        kubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -100 || true
+
+        '
+    - name: Fail if hibernation E2E tests failed
+      if: ${{ always() && steps.e2e.outcome == 'failure' }}
+      run: exit 1

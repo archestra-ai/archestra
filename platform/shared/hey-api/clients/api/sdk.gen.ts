@@ -3109,7 +3109,7 @@ export const updateConversationEnabledTools = <ThrowOnError extends boolean = fa
 });
 
 /**
- * MS Teams Bot Framework webhook endpoint
+ * MS Teams webhook endpoint
  */
 export const postApiWebhooksChatopsMsTeams = <ThrowOnError extends boolean = false>(options: Options<PostApiWebhooksChatopsMsTeamsData, ThrowOnError>) => (options.client ?? client).post<PostApiWebhooksChatopsMsTeamsResponses, PostApiWebhooksChatopsMsTeamsErrors, ThrowOnError>({
     url: '/api/webhooks/chatops/ms-teams',

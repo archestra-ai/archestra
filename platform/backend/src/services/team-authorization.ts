@@ -29,8 +29,12 @@ import type { TeamMemberRole } from "@/types/team-role";
 export async function getTeamForOrg(params: {
   teamId: string;
   organizationId: string;
+  /** False when only the team row is needed (default true). */
+  includeMembers?: boolean;
 }): Promise<Team | null> {
-  const team = await TeamModel.findById(params.teamId);
+  const team = await TeamModel.findById(params.teamId, {
+    includeMembers: params.includeMembers,
+  });
   if (!team || team.organizationId !== params.organizationId) {
     return null;
   }

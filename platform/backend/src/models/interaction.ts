@@ -1293,7 +1293,8 @@ class InteractionModel {
    * Without `search` or `ids`, returns the most active users first, from a
    * per-organization cache (see USER_FILTER_OPTIONS_CACHE_TTL_MS). With them,
    * matches users by name (by id when the name is empty), or by exact id, in
-   * byte order of name like the member picker. That path probes the log per
+   * byte order of name like the member picker (not locale order: non-ASCII
+   * names sort by their UTF-8 bytes). That path probes the log per
    * candidate user through the `user_id` index instead of aggregating the
    * whole log.
    */
@@ -2728,7 +2729,8 @@ class InteractionModel {
       )
       .orderBy(sql`${users.name} COLLATE "C"`, sql`${users.id} COLLATE "C"`);
     // One indexed probe per candidate on `user_id`, stopping at the user's
-    // first interaction in the organization.
+    // first interaction in the organization. It refers to the `candidates`
+    // alias of the outer query below, so it is valid only inside that query.
     const probe = db
       .select({ found: sql`1` })
       .from(schema.interactionsTable)

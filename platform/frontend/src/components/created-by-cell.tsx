@@ -39,12 +39,14 @@ export function CreatedByCell({
   className,
   showServiceAccountBadge = true,
   secondaryText,
+  showTooltip = true,
 }: {
   createdBy: CreatedBy | null | undefined;
   className?: string;
   showServiceAccountBadge?: boolean;
   /** Optional second line; the avatar stays centered beside both lines. */
   secondaryText?: string | null;
+  showTooltip?: boolean;
 }) {
   if (!createdBy) {
     return null;
@@ -56,32 +58,34 @@ export function CreatedByCell({
     ? `${label} · Service account`
     : (createdBy.email ?? label);
 
+  const content = (
+    <span
+      className={cn("flex min-w-0 items-center gap-2", className)}
+      title={showTooltip ? detail : undefined}
+    >
+      <CreatorAvatar createdBy={createdBy} />
+      <span className="min-w-0">
+        <span className="block truncate">{label}</span>
+        {secondaryText && secondaryText !== label && (
+          <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+            {secondaryText}
+          </span>
+        )}
+      </span>
+      {isServiceAccount && showServiceAccountBadge && (
+        <Badge
+          variant="outline"
+          className="h-4 shrink-0 rounded px-1 py-0 text-[10px] font-normal leading-none text-muted-foreground"
+        >
+          Service account
+        </Badge>
+      )}
+    </span>
+  );
+  if (!showTooltip) return content;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn("flex min-w-0 items-center gap-2", className)}
-          title={detail}
-        >
-          <CreatorAvatar createdBy={createdBy} />
-          <span className="min-w-0">
-            <span className="block truncate">{label}</span>
-            {secondaryText && secondaryText !== label && (
-              <span className="block truncate text-[11px] leading-4 text-muted-foreground">
-                {secondaryText}
-              </span>
-            )}
-          </span>
-          {isServiceAccount && showServiceAccountBadge && (
-            <Badge
-              variant="outline"
-              className="h-4 shrink-0 rounded px-1 py-0 text-[10px] font-normal leading-none text-muted-foreground"
-            >
-              Service account
-            </Badge>
-          )}
-        </span>
-      </TooltipTrigger>
+      <TooltipTrigger asChild>{content}</TooltipTrigger>
       <TooltipContent>
         {isServiceAccount || label === detail ? detail : `${label} · ${detail}`}
       </TooltipContent>

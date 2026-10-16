@@ -256,6 +256,7 @@ function GroupIdentity({
   if (row.dimension === "user")
     return (
       <CreatedByCell
+        showTooltip={false}
         createdBy={{ id: row.key, name: row.label, email: row.detail }}
         secondaryText={showDetail ? row.detail : undefined}
         className="text-xs"
@@ -384,7 +385,7 @@ function SummaryTable({
       minSize: 154,
       cell: ({ row }) =>
         row.original.lastSeenAt ? (
-          <LogTime timestamp={row.original.lastSeenAt} />
+          <LogTime showTooltip={false} timestamp={row.original.lastSeenAt} />
         ) : null,
     },
   ];
@@ -474,6 +475,7 @@ function FactsTable({ explorer }: { explorer: Explorer }) {
       size: 190,
       cell: ({ row }) => (
         <CreatedByCell
+          showTooltip={false}
           createdBy={{
             id: row.original.user,
             name: row.original.userName,
@@ -531,7 +533,9 @@ function FactsTable({ explorer }: { explorer: Explorer }) {
       header: "Last call",
       size: 154,
       minSize: 154,
-      cell: ({ row }) => <LogTime timestamp={row.original.lastSeenAt} />,
+      cell: ({ row }) => (
+        <LogTime showTooltip={false} timestamp={row.original.lastSeenAt} />
+      ),
     },
   ];
   return (

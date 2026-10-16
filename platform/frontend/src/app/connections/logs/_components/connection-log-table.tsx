@@ -227,6 +227,7 @@ const columns: ColumnDef<ConnectionEvent>[] = [
             <span>{label}</span>
           </span>
           <CreatedByCell
+            showTooltip={false}
             createdBy={{
               id: event.userId,
               name: event.userName,
@@ -302,7 +303,9 @@ const columns: ColumnDef<ConnectionEvent>[] = [
     header: "Time",
     size: 154,
     minSize: 154,
-    cell: ({ row }) => <LogTime timestamp={row.original.occurredAt} />,
+    cell: ({ row }) => (
+      <LogTime showTooltip={false} timestamp={row.original.occurredAt} />
+    ),
   },
 ];
 

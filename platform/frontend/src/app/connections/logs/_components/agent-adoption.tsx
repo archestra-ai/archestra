@@ -35,50 +35,36 @@ import type { ConnectionsWindow } from "./connections-window";
 
 type AdoptionAgent = AgentAdoptionMember["agents"][number];
 
-/** Fixed, whatever range is picked, so a user's state doesn't move with it. */
-const ACTIVE_DAYS = 30;
 const PAGE_SIZE = 25;
 const MAX_AGENT_ICONS = 5;
 const ALL = "all";
 
-const STATES: Record<
-  AgentAdoptionStatus,
-  { label: string; color: string; help: string }
-> = {
+const STATES: Record<AgentAdoptionStatus, { label: string; color: string }> = {
   active: {
     label: "Active",
     color: "var(--color-emerald-500)",
-    help: `Used an agent to do something in the last ${ACTIVE_DAYS} days: a tool call through the MCP gateway or a call to the LLM proxy.`,
   },
   inactive: {
     label: "Inactive",
     color: "var(--color-amber-500)",
-    help: `Has an agent connected, but it did nothing in the last ${ACTIVE_DAYS} days. Opening the agent doesn't count.`,
   },
   notConnected: {
     label: "Not connected",
     color:
       "color-mix(in oklch, var(--muted-foreground) 55%, var(--background))",
-    help: "None of their connected agents has reached the MCP gateway or LLM proxy. Agents they disconnected don't count.",
   },
 };
 
 /** The same states for one agent; one that never reached anything says so. */
-const AGENT_STATES: Record<
-  AgentAdoptionStatus,
-  { label: string; help: string }
-> = {
+const AGENT_STATES: Record<AgentAdoptionStatus, { label: string }> = {
   active: {
     label: "Active",
-    help: `Did something in the last ${ACTIVE_DAYS} days.`,
   },
   inactive: {
     label: "Inactive",
-    help: `Connected, but did nothing in the last ${ACTIVE_DAYS} days.`,
   },
   notConnected: {
     label: "Never connected",
-    help: "Set up, but has never reached the MCP gateway or LLM proxy.",
   },
 };
 
@@ -268,6 +254,7 @@ function UserTable({
       ),
       cell: ({ row }) => (
         <CreatedByCell
+          showTooltip={false}
           createdBy={{
             id: row.original.userId,
             name: row.original.name,
@@ -378,12 +365,12 @@ function UserTable({
                 className="grid min-w-[700px] grid-cols-[minmax(240px,1fr)_170px_170px] items-center gap-3 px-4 py-3"
               >
                 <div className="flex min-w-0 items-start gap-2">
-                  <Hint
-                    text={`${AGENT_STATES[agent.status].label}. ${AGENT_STATES[agent.status].help}`}
-                    className="mt-1.5"
-                  >
+                  <span className="mt-1.5">
                     <StateDot state={agent.status} />
-                  </Hint>
+                    <span className="sr-only">
+                      {AGENT_STATES[agent.status].label}
+                    </span>
+                  </span>
                   <div className="min-w-0">
                     <span className="flex items-center gap-1.5 text-xs font-medium">
                       <AgentIcon agent={agent} size={16} />
@@ -409,24 +396,16 @@ function UserTable({
 /** How an agent got there, under its name. */
 function SetupLine({ agent }: { agent: AdoptionAgent }) {
   const muted = "block text-xs text-muted-foreground";
-  if (agent.viaToken) {
+  if (agent.viaToken)
+    return <span className={muted}>Calls on a pasted token</span>;
+  if (agent.signedIn || !agent.setupAt)
     return (
-      <Hint text="Calls on a pasted token. The agent didn't say what it is.">
-        <span className={muted}>Calls on a pasted token</span>
-      </Hint>
+      <span className={muted}>
+        {agent.setupAt
+          ? `Signed in by itself ${formatRelativeTimeFromNow(agent.setupAt)}`
+          : "Signed in by itself"}
+      </span>
     );
-  }
-  if (agent.signedIn || !agent.setupAt) {
-    return (
-      <Hint text="Set up by hand. It showed up when it first signed in to the MCP gateway.">
-        <span className={muted}>
-          {agent.setupAt
-            ? `Signed in by itself ${formatRelativeTimeFromNow(agent.setupAt)}`
-            : "Signed in by itself"}
-        </span>
-      </Hint>
-    );
-  }
   return (
     <span className={muted}>
       {`Set up ${formatRelativeTimeFromNow(agent.setupAt)}`}
@@ -486,7 +465,7 @@ function LastCall({
   const old = rangeStart !== null && new Date(at) < rangeStart;
   return (
     <span className={cn(old && "text-muted-foreground")}>
-      <LogTime timestamp={at} />
+      <LogTime showTooltip={false} timestamp={at} />
     </span>
   );
 }
@@ -519,13 +498,10 @@ function SortButton({
 /** What each state means, in a line each, behind an icon on the card. */
 function StatePill({ state }: { state: AgentAdoptionStatus }) {
   return (
-    <Hint
-      text={STATES[state].help}
-      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap"
-    >
+    <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap">
       <StateDot state={state} />
-      {STATES[state].label}
-    </Hint>
+      <span>{STATES[state].label}</span>
+    </span>
   );
 }
 

@@ -931,15 +931,16 @@ describe("a battery with targets", () => {
             kind: block.kind,
             unservedMarks: block.unservedMarks,
           })),
-        self: audience.audiences.find((level) => level.name === "self")?.kind,
+        internal: audience.audiences.find((level) => level.name === "internal")
+          ?.kind,
       };
     };
-    expect(await views()).toEqual({ blocks: [], self: "builtin" });
+    expect(await views()).toEqual({ blocks: [], internal: "builtin" });
 
     config.daggerRuntime.enabled = false;
     expect(await views()).toEqual({
       blocks: [{ kind: "approvals", unservedMarks: ["acme-review"] }],
-      self: "unmapped",
+      internal: "unmapped",
     });
   });
 
@@ -1489,7 +1490,7 @@ policy = "multi-user.toml"
         text: `${empty}
 [[policy.tool]]
 name = "mcp/acme/list"
-requires = { attention = ["acme-review"], audience = { contains = ["self"] } }
+requires = { attention = ["acme-review"], audience = { contains = ["internal"] } }
 `,
       },
       { path: "single-user.toml", text: empty },

@@ -359,7 +359,8 @@ ${CATCH_ALL_RULES}`,
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     // The default, plus one client tool that needs a session still readable
-    // by the public: a call after a narrowing read asks for review.
+    // by the public: a call after a narrowing read asks for review. One that
+    // reaches only the requester stays allowed.
     await declareRoot({
       organizationId,
       userId: admin.id,
@@ -368,6 +369,11 @@ ${CATCH_ALL_RULES}`,
 name = "host/archestra/publish_probe"
 delta = {}
 requires = { audience = { contains = ["public"] } }
+
+[[policy.tool]]
+name = "host/archestra/note_to_self"
+delta = {}
+requires = { audience = { contains = ["self"] } }
 `,
     });
     const composed = await openappaBatteriesService.recompile(organizationId);
@@ -378,6 +384,7 @@ requires = { audience = { contains = ["public"] } }
       "probe-alone": probe,
       // Claude Code's Read, under the battery's credential rule.
       "read-env": `host/archestra/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\n${probe}`,
+      "note-after-read-env": `host/archestra/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\nhost/archestra/note_to_self {}\nexpect allow\n`,
       "read-readme": `host/archestra/Read {\n  file_path: "/repo/README.md"\n}\nexpect allow\n${probe}`,
       // Codex's shell spells the command `cmd`.
       "codex-credentials": `host/archestra/exec_command {\n  cmd: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
@@ -411,6 +418,7 @@ requires = { audience = { contains = ["public"] } }
     ).toEqual({
       "probe-alone": ["allow"],
       "read-env": ["allow", "authority hitl"],
+      "note-after-read-env": ["allow", "allow"],
       "read-readme": ["allow", "allow"],
       "codex-credentials": ["allow", "authority hitl"],
       "git-push": ["claude-code.bash-repository-requirements"],

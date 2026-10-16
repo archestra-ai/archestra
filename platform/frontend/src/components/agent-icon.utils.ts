@@ -14,6 +14,7 @@ export function isAgentImageIcon(
  * The icon an agent catalog template saves on the agents it creates. Agent
  * icons draw these values as the template's Connect page mark, not as the
  * file they name, so stored agents and the Connect page show the same logo.
+ * Agents keep the value they were saved with, so never change a value here.
  */
 export const CATALOG_AGENT_ICONS: Record<AgentCatalogId, string> = {
   "claude-code": "/model-logos/anthropic.svg",

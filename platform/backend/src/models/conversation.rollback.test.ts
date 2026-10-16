@@ -176,6 +176,7 @@ describe("ConversationModel", () => {
     });
     expect((await find())?.contextTokensUsed).toBe(43_000);
 
+    // Stamped now, so it is newer than the turns above.
     await ConversationCompactionModel.create({
       conversationId: conversation.id,
       summary: "Earlier turns, summarized.",
@@ -184,7 +185,6 @@ describe("ConversationModel", () => {
       model: "claude-opus-4-8",
       originalTokenEstimate: 43_000,
       compactedTokenEstimate: 6_000,
-      createdAt: at(4),
     });
     expect((await find())?.contextTokensUsed).toBe(6_000);
   });

@@ -14,14 +14,12 @@ import {
   getTableColumns,
   gt,
   inArray,
-  isNotNull,
   isNull,
   max,
   or,
   sql,
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import { secretManager } from "@/secrets-manager";
 import type {
   LabelWithDetails,
   SelectServiceAccount,
@@ -494,48 +492,6 @@ class ServiceAccountModel {
     return row ?? null;
   }
 
-  /**
-   * Value of the account's platform key, minted on first use. The platform
-   * presents it to its own MCP gateway when it runs work as this account.
-   * The key is listed like any other, so deleting it rotates it here.
-   */
-  static async ensurePlatformTokenValue(
-    serviceAccountId: string,
-  ): Promise<{ tokenId: string; value: string }> {
-    const existing = await readPlatformToken(serviceAccountId);
-    if (existing) return existing;
-
-    const value = createTokenValue();
-    const secret = await secretManager().createSecret(
-      { token: value },
-      `service-account-platform-token-${serviceAccountId}`,
-      // Platform keys are minted on demand, which a read-only BYOS vault
-      // cannot take, so they always live in the database.
-      true,
-    );
-    const [created] = await db
-      .insert(schema.serviceAccountTokensTable)
-      .values({
-        serviceAccountId,
-        name: PLATFORM_TOKEN_NAME,
-        tokenHash: hashToken(value),
-        tokenStart: value.slice(0, 16),
-        secretId: secret.id,
-      })
-      .onConflictDoNothing()
-      .returning({ id: schema.serviceAccountTokensTable.id });
-
-    if (created) return { tokenId: created.id, value };
-
-    // A concurrent call won the race; drop the secret nothing references.
-    await secretManager().deleteSecret(secret.id);
-    const winner = await readPlatformToken(serviceAccountId);
-    if (!winner) {
-      throw new Error("Failed to create the service account platform key");
-    }
-    return winner;
-  }
-
   static async verifyToken(token: string): Promise<{
     serviceAccount: SelectServiceAccount;
     token: SelectServiceAccountToken;
@@ -678,30 +634,6 @@ function normalizeToken(
     expiresAt: token.expiresAt,
     createdAt: token.createdAt,
   };
-}
-
-const PLATFORM_TOKEN_NAME = "Platform key";
-
-async function readPlatformToken(
-  serviceAccountId: string,
-): Promise<{ tokenId: string; value: string } | null> {
-  const [row] = await db
-    .select({
-      id: schema.serviceAccountTokensTable.id,
-      secretId: schema.serviceAccountTokensTable.secretId,
-    })
-    .from(schema.serviceAccountTokensTable)
-    .where(
-      and(
-        eq(schema.serviceAccountTokensTable.serviceAccountId, serviceAccountId),
-        isNotNull(schema.serviceAccountTokensTable.secretId),
-      ),
-    )
-    .limit(1);
-  if (!row?.secretId) return null;
-  const secret = await secretManager().getSecret(row.secretId);
-  const value = (secret?.secret as { token?: unknown } | undefined)?.token;
-  return typeof value === "string" ? { tokenId: row.id, value } : null;
 }
 
 function createTokenValue(): string {

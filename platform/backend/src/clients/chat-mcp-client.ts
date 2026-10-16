@@ -43,6 +43,7 @@ import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
+  AgentModel,
   AgentTeamModel,
   ServiceAccountModel,
   TeamModel,
@@ -52,6 +53,7 @@ import {
 } from "@/models";
 import { isAppaDelegatedRun } from "@/openappa/service";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
+import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
@@ -290,7 +292,8 @@ export const __test = {
 /**
  * Select the token the chat MCP client presents to the gateway:
  * - a team token's call uses that team's token;
- * - a service account (`service-account:<id>`) uses its platform key;
+ * - a service account (`service-account:<id>`) gets no bearer value: its
+ *   tools are listed in-process (see {@link getChatMcpTools});
  * - the headless "system" sentinel uses the organization token;
  * - a person uses their personal token, then a team token for a team they
  *   share with the profile.
@@ -326,29 +329,32 @@ export async function selectMCPGatewayToken(
   }
 
   // Synthetic principals have no users row, so they can never own a personal
-  // user token. A service account acts through its own key instead of
-  // borrowing the organization token.
+  // user token. A service account needs no bearer value at all: its tools are
+  // listed and run in-process as the account, with the same agent access
+  // check the gateway applies to its keys.
   const serviceAccountId = serviceAccountIdFromUserId(userId);
   const serviceAccount = serviceAccountId
     ? await ServiceAccountModel.findAccount(serviceAccountId, organizationId)
     : null;
   if (serviceAccount) {
-    if (serviceAccount.disabled) {
+    const canUseAgent =
+      !serviceAccount.disabled &&
+      (await AgentTeamModel.userHasAgentAccess({
+        userId,
+        agentId,
+        action: "use",
+        isAgentAdmin: false,
+      }));
+    if (!canUseAgent) {
       logger.warn(
         { agentId, serviceAccountId: serviceAccount.id },
-        "Service account is disabled - no gateway token for chat MCP client",
+        "Service account is disabled or cannot use this agent - no tools for chat MCP client",
       );
       return null;
     }
-    const { tokenId, value } =
-      await ServiceAccountModel.ensurePlatformTokenValue(serviceAccount.id);
-    logger.info(
-      { agentId, serviceAccountId: serviceAccount.id, tokenId },
-      "Using service account platform key for chat MCP client",
-    );
     return {
-      tokenValue: value,
-      tokenId,
+      tokenValue: null,
+      tokenId: userId,
       teamId: serviceAccount.teamId,
       isOrganizationToken: false,
       serviceAccountId: serviceAccount.id,
@@ -681,6 +687,10 @@ export async function getChatMcpClient(
         { agentId, userId },
         "No valid token available for user - cannot connect to MCP Gateway",
       );
+      return null;
+    }
+    if (tokenResult.tokenValue === null) {
+      // In-process principals (service accounts) have no gateway session.
       return null;
     }
     tokenValue = tokenResult.tokenValue;
@@ -1045,18 +1055,22 @@ export async function getChatMcpTools({
     throw new McpToolsUnavailableError("no gateway token for user");
   }
 
-  // Still use MCP client for listing tools (via MCP Gateway)
+  // List tools via the MCP Gateway, except for a service account, whose list
+  // is built in-process (it has no bearer value to present).
   // Pass the scope key for per-conversation/per-execution browser isolation.
   // Forward the already-resolved token to avoid a duplicate selectMCPGatewayToken call.
-  const client = await getChatMcpClient(
-    agentId,
-    userId,
-    organizationId,
-    scopeKey,
-    mcpGwToken.tokenValue,
-  );
+  const client =
+    mcpGwToken.tokenValue === null
+      ? null
+      : await getChatMcpClient(
+          agentId,
+          userId,
+          organizationId,
+          scopeKey,
+          mcpGwToken.tokenValue,
+        );
 
-  if (!client) {
+  if (mcpGwToken.tokenValue !== null && !client) {
     logger.warn(
       { agentId, userId },
       "No MCP client available - failing the turn instead of streaming with empty tools",
@@ -1065,8 +1079,14 @@ export async function getChatMcpTools({
   }
 
   try {
-    logger.info({ agentId, userId }, "MCP client available, listing tools...");
-    const { tools: mcpTools } = await client.listTools();
+    logger.info({ agentId, userId }, "Listing MCP tools...");
+    const mcpTools = client
+      ? (await client.listTools()).tools
+      : await listToolsInProcess({
+          agentId,
+          organizationId,
+          serviceAccountId: mcpGwToken.serviceAccountId,
+        });
 
     // Filter out agent skills and app-only tools.
     // Tools with _meta.ui.visibility that does not include "model" are intended
@@ -1229,17 +1249,19 @@ export async function getChatMcpTools({
     // turn instead of reusing the same failing session until the idle TTL. The
     // detail stays in the log above; the thrown message is kept generic so raw
     // gateway error text never reaches the API client.
-    const cacheKey = getCacheKey(agentId, userId, scopeKey);
-    try {
-      await client.close();
-    } catch (closeError) {
-      logger.warn(
-        { agentId, userId, closeError },
-        "Error closing MCP client after tool fetch failure (non-fatal)",
-      );
+    if (client) {
+      const cacheKey = getCacheKey(agentId, userId, scopeKey);
+      try {
+        await client.close();
+      } catch (closeError) {
+        logger.warn(
+          { agentId, userId, closeError },
+          "Error closing MCP client after tool fetch failure (non-fatal)",
+        );
+      }
+      clientCache.delete(cacheKey);
+      clientLastValidatedAt.delete(cacheKey);
     }
-    clientCache.delete(cacheKey);
-    clientLastValidatedAt.delete(cacheKey);
     throw new McpToolsUnavailableError("tool listing failed");
   }
 }
@@ -1435,4 +1457,25 @@ function deleteToolCacheScope(toolCacheKey: string): void {
   // The separator keeps the match on a key boundary: isolation key `exec-1`
   // must not reclaim `exec-10`'s entries.
   toolCache.deleteByPrefix(`${toolCacheKey}:`);
+}
+
+/**
+ * The tools/list a service account would get from the gateway, built the
+ * same way without a loopback request.
+ */
+async function listToolsInProcess(params: {
+  agentId: string;
+  organizationId: string;
+  serviceAccountId: string | undefined;
+}) {
+  const agent = await AgentModel.findGatewayAgentById(params.agentId);
+  if (!agent) throw new Error(`Agent not found: ${params.agentId}`);
+  const { tools } = await buildAgentMcpToolList({
+    agent,
+    tokenAuth: {
+      organizationId: params.organizationId,
+      serviceAccountId: params.serviceAccountId,
+    },
+  });
+  return tools;
 }

@@ -1,4 +1,4 @@
-# Temporary paired, same-source benchmark. Wave 2: force lint tasks, warm frontend caches.
+# Temporary paired benchmark. Wave 3: default lint; frontend 8 BS vs 16 Ubi without compiler archive; native tests.
 name: Lint and Frontend Runner Benchmark
 'on':
   pull_request:
@@ -23,8 +23,6 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-      TURBO_FORCE: 'true'
-      TURBO_REMOTE_CACHE_READ_ONLY: 'true'
     steps:
     - name: Check if this is a release-please PR
       id: check-release-please
@@ -41,21 +39,6 @@ jobs:
         persist-credentials: false
         fetch-depth: 1
         ref: aed871b42e40385d17ca40c1b250d07664e617da
-    - name: Generate token for release-please PR
-      if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-      id: generate-token
-      uses: ./.github/actions/github-app-token
-      with:
-        app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-        private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
-    - name: Update checkout credentials for release-please PR
-      if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      with:
-        persist-credentials: true
-        ref: aed871b42e40385d17ca40c1b250d07664e617da
-        token: ${{ steps.generate-token.outputs.token }}
-        fetch-depth: 1
     - name: Setup environment
       uses: ./.github/actions/setup-env
       with:
@@ -183,7 +166,7 @@ jobs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+        key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-cold-benchmark-${{ github.run_id }}
     - name: Install Chromium for Playwright
       if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit != 'true'
       run: "pnpm --filter @frontend exec playwright install chromium\nfor attempt in 1 2 3; do\n  if pnpm --filter @frontend exec playwright install-deps chromium;\
@@ -202,10 +185,8 @@ jobs:
       with:
         path: platform/frontend/.next-pw-shard-*/dev/cache
         key: frontend-integration-next-${{ runner.os }}-compiler-v2-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts',
-          'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
-        restore-keys: 'frontend-integration-next-${{ runner.os }}-compiler-v2-
-
-          '
+          'platform/frontend/*.mjs', 'platform/frontend/*.json') }}-cold-benchmark-${{ github.run_id }}
+      if: matrix.provider == 'Blacksmith'
     - name: Reap stale MSW webServers
       if: runner.os == 'macOS'
       run: "for pid in $(pgrep -f \"next dev -H 127.0.0.1\" || true); do\n  age=$(ps -o etime= -p \"$pid\" | tr -d ' ') || continue\n  case \"$age\" in\n    *-*|*:*:*)\
@@ -234,6 +215,70 @@ jobs:
         name: playwright-integration-traces-${{ matrix.provider }}
         path: platform/frontend/test-results-shard-*/
         retention-days: '7'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - provider: Blacksmith
+          runner: blacksmith-8vcpu-ubuntu-2404
+        - provider: Ubicloud
+          runner: ubicloud-standard-16-ubuntu-2404
+  openappa-native-tests:
+    name: openappa-native-tests (${{ matrix.provider }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
+        env:
+          POSTGRES_USER: archestra
+          POSTGRES_PASSWORD: archestra_ci_password
+          POSTGRES_DB: archestra_openappa_test
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U archestra -d archestra_openappa_test" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+    - name: Checkout project
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        ref: aed871b42e40385d17ca40c1b250d07664e617da
+    - name: Setup environment
+      uses: ./.github/actions/setup-env
+      with:
+        working-directory: ./platform
+    - name: Record runner identity
+      working-directory: .
+      run: 'node -e ''const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem(),node:process.version}))''
+
+        git rev-parse HEAD
+
+        '
+    - name: Cache cargo registry and target
+      uses: ./.github/actions/setup-rust-build
+      with:
+        workspaces: platform/archestra-rs
+        shared-key: backend-unit-tests
+        save-if: 'false'
+    - name: Apply Archestra migrations to the test database
+      env:
+        ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+      run: pnpm --dir backend db:migrate
+    - name: Build the native addon
+      run: pnpm exec turbo build --filter=@archestra/openappa-rs
+    - name: Native runtime and PostgreSQL ledger tests
+      env:
+        ARCHESTRA_OPENAPPA_TEST_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+      run: pnpm --filter @archestra/openappa-rs test
     strategy:
       fail-fast: false
       matrix:

@@ -79,11 +79,17 @@ class AgentActivationSkillPolicyService {
     organizationId: string;
     userId: string;
   }): Promise<AgentActivationSkillPolicyResponse> {
-    const [snapshot, candidates] = await Promise.all([
-      AgentActivationSkillRuleModel.findPolicySnapshot(params.agentId),
-      listPolicyIndependentAvailableAgentSkills(params),
-    ]);
+    const snapshot = await AgentActivationSkillRuleModel.findPolicySnapshot(
+      params.agentId,
+    );
     if (!snapshot) throw new ApiError(404, "Agent not found");
+    const candidates =
+      snapshot.rules.length === 0
+        ? []
+        : await listPolicyIndependentAvailableAgentSkills({
+            ...params,
+            includeContent: false,
+          });
     return buildEditorResponse({
       state: snapshot,
       rules: snapshot.rules,
@@ -100,7 +106,10 @@ class AgentActivationSkillPolicyService {
     policy: AgentActivationSkillPolicyResponse;
     changed: boolean;
   }> {
-    const candidates = await listPolicyIndependentAvailableAgentSkills(params);
+    const candidates = await listPolicyIndependentAvailableAgentSkills({
+      ...params,
+      includeContent: false,
+    });
     const visibleKeys = new Set(
       candidates.map((candidate) =>
         referenceKey(getAvailableAgentSkillReference(candidate)),
@@ -194,7 +203,10 @@ class AgentActivationSkillPolicyService {
     userId: string;
     policy: CreateAgentActivationSkillPolicy;
   }): Promise<void> {
-    const candidates = await listPolicyIndependentAvailableAgentSkills(params);
+    const candidates = await listPolicyIndependentAvailableAgentSkills({
+      ...params,
+      includeContent: false,
+    });
     const visibleKeys = new Set(
       candidates.map((candidate) =>
         referenceKey(getAvailableAgentSkillReference(candidate)),
@@ -248,7 +260,10 @@ class AgentActivationSkillPolicyService {
     environmentId: string | null;
     policy: CreateAgentActivationSkillPolicy;
   }): Promise<void> {
-    const candidates = await listPolicyIndependentAvailableAgentSkills(params);
+    const candidates = await listPolicyIndependentAvailableAgentSkills({
+      ...params,
+      includeContent: false,
+    });
     const visibleKeys = new Set(
       candidates.map((candidate) =>
         referenceKey(getAvailableAgentSkillReference(candidate)),

@@ -122,8 +122,15 @@ export function useAssignableTeams(params: {
 }) {
   const enabled = params.enabled ?? true;
   const isAdmin = !!params.isResourceAdmin;
-  const allTeams = useTeams({ enabled: enabled && isAdmin });
-  const myTeams = useTeams({ mine: true, enabled: enabled && !isAdmin });
+  const allTeams = useTeams({
+    includeRelations: false,
+    enabled: enabled && isAdmin,
+  });
+  const myTeams = useTeams({
+    mine: true,
+    includeRelations: false,
+    enabled: enabled && !isAdmin,
+  });
   return isAdmin ? allTeams : myTeams;
 }
 

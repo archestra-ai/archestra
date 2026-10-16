@@ -1,7 +1,13 @@
-import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  ResourcePermissionActionSchema,
+  type ResourcePermissionGrant,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
+import AgentModel from "@/models/agent";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import agentRoutes from "./agent";
@@ -220,4 +226,256 @@ describe("bounded chat roster", () => {
       legacy.find((row: { id: string }) => row.id === organization.id),
     ]);
   });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test.for([
+    "admin",
+    "member",
+  ] as const)("preserves %s audience visibility and cursor ordering across grant subjects", async (role, {
+    makeMember,
+    makeUser,
+    makeAgent,
+    makeTeam,
+    makeTeamMember,
+    makeOrganization,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role });
+    const other = await makeUser();
+    await makeMember(other.id, ctx.organizationId);
+    const team = await makeTeam(ctx.organizationId, ctx.user.id);
+    await makeTeamMember(team.id, ctx.user.id);
+    const foreignOrg = await makeOrganization();
+    const unrelatedTeam = await makeTeam(ctx.organizationId, other.id);
+    const subjectCases: Array<{
+      name: string;
+      grants: ResourcePermissionGrant[];
+    }> = [
+      {
+        name: "Organization read",
+        grants: [
+          { subject: { type: "organization", id: "*" }, actions: ["read"] },
+        ],
+      },
+      {
+        name: "Role read",
+        grants: [{ subject: { type: "role", id: role }, actions: ["read"] }],
+      },
+      {
+        name: "Team read",
+        grants: [{ subject: { type: "team", id: team.id }, actions: ["read"] }],
+      },
+      {
+        name: "Unrelated role read",
+        grants: [
+          {
+            subject: { type: "role", id: "unrelated-role" },
+            actions: ["read"],
+          },
+        ],
+      },
+      {
+        name: "Unrelated team read",
+        grants: [
+          {
+            subject: { type: "team", id: unrelatedTeam.id },
+            actions: ["read"],
+          },
+        ],
+      },
+      {
+        name: "Named user read",
+        grants: [
+          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+        ],
+      },
+      {
+        name: "Service account read",
+        grants: [
+          {
+            subject: { type: "serviceAccount", id: crypto.randomUUID() },
+            actions: ["read"],
+          },
+        ],
+      },
+      {
+        name: "Organization use only",
+        grants: [
+          { subject: { type: "organization", id: "*" }, actions: ["use"] },
+        ],
+      },
+      {
+        name: "Role use with named reader",
+        grants: [
+          { subject: { type: "role", id: role }, actions: ["use"] },
+          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+        ],
+      },
+      {
+        name: "Team update with named reader",
+        grants: [
+          { subject: { type: "team", id: team.id }, actions: ["update"] },
+          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+        ],
+      },
+      {
+        name: "Mixed organization and team read",
+        grants: [
+          { subject: { type: "team", id: team.id }, actions: ["read"] },
+          { subject: { type: "organization", id: "*" }, actions: ["read"] },
+        ],
+      },
+      {
+        name: "Duplicate team read",
+        grants: Array.from({ length: 2 }, () => ({
+          subject: { type: "team" as const, id: team.id },
+          actions: ["read" as const],
+        })),
+      },
+      {
+        name: "Foreign scope policy",
+        grants: [
+          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+        ],
+      },
+      {
+        name: "Other resource policy",
+        grants: [
+          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+        ],
+      },
+    ];
+    for (const action of ResourcePermissionActionSchema.options.filter(
+      (action) => action !== "read",
+    )) {
+      subjectCases.push({
+        name: `Organization ${action} with named reader`,
+        grants: [
+          { subject: { type: "organization", id: "*" }, actions: [action] },
+          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+        ],
+      });
+    }
+    const expectedShared = new Set<string>();
+    for (const item of subjectCases) {
+      const agent = await makeAgent({
+        organizationId: ctx.organizationId,
+        authorId: other.id,
+        agentType: "agent",
+        access: "personal",
+        name: item.name,
+      });
+      await db.transaction(async (tx) =>
+        ResourcePermissionPolicyModel.updatePresetUpgradePolicy({
+          tx,
+          policy: {
+            organizationId: ctx.organizationId,
+            resource: "agent",
+            scope: agent.id,
+          },
+          grants: [
+            { subject: { type: "user", id: other.id }, actions: ["read"] },
+            ...item.grants,
+          ],
+        }),
+      );
+      if (
+        item.name === "Foreign scope policy" ||
+        item.name === "Other resource policy"
+      ) {
+        await ResourcePermissionPolicyModel.replace({
+          organizationId:
+            item.name === "Foreign scope policy"
+              ? foreignOrg.id
+              : ctx.organizationId,
+          resource:
+            item.name === "Other resource policy" ? "mcpGateway" : "agent",
+          scope: agent.id,
+          revision: 0,
+          grants: [
+            { subject: { type: "organization", id: "*" }, actions: ["read"] },
+          ],
+        });
+      }
+      if (
+        [
+          "Organization read",
+          "Role read",
+          "Team read",
+          "Mixed organization and team read",
+          "Duplicate team read",
+        ].includes(item.name) ||
+        (role === "admin" &&
+          ["Unrelated role read", "Unrelated team read"].includes(item.name))
+      )
+        expectedShared.add(agent.id);
+    }
+    const own = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      access: "personal",
+      name: "Own personal",
+    });
+    const foreign = await makeAgent({
+      organizationId: foreignOrg.id,
+      agentType: "agent",
+      access: "org",
+    });
+    const deleted = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      access: "org",
+    });
+    await AgentModel.delete(deleted.id);
+    const builtin = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      access: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const legacy = await get("/api/agents/chat-roster");
+    const expected = legacy.filter(
+      (agent: { builtIn: boolean; scope: string; authorId: string | null }) =>
+        !agent.builtIn &&
+        (agent.scope !== "personal" || agent.authorId === ctx.user.id),
+    );
+    expected.sort(
+      (
+        a: { scope: string; name: string; id: string },
+        b: { scope: string; name: string; id: string },
+      ) => {
+        const rank = (scope: string) =>
+          scope === "personal" ? 0 : scope === "team" ? 1 : 2;
+        return (
+          rank(a.scope) - rank(b.scope) ||
+          Buffer.compare(Buffer.from(a.name), Buffer.from(b.name)) ||
+          a.id.localeCompare(b.id)
+        );
+      },
+    );
+    expect(new Set(expected.map((agent: { id: string }) => agent.id))).toEqual(
+      new Set([own.id, ...expectedShared]),
+    );
+    const actual = [];
+    let cursor: string | null = null;
+    do {
+      const page = await get(
+        `/api/agents/chat-roster/page?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+      );
+      actual.push(...page.data);
+      cursor = page.pagination.nextCursor;
+    } while (cursor);
+    expect(actual).toEqual(expected);
+    for (const agent of [foreign, deleted, builtin])
+      expect(actual.map((row) => row.id)).not.toContain(agent.id);
+    expect(
+      (await get("/api/agents/chat-roster/page?search=read&limit=100")).data,
+    ).toEqual(
+      expected.filter((agent: { name: string }) =>
+        agent.name.toLowerCase().includes("read"),
+      ),
+    );
+  });
+  // SPDX-SnippetEnd
 });

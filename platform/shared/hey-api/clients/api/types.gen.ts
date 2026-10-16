@@ -99388,6 +99388,108 @@ export type DeletePendingSignupMemberResponses = {
 
 export type DeletePendingSignupMemberResponse = DeletePendingSignupMemberResponses[keyof DeletePendingSignupMemberResponses];
 
+export type GetOrganizationMemberOptionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        cursor?: string;
+        search?: string;
+        searchMode?: 'name' | 'name_or_email';
+        ids?: Array<string>;
+        emails?: Array<string>;
+    };
+    url: '/api/organization/member-options';
+};
+
+export type GetOrganizationMemberOptionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOrganizationMemberOptionsError = GetOrganizationMemberOptionsErrors[keyof GetOrganizationMemberOptionsErrors];
+
+export type GetOrganizationMemberOptionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
+};
+
+export type GetOrganizationMemberOptionsResponse = GetOrganizationMemberOptionsResponses[keyof GetOrganizationMemberOptionsResponses];
+
 export type GetOrganizationMembersData = {
     body?: never;
     path?: never;

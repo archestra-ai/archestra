@@ -91,11 +91,15 @@ export function AgentReachBrowser({
             <Button
               size="sm"
               variant="outline"
-              disabled={!hasNext || query.isFetchingNextPage}
+              disabled={
+                !hasNext ||
+                query.isFetchingNextPage ||
+                search !== debouncedSearch
+              }
               onClick={async () => {
+                setPageIndex(page + 1);
                 if (page + 1 >= (query.data?.pages.length ?? 0))
                   await query.fetchNextPage();
-                setPageIndex(page + 1);
               }}
             >
               Next agents

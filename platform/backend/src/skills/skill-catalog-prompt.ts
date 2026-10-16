@@ -17,6 +17,7 @@ interface SkillCatalogContext {
   /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
   lookups?: PrincipalSource;
+  includeContent?: boolean;
 }
 
 /**
@@ -119,6 +120,7 @@ export async function listAccessibleCatalogSkills(
       organizationId,
       accessibleSkillIds,
       environmentId,
+      includeContent: params.includeContent,
     }),
   );
 }

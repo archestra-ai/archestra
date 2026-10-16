@@ -1059,14 +1059,32 @@ class AgentModel {
     const table = schema.agentsTable;
     const base = await AgentModel.buildRosterWhere({
       ...params,
-      options: { ...params.options, excludeOtherPersonalAgents: true },
+      options: { ...params.options, excludeOtherPersonalAgents: false },
     });
     const pattern = params.filters.search
       ? `%${escapeLikePattern(params.filters.search)}%`
       : undefined;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Only object-local read grants determine scope. Classify their scopes as
+    // one set instead of probing each agent's policy to discard other authors'
+    // personal agents; the base query still enforces all read permissions.
+    const nonPersonalReaders = ["organization", "role", "team"].map(
+      (type) =>
+        sql`${JSON.stringify([{ subject: { type }, actions: ["read"] }])}`,
+    );
+    const nonPersonalAudience = sql<boolean>`(${table.organizationId}, ${table.id}::text) IN (
+      SELECT chat_policy.organization_id, chat_policy.scope
+      FROM resource_permission_policies chat_policy
+      WHERE chat_policy.resource = 'agent' AND chat_policy.scope <> '*'
+        ${params.options.authorization ? sql`AND chat_policy.organization_id = ${params.options.authorization.organizationId}` : sql``}
+        AND chat_policy.grants @> ANY(ARRAY[${sql.join(nonPersonalReaders, sql`, `)}]::jsonb[])
+    )`;
+    // SPDX-SnippetEnd
     const where = and(
       base,
-      or(not(agentAudienceIs("personal")), eq(table.authorId, params.userId)),
+      or(eq(table.authorId, params.userId), nonPersonalAudience),
       eq(table.builtIn, false),
       pattern
         ? or(ilike(table.name, pattern), ilike(table.description, pattern))

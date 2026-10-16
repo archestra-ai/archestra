@@ -79,9 +79,9 @@ export function SubagentsView({
   const hasNext =
     page + 1 < (candidates.data?.pages.length ?? 0) || candidates.hasNextPage;
   const nextPage = async () => {
+    setPageIndex(page + 1);
     if (page + 1 >= (candidates.data?.pages.length ?? 0))
       await candidates.fetchNextPage();
-    setPageIndex(page + 1);
   };
 
   const adding = [...selected].filter((id) => !saved.has(id));
@@ -221,7 +221,11 @@ export function SubagentsView({
           <Button
             variant="outline"
             size="sm"
-            disabled={!hasNext || candidates.isFetchingNextPage}
+            disabled={
+              !hasNext ||
+              candidates.isFetchingNextPage ||
+              search !== debouncedSearch
+            }
             onClick={nextPage}
           >
             Next agents

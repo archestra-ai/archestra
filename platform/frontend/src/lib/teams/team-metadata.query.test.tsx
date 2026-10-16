@@ -6,7 +6,11 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
-import { useTeams, useTeamsWithVaultFolders } from "./team.query";
+import {
+  useAssignableTeams,
+  useTeams,
+  useTeamsWithVaultFolders,
+} from "./team.query";
 
 const origin = "http://localhost:9000";
 const server = setupServer();
@@ -186,3 +190,25 @@ it("waits for a known enabled BYOS feature before loading the default vault pick
   expect(teamRequests).toBe(1);
   expect(vaultRequests).toBe(1);
 });
+
+for (const isAdmin of [true, false]) {
+  it(`assignable-team selectors omit relations while preserving membership scope (admin=${isAdmin})`, async () => {
+    const requests: URLSearchParams[] = [];
+    server.use(
+      http.get(`${origin}/api/teams`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        requests.push(params);
+        return HttpResponse.json({ data: [team] });
+      }),
+    );
+    const { result } = renderHook(
+      () => useAssignableTeams({ isResourceAdmin: isAdmin }),
+      setup(),
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(requests).toHaveLength(1);
+    expect(requests[0].get("includeRelations")).toBe("false");
+    expect(requests[0].get("mine")).toBe(isAdmin ? null : "true");
+    expect(result.current.data?.map((row) => row.id)).toEqual([team.id]);
+  });
+}

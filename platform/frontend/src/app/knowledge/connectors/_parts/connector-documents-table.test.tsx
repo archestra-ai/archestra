@@ -1,8 +1,25 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useOrganizationMembers } from "@/lib/organization.query";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useTeams } from "@/lib/teams/team.query";
 import { ConnectorDocumentsTable } from "./connector-documents-table";
 
@@ -49,7 +66,6 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
 }));
 
 vi.mock("@/lib/teams/team.query");
-vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectorUserGroups: () => ({ data: null, isPending: false }),
@@ -106,9 +122,6 @@ describe("ConnectorDocumentsTable", () => {
     vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
       typeof useTeams
     >);
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
     mockDeleteMutateAsync.mockResolvedValue({ success: true });
   });
 
@@ -181,3 +194,38 @@ describe("ConnectorDocumentsTable", () => {
     });
   });
 });
+
+const memberServer = setupServer(
+  http.get(
+    "http://localhost:9000/api/organization/member-options",
+    ({ request }) => {
+      expect(new URL(request.url).searchParams.get("emails")).toBe(
+        "alice@example.com",
+      );
+      return HttpResponse.json({
+        data: [],
+        pagination: { limit: 100, hasNext: false, nextCursor: null },
+      });
+    },
+  ),
+);
+const clients: QueryClient[] = [];
+beforeAll(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  memberServer.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => {
+  for (const client of clients) client.clear();
+  clients.length = 0;
+  memberServer.resetHandlers();
+});
+afterAll(() => memberServer.close());
+function render(element: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  clients.push(client);
+  return rtlRender(
+    <QueryClientProvider client={client}>{element}</QueryClientProvider>,
+  );
+}

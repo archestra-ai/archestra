@@ -1133,9 +1133,9 @@ jobs:
   # self-hosted runners, so if mac-mini-1 dies, its jobs would sit queued (and
   # block the merge queue) for up to 24h. This watchdog polls this run's own
   # jobs; if no mac-mini job has made ANY progress within the grace window it
-  # flips the MAC_MINI_CI kill switch off (routing every subsequent run back
-  # to Blacksmith) and cancels this run so the merge queue ejects the PR
-  # immediately — re-queueing then runs fully on Blacksmith. Re-enable with:
+  # flips the MAC_MINI_CI kill switch off and cancels this run so the merge
+  # queue ejects the PR immediately. Re-queueing uses the hosted fallback
+  # runners (GitHub for Rust checks, Ubicloud for frontend). Re-enable with:
   # gh variable set MAC_MINI_CI --body on
   mac-mini-watchdog:
     name: Mac Mini Watchdog
@@ -1161,7 +1161,7 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Fail over to Blacksmith if mac-mini-1 shows no progress
+      - name: Fail over to hosted runners if mac-mini-1 shows no progress
         env:
           GH_TOKEN: ${{ github.token }}
           VAR_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -1198,7 +1198,7 @@ jobs:
             echo "Waiting: $total mac-mini jobs queued, none progressed, machine idle elsewhere..."
             sleep 20
           done
-          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Blacksmith. Re-enable with: gh variable set MAC_MINI_CI --body on"
+          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to use hosted fallback runners. Re-enable with: gh variable set MAC_MINI_CI --body on"
           GH_TOKEN="$VAR_TOKEN" gh variable set MAC_MINI_CI --body off --repo "$REPO" \
             || echo "::warning::Could not flip MAC_MINI_CI — flip it manually before re-queueing."
           gh run cancel "$RUN_ID" --repo "$REPO"

@@ -55,6 +55,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { formatRequestLatency } from "@/lib/interactions/format-request-latency";
 import {
   useExportSessionInteractions,
   useInteraction,
@@ -444,12 +445,13 @@ export default function SessionDetailPage({
         {/* Interactions Table */}
         {interactionsLoading ? null : (
           <div className="rounded-md border overflow-x-auto">
-            <Table className="table-fixed w-full min-w-[700px]">
+            <Table className="table-fixed w-full min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[120px]">Time</TableHead>
                   <TableHead className="w-[115px]">Agent</TableHead>
                   <TableHead className="w-[140px]">Model</TableHead>
+                  <TableHead className="w-[95px] text-right">Latency</TableHead>
                   <TableHead className="w-[160px]">Tokens</TableHead>
                   <TableHead className="w-[160px]">Cost</TableHead>
                 </TableRow>
@@ -458,7 +460,7 @@ export default function SessionDetailPage({
                 {interactions.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={6}
                       className="text-center text-muted-foreground"
                     >
                       No interactions found for this session
@@ -511,6 +513,7 @@ export default function SessionDetailPage({
                             </Badge>
                           </div>
                         </TableCell>
+                        <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">{formatRequestLatency(interaction.latencyMs)}</TableCell>
                         <TableCell className="font-mono text-xs">
                           {(interaction.inputTokens ?? 0).toLocaleString()} in /{" "}
                           {(interaction.outputTokens ?? 0).toLocaleString()} out

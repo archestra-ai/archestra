@@ -501,6 +501,7 @@ export function buildInteractionRecord(params: {
     cacheSavings: number | undefined;
   };
   toolCallBlock?: ToolCallBlock;
+  latencyMs?: number;
 }): InsertInteraction {
   return {
     profileId: params.agent.id,
@@ -524,6 +525,7 @@ export function buildInteractionRecord(params: {
     processedRequest: params.processedRequest as InteractionRequest,
     response: params.response as InteractionResponse,
     toolCallBlock: params.toolCallBlock,
+    latencyMs: params.latencyMs,
     model: params.actualModel,
     // `baseline_model` / `baseline_cost` predate the removal of optimization
     // rules, which were the only thing that could swap the requested model for

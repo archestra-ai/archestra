@@ -350,6 +350,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   cacheWriteTokens: true,
   cost: true,
   baselineCost: true,
+  latencyMs: true,
   createdAt: true,
 }).extend({
   type: SupportedProvidersDiscriminatorSchema,

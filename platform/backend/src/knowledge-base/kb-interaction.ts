@@ -84,7 +84,8 @@ export async function withKbObservability<T>(
 
       const startTime = Date.now();
       const recordInteraction = async (interaction: KbInteractionData) => {
-        const durationSeconds = (Date.now() - startTime) / 1000;
+        const durationMs = Math.max(0, Date.now() - startTime);
+        const durationSeconds = durationMs / 1000;
         span.setAttribute(ATTR_GENAI_RESPONSE_MODEL, interaction.model);
         span.setAttribute(
           ATTR_GENAI_USAGE_INPUT_TOKENS,
@@ -137,6 +138,7 @@ export async function withKbObservability<T>(
           profileId: null,
           connectorId: params.connectorId ?? null,
           source: params.source,
+          latencyMs: durationMs,
           type: params.type,
           request: interaction.request as InteractionRequest,
           response: interaction.response as InteractionResponse,

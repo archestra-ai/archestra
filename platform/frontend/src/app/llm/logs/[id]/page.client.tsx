@@ -28,6 +28,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { describeKey } from "@/components/virtual-key-badge";
 import { useAgentOptions } from "@/lib/agent.query";
 import { typeRole } from "@/lib/design/type-scale";
+import { formatRequestLatency } from "@/lib/interactions/format-request-latency";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
@@ -172,6 +173,10 @@ function LogDetail({
       ),
     },
     { label: "Provider", value: interaction.provider },
+    {
+      label: "Latency",
+      value: <span className="font-mono tabular-nums text-muted-foreground">{formatRequestLatency(dynamicInteraction.latencyMs)}</span>,
+    },
     ...(failed
       ? [
           {

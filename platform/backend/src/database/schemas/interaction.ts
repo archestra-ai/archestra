@@ -271,6 +271,8 @@ const interactionsTable = pgTable(
     cost: numeric("cost", { precision: 13, scale: 10 }),
     cacheCost: numeric("cache_cost", { precision: 13, scale: 10 }),
     cacheSavings: numeric("cache_savings", { precision: 13, scale: 10 }),
+    /** End-to-end request duration in milliseconds; null for legacy rows. */
+    latencyMs: integer("latency_ms"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

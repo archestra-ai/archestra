@@ -430,6 +430,14 @@ export const AppTemplateSchema = z.object({
 });
 
 export const UpdateAppSchema = z.object({
+  baseVersion: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Expected current content version. A stale value rejects the entire update with 409 before any changes persist.",
+    ),
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).optional(),
   // Changing this breaks links that used the old slug; /a/<id> keeps working.
   slug: AppSlugSchema.optional(),

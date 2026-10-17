@@ -1953,7 +1953,7 @@ export const restoreAppVersion = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * List the tools assigned to an app.
+ * List the tools assigned to an app, including each assignment's stored server pin and credential resolution mode.
  *
  * Authentication:
  *

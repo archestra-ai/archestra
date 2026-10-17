@@ -77,6 +77,7 @@ import {
   AppTemplateSchema,
   AppVersionSummarySchema,
   type AppViewerRole,
+  AssignedToolSchema,
   CreateAppSchema,
   CredentialResolutionModeSchema,
   constructResponseSchema,
@@ -84,7 +85,6 @@ import {
   ExternalAppResolutionSchema,
   PublicAppSchema,
   SelectAppVersionSchema,
-  SelectToolSchema,
   UpdateAppSchema,
   UuidIdSchema,
 } from "@/types";
@@ -1042,6 +1042,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const updated = await AppModel.update({
         id: appId,
+        expectedLatestVersion: body.baseVersion,
         ...(Object.keys(patch).length > 0 ? { patch } : {}),
         ...(version ? { version } : {}),
       }).catch((error) => {
@@ -1412,10 +1413,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetAppTools,
-        description: "List the tools assigned to an app.",
+        description:
+          "List the tools assigned to an app, including each assignment's " +
+          "stored server pin and credential resolution mode.",
         tags: ["Apps"],
         params: z.object({ appId: UuidIdSchema }),
-        response: constructResponseSchema(z.array(SelectToolSchema)),
+        response: constructResponseSchema(z.array(AssignedToolSchema)),
       },
     },
     async ({ params: { appId }, user, organizationId }, reply) => {

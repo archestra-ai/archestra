@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useIdleEnabled } from "@/lib/hooks/use-idle-enabled";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export const onboardingKeys = {
@@ -20,9 +21,11 @@ export const onboardingKeys = {
  */
 export function useSeenNavItems() {
   const isAuthenticated = useIsAuthenticated();
+  // A nudge: it waits for the page's own first requests.
+  const enabled = useIdleEnabled(isAuthenticated);
   return useQuery({
     queryKey: onboardingKeys.seenNavItems(),
-    enabled: isAuthenticated,
+    enabled,
     staleTime: Number.POSITIVE_INFINITY,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getOnboardingSeenNavItems();
@@ -77,9 +80,10 @@ export function useOnboardingSurveyEligibility({
 }: {
   enabled: boolean;
 }) {
+  const idleEnabled = useIdleEnabled(enabled);
   return useQuery({
     queryKey: onboardingKeys.surveyEligibility(),
-    enabled,
+    enabled: idleEnabled,
     staleTime: 5 * 60 * 1000,
     retry: false,
     queryFn: async () => {
@@ -98,9 +102,10 @@ export function useOnboardingSurveyEligibility({
  * pop-up simply isn't shown.
  */
 export function useFeedbackPopupActivation({ enabled }: { enabled: boolean }) {
+  const idleEnabled = useIdleEnabled(enabled);
   return useQuery({
     queryKey: onboardingKeys.feedbackPopupActivation(),
-    enabled,
+    enabled: idleEnabled,
     staleTime: 5 * 60 * 1000,
     retry: false,
     queryFn: async () => {

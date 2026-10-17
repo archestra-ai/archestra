@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useIdleEnabled } from "@/lib/hooks/use-idle-enabled";
 import { handleApiError, throwOnApiError } from "./utils";
 
 export const siteNotificationKeys = {
@@ -32,6 +33,9 @@ export function useActiveSiteNotification(
     "enabled" | "staleTime" | "refetchOnWindowFocus"
   >,
 ) {
+  // The banner is not what the page loads for: it waits for the page's own
+  // first requests.
+  const enabled = useIdleEnabled(options?.enabled !== false);
   return useQuery({
     queryKey: siteNotificationKeys.active(),
     queryFn: async () => {
@@ -42,6 +46,7 @@ export function useActiveSiteNotification(
     staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
     ...options,
+    enabled,
   });
 }
 

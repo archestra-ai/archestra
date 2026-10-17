@@ -1,6 +1,5 @@
 "use client";
 
-import { ManagedResourceSchema } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
@@ -15,7 +14,10 @@ import {
   useAllPermissions,
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
-import { hasPagePermissions } from "@/lib/auth/auth.utils";
+import {
+  hasPagePermissions,
+  pageUsesCapabilities,
+} from "@/lib/auth/auth.utils";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
@@ -24,14 +26,9 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
-  // Scoped capabilities only matter for a read on a resource with object
-  // grants; any other page is decided by role permissions alone, so it does
-  // not wait for them.
-  const needsCapabilities = Object.entries(requiredPermissions ?? {}).some(
-    ([resource, actions]) =>
-      actions.includes("read") &&
-      ManagedResourceSchema.safeParse(resource).success,
-  );
+  // A page decided by role permissions alone does not wait for the scoped
+  // capabilities.
+  const needsCapabilities = pageUsesCapabilities(requiredPermissions ?? {});
   const permissions = useAllPermissions();
   const capabilities = useScopedCapabilities(needsCapabilities);
   const hasRequiredPermissions = hasPagePermissions({

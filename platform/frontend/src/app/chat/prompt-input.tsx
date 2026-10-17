@@ -315,7 +315,13 @@ const PromptInputContent = ({
 }) => {
   const selectedCredentialId =
     currentConversationChatApiKeyId ?? initialApiKeyId ?? agentLlmApiKeyId;
+  // Waits for the resolved permission: the composer renders before it, and
+  // a role without the grant must not get a 403 from this.
+  const { data: canReadProviderKeys } = useHasPermissions({
+    llmProviderApiKey: ["read"],
+  });
   const { data: credentialOptions } = useAvailableLlmProviderApiKeys({
+    enabled: canReadProviderKeys === true,
     toastOnError: false,
   });
   const rejectedCredential = credentialOptions?.find(

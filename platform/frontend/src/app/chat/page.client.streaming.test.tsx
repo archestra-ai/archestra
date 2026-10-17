@@ -1,11 +1,18 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { UIMessage } from "ai";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSyncExternalStore } from "react";
+import { toast } from "sonner";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -202,17 +209,14 @@ test("typing in the composer does not re-render the transcript", async () => {
 });
 
 async function renderStreamingChat() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({
-          defaultOptions: {
-            queries: { retry: false },
-            mutations: { retry: false },
-          },
-        })
-      }
-    >
+    <QueryClientProvider client={queryClient}>
       <ConnectivityProvider>
         <ChatPageContent routeConversationId={conversation.id} />
       </ConnectivityProvider>
@@ -226,6 +230,9 @@ async function renderStreamingChat() {
   expect(
     await screen.findByText(`Answer ${HISTORY_TURNS - 1}`),
   ).toBeInTheDocument();
+  // The page renders before its permission-gated queries answer; count
+  // renders only once they have settled.
+  await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   return composer;
 }
 
@@ -285,3 +292,54 @@ function createTranscriptStore() {
     },
   };
 }
+
+test("a role without provider, model and agent read never requests them", async () => {
+  // The page renders before permissions answer; the queries those grants
+  // guard must still wait for them, or such a role gets 403 toasts.
+  const requested: string[] = [];
+  const onRequest = ({ request }: { request: Request }) => {
+    requested.push(new URL(request.url).pathname);
+  };
+  server.events.on("request:start", onRequest);
+  server.use(
+    http.get("/api/user/permissions", () =>
+      HttpResponse.json({ chat: ["read", "create", "update", "delete"] }),
+    ),
+  );
+  try {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectivityProvider>
+          <ChatPageContent routeConversationId={conversation.id} />
+        </ConnectivityProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(requested).toContain("/api/user/permissions"));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    for (const path of [
+      "/api/llm-provider-api-keys",
+      "/api/llm-provider-api-keys/available",
+      "/api/llm-models",
+      "/api/llm-models/available",
+      "/api/agents/chat-roster",
+    ]) {
+      expect(requested).not.toContain(path);
+    }
+    // (This file's catch-all 404 handler answers a null body, which other
+    // requests turn into a generic toast; only refusals matter here.)
+    expect(
+      vi
+        .mocked(toast.error)
+        .mock.calls.filter(([message]) =>
+          /permission|forbidden|not allowed/i.test(String(message)),
+        ),
+    ).toEqual([]);
+  } finally {
+    server.events.removeListener("request:start", onRequest);
+    server.resetHandlers();
+  }
+});

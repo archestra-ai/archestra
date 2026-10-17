@@ -47,15 +47,45 @@ it("resolves more than 200 references in bounded ID batches with an explicit pag
     useAgentOptionsByIds({ ids, filters: { agentType: "agent" } }),
   );
   await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
-  expect(requests.map((query) => query.get("ids")?.split(",").length)).toEqual([
-    200, 1,
-  ]);
+  expect(
+    requests
+      .map((query) => query.get("ids")?.split(",").length)
+      .sort((a = 0, b = 0) => b - a),
+  ).toEqual([200, 1]);
   for (const query of requests) {
     expect(query.get("agentType")).toBe("agent");
     expect(query.get("excludeBuiltIn")).toBe("false");
     expect(query.get("limit")).toBe("1000");
     expect(query.has("cursor")).toBe(false);
   }
+  expect(hook.result.current.data?.map((row) => row.id)).toEqual(ids);
+});
+
+it("requests independent ID batches in parallel", async () => {
+  // Each response waits until both batches have arrived, so sequential
+  // batching would never finish.
+  let arrived = 0;
+  let releaseAll = () => {};
+  const bothArrived = new Promise<void>((resolve) => {
+    releaseAll = resolve;
+  });
+  server.use(
+    http.get(`${API_ORIGIN}/api/agents/options`, async ({ request }) => {
+      const ids =
+        new URL(request.url).searchParams.get("ids")?.split(",") ?? [];
+      arrived += 1;
+      if (arrived === 2) releaseAll();
+      await bothArrived;
+      return HttpResponse.json({
+        data: ids.map((id) => ({ id, name: id })),
+        pagination: { limit: 1000, hasNext: false, nextCursor: null },
+      });
+    }),
+  );
+  const ids = Array.from({ length: 201 }, (_, i) => agentId(i));
+  const hook = renderWithClient(() => useAgentOptionsByIds({ ids }));
+  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+  expect(arrived).toBe(2);
   expect(hook.result.current.data?.map((row) => row.id)).toEqual(ids);
 });
 

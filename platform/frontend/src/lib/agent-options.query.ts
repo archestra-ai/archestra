@@ -80,33 +80,40 @@ export function useAgentOptionsByIds({
   return useQuery({
     queryKey: ["agents", "options", "ids", uniqueIds, filters],
     queryFn: async () => {
-      const options: archestraApiTypes.GetAgentOptionsResponses["200"]["data"] =
-        [];
+      const batches: string[][] = [];
       for (
         let offset = 0;
         offset < uniqueIds.length;
         offset += AGENT_OPTIONS_MAX_IDS
       ) {
-        const batch = uniqueIds.slice(offset, offset + AGENT_OPTIONS_MAX_IDS);
-        // A batch fits one page; follow the cursor anyway.
-        let cursor: string | undefined;
-        do {
-          const { data, error } = await archestraApiSdk.getAgentOptions({
-            query: {
-              excludeBuiltIn: false,
-              ...filters,
-              ids: batch,
-              limit: AGENT_OPTIONS_MAX_PAGE_SIZE,
-              cursor,
-            },
-          });
-          throwOnApiError(error, { toastOnError: false });
-          if (!data) throw new Error("Agent options are unavailable");
-          options.push(...data.data);
-          cursor = data.pagination.nextCursor ?? undefined;
-        } while (cursor);
+        batches.push(uniqueIds.slice(offset, offset + AGENT_OPTIONS_MAX_IDS));
       }
-      return options;
+      // Batches are independent, so fetch them in parallel.
+      const pages = await Promise.all(
+        batches.map(async (batch) => {
+          const options: archestraApiTypes.GetAgentOptionsResponses["200"]["data"] =
+            [];
+          // A batch fits one page; follow the cursor anyway.
+          let cursor: string | undefined;
+          do {
+            const { data, error } = await archestraApiSdk.getAgentOptions({
+              query: {
+                excludeBuiltIn: false,
+                ...filters,
+                ids: batch,
+                limit: AGENT_OPTIONS_MAX_PAGE_SIZE,
+                cursor,
+              },
+            });
+            throwOnApiError(error, { toastOnError: false });
+            if (!data) throw new Error("Agent options are unavailable");
+            options.push(...data.data);
+            cursor = data.pagination.nextCursor ?? undefined;
+          } while (cursor);
+          return options;
+        }),
+      );
+      return pages.flat();
     },
     enabled: enabled && uniqueIds.length > 0,
   });

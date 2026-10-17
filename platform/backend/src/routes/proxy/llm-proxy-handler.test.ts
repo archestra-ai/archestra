@@ -2250,12 +2250,6 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    // A provider key alone is accepted only where the org opts in. This case is
-    // about extraHeaders on a non-loopback request, not the platform gate. The
-    // request resolves through the test agent, so its organization opts in.
-    await OrganizationModel.patch(testAgent.organizationId, {
-      allowUnauthenticatedLlmProxyRequests: true,
-    });
     const apiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       secretId: null,
@@ -2289,6 +2283,43 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
     const [, options] = createClientSpy.mock.calls[0];
     expect(options.defaultHeaders).toBeUndefined();
   });
+
+  test("rejects a non-loopback chat completion that carries only a provider key", async () => {
+    const response = await sendWithProviderKeyOnly();
+
+    expect(response.statusCode, response.body).toBe(401);
+    expect(response.json().error.message).toContain("Authentication required");
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  test("forwards a non-loopback chat completion with only a provider key once the organization allows unauthenticated requests", async () => {
+    await OrganizationModel.patch(testAgent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
+
+    const response = await sendWithProviderKeyOnly();
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(createClientSpy).toHaveBeenCalledWith("test-key", expect.anything());
+  });
+
+  /** An external client's chat completion with no platform credential. */
+  function sendWithProviderKeyOnly() {
+    return app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      remoteAddress: "203.0.113.5",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+  }
 
   test("loopback request with keyless Azure provider key ignores extracted auth and uses inference URL", async ({
     makeOrganization,

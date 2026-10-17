@@ -146,10 +146,12 @@ export function createProxyPreHandler(params: {
       );
     }
 
-    cleanForwardedBody(request, params.beforeCleanBody).then(
-      () => next(),
-      next,
-    );
+    // Strip last: the body hooks (e.g. Claude Code's count observer) still
+    // read X-Archestra-* headers such as the agent id.
+    cleanForwardedBody(request, params.beforeCleanBody).then(() => {
+      stripArchestraRequestHeaders(request);
+      next();
+    }, next);
   };
 
   const { authenticate } = params;
@@ -160,10 +162,11 @@ export function createProxyPreHandler(params: {
     next: HookHandlerDoneFunction,
   ) => {
     const agentId = request.url.replace(apiPrefix, "").match(UUID_REGEX)?.[1];
-    authenticate({ request, agentId }).then(
-      () => rewritePreHandler(request, reply, next),
-      next,
-    );
+    // .catch rather than a second .then argument, so a synchronous throw in
+    // the rewrite reaches Fastify instead of becoming an unhandled rejection.
+    authenticate({ request, agentId })
+      .then(() => rewritePreHandler(request, reply, next))
+      .catch(next);
   };
 }
 
@@ -202,6 +205,22 @@ export async function cleanForwardedBody(
       raw,
       beforeCleanBody && ((body) => beforeCleanBody(request, body)),
     )) ?? Readable.from([raw], { objectMode: false });
+}
+
+/**
+ * Removes every `X-Archestra-*` header before a catch-all proxy forwards the
+ * request. These headers carry Archestra's own credentials and routing hints
+ * (the passthrough key in `X-Archestra-Virtual-Key` above all), which must
+ * never reach a third-party provider. Runs after authentication has read them.
+ */
+export function stripArchestraRequestHeaders(request: FastifyRequest): void {
+  for (const headers of new Set([request.headers, request.raw.headers])) {
+    for (const name of Object.keys(headers)) {
+      if (name.toLowerCase().startsWith("x-archestra-")) {
+        delete headers[name];
+      }
+    }
+  }
 }
 
 // === Internal helpers ===

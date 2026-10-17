@@ -16,7 +16,7 @@ import type OpenAI from "openai";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
-import { ModelModel, OrganizationModel } from "@/models";
+import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { openaiAdapterFactory } from "../adapters/openai";
@@ -164,14 +164,15 @@ describe("app-runtime interaction attribution (integration)", () => {
     makeOrganization,
     makeAgent,
     makeApp,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const ownedApp = await makeApp({ organizationId: org.id });
-    // The provider key these headers carry is accepted only where the org opts
-    // in; the platform-credential gate is covered in llm-proxy-auth.test.ts.
-    await OrganizationModel.patch(org.id, {
-      allowUnauthenticatedLlmProxyRequests: true,
+    const credential = await passthroughHeaders(org.id, {
+      makeUser,
+      makeMember,
     });
 
     await setupRoute();
@@ -182,7 +183,11 @@ describe("app-runtime interaction attribution (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       remoteAddress: "203.0.113.7",
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: ownedApp.id },
+      headers: {
+        ...OPENAI_HEADERS,
+        ...credential,
+        [APP_ID_HEADER]: ownedApp.id,
+      },
       payload: PAYLOAD,
     });
 

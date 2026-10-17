@@ -11,12 +11,15 @@ describe("createProxyPreHandler", () => {
   let mockUpstream: FastifyInstance;
   let upstreamPort: number;
   let upstreamHits: number;
+  let upstreamHeaders: Record<string, string | string[] | undefined>;
 
   beforeEach(async () => {
     mockUpstream = Fastify();
     upstreamHits = 0;
-    mockUpstream.addHook("onRequest", async () => {
+    upstreamHeaders = {};
+    mockUpstream.addHook("onRequest", async (request) => {
       upstreamHits++;
+      upstreamHeaders = request.headers;
     });
 
     mockUpstream.get("/v1/models", async () => ({
@@ -134,6 +137,41 @@ describe("createProxyPreHandler", () => {
       expect(seen).toEqual([TEST_UUID]);
       expect(response.statusCode).toBe(200);
       expect(upstreamHits).toBe(1);
+    });
+
+    // The passthrough key authenticates the caller to Archestra; forwarding it
+    // would hand an Archestra credential to a third-party provider.
+    test("forwards the caller's provider key but no X-Archestra headers", async () => {
+      const seenKeys: Array<string | undefined> = [];
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async ({ request }) => {
+          seenKeys.push(
+            request.headers["x-archestra-virtual-key"] as string | undefined,
+          );
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/openai/chat/completions",
+        headers: {
+          authorization: "Bearer sk-provider-key",
+          "x-archestra-virtual-key": "arch_passthrough_token",
+          "x-archestra-source": "chatops:slack",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(seenKeys).toEqual(["arch_passthrough_token"]);
+      expect(upstreamHeaders.authorization).toBe("Bearer sk-provider-key");
+      expect(
+        Object.keys(upstreamHeaders).filter((name) =>
+          name.startsWith("x-archestra-"),
+        ),
+      ).toEqual([]);
     });
   });
 

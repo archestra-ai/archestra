@@ -751,6 +751,7 @@ function ConnectSteps({
 function PassthroughKeyPicker({
   options,
   selectedId,
+  allowNone,
   canCreate,
   onSelect,
   onCreate,
@@ -763,6 +764,8 @@ function PassthroughKeyPicker({
     tokenStart?: string | null;
   }>;
   selectedId: string | null;
+  /** Offer "No passthrough key"; false when the organization requires one. */
+  allowNone: boolean;
   canCreate: boolean;
   onSelect: (id: string | null) => void;
   onCreate: () => void;
@@ -770,70 +773,75 @@ function PassthroughKeyPicker({
 }) {
   const rowClass = (selected: boolean) =>
     cn(
-      "flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-[#f3f4f9]",
-      selected && "bg-[#f6f4ff]",
+      "flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-muted",
+      selected && "bg-primary/5",
     );
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#d9d8e6] bg-white">
-      <div className="flex items-center justify-between border-b border-[#ececf3] px-4 py-2.5">
-        <span className="text-[11px] font-semibold tracking-wide text-[#6b6a7f] uppercase">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
           Choose a passthrough key
         </span>
         <UnstyledButton
           type="button"
           onClick={onCancel}
-          className="text-xs font-medium text-[#6b6a7f] hover:text-[#1f1d33]"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
         >
           Cancel
         </UnstyledButton>
       </div>
-      <UnstyledButton
-        type="button"
-        onClick={() => onSelect(null)}
-        className={rowClass(selectedId === null)}
-      >
-        <span className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-semibold text-[#1f1d33]">
-            No passthrough key
+      {allowNone && (
+        <UnstyledButton
+          type="button"
+          onClick={() => onSelect(null)}
+          className={rowClass(selectedId === null)}
+        >
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-semibold text-foreground">
+              No passthrough key
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Requests aren't linked to a user
+            </span>
           </span>
-          <span className="text-xs text-[#6b6a7f]">
-            Requests aren't linked to a user
-          </span>
-        </span>
-        {selectedId === null && (
-          <Check className="size-4 shrink-0 text-[#6a4fd8]" aria-hidden />
-        )}
-      </UnstyledButton>
-      {options.map((option) => {
+          {selectedId === null && (
+            <Check className="size-4 shrink-0 text-primary" aria-hidden />
+          )}
+        </UnstyledButton>
+      )}
+      {options.map((option, index) => {
         const selected = option.id === selectedId;
         return (
           <UnstyledButton
             key={option.id}
             type="button"
             onClick={() => onSelect(option.id)}
-            className={cn(rowClass(selected), "border-t border-[#ececf3]")}
+            className={cn(
+              rowClass(selected),
+              (allowNone || index > 0) && "border-t border-border",
+            )}
           >
             <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate text-[13px] font-semibold text-[#1f1d33]">
+              <span className="truncate text-[13px] font-semibold text-foreground">
                 {option.label}
               </span>
-              <span className="font-mono text-xs text-[#6b6a7f]">
+              <span className="font-mono text-xs text-muted-foreground">
                 {`${option.tokenStart ?? "arch_"}••••••••••••`}
               </span>
             </span>
             {selected && (
-              <Check className="size-4 shrink-0 text-[#6a4fd8]" aria-hidden />
+              <Check className="size-4 shrink-0 text-primary" aria-hidden />
             )}
           </UnstyledButton>
         );
       })}
       {canCreate && (
-        <div className="border-t border-[#ececf3] px-4 py-2.5">
+        <div className="border-t border-border px-4 py-2.5">
           <UnstyledButton
             type="button"
             onClick={onCreate}
-            className="text-[13px] font-medium text-[#6a4fd8] hover:text-[#5b41c4]"
+            className="text-[13px] font-medium text-primary hover:text-primary/80"
           >
             + Create new key
           </UnstyledButton>
@@ -876,28 +884,28 @@ function PassthroughKeyStep({
   const chooseLabel = options.length > 0 ? "Choose existing" : null;
 
   return (
-    <li className="relative flex gap-5 pb-10 before:absolute before:top-8 before:bottom-1 before:left-4 before:w-px before:bg-[#d9d8e6] last:pb-0 last:before:hidden">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-[#c9c7da] bg-white text-[13px] font-semibold text-[#4a4863] tabular-nums">
+    <li className="relative flex gap-5 pb-10 before:absolute before:top-8 before:bottom-1 before:left-4 before:w-px before:bg-border last:pb-0 last:before:hidden">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-muted-foreground/40 bg-card text-[13px] font-semibold text-muted-foreground tabular-nums">
         {number}
       </span>
       <section className="min-w-0 flex-1 space-y-4">
         <div className="flex items-center gap-2.5">
-          <h2 className="text-lg font-semibold text-[#1f1d33]">
+          <h2 className="text-lg font-semibold text-foreground">
             Passthrough key
           </h2>
           <span
             className={
               required
-                ? "rounded-full bg-[#fdf1d8] px-2.5 py-[3px] text-xs font-semibold text-[#8a5a00]"
-                : "rounded-full bg-[#ececf3] px-2.5 py-[3px] text-xs font-semibold text-[#6b6a7f]"
+                ? "rounded-full bg-amber-100 dark:bg-amber-950 px-2.5 py-[3px] text-xs font-semibold text-amber-800 dark:text-amber-300"
+                : "rounded-full bg-muted px-2.5 py-[3px] text-xs font-semibold text-muted-foreground"
             }
           >
             {required ? "Required" : "Optional"}
           </span>
         </div>
-        <p className="text-sm leading-[22px] text-[#4a4863]">
+        <p className="text-sm leading-[22px] text-muted-foreground">
           Send your own {targetLabel} key, and this passthrough key in the{" "}
-          <code className="rounded-md border border-[#d9d8e6] bg-white px-1.5 py-0.5 font-mono text-xs text-[#1f1d33]">
+          <code className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-xs text-foreground">
             {VIRTUAL_KEY_HEADER}
           </code>{" "}
           header.
@@ -907,6 +915,7 @@ function PassthroughKeyStep({
           <PassthroughKeyPicker
             options={options}
             selectedId={picked?.id ?? null}
+            allowNone={!required}
             canCreate={canCreate}
             onSelect={(id) => {
               onPick(id);
@@ -916,29 +925,29 @@ function PassthroughKeyStep({
             onCancel={() => setChanging(false)}
           />
         ) : picked ? (
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-[#d9d8e6] bg-white px-4 py-3.5">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3.5">
             <div className="flex min-w-0 flex-col gap-1">
-              <span className="truncate text-[13px] font-semibold text-[#1f1d33]">
+              <span className="truncate text-[13px] font-semibold text-foreground">
                 {picked.label}
               </span>
-              <span className="font-mono text-xs text-[#6b6a7f]">
+              <span className="font-mono text-xs text-muted-foreground">
                 {`${picked.tokenStart ?? "arch_"}••••••••••••`}
               </span>
             </div>
             <UnstyledButton
               type="button"
               onClick={() => setChanging(true)}
-              className="shrink-0 text-[13px] font-medium text-[#1f1d33] underline underline-offset-2 hover:text-[#6a4fd8]"
+              className="shrink-0 text-[13px] font-medium text-foreground underline underline-offset-2 hover:text-primary"
             >
               Change
             </UnstyledButton>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-[#b9b6d0] bg-white p-6 text-center">
-            <span className="text-sm font-semibold text-[#1f1d33]">
+          <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-border bg-card p-6 text-center">
+            <span className="text-sm font-semibold text-foreground">
               No passthrough key yet
             </span>
-            <span className="max-w-[400px] text-[13px] leading-5 text-[#6b6a7f]">
+            <span className="max-w-[400px] text-[13px] leading-5 text-muted-foreground">
               {required
                 ? "Create one, then send it in the"
                 : "Without one, requests aren't linked to a user. Create one, then send it in the"}{" "}
@@ -967,7 +976,7 @@ function PassthroughKeyStep({
 
         {required && (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs leading-[18px] text-[#6b6a7f]">
+            <p className="text-xs leading-[18px] text-muted-foreground">
               Requests without a passthrough key are rejected.
               {canManageLlmSettings && (
                 <>
@@ -975,7 +984,7 @@ function PassthroughKeyStep({
                   Admins can change this in{" "}
                   <Link
                     href="/settings/llm"
-                    className="underline hover:text-[#1f1d33]"
+                    className="underline hover:text-foreground"
                   >
                     LLM settings
                   </Link>

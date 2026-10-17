@@ -12,7 +12,6 @@ import {
   githubCopilotResponsesAdapterFactory,
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
-import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import {
   extractBearerToken,
@@ -39,7 +38,6 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, RESPONSES_SUFFIX],
       upstream: config.llm["github-copilot"].baseUrl,
       providerName: "GitHubCopilot",
-      authenticate: createPassthroughAuthenticator("github-copilot"),
       // Copilot's API only accepts the exchanged short-lived bearer, so never
       // forward the raw GitHub token for an unsupported path — reject instead.
       rejectUnhandledPaths: true,
@@ -190,6 +188,7 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) {
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
+      agentId,
       provider: "github-copilot",
       token: extractBearerToken(request.headers.authorization),
     });

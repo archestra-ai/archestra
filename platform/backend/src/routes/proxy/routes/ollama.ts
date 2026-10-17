@@ -19,7 +19,10 @@ import {
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
-import { cleanForwardedBody } from "./proxy-prehandler";
+import {
+  cleanForwardedBody,
+  stripArchestraRequestHeaders,
+} from "./proxy-prehandler";
 
 const ollamaEmbeddingsAdapterFactory =
   makeOpenAiCompatibleEmbeddingsAdapterFactory(
@@ -100,14 +103,13 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             "Ollama proxy preHandler: skipping custom-handled route",
           );
-          reply.code(400).send({
+          return reply.code(400).send({
             error: {
               message:
                 "Chat completions requests should use the dedicated endpoint",
               type: "invalid_request_error",
             },
           });
-          return;
         }
 
         const { rewrittenUrl, proxyPath, strippedUuid } = rewriteOllamaProxyUrl(
@@ -130,6 +132,7 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         await cleanForwardedBody(request);
+        stripArchestraRequestHeaders(request);
       },
     });
   } else {

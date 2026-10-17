@@ -393,6 +393,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
+      agentId,
       provider: "openai",
       token: extractBearerToken(request.headers.authorization),
     });

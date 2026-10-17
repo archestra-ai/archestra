@@ -389,6 +389,28 @@ describe("LlmProxyPage connect steps", () => {
     expect(request).toContain("X-Archestra-Virtual-Key:");
   });
 
+  it("does not offer 'No passthrough key' when the organization requires one", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([JEV_PROVIDER_KEY]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
+        HttpResponse.json(page([PASSTHROUGH_KEY])),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await selectJev(user);
+    await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
+    await user.click(await screen.findByRole("button", { name: "Change" }));
+
+    expect(
+      await screen.findByText("Choose a passthrough key"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Laptop/ })).toBeInTheDocument();
+    expect(screen.queryByText("No passthrough key")).not.toBeInTheDocument();
+  });
+
   it("sends only the caller's own key when the org allows requests without a passthrough key", async () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: { allowUnauthenticatedLlmProxyRequests: true },

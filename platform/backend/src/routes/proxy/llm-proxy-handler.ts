@@ -955,24 +955,22 @@ export async function handleLLMProxy<
     });
   }
 
-  // 5. Enforce a platform credential on external requests. A validated
-  // passthrough key or personal token is one: each authenticates the acting
-  // user, even when the provider credential comes from elsewhere. A provider
-  // key alone is rejected unless the organization allows unauthenticated
-  // requests.
-  assertPlatformAuthenticated({
+  // 5. Enforce a platform credential on external requests (rules in
+  // assertPlatformAuthenticated). The organization setting is read only when
+  // nothing else authenticates the request.
+  await assertPlatformAuthenticated({
     apiKey,
-    wasVirtualKeyResolved:
+    hasPlatformCredential:
       wasVirtualKeyResolved ||
       wasOAuthAuthenticated ||
-      passthroughVirtualKeyId !== undefined ||
       personalTokenUserId !== undefined,
+    wasPassthroughKeyValidated: passthroughVirtualKeyId !== undefined,
     wasJwksAuthenticated,
     isInternalCall: internalCall,
     providerSuppliesServerCredential:
       providerSuppliesServerCredential(providerName),
-    allowUnauthenticated:
-      await OrganizationModel.allowsUnauthenticatedLlmProxyRequests(
+    allowsUnauthenticated: () =>
+      OrganizationModel.allowsUnauthenticatedLlmProxyRequests(
         resolvedAgent.organizationId,
       ),
   });

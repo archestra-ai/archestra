@@ -869,7 +869,16 @@ describe("Gemini proxy routing", () => {
     expect(body.models).toHaveLength(2);
   });
 
-  test("strips Archestra control headers before proxying upstream", async () => {
+  test("strips Archestra control headers before proxying upstream", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const passthroughToken = await makeCatchAllPlatformCredential({
+      makeAgent,
+      makeUser,
+      makeMember,
+    });
     const originalBaseUrl = config.llm.gemini.baseUrl;
     const realApp = createGeminiProxyTestApp();
     config.llm.gemini.baseUrl = `http://localhost:${upstreamPort}`;
@@ -879,7 +888,7 @@ describe("Gemini proxy routing", () => {
         method: "GET",
         url: "/v1/gemini/v1beta/models",
         headers: {
-          "x-archestra-virtual-key": "arch_passthrough",
+          "x-archestra-virtual-key": passthroughToken,
           "x-archestra-user-id": "untrusted-user-id",
           "x-goog-api-key": "provider-api-key",
         },
@@ -976,7 +985,45 @@ describe("Gemini countTokens passthrough", () => {
     await upstream.close();
   });
 
-  test("takes the gateway's markers out of the tool list before it reaches Gemini", async () => {
+  test("rejects a raw Gemini key without a platform credential before it reaches Gemini", async ({
+    makeAgent,
+  }) => {
+    await makeAgent();
+    const app = createFastifyInstance();
+    await app.register(geminiProxyRoutes);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": "raw-gemini-key",
+        },
+        payload: {
+          generateContentRequest: {
+            contents: [{ role: "user", parts: [{ text: "Hello!" }] }],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+    expect(forwardedBodies).toEqual([]);
+  });
+
+  test("takes the gateway's markers out of the tool list before it reaches Gemini", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const passthroughToken = await makeCatchAllPlatformCredential({
+      makeAgent,
+      makeUser,
+      makeMember,
+    });
     const app = createFastifyInstance();
     await app.register(geminiProxyRoutes);
     const description = attestToolDescription({
@@ -991,7 +1038,10 @@ describe("Gemini countTokens passthrough", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-archestra-virtual-key": passthroughToken,
+        },
         payload: {
           generateContentRequest: {
             contents: [{ role: "user", parts: [{ text: "Hello!" }] }],
@@ -1026,7 +1076,16 @@ describe("Gemini countTokens passthrough", () => {
     );
   });
 
-  test("takes OpenAPPA's call-bound notices, legacy offers and remedy receipts out of a wrapped request", async () => {
+  test("takes OpenAPPA's call-bound notices, legacy offers and remedy receipts out of a wrapped request", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const passthroughToken = await makeCatchAllPlatformCredential({
+      makeAgent,
+      makeUser,
+      makeMember,
+    });
     const secret = "test-offer-signing-secret-32chars";
     config.openappa.offerSigningSecret = secret;
     // Leftover offer material from persisted history. Not minted, and not a route.
@@ -1113,7 +1172,10 @@ describe("Gemini countTokens passthrough", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-archestra-virtual-key": passthroughToken,
+        },
         payload: {
           generateContentRequest: {
             contents: contents(notice([offer]), {
@@ -1139,7 +1201,16 @@ describe("Gemini countTokens passthrough", () => {
     });
   });
 
-  test("preserves an unowned Gemini lookalike's application fields in a wrapped request", async () => {
+  test("preserves an unowned Gemini lookalike's application fields in a wrapped request", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const passthroughToken = await makeCatchAllPlatformCredential({
+      makeAgent,
+      makeUser,
+      makeMember,
+    });
     const names = [
       "archestra__get_remedy_plans",
       "archestra__execute_remedy_plan",
@@ -1187,7 +1258,10 @@ describe("Gemini countTokens passthrough", () => {
       const response = await app.inject({
         method: "POST",
         url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-archestra-virtual-key": passthroughToken,
+        },
         payload,
       });
       expect(response.statusCode).toBe(200);
@@ -1298,6 +1372,25 @@ type GeminiSdkRequest = {
 
 function createGeminiProxyTestApp() {
   return createFastifyInstance();
+}
+
+/**
+ * A passthrough key owned by a member of a real agent's organization. Catch-all
+ * routes without an agent in the URL resolve the deployment's organization,
+ * which is this one because it is the only organization the test creates.
+ */
+async function makeCatchAllPlatformCredential(fixtures: {
+  makeAgent: () => Promise<{ id: string; organizationId: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  makeMember: (userId: string, organizationId: string) => Promise<unknown>;
+}): Promise<string> {
+  const agent = await fixtures.makeAgent();
+  const owner = await fixtures.makeUser();
+  await fixtures.makeMember(owner.id, agent.organizationId);
+  return makePassthroughCredential({
+    organizationId: agent.organizationId,
+    ownerId: owner.id,
+  });
 }
 
 function geminiTestHeaders(platformCredential: string) {

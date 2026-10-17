@@ -172,6 +172,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) {
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
+      agentId,
       provider: "anthropic",
       token: extractAnthropicToken(request.headers),
       allowKeyless: isAnthropicKeylessAuthEnabled(),

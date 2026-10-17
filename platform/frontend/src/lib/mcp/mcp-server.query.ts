@@ -1372,19 +1372,28 @@ function useMcpServersForCatalogIds(params: {
 
   // A changed set of catalogs (the list's search, say) is a new request:
   // keep the installs already known for the catalogs still asked for until
-  // it answers, so those rows do not read "Not connected" meanwhile.
-  const lastAnswer = useRef<typeof servers>(undefined);
-  if (servers) lastAnswer.current = servers;
+  // it answers, so those rows do not read "Not connected" meanwhile. Only
+  // for the same target: another scope or team set can use other installs.
+  const targetKey = JSON.stringify([
+    params.assignmentScope ?? null,
+    params.assignmentTeamIds ?? null,
+  ]);
+  const lastAnswer = useRef<{
+    targetKey: string;
+    servers: NonNullable<typeof servers>;
+  } | null>(null);
+  if (servers) lastAnswer.current = { targetKey, servers };
   const requestedKey = sortedIds.join(",");
   // biome-ignore lint/correctness/useExhaustiveDependencies: requestedKey stands for sortedIds
   return useMemo(() => {
     if (servers) return servers;
-    if (!lastAnswer.current) return undefined;
+    const kept = lastAnswer.current;
+    if (!kept || kept.targetKey !== targetKey) return undefined;
     const requested = new Set(sortedIds);
-    return lastAnswer.current.filter(
+    return kept.servers.filter(
       (server) => server.catalogId && requested.has(server.catalogId),
     );
-  }, [servers, requestedKey]);
+  }, [servers, requestedKey, targetKey]);
 }
 
 function combineServerChunks<T>(results: Array<{ data: T[] | undefined }>) {

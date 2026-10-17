@@ -66,4 +66,53 @@ describe("installs of the catalogs on screen", () => {
     await waitFor(() => expect(result.current["cat-b"]).toHaveLength(1));
     expect(result.current["cat-a"]).toHaveLength(1);
   });
+
+  it("drop the previous target's installs when the assignment target changes", async () => {
+    // Installs answer per scope; the second scope's read waits.
+    let release: () => void = () => {};
+    getMcpServersMock.mockImplementation(
+      ({
+        query,
+      }: {
+        query: { catalogIds: string[]; assignmentScope?: string };
+      }) => {
+        const answer = {
+          data: query.catalogIds.map((catalogId) => ({
+            id: `srv-${query.assignmentScope}-${catalogId}`,
+            catalogId,
+            ownerId: "user-1",
+          })),
+        };
+        if (query.assignmentScope !== "team") return Promise.resolve(answer);
+        return new Promise((resolve) => {
+          release = () => resolve(answer);
+        });
+      },
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: "personal" | "team" }) =>
+        useMcpServersGroupedByCatalog({
+          catalogIdsIn: ["cat-a"],
+          assignmentScope: scope,
+        }),
+      { wrapper, initialProps: { scope: "personal" as "personal" | "team" } },
+    );
+    await waitFor(() => expect(result.current["cat-a"]).toHaveLength(1));
+
+    rerender({ scope: "team" });
+    // The personal target's install is not the team's.
+    expect(result.current["cat-a"]).toBeUndefined();
+
+    release();
+    await waitFor(() =>
+      expect(result.current["cat-a"]?.[0]?.id).toBe("srv-team-cat-a"),
+    );
+  });
 });

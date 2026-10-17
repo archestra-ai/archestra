@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -90,11 +90,23 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
     isPending: false,
     isError: false,
   }),
-  useMcpRegistryPage: (params: unknown) => {
+  // Like the server: the search narrows by name, the page is sorted by name
+  // and cut to the limit.
+  useMcpRegistryPage: (params: { search?: string; limit?: number }) => {
     registryPageCalls.push(params);
-    const rows = useInternalMcpCatalogMock().data as unknown[];
+    const all = useInternalMcpCatalogMock().data as Array<{ name: string }>;
+    const matching = all
+      .filter(
+        (row) =>
+          !params.search ||
+          row.name.toLowerCase().includes(params.search.toLowerCase()),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
     return {
-      data: { data: rows, pagination: { total: rows.length } },
+      data: {
+        data: matching.slice(0, params.limit ?? matching.length),
+        pagination: { total: matching.length },
+      },
       isPending: false,
       isFetching: false,
     };
@@ -139,6 +151,24 @@ function renderTab() {
     <QueryClientProvider client={queryClient}>
       <AppToolsEditor appId={APP_ID} />
     </QueryClientProvider>,
+  );
+}
+
+const controlledClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
+function controlledEditor(
+  selected: Set<string>,
+  onSelectionChange: (next: Set<string>) => void,
+) {
+  return (
+    <QueryClientProvider client={controlledClient}>
+      <AppToolsEditor
+        appId={APP_ID}
+        selectedToolIds={selected}
+        onSelectionChange={onSelectionChange}
+      />
+    </QueryClientProvider>
   );
 }
 
@@ -301,6 +331,134 @@ describe("AppToolsEditor", () => {
     );
     expect(assignMutate).not.toHaveBeenCalled();
     expect(unassignMutate).not.toHaveBeenCalled();
+  });
+
+  it("keeps a selection change made while an added server's tools load", async () => {
+    const user = userEvent.setup();
+    const NOTION_ID = "notion-catalog";
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [makeCatalog(), makeCatalog({ id: NOTION_ID, name: "Notion" })],
+    });
+    let releaseNotion: (tools: unknown[]) => void = () => {};
+    fetchCatalogToolsMock.mockImplementation((id: string) =>
+      id === NOTION_ID
+        ? new Promise((resolve) => {
+            releaseNotion = resolve;
+          })
+        : Promise.resolve([
+            makeTool("t-create", "create_issue"),
+            makeTool("t-delete", "delete_issue"),
+          ]),
+    );
+    const onSelectionChange = vi.fn();
+    const view = render(
+      controlledEditor(new Set(["t-create"]), onSelectionChange),
+    );
+
+    await screen.findByRole("button", { name: /JIRA/ });
+    await user.click(screen.getByRole("button", { name: /add/i }));
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", { name: /notion/i }),
+    );
+    // The form changes the selection while Notion's tools are still loading.
+    view.rerender(
+      controlledEditor(new Set(["t-create", "t-delete"]), onSelectionChange),
+    );
+    releaseNotion([
+      {
+        id: "n-page",
+        name: "create_page",
+        description: null,
+        catalogId: NOTION_ID,
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(onSelectionChange).toHaveBeenLastCalledWith(
+        new Set(["t-create", "t-delete", "n-page"]),
+      ),
+    );
+  });
+
+  describe("a server picked from beyond the first page", () => {
+    // 60 servers before "Zulip" by name: Zulip is only on a searched page,
+    // and picking it closes the menu, which clears the search.
+    const ZULIP_ID = "zulip-catalog";
+    beforeEach(() => {
+      useInternalMcpCatalogMock.mockReturnValue({
+        data: [
+          makeCatalog(),
+          ...Array.from({ length: 60 }, (_, i) =>
+            makeCatalog({
+              id: `filler-${i}`,
+              name: `Filler ${String(i).padStart(2, "0")}`,
+            }),
+          ),
+          makeCatalog({ id: ZULIP_ID, name: "Zulip" }),
+        ],
+      });
+      fetchCatalogToolsMock.mockImplementation((id: string) =>
+        Promise.resolve(
+          id === ZULIP_ID
+            ? [
+                {
+                  id: "z-send",
+                  name: "send_message",
+                  description: null,
+                  catalogId: ZULIP_ID,
+                },
+              ]
+            : [makeTool("t-create", "create_issue")],
+        ),
+      );
+    });
+
+    async function pickZulip(user: ReturnType<typeof userEvent.setup>) {
+      await screen.findByRole("button", { name: /JIRA/ });
+      await user.click(screen.getByRole("button", { name: /add/i }));
+      await user.type(screen.getByRole("textbox"), "zulip");
+      await user.click(
+        await screen.findByRole("menuitemcheckbox", { name: /zulip/i }),
+      );
+      // Past the search debounce, the list is back on its first page.
+      await waitFor(() =>
+        expect(registryPageCalls.at(-1)).not.toHaveProperty("search"),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    it("keeps its pill in the live editor", async () => {
+      const user = userEvent.setup();
+      renderTab();
+
+      await pickZulip(user);
+
+      // Its checklist is still open, and the pill stays once it closes.
+      expect(screen.getByLabelText("send_message")).not.toBeChecked();
+      await user.keyboard("{Escape}");
+      expect(
+        await screen.findByRole("button", { name: /^Zulip/ }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the staged tools visible and removable in the settings form", async () => {
+      const user = userEvent.setup();
+      let staged = new Set(["t-create"]);
+      const onSelectionChange = vi.fn((next: Set<string>) => {
+        staged = next;
+        view.rerender(controlledEditor(staged, onSelectionChange));
+      });
+      const view = render(controlledEditor(staged, onSelectionChange));
+
+      await pickZulip(user);
+
+      expect(staged).toEqual(new Set(["t-create", "z-send"]));
+      // The staged tool stays visible, and removable, in the server's checklist.
+      await user.keyboard("{Escape}");
+      expect(
+        await screen.findByRole("button", { name: /^Zulip/ }),
+      ).toHaveTextContent("(1)");
+    });
   });
 
   it("flags an assigned server that sits outside the app's environment", async () => {

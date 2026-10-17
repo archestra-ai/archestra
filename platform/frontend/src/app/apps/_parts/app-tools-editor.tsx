@@ -8,7 +8,7 @@ import {
 } from "@archestra/shared";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ToolChecklist } from "@/components/agent-tools-editor";
 import {
   isCatalogInAppEnvironment,
@@ -109,12 +109,19 @@ export function AppToolsEditor({
     [controlled, selectedToolIds, assigned],
   );
 
+  // The selection as of the latest render: a change applied after an await
+  // (adding a server waits for its tools) must not overwrite a change made
+  // meanwhile with the selection it started from.
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+
   // Applies a per-catalog selection change: re-projects it onto the full
   // selection (controlled) or assigns/unassigns the delta live (uncontrolled).
   const changeCatalogSelection = (
     catalogTools: CatalogTool[],
     next: Set<string>,
   ) => {
+    const selection = selectionRef.current;
     if (controlled) {
       const merged = new Set(selection);
       for (const t of catalogTools) merged.delete(t.id);
@@ -198,14 +205,23 @@ export function AppToolsEditor({
   const isCatalogSearching =
     catalogSearch.trim() !== debouncedCatalogSearch ||
     (!!debouncedCatalogSearch && catalogPage.isFetching);
+  // Rows picked from the list this session. Picking closes the list, which
+  // clears its search, so a server found on a searched page would otherwise
+  // drop out of the editor together with its pill and staged tools.
+  const [pickedRows, setPickedRows] = useState<Map<string, CatalogItem>>(
+    () => new Map(),
+  );
   const catalogs = useMemo(() => {
     const byId = new Map<string, CatalogItem>();
     for (const row of assignedCatalogRows.data) byId.set(row.id, row);
+    for (const [id, row] of pickedRows) {
+      if (!byId.has(id)) byId.set(id, row);
+    }
     for (const row of catalogPage.data?.data ?? []) {
       if (!byId.has(row.id)) byId.set(row.id, row);
     }
     return [...byId.values()];
-  }, [assignedCatalogRows.data, catalogPage.data]);
+  }, [assignedCatalogRows.data, pickedRows, catalogPage.data]);
 
   // Candidate servers: every one in the app's environment or the Default
   // baseline apps may always draw from (Playwright is environment-agnostic
@@ -326,19 +342,27 @@ export function AppToolsEditor({
   const toggleCatalog = async (catalogId: string) => {
     const catalog = candidates.find((c) => c.id === catalogId);
     if (!catalog) return;
+    const shown =
+      (selectedByCatalog.get(catalogId)?.size ?? 0) > 0 ||
+      activeCatalogIds.has(catalogId);
+    // Keep the row before waiting for its tools: the list's search clears as
+    // soon as the menu closes.
+    if (!shown) setPickedRows((prev) => new Map(prev).set(catalogId, catalog));
     const catalogTools =
       toolsByCatalog.get(catalogId) ??
       // A server added from the list: its tools load as it is added.
       ((await queryClient.fetchQuery(
         catalogToolsQuery(catalogId, true),
       )) as CatalogTool[]);
-    const shown =
-      (selectedByCatalog.get(catalogId)?.size ?? 0) > 0 ||
-      activeCatalogIds.has(catalogId);
     if (shown) {
       changeCatalogSelection(catalogTools, new Set());
       setActiveCatalogIds((prev) => {
         const next = new Set(prev);
+        next.delete(catalogId);
+        return next;
+      });
+      setPickedRows((prev) => {
+        const next = new Map(prev);
         next.delete(catalogId);
         return next;
       });

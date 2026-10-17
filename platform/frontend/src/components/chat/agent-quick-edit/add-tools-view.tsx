@@ -122,30 +122,17 @@ export function AddToolsView({
       refetchInterval: pollWhileInstalling ? 2_000 : false,
     },
   );
-  // The page's own total is its tab's count; one more count query covers the
-  // other tabs (all = connected + not connected).
-  const pageTotal = page.data?.pagination.total;
-  const allTotalQuery = useMcpRegistryPage(
+  // The counts on the filter come from their own queries, on every tab, so a
+  // tab's label does not change while that tab's page loads; each keeps its
+  // last total across a search until the new one answers.
+  const allTotal = useMcpRegistryPage(
     { ...baseQuery, limit: 1, offset: 0 },
-    { placeholderScope: "add-tools:total", enabled: filter === "connected" },
+    { placeholderScope: "add-tools:total" },
   ).data?.pagination.total;
-  const connectedTotalQuery = useMcpRegistryPage(
+  const connectedTotal = useMcpRegistryPage(
     { ...baseQuery, installState: "installed", limit: 1, offset: 0 },
-    {
-      placeholderScope: "add-tools:connected",
-      enabled: filter !== "connected",
-    },
+    { placeholderScope: "add-tools:connected" },
   ).data?.pagination.total;
-  const connectedTotal =
-    filter === "connected" ? pageTotal : connectedTotalQuery;
-  const allTotal =
-    filter === "all"
-      ? pageTotal
-      : filter === "connected"
-        ? allTotalQuery
-        : pageTotal !== undefined && connectedTotalQuery !== undefined
-          ? pageTotal + connectedTotalQuery
-          : undefined;
   // The built-in entry is ready to add without an install, but the server
   // never counts it as installed: whether the search matches it decides the
   // Connected count, and the Connected tab lists it next to the installed
@@ -213,11 +200,17 @@ export function AddToolsView({
     setPollWhileInstalling(anyInstalling);
   }, [anyInstalling]);
 
-  const totalCount = allTotal ?? rows.length;
+  // Unknown until its totals answer: a count of the visible rows would be
+  // wrong on every tab but All.
+  const totalCount = allTotal;
   const connectedCount =
     connectedTotal !== undefined && builtInPage !== undefined
       ? connectedTotal + (builtInRow ? 1 : 0)
-      : rows.filter((row) => row.connected).length;
+      : undefined;
+  const notConnectedCount =
+    totalCount !== undefined && connectedCount !== undefined
+      ? Math.max(0, totalCount - connectedCount)
+      : undefined;
   const readyRows = rows
     .filter((row) => row.connected && filter !== "not-connected")
     .sort(
@@ -286,12 +279,9 @@ export function AddToolsView({
         >
           {(
             [
-              ["all", `All ${totalCount}`],
-              ["connected", `Connected ${connectedCount}`],
-              [
-                "not-connected",
-                `Not connected ${Math.max(0, totalCount - connectedCount)}`,
-              ],
+              ["all", withCount("All", totalCount)],
+              ["connected", withCount("Connected", connectedCount)],
+              ["not-connected", withCount("Not connected", notConnectedCount)],
             ] as const
           ).map(([value, label]) => (
             <Button
@@ -1025,3 +1015,7 @@ function ProgressStep({
 
 /** Rows the list shows at a time; a search narrows on the server. */
 const ADD_TOOLS_PAGE_SIZE = 100;
+
+function withCount(label: string, count: number | undefined) {
+  return count === undefined ? label : `${label} ${count}`;
+}

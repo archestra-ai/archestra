@@ -688,11 +688,14 @@ function ConnectionsTable({
     showInfrastructure && rows.some((r) => deploymentStatuses[r.server.id]);
 
   return (
-    // A fixed-layout table squeezes its unsized columns to nothing on a
-    // narrow screen; a floor width makes it scroll sideways instead.
+    // Let columns honor their content widths so the action buttons cannot
+    // overflow into the date column. Narrow containers scroll horizontally.
     <Table
       data-testid={testId}
-      className={hasDeploymentStatuses ? "min-w-[780px]" : "min-w-[600px]"}
+      className={cn(
+        "table-auto",
+        hasDeploymentStatuses ? "min-w-[780px]" : "min-w-[600px]",
+      )}
     >
       <TableHeader>
         <TableRow>

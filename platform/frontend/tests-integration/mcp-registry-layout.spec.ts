@@ -370,3 +370,57 @@ test.describe("MCP Registry layout", () => {
     );
   });
 });
+
+for (const width of [1280, 800]) {
+  test(`credential actions stay inside their cell at ${width}px`, async ({
+    page,
+    mswControl,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await seed(mswControl);
+    await mswControl.use({
+      method: "get",
+      url: "/api/mcp_server",
+      body: [
+        ...SERVERS,
+        makeInstalledServer({
+          id: "srv-reauth-other",
+          catalogId: "cat-reauth",
+          serverType: "remote",
+          ownerId: "test-other-user",
+          ownerEmail: "reviewer@example.test",
+          oauthRefreshError: undefined,
+        }),
+      ],
+    });
+    await page.goto("/mcp/registry/cat-reauth?tab=credentials");
+    const reauthenticate = page.getByRole("button", {
+      name: "Re-authenticate",
+      exact: true,
+    });
+    await expect(reauthenticate).toBeVisible();
+    const overflow = await reauthenticate.evaluate((button) => {
+      const cell = button.closest("td");
+      if (!cell) throw new Error("Credential action is missing its table cell");
+      const bounds = cell.getBoundingClientRect();
+      return Array.from(cell.querySelectorAll("button")).map((action) => {
+        const rect = action.getBoundingClientRect();
+        return {
+          label: action.textContent?.trim(),
+          left: Math.max(0, bounds.left - rect.left),
+          right: Math.max(0, rect.right - bounds.right),
+        };
+      });
+    });
+    for (const action of overflow) {
+      expect(
+        action.left,
+        `${action.label} overlaps the previous column`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        action.right,
+        `${action.label} overflows its cell`,
+      ).toBeLessThanOrEqual(1);
+    }
+  });
+}

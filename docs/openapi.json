@@ -248071,6 +248071,7 @@
                     }
                   },
                   "environmentIds": {
+                    "description": "Items in these environments. An empty list matches nothing; omit it for every environment.",
                     "maxItems": 500,
                     "type": "array",
                     "items": {
@@ -248106,6 +248107,7 @@
                     ]
                   },
                   "catalogIds": {
+                    "description": "Only these items. An empty list matches nothing; omit it for every item.",
                     "maxItems": 10000,
                     "type": "array",
                     "items": {
@@ -249145,6 +249147,7 @@
                     }
                   },
                   "environmentIds": {
+                    "description": "Items in these environments. An empty list matches nothing; omit it for every environment.",
                     "maxItems": 500,
                     "type": "array",
                     "items": {
@@ -249180,6 +249183,7 @@
                     ]
                   },
                   "catalogIds": {
+                    "description": "Only these items. An empty list matches nothing; omit it for every item.",
                     "maxItems": 10000,
                     "type": "array",
                     "items": {

@@ -64230,6 +64230,9 @@ export type SearchMcpRegistryData = {
          * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
          */
         owner?: Array<string>;
+        /**
+         * Items in these environments. An empty list matches nothing; omit it for every environment.
+         */
         environmentIds?: Array<string>;
         authorIds?: Array<string>;
         /**
@@ -64240,6 +64243,9 @@ export type SearchMcpRegistryData = {
          * Installed: the caller can see and use an install of the item. Omit for both.
          */
         installState?: 'installed' | 'not-installed';
+        /**
+         * Only these items. An empty list matches nothing; omit it for every item.
+         */
         catalogIds?: Array<string>;
         /**
          * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier.
@@ -64469,6 +64475,9 @@ export type SearchMcpRegistryIdsData = {
          * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
          */
         owner?: Array<string>;
+        /**
+         * Items in these environments. An empty list matches nothing; omit it for every environment.
+         */
         environmentIds?: Array<string>;
         authorIds?: Array<string>;
         /**
@@ -64479,6 +64488,9 @@ export type SearchMcpRegistryIdsData = {
          * Installed: the caller can see and use an install of the item. Omit for both.
          */
         installState?: 'installed' | 'not-installed';
+        /**
+         * Only these items. An empty list matches nothing; omit it for every item.
+         */
         catalogIds?: Array<string>;
         /**
          * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier.

@@ -421,11 +421,24 @@ class InternalMcpCatalogModel {
     filters: RegistryListFilters;
     sorting: RegistrySorting;
     limit: number;
+    /**
+     * Only items with an install the viewer can see, the rows select-all can
+     * act on, so the limit counts only those.
+     */
+    withVisibleInstall?: boolean;
   }): Promise<Array<{ id: string; name: string }>> {
     const catalog = schema.internalMcpCatalogTable;
-    const where = await InternalMcpCatalogModel.buildRegistryCondition(
-      params.options,
-      params.filters,
+    const where = and(
+      await InternalMcpCatalogModel.buildRegistryCondition(
+        params.options,
+        params.filters,
+      ),
+      params.withVisibleInstall
+        ? McpServerModel.visibleInstallExistsCondition({
+            viewer: params.options.installViewer,
+            catalogIdColumn: catalog.id,
+          })
+        : undefined,
     );
     return db
       .select({ id: catalog.id, name: catalog.name })

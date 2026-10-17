@@ -248,6 +248,23 @@ describe("MCP registry list routes", () => {
       ]);
     });
 
+    test("refuses more label keys than one query should join", async () => {
+      const labels = Object.fromEntries(
+        Array.from({ length: 51 }, (_, i) => [`key-${i}`, ["value"]]),
+      );
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog/registry/search",
+        payload: { limit: 10, offset: 0, labels },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toContain("At most 50 label keys");
+      const fifty = Object.fromEntries(Object.entries(labels).slice(0, 50));
+      expect((await search({ labels: fifty })).data).toEqual([]);
+    });
+
     test("combines search, labels, install state and access in one query", async ({
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -725,10 +742,9 @@ describe("MCP registry list routes", () => {
         id: crypto.randomUUID(),
         name: `item-${String(i).padStart(4, "0")}`,
       }));
-      vi.spyOn(
-        InternalMcpCatalogModel,
-        "findRegistryMatchingIds",
-      ).mockResolvedValue(matching);
+      const findMatching = vi
+        .spyOn(InternalMcpCatalogModel, "findRegistryMatchingIds")
+        .mockResolvedValue(matching);
       vi.spyOn(McpServerModel, "findRegistryInstallRows").mockResolvedValue(
         matching.map((item) => ({
           id: crypto.randomUUID(),
@@ -753,6 +769,14 @@ describe("MCP registry list routes", () => {
       expect(body.truncated).toBe(true);
       expect(body.data.map((row) => row.id)).toEqual(
         matching.slice(0, MAX_BULK_IDS).map((item) => item.id),
+      );
+      // Items without a visible install are left out in SQL, so they never
+      // use up the cap, and one row past it is enough to tell it was cut.
+      expect(findMatching).toHaveBeenCalledWith(
+        expect.objectContaining({
+          limit: MAX_BULK_IDS + 1,
+          withVisibleInstall: true,
+        }),
       );
     });
   });

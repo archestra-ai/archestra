@@ -178,6 +178,9 @@ const MCP_REGISTRY_SORT_KEYS = [
   "issueAge",
 ] as const;
 
+/** Label keys one registry list request may filter by. */
+const MAX_REGISTRY_LABEL_KEYS = 50;
+
 /**
  * Filters and order of the registry list. A POST body rather than a query
  * string: the attention orders carry the browser's ranked catalog ids, which
@@ -187,11 +190,23 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
   MCP_REGISTRY_SORT_KEYS,
 ).extend({
   search: z.string().trim().max(256).optional(),
-  labels: z.record(z.string(), z.array(z.string()).max(100)).optional(),
+  // Each key is one more EXISTS in the query.
+  labels: z
+    .record(z.string(), z.array(z.string()).max(100))
+    .refine((labels) => Object.keys(labels).length <= MAX_REGISTRY_LABEL_KEYS, {
+      message: `At most ${MAX_REGISTRY_LABEL_KEYS} label keys`,
+    })
+    .optional(),
   access: ResourceAccessQuerySchema,
   sharedWith: ResourceSharedWithQuerySchema,
   owner: ResourceOwnerQuerySchema,
-  environmentIds: z.array(z.string().uuid()).max(500).optional(),
+  environmentIds: z
+    .array(z.string().uuid())
+    .max(500)
+    .optional()
+    .describe(
+      "Items in these environments. An empty list matches nothing; omit it for every environment.",
+    ),
   authorIds: z.array(z.string().min(1)).max(500).optional(),
   authorServiceAccountIds: z
     .array(z.string().uuid())
@@ -206,7 +221,13 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
     .describe(
       "Installed: the caller can see and use an install of the item. Omit for both.",
     ),
-  catalogIds: z.array(z.string().uuid()).max(10_000).optional(),
+  catalogIds: z
+    .array(z.string().uuid())
+    .max(10_000)
+    .optional()
+    .describe(
+      "Only these items. An empty list matches nothing; omit it for every item.",
+    ),
   rankTiers: z
     .array(z.array(z.string().uuid()).max(10_000))
     .max(1_000)
@@ -687,11 +708,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         request.body,
       );
+      // One past the cap, so the answer can say it was cut.
       const matching = await InternalMcpCatalogModel.findRegistryMatchingIds({
         options,
         filters,
         sorting,
-        limit: 10_000,
+        limit: MAX_BULK_IDS + 1,
+        withVisibleInstall: true,
       });
       const installs = summarizeRegistryInstalls(
         await McpServerModel.findRegistryInstallRows({

@@ -1,4 +1,4 @@
-import { type ComponentType, lazy } from "react";
+import { type ComponentType, lazy, Suspense } from "react";
 
 /**
  * `React.lazy` that renders synchronously once the module has loaded.
@@ -36,4 +36,26 @@ export function preloadableLazy<Props>(
     return preload().then(() => loaded as { default: ComponentType<Props> });
   }) as unknown as ComponentType<Props>;
   return { Component, preload };
+}
+
+/**
+ * A lazily loaded component that suspends into an empty boundary of its own,
+ * plus its `preload`. For parts of a screen nothing waits for (dialogs,
+ * panels, the transcript behind the composer): they drop in when their chunk
+ * arrives, without holding the rest of the screen.
+ */
+export function lazyComponent<Props extends object>(
+  load: () => Promise<ComponentType<Props>>,
+): ComponentType<Props> & { preload: () => Promise<void> } {
+  const view = preloadableLazy<Props>(() =>
+    load().then((Component) => ({ default: Component })),
+  );
+  function LazyComponent(props: Props) {
+    return (
+      <Suspense fallback={null}>
+        <view.Component {...props} />
+      </Suspense>
+    );
+  }
+  return Object.assign(LazyComponent, { preload: view.preload });
 }

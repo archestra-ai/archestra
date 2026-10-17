@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import * as quickEditViews from "./agent-quick-edit/lazy-views";
 import { InitialAgentSelector } from "./initial-agent-selector";
 
 const {
@@ -248,6 +249,15 @@ beforeEach(() => {
   } as ReturnType<typeof useSession>);
   vi.mocked(useFeature).mockReturnValue(false);
   mockPinnedIds.splice(0);
+});
+
+// The quick-edit views are lazy chunks; load them so the dialog renders at once.
+beforeAll(async () => {
+  await Promise.all(
+    Object.values(quickEditViews).map((view) =>
+      typeof view === "function" && "preload" in view ? view.preload() : null,
+    ),
+  );
 });
 
 describe("InitialAgentSelector before the agent resolves", () => {

@@ -79,7 +79,8 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
     [installedServers, currentUserId],
   );
 
-  const { isDialogOpened, openDialog, closeDialog } = useDialogs<DialogKey>();
+  const { isDialogOpened, openDialog, closeDialog, hasOpenDialog } =
+    useDialogs<DialogKey>();
 
   const [selectedCatalogItem, setSelectedCatalogItem] =
     useState<CatalogItem | null>(null);
@@ -454,6 +455,7 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
 
     // Dialog state (for rendering)
     isDialogOpened,
+    hasOpenDialog,
     selectedCatalogItem,
     localServerCatalogItem,
     noAuthCatalogItem,

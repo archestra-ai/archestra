@@ -14,6 +14,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { ConnectivityProvider } from "@/lib/config/connectivity";
@@ -25,6 +26,7 @@ import {
   appearanceSettingsSeed,
   organizationSeed,
 } from "@/mocks/data/organization";
+import { ChatMessages } from "./lazy-parts";
 import { ChatPageContent } from "./page.client";
 
 // While a response streams, every chunk re-renders the chat page. Typing in
@@ -176,6 +178,11 @@ beforeEach(() => {
     } as unknown as ReturnType<typeof useChatSession>;
   });
   transcript.reset();
+});
+
+// The transcript and its markdown are lazy chunks; load them before timing renders.
+beforeAll(async () => {
+  await Promise.all([ChatMessages.preload(), preloadResponseMarkdown()]);
 });
 
 test("a streamed chunk re-renders only the streaming message, not the history or the composer", async () => {

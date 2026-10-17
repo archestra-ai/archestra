@@ -1,63 +1,28 @@
-import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
-import { ManageUsersDialog } from "@/app/mcp/registry/_parts/manage-users-dialog";
-import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
-import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
-import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
+"use client";
+
+import { Suspense, useState } from "react";
 import type { McpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import { preloadableLazy } from "@/lib/utils/preloadable-lazy";
 
-interface McpInstallDialogsProps {
+const dialogs = preloadableLazy(() => import("./mcp-install-dialogs.impl"));
+
+/**
+ * The MCP install dialogs an orchestrator drives. Their code (the registry's
+ * install forms, OAuth confirmation, the manage-users dialog) is a separate
+ * chunk, fetched the first time one of them opens and kept mounted after,
+ * so closing still animates.
+ */
+export function McpInstallDialogs({
+  orchestrator,
+}: {
   orchestrator: McpInstallOrchestrator;
-}
-
-export function McpInstallDialogs({ orchestrator }: McpInstallDialogsProps) {
+}) {
+  const [opened, setOpened] = useState(false);
+  if (orchestrator.hasOpenDialog && !opened) setOpened(true);
+  if (!opened && !orchestrator.hasOpenDialog) return null;
   return (
-    <>
-      <RemoteServerInstallDialog
-        isOpen={orchestrator.isDialogOpened("remote-install")}
-        onClose={orchestrator.closeRemoteInstall}
-        onConfirm={orchestrator.handleRemoteServerInstallConfirm}
-        catalogItem={orchestrator.selectedCatalogItem}
-        isInstalling={orchestrator.isInstalling}
-        isReauth={orchestrator.isReauth}
-      />
-
-      <OAuthConfirmationDialog
-        open={orchestrator.isDialogOpened("oauth")}
-        onOpenChange={(open) => {
-          if (!open) orchestrator.closeOAuth();
-        }}
-        serverName={orchestrator.selectedCatalogItem?.name || ""}
-        onConfirm={orchestrator.handleOAuthConfirm}
-        onCancel={orchestrator.closeOAuth}
-        catalogId={orchestrator.selectedCatalogItem?.id}
-      />
-
-      <NoAuthInstallDialog
-        isOpen={orchestrator.isDialogOpened("no-auth")}
-        onClose={orchestrator.closeNoAuth}
-        onInstall={orchestrator.handleNoAuthConfirm}
-        catalogItem={orchestrator.noAuthCatalogItem}
-        isInstalling={orchestrator.isInstalling}
-      />
-
-      {orchestrator.localServerCatalogItem && (
-        <LocalServerInstallDialog
-          isOpen={orchestrator.isDialogOpened("local-install")}
-          onClose={orchestrator.closeLocalInstall}
-          onConfirm={orchestrator.handleLocalServerInstallConfirm}
-          catalogItem={orchestrator.localServerCatalogItem}
-          isInstalling={orchestrator.isInstalling}
-          isReauth={orchestrator.isReauth}
-        />
-      )}
-
-      {orchestrator.manageCatalogId && (
-        <ManageUsersDialog
-          isOpen={orchestrator.isDialogOpened("manage")}
-          onClose={orchestrator.handleManageDialogClose}
-          catalogId={orchestrator.manageCatalogId}
-        />
-      )}
-    </>
+    <Suspense fallback={null}>
+      <dialogs.Component orchestrator={orchestrator} />
+    </Suspense>
   );
 }

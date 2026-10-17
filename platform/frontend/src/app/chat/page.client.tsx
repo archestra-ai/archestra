@@ -42,12 +42,10 @@ import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AgentConnectionNotice } from "@/components/chat/agent-connection-notice";
 import { AppsProvider } from "@/components/chat/apps-context";
-import { BrowserPanel } from "@/components/chat/browser-panel";
 import {
   ChatLinkButton,
   MobileHeaderChatLinks,
 } from "@/components/chat/chat-help-link";
-import { ChatMessages } from "@/components/chat/chat-messages";
 import {
   collectBrowserToolCallIds,
   deriveAppFilesRevisions,
@@ -55,7 +53,6 @@ import {
 } from "@/components/chat/chat-messages.utils";
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { useConversationActions } from "@/components/chat/conversation-actions";
-import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -63,17 +60,10 @@ import {
   getComposerAnswer,
   takesComposerAnswer,
 } from "@/components/chat/mcp-elicitation-fields";
-import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
-import {
-  AppsPanelContent,
-  type RightPanelTab,
-  RightSidePanel,
-} from "@/components/chat/right-side-panel";
+import type { RightPanelTab } from "@/components/chat/right-side-panel";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
-import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
 import { LoadingState } from "@/components/loading";
-import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -214,6 +204,17 @@ import {
   resolveChatModelState,
   resolvePreferredModelForProvider,
 } from "./chat-initial-state";
+import {
+  AppsPanelContent,
+  BrowserPanel,
+  ChatMessages,
+  ConversationFilesPanel,
+  DefaultModelOnboardingStep,
+  NoApiKeySetup,
+  OnboardingWizardButton,
+  preloadConversationParts,
+  RightSidePanel,
+} from "./lazy-parts";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
   type ChatSubmitOptions,
@@ -291,7 +292,9 @@ export function ChatPageContent({
   // A conversation has a transcript to render: fetch the markdown renderer
   // now, behind the composer, rather than on the next idle callback.
   useEffect(() => {
-    if (routeConversationId) void preloadResponseMarkdown();
+    if (!routeConversationId) return;
+    preloadConversationParts();
+    void preloadResponseMarkdown();
   }, [routeConversationId]);
 
   // Hide version display from layout - chat page has its own version display

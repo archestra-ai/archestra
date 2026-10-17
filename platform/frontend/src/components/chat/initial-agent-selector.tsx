@@ -98,17 +98,15 @@ import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.ho
 import { cn } from "@/lib/utils/tailwind";
 import {
   AddToolsView,
-  ConnectView,
-  InstallingView,
-} from "./agent-quick-edit/add-tools-view";
-import { ChooseToolsView } from "./agent-quick-edit/choose-tools-view";
-import { KnowledgeView } from "./agent-quick-edit/knowledge-view";
-import {
   AgentSettingsSkeleton,
   AgentSettingsView,
+  ChooseToolsView,
+  ConnectView,
+  InstallingView,
+  KnowledgeView,
   type QuickEditNotice,
-} from "./agent-quick-edit/settings-view";
-import { SubagentsView } from "./agent-quick-edit/subagents-view";
+  SubagentsView,
+} from "./agent-quick-edit/lazy-views";
 import {
   filterAndSortInitialAgents,
   groupInitialAgents,

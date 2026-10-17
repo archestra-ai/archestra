@@ -19,5 +19,7 @@ export function useDialogs<T extends string>() {
     isDialogOpened,
     openDialog,
     closeDialog,
+    /** Whether any dialog is open, so their code can load only then. */
+    hasOpenDialog: Object.values<boolean>(dialogState).some(Boolean),
   };
 }

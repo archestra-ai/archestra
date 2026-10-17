@@ -14758,7 +14758,7 @@ export type GetAgentsData = {
          */
         includeTools?: boolean;
         /**
-         * Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows: the count is skipped, `hasNext` stays exact, and `total` is then only a lower bound (the agents up to this page, plus one when there are more).
+         * Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows. With false, the count is skipped and `hasNext` stays exact. `total` is then a lower bound: the agents up to this page, plus one when more follow.
          */
         includeTotal?: boolean;
         limit?: number;
@@ -29510,9 +29510,12 @@ export type GetAuditLogResourcesData = {
          */
         search?: string;
         /**
-         * Only this resource, e.g. to label a preselected filter
+         * Return only this resource, e.g. to label a preselected filter
          */
         resourceId?: string;
+        /**
+         * Maximum number of resources to return
+         */
         limit?: number;
     };
     url: '/api/audit-logs/resources';
@@ -80573,7 +80576,7 @@ export type GetMcpServersData = {
     query?: {
         catalogId?: string;
         /**
-         * Include each listed install's assigned agents (default false; the list returns empty assignedAgents). Only the installs in the response are looked up, so narrow with catalogId. GET /api/mcp_server/{id} returns one install's agents.
+         * Include each listed install's assigned agents. Defaults to false, which returns an empty `assignedAgents` for every install. The lookup covers every install in the response, so narrow the list with `catalogId` when you need only some. GET /api/mcp_server/{id} returns the agents of one install.
          */
         includeAssignedAgents?: boolean;
         assignmentScope?: 'personal' | 'team' | 'org';

@@ -2084,7 +2084,7 @@ export const archestraChatCompletionsWithAgent = <ThrowOnError extends boolean =
 export const getAuditLogs = <ThrowOnError extends boolean = false>(options?: Options<GetAuditLogsData, ThrowOnError>) => (options?.client ?? client).get<GetAuditLogsResponses, GetAuditLogsErrors, ThrowOnError>({ url: '/api/audit-logs', ...options });
 
 /**
- * Resources that have audit events, with the name from their latest event, for the log's resource filter. Requires auditLog:read; without auditLog:admin only resources from the caller's own events are listed.
+ * Get the resources that have audit events, for the log's resource filter. Covers agents, apps, environments, MCP servers, roles, skills and teams. Each resource has the name from its latest named event. Requires auditLog:read. Without auditLog:admin, only resources from the caller's own events are listed.
  *
  * Authentication:
  *

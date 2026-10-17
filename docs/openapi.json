@@ -50219,7 +50219,7 @@
             "in": "query",
             "name": "includeTotal",
             "required": false,
-            "description": "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows: the count is skipped, `hasNext` stays exact, and `total` is then only a lower bound (the agents up to this page, plus one when there are more)."
+            "description": "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows. With false, the count is skipped and `hasNext` stays exact. `total` is then a lower bound: the agents up to this page, plus one when more follow."
           },
           {
             "schema": {
@@ -104036,7 +104036,7 @@
         "tags": [
           "Audit Log"
         ],
-        "description": "Resources that have audit events, with the name from their latest event, for the log's resource filter. Requires auditLog:read; without auditLog:admin only resources from the caller's own events are listed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`auditLog:read`: View audit log records of your own administrative actions",
+        "description": "Get the resources that have audit events, for the log's resource filter. Covers agents, apps, environments, MCP servers, roles, skills and teams. Each resource has the name from its latest named event. Requires auditLog:read. Without auditLog:admin, only resources from the caller's own events are listed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`auditLog:read`: View audit log records of your own administrative actions",
         "parameters": [
           {
             "schema": {
@@ -104055,7 +104055,7 @@
             "in": "query",
             "name": "resourceId",
             "required": false,
-            "description": "Only this resource, e.g. to label a preselected filter"
+            "description": "Return only this resource, e.g. to label a preselected filter"
           },
           {
             "schema": {
@@ -104066,7 +104066,8 @@
             },
             "in": "query",
             "name": "limit",
-            "required": false
+            "required": false,
+            "description": "Maximum number of resources to return"
           }
         ],
         "responses": {
@@ -309206,7 +309207,7 @@
             "in": "query",
             "name": "includeAssignedAgents",
             "required": false,
-            "description": "Include each listed install's assigned agents (default false; the list returns empty assignedAgents). Only the installs in the response are looked up, so narrow with catalogId. GET /api/mcp_server/{id} returns one install's agents."
+            "description": "Include each listed install's assigned agents. Defaults to false, which returns an empty `assignedAgents` for every install. The lookup covers every install in the response, so narrow the list with `catalogId` when you need only some. GET /api/mcp_server/{id} returns the agents of one install."
           },
           {
             "schema": {

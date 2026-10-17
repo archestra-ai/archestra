@@ -7,6 +7,7 @@ import {
   CircleAlert,
   FileSearch,
   KeyRound,
+  LogIn,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -497,6 +498,9 @@ export function McpServerIssueNotice({
         ? "error"
         : "warning";
   const compactButton = "h-6 px-2 text-xs";
+  const signInAction = actions.primary?.actionId.startsWith("reauthenticate:")
+    ? actions.primary
+    : undefined;
 
   return (
     <>
@@ -547,17 +551,30 @@ export function McpServerIssueNotice({
           className="ml-auto flex flex-wrap items-center gap-1.5"
         >
           {panelActions === "dismiss-only" ? (
-            dismissTargets.length > 0 && (
+            // Your own rejected token has one fix, signing in again; it
+            // replaces Dismiss rather than sitting beside it.
+            signInAction ? (
               <Button
-                variant="outline"
                 size="sm"
                 className={compactButton}
-                aria-label={`Dismiss alert for ${item.name}`}
-                onClick={() => setDismissOpen(true)}
+                onClick={signInAction.onClick}
               >
-                <BellOff className="size-3" />
-                Dismiss
+                <LogIn className="size-3" />
+                Sign in
               </Button>
+            ) : (
+              dismissTargets.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={compactButton}
+                  aria-label={`Dismiss alert for ${item.name}`}
+                  onClick={() => setDismissOpen(true)}
+                >
+                  <BellOff className="size-3" />
+                  Dismiss
+                </Button>
+              )
             )
           ) : (
             <>

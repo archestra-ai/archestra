@@ -394,9 +394,10 @@ for (const width of [1280, 800]) {
       ],
     });
     await page.goto("/mcp/registry/cat-reauth?tab=credentials");
+    // Row actions are icon buttons named for their row ("Re-authenticate
+    // owner@example.test").
     const reauthenticate = page.getByRole("button", {
-      name: "Re-authenticate",
-      exact: true,
+      name: /^Re-authenticate /,
     });
     await expect(reauthenticate).toBeVisible();
     const overflow = await reauthenticate.evaluate((button) => {

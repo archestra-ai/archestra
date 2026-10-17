@@ -13,6 +13,7 @@ import type * as OnboardingWizardModule from "@/components/chat/onboarding-wizar
 import type * as RightPanelModule from "@/components/chat/right-side-panel";
 import type * as DefaultModelModule from "@/components/default-model-onboarding";
 import type * as NoApiKeyModule from "@/components/no-api-key-setup";
+import { afterNextPaint } from "@/lib/app-interactive";
 import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 
 // Parts of the chat page that are not the composer. Each is its own chunk, so
@@ -25,11 +26,11 @@ const LazyChatMessages = lazyComponent<
 >(() => import("@/components/chat/chat-messages").then((m) => m.ChatMessages));
 
 /**
- * The transcript, mounted in a transition after the page's first commit. The
- * composer must never wait on it: even when the chunk and the conversation
- * are already in memory (a reload, a switch between chats), the composer
- * commits and becomes typeable first, and the transcript renders behind it
- * in an interruptible render.
+ * The transcript, mounted in a transition once the page's first commit has
+ * painted. The composer must never wait on it: even when the chunk and the
+ * conversation are already in memory (a reload, a switch between chats), the
+ * composer commits, paints and takes input first, and the transcript renders
+ * behind it in an interruptible render.
  */
 export const ChatMessages = Object.assign(
   function DeferredChatMessages(
@@ -37,7 +38,7 @@ export const ChatMessages = Object.assign(
   ) {
     const [mounted, setMounted] = useState(false);
     useEffect(() => {
-      startTransition(() => setMounted(true));
+      afterNextPaint(() => startTransition(() => setMounted(true)));
     }, []);
     return mounted ? <LazyChatMessages {...props} /> : null;
   },

@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
-import { appInteractive } from "@/lib/app-interactive";
+import { afterNextPaint, appInteractive } from "@/lib/app-interactive";
 import { MAIN_CONTENT_ID } from "@/lib/app-shell-region";
 import { useSession } from "@/lib/auth/auth.query";
 import {
@@ -248,12 +248,14 @@ export function AppShell({ children }: AppShellProps) {
  * list and their queries are not what the visitor came for, so the first
  * render (on the server too) draws its empty frame at the exact width, and
  * the real sidebar replaces it in a transition right after the page —
- * the chat composer — has committed. The frame stays while its chunk loads.
+ * the chat composer — has committed and painted (so its chunk is not
+ * evaluated between the composer's commit and its first typeable frame). The
+ * frame stays while the chunk loads.
  */
 function DeferredSidebar() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    startTransition(() => setMounted(true));
+    afterNextPaint(() => startTransition(() => setMounted(true)));
   }, []);
   const placeholder = <SidebarPlaceholder collapsible="icon" />;
   if (!mounted) return placeholder;

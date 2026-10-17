@@ -236,7 +236,7 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
   includeBuiltIn: z
     .boolean()
     .optional()
-    .describe("Also list the built-in Archestra entry."),
+    .describe("Also list the built-in MCP server entry."),
   includeDefaultEnvironment: z
     .boolean()
     .optional()

@@ -248453,7 +248453,7 @@
                     }
                   },
                   "includeBuiltIn": {
-                    "description": "Also list the built-in Archestra entry.",
+                    "description": "Also list the built-in MCP server entry.",
                     "type": "boolean"
                   },
                   "includeDefaultEnvironment": {
@@ -249579,7 +249579,7 @@
                     }
                   },
                   "includeBuiltIn": {
-                    "description": "Also list the built-in Archestra entry.",
+                    "description": "Also list the built-in MCP server entry.",
                     "type": "boolean"
                   },
                   "includeDefaultEnvironment": {

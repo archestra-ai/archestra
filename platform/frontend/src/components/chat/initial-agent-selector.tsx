@@ -99,7 +99,12 @@ import {
   useKnowledgeBasesByIds,
 } from "@/lib/knowledge/knowledge-base.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  fetchInternalMcpCatalogItem,
+  type McpCatalogDirectoryItem,
+  useMcpCatalogDirectory,
+} from "@/lib/mcp/mcp-registry.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
@@ -292,8 +297,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeSource: ["read"],
   });
+  // Names and icons only: the registry's directory, not the full catalog.
   const { data: catalogItems = [], isSuccess: catalogLoaded } =
-    useInternalMcpCatalog({
+    useMcpCatalogDirectory({
       enabled: shouldLoadAgentManagementDetails && !!canReadMcpRegistry,
     });
   const { catalogName: builtInCatalogName } = useArchestraMcpIdentity();
@@ -400,6 +406,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   });
 
   // ---- Quick-edit dialog state ---------------------------------------------
+  const queryClient = useQueryClient();
   const [dialogView, setDialogView] = useState<DialogView>("settings");
   const [chooseToolsFrom, setChooseToolsFrom] = useState<
     "settings" | "add-tools"
@@ -517,11 +524,15 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     if (options?.highlight) setNotice(null);
   };
 
-  const chooseTools = (
-    catalog: CatalogItem,
+  // Lists hand over a directory row; the views behind it need the item's
+  // configuration, so it is loaded by id first.
+  const chooseTools = async (
+    catalog: { id: string },
     from: "settings" | "add-tools",
   ) => {
-    setSelectedCatalog(catalog);
+    const item = await fetchInternalMcpCatalogItem(queryClient, catalog.id);
+    if (!item) return;
+    setSelectedCatalog(item);
     setChooseToolsFrom(from);
     setDialogView("choose-tools");
   };
@@ -1154,7 +1165,11 @@ function AgentPickerRow({
 
 const MAX_VISIBLE_AVATARS = 3;
 
-type SummaryServer = { catalog: CatalogItem; name: string; toolCount: number };
+type SummaryServer = {
+  catalog: Pick<McpCatalogDirectoryItem, "id" | "icon">;
+  name: string;
+  toolCount: number;
+};
 type SummaryKnowledge = {
   id: string;
   name: string;

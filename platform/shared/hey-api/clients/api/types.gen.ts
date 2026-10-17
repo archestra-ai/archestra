@@ -64783,6 +64783,8 @@ export type GetMcpRegistryIssueIndexResponses = {
             authorId?: string;
             createdByServiceAccountId?: string;
             authorName?: string;
+            icon?: string;
+            iconUrl?: string;
             alertMutes?: Array<{
                 catalogId: string;
                 mcpServerId: string | null;

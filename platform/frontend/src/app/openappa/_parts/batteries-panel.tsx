@@ -58,6 +58,7 @@ import { DEFAULT_FILTER_ALL } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
 import {
   useMcpServers,
   useReloadMcpServerTools,
@@ -150,8 +151,21 @@ const knownFilter = (
 export function BatteriesPanel() {
   const declarations = usePolicyDeclarations();
   const batteries = useBatteries();
+  // Battery matching reads each entry's server URL and image, which only the
+  // full catalog carries.
   const catalog = useInternalMcpCatalog();
-  const servers = useMcpServers();
+  // Which entries are installed: every visible install's catalog id is in the
+  // registry's issue index. Without the right to list installs the answer is
+  // unknown (undefined), as it was when the server list was not loaded.
+  const { data: canReadInstallations } = useHasPermissions({
+    mcpServerInstallation: ["read"],
+  });
+  const { data: issueIndex } = useMcpRegistryIssueIndex({
+    enabled: !!canReadInstallations,
+  });
+  const servers = {
+    data: canReadInstallations ? issueIndex?.servers : undefined,
+  };
   // The batteries that fit a server, as the overview counts them.
   const summary = useCoverageSummary();
   const { data: canManage } = useHasPermissions({

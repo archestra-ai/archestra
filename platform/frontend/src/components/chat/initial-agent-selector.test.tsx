@@ -185,6 +185,17 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
     mockUseInternalMcpCatalog(options),
 }));
 
+// The selector reads names and icons from the registry's directory and loads
+// a catalog item by id when a flow opens it; both answer from the same list.
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpCatalogDirectory: (options?: unknown) =>
+    mockUseInternalMcpCatalog(options),
+  fetchInternalMcpCatalogItem: async (_queryClient: unknown, id: string) =>
+    (
+      mockUseInternalMcpCatalog()?.data as Array<{ id: string }> | undefined
+    )?.find((item) => item.id === id) ?? null,
+}));
+
 vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
   useMcpInstallOrchestrator: (options?: unknown) =>
     mockUseMcpInstallOrchestrator(options),

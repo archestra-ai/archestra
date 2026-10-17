@@ -63,8 +63,8 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   useAllCatalogTools,
-  useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import { cn } from "@/lib/utils/tailwind";
 import { AgentReachBrowser } from "./agent-reach-browser";
 import { summarizeAllToolAccess } from "./all-access.utils";
@@ -119,7 +119,7 @@ export function AgentSettingsView({
   allKnowledgeBases: KnowledgeBase[];
   allConnectors: Connector[];
   onAddTools: () => void;
-  onChooseTools: (catalog: CatalogItem) => void;
+  onChooseTools: (catalog: { id: string }) => void;
   onEditSubagents: () => void;
   onEditKnowledge: () => void;
 }) {
@@ -449,9 +449,9 @@ function ToolsSection({
   highlightCatalogId: string | null;
   accessSwitch: ReactNode;
   onAddTools: () => void;
-  onChooseTools: (catalog: CatalogItem) => void;
+  onChooseTools: (catalog: { id: string }) => void;
 }) {
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [] } = useMcpCatalogDirectory();
   const { data: assignedToolsData, isPending } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
@@ -644,7 +644,7 @@ function AllToolsSection({
   accessSwitch: ReactNode;
   editExclusionsHref: string | null;
 }) {
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [] } = useMcpCatalogDirectory();
   const { data: catalogTools, isPending: toolsPending } = useAllCatalogTools();
   const { data: toolExclusions } = useAgentToolExclusions(agent.id);
   const { data: canReadKnowledgeBase } = useHasPermissions({

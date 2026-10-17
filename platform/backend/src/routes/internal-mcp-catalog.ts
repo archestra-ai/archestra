@@ -297,6 +297,9 @@ const McpRegistryIssueIndexSchema = z.object({
       authorId: z.string().optional(),
       createdByServiceAccountId: z.string().optional(),
       authorName: z.string().optional(),
+      /** An emoji icon; image icons are linked through `iconUrl`. */
+      icon: z.string().optional(),
+      iconUrl: z.string().optional(),
       alertMutes: z.array(McpServerAlertMuteSchema).optional(),
     }),
   ),
@@ -756,7 +759,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       });
       return reply.send({
-        catalogItems: catalogItems.map(withoutEmptyFields),
+        catalogItems: catalogItems.map(
+          ({ emojiIcon, hasImageIcon, updatedAt, ...item }) =>
+            withoutEmptyFields({
+              ...item,
+              icon: emojiIcon,
+              iconUrl: hasImageIcon
+                ? registryIconUrlForVersion(item.id, `u${updatedAt.getTime()}`)
+                : null,
+            }),
+        ),
         servers: servers.map(withoutEmptyFields),
       });
     },
@@ -3523,7 +3535,15 @@ function summarizeRegistryInstalls(
 
 /** A content-versioned link, so a changed icon is a new URL. */
 function registryIconUrl(catalogId: string, icon: string): string {
-  return `/api/internal_mcp_catalog/${catalogId}/icon?v=${iconVersion(icon)}`;
+  return registryIconUrlForVersion(catalogId, iconVersion(icon));
+}
+
+/**
+ * The icon route link for a version token. The issue index versions by the
+ * item's update time so it never reads the image bytes; any edit is a new URL.
+ */
+function registryIconUrlForVersion(catalogId: string, version: string): string {
+  return `/api/internal_mcp_catalog/${catalogId}/icon?v=${version}`;
 }
 
 function iconVersion(icon: string): string {

@@ -916,6 +916,10 @@ describe("MCP registry list routes", () => {
         }),
       ]);
       expect(body.servers[0]).not.toHaveProperty("teamId");
+      // Icon maps link the image instead of carrying it.
+      expect(body.catalogItems[0].iconUrl).toMatch(
+        new RegExp(`^/api/internal_mcp_catalog/${item.id}/icon\\?v=`),
+      );
       expect(body.servers[0]).not.toHaveProperty("oauthRefreshErrorMessage");
     });
   });

@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -47,6 +48,8 @@ export type McpRegistryIssueIndex = {
       | "authorId"
       | "createdByServiceAccountId"
       | "authorName"
+      | "icon"
+      | "iconUrl"
     > & { alertMutes: NonNullable<WireCatalogItem["alertMutes"]> }
   >;
   servers: Array<
@@ -247,6 +250,32 @@ function mcpServersForCatalogsQueryKey(catalogIds: string[]) {
 
 const PAGE_INSTALLS_STALE_MS = 30_000;
 
+/**
+ * Every catalog item the viewer can see, as a name and icon directory: the
+ * issue index's items with one display icon each (an emoji, or the link to the
+ * item's image). For icon maps and name lookups that used to load the whole
+ * catalog with its configuration.
+ */
+export function useMcpCatalogDirectory(options?: { enabled?: boolean }) {
+  const query = useMcpRegistryIssueIndex(options);
+  const items = useMemo(
+    () =>
+      query.data?.catalogItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        serverType: item.serverType,
+        environmentId: item.environmentId,
+        icon: item.iconUrl ?? item.icon,
+      })),
+    [query.data],
+  );
+  return { ...query, data: items };
+}
+
+export type McpCatalogDirectoryItem = NonNullable<
+  ReturnType<typeof useMcpCatalogDirectory>["data"]
+>[number];
+
 export function catalogItemQueryOptions(id: string) {
   return queryOptions({
     queryKey: ["mcp-catalog", "item", id],
@@ -388,6 +417,8 @@ function normalizeIssueIndex(
       environmentId: item.environmentId ?? null,
       authorId: item.authorId ?? null,
       createdByServiceAccountId: item.createdByServiceAccountId ?? null,
+      icon: item.icon ?? null,
+      iconUrl: item.iconUrl ?? null,
       authorName: item.authorName ?? null,
       alertMutes: item.alertMutes ?? [],
     })),

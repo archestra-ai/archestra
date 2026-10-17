@@ -235,6 +235,23 @@ beforeEach(() => {
         matches: [],
       });
     }),
+    // Which entries are installed comes from the registry's issue index.
+    http.get(`${baseUrl}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({
+        catalogItems: [],
+        servers: [
+          { id: freshServerId, catalogId: freshCatalogId },
+          { id: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d", catalogId },
+          { id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", catalogId: otherCatalogId },
+        ].map((install) => ({
+          ...install,
+          scope: "org",
+          localInstallationStatus: "success",
+          updatedAt: "2026-09-22T12:00:00Z",
+          canUseCredential: true,
+        })),
+      }),
+    ),
     // Bare is in the catalog but nobody installed it.
     http.get(`${baseUrl}/api/mcp_server`, () =>
       HttpResponse.json(
@@ -355,6 +372,9 @@ test("with no installed server to attach to, the attach form leads to MCP Regist
   declarations = emptyDeclarations();
   server.use(
     http.get(`${baseUrl}/api/mcp_server`, () => HttpResponse.json([])),
+    http.get(`${baseUrl}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({ catalogItems: [], servers: [] }),
+    ),
   );
   show();
   expect(
@@ -710,6 +730,9 @@ test("an organization battery can be included and removed without an installed s
   batteries = [githubBattery(), jevBattery()];
   server.use(
     http.get(`${baseUrl}/api/mcp_server`, () => HttpResponse.json([])),
+    http.get(`${baseUrl}/api/internal_mcp_catalog/registry/issue-index`, () =>
+      HttpResponse.json({ catalogItems: [], servers: [] }),
+    ),
     http.post(
       `${baseUrl}/api/openappa/battery-installs`,
       async ({ request }) => {

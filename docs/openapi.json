@@ -249884,6 +249884,12 @@
                           "authorName": {
                             "type": "string"
                           },
+                          "icon": {
+                            "type": "string"
+                          },
+                          "iconUrl": {
+                            "type": "string"
+                          },
                           "alertMutes": {
                             "type": "array",
                             "items": {

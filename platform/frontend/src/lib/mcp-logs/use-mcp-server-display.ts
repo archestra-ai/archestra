@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { useMemo } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 
 export type McpServerDisplay = {
@@ -25,7 +25,8 @@ export function useMcpServerDisplayByName() {
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  const { data: catalogItems } = useInternalMcpCatalog({
+  // Names and icons only: the registry's directory, not the full catalog.
+  const { data: catalogItems } = useMcpCatalogDirectory({
     enabled: canReadMcpRegistry === true,
   });
   const servers = serversQuery.data;

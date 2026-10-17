@@ -469,6 +469,10 @@ class InternalMcpCatalogModel {
       authorId: string | null;
       createdByServiceAccountId: string | null;
       authorName: string | null;
+      /** An emoji icon; null for an image icon or none. */
+      emojiIcon: string | null;
+      hasImageIcon: boolean;
+      updatedAt: Date;
     }>
   > {
     const catalog = schema.internalMcpCatalogTable;
@@ -483,6 +487,12 @@ class InternalMcpCatalogModel {
         environmentId: catalog.environmentId,
         authorId: catalog.authorId,
         createdByServiceAccountId: catalog.createdByServiceAccountId,
+        // The image bytes stay in the database: callers link the icon route.
+        emojiIcon: sql<
+          string | null
+        >`case when ${catalog.icon} like 'data:%' then null else ${catalog.icon} end`,
+        hasImageIcon: sql<boolean>`coalesce(${catalog.icon} like 'data:%', false)`,
+        updatedAt: catalog.updatedAt,
       })
       .from(catalog)
       .where(where)

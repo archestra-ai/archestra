@@ -53,7 +53,6 @@ import {
   OrganizationModel,
   OrganizationRoleModel,
   SessionModel,
-  TeamModel,
   ToolModel,
 } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -1351,58 +1350,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ids: query.ids,
           emails: query.emails,
         }),
-      );
-    },
-  );
-
-  fastify.get(
-    "/api/organization/members",
-    {
-      schema: {
-        operationId: RouteId.GetOrganizationMembers,
-        description:
-          "List organization members visible to the caller. Callers with the member:read permission (admins and equivalent custom roles) receive the full organization roster; other authenticated users receive only the members they share a team with.",
-        tags: ["Organization"],
-        response: constructResponseSchema(
-          z.array(
-            z.object({
-              id: z.string(),
-              name: z.string(),
-              email: z.string(),
-            }),
-          ),
-        ),
-      },
-    },
-    async ({ organizationId, user, headers, serviceAccount }, reply) => {
-      // member:read (admins, custom roles) sees the whole roster; everyone else
-      // sees only the users they share a team with, so a member can pick a chat
-      // share recipient without the org directory being exposed to (or scanned
-      // for) them. Forward serviceAccount + the resolved userContext exactly as
-      // the auth middleware does, so service-account callers are checked against
-      // their own permissions (not the synthetic user) and user callers against
-      // request.organizationId rather than the session cookie.
-      const { success: canSeeAllMembers } = await hasPermission(
-        { member: ["read"] },
-        headers,
-        serviceAccount,
-        { userId: user.id, organizationId },
-      );
-      const members = canSeeAllMembers
-        ? await MemberModel.findAllByOrganization(organizationId)
-        : await MemberModel.findByUserIdsInOrganization({
-            organizationId,
-            userIds: await TeamModel.getTeammateUserIdsInOrganization({
-              userId: user.id,
-              organizationId,
-            }),
-          });
-      // These model queries also select role/systemRole for admin surfaces that
-      // reuse them; this endpoint exposes identity only. Project explicitly so
-      // the privileged fields never depend on response-schema serialization to
-      // be dropped — a member without member:read must not learn teammates' roles.
-      return reply.send(
-        members.map(({ id, name, email }) => ({ id, name, email })),
       );
     },
   );

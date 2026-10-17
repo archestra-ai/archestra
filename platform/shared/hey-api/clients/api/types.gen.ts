@@ -98381,94 +98381,6 @@ export type GetOrganizationMemberOptionsResponses = {
 
 export type GetOrganizationMemberOptionsResponse = GetOrganizationMemberOptionsResponses[keyof GetOrganizationMemberOptionsResponses];
 
-export type GetOrganizationMembersData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/organization/members';
-};
-
-export type GetOrganizationMembersErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetOrganizationMembersError = GetOrganizationMembersErrors[keyof GetOrganizationMembersErrors];
-
-export type GetOrganizationMembersResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        email: string;
-    }>;
-};
-
-export type GetOrganizationMembersResponse = GetOrganizationMembersResponses[keyof GetOrganizationMembersResponses];
-
 export type GetOrganizationMemberData = {
     body?: never;
     path: {
@@ -116155,7 +116067,14 @@ export type GetUserPermissionsResponse = GetUserPermissionsResponses[keyof GetUs
 export type GetImpersonableUsersData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        limit?: number;
+        cursor?: string;
+        /**
+         * Matches name or email
+         */
+        search?: string;
+    };
     url: '/api/user/impersonable';
 };
 
@@ -116231,12 +116150,19 @@ export type GetImpersonableUsersResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        email: string;
-        role: string | null;
-    }>;
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            email: string;
+            role: string | null;
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
 };
 
 export type GetImpersonableUsersResponse = GetImpersonableUsersResponses[keyof GetImpersonableUsersResponses];

@@ -117,6 +117,12 @@ export class Authnz {
     // lifecycles and no TOTP.
     await this.enforceOrganizationAuthPolicies(request);
 
+    // No route matched: let the not-found handler answer 404. Denying by
+    // default here would report a missing route as an unregistered one.
+    if (request.routeOptions.url === undefined) {
+      return;
+    }
+
     const { success, error } = await this.isAuthorized(request);
     if (success) {
       logger.trace(

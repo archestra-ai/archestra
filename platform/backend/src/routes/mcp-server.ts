@@ -146,12 +146,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogId: z.string().optional(),
           includeAssignedAgents: z
             .preprocess(
-              (value) => value !== "false" && value !== false,
+              (value) => value === "true" || value === true,
               z.boolean(),
             )
             .optional()
             .describe(
-              "Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.",
+              "Include each listed install's assigned agents (default false; the list returns empty assignedAgents). Only the installs in the response are looked up, so narrow with catalogId. GET /api/mcp_server/{id} returns one install's agents.",
             ),
           assignmentScope: AgentScopeSchema.optional(),
           assignmentTeamIds: z
@@ -256,7 +256,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // in the organization before discarding all but one.
           catalogId,
           // The API includes agent usage unless asked not to.
-          includeAssignedAgents: includeAssignedAgents !== false,
+          includeAssignedAgents: includeAssignedAgents === true,
           // serverType:"app" backings are managed on the Apps surface, not
           // listed as MCP servers — keep them out of the user-facing server
           // list (and its consumers like the agent tool-assignment picker).

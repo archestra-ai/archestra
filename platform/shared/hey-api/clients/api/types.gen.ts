@@ -80351,7 +80351,7 @@ export type GetMcpServersData = {
     query?: {
         catalogId?: string;
         /**
-         * Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.
+         * Include each listed install's assigned agents (default false; the list returns empty assignedAgents). Only the installs in the response are looked up, so narrow with catalogId. GET /api/mcp_server/{id} returns one install's agents.
          */
         includeAssignedAgents?: boolean;
         assignmentScope?: 'personal' | 'team' | 'org';

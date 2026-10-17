@@ -868,22 +868,6 @@ export function useTestOcrConnection() {
   });
 }
 
-/**
- * Users the current caller can see: the full organization roster with
- * member:read, otherwise only the caller's teammates (may be empty).
- */
-export function useOrganizationMembers(enabled = true) {
-  return useQuery({
-    queryKey: [...organizationKeys.all, "members"],
-    queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getOrganizationMembers();
-      throwOnApiError(error);
-      return data ?? [];
-    },
-    enabled,
-  });
-}
-
 export type PendingSignupMember = {
   userId: string;
   name: string | null;

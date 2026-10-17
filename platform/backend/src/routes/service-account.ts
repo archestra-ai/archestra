@@ -680,7 +680,9 @@ async function validateTeamLinkOrThrow(params: {
   userId: string;
 }) {
   if (!params.teamId) return;
-  const team = await TeamModel.findById(params.teamId);
+  const team = await TeamModel.findById(params.teamId, {
+    includeMembers: false,
+  });
   if (!team || team.organizationId !== params.organizationId) {
     throw new ApiError(400, "Team not found");
   }

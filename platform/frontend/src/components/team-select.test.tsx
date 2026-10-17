@@ -12,12 +12,17 @@ global.ResizeObserver = class ResizeObserver {
 Element.prototype.scrollIntoView = vi.fn();
 
 const TEAMS = [
-  { id: "t-support", name: "Customer Support", description: null, members: [] },
+  {
+    id: "t-support",
+    name: "Customer Support",
+    description: null,
+    memberCount: 0,
+  },
   {
     id: "t-data",
     name: "Data Science",
     description: "Forecasting",
-    members: [{ userId: "u1" }, { userId: "u2" }],
+    memberCount: 2,
   },
 ] as never[];
 
@@ -38,6 +43,19 @@ describe("TeamSelect", () => {
     ).toHaveTextContent("Data Science");
   });
 
+  it("shows only the description when a restored team has no member count", async () => {
+    const user = userEvent.setup();
+    renderSelect(null, [
+      { id: "t-old", name: "Legacy", description: "Cached row" },
+    ] as never[]);
+
+    await user.click(screen.getByRole("combobox", { name: "Billing team" }));
+
+    const option = screen.getByRole("option", { name: /^Legacy/ });
+    expect(option).toHaveTextContent("Cached row");
+    expect(option).not.toHaveTextContent(/member/);
+  });
+
   it("clears the team with the no-team choice", async () => {
     const user = userEvent.setup();
     const onValueChange = renderSelect("t-data");
@@ -49,7 +67,7 @@ describe("TeamSelect", () => {
   });
 });
 
-function renderSelect(initial: string | null) {
+function renderSelect(initial: string | null, teams = TEAMS) {
   const onValueChange = vi.fn();
   function Harness() {
     const [value, setValue] = useState(initial);
@@ -61,7 +79,7 @@ function renderSelect(initial: string | null) {
           onValueChange(next);
           setValue(next);
         }}
-        teams={TEAMS}
+        teams={teams}
         noneOption={{ label: "No team", description: "Nobody pays" }}
       />
     );

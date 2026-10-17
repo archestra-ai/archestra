@@ -31,6 +31,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectTeamExternalGroupSchema,
+  SelectTeamListItemSchema,
   SelectTeamMemberListItemSchema,
   SelectTeamMemberSchema,
   SelectTeamSchema,
@@ -38,6 +39,12 @@ import {
   UpdateTeamMemberBodySchema,
 } from "@/types";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+
+/** A query string "true" or "false" read as a boolean. */
+const BooleanQueryParamSchema = z.preprocess(
+  (value) => (value === "false" ? false : value === "true" ? true : value),
+  z.boolean(),
+);
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -49,16 +56,12 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Teams"],
         querystring: PaginationQuerySchema.extend({
           name: z.string().optional(),
-          includeRelations: z
-            .preprocess(
-              (value) =>
-                value === "false" ? false : value === "true" ? true : value,
-              z.boolean(),
-            )
-            .describe(
-              "Include team members, labels and descendant teams (default true). Disable for metadata-only pickers.",
-            )
-            .optional(),
+          includeRelations: BooleanQueryParamSchema.describe(
+            "Include team members, labels and descendant teams (default true). Set to false to get only the team fields and memberCount.",
+          ).optional(),
+          includeMembers: BooleanQueryParamSchema.describe(
+            "Include the members array of each team (default true). Set to false to get labels and descendant teams without members. Use memberCount for the number of members.",
+          ).optional(),
           // Filter teams by labels. Format: key1:val1|val2;key2:val3
           // (AND across keys, OR within a key's values).
           labels: z.string().optional(),
@@ -71,12 +74,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .optional(),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectTeamSchema),
+          createPaginatedResponseSchema(SelectTeamListItemSchema),
         ),
       },
     },
     async (request, reply) => {
-      const { limit, offset, name, mine, includeRelations } = request.query;
+      const { limit, offset, name, mine, includeRelations, includeMembers } =
+        request.query;
       const labels = parseLabelsParam(request.query.labels);
       const { success: canManageAllTeams } = await hasPermission(
         { team: ["update"] },
@@ -92,6 +96,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name,
           labels,
           includeRelations,
+          includeMembers,
         });
         return reply.send({
           data: result.data,
@@ -106,6 +111,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name,
         labels,
         includeRelations,
+        includeMembers,
       });
       return reply.send({
         data: result.data,
@@ -178,35 +184,43 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetTeam,
-        description: "Get a team by ID",
+        description:
+          "Get a team by ID, with the caller's role in it as myRole when they are a member",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
         }),
+        querystring: z.object({
+          includeMembers: BooleanQueryParamSchema.describe(
+            "Include the team's members array (default true). Set to false for a large team when only its details are needed; page through members with GET /api/teams/{id}/members/page.",
+          ).optional(),
+        }),
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async ({ params: { id }, organizationId, user, headers }, reply) => {
-      const team = await getTeamForOrg({ teamId: id, organizationId });
-      if (!team) {
-        throw new ApiError(404, "Team not found");
-      }
-
-      const { success: isOrgTeamManager } = await hasPermission(
-        { team: ["update"] },
+    async (
+      {
+        params: { id },
+        query: { includeMembers },
+        organizationId,
+        user,
         headers,
-      );
-      const canRead = await canReadTeam({
-        isOrgTeamManager,
-        userId: user.id,
+      },
+      reply,
+    ) => {
+      const team = await findReadableTeam({
         teamId: id,
+        organizationId,
+        userId: user.id,
+        headers,
+        includeMembers: includeMembers ?? true,
       });
-      if (!canRead) {
-        throw new ApiError(404, "Team not found");
-      }
 
-      const labels = await TeamLabelModel.getLabelsForTeam(id);
-      return reply.send({ ...team, labels });
+      const [labels, myRole] = await Promise.all([
+        TeamLabelModel.getLabelsForTeam(id),
+        TeamModel.getMemberRole(id, user.id),
+      ]);
+      return reply.send({ ...team, labels, ...(myRole && { myRole }) });
     },
   );
 
@@ -226,7 +240,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, body, organizationId, headers, user }, reply) => {
       // Verify the team exists and belongs to the user's organization
-      const existingTeam = await TeamModel.findById(id);
+      const existingTeam = await TeamModel.findById(id, {
+        includeMembers: false,
+      });
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -351,7 +367,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, headers }, reply) => {
       // Verify the team exists and belongs to the user's organization
-      const existingTeam = await TeamModel.findById(id);
+      const existingTeam = await TeamModel.findById(id, {
+        includeMembers: false,
+      });
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -391,25 +409,79 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user, headers }, reply) => {
-      const team = await getTeamForOrg({ teamId: id, organizationId });
-      if (!team) {
-        throw new ApiError(404, "Team not found");
-      }
-
-      const { success: isOrgTeamManager } = await hasPermission(
-        { team: ["update"] },
-        headers,
-      );
-      const canRead = await canReadTeam({
-        isOrgTeamManager,
-        userId: user.id,
+      await findReadableTeam({
         teamId: id,
+        organizationId,
+        userId: user.id,
+        headers,
+        includeMembers: false,
       });
-      if (!canRead) {
-        throw new ApiError(404, "Team not found");
-      }
-
       return reply.send(await TeamModel.getTeamMembersWithUsers(id));
+    },
+  );
+
+  fastify.get(
+    "/api/teams/:id/members/page",
+    {
+      schema: {
+        operationId: RouteId.GetTeamMembersPage,
+        description:
+          "Get one page of a team's members, ordered by name, with optional search",
+        tags: ["Teams"],
+        params: z.object({
+          id: z.string(),
+        }),
+        querystring: PaginationQuerySchema.extend({
+          search: z
+            .string()
+            .max(512, "Search must be at most 512 characters")
+            .optional()
+            .describe(
+              "Search by user name or email. Every whitespace-separated word must appear in the name or the email.",
+            ),
+          userIds: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string().min(1)).min(1).max(100),
+            )
+            .optional()
+            .describe(
+              "Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both.",
+            ),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectTeamMemberListItemSchema),
+        ),
+      },
+    },
+    async (
+      {
+        params: { id },
+        query: { limit, offset, search, userIds },
+        organizationId,
+        user,
+        headers,
+      },
+      reply,
+    ) => {
+      await findReadableTeam({
+        teamId: id,
+        organizationId,
+        userId: user.id,
+        headers,
+        includeMembers: false,
+      });
+      const result = await TeamModel.getTeamMembersWithUsersPaginated({
+        teamId: id,
+        limit,
+        offset,
+        search: search || undefined,
+        userIds,
+      });
+      return reply.send({
+        data: result.data,
+        pagination: calculatePaginationMeta(result.total, { limit, offset }),
+      });
     },
   );
 
@@ -643,7 +715,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(id);
+      const team = await TeamModel.findById(id, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -706,7 +778,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(id);
+      const team = await TeamModel.findById(id, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -771,7 +843,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(id);
+      const team = await TeamModel.findById(id, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -825,6 +897,42 @@ async function assertCanManageTeam(params: {
   if (!allowed) {
     throw new ApiError(403, `You must be a team admin to ${params.action}`);
   }
+}
+
+/**
+ * The team, when it is in the caller's organization and the caller may read
+ * it. Answers 404 otherwise, so a team the caller cannot read looks the same
+ * as one that does not exist.
+ */
+async function findReadableTeam(params: {
+  teamId: string;
+  organizationId: string;
+  userId: string;
+  headers: Parameters<typeof hasPermission>[1];
+  includeMembers?: boolean;
+}) {
+  const team = await getTeamForOrg({
+    teamId: params.teamId,
+    organizationId: params.organizationId,
+    includeMembers: params.includeMembers,
+  });
+  if (!team) {
+    throw new ApiError(404, "Team not found");
+  }
+
+  const { success: isOrgTeamManager } = await hasPermission(
+    { team: ["update"] },
+    params.headers,
+  );
+  const canRead = await canReadTeam({
+    isOrgTeamManager,
+    userId: params.userId,
+    teamId: params.teamId,
+  });
+  if (!canRead) {
+    throw new ApiError(404, "Team not found");
+  }
+  return team;
 }
 
 async function assertValidTeamParent(params: {

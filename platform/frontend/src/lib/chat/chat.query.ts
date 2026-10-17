@@ -134,29 +134,31 @@ export function mergeUpdatedConversationIntoCache(
 export function useConversation(conversationId?: string) {
   return useQuery({
     queryKey: ["conversation", conversationId],
-    queryFn: () => {
-      if (!conversationId) return null;
-      // 400/404 are handled gracefully by the UI, so suppress their toast.
-      // For a locked chat the stored key rides along; without it
-      // the server answers 200 with `contentLocked: true` and no messages.
-      return callApi(
-        () =>
-          getChatConversation({
-            path: { id: conversationId },
-            headers: lockedChatRequestHeaders(conversationId),
-          }),
-        null,
-        {
-          silentStatuses: [400, 404],
-        },
-      );
-    },
+    queryFn: () => (conversationId ? fetchConversation(conversationId) : null),
     enabled: !!conversationId,
     staleTime: 0, // Always refetch to ensure we have the latest messages
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
     retry: false, // Don't retry on error to avoid multiple 404s
   });
+}
+
+/** One conversation with its messages, for callers outside the chat page. */
+export function fetchConversation(conversationId: string) {
+  // 400/404 are handled gracefully by the UI, so suppress their toast.
+  // For a locked chat the stored key rides along; without it
+  // the server answers 200 with `contentLocked: true` and no messages.
+  return callApi(
+    () =>
+      getChatConversation({
+        path: { id: conversationId },
+        headers: lockedChatRequestHeaders(conversationId),
+      }),
+    null,
+    {
+      silentStatuses: [400, 404],
+    },
+  );
 }
 
 export function useConversationFiles(conversationId?: string) {

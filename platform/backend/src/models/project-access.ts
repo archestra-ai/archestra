@@ -115,6 +115,13 @@ class ProjectAccessModel {
     limit?: number;
     offset?: number;
   }): Promise<{ rows: ProjectListCandidate[]; total: number }> {
+    // An empty id set (no label match, no pins) matches nothing: skip both queries.
+    if (
+      params.ids?.length === 0 ||
+      (params.pins?.pinned && params.pins.ids.length === 0)
+    ) {
+      return { rows: [], total: 0 };
+    }
     const table = schema.projectsTable;
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

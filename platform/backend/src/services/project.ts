@@ -1014,11 +1014,6 @@ class ProjectService {
     });
   }
 
-  /**
-   * A project's default agent must be one every member of the project can
-   * actually use, however widely the project is shared. Org scope is what
-   * guarantees that, so it is enforced here rather than left to the picker.
-   */
   /** The response rows for one page: everything the cards show, read for the page alone. */
   private async toListItems(params: {
     rows: {
@@ -1087,6 +1082,11 @@ class ProjectService {
     });
   }
 
+  /**
+   * A project's default agent must be one every member of the project can
+   * actually use, however widely the project is shared. Org scope is what
+   * guarantees that, so it is enforced here rather than left to the picker.
+   */
   private async requirePinnableDefaultAgent(params: {
     agentId: string;
     organizationId: string;

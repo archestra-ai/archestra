@@ -92,6 +92,10 @@ describe("GET /api/projects (scope + search)", () => {
         labels: [{ key: "stage", value: "ready" }],
       },
     ]);
+    expect((await list("?labels=stage%3Amissing")).json()).toMatchObject({
+      data: [],
+      pagination: { total: 0 },
+    });
 
     expect(
       (

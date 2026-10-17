@@ -46,4 +46,23 @@ describe("defaultAdminPasswordCheck", () => {
     ).toBe(false);
     expect(verifyCalls.count).toBe(2);
   });
+
+  test("checks the same hash again for a different password", async () => {
+    const stored = await hashPassword("first-default");
+    verifyCalls.count = 0;
+
+    expect(
+      await defaultAdminPasswordCheck.matches({
+        password: "first-default",
+        hash: stored,
+      }),
+    ).toBe(true);
+    expect(
+      await defaultAdminPasswordCheck.matches({
+        password: "second-default",
+        hash: stored,
+      }),
+    ).toBe(false);
+    expect(verifyCalls.count).toBe(2);
+  });
 });

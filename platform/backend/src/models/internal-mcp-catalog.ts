@@ -608,9 +608,11 @@ class InternalMcpCatalogModel {
     const principals =
       await InternalMcpCatalogModel.resolveListPrincipals(options);
 
+    // `%` and `_` in the query are text to find, not wildcards.
+    const pattern = `%${escapeLikePattern(query)}%`;
     const baseSearchCondition = or(
-      ilike(schema.internalMcpCatalogTable.name, `%${query}%`),
-      ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
+      ilike(schema.internalMcpCatalogTable.name, pattern),
+      ilike(schema.internalMcpCatalogTable.description, pattern),
     );
 
     // SPDX-SnippetBegin

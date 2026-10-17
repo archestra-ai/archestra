@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.76](https://github.com/archestra-ai/archestra/compare/platform-v1.3.75...platform-v1.3.76) (2026-10-17)
+
+
+### Bug Fixes
+
+* **chat:** reattach to a stalled run without duplicating the answer (backport to release/1.3) ([#9131](https://github.com/archestra-ai/archestra/issues/9131)) ([4716fdb](https://github.com/archestra-ai/archestra/commit/4716fdb5bc4643b9b5122eaf4809744a612e9c19))
+* **connections:** send the marketplace token as the clone URL password (backport [#9154](https://github.com/archestra-ai/archestra/issues/9154)) ([#9155](https://github.com/archestra-ai/archestra/issues/9155)) ([1296d7f](https://github.com/archestra-ai/archestra/commit/1296d7f017806a1c10745fa99c81b08b02cb4d47))
+
 ## [1.3.75](https://github.com/archestra-ai/archestra/compare/platform-v1.3.74...platform-v1.3.75) (2026-10-17)
 
 

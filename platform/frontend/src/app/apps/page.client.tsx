@@ -27,6 +27,7 @@ import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
+import { EmptyTableSection } from "@/components/table-section-heading";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -259,11 +260,22 @@ export default function AppsPage() {
                   apps={pinnedApps}
                   onOpenSettings={openSettings}
                 />
-                <AppSection
-                  title="All apps"
-                  apps={unpinnedApps}
-                  onOpenSettings={openSettings}
-                />
+                {unpinnedApps.length > 0 ? (
+                  <AppSection
+                    title="All apps"
+                    apps={unpinnedApps}
+                    onOpenSettings={openSettings}
+                  />
+                ) : (
+                  <EmptyTableSection
+                    title="All apps"
+                    message={
+                      hasActiveFilters
+                        ? "No other apps match your filters"
+                        : "No other apps yet"
+                    }
+                  />
+                )}
               </div>
             )}
           </LoadingWrapper>

@@ -51,6 +51,16 @@ describe("outbound A2A subagent assignments", () => {
       "External Researcher",
     );
     const second = await createRemoteAgent(ctx.organizationId, "Second Remote");
+    // The count reads only rows without a pinned MCP server, so the
+    // delegation path must never pin one.
+    const assignmentCount = async (remoteAgentId: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/a2a/remote-agents/${remoteAgentId}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json().assignmentCount;
+    };
 
     const initial = await ctx.app.inject({
       method: "POST",
@@ -63,6 +73,7 @@ describe("outbound A2A subagent assignments", () => {
       removed: [],
     });
     expect(await assignedToolIds(parent.id)).toEqual([first.toolId]);
+    expect(await assignmentCount(first.id)).toBe(1);
 
     const listed = await ctx.app.inject({
       method: "GET",
@@ -91,6 +102,8 @@ describe("outbound A2A subagent assignments", () => {
       removed: [first.connection.id],
     });
     expect(await assignedToolIds(parent.id)).toEqual([second.toolId]);
+    expect(await assignmentCount(first.id)).toBe(0);
+    expect(await assignmentCount(second.id)).toBe(1);
 
     const removed = await ctx.app.inject({
       method: "POST",

@@ -69,11 +69,17 @@ kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_passw
 
 ## Before Joining the Merge Queue
 
-Run `pnpm preflight` from a clean checkout of the finished PR revision before requesting queue entry. It checks types, lint, unused exports, white-label copy, and frontend/shared unit tests. Coding agents follow this step through `platform/AGENTS.md`; no PR label is needed.
+Use `pnpm enqueue <PR-number>` from `platform/` to check the finished PR revision and request queue entry in one command. Install and authenticate the GitHub CLI first, and start from a clean checkout of the PR head.
 
-Run the relevant focused tests for your changes, too. Preflight runs locally when requested, so intermediate pushes add no preflight CI runs. The merge queue still runs the full build, backend suites, Rust checks, browser suites, and generated-file validation.
+1. Run the focused tests for your changes, then commit and push the finished revision.
+2. Wait for required PR checks and reviews, then run `pnpm enqueue 1234`, replacing `1234` with your PR number. The command uses the repository in `origin`; pass `--repo owner/repository` when the PR belongs to another repository.
+3. Look for a queued confirmation, then continue monitoring until the PR merges. If GitHub rejects admission, resolve the reported requirement before running the command again.
 
-If code changes after preflight, rerun it on the new revision. GitHub does not enforce this local check as a queue-admission requirement.
+Enqueue runs preflight for types, lint, unused exports, white-label copy, and frontend/shared unit tests. It refuses to queue if those checks fail, the local or remote revision changes, the target branch changes, or the branch has no merge queue. It requests queue entry only; it cannot turn into a direct merge if queue protection changes.
+
+Do not run `pnpm preflight` separately before enqueue; it is available for validation without requesting queue entry.
+
+The command runs locally when requested, so intermediate pushes add no preflight CI runs. The merge queue still runs the full build, backend suites, Rust checks, browser suites, and generated-file validation. Direct GitHub queueing can bypass the wrapper; GitHub does not enforce its preflight result as an admission requirement.
 
 ## Running a Second Stack
 

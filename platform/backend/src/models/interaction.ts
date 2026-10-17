@@ -69,6 +69,10 @@ import {
   LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH,
   normalizeInteractionResponse,
 } from "@/types";
+import {
+  type InteractionSessionPreview,
+  InteractionSessionPreviewSchema,
+} from "@/types/interaction";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
 import { isUuid, uuidv7 } from "@/utils/uuid";
@@ -528,7 +532,16 @@ class InteractionModel {
       .insert(schema.interactionsTable)
       // Monotonic v7 id: created_at ties happen under load, and the delta
       // manager's "most recent interaction" lookup breaks ties with the id.
-      .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
+      .values({
+        id: uuidv7(),
+        ...encryptInteractionContent(
+          {
+            ...values,
+            sessionPreview: buildSessionPreview(sanitized, values.request),
+          },
+          audit,
+        ),
+      })
       .returning();
     // The RETURNING row is this method's public return value — decrypt it so
     // callers never see envelopes. Safe for encrypted-chat rows too: this caller
@@ -2276,12 +2289,13 @@ class InteractionModel {
       for (const interaction of windowRows) {
         const isGuardrail = isGuardrailSource(interaction.source);
         const isOpenCodeSideTurn =
-          isOpenCodeFamilySessionSource(interaction.sessionSource) &&
-          computeRequestType(
-            interaction.request,
-            interaction.sessionSource,
-            interaction.source,
-          ) === "subagent";
+          interaction.preview?.isOpenCodeSideTurn ??
+          (isOpenCodeFamilySessionSource(interaction.sessionSource) &&
+            computeRequestType(
+              interaction.request,
+              interaction.sessionSource,
+              interaction.source,
+            ) === "subagent");
 
         // Check for title generation request (Claude Code)
         if (interaction.isTitleGeneration && claudeCodeTitle === undefined) {
@@ -2289,7 +2303,9 @@ class InteractionModel {
           const response = interaction.response as {
             content?: Array<{ text?: string }>;
           };
-          claudeCodeTitle = response?.content?.[0]?.text ?? null;
+          claudeCodeTitle = interaction.preview
+            ? interaction.preview.claudeCodeTitle
+            : (response?.content?.[0]?.text ?? null);
           continue;
         }
 
@@ -2328,10 +2344,11 @@ class InteractionModel {
           // A Metadata only turn is a real turn whose content was never
           // stored: it is the session's tip, with no preview to show.
           if (
-            hasOpenAiContent ||
-            hasResponsesContent ||
-            hasGeminiContent ||
-            isLogContentNotStored(interaction.request)
+            interaction.preview?.hasContent ??
+            (hasOpenAiContent ||
+              hasResponsesContent ||
+              hasGeminiContent ||
+              isLogContentNotStored(interaction.request))
           ) {
             if (isGuardrail) guardrailTip ??= interaction;
             else lastMainInteraction = interaction;
@@ -2400,16 +2417,18 @@ class InteractionModel {
       }
     }
 
-    // Reconstruct every chosen tip's full request from deltas in one pass (a
-    // no-op for legacy/non-delta rows, which reconstructMany returns as-is).
-    // Still at most one tip per session, now in a single ancestor query.
+    // Only old tips without compact metadata need their full delta history.
+    // Batch those legacy reads; modern previews never load an ancestor chain.
     const reconstructed = await InteractionDeltaManager.reconstructMany(
       [...selectedPerSession.values()]
         .map(
           ({ lastMainInteraction, guardrailTip }) =>
             lastMainInteraction ?? guardrailTip,
         )
-        .filter((tip): tip is (typeof interactions)[0] => tip !== null)
+        .filter(
+          (tip): tip is (typeof interactions)[0] =>
+            tip !== null && tip.preview === null,
+        )
         .map((tip) => ({
           id: tip.id,
           threadId: tip.threadId,
@@ -2430,12 +2449,15 @@ class InteractionModel {
 
       result.set(sessionKey, {
         lastUserMessagePreview: lastMainInteraction
-          ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
+          ? lastMainInteraction.preview
+            ? lastMainInteraction.preview.lastUserMessagePreview
+            : buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
           : null,
         lastInteractionId: lastMainInteraction?.id ?? null,
         lastInteractionType: lastMainInteraction?.type ?? null,
         contentNotStored: lastMainInteraction
-          ? isLogContentNotStored(lastMainInteraction.request)
+          ? (lastMainInteraction.preview?.contentNotStored ??
+            isLogContentNotStored(lastMainInteraction.request))
           : false,
         claudeCodeTitle: claudeCodeTitle ?? null,
       });
@@ -2492,7 +2514,7 @@ class InteractionModel {
       oldest > 0
         ? sql`
         UNION ALL
-        (SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, type, created_at,
                 encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
@@ -2510,7 +2532,7 @@ class InteractionModel {
       uuidKeys.length > 0
         ? sql`
       UNION ALL
-      SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
+      SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, type, created_at,
              encrypted_chat_conversation_id
       FROM interactions
       WHERE id IN (${sql.join(
@@ -2528,6 +2550,7 @@ class InteractionModel {
       source: InteractionSource | null;
       thread_id: string | null;
       request: unknown;
+      session_preview: unknown;
       type: string;
       // Raw SQL bypasses Drizzle's column mapping, so timestamps arrive as
       // whatever the driver hands back — a Date on one, a string on another.
@@ -2544,11 +2567,11 @@ class InteractionModel {
       -- insertion order (the same tiebreak the write path already uses to
       -- resolve a delta parent). Final ordering is applied in JS, since the
       -- per-key UNION below has no single ordering to inherit.
-      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.type,
+      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.session_preview, t.type,
              t.created_at, t.encrypted_chat_conversation_id
       FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
       CROSS JOIN LATERAL (
-        (SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, CASE WHEN session_preview IS NULL THEN request ELSE NULL END AS request, session_preview, type, created_at,
                 encrypted_chat_conversation_id
          FROM ${newestFrom}
          ORDER BY created_at DESC NULLS LAST, id DESC
@@ -2572,11 +2595,16 @@ class InteractionModel {
     // overlap, and the caller's scan must not see the same row twice.
     const byId = new Map<string, SessionWindowRow>();
     for (const row of interactionsResult.rows) {
+      const parsedPreview = InteractionSessionPreviewSchema.safeParse(
+        row.session_preview,
+      );
+      const preview = parsedPreview.success ? parsedPreview.data : null;
       // A guardrail consult quotes the call it judges, so its text marks
       // nothing about the consult itself.
-      const requestText = isGuardrailSource(row.source)
-        ? ""
-        : JSON.stringify(row.request);
+      const requestText =
+        preview || isGuardrailSource(row.source)
+          ? ""
+          : JSON.stringify(row.request);
       byId.set(row.id, {
         id: row.id,
         sessionId: row.session_id,
@@ -2584,11 +2612,14 @@ class InteractionModel {
         source: row.source,
         threadId: row.thread_id,
         request: row.request,
+        preview,
         response: undefined,
-        isTitleGeneration: requestText.includes(
-          "Please write a 5-10 word title",
-        ),
-        isPromptSuggestion: requestText.includes("prompt suggestion generator"),
+        isTitleGeneration:
+          preview?.isTitleGeneration ??
+          requestText.includes("Please write a 5-10 word title"),
+        isPromptSuggestion:
+          preview?.isPromptSuggestion ??
+          requestText.includes("prompt suggestion generator"),
         type: row.type,
         createdAt: new Date(row.created_at).getTime(),
       });
@@ -2598,7 +2629,7 @@ class InteractionModel {
     // batch for the sampled title-generation turns that actually need them;
     // full assistant responses can otherwise dwarf the session-list reads.
     const titleIds = [...byId.values()]
-      .filter((row) => row.isTitleGeneration)
+      .filter((row) => row.isTitleGeneration && !row.preview)
       .map((row) => row.id);
     if (titleIds.length > 0) {
       const titles = await db
@@ -2799,6 +2830,7 @@ export default InteractionModel;
 
 /** One interaction row sampled for a session's list entry. */
 type SessionWindowRow = {
+  preview: InteractionSessionPreview | null;
   id: string;
   sessionId: string | null;
   sessionSource: string | null;
@@ -2953,4 +2985,45 @@ function parseInteractionAuthMethods(
       const result = InteractionAuthMethodSchema.safeParse(authMethod);
       return result.success ? [result.data] : [];
     });
+}
+
+/** Derive text from the full request and classify the stored delta suffix. */
+function buildSessionPreview(
+  data: InsertInteraction,
+  storedRequest: unknown,
+): InteractionSessionPreview {
+  const request = storedRequest as {
+    messages?: unknown[];
+    input?: unknown[];
+    contents?: unknown[];
+  };
+  const text = isGuardrailSource(data.source ?? null)
+    ? ""
+    : (JSON.stringify(request) ?? "");
+  const isTitleGeneration = text.includes("Please write a 5-10 word title");
+  const response = data.response as { content?: Array<{ text?: string }> };
+  const contentNotStored = isLogContentNotStored(request);
+  return {
+    hasContent:
+      [request?.messages, request?.input, request?.contents].some(
+        (value) => Array.isArray(value) && value.length > 0,
+      ) || contentNotStored,
+    isTitleGeneration,
+    isPromptSuggestion: text.includes("prompt suggestion generator"),
+    isOpenCodeSideTurn:
+      isOpenCodeFamilySessionSource(data.sessionSource ?? null) &&
+      computeRequestType(
+        request,
+        data.sessionSource ?? null,
+        data.source ?? null,
+      ) === "subagent",
+    contentNotStored,
+    lastUserMessagePreview: buildLastUserMessagePreview(
+      data.request,
+      data.type,
+    ),
+    claudeCodeTitle: isTitleGeneration
+      ? (response?.content?.[0]?.text ?? null)
+      : null,
+  };
 }

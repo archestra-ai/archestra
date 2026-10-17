@@ -11,7 +11,14 @@ import {
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
-import { memo, type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   PromptInputButton,
   PromptInputTools,
@@ -26,6 +33,7 @@ import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
+import { useChatSetupMenuPosition } from "@/components/chat/use-chat-setup-menu-position";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -205,6 +213,20 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const {
+    triggerRef: optionsTriggerRef,
+    position: optionsPosition,
+    updatePosition: updateOptionsPosition,
+  } = useChatSetupMenuPosition(optionsOpen && !conversationId);
+  const handleOptionsOpenChange = (next: boolean) => {
+    if (next && !conversationId) updateOptionsPosition();
+    setOptionsOpen(next);
+  };
+  const credentialSelectorRef = useRef<{ selectKey: (keyId: string) => void }>(
+    null,
+  );
+  const handleSubscriptionSelect = (keyId: string) =>
+    credentialSelectorRef.current?.selectKey(keyId);
   const providerCatalog = useModelProviderCatalog();
   // New chats expose their setup; existing conversations keep it in one menu.
   const showOptionsMenu = !!conversationId || isNarrow;
@@ -348,6 +370,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           (canSeeFullView === false && subscriptionConnectRequired)) && (
           <div className="hidden">
             <LlmProviderApiKeySelector
+              ref={credentialSelectorRef}
               conversationId={conversationId}
               currentProvider={currentProvider}
               currentConversationChatApiKeyId={
@@ -366,21 +389,28 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         )}
       {/* Existing chats always use the menu; new chats use it only when space is tight. */}
       {showOptionsMenu && (
-        <Popover open={optionsOpen} onOpenChange={setOptionsOpen}>
+        <Popover open={optionsOpen} onOpenChange={handleOptionsOpenChange}>
           <PopoverTrigger asChild>
-            <Button type="button" variant="ghost" size="icon-sm">
+            <Button
+              ref={optionsTriggerRef}
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+            >
               <MoreVerticalIcon className="size-4" />
               <span className="sr-only">More options</span>
             </Button>
           </PopoverTrigger>
           <PopoverContent
-            side="top"
+            side={conversationId ? "top" : optionsPosition.side}
             align="start"
+            sideOffset={8}
             collisionPadding={12}
-            className="w-auto overflow-hidden p-0"
+            className="w-auto overflow-hidden rounded-xl p-0"
           >
             <ChatSetupMenu
               conversationId={conversationId}
+              maxHeight={conversationId ? undefined : optionsPosition.maxHeight}
               close={closeOptions}
               agentId={selectorAgentId}
               onAgentChange={
@@ -404,6 +434,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               onProviderChange={onProviderChange}
               subscriptionConnectRequired={subscriptionConnectRequired}
               onSubscriptionConnect={onSubscriptionConnect}
+              onSubscriptionSelect={handleSubscriptionSelect}
               subscriptionSignInTitle={subscriptionSignInTitle}
               thinkingEffort={thinkingEffort}
               onThinkingEffortChange={onThinkingEffortChange}
@@ -630,6 +661,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               onProviderChange={onProviderChange}
               subscriptionConnectRequired={subscriptionConnectRequired}
               onSubscriptionConnect={onSubscriptionConnect}
+              onSubscriptionSelect={handleSubscriptionSelect}
               subscriptionSignInTitle={subscriptionSignInTitle}
               thinkingEffort={thinkingEffort}
               onThinkingEffortChange={onThinkingEffortChange}

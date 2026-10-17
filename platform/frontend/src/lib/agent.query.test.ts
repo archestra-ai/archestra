@@ -8,8 +8,9 @@ import {
   useChatAgentBootstrap,
   useCreateProfile,
   usePinAgent,
+  usePinnedAgentIds,
   useProfile,
-  useProfiles,
+  useProfilesPaginated,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
@@ -34,6 +35,8 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       getChatAgentRoster: vi.fn(),
       getAgent: vi.fn(),
       getChatAgentMcpTools: vi.fn(),
+      getMemberDefaultAgent: vi.fn(),
+      getOrganization: vi.fn(),
       pinAgent: vi.fn(),
       unpinAgent: vi.fn(),
       updateAgent: vi.fn(),
@@ -216,7 +219,7 @@ describe("agent write mutations", () => {
       .mockResolvedValue({ data: [{ name: "tools", tokens: 5763 }] } as never);
     const hook = setup(() => ({
       update: useUpdateProfile(),
-      list: useProfiles({ filters: { agentType: "mcp_gateway" } }),
+      list: useProfilesPaginated({ agentTypes: ["mcp_gateway"] }),
       tools: useChatProfileMcpTools(savedGateway.id),
     }));
     try {
@@ -230,7 +233,7 @@ describe("agent write mutations", () => {
         }),
       );
       await waitFor(() =>
-        expect(hook.result.current.list.data?.[0].toolExposureMode).toBe(
+        expect(hook.result.current.list.data?.data[0].toolExposureMode).toBe(
           "search_and_run_only",
         ),
       );
@@ -297,22 +300,45 @@ describe("agent detail", () => {
     vi.clearAllMocks();
   });
 
+  const partialRows = [{ id: "agent-1", name: "Only a name" }];
   it.each([
-    { kind: "options", filters: {} },
-    { kind: "chat-roster", filters: "v2" },
-    { kind: "all", filters: { includeTools: false } },
-    { kind: "all", filters: { includeTools: true, view: "chat" } },
-  ])("never seeds an editing form from $kind metadata ($filters)", async ({
-    kind,
-    filters,
-  }) => {
+    {
+      kind: "selector options",
+      queryKey: ["agents", "options", {}],
+      data: partialRows,
+    },
+    {
+      kind: "chat roster",
+      queryKey: ["agents", "chat-roster", "bootstrap", "v3"],
+      data: partialRows,
+    },
+    {
+      kind: "tool-free paginated list",
+      queryKey: ["agents", { limit: 20, includeTools: false }],
+      data: { data: partialRows },
+    },
+    {
+      kind: "tool-free catalog",
+      queryKey: ["agents", "catalog", { includeTools: false }],
+      data: { data: partialRows },
+    },
+    {
+      // Tool rows, not agents: one carries the agent's id, so the scan must
+      // skip this cache rather than just miss it.
+      kind: "gateway's tool rows",
+      queryKey: [
+        "agents",
+        "gateway-tool-rows",
+        "agent-1",
+        { agentTypes: ["mcp_gateway"] },
+      ],
+      data: [{ id: "agent-1", name: "lookup", delegateToAgentId: null }],
+    },
+  ])("never seeds an editing form from a $kind", async ({ queryKey, data }) => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(
-      ["agents", kind, filters],
-      [{ id: "agent-1", name: "Only a name" }],
-    );
+    queryClient.setQueryData(queryKey, data);
     let finish: ((value: never) => void) | undefined;
     sdk.getAgent.mockImplementation(
       () =>
@@ -338,7 +364,7 @@ describe("agent detail", () => {
     expect(result.current.data?.tools).toEqual([{ id: "tool-1" }]);
   });
 
-  it("still seeds an editing form from a fresh full roster", () => {
+  it("still seeds an editing form from a fresh paginated list", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -348,13 +374,38 @@ describe("agent detail", () => {
       systemPrompt: "Configured prompt",
       tools: [{ id: "tool-1" }],
     };
-    queryClient.setQueryData(
-      ["agents", "all", { includeTools: true }],
-      [agent],
-    );
+    queryClient.setQueryData(["agents", { limit: 20 }], { data: [agent] });
     const { result } = setup(() => useProfile("agent-1"), queryClient);
     expect(result.current.data).toEqual(agent);
     expect(sdk.getAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe("pinned agent ids", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reads the pinned agents without their tools, since it keeps only their ids", async () => {
+    sdk.getAgents.mockResolvedValue({
+      data: { data: [{ id: "pinned-1" }] },
+      error: undefined,
+    } as never);
+    sdk.getMemberDefaultAgent.mockResolvedValue({
+      data: { defaultAgentId: null, personalChatAgentId: null },
+      error: undefined,
+    } as never);
+    sdk.getOrganization.mockResolvedValue({
+      data: { defaultAgentId: null },
+      error: undefined,
+    } as never);
+
+    const { result } = setup(() => usePinnedAgentIds());
+
+    await waitFor(() => expect(result.current.data).toEqual(["pinned-1"]));
+    expect(sdk.getAgents).toHaveBeenCalledWith({
+      query: expect.objectContaining({ pinned: true, includeTools: false }),
+    });
   });
 });
 

@@ -76,9 +76,6 @@ describe("McpGatewaysPageServer", () => {
     getAgentsMock.mockResolvedValue({
       data: { data: [{ id: "agent-1" }] },
     });
-    getTeamsMock.mockResolvedValue({
-      data: { data: [{ id: "team-1", name: "Team 1" }] },
-    });
 
     render(await McpGatewaysPageServer());
 
@@ -98,17 +95,12 @@ describe("McpGatewaysPageServer", () => {
           : Promise.resolve({ error: { message: "Pins unavailable" } });
       },
     );
-    getTeamsMock.mockResolvedValue({
-      data: { data: [{ id: "team-1", name: "Team 1" }] },
-    });
-
     render(await McpGatewaysPageServer());
 
     expect(screen.getByTestId("mcp-gateways-page")).toHaveTextContent(
       JSON.stringify({
         agents: { data: [{ id: "gateway-1" }] },
         pinnedAgents: null,
-        teams: [{ id: "team-1", name: "Team 1" }],
       }),
     );
     expect(
@@ -116,8 +108,22 @@ describe("McpGatewaysPageServer", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("skips the teams fetch when the user cannot read teams", async () => {
-    serverHasPermissionsMock.mockResolvedValue(false);
+  it("prefetches both gateway lists without their tools", async () => {
+    getAgentsMock.mockResolvedValue({ data: { data: [] } });
+
+    render(await McpGatewaysPageServer());
+
+    expect(getAgentsMock).toHaveBeenCalledTimes(2);
+    for (const pinned of [false, true]) {
+      expect(getAgentsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: expect.objectContaining({ pinned, includeTools: false }),
+        }),
+      );
+    }
+  });
+
+  it("does not prefetch teams, which the client page never reads", async () => {
     getAgentsMock.mockResolvedValue({
       data: { data: [{ id: "agent-1" }] },
     });

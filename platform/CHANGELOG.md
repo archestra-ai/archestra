@@ -1,5 +1,56 @@
 # Changelog
 
+## [1.4.0-rc.50](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.49...platform-v1.4.0-rc.50) (2026-10-17)
+
+
+### Features
+
+* add request timing and streamline log views ([#9088](https://github.com/archestra-ai/archestra/issues/9088)) ([4410804](https://github.com/archestra-ai/archestra/commit/44108044135ba6dc6a239e6593008ac75ea21b7a))
+* **app:** expose assignment state and version preconditions ([#9097](https://github.com/archestra-ai/archestra/issues/9097)) ([31e3322](https://github.com/archestra-ai/archestra/commit/31e33225887285fbb5bf6aec038bebb02792fb68))
+* **chat:** one compact setup menu for agent, key, model and reasoning ([#9078](https://github.com/archestra-ai/archestra/issues/9078)) ([b4cf846](https://github.com/archestra-ai/archestra/commit/b4cf846d34eb362f96dfe1512c485b45b5dfb7b4))
+* **llm-proxy:** authenticate /v1 calls with the in-process proof ([#9094](https://github.com/archestra-ai/archestra/issues/9094)) ([edd5573](https://github.com/archestra-ai/archestra/commit/edd5573dd207d7fcfee7f94c72e511bc50fad491))
+* **openappa:** compact validations page with per-row runs and saved errors ([#9076](https://github.com/archestra-ai/archestra/issues/9076)) ([0068056](https://github.com/archestra-ai/archestra/commit/00680568cf8ae345c6cf2617102938d17f1eb052))
+* **openappa:** simplify the Claude Code approval card ([#9092](https://github.com/archestra-ai/archestra/issues/9092)) ([0f887ab](https://github.com/archestra-ai/archestra/commit/0f887ab591fa6ead2742db564e7d06d3aa08629a))
+* **service-accounts:** let service accounts own skill sandboxes and files ([#9068](https://github.com/archestra-ai/archestra/issues/9068)) ([2c55de5](https://github.com/archestra-ai/archestra/commit/2c55de5dd78e67640fc1536eb43a9ca181823280))
+* **service-accounts:** retire team and organization gateway tokens ([#8928](https://github.com/archestra-ai/archestra/issues/8928)) ([aebb091](https://github.com/archestra-ai/archestra/commit/aebb0911f1b4a033d9fdc79a1f9247668aa38b5d))
+
+
+### Bug Fixes
+
+* **agent-runtime:** improve run controls, credentials, and failure diagnostics ([#9049](https://github.com/archestra-ai/archestra/issues/9049)) ([4d50975](https://github.com/archestra-ai/archestra/commit/4d509751ab9ecd763215002a713377277b53e401))
+* **agents:** give agent icons a fixed box and use the Connect page logos ([#9083](https://github.com/archestra-ai/archestra/issues/9083)) ([d2a3420](https://github.com/archestra-ai/archestra/commit/d2a34207cbec2ff70017ba5702b5f6b4b8d48bc7))
+* **chat:** keep model onboarding visible after adding a key ([#9101](https://github.com/archestra-ai/archestra/issues/9101)) ([1324e1b](https://github.com/archestra-ai/archestra/commit/1324e1bca9312967095e2bc9a1a3aabbf553b056))
+* **chatops:** ack slow Slack slash commands and offer only my and shared agents ([#9061](https://github.com/archestra-ai/archestra/issues/9061)) ([fbeebb6](https://github.com/archestra-ai/archestra/commit/fbeebb69f2ba42b2f5e92803467365c5dc6fb8de))
+* **frontend:** make cosmic night tab pickers visible in light mode ([#9098](https://github.com/archestra-ai/archestra/issues/9098)) ([b3e368d](https://github.com/archestra-ai/archestra/commit/b3e368d4eda4f67e0a4c0fbdbfdc036783098acd))
+* mask telemetry content and avoid duplicate request traces ([#9067](https://github.com/archestra-ai/archestra/issues/9067)) ([b1fb863](https://github.com/archestra-ai/archestra/commit/b1fb86386c9fe34db80436e98ee4ebfd1140b9f1))
+* **openappa:** ask for runtime approvals in the agent's own terminal ([#9059](https://github.com/archestra-ai/archestra/issues/9059)) ([213e092](https://github.com/archestra-ai/archestra/commit/213e092341beff9e5bb8d37870c94743a038acc6))
+* **openappa:** move replay notes from get_openappa_policy_tests into the APPA guide ([#9073](https://github.com/archestra-ai/archestra/issues/9073)) ([d19b101](https://github.com/archestra-ai/archestra/commit/d19b10128e57c3fbd51e131959a29816da47aa59))
+* **security:** close open CodeQL and Dependabot alerts ([#9051](https://github.com/archestra-ai/archestra/issues/9051)) ([0e157d6](https://github.com/archestra-ai/archestra/commit/0e157d61352bdc3c4ce2f101c7fe311726527455))
+* **service-accounts:** accept legacy-prefixed keys moved from team tokens ([#9085](https://github.com/archestra-ai/archestra/issues/9085)) ([5af09e2](https://github.com/archestra-ai/archestra/commit/5af09e22ef8c9ae4d670ff0ea1a7543154a5986f))
+
+
+### Performance Improvements
+
+* **connections:** aggregate traffic before adoption lookups ([#9100](https://github.com/archestra-ai/archestra/issues/9100)) ([0096730](https://github.com/archestra-ai/archestra/commit/009673015231490ab0d32d84ae2da78ca5dbd1ef))
+* **frontend:** prefetch list links on hover instead of on view ([#9077](https://github.com/archestra-ai/archestra/issues/9077)) ([9061978](https://github.com/archestra-ai/archestra/commit/9061978376c271afe21d810869d51dd1c4acdae4))
+* index permission grants and bound capability reads ([#9080](https://github.com/archestra-ai/archestra/issues/9080)) ([4825af1](https://github.com/archestra-ai/archestra/commit/4825af15fc90563e7fe8834c99a1eebf2b189677))
+* **knowledge:** store connector document counts instead of counting on every list ([#9090](https://github.com/archestra-ai/archestra/issues/9090)) ([9f08c8c](https://github.com/archestra-ai/archestra/commit/9f08c8c5452bb6336c5d839e37772e32ac445da5))
+* **logs:** bound, search and cache the LLM logs user filter ([#9089](https://github.com/archestra-ai/archestra/issues/9089)) ([97b5633](https://github.com/archestra-ai/archestra/commit/97b56338ca593157966c7b67497ce63343d2b63e))
+* **mcp:** index agent_tools and load assignments only where pages show them ([#9095](https://github.com/archestra-ai/archestra/issues/9095)) ([1e87db3](https://github.com/archestra-ai/archestra/commit/1e87db37ed17385f9b2d070597306869c80e5a76))
+* **mcp:** load the registry without each connection's agents ([#9082](https://github.com/archestra-ai/archestra/issues/9082)) ([162fe5e](https://github.com/archestra-ai/archestra/commit/162fe5ea9b10c9a2447c05231bcbdab10d1444dd))
+
+
+### Documentation
+
+* **agents:** let the docs-writer skill decide when docs change ([#9079](https://github.com/archestra-ai/archestra/issues/9079)) ([b72c963](https://github.com/archestra-ai/archestra/commit/b72c963439bcb50edd8195ef357674ce148628fa))
+
+
+### Miscellaneous Chores
+
+* **deps:** ignore the zip extract advisories until appa moves to zip 9 ([#9096](https://github.com/archestra-ai/archestra/issues/9096)) ([3c3626d](https://github.com/archestra-ai/archestra/commit/3c3626d639682e7c3c41cbe47f15c740a4518496))
+* remove unused pages and legacy app recordings ([#9069](https://github.com/archestra-ai/archestra/issues/9069)) ([4a39565](https://github.com/archestra-ai/archestra/commit/4a39565a3aef3fc3c1a9673ebfa5060a2304f96a))
+* update client versions ([#9084](https://github.com/archestra-ai/archestra/issues/9084)) ([15ec65b](https://github.com/archestra-ai/archestra/commit/15ec65bcf48ec5f3dfbd7bb77c61ff77a8dd15d0))
+
 ## [1.4.0-rc.49](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.48...platform-v1.4.0-rc.49) (2026-10-16)
 
 

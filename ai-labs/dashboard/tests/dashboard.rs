@@ -154,6 +154,7 @@ fn run_id_that_escapes_experiments_dir_is_rejected() {
     std::fs::write(outside.join("config.json"), "{}").unwrap();
     std::os::unix::fs::symlink(&outside, experiments.join("linked")).unwrap();
     assert!(load_run(&experiments, "linked").unwrap().is_none());
+    assert!(list_runs(&experiments).unwrap().is_empty());
 }
 
 // ---------------------------------------------------------------------------

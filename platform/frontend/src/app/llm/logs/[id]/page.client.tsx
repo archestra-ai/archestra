@@ -437,6 +437,8 @@ function formatAuthMethod(authMethod: InteractionAuthMethod) {
       return "Provider Key";
     case "jwks":
       return "JWKS";
+    case "personal_token":
+      return "Personal Token";
     case "internal":
       return "Internal";
     default:

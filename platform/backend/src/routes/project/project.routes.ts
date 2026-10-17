@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
+  calculatePaginationMeta,
+  createPaginatedResponseSchema,
   MAX_PROJECT_UPLOAD_BYTES,
+  PaginationQuerySchema,
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
@@ -252,9 +255,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "`excludeAuthorIds` (ignored for non-admins). `search` matches name + " +
           "description. `status=deleted` returns the org-wide soft-deleted " +
           "projects for a project admin (empty for everyone else); the other " +
-          "filters do not apply to that slice.",
+          "filters do not apply to that slice. Paginated: owner-first, then " +
+          "newest, then id.",
         tags: ["Projects"],
-        querystring: z.object({
+        querystring: PaginationQuerySchema.extend({
           scope: ProjectListScopeSchema.optional(),
           search: z.string().optional(),
           labels: z
@@ -279,8 +283,21 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           access: ResourceAccessQuerySchema,
           sharedWith: ResourceSharedWithQuerySchema,
           owner: ResourceOwnerQuerySchema,
+          pinned: z
+            .preprocess(
+              (value) =>
+                value === "false" ? false : value === "true" ? true : value,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Only return projects the current user has pinned (true) or " +
+                "has not pinned (false). Omit for both.",
+            ),
         }),
-        response: constructResponseSchema(z.array(ProjectListItemSchema)),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(ProjectListItemSchema),
+        ),
       },
     },
     async ({ query, organizationId, user }) => {
@@ -295,7 +312,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const labelFilteredIds = parsedLabels
         ? await ProjectLabelModel.getIdsMatchingLabels(parsedLabels)
         : undefined;
-      return projectService.list({
+      const { data, total } = await projectService.list({
         organizationId,
         userId: user.id,
         isProjectAdmin,
@@ -308,7 +325,17 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         status: query.status,
         labelFilteredIds,
         access: resourceAccessSelection(query),
+        pinned: query.pinned,
+        limit: query.limit,
+        offset: query.offset,
       });
+      return {
+        data,
+        pagination: calculatePaginationMeta(total, {
+          limit: query.limit,
+          offset: query.offset,
+        }),
+      };
     },
   );
 

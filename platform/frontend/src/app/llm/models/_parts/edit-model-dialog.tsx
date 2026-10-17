@@ -8,6 +8,7 @@ import {
   OUTPUT_MODALITY_OPTIONS,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
+import { isValidModelPrice } from "@archestra/shared/model-price";
 import { AlertCircle, Boxes, RotateCcw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -194,9 +195,9 @@ export function EditModelDialog({
   const _teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
   const nonNegativePriceRule = {
     validate: (v: string) => {
-      if (!v) return true;
-      const n = parseFloat(v);
-      if (Number.isNaN(n) || n < 0) return "Must be a non-negative number";
+      if (!v.trim()) return true;
+      if (!isValidModelPrice(v))
+        return "Enter a decimal number between 0 and 99999999.99 (use a dot)";
       return true;
     },
   };

@@ -24,6 +24,7 @@ import {
   mistralAdapterFactory,
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -49,6 +50,7 @@ const mistralProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, EMBEDDINGS_SUFFIX],
       upstream: config.llm.mistral.baseUrl,
       providerName: "Mistral",
+      authenticate: createPassthroughAuthenticator("mistral"),
     }),
   });
 

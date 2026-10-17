@@ -62,6 +62,22 @@ Record both before the group can disappear.
 
 Only after authorization, eligibility and a confirmed merge-queue rule:
 
+For platform work, use the wrapper from `platform/` after the focused tests:
+
+```bash
+pnpm enqueue "$PR" --repo "$REPO"
+```
+
+Wait for required PR checks and reviews before running it. It runs preflight
+on a clean checkout of the exact PR head, rechecks the head and queue rule, and
+requests queue entry through `enqueuePullRequest` with `expectedHeadOid`. It
+reads back membership and stops if GitHub rejects admission; it never requests
+a direct merge or enables generic auto-merge.
+Without `--repo`, it resolves the repository from `origin`. It requires an
+explicit PR number and never selects the current branch's PR implicitly.
+
+For work outside platform, use the guarded GitHub command directly:
+
 ```bash
 gh pr merge "$PR" --repo "$REPO" --match-head-commit "$PR_HEAD"
 ```

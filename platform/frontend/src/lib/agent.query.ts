@@ -100,53 +100,6 @@ export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
   });
 }
 
-/**
- * Agents per request for every roster. The list is paginated on the server, so
- * a roster never loads the whole organization.
- */
-export const AGENT_PAGE_SIZE = 100;
-
-/** One page of agents, with the server-side name search applied. */
-async function fetchAgentPage(
-  query: archestraApiTypes.GetAgentsData["query"],
-): Promise<
-  Array<
-    Omit<
-      archestraApiTypes.GetAgentsResponses["200"]["data"][number],
-      "pinnedAt"
-    >
-  >
-> {
-  const { data, error } = await getAgents({ query });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.data ?? [];
-}
-
-// Returns one page of agents as an array
-export function useProfiles(
-  params: {
-    initialData?: Array<
-      Omit<
-        archestraApiTypes.GetAgentsResponses["200"]["data"][number],
-        "pinnedAt"
-      >
-    >;
-    filters?: archestraApiTypes.GetAgentsData["query"];
-    enabled?: boolean;
-  } = {},
-) {
-  const filters = {
-    limit: AGENT_PAGE_SIZE,
-    ...params?.filters,
-  } satisfies archestraApiTypes.GetAgentsData["query"];
-  return useQuery({
-    queryKey: ["agents", "all", filters],
-    queryFn: () => fetchAgentPage(filters),
-    initialData: params?.initialData,
-    enabled: params?.enabled,
-  });
-}
-
 /** Names and presentation data only; fetch a resource before editing it. */
 export function useAgentOptions(
   params: {
@@ -377,8 +330,15 @@ export function usePinnedAgentIds(params?: { enabled?: boolean }) {
   const { data: pinned } = useQuery({
     queryKey: ["agents", "pinned-ids"],
     queryFn: async () => {
+      // Only the ids are kept, so it skips the agents' tool assignments.
       const { data, error } = await getAgents({
-        query: { pinned: true, agentTypes: ["agent"], limit: 100, offset: 0 },
+        query: {
+          pinned: true,
+          agentTypes: ["agent"],
+          limit: 100,
+          offset: 0,
+          includeTools: false,
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return (data?.data ?? []).map((agent) => agent.id);
@@ -1071,14 +1031,22 @@ function findCachedAgent(
     .findAll({ queryKey: ["agents"] })) {
     // Chat and selector rosters deliberately carry partial Agent data. It is
     // enough to paint and initialize chat, but must never seed an editing form
-    // as though it came from the full detail endpoint.
-    if (["chat-roster", "options"].includes(String(query.queryKey[1])))
+    // as though it came from the full detail endpoint. Gateway tool rows hold
+    // tools, not agents.
+    if (
+      ["chat-roster", "options", "gateway-tool-rows"].includes(
+        String(query.queryKey[1]),
+      )
+    )
       continue;
     // A list fetched without tools would seed a detail with no tools, which
-    // reads as "this agent has none" until the seed goes stale.
-    const params = query.queryKey[2] as
-      | { includeTools?: boolean; view?: string }
-      | undefined;
+    // reads as "this agent has none" until the seed goes stale. The filters
+    // sit at a different key position per list (`["agents", filters]` for the
+    // paginated list, `["agents", "catalog", filters]` for the catalog).
+    const params = query.queryKey.find(
+      (part): part is { includeTools?: boolean; view?: string } =>
+        typeof part === "object" && part !== null,
+    );
     if (params?.includeTools === false || params?.view === "chat") continue;
     const cached: unknown = query.state.data;
     const rows = Array.isArray(cached)

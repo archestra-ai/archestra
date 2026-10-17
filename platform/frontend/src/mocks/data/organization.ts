@@ -26,6 +26,7 @@ export function makeOrganization(
     newAppsDisabledByDefault: false,
     newAppsLockedByDefault: false,
     allowChatFileUploads: false,
+    allowUnauthenticatedLlmProxyRequests: false,
     allowToolAutoAssignment: true,
     // Configured, so the knowledge section renders its pages rather than the
     // "Configuration is needed" placeholder every route below /knowledge is
@@ -141,6 +142,7 @@ export function makeTeam(overrides: Partial<Team> = {}): Team {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     roles: [],
+    memberCount: overrides.members?.length ?? 0,
     ...overrides,
   };
 }

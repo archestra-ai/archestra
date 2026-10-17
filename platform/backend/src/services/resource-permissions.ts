@@ -4,7 +4,9 @@ import {
   DEFAULT_CREDENTIAL_GRANTS,
   hasScopedPermission,
   isBuiltInCatalogId,
+  isManagedResource,
   isResourcePermissionPreset,
+  isResourcePermissionScope,
   ManagedResourceSchema,
   ORGANIZATION_WIDE_RESOURCES,
   PERMISSIONS_LOCKOUT_CODE,
@@ -1270,10 +1272,10 @@ function expandScopedGrants(params: {
   subjectKeys: Set<string>;
 }): ManagedScopedPermission[] {
   return params.policies.flatMap((policy) => {
-    const resource = ManagedResourceSchema.safeParse(policy.resource);
+    const { resource } = policy;
     if (
-      !resource.success ||
-      !ResourcePermissionScopeSchema.safeParse(policy.scope).success
+      !isManagedResource(resource) ||
+      !isResourcePermissionScope(policy.scope)
     )
       return [];
     return policy.grants.flatMap((grant) =>
@@ -1286,7 +1288,7 @@ function expandScopedGrants(params: {
               ? [
                   {
                     organizationId: policy.organizationId,
-                    resource: resource.data,
+                    resource,
                     scope: policy.scope,
                     action: parsed.data,
                   },

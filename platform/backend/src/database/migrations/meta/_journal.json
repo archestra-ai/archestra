@@ -3963,6 +3963,20 @@
       "when": 1792255622321,
       "tag": "0565_tricky_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 566,
+      "version": "7",
+      "when": 1792274152999,
+      "tag": "0566_interaction_user_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 567,
+      "version": "7",
+      "when": 1792280181708,
+      "tag": "0567_list_page_indexes",
+      "breakpoints": true
     }
   ]
 }

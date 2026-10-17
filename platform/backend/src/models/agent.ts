@@ -1,3 +1,4 @@
+import type { CreatedBy } from "@archestra/shared";
 import {
   type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
@@ -28,7 +29,6 @@ import {
   eq,
   exists,
   getTableColumns,
-  getTableName,
   gte,
   ilike,
   inArray,
@@ -56,6 +56,7 @@ import {
   decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { qualified } from "@/database/utils/qualified-column";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
@@ -79,6 +80,8 @@ import {
   type UpdateAgent,
 } from "@/types";
 import type { AgentOptionFilters } from "@/types/agent";
+import type { SuggestedPromptInput } from "@/types/agent-suggested-prompt";
+import type { LabelWithDetails } from "@/types/label";
 import { isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
@@ -91,7 +94,6 @@ import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
-import AgentPinModel from "./agent-pin";
 import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
@@ -100,6 +102,7 @@ import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
 import { idArrayCondition } from "./id-array-condition";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
@@ -174,6 +177,8 @@ type AgentListFilters = {
   providerApiKeyId?: string;
   /** Caller-relative pin filter for the paginated Agents surface. */
   pinned?: boolean;
+  /** False skips the count; `total` is then a lower bound. */
+  includeTotal?: boolean;
   /**
    * Attach each agent's assigned tools. Defaults to true; off, agents come
    * back with `tools: []`, meaning "not requested" rather than "none
@@ -2024,7 +2029,8 @@ class AgentModel {
           direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
         );
     } else if (sorting?.sortBy === "toolsCount") {
-      // Ordered by the count the Tools column shows (see getListToolCounts):
+      // Ordered by the count the Tools column shows (see countListTools and
+      // the toolCounts subselect in findListEnrichment):
       // all assignments, minus subagent delegations, minus the knowledge
       // search tool when the agent has no knowledge sources. Only the few
       // special tools are joined; the plain count needs no join.
@@ -2146,154 +2152,133 @@ class AgentModel {
       );
     }
 
-    const sortedAgents = await query
-      .limit(pagination.limit)
-      .offset(pagination.offset);
+    // The count does not depend on the page, so it runs alongside it on
+    // another connection instead of after it. Without a count, one extra row
+    // tells whether another page follows.
+    const countTotal = filters?.includeTotal !== false;
+    const totalQuery = countTotal
+      ? db
+          .select({ total: count() })
+          .from(schema.agentsTable)
+          .where(whereClause)
+          .then(([row]) => Number(row?.total ?? 0))
+      : Promise.resolve(null);
+    const pageSize = pagination.limit + (countTotal ? 0 : 1);
+    // Sorting by a plain column with the caller's personal agents first:
+    // read those agents on their own, then the rest in column order. The
+    // second read walks an index and stops at the page, without ranking every
+    // visible agent.
+    const twoPhase =
+      !!userId &&
+      pinnedAgentOrderClauses.length === 0 &&
+      (sorting?.sortBy === undefined ||
+        sorting.sortBy === "name" ||
+        sorting.sortBy === "createdAt");
+    const [fetchedAgents, countedTotal] = await Promise.all([
+      twoPhase
+        ? AgentModel.findPersonalFirstPage({
+            whereClause,
+            orderByClause,
+            userId,
+            pagination: { limit: pageSize, offset: pagination.offset },
+          })
+        : query.limit(pageSize).offset(pagination.offset),
+      totalQuery,
+    ]);
+    const sortedAgents = fetchedAgents.slice(0, pagination.limit);
+    const total = countedTotal ?? pagination.offset + fetchedAgents.length;
 
     const sortedAgentIds = sortedAgents.map((a) => a.id);
 
     // If no agents match, return early
     if (sortedAgentIds.length === 0) {
-      const [{ total }] = await db
-        .select({ total: count() })
-        .from(schema.agentsTable)
-        .where(whereClause);
-      return createPaginatedResult([], Number(total), pagination);
+      return createPaginatedResult([], total, pagination);
     }
 
-    // Step 2: Get full agent data for the paginated agent IDs. Tool refs are
-    // a query of their own: joined, every agent row came back once per
-    // assigned tool, system prompt and icon included.
-    const [agentRows, toolRows, [{ total: totalResult }]] = await Promise.all([
-      db
-        .select()
-        .from(schema.agentsTable)
-        .where(inArray(schema.agentsTable.id, sortedAgentIds)),
-      filters?.includeTools !== false
-        ? db
-            .select({
-              agentId: schema.agentToolsTable.agentId,
-              tool: agentToolRefColumns,
-            })
-            .from(schema.agentToolsTable)
-            .innerJoin(
-              schema.toolsTable,
-              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-            )
-            .where(inArray(schema.agentToolsTable.agentId, sortedAgentIds))
-        : Promise.resolve([]),
-      db.select({ total: count() }).from(schema.agentsTable).where(whereClause),
+    // Step 2: everything the list shows for these agents, in two statements
+    // run together: findListEnrichment for the rows and their light aspects,
+    // findListTools for the tools.
+    const includeTools = filters?.includeTools !== false;
+    const [enriched, toolsByAgent] = await Promise.all([
+      AgentModel.findListEnrichment({
+        agentIds: sortedAgentIds,
+        includeTools,
+        userId,
+      }),
+      AgentModel.findListTools({
+        agentIds: sortedAgentIds,
+        includeTools,
+      }),
     ]);
+    for (const entry of enriched) {
+      entry.tools = toolsByAgent.get(entry.row.id) ?? [];
+      entry.toolCounts ??= countListTools(entry.tools);
+    }
 
     // Sort in memory to maintain the order from the sorted query
     const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
-    agentRows.sort(
-      (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
+    enriched.sort(
+      (a, b) => (orderMap.get(a.row.id) ?? 0) - (orderMap.get(b.row.id) ?? 0),
     );
 
-    const agents: Agent[] = agentRows.map((agent) => ({
-      ...agent,
-      tools: [],
-      teams: [] as Array<{ id: string; name: string }>,
-      users: [] as Array<{ id: string; name: string; email: string }>,
-      labels: [],
-      knowledgeBaseIds: [],
-      connectorIds: [],
-      suggestedPrompts: [],
-    }));
-    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-    for (const row of toolRows) {
-      agentsById.get(row.agentId)?.tools.push(row.tool);
-    }
-    const agentIds = agents.map((agent) => agent.id);
-
-    // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, usersMap, labelsMap] = await Promise.all([
-      AgentTeamModel.getTeamDetailsForAgents(agentIds),
-      AgentUserModel.getUserDetailsForAgents(agentIds),
-      AgentLabelModel.getLabelsForAgents(agentIds),
-    ]);
-
-    // Assign teams, grantees, and labels to each agent
-    for (const agent of agents) {
-      agent.teams = teamsMap.get(agent.id) || [];
-      agent.users = usersMap.get(agent.id) || [];
-      agent.labels = labelsMap.get(agent.id) || [];
-    }
-
-    await Promise.all([
-      AgentModel.populateGrantedScope(agents),
-      AgentModel.populateAuthorNames(agents),
-      AgentModel.populateKnowledgeBaseIds(agents),
-      AgentModel.populateConnectorIds(agents),
-      AgentModel.populateSuggestedPrompts(agents),
-      AgentModel.populateResolvedLlm(agents),
-    ]);
-    // Counted after the knowledge sources are populated: the knowledge
-    // search tool counts only for an agent that has some.
-    const [pinnedAtByAgent, toolCounts] = await Promise.all([
-      userId
-        ? AgentPinModel.getPinnedAtForAgents({ userId, agentIds })
-        : new Map<string, Date>(),
-      AgentModel.getListToolCounts(agents),
-    ]);
-    AgentModel.filterUnavailableKnowledgeTools(agents);
-
-    return createPaginatedResult(
-      agents.map((agent) => ({
-        ...agent,
-        pinnedAt: pinnedAtByAgent.get(agent.id) ?? null,
-        toolsCount: toolCounts.get(agent.id)?.toolsCount ?? 0,
-        subagentsCount: toolCounts.get(agent.id)?.subagentsCount ?? 0,
-      })),
-      Number(totalResult),
-      pagination,
+    const policies = enriched.flatMap((entry) => entry.policies);
+    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
+      resources: ["agent", "mcpGateway"],
+      scopes: sortedAgentIds,
+      policies,
+    });
+    const agents: Agent[] = enriched.map((entry) => {
+      const recipient = recipients.get(entry.row.id);
+      const teamNames = new Map(
+        entry.teams.map((team) => [team.id, team.name]),
+      );
+      const userById = new Map(entry.users.map((user) => [user.id, user]));
+      const provider: SupportedProvider | null =
+        entry.llmKey?.provider ?? entry.model?.provider ?? null;
+      return {
+        ...entry.row,
+        tools: entry.tools,
+        teams: (recipient?.teamIds ?? []).flatMap((id) => {
+          const name = teamNames.get(id);
+          return name === undefined ? [] : [{ id, name }];
+        }),
+        users: (recipient?.userIds ?? []).flatMap((id) => {
+          const user = id === entry.row.authorId ? undefined : userById.get(id);
+          return user ? [user] : [];
+        }),
+        labels: entry.labels,
+        knowledgeBaseIds: entry.knowledgeBaseIds,
+        connectorIds: entry.connectorIds,
+        suggestedPrompts: entry.suggestedPrompts,
+        authorName: entry.creator?.name ?? null,
+        authorEmail: entry.creator?.email ?? null,
+        createdBy: entry.creator ?? null,
+        resolvedLlmProvider: provider,
+        resolvedLlmProviderKeyName: entry.row.llmApiKeyId
+          ? (entry.llmKey?.name ?? null)
+          : null,
+        llmProviderRequiresPerUserCredential: provider
+          ? providerRequiresPerUserCredential(provider)
+          : false,
+        resolvedLlmModelName: entry.row.modelId
+          ? (entry.model?.modelName ?? null)
+          : null,
+      } as Agent;
+    });
+    await AgentModel.populateGrantedScope(agents, policies);
+    const pinnedAtByAgent = new Map(
+      enriched.flatMap((entry) =>
+        entry.pinnedAtMs === null
+          ? []
+          : [[entry.row.id, new Date(entry.pinnedAtMs)] as const],
+      ),
     );
-  }
-
-  /**
-   * Each listed agent's tool and subagent counts, as its `tools` would give
-   * them, without loading the tools: subagents are delegation tools, and the
-   * knowledge search tool counts only for an agent with knowledge sources, as
-   * in filterUnavailableKnowledgeTools.
-   */
-  private static async getListToolCounts(
-    agents: Array<Pick<Agent, "id" | "knowledgeBaseIds" | "connectorIds">>,
-  ): Promise<Map<string, { toolsCount: number; subagentsCount: number }>> {
-    if (agents.length === 0) return new Map();
-    const delegate = schema.toolsTable.delegateToAgentId;
-    const isKnowledgeTool = isKnowledgeSearchToolName(schema.toolsTable.name);
-    const rows = await db
-      .select({
-        agentId: schema.agentToolsTable.agentId,
-        tools: sql<number>`count(*) filter (where ${delegate} is null)`.mapWith(
-          Number,
-        ),
-        subagents:
-          sql<number>`count(*) filter (where ${delegate} is not null)`.mapWith(
-            Number,
-          ),
-        knowledgeTools:
-          sql<number>`count(*) filter (where ${delegate} is null and ${isKnowledgeTool})`.mapWith(
-            Number,
-          ),
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        inArray(
-          schema.agentToolsTable.agentId,
-          agents.map((agent) => agent.id),
-        ),
-      )
-      .groupBy(schema.agentToolsTable.agentId);
-    const countsByAgent = new Map(rows.map((row) => [row.agentId, row]));
-    return new Map(
-      agents.map((agent) => {
-        const counts = countsByAgent.get(agent.id);
+    // Subagents are delegation tools, and the knowledge search tool counts
+    // only for an agent with knowledge sources, as in
+    // filterUnavailableKnowledgeTools.
+    const toolCounts = new Map(
+      agents.map((agent, index) => {
+        const counts = enriched[index]?.toolCounts;
         return [
           agent.id,
           {
@@ -2304,6 +2289,18 @@ class AgentModel {
           },
         ];
       }),
+    );
+    AgentModel.filterUnavailableKnowledgeTools(agents);
+
+    return createPaginatedResult(
+      agents.map((agent) => ({
+        ...agent,
+        pinnedAt: pinnedAtByAgent.get(agent.id) ?? null,
+        toolsCount: toolCounts.get(agent.id)?.toolsCount ?? 0,
+        subagentsCount: toolCounts.get(agent.id)?.subagentsCount ?? 0,
+      })),
+      total,
+      pagination,
     );
   }
 
@@ -2527,15 +2524,21 @@ class AgentModel {
   private static getOrderByClause(sorting?: SortingQuery) {
     const direction = sorting?.sortDirection === "asc" ? asc : desc;
 
+    // The id breaks ties (bulk-created agents share a creation time), so a
+    // page boundary never repeats or skips an agent.
+    const withTieBreak = (sort: SQL) =>
+      sql`${sort}, ${direction(schema.agentsTable.id)}`;
     switch (sorting?.sortBy) {
       case "name":
-        return direction(schema.agentsTable.name);
+        return withTieBreak(direction(schema.agentsTable.name));
       case "createdAt":
-        return direction(schema.agentsTable.createdAt);
+        return withTieBreak(direction(schema.agentsTable.createdAt));
       case "lastUsedAt":
         // Never-used agents sort as oldest (asc first / desc last).
-        return direction(
-          sql`COALESCE(${schema.agentsTable.lastUsedAt}, '-infinity'::timestamp)`,
+        return withTieBreak(
+          direction(
+            sql`COALESCE(${schema.agentsTable.lastUsedAt}, '-infinity'::timestamp)`,
+          ),
         );
       case "toolsCount":
       case "subagentsCount":
@@ -2546,8 +2549,222 @@ class AgentModel {
         return direction(schema.agentsTable.createdAt); // Fallback
       default:
         // Default: newest first
-        return desc(schema.agentsTable.createdAt);
+        return sql`${desc(schema.agentsTable.createdAt)}, ${desc(schema.agentsTable.id)}`;
     }
+  }
+
+  /**
+   * One list page ordered as `getPersonalAgentPriorityOrderClauses` then
+   * `orderByClause`: the caller's own personal agents first, then every other
+   * agent. Same ids in the same order as the single ranked query.
+   */
+  private static async findPersonalFirstPage(params: {
+    whereClause: SQL | undefined;
+    orderByClause: SQL;
+    userId: string;
+    pagination: PaginationQuery;
+  }): Promise<Array<{ id: string }>> {
+    const { limit, offset } = params.pagination;
+    // The author test comes first so the audience lookup runs only for the
+    // caller's own agents.
+    const ownPersonal = and(
+      eq(schema.agentsTable.authorId, params.userId),
+      agentAudienceIs("personal"),
+    );
+    // Read no further than the page's end: when the caller's own agents reach
+    // it, the page is all theirs; otherwise this read holds every one of them,
+    // so its length is where the others start.
+    const own = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(and(params.whereClause, ownPersonal))
+      .orderBy(params.orderByClause)
+      .limit(offset + limit);
+    const ownPage = own.slice(offset, offset + limit);
+    const remaining = limit - ownPage.length;
+    if (remaining <= 0) return ownPage;
+    const rest = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          params.whereClause,
+          or(
+            sql`${schema.agentsTable.authorId} IS DISTINCT FROM ${params.userId}`,
+            not(agentAudienceIs("personal")),
+          ),
+        ),
+      )
+      .orderBy(params.orderByClause)
+      .limit(remaining)
+      .offset(Math.max(0, offset - own.length));
+    return [...ownPage, ...rest];
+  }
+
+  /**
+   * The page's heaviest aspect, each agent's tools, read set-based in a
+   * statement of its own so it runs beside findListEnrichment instead of
+   * after it. No statement when the list does not show tools.
+   */
+  private static async findListTools(params: {
+    agentIds: string[];
+    includeTools: boolean;
+  }): Promise<Map<string, ToolRef[]>> {
+    if (params.agentIds.length === 0 || !params.includeTools) return new Map();
+    // The ToolRef fields are listed by hand in json_build_object below; a
+    // field added to ToolRef must be added there too.
+    const result = await db.execute<{ agent_id: string; tools: ToolRef[] }>(sql`
+      SELECT at.agent_id, json_agg(json_build_object(
+        'id', t.id, 'agentId', t.agent_id, 'catalogId', t.catalog_id,
+        'delegateToAgentId', t.delegate_to_agent_id,
+        'delegateToA2aConnectionId', t.delegate_to_a2a_connection_id,
+        'name', t.name, 'rawName', t.raw_name, 'description', t.description
+      )) AS tools
+      FROM ${schema.agentToolsTable} at INNER JOIN ${schema.toolsTable} t ON t.id = at.tool_id
+      WHERE at.agent_id = ANY(ARRAY[${sql.join(
+        params.agentIds.map((id) => sql`${id}`),
+        sql`, `,
+      )}]::uuid[])
+      GROUP BY at.agent_id`);
+    return new Map(result.rows.map((row) => [row.agent_id, row.tools]));
+  }
+
+  /**
+   * One statement for everything an agent list row shows besides its order
+   * and its tools. It reads the agent rows plus one correlated subselect per
+   * aspect: the agent's policy and the teams and users it grants to, labels,
+   * knowledge bases, connectors, suggested prompts, the caller's pin,
+   * creator, LLM key, model, and tool counts for a list without tools. The
+   * pin time comes back as epoch milliseconds.
+   *
+   * Every subselect runs once per row, which suits a list page: callers pass
+   * at most 100 ids (PaginationQuerySchema caps `limit`).
+   */
+  private static async findListEnrichment(params: {
+    agentIds: string[];
+    includeTools: boolean;
+    userId?: string;
+  }): Promise<ListEnrichment[]> {
+    if (params.agentIds.length === 0) return [];
+    const agentId = qualified(schema.agentsTable.id);
+    const agentScope = sql`${agentId}::text`;
+    // organization_id leads the policies' primary key: with it each row is
+    // one index probe, without it a skip scan.
+    const policyOfAgent = sql`p.organization_id = ${qualified(schema.agentsTable.organizationId)}
+      AND p.resource IN ('agent', 'mcpGateway') AND p.scope = ${agentScope}`;
+    const epochMs = (value: SQL) =>
+      sql`floor(extract(epoch from ${value}) * 1000)::float8`;
+    const rows = await db
+      .select({
+        row: getTableColumns(schema.agentsTable),
+        // One probe of the agent's policies yields them and the names of the
+        // teams and users their grants name.
+        access: sql<{
+          policies: ObjectPolicy[];
+          teams: Array<{ id: string; name: string }>;
+          users: Array<{ id: string; name: string; email: string }>;
+        }>`(
+          SELECT json_build_object(
+            'policies', pol.policies,
+            'teams', (
+              SELECT coalesce(json_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name)), '[]'::json)
+              FROM jsonb_array_elements(pol.grant_sets) gs,
+                jsonb_array_elements(gs) g
+                INNER JOIN ${schema.teamsTable} t ON t.id = g->'subject'->>'id'
+              WHERE g->'subject'->>'type' = 'team'),
+            'users', (
+              SELECT coalesce(json_agg(DISTINCT jsonb_build_object('id', u.id, 'name', u.name, 'email', u.email)), '[]'::json)
+              FROM jsonb_array_elements(pol.grant_sets) gs,
+                jsonb_array_elements(gs) g
+                INNER JOIN ${schema.usersTable} u ON u.id = g->'subject'->>'id'
+              WHERE g->'subject'->>'type' = 'user'))
+          FROM (
+            SELECT
+              coalesce(json_agg(json_build_object(
+                'organizationId', p.organization_id, 'resource', p.resource,
+                'scope', p.scope, 'grants', p.grants
+              )), '[]'::json) AS policies,
+              coalesce(jsonb_agg(p.grants), '[]'::jsonb) AS grant_sets
+            FROM ${schema.resourcePermissionPoliciesTable} p WHERE ${policyOfAgent}) pol)`,
+        labels: sql<LabelWithDetails[]>`(
+          SELECT coalesce(json_agg(json_build_object(
+            'keyId', al.key_id, 'valueId', al.value_id,
+            'key', coalesce(lk.key, ''), 'value', coalesce(lv.value, '')
+          ) ORDER BY lk.key), '[]'::json)
+          FROM ${schema.agentLabelsTable} al
+            LEFT JOIN ${schema.labelKeysTable} lk ON lk.id = al.key_id
+            LEFT JOIN ${schema.labelValuesTable} lv ON lv.id = al.value_id
+          WHERE al.agent_id = ${agentId})`,
+        // Ids in assignment order, here and in connectorIds.
+        knowledgeBaseIds: sql<string[]>`(
+          SELECT coalesce(json_agg(akb.knowledge_base_id
+            ORDER BY akb.created_at, akb.knowledge_base_id), '[]'::json)
+          FROM ${schema.agentKnowledgeBasesTable} akb
+            INNER JOIN ${schema.knowledgeBasesTable} kb ON kb.id = akb.knowledge_base_id
+          WHERE akb.agent_id = ${agentId} AND kb.deleted_at IS NULL)`,
+        connectorIds: sql<string[]>`(
+          SELECT coalesce(json_agg(aca.connector_id
+            ORDER BY aca.created_at, aca.connector_id), '[]'::json)
+          FROM ${schema.agentConnectorAssignmentsTable} aca
+            INNER JOIN ${schema.knowledgeBaseConnectorsTable} kc ON kc.id = aca.connector_id
+          WHERE aca.agent_id = ${agentId} AND kc.deleted_at IS NULL)`,
+        suggestedPrompts: sql<SuggestedPromptInput[]>`(
+          SELECT coalesce(json_agg(json_build_object(
+            'summaryTitle', sp.summary_title, 'prompt', sp.prompt
+          ) ORDER BY sp.sort_order), '[]'::json)
+          FROM ${schema.agentSuggestedPromptsTable} sp WHERE sp.agent_id = ${agentId})`,
+        pinnedAtMs: params.userId
+          ? sql<number | null>`(
+              SELECT ${epochMs(sql`ap.pinned_at`)} FROM ${schema.agentPinsTable} ap
+              WHERE ap.user_id = ${params.userId} AND ap.agent_id = ${agentId})`
+          : sql<number | null>`NULL::float8`,
+        creatorUser: sql<{ id: string; name: string; email: string } | null>`(
+          SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
+          FROM ${schema.usersTable} u WHERE u.id = ${qualified(schema.agentsTable.authorId)})`,
+        creatorServiceAccount: sql<{ id: string; name: string } | null>`(
+          SELECT json_build_object('id', sa.id, 'name', sa.name)
+          FROM ${schema.serviceAccountsTable} sa
+          WHERE sa.id = ${qualified(schema.agentsTable.createdByServiceAccountId)})`,
+        llmKey: sql<{ name: string; provider: SupportedProvider } | null>`(
+          SELECT json_build_object('name', k.name, 'provider', k.provider)
+          FROM ${schema.llmProviderApiKeysTable} k WHERE k.id = ${qualified(schema.agentsTable.llmApiKeyId)})`,
+        // With the tools at hand the caller counts them (countListTools);
+        // only a list without tools counts in SQL.
+        toolCounts: params.includeTools
+          ? sql<ListToolCounts | null>`NULL::json`
+          : sql<ListToolCounts | null>`(
+          SELECT json_build_object(
+            'tools', count(*) filter (where tc.delegate_to_agent_id is null),
+            'subagents', count(*) filter (where tc.delegate_to_agent_id is not null),
+            'knowledgeTools', count(*) filter (
+              where tc.delegate_to_agent_id is null
+                and ${isKnowledgeSearchToolName(sql.raw("tc.name"))}
+            )
+          )
+          FROM ${schema.agentToolsTable} atc INNER JOIN ${schema.toolsTable} tc ON tc.id = atc.tool_id
+          WHERE atc.agent_id = ${agentId})`,
+        model: sql<{ provider: SupportedProvider; modelName: string } | null>`(
+          SELECT json_build_object('provider', m.provider, 'modelName', m.model_id)
+          FROM ${schema.modelsTable} m WHERE m.id = ${qualified(schema.agentsTable.modelId)})`,
+      })
+      .from(schema.agentsTable)
+      .where(inArray(schema.agentsTable.id, params.agentIds));
+    return rows.map(
+      ({ creatorUser, creatorServiceAccount, access, ...entry }) => ({
+        ...entry,
+        ...access,
+        // Filled in by the caller from findListTools.
+        tools: [],
+        // A service account that created the agent wins, as in CreatedByModel.id.
+        creator: entry.row.createdByServiceAccountId
+          ? creatorServiceAccount
+            ? CreatedByModel.fromServiceAccount(creatorServiceAccount)
+            : null
+          : creatorUser
+            ? CreatedByModel.fromUser(creatorUser)
+            : null,
+      }),
+    );
   }
 
   private static getPersonalAgentPriorityOrderClauses(userId?: string) {
@@ -2558,8 +2775,8 @@ class AgentModel {
     return [
       asc(sql`
         CASE
-          WHEN ${agentAudienceIs("personal")}
-            AND ${schema.agentsTable.authorId} = ${userId}
+          WHEN ${schema.agentsTable.authorId} = ${userId}
+            AND ${agentAudienceIs("personal")}
           THEN 0
           ELSE 1
         END
@@ -4057,6 +4274,7 @@ class AgentModel {
 
   static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
     const run = async (transaction: Transaction) => {
+      await InteractionUserActivityModel.lifecycleFence(transaction);
       const count = await hardDelete(
         transaction,
         schema.agentsTable,
@@ -4123,6 +4341,7 @@ class AgentModel {
    */
   static async purge(id: string, organizationId: string): Promise<boolean> {
     return withDbTransaction(async (tx) => {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       // `sql.raw`, not an interpolated value: SET is a utility command and
       // takes no bind parameters, so `= $1` is a syntax error. The value is a
       // module constant, never caller input.
@@ -5504,6 +5723,27 @@ function hasKnowledgeSources(
 }
 
 /**
+ * The list's tool counts from an agent's tools, by the rule the `toolCounts`
+ * SQL applies: delegations are subagents, and the knowledge search tool is
+ * counted apart (isQueryKnowledgeSourcesTool, the JS twin of
+ * isKnowledgeSearchToolName).
+ */
+function countListTools(
+  tools: Array<Pick<ToolRef, "delegateToAgentId" | "name">>,
+): ListToolCounts {
+  const counts = { tools: 0, subagents: 0, knowledgeTools: 0 };
+  for (const tool of tools) {
+    if (tool.delegateToAgentId !== null) {
+      counts.subagents++;
+      continue;
+    }
+    counts.tools++;
+    if (isQueryKnowledgeSourcesTool(tool.name)) counts.knowledgeTools++;
+  }
+  return counts;
+}
+
+/**
  * Whether a tool is the knowledge search tool: its bare name, or the name
  * after a server prefix. Only the leading `_%` is a wildcard. Shared by the
  * list's Tools count and its sort so the two agree.
@@ -6001,16 +6241,6 @@ function catalogSortValue(sortBy: string | undefined): {
 
 const ALL_SORTS_ABOVE_ANY_COUNT = 2147483647;
 
-/**
- * A column with its table's name. Selected inside the catalog's UNION, Drizzle
- * renders a bare column name, which a correlated subquery would resolve
- * against its own table: `"agent_id" = "id"` compares two `mcp_tool_calls`
- * columns instead of reaching out to `agents`.
- */
-function qualified(column: AnyPgColumn): SQL {
-  return sql`${sql.identifier(getTableName(column.table))}.${sql.identifier(column.name)}`;
-}
-
 /** Shared by the startup preflight and the per-member creation guard. */
 function personalChatAgentConditions(params: {
   userId: string | AnyPgColumn;
@@ -6105,3 +6335,29 @@ const ChatRosterCursorPositionSchema = z.object({
   rank: z.number().int().min(0).max(3),
   name: z.string(),
 });
+
+type ToolRef = Agent["tools"][number];
+
+type ListEnrichment = {
+  row: typeof schema.agentsTable.$inferSelect;
+  tools: ToolRef[];
+  policies: ObjectPolicy[];
+  teams: Array<{ id: string; name: string }>;
+  users: Array<{ id: string; name: string; email: string }>;
+  labels: LabelWithDetails[];
+  knowledgeBaseIds: string[];
+  connectorIds: string[];
+  suggestedPrompts: SuggestedPromptInput[];
+  pinnedAtMs: number | null;
+  creator: CreatedBy | null;
+  llmKey: { name: string; provider: SupportedProvider } | null;
+  model: { provider: SupportedProvider; modelName: string } | null;
+  /** Null when the list shows tools: the caller counts them. */
+  toolCounts: ListToolCounts | null;
+};
+
+type ListToolCounts = {
+  tools: number;
+  subagents: number;
+  knowledgeTools: number;
+};

@@ -221,6 +221,8 @@ function McpGateways() {
     ids: excludeIds,
     includeTools: false,
     enabled: !!excludeIds?.length,
+    // Pinned rows show no total.
+    includeTotal: false,
   });
   const automaticPinRows = automaticPinsResponse?.data ?? [];
 
@@ -253,6 +255,8 @@ function McpGateways() {
     ...listFilters,
     status: undefined,
     pinned: true,
+    // Pinned rows show no total.
+    includeTotal: false,
   });
   const pinGateway = usePinAgent();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });

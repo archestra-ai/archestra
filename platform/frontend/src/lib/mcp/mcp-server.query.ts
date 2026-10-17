@@ -74,7 +74,7 @@ export function useMcpServers(params?: McpServersParams) {
   const { data: canReadInstallations } = useHasPermissions({
     mcpServerInstallation: ["read"],
   });
-  // Per-install agent usage is opt-in, unlike the API's default: building it
+  // Per-install agent usage is opt-in, as in the API: building it
   // looks up the agents of every listed install, and only a server's own page
   // shows it. Every other list reads status and names, and with a boolean key
   // those callers share one cached request.

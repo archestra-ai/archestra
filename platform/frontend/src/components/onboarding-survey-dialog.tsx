@@ -19,6 +19,7 @@ import {
   useOnboardingSurveyEligibility,
   useSubmitOnboardingSurvey,
 } from "@/lib/onboarding/onboarding.query";
+import { useShellReady } from "@/lib/shell-deferral";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -30,8 +31,9 @@ import { cn } from "@/lib/utils/tailwind";
  */
 export function OnboardingSurveyDialog() {
   const { data: isAdmin } = useHasPermissions(SURVEY_ADMIN_PERMISSION);
+  const shellReady = useShellReady();
   const { data: eligibility } = useOnboardingSurveyEligibility({
-    enabled: isAdmin === true,
+    enabled: isAdmin === true && shellReady,
   });
   const { mutate: submitSurvey, isPending } = useSubmitOnboardingSurvey();
   const appName = useAppName();

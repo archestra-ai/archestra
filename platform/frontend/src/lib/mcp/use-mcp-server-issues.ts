@@ -39,14 +39,16 @@ export interface McpServerFacetCounts {
  */
 export function useMcpServerIssues(
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>,
+  /** False holds the issue index and team reads (the sidebar badge). */
+  { enabled = true }: { enabled?: boolean } = {},
 ): {
   issuesByCatalog: Map<string, McpServerIssue[]>;
   facetCounts: McpServerFacetCounts;
 } {
-  const { data: index } = useMcpRegistryIssueIndex();
+  const { data: index } = useMcpRegistryIssueIndex({ enabled });
   const { data: session } = useSession();
   const userId = session?.user?.id ?? null;
-  const canReauthenticate = useCanReauthenticate();
+  const canReauthenticate = useCanReauthenticate({ enabled });
   const { data: canManageInstalls } = useHasPermissions(
     { mcpRegistry: ["update"] },
     "*",

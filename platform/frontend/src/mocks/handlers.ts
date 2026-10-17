@@ -404,6 +404,10 @@ export const handlers: HttpHandler[] = [
       hasPrev: false,
     },
   }),
+  // The Audit Logs page's resource picker searches this when it opens, and
+  // reads one entry to label a resource filter carried in the URL. No
+  // matches keeps the strict unhandled-request guard satisfied.
+  ...getJson("/api/audit-logs/resources", { data: [] }),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.
   ...getJson("/api/environments", {

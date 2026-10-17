@@ -542,6 +542,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await AgentModel.findOptionsPage({
           ...params,
+          // This route takes no search or picker filters, unlike /options/page;
+          // pages use the default newest-first order.
           filters: {},
           pagination: query,
         }),

@@ -63,7 +63,10 @@ export function useAgentOptionsPage({
   });
 }
 
-/** Names for explicit references, without fetching unrelated agents. */
+/**
+ * Names for explicit references, without fetching unrelated agents. Built-in
+ * agents resolve too unless `filters.excludeBuiltIn` is true.
+ */
 export function useAgentOptionsByIds({
   ids,
   filters,
@@ -113,7 +116,10 @@ export function useAgentOptionsByIds({
           return options;
         }),
       );
-      return pages.flat();
+      // Keep one row per agent even if batches ever overlap.
+      return [
+        ...new Map(pages.flat().map((option) => [option.id, option])).values(),
+      ];
     },
     enabled: enabled && uniqueIds.length > 0,
   });

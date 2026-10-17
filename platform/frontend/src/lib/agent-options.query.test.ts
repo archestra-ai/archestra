@@ -123,6 +123,36 @@ it("follows the next cursor until the batch is complete", async () => {
   ]);
 });
 
+it("returns one row per agent when pages repeat an agent", async () => {
+  server.use(
+    http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
+      const second =
+        new URL(request.url).searchParams.get("cursor") === "page-2";
+      return HttpResponse.json({
+        data: second
+          ? [
+              { id: agentId(0), name: "Agent 0" },
+              { id: agentId(1), name: "Agent 1" },
+            ]
+          : [{ id: agentId(0), name: "Agent 0" }],
+        pagination: {
+          limit: 1000,
+          hasNext: !second,
+          nextCursor: second ? null : "page-2",
+        },
+      });
+    }),
+  );
+  const hook = renderWithClient(() =>
+    useAgentOptionsByIds({ ids: [agentId(0), agentId(1)] }),
+  );
+  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+  expect(hook.result.current.data?.map((row) => row.id)).toEqual([
+    agentId(0),
+    agentId(1),
+  ]);
+});
+
 it("never requests the roster without IDs", async () => {
   let requests = 0;
   server.use(

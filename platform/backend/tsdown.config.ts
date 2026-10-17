@@ -294,6 +294,7 @@ export default defineConfig((options: UserConfig) => {
     entry: [
       "src/server.ts",
       "src/standalone-scripts/reset-user-password.ts",
+      "src/standalone-scripts/rebuild-interaction-user-activity.ts",
       "src/standalone-scripts/vault-env-injector.ee.ts",
       "src/standalone-scripts/migrate-byos-to-vault/migrate.ee.ts",
       // Encryption-key re-encryption migration, run by the Helm migration Job.

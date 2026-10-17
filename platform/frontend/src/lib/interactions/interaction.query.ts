@@ -264,6 +264,9 @@ export function useInteractionUserOptions({
       return response.data ?? [];
     },
     enabled,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchInterval: search ? false : 20_000,
   });
 }
 

@@ -3967,8 +3967,15 @@
     {
       "idx": 566,
       "version": "7",
-      "when": 1792268940143,
-      "tag": "0566_list_page_indexes",
+      "when": 1792274152999,
+      "tag": "0566_interaction_user_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 567,
+      "version": "7",
+      "when": 1792280181708,
+      "tag": "0567_list_page_indexes",
       "breakpoints": true
     }
   ]

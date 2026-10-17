@@ -10,6 +10,7 @@ import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
 import AgentModel from "./agent";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import McpServerModel from "./mcp-server";
 import RoleCompositionModel from "./role-composition";
 import SkillModel from "./skill";
@@ -222,6 +223,7 @@ class UserModel {
     logger.debug("UserModel.delete: deleting user");
 
     if (tx) {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       // Inside a caller's transaction the cleanup MUST run on the same
       // executor: a base-db query under an open transaction deadlocks the
       // single-connection test database, and base-db cleanup would escape the

@@ -149,40 +149,6 @@ describe("TeamModel", () => {
     });
   });
 
-  describe("getUserTeams", () => {
-    test("returns teams with members for the user", async ({
-      makeUser,
-      makeOrganization,
-      makeTeam,
-    }) => {
-      const user = await makeUser();
-      const org = await makeOrganization();
-      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
-      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
-
-      await TeamModel.addMember(team1.id, user.id);
-      await TeamModel.addMember(team2.id, user.id);
-
-      // Add another member to team1
-      const other = await makeUser({ email: "other@test.com" });
-      await TeamModel.addMember(team1.id, other.id);
-
-      const teams = await TeamModel.getUserTeams(user.id);
-
-      expect(teams).toHaveLength(2);
-      const t1 = teams.find((t) => t.id === team1.id);
-      expect(t1?.members).toHaveLength(2);
-    });
-
-    test("returns empty array when user has no teams", async ({ makeUser }) => {
-      const user = await makeUser();
-
-      const teams = await TeamModel.getUserTeams(user.id);
-
-      expect(teams).toEqual([]);
-    });
-  });
-
   describe("getTeamMembersBatch", () => {
     test("returns members grouped by team ID", async ({
       makeUser,

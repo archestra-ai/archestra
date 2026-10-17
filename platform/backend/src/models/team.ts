@@ -636,49 +636,10 @@ class TeamModel {
   }
 
   /**
-   * Get all teams a user is a member of
-   */
-  static async getUserTeams(userId: string): Promise<Team[]> {
-    logger.debug({ userId }, "TeamModel.getUserTeams: fetching user teams");
-    // Fetch user's team memberships
-    const teamMemberships = await db
-      .select()
-      .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, userId));
-
-    if (teamMemberships.length === 0) {
-      logger.debug({ userId, count: 0 }, "TeamModel.getUserTeams: completed");
-      return [];
-    }
-
-    const teamIds = teamMemberships.map((m) => m.teamId);
-
-    // Batch fetch teams and their members in parallel
-    const [teams, membersByTeam] = await Promise.all([
-      db
-        .select()
-        .from(schema.teamsTable)
-        .where(inArray(schema.teamsTable.id, teamIds)),
-      TeamModel.getTeamMembersBatch(teamIds),
-    ]);
-
-    const teamsWithMembers = teams.map((team) => ({
-      ...team,
-      members: membersByTeam.get(team.id) || [],
-    }));
-
-    logger.debug(
-      { userId, count: teamsWithMembers.length },
-      "TeamModel.getUserTeams: completed",
-    );
-    return teamsWithMembers;
-  }
-
-  /**
-   * Get the teams a user belongs to within a single organization. Unlike
-   * {@link getUserTeams}, this is scoped to one org, so callers that render
-   * user context into prompts (templated skills, agent system prompts) cannot
-   * leak team names from the user's other organizations.
+   * Get the teams a user belongs to within a single organization. Scoping to
+   * one org keeps callers that render user context into prompts (templated
+   * skills, agent system prompts) from leaking team names from the user's
+   * other organizations.
    */
   static async getUserTeamsForOrganization(params: {
     userId: string;

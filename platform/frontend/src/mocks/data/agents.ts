@@ -61,7 +61,9 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     connectorIds: [],
     suggestedPrompts: [],
     pinnedAt: null,
-    // Counted as the list routes count them, from the mock's tools.
+    // From the mock's tools: delegations are subagents, the rest are tools.
+    // The list routes also leave out the knowledge search tool for an agent
+    // without knowledge sources; pass `toolsCount` to test that case.
     toolsCount: tools.filter((tool) => !tool.delegateToAgentId).length,
     subagentsCount: tools.filter((tool) => tool.delegateToAgentId).length,
     ...overrides,

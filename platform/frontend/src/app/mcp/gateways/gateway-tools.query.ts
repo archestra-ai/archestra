@@ -29,7 +29,9 @@ export function useGatewayToolRows(params: {
       throwOnApiError(error, { toastOnError: false });
       return data?.data[0]?.tools ?? [];
     },
-    // Lets the row's other tooltip reuse the read; agent changes refresh it.
-    staleTime: 5 * 60 * 1000,
+    // Long enough for the row's other tooltip to reuse the read, short enough
+    // that the names keep up with a list refetched in the meantime. Agent
+    // changes in this tab refresh it at once.
+    staleTime: 30 * 1000,
   });
 }

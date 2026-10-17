@@ -50,7 +50,6 @@ import { claimConnectionSetupConversation } from "@/services/connection-setup-co
 import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { ApiError } from "@/types";
 import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
-import { isLoopbackRequest } from "@/utils/network";
 
 /**
  * Whether this request is the installer's own conversation under an approved
@@ -136,7 +135,9 @@ export async function admitOpenappaRequest(params: {
   /** Set for the proxy's loopback Chat call path. */
   chatSource: AppaChatSource | undefined;
   externalAgentId: string | undefined;
-  /** A loopback call this process proved it made itself. */
+  /** A call this process proved it made itself (in-process or guardrail proof). */
+  inProcessRequest: boolean;
+  /** A guardrail call: the platform's own annotator or review model. */
   internalCall: boolean;
   installerSetupBypass: boolean;
   ingress: OpenappaIngress;
@@ -167,7 +168,7 @@ export async function admitOpenappaRequest(params: {
   // Internal agents (Chat, Slack, A2A, etc.) share the loopback boundary.
   // External clients still need platform authentication; a session ID or
   // user attribution header alone is not a credential.
-  const isInternalRequest = isLoopbackRequest(request);
+  const isInternalRequest = params.inProcessRequest;
   if (
     appaActive &&
     !isInternalRequest &&

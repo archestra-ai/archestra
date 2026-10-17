@@ -26,6 +26,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
@@ -209,6 +210,7 @@ describe("Anthropic anthropic-beta forwarding", () => {
         url: `/v1/anthropic/${agentId}/v1/messages`,
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           "content-type": "application/json",
           authorization: "Bearer test-key",
           "anthropic-version": "2023-06-01",

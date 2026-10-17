@@ -7,7 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -290,16 +290,14 @@ export function useMcpRegistryRowsByIds(
   options?: Pick<McpRegistryListQuery, "includeBuiltIn" | "includeApps">,
 ) {
   const sortedIds = [...new Set(ids)].sort();
+  const idsKey = sortedIds.join(",");
   const chunks: string[][] = [];
   for (let i = 0; i < sortedIds.length; i += MAX_REGISTRY_PAGE_SIZE) {
     chunks.push(sortedIds.slice(i, i + MAX_REGISTRY_PAGE_SIZE));
   }
-  return useQueries({
+  const results = useQueries({
     queries: chunks.map((catalogIds) => ({
       queryKey: [...mcpRegistryQueryKey, "rows-by-id", catalogIds, options],
-      // Adding or removing one id changes the request; keep the rows already
-      // known on screen until it answers.
-      placeholderData: (previous: McpRegistryRow[] | undefined) => previous,
       queryFn: async () => {
         const { data, error } = await searchMcpRegistry({
           body: {
@@ -317,6 +315,45 @@ export function useMcpRegistryRowsByIds(
     })),
     combine: combineRowChunks,
   });
+
+  // A changed id set is a new query with nothing to show, even for the ids
+  // it shares with the previous set (`placeholderData` has no previous data
+  // to give a new observer inside `useQueries`). Rows already known stay on
+  // screen until their new chunk answers; a removed id leaves at once.
+  const knownRows = useRef(new Map<string, McpRegistryRow>());
+  const everyChunkAnswered = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: idsKey stands for sortedIds
+  const data = useMemo(() => {
+    const requested = new Set(sortedIds);
+    const answered = new Set<string>();
+    const rows: McpRegistryRow[] = [];
+    results.chunks.forEach((chunk, i) => {
+      if (!chunk.data) return;
+      for (const id of chunks[i] ?? []) answered.add(id);
+      for (const row of chunk.data) rows.push(row);
+    });
+    for (const [id, row] of knownRows.current) {
+      if (requested.has(id) && !answered.has(id)) rows.push(row);
+    }
+    const next = new Map<string, McpRegistryRow>();
+    for (const row of rows) next.set(row.id, row);
+    knownRows.current = next;
+    return rows;
+  }, [results.chunks, idsKey]);
+  if (!results.isPending) everyChunkAnswered.current = true;
+
+  return {
+    data,
+    /** Some requested chunk has not answered yet. */
+    isPending: results.isPending,
+    /**
+     * Every chunk has answered once: later id changes keep the known rows,
+     * so a loading state should wait only for this.
+     */
+    hasLoaded: everyChunkAnswered.current,
+    isError: results.isError,
+    refetch: results.refetch,
+  };
 }
 
 export function catalogItemQueryOptions(id: string) {
@@ -463,7 +500,7 @@ function combineRowChunks(
   }>,
 ) {
   return {
-    data: results.flatMap((result) => result.data ?? []),
+    chunks: results.map((result) => ({ data: result.data })),
     isPending: results.some((result) => result.isPending),
     isError: results.some((result) => result.isError),
     refetch: () => Promise.all(results.map((result) => result.refetch())),

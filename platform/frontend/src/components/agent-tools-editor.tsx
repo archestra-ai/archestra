@@ -336,9 +336,11 @@ const AgentToolsEditorContent = forwardRef<
     }
     return [...byId.values()];
   }, [assignedCatalogs.data, catalogPage.data, pendingVersion]);
+  // Only the first load: a later change of the assigned catalogs keeps the
+  // rows already known on screen while it loads.
   const isPending =
     (!!agentId && isAssignedToolsLoading) ||
-    assignedCatalogs.isPending ||
+    !assignedCatalogs.hasLoaded ||
     catalogPage.isPending;
   const catalogFailed = assignedCatalogs.isError || catalogPage.isLoadingError;
   const refetchCatalog = () => {

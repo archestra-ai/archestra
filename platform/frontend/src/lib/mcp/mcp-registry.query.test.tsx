@@ -31,6 +31,7 @@ import {
   startMcpRegistryEarlyRequests,
   useMcpRegistryIssueIndex,
   useMcpRegistryPage,
+  useMcpRegistryRowsByIds,
   useMcpServersForCatalogs,
 } from "./mcp-registry.query";
 
@@ -241,5 +242,63 @@ describe("registry early requests", () => {
       expect(result.current.page.data?.data[0]?.id).toBe("cat-a"),
     );
     expect(searchMcpRegistryMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("registry rows by id", () => {
+  beforeEach(() => searchMcpRegistryMock.mockReset());
+
+  it("keeps the rows already known while a changed id set loads", async () => {
+    // Each request answers with one row per id; the second one waits.
+    let releaseSecond: () => void = () => {};
+    searchMcpRegistryMock.mockImplementation(
+      (request?: { body?: { catalogIds?: string[] } }) => {
+        const catalogIds = request?.body?.catalogIds ?? [];
+        const answer = {
+          data: {
+            data: catalogIds.map((id) => ({ id, name: id })),
+            pagination: { total: catalogIds.length },
+            selectableTotal: 0,
+            installs: [],
+          },
+        };
+        if (catalogIds.length !== 2) return Promise.resolve(answer);
+        return new Promise((resolve) => {
+          releaseSecond = () => resolve(answer);
+        });
+      },
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result, rerender } = renderHook(
+      ({ ids }: { ids: string[] }) => useMcpRegistryRowsByIds(ids),
+      { wrapper, initialProps: { ids: ["cat-a"] } },
+    );
+    await waitFor(() => expect(result.current.hasLoaded).toBe(true));
+
+    rerender({ ids: ["cat-a", "cat-b"] });
+
+    // The known row stays, and the editors do not go back to loading.
+    expect(result.current.data.map((row) => row.id)).toEqual(["cat-a"]);
+    expect(result.current.hasLoaded).toBe(true);
+    expect(result.current.isPending).toBe(true);
+
+    releaseSecond();
+    await waitFor(() =>
+      expect(result.current.data.map((row) => row.id)).toEqual([
+        "cat-a",
+        "cat-b",
+      ]),
+    );
+    expect(result.current.isPending).toBe(false);
+
+    // A removed id leaves at once.
+    rerender({ ids: ["cat-b"] });
+    expect(result.current.data.map((row) => row.id)).toEqual(["cat-b"]);
   });
 });

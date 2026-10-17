@@ -477,9 +477,10 @@ export const AgentToolExclusionsEditor = forwardRef<
   }
 
   // The first load of the rows behind already-disabled tools: their pills
-  // would otherwise appear one by one after the editor shows.
+  // would otherwise appear one by one after the editor shows. Later changes
+  // keep the rows already known on screen.
   const excludedRowsLoading =
-    excludedCatalogRows.isPending && excludedCatalogs.length < entries.size;
+    !excludedCatalogRows.hasLoaded && excludedCatalogs.length < entries.size;
   if (!initialized || excludedRowsLoading) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">

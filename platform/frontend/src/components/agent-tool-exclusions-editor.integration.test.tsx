@@ -209,4 +209,50 @@ describe("AgentToolExclusionsEditor — catalogs", () => {
     ).toBeInTheDocument();
     expect(requests.some((body) => body.search === "65")).toBe(true);
   });
+
+  it("keeps the editor on screen while a newly disabled server's row loads", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    // The by-id read that adds server-65 waits until the test lets it go.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const search = registrySearch(many);
+    server.use(
+      http.post(
+        `${API_ORIGIN}/api/internal_mcp_catalog/registry/search`,
+        async (info) => {
+          const body = (await info.request.clone().json()) as SearchBody;
+          if (body.catalogIds?.includes("catalog-65")) await gate;
+          return search.resolver(info);
+        },
+      ),
+      http.get(`${API_ORIGIN}/api/internal_mcp_catalog/tools`, () =>
+        HttpResponse.json([
+          { id: TOOL_ID, name: "server_79__do_thing", catalogId: "catalog-79" },
+          { id: "tool-2", name: "server_65__x", catalogId: "catalog-65" },
+        ]),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderEditor();
+    expect(await screen.findByText("server-79")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /disable tools/i }));
+    await user.type(screen.getByPlaceholderText(/search mcp servers/i), "65");
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", { name: /server-65/ }),
+    );
+
+    // The by-id set changed; the known pill stays and nothing reloads.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(/Loading exclusions/i)).not.toBeInTheDocument();
+    expect(screen.getByText("server-79")).toBeInTheDocument();
+    release();
+  });
 });

@@ -88,6 +88,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
       (row) => ids.includes(row.id),
     ),
     isPending: false,
+    hasLoaded: true,
     isError: false,
   }),
   // Like the server: the search narrows by name, the page is sorted by name

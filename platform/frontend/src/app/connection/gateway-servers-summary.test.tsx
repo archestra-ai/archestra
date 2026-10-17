@@ -24,6 +24,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", async () => {
         (useInternalMcpCatalog().data ?? []) as Array<{ id: string }>
       ).filter((row) => ids.includes(row.id)),
       isPending: false,
+      hasLoaded: true,
       isError: false,
     }),
   };

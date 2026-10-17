@@ -426,6 +426,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", async (importOriginal) => ({
         ids.includes(row.id),
       ),
       isPending: catalog.isPending ?? false,
+      hasLoaded: !(catalog.isPending ?? false),
       isError: catalog.isError ?? false,
       refetch: async () => [],
     };

@@ -228,8 +228,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const handleSubscriptionSelect = (keyId: string) =>
     credentialSelectorRef.current?.selectKey(keyId);
   const providerCatalog = useModelProviderCatalog();
-  // New chats expose their setup; existing conversations keep it in one menu.
-  const showOptionsMenu = !!conversationId || isNarrow;
+  // The pickers stay inline whenever they fit, for new and started chats
+  // alike; the menu is only the fallback for a toolbar too narrow to hold them.
+  const showOptionsMenu = isNarrow;
 
   const selectedApiKeyId = conversationId
     ? (currentConversationChatApiKeyId ?? null)
@@ -387,7 +388,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             />
           </div>
         )}
-      {/* Existing chats always use the menu; new chats use it only when space is tight. */}
+      {/* Only when the inline pickers no longer fit. */}
       {showOptionsMenu && (
         <Popover open={optionsOpen} onOpenChange={handleOptionsOpenChange}>
           <PopoverTrigger asChild>

@@ -21,7 +21,7 @@ import {
 import { logoNameForProvider } from "@/lib/provider-logos";
 
 /**
- * A new chat's model control: the model's name, plus the reasoning level when
+ * The composer's model control: the model's name, plus the reasoning level when
  * one is chosen, opening the setup menu's Model and Key tabs. It also keeps
  * the selected model valid as the key changes, so it stays mounted.
  */

@@ -555,15 +555,17 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   agentName={displayAgentName}
                 />
               ) : !triggerIconsLoaded ? (
+                // Same footprint as the "All tools" circles, which most
+                // agents land on, so the controls beside it do not shift.
                 <span
-                  className="flex min-w-14 shrink-0 items-center"
+                  className="flex shrink-0 items-center -space-x-1.5"
                   aria-hidden="true"
                   data-testid="agent-tools-placeholder"
                 >
-                  {[0, 1, 2].map((index) => (
+                  {ALL_TOOLS_ICONS.map(({ key }) => (
                     <span
-                      key={index}
-                      className="-ml-1.5 size-5 rounded-full border-2 border-background bg-muted first:ml-0 animate-pulse"
+                      key={key}
+                      className="size-5 shrink-0 animate-pulse rounded-full bg-muted ring-1 ring-background"
                     />
                   ))}
                 </span>

@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import {
   type CSSProperties,
+  Suspense,
+  startTransition,
   useCallback,
   useEffect,
   useState,
@@ -11,21 +13,21 @@ import {
 import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
-import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { LoadingState } from "@/components/loading";
 import {
   NavigationStatusProvider,
   useNavigationStatus,
 } from "@/components/navigation-status-provider";
-import { OnboardingSurveyDialog } from "@/components/onboarding-survey-dialog";
 import {
   SidebarCircleToggle,
+  SidebarPlaceholder,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
+import { appInteractive } from "@/lib/app-interactive";
 import { MAIN_CONTENT_ID } from "@/lib/app-shell-region";
 import { useSession } from "@/lib/auth/auth.query";
 import {
@@ -37,11 +39,11 @@ import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
+import { lazyComponent, preloadableLazy } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";
-import { AppSidebar } from "./sidebar";
 import {
   SidebarResizeHandle,
   useSidebarWidthState,
@@ -178,7 +180,7 @@ export function AppShell({ children }: AppShellProps) {
                 the keyboard tabs forward into the revealed sidebar content
                 instead of skipping to <main> (WCAG 2.4.3). */}
           <NavAwareSidebarCircleToggle />
-          <AppSidebar />
+          <DeferredSidebar />
           <SidebarResizeHandle
             width={sidebarWidth.width}
             onWidthChange={sidebarWidth.setWidth}
@@ -231,13 +233,67 @@ export function AppShell({ children }: AppShellProps) {
           </main>
           <Toaster />
           <ConversationSearchProvider />
-          <OnboardingSurveyDialog />
-          <FeedbackPopupDialog />
+          <AfterIdle>
+            <OnboardingSurveyDialog />
+            <FeedbackPopupDialog />
+          </AfterIdle>
         </SidebarProvider>
       </NavigationStatusProvider>
     </ConnectivityProvider>
   );
 }
+
+/**
+ * The sidebar, after the page's first commit. Its navigation, conversation
+ * list and their queries are not what the visitor came for, so the first
+ * render (on the server too) draws its empty frame at the exact width, and
+ * the real sidebar replaces it in a transition right after the page —
+ * the chat composer — has committed. The frame stays while its chunk loads.
+ */
+function DeferredSidebar() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    startTransition(() => setMounted(true));
+  }, []);
+  const placeholder = <SidebarPlaceholder collapsible="icon" />;
+  if (!mounted) return placeholder;
+  return (
+    <Suspense fallback={placeholder}>
+      <appSidebar.Component />
+    </Suspense>
+  );
+}
+
+const appSidebar = preloadableLazy<Record<string, never>>(() =>
+  import("./sidebar").then((m) => ({ default: m.AppSidebar })),
+);
+
+/** Renders its children from the first idle callback after the app is interactive. */
+function AfterIdle({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void appInteractive.whenIdle().then(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return ready ? <>{children}</> : null;
+}
+
+const OnboardingSurveyDialog = lazyComponent(() =>
+  import("@/components/onboarding-survey-dialog").then(
+    (m) => m.OnboardingSurveyDialog,
+  ),
+);
+
+const FeedbackPopupDialog = lazyComponent(() =>
+  import("@/components/feedback-popup-dialog").then(
+    (m) => m.FeedbackPopupDialog,
+  ),
+);
 
 function ConnectivityBar() {
   const { state, retry } = useConnectivity();

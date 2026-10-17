@@ -263082,7 +263082,9 @@
                             }
                           },
                           "assignedAgentCount": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -267770,7 +267772,9 @@
                             }
                           },
                           "assignedAgentCount": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
                           "totalDocsIngested": {
                             "type": "number"

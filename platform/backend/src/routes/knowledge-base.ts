@@ -194,7 +194,7 @@ const KnowledgeBaseWithConnectorsSchema = KnowledgeBaseResponseSchema.extend({
   ),
   totalDocsIndexed: z.number(),
   assignedAgents: z.array(AssignedAgentSummarySchema),
-  assignedAgentCount: z.number(),
+  assignedAgentCount: z.number().int().min(0),
   labels: z.array(LabelWithDetailsSchema),
 });
 
@@ -229,7 +229,7 @@ const KnowledgeBaseConnectorReadResponseSchema =
 const KnowledgeBaseConnectorListItemSchema =
   KnowledgeBaseConnectorReadResponseSchema.extend({
     assignedAgents: z.array(AssignedAgentSummarySchema),
-    assignedAgentCount: z.number(),
+    assignedAgentCount: z.number().int().min(0),
     totalDocsIngested: z.number(),
   });
 

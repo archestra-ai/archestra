@@ -272,6 +272,7 @@ const McpRegistryRowSchema = ListInternalMcpCatalogSchema.pick({
   dynamicConnectionMcpServerId: true,
   appId: true,
   appEnabled: true,
+  docsUrl: true,
 }).extend({
   /** An emoji icon; image icons are served from `iconUrl` instead. */
   icon: z.string().nullable(),
@@ -672,6 +673,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             providesSkills: item.providesSkills,
             catalogReinstallRequired: item.catalogReinstallRequired,
             dynamicConnectionMcpServerId: item.dynamicConnectionMcpServerId,
+            docsUrl: item.docsUrl,
             appId:
               item.serverType === "app"
                 ? (appIdByCatalog.get(item.id) ?? null)

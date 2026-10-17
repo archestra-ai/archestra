@@ -248619,6 +248619,10 @@
                             "nullable": true,
                             "type": "boolean"
                           },
+                          "docsUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "icon": {
                             "nullable": true,
                             "type": "string"
@@ -248731,6 +248735,7 @@
                           "skillCount",
                           "catalogReinstallRequired",
                           "dynamicConnectionMcpServerId",
+                          "docsUrl",
                           "icon",
                           "iconUrl",
                           "alertMutes",

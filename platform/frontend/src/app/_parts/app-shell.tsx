@@ -8,7 +8,10 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
+import {
+  MOBILE_HEADER_ACTIONS_CONTAINER_ID,
+  MOBILE_HEADER_TITLE_CONTAINER_ID,
+} from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
@@ -206,8 +209,12 @@ export function AppShell({ children }: AppShellProps) {
                 />
               )}
               <ImpersonationBanner />
-              <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+              <header className="h-14 border-b border-border flex md:hidden items-center justify-between gap-2 px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
                 <NavAwareSidebarTrigger />
+                <div
+                  id={MOBILE_HEADER_TITLE_CONTAINER_ID}
+                  className="flex min-w-0 flex-1 items-center"
+                />
                 <div
                   id={MOBILE_HEADER_ACTIONS_CONTAINER_ID}
                   className="flex items-center gap-2"

@@ -1,9 +1,10 @@
 import { TimeInMs } from "@archestra/shared/consts";
 import { vi } from "vitest";
-import { cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { recordQueries } from "@/test/query-counter";
 import type { InteractionResponse } from "@/types";
 import InteractionModel from "./interaction";
 
@@ -241,7 +242,7 @@ describe("InteractionModel.getUserFilterOptions", () => {
       expect(await list()).toEqual([{ id: first.id, name: "First" }]);
       await seed(agent.id, [later.id, later.id]);
 
-      clock.mockReturnValue(now + 4 * TimeInMs.Minute);
+      clock.mockReturnValue(now + 20 * TimeInMs.Second);
       expect(await list()).toEqual([{ id: first.id, name: "First" }]);
       // Search reads the log directly, so it already sees the new user.
       expect(
@@ -252,7 +253,7 @@ describe("InteractionModel.getUserFilterOptions", () => {
         }),
       ).toEqual([{ id: later.id, name: "Later" }]);
 
-      clock.mockReturnValue(now + 6 * TimeInMs.Minute);
+      clock.mockReturnValue(now + 40 * TimeInMs.Second);
       expect(await list()).toEqual([
         { id: later.id, name: "Later" },
         { id: first.id, name: "First" },
@@ -294,6 +295,49 @@ describe("InteractionModel.getUserFilterOptions", () => {
     );
     // One store per organization: the five concurrent misses shared a load.
     expect(set).toHaveBeenCalledTimes(2);
+  });
+
+  test("version churn returns one exact uncached fallback instead of restarting the load", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const foreignAgent = await makeAgent({ organizationId: other.id });
+    const user = await makeUser({ name: "Local" });
+    const foreign = await makeUser({ name: "Foreign" });
+    await seed(agent.id, [user.id]);
+    await seed(foreignAgent.id, [foreign.id, foreign.id]);
+    let loads = 0;
+    vi.spyOn(cacheManager, "get").mockImplementation(async (key) => {
+      if (key.startsWith(CacheKey.InteractionUserOptions)) {
+        loads++;
+        if (loads <= 3) await makeApp({ organizationId: org.id });
+      }
+      return undefined;
+    });
+    const set = vi.spyOn(cacheManager, "set");
+    const loaded = await recordQueries(() =>
+      InteractionModel.getUserFilterOptions({
+        organizationId: org.id,
+        limit: 100,
+      }),
+    );
+    expect(loaded.result).toEqual([{ id: user.id, name: user.name }]);
+    expect(loads).toBe(1);
+    expect(
+      loaded.statements.filter((statement) =>
+        /\bfrom\s+"?interactions"?\b/i.test(statement),
+      ),
+    ).toHaveLength(2);
+    expect(
+      set.mock.calls.some(([key]) =>
+        key.startsWith(CacheKey.InteractionUserOptions),
+      ),
+    ).toBe(false);
   });
 
   test("still answers when the cache cannot store the list", async ({

@@ -100,6 +100,7 @@ import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
 import { idArrayCondition } from "./id-array-condition";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
@@ -4057,6 +4058,7 @@ class AgentModel {
 
   static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
     const run = async (transaction: Transaction) => {
+      await InteractionUserActivityModel.lifecycleFence(transaction);
       const count = await hardDelete(
         transaction,
         schema.agentsTable,
@@ -4123,6 +4125,7 @@ class AgentModel {
    */
   static async purge(id: string, organizationId: string): Promise<boolean> {
     return withDbTransaction(async (tx) => {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       // `sql.raw`, not an interpolated value: SET is a utility command and
       // takes no bind parameters, so `= $1` is a syntax error. The value is a
       // module constant, never caller input.

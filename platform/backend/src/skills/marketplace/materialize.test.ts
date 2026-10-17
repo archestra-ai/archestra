@@ -663,6 +663,132 @@ describe("MarketplaceMaterializer", () => {
     }
   });
 
+  describe("a second replica with its own cache dir", () => {
+    let cacheDirB: string;
+    let replicaB: MarketplaceMaterializer;
+    const ref = () => ({ kind: "link" as const, id: linkId });
+    const v1 = () => makeRequest(linkId);
+    const v2 = () =>
+      makeRequest(linkId, {
+        skills: [makeSkill({ content: "# Updated body" })],
+      });
+    const markerPath = () =>
+      path.join(replicaB.repoPathFor(ref()), ".git", "rebuild-marker");
+
+    beforeEach(async () => {
+      cacheDirB = await fs.mkdtemp(
+        path.join(tmpdir(), "archestra-materialize-test-"),
+      );
+      replicaB = new MarketplaceMaterializer({ cacheDir: cacheDirB });
+    });
+
+    afterEach(async () => {
+      await fs.rm(cacheDirB, { recursive: true, force: true });
+    });
+
+    /** Both replicas on revision 1, then A appends revision 2. */
+    async function replicaBOneBehind() {
+      const first = await materializer.materialize(v1());
+      await replicaB.materialize(v1());
+      await fs.writeFile(markerPath(), "");
+      const second = await materializer.materialize(v2());
+      return { first, second };
+    }
+
+    test("catches up a replica one revision behind without rebuilding", async () => {
+      const { first, second } = await replicaBOneBehind();
+      const listSpy = vi.spyOn(SkillShareLinkRevisionModel, "list");
+      const listAfterSpy = vi.spyOn(SkillShareLinkRevisionModel, "listAfter");
+
+      try {
+        const result = await replicaB.materialize(v2());
+
+        expect(result.commitHash).toBe(second.commitHash);
+        expect(await diskHead(result.repoPath)).toBe(second.commitHash);
+        expect(await readParent(result.repoPath)).toBe(first.commitHash);
+        await expect(fs.access(markerPath())).resolves.toBeUndefined();
+        // only the revision newer than the disk HEAD was loaded with payload
+        expect(listSpy).not.toHaveBeenCalled();
+        expect(listAfterSpy).toHaveBeenCalledTimes(1);
+        await expect(listAfterSpy.mock.results[0].value).resolves.toHaveLength(
+          1,
+        );
+      } finally {
+        listSpy.mockRestore();
+        listAfterSpy.mockRestore();
+      }
+    });
+
+    test("drops an orphan commit left on top of a stored revision", async () => {
+      const first = await materializer.materialize(v1());
+      const onB = await replicaB.materialize(v1());
+      // a lost append race leaves a commit on disk that never got stored
+      const orphan = await gitWithIdentity(
+        onB.repoPath,
+        "commit-tree",
+        "HEAD^{tree}",
+        "-p",
+        "HEAD",
+        "-m",
+        "orphan",
+      );
+      await git(onB.repoPath, "update-ref", "refs/heads/main", orphan);
+      await fs.writeFile(markerPath(), "");
+      const second = await materializer.materialize(v2());
+
+      const result = await replicaB.materialize(v2());
+
+      expect(result.commitHash).toBe(second.commitHash);
+      expect(await diskHead(result.repoPath)).toBe(second.commitHash);
+      expect(await readParent(result.repoPath)).toBe(first.commitHash);
+      await expect(fs.access(markerPath())).resolves.toBeUndefined();
+    });
+
+    test("rebuilds a disk history unrelated to the stored chain", async () => {
+      const first = await materializer.materialize(v1());
+      const onB = await replicaB.materialize(v1());
+      const unrelated = await gitWithIdentity(
+        onB.repoPath,
+        "commit-tree",
+        "HEAD^{tree}",
+        "-m",
+        "unrelated root",
+      );
+      await git(onB.repoPath, "update-ref", "refs/heads/main", unrelated);
+      await fs.writeFile(markerPath(), "");
+      const second = await materializer.materialize(v2());
+
+      const result = await replicaB.materialize(v2());
+
+      expect(result.commitHash).toBe(second.commitHash);
+      expect(await diskHead(result.repoPath)).toBe(second.commitHash);
+      expect(await readParent(result.repoPath)).toBe(first.commitHash);
+      await expect(fs.access(markerPath())).rejects.toThrow();
+    });
+
+    test("falls back to a full rebuild when the disk base commit is corrupt", async () => {
+      const { first, second } = await replicaBOneBehind();
+      const repoB = replicaB.repoPathFor(ref());
+      // remove the base commit object so walking the disk history fails
+      await fs.rm(
+        path.join(
+          repoB,
+          ".git",
+          "objects",
+          first.commitHash.slice(0, 2),
+          first.commitHash.slice(2),
+        ),
+      );
+
+      const result = await replicaB.materialize(v2());
+
+      expect(result.commitHash).toBe(second.commitHash);
+      expect(await diskHead(result.repoPath)).toBe(second.commitHash);
+      expect(await readParent(result.repoPath)).toBe(first.commitHash);
+      await expect(fs.access(markerPath())).rejects.toThrow();
+    });
+  });
+
   test("commit author and committer use the configured identity", async () => {
     const identity = { name: "Test Marketplace", email: "test@example.com" };
     const m = new MarketplaceMaterializer({ cacheDir, identity });
@@ -681,6 +807,23 @@ const execFileAsync = promisify(execFile);
 
 async function git(repoPath: string, ...args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", args, { cwd: repoPath });
+  return stdout.trim();
+}
+
+async function gitWithIdentity(
+  repoPath: string,
+  ...args: string[]
+): Promise<string> {
+  const identity = {
+    GIT_AUTHOR_NAME: "Other Replica",
+    GIT_AUTHOR_EMAIL: "other@example.com",
+    GIT_COMMITTER_NAME: "Other Replica",
+    GIT_COMMITTER_EMAIL: "other@example.com",
+  };
+  const { stdout } = await execFileAsync("git", args, {
+    cwd: repoPath,
+    env: { ...process.env, ...identity },
+  });
   return stdout.trim();
 }
 

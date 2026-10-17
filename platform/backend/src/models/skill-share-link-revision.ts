@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   MarketplaceRepoRef,
@@ -37,6 +37,41 @@ class SkillShareLinkRevisionModel {
       .select()
       .from(schema.skillShareLinkRevisionsTable)
       .where(ownerFilter(ref))
+      .orderBy(asc(schema.skillShareLinkRevisionsTable.sequence));
+  }
+
+  /**
+   * The stored chain's `sequence` → `commitSha` index, without payloads. Lets
+   * the materializer find where a stale on-disk repo diverged without loading
+   * every revision's file list.
+   */
+  static async listCommitIndex(
+    ref: MarketplaceRepoRef,
+  ): Promise<Array<{ sequence: number; commitSha: string }>> {
+    return db
+      .select({
+        sequence: schema.skillShareLinkRevisionsTable.sequence,
+        commitSha: schema.skillShareLinkRevisionsTable.commitSha,
+      })
+      .from(schema.skillShareLinkRevisionsTable)
+      .where(ownerFilter(ref))
+      .orderBy(asc(schema.skillShareLinkRevisionsTable.sequence));
+  }
+
+  /** Revisions strictly after `sequence`, oldest first. */
+  static async listAfter(
+    ref: MarketplaceRepoRef,
+    sequence: number,
+  ): Promise<SkillShareLinkRevision[]> {
+    return db
+      .select()
+      .from(schema.skillShareLinkRevisionsTable)
+      .where(
+        and(
+          ownerFilter(ref),
+          gt(schema.skillShareLinkRevisionsTable.sequence, sequence),
+        ),
+      )
       .orderBy(asc(schema.skillShareLinkRevisionsTable.sequence));
   }
 

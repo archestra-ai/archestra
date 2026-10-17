@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import logger from "@/logging";
 import { SkillShareLinkRevisionModel } from "@/models";
 import {
   computePluginDeliveryStats,
@@ -10,6 +11,7 @@ import {
 import type {
   MarketplaceRepoRef,
   RevisionPayloadFile,
+  SkillShareLinkRevision,
 } from "@/types/skill-share-link-revision";
 import { computeLayout, type MaterializeRequest } from "./layout";
 
@@ -245,12 +247,111 @@ export class MarketplaceMaterializer {
       return;
     }
 
+    const startedAt = Date.now();
+    let fallbackReason =
+      diskHead === null ? "no repo on disk" : "no stored revisions";
+    // a throw (git error, replay SHA mismatch) means a corrupt repo or a bug,
+    // unlike the expected reasons for a full rebuild
+    let incrementalFailed = false;
+    if (diskHead !== null && expectedHead !== null) {
+      try {
+        const result = await this.replayIncremental({
+          ref,
+          repoPath,
+          expectedHead,
+        });
+        if (typeof result !== "string") {
+          logReplay({
+            ref,
+            mode: "incremental",
+            baseSequence: result.baseSequence,
+            replayed: result.replayed,
+            startedAt,
+          });
+          return;
+        }
+        fallbackReason = result;
+      } catch (error) {
+        fallbackReason = error instanceof Error ? error.message : String(error);
+        incrementalFailed = true;
+      }
+    }
+
     const revisions = await SkillShareLinkRevisionModel.list(ref);
     await fs.rm(repoPath, { recursive: true, force: true });
     await this.initEmptyRepo(repoPath);
+    await this.replayRevisions({ ref, repoPath, revisions, parentSha: null });
+    logReplay({
+      ref,
+      mode: "full",
+      baseSequence: 0,
+      replayed: revisions.length,
+      startedAt,
+      fallbackReason,
+      level: incrementalFailed ? "warn" : "info",
+    });
+  }
 
-    let parentSha: string | null = null;
-    for (const rev of revisions) {
+  /**
+   * Commit SHAs are deterministic over the whole parent chain, so a disk commit
+   * equal to a stored `commitSha` proves the disk history up to it matches the
+   * stored chain. Rewind `main` to the newest such commit (HEAD itself when this
+   * replica is merely behind; its parent when a lost append left an orphan) and
+   * replay only the newer revisions. Returns a reason string when the disk can't
+   * be caught up this way and the caller should rebuild from scratch.
+   */
+  private async replayIncremental(params: {
+    ref: MarketplaceRepoRef;
+    repoPath: string;
+    expectedHead: string;
+  }): Promise<{ baseSequence: number; replayed: number } | string> {
+    const { ref, repoPath, expectedHead } = params;
+    const index = await SkillShareLinkRevisionModel.listCommitIndex(ref);
+    const sequenceBySha = new Map(
+      index.map((rev) => [rev.commitSha, rev.sequence]),
+    );
+    const expectedSequence = sequenceBySha.get(expectedHead);
+    if (expectedSequence === undefined) {
+      return "expected head is not in the stored chain";
+    }
+
+    const history = await runGit({
+      binary: this.gitBinaryPath,
+      cwd: repoPath,
+      args: ["rev-list", "--first-parent", "HEAD"],
+    });
+    const base = history.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .find((sha) => sequenceBySha.has(sha));
+    if (!base) return "no stored commit in the disk history";
+    const baseSequence = sequenceBySha.get(base) ?? 0;
+    if (baseSequence > expectedSequence) {
+      return "disk base is newer than the expected head";
+    }
+
+    await runGit({
+      binary: this.gitBinaryPath,
+      cwd: repoPath,
+      args: ["update-ref", "refs/heads/main", base],
+    });
+    const revisions = await SkillShareLinkRevisionModel.listAfter(
+      ref,
+      baseSequence,
+    );
+    await this.replayRevisions({ ref, repoPath, revisions, parentSha: base });
+    return { baseSequence, replayed: revisions.length };
+  }
+
+  private async replayRevisions(params: {
+    ref: MarketplaceRepoRef;
+    repoPath: string;
+    revisions: SkillShareLinkRevision[];
+    parentSha: string | null;
+  }): Promise<void> {
+    const { ref, repoPath } = params;
+    let parentSha = params.parentSha;
+    for (const rev of params.revisions) {
       const sha = await this.commitOnDisk({
         repoPath,
         files: rev.payload.files,
@@ -397,6 +498,29 @@ function computeContentHash(files: RevisionPayloadFile[]): string {
     h.update("\0");
   }
   return h.digest("hex");
+}
+
+function logReplay(params: {
+  ref: MarketplaceRepoRef;
+  mode: "incremental" | "full";
+  baseSequence: number;
+  replayed: number;
+  startedAt: number;
+  fallbackReason?: string;
+  level?: "info" | "warn";
+}): void {
+  logger[params.level ?? "info"](
+    {
+      refKind: params.ref.kind,
+      refId: params.ref.id,
+      mode: params.mode,
+      baseSequence: params.baseSequence,
+      replayedRevisions: params.replayed,
+      durationMs: Date.now() - params.startedAt,
+      fallbackReason: params.fallbackReason,
+    },
+    "[SkillMarketplace] Replayed revisions onto the on-disk repo",
+  );
 }
 
 function roundToSeconds(d: Date): Date {

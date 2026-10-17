@@ -177,6 +177,19 @@ describe("useDefaultCredentialsEnabled", () => {
 
     expect(result.current.data).toBe(true);
   });
+
+  it("asks nothing while disabled", async () => {
+    vi.mocked(archestraApiSdk.getDefaultCredentialsStatus).mockClear();
+
+    const { result } = renderHook(
+      () => useDefaultCredentialsEnabled({ enabled: false }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(result.current.data).toBeUndefined();
+    expect(archestraApiSdk.getDefaultCredentialsStatus).not.toHaveBeenCalled();
+  });
 });
 
 describe("useHasPermissions", () => {

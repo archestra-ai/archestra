@@ -2,16 +2,16 @@ import { render, screen } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useDefaultCredentialsStatus } from "@/lib/auth/default-credentials.query";
+import {
+  useDefaultCredentialsEnabled,
+  useHasPermissions,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { SidebarWarningsAccordion } from "./sidebar-warnings-accordion";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/auth/default-credentials.query", () => ({
-  useDefaultCredentialsStatus: vi.fn(),
-}));
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/environment.query", () => ({
   useK8sCapabilities: vi.fn(),
@@ -61,10 +61,10 @@ function setup({
   vi.mocked(useSession).mockReturnValue({
     data: { user: { email: "someone@example.org" } },
   } as ReturnType<typeof useSession>);
-  vi.mocked(useDefaultCredentialsStatus).mockReturnValue({
+  vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
     data: false,
     isLoading: false,
-  } as ReturnType<typeof useDefaultCredentialsStatus>);
+  } as ReturnType<typeof useDefaultCredentialsEnabled>);
   vi.mocked(useDisableBasicAuth).mockReturnValue(true);
 
   vi.mocked(useK8sCapabilities).mockReturnValue({
@@ -134,10 +134,10 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     vi.mocked(useSession).mockReturnValue({
       data: { user: { email: "someone@example.org" } },
     } as ReturnType<typeof useSession>);
-    vi.mocked(useDefaultCredentialsStatus).mockReturnValue({
+    vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
       data: false,
       isLoading: false,
-    } as ReturnType<typeof useDefaultCredentialsStatus>);
+    } as ReturnType<typeof useDefaultCredentialsEnabled>);
     vi.mocked(useDisableBasicAuth).mockReturnValue(true);
     vi.mocked(useK8sCapabilities).mockReturnValue({
       data: { error: { message: "Unauthenticated" } },
@@ -169,10 +169,10 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     vi.mocked(useSession).mockReturnValue({
       data: { user: { email: "someone@example.org" } },
     } as ReturnType<typeof useSession>);
-    vi.mocked(useDefaultCredentialsStatus).mockReturnValue({
+    vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
       data: undefined,
       isLoading: false,
-    } as ReturnType<typeof useDefaultCredentialsStatus>);
+    } as ReturnType<typeof useDefaultCredentialsEnabled>);
     vi.mocked(useDisableBasicAuth).mockReturnValue(false);
     vi.mocked(useK8sCapabilities).mockReturnValue({
       data: undefined,
@@ -184,7 +184,7 @@ describe("SidebarWarningsAccordion network policy warning", () => {
       </SidebarProvider>,
     );
 
-    expect(useDefaultCredentialsStatus).toHaveBeenCalledWith({
+    expect(useDefaultCredentialsEnabled).toHaveBeenCalledWith({
       enabled: false,
     });
   });

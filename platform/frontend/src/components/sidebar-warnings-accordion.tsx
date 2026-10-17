@@ -19,8 +19,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useDefaultCredentialsStatus } from "@/lib/auth/default-credentials.query";
+import {
+  useDefaultCredentialsEnabled,
+  useHasPermissions,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
@@ -50,7 +53,7 @@ export function SidebarWarningsAccordion({
   // Asked only of the one viewer the warning is for: the default admin, who
   // can change the organization's sign-in, while password sign-in is on.
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
-    useDefaultCredentialsStatus({
+    useDefaultCredentialsEnabled({
       enabled:
         canUpdateOrg === true &&
         disableBasicAuth === false &&

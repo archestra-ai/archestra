@@ -224,9 +224,19 @@ export function usePermissionMap<Key extends string>(
   return result;
 }
 
-export function useDefaultCredentialsEnabled() {
+/**
+ * Whether the default admin credentials are still active. `enabled: false`
+ * skips the request, e.g. in the app shell for anyone who cannot see that
+ * warning.
+ */
+export function useDefaultCredentialsEnabled({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   return useQuery({
     queryKey: authQueryKeys.defaultCredentialsEnabled(),
+    enabled,
     queryFn: async () => {
       const { data, error } =
         await archestraApiSdk.getDefaultCredentialsStatus();

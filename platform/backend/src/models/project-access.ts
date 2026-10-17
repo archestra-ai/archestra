@@ -222,10 +222,11 @@ class ProjectAccessModel {
         desc(table.createdAt),
         asc(table.id),
       )
-      .offset(params.offset ?? 0)
       .$dynamic();
+    if (params.limit !== undefined) page.limit(params.limit);
+    if (params.offset) page.offset(params.offset);
     const [rows, [{ total }]] = await Promise.all([
-      params.limit === undefined ? page : page.limit(params.limit),
+      page,
       db.select({ total: sql<number>`count(*)::int` }).from(table).where(where),
     ]);
     return {

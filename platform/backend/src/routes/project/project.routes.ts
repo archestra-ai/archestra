@@ -285,7 +285,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           owner: ResourceOwnerQuerySchema,
           pinned: z
             .preprocess(
-              (value) => (typeof value === "string" ? value === "true" : value),
+              (value) =>
+                value === "false" ? false : value === "true" ? true : value,
               z.boolean(),
             )
             .optional()

@@ -639,6 +639,11 @@ describe("GET /api/projects (scope + search)", () => {
     ]);
   });
 
+  test("rejects a pinned value other than true or false", async () => {
+    expect((await list("?pinned=yes")).statusCode).toBe(400);
+    expect((await list("?pinned=1")).statusCode).toBe(400);
+  });
+
   test("search matches name and description (case-insensitive)", async () => {
     await create(viewer, "Alpha", "about cats");
     await create(viewer, "Beta", "about dogs");

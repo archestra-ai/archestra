@@ -82,6 +82,7 @@ import AgentTeamModel from "./agent-team";
 import AgentUsageModel from "./agent-usage";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
 import { interactionBelongsToOrganization } from "./log-organization";
 import VirtualApiKeyModel from "./virtual-api-key";
@@ -129,11 +130,11 @@ const SESSION_ACCESS_DENIED = Symbol("session-access-denied");
 
 /**
  * The logs user filter's default list (most active users first) is cached per
- * organization in the distributed cache, because computing it aggregates the
- * organization's whole log. Stored at the endpoint's maximum size so every
- * requested limit is a prefix of the same entry.
+ * organization in the distributed cache. A ready activity summary avoids the
+ * history scan; incomplete summaries use the exact aggregate. Stored at the
+ * endpoint's maximum size so every requested limit is a prefix of the same entry.
  */
-const USER_FILTER_OPTIONS_CACHE_TTL_MS = 5 * TimeInMs.Minute;
+const USER_FILTER_OPTIONS_CACHE_TTL_MS = 30 * TimeInMs.Second;
 const USER_FILTER_OPTIONS_MAX = 100;
 
 const sessionTotalCache = new LRUCacheManager<number>({
@@ -545,21 +546,48 @@ class InteractionModel {
         ? { values: sanitized, tip: null }
         : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
-    const [interaction] = await db
-      .insert(schema.interactionsTable)
-      // Monotonic v7 id: created_at ties happen under load, and the delta
-      // manager's "most recent interaction" lookup breaks ties with the id.
-      .values({
-        id: uuidv7(),
-        ...encryptInteractionContent(
-          {
-            ...values,
-            sessionPreview: buildSessionPreview(sanitized, values.request),
-          },
-          audit,
-        ),
-      })
-      .returning();
+    const interactionId = values.id ?? uuidv7();
+    const insertValues = {
+      ...encryptInteractionContent(
+        {
+          ...values,
+          sessionPreview: buildSessionPreview(sanitized, values.request),
+        },
+        audit,
+      ),
+      id: interactionId,
+    };
+    const insert = async () => {
+      const [created] = await db
+        .insert(schema.interactionsTable)
+        // Monotonic v7 id: created_at ties happen under load, and the delta
+        // manager's "most recent interaction" lookup breaks ties with the id.
+        .values(insertValues)
+        .onConflictDoNothing({ target: schema.interactionsTable.id })
+        .returning();
+      if (!created) {
+        const [existing] = await db
+          .select()
+          .from(schema.interactionsTable)
+          .where(eq(schema.interactionsTable.id, interactionId));
+        if (
+          !existing ||
+          existing.userId !== (data.userId ?? null) ||
+          existing.profileId !== (data.profileId ?? null) ||
+          existing.appId !== (data.appId ?? null) ||
+          existing.connectorId !== (data.connectorId ?? null)
+        )
+          throw new Error(
+            "Interaction id was already used for different attribution",
+          );
+        return existing;
+      }
+      return created;
+    };
+    const interaction =
+      data.userId == null
+        ? await insert()
+        : await InteractionUserActivityModel.append(insertValues);
     // The RETURNING row is this method's public return value — decrypt it so
     // callers never see envelopes. Safe for encrypted-chat rows too: this caller
     // supplied the very key that just encrypted them.
@@ -1139,25 +1167,10 @@ class InteractionModel {
     for (let batch = 0; batch < maxBatches; batch++) {
       let deleted: number;
       try {
-        const result = await db.execute<{ deleted: number }>(sql`
-          WITH fence AS (
-            SELECT i.id
-            FROM ${schema.interactionsTable} AS i
-            WHERE i.created_at < now()::timestamp - make_interval(days => ${params.retentionDays})
-              AND NOT EXISTS (
-                SELECT 1 FROM ${schema.interactionsTable} AS c
-                WHERE c.parent_id = i.id
-              )
-            LIMIT ${batchSize}
-          ),
-          removed AS (
-            DELETE FROM ${schema.interactionsTable}
-            WHERE id IN (SELECT id FROM fence)
-            RETURNING 1
-          )
-          SELECT COUNT(*)::int AS deleted FROM removed
-        `);
-        deleted = Number(result.rows[0]?.deleted ?? 0);
+        deleted = await InteractionUserActivityModel.deleteExpiredBatch({
+          retentionDays: params.retentionDays,
+          batchSize,
+        });
       } catch (error) {
         // Most likely the parent_id RESTRICT FK racing a concurrent insert
         // that chained onto a row selected for deletion. Safe to stop — the
@@ -2700,38 +2713,62 @@ class InteractionModel {
 
   /**
    * Concurrent misses for the same organization share one load, so a burst of
-   * page visits after the entry expires runs the aggregate once per process.
+   * page visits after the entry expires runs the loader once per process.
    */
   private static mostActiveUsersLoads = new Map<string, Promise<UserInfo[]>>();
 
-  private static getCachedMostActiveUsers(
+  private static async getCachedMostActiveUsers(
     organizationId: string,
   ): Promise<UserInfo[]> {
-    const pending = InteractionModel.mostActiveUsersLoads.get(organizationId);
+    const state = await InteractionUserActivityModel.state();
+    const version = `${organizationId}-${state.generation}-${state.revision}-${state.ready}`;
+    const pending = InteractionModel.mostActiveUsersLoads.get(version);
     if (pending) {
       return pending;
     }
-    const load = InteractionModel.loadMostActiveUsers(organizationId).finally(
-      () => InteractionModel.mostActiveUsersLoads.delete(organizationId),
-    );
-    InteractionModel.mostActiveUsersLoads.set(organizationId, load);
+    const load = InteractionModel.loadMostActiveUsers(
+      organizationId,
+      state,
+    ).finally(() => InteractionModel.mostActiveUsersLoads.delete(version));
+    InteractionModel.mostActiveUsersLoads.set(version, load);
     return load;
   }
 
   private static async loadMostActiveUsers(
     organizationId: string,
+    state: Awaited<ReturnType<typeof InteractionUserActivityModel.state>>,
   ): Promise<UserInfo[]> {
-    const key = `${CacheKey.InteractionUserOptions}-${organizationId}` as const;
+    const key =
+      `${CacheKey.InteractionUserOptions}-${organizationId}-${state.generation}-${state.revision}-${state.ready}` as const;
     const cached = await cacheManager.get<UserInfo[]>(key);
     if (cached) {
       return cached;
     }
-    const users = await InteractionModel.getUniqueUserIds({
-      organizationId,
-      limit: USER_FILTER_OPTIONS_MAX,
-    });
+    const startedAt = Date.now();
+    const users = state.ready
+      ? await InteractionUserActivityModel.mostActive({
+          organizationId,
+          limit: USER_FILTER_OPTIONS_MAX,
+          generation: state.generation,
+        })
+      : await InteractionModel.getUniqueUserIds({
+          organizationId,
+          limit: USER_FILTER_OPTIONS_MAX,
+        });
+    const current = await InteractionUserActivityModel.state();
+    if (
+      current.generation !== state.generation ||
+      current.revision !== state.revision ||
+      current.ready !== state.ready
+    ) {
+      return InteractionModel.getUniqueUserIds({
+        organizationId,
+        limit: USER_FILTER_OPTIONS_MAX,
+      });
+    }
     try {
-      await cacheManager.set(key, users, USER_FILTER_OPTIONS_CACHE_TTL_MS);
+      const ttl = USER_FILTER_OPTIONS_CACHE_TTL_MS - (Date.now() - startedAt);
+      if (ttl > 0) await cacheManager.set(key, users, ttl);
     } catch (error) {
       // The list is still correct; the next request recomputes it.
       logger.warn(

@@ -5,7 +5,7 @@ import db from "@/database";
 // The native runtime's PostgreSQL store writes these tables with its own SQL.
 // These statements are the ones it runs to publish and to read a head, so the
 // schema here must accept them and refuse what the store relies on refusing.
-describe("0566 OpenAPPA policy revisions", () => {
+describe("0567 OpenAPPA policy revisions", () => {
   test("a publish records the head and its revision, and the head reads back", async () => {
     await publish({ deployment: "org-a", revision: 1, hash: "a".repeat(64) });
     await db.execute(

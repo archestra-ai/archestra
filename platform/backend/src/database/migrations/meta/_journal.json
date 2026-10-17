@@ -3967,8 +3967,15 @@
     {
       "idx": 566,
       "version": "7",
-      "when": 1792277018007,
-      "tag": "0566_calm_hellfire_club",
+      "when": 1792274152999,
+      "tag": "0566_interaction_user_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 567,
+      "version": "7",
+      "when": 1792281193069,
+      "tag": "0567_calm_hellfire_club",
       "breakpoints": true
     }
   ]

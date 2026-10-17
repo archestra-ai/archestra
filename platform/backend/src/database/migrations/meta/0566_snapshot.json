@@ -1,5 +1,5 @@
 {
-  "id": "6f16f76c-0e17-4caf-9c6b-637ca1e1943f",
+  "id": "e6c109e5-62ee-4f25-8885-be6081ef1ba3",
   "prevId": "68391026-7b07-4d07-973d-faa870e0d8a3",
   "version": "7",
   "dialect": "postgresql",
@@ -10580,6 +10580,248 @@
       },
       "indexes": {},
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.interaction_user_activity_deltas": {
+      "name": "interaction_user_activity_deltas",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "generation": {
+          "name": "generation",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "balance": {
+          "name": "balance",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "interaction_user_activity_deltas_user_id_user_id_fk": {
+          "name": "interaction_user_activity_deltas_user_id_user_id_fk",
+          "tableFrom": "interaction_user_activity_deltas",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "interaction_user_activity_deltas_organization_id_user_id_pk": {
+          "name": "interaction_user_activity_deltas_organization_id_user_id_pk",
+          "columns": [
+            "organization_id",
+            "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.interaction_user_activity_missing_owners": {
+      "name": "interaction_user_activity_missing_owners",
+      "schema": "",
+      "columns": {
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "interaction_user_activity_missing_owners_kind_owner_id_pk": {
+          "name": "interaction_user_activity_missing_owners_kind_owner_id_pk",
+          "columns": [
+            "kind",
+            "owner_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.interaction_user_activity_state": {
+      "name": "interaction_user_activity_state",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "generation": {
+          "name": "generation",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "ready": {
+          "name": "ready",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "interaction_user_activity_singleton": {
+          "name": "interaction_user_activity_singleton",
+          "value": "\"interaction_user_activity_state\".\"id\" = 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.interaction_user_activity": {
+      "name": "interaction_user_activity",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "activity_count": {
+          "name": "activity_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "interaction_user_activity_user_id_user_id_fk": {
+          "name": "interaction_user_activity_user_id_user_id_fk",
+          "tableFrom": "interaction_user_activity",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "interaction_user_activity_organization_id_user_id_pk": {
+          "name": "interaction_user_activity_organization_id_user_id_pk",
+          "columns": [
+            "organization_id",
+            "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "interaction_user_activity_positive": {
+          "name": "interaction_user_activity_positive",
+          "value": "\"interaction_user_activity\".\"activity_count\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.interaction_user_activity_users": {
+      "name": "interaction_user_activity_users",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "generation": {
+          "name": "generation",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "interaction_user_activity_users_user_id_user_id_fk": {
+          "name": "interaction_user_activity_users_user_id_user_id_fk",
+          "tableFrom": "interaction_user_activity_users",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -27433,36 +27675,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.openappa_deployments": {
-      "name": "openappa_deployments",
-      "schema": "",
-      "columns": {
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "head": {
-          "name": "head",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "openappa_deployments_head_positive": {
-          "name": "openappa_deployments_head_positive",
-          "value": "\"openappa_deployments\".\"head\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.openappa_dispatch_leases": {
       "name": "openappa_dispatch_leases",
       "schema": "",
@@ -28312,112 +28524,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.openappa_policy_revisions": {
-      "name": "openappa_policy_revisions",
-      "schema": "",
-      "columns": {
-        "deployment": {
-          "name": "deployment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "revision": {
-          "name": "revision",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "hash": {
-          "name": "hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "openappa_policy_revisions_key_idx": {
-          "name": "openappa_policy_revisions_key_idx",
-          "columns": [
-            {
-              "expression": "deployment",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "revision",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "openappa_policy_revisions_deployment_fk": {
-          "name": "openappa_policy_revisions_deployment_fk",
-          "tableFrom": "openappa_policy_revisions",
-          "tableTo": "openappa_deployments",
-          "columnsFrom": [
-            "deployment"
-          ],
-          "columnsTo": [
-            "name"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "openappa_policy_revisions_hash_fk": {
-          "name": "openappa_policy_revisions_hash_fk",
-          "tableFrom": "openappa_policy_revisions",
-          "tableTo": "openappa_policy_files",
-          "columnsFrom": [
-            "hash"
-          ],
-          "columnsTo": [
-            "hash"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "openappa_policy_revisions_pk": {
-          "name": "openappa_policy_revisions_pk",
-          "columns": [
-            "deployment",
-            "revision"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "openappa_policy_revisions_revision_positive": {
-          "name": "openappa_policy_revisions_revision_positive",
-          "value": "\"openappa_policy_revisions\".\"revision\" > 0"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.openappa_processed_results": {

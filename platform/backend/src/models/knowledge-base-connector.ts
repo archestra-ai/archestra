@@ -26,6 +26,7 @@ import type {
 } from "@/types/knowledge-connector";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
@@ -752,6 +753,7 @@ class KnowledgeBaseConnectorModel {
     organizationId: string;
   }): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       // `sql.raw`: SET is a utility command and takes no bind parameters, so
       // `= $1` is a syntax error. The value is a module constant, never input.
       await tx.execute(

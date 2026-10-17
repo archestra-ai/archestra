@@ -348,7 +348,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: { ...headers(), ...extraHeaders },
+      headers: { ...internalCallHeader(), ...headers(), ...extraHeaders },
       payload: payloadBody as Record<string, unknown>,
     });
 
@@ -448,7 +448,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: `/v1/openai/${agent.id}/chat/completions`,
         remoteAddress: "127.0.0.1",
-        headers: { ...requestHeaders, ...extraHeaders },
+        headers: {
+          ...internalCallHeader(),
+          ...requestHeaders,
+          ...extraHeaders,
+        },
         payload: requestBody as Record<string, unknown>,
       });
     const proposal = await submit(body);
@@ -1762,6 +1766,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.0 (external, cli)",
           "x-claude-code-session-id": "blocked-reporting",
@@ -2021,7 +2026,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: externalClientHeaders(),
+      headers: { ...externalClientHeaders() },
       payload: payload(false) as Record<string, unknown>,
     });
 
@@ -2036,7 +2041,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: externalClientHeaders(),
+      headers: { ...externalClientHeaders() },
       payload: {
         ...(payload(false) as Record<string, unknown>),
         metadata: { user_id: "generic-session" },
@@ -2062,6 +2067,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         "x-api-key": "test-key",
         "anthropic-version": "2023-06-01",
         "x-archestra-source": source,
@@ -2116,6 +2122,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress,
         headers: {
+          ...internalCallHeader(),
           authorization: `Bearer ${virtualKey}`,
           "anthropic-version": "2023-06-01",
           "x-archestra-source": "guardrail:annotator",
@@ -2150,6 +2157,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         authorization: `Bearer ${virtualKey}`,
         "anthropic-version": "2023-06-01",
         "x-archestra-source": "guardrail:annotator",
@@ -2542,6 +2550,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": claudeSession,
       },
@@ -2654,6 +2663,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "user-agent": "claude-code/2.1.258",
         "x-claude-code-session-id": claudeSession,
@@ -2735,7 +2745,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: claudeCode,
+      headers: { ...claudeCode },
       payload: request(opening),
     });
     expect(asked.statusCode, asked.body).toBe(200);
@@ -2774,7 +2784,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: claudeCode,
+      headers: { ...claudeCode },
       payload: request(history),
     });
 
@@ -2795,7 +2805,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: claudeCode,
+      headers: { ...claudeCode },
       payload: request([
         ...history,
         { role: "assistant", content: "Spawning a new scout." },
@@ -2978,7 +2988,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: clientHeaders,
+      headers: { ...internalCallHeader(), ...clientHeaders },
       payload: body as Record<string, unknown>,
     });
 
@@ -3229,6 +3239,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "user-agent": "claude-cli/2.1.0 (external, cli)",
         "x-claude-code-session-id": parent,
@@ -3322,7 +3333,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers: childHeaders,
+        headers: { ...internalCallHeader(), ...childHeaders },
         payload: {
           ...payload(false),
           ...(mode === "split-pane"
@@ -3382,6 +3393,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "user-agent": "claude-cli/2.1.289 (external, cli)",
         "x-claude-code-session-id": "5c1d2e3f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
@@ -3416,7 +3428,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: claudeCode(parent),
+      headers: { ...claudeCode(parent) },
       payload: payload(false) as Record<string, unknown>,
     });
     expect(first.statusCode, first.body).toBe(200);
@@ -3441,7 +3453,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: claudeCode(summarizer),
+      headers: { ...claudeCode(summarizer) },
       payload: payload(false, [
         { role: "user", content: "Check the weather" },
         {
@@ -3542,7 +3554,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: headersFor(claudeSession),
+      headers: { ...headersFor(claudeSession) },
       payload: body as Record<string, unknown>,
     });
     expect(asked.statusCode, asked.body).toBe(200);
@@ -3596,7 +3608,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: headersFor(otherSession),
+      headers: { ...headersFor(otherSession) },
       payload: withQuestion(answeredHistory),
     });
     expect(copied.statusCode, copied.body).toBe(200);
@@ -3616,7 +3628,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: headersFor(claudeSession),
+      headers: { ...headersFor(claudeSession) },
       payload: withQuestion([
         { role: "user", content: "Check the weather" },
         {
@@ -3650,7 +3662,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: headersFor(claudeSession),
+      headers: { ...headersFor(claudeSession) },
       payload: withQuestion(answeredHistory),
     });
     expect(approved.statusCode, approved.body).toBe(200);
@@ -3675,7 +3687,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: headersFor(claudeSession),
+      headers: { ...headersFor(claudeSession) },
       payload: withQuestion(answeredHistory),
     });
     expect(replay.statusCode, replay.body).toBe(200);
@@ -3750,6 +3762,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "user-agent": "claude-cli/2.1.0 (external, cli)",
         "x-claude-code-session-id": parent,
@@ -3784,7 +3797,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: claudeCode(parent),
+      headers: { ...claudeCode(parent) },
       payload: payload(stream) as Record<string, unknown>,
     });
     expect(first.statusCode, first.body).toBe(200);
@@ -3828,7 +3841,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: claudeCode(summarizer),
+      headers: { ...claudeCode(summarizer) },
       payload: payload(false, history) as Record<string, unknown>,
     });
 
@@ -3878,6 +3891,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
       },
@@ -3919,6 +3933,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": replaying,
       },
@@ -3965,7 +3980,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers,
+        headers: { ...internalCallHeader(), ...headers },
         payload: request,
       });
       expect(response.statusCode, response.body).toBe(200);
@@ -3999,6 +4014,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "user-agent": "claude-cli/2.1.289 (external, cli)",
         "x-claude-code-session-id": parent,
@@ -4027,6 +4043,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
       },
@@ -4067,6 +4084,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f7",
       },
@@ -4140,6 +4158,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.278 (external, cli)",
           "x-claude-code-session-id": session,
@@ -4187,6 +4206,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "user-agent": "claude-cli/2.1.278 (external, cli)",
         "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
@@ -4222,7 +4242,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers,
+        headers: { ...internalCallHeader(), ...headers },
         payload: payload(false, messages),
       });
 
@@ -4294,6 +4314,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.278 (external, cli)",
           "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
@@ -4346,7 +4367,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers,
+      headers: { ...internalCallHeader(), ...headers },
       payload: payload(false),
     });
     expect(opening.statusCode, opening.body).toBe(200);
@@ -4360,7 +4381,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers,
+      headers: { ...internalCallHeader(), ...headers },
       payload: {
         model: "claude-sonnet-5",
         max_tokens: 64,
@@ -4384,7 +4405,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers,
+      headers: { ...internalCallHeader(), ...headers },
       payload: payload(false, [
         { role: "user", content: "Check the weather" },
         { role: "assistant", content: "It is sunny." },
@@ -4404,7 +4425,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers,
+      headers: { ...internalCallHeader(), ...headers },
       payload: payload(false),
     });
     expect(reply.statusCode, reply.body).toBe(200);
@@ -4422,6 +4443,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "user-agent": "claude-cli/2.1.281 (external, cli)",
       },
@@ -4447,6 +4469,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
       },
@@ -4495,6 +4518,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": replaying,
       },
@@ -4535,6 +4559,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": parent,
       },
@@ -4577,6 +4602,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "x-archestra-user-id": caller,
           "x-claude-code-session-id": replaying,
@@ -4613,6 +4639,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "x-claude-code-session-id": session,
         },
@@ -4626,6 +4653,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
       },
@@ -4902,6 +4930,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         authorization: `Bearer ${virtualKey}`,
         "anthropic-version": "2023-06-01",
         "x-archestra-user-id": userId,
@@ -4932,6 +4961,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         authorization: `Bearer ${virtualKey}`,
         "anthropic-version": "2023-06-01",
         "x-archestra-source": "chat",
@@ -5082,7 +5112,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: noUser,
+      headers: { ...internalCallHeader(), ...noUser },
       payload: payload(false) as Record<string, unknown>,
     });
 
@@ -5095,7 +5125,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: externalClientHeaders(),
+      headers: { ...externalClientHeaders() },
       payload: {
         ...(payload(false) as Record<string, unknown>),
         metadata: { user_id: "generic-session" },
@@ -5114,7 +5144,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: { ...headers(), "x-appa-session-id": "bad\u0007session" },
+      headers: {
+        ...internalCallHeader(),
+        ...headers(),
+        "x-appa-session-id": "bad\u0007session",
+      },
       payload: payload(false) as Record<string, unknown>,
     });
 
@@ -5128,6 +5162,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": "x".repeat(513),
       },
@@ -5148,6 +5183,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-appa-session-id": "qa-session-1",
       },
@@ -5169,6 +5205,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-archestra-source": "chatops:slack",
         "x-archestra-session-id": "platform-thread-1",
@@ -5444,7 +5481,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: `/v1/anthropic/${compactionAgent.id}/v1/messages`,
       remoteAddress: "127.0.0.1",
-      headers: { ...headers(), "x-archestra-source": "chat:compaction" },
+      headers: {
+        ...internalCallHeader(),
+        ...headers(),
+        "x-archestra-source": "chat:compaction",
+      },
       payload: payload(false) as Record<string, unknown>,
     });
 
@@ -5495,6 +5536,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...requestHeaders,
         ...(withUser ? { "x-archestra-user-id": userId } : {}),
         "x-archestra-source": "chatops:slack",
@@ -5593,7 +5635,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: headers(),
+      headers: { ...internalCallHeader(), ...headers() },
       payload: body,
     });
     expect(response.statusCode, response.body).toBe(200);
@@ -5937,6 +5979,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.285 (external, cli)",
           "x-claude-code-session-id": "4b8e2f1a-7c3d-4e5f-9a0b-1c2d3e4f5a6b",
@@ -5981,7 +6024,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: headers(),
+      headers: { ...internalCallHeader(), ...headers() },
       payload: payload(stream, [
         { role: "user", content: "Open the board" },
         {
@@ -6070,7 +6113,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers: headers(),
+        headers: { ...internalCallHeader(), ...headers() },
         payload: payload(false, messages),
       });
       expect(response.statusCode, response.body).toBe(200);
@@ -6122,7 +6165,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: headers(),
+      headers: { ...internalCallHeader(), ...headers() },
       payload: payload(false, messages),
     });
     expect(response.statusCode, response.body).toBe(200);
@@ -6245,6 +6288,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.289 (external, cli)",
           "x-claude-code-session-id": "6f0e7f0e-3a53-4f0c-9d0e-6c1f5b2a9d11",
@@ -6352,7 +6396,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers: claudeCodeHeaders(agentId),
+        headers: { ...claudeCodeHeaders(agentId) },
         payload: body,
       });
     };
@@ -6371,7 +6415,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers: claudeCodeHeaders(agentId),
+        headers: { ...claudeCodeHeaders(agentId) },
         payload: body,
       });
     };
@@ -6537,6 +6581,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.289 (external, cli)",
           "x-claude-code-session-id": own,
@@ -7435,6 +7480,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...claudeCodeHeaders(undefined),
             "x-claude-code-session-id": fork,
           },
@@ -8163,6 +8209,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...claudeCodeHeaders(undefined),
             "x-claude-code-session-id": "9d2c4b6a-1e3f-4a5b-8c7d-0e1f2a3b4c5d",
           },
@@ -8366,6 +8413,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             url: `/v1/openai/${agent.id}/responses`,
             remoteAddress: "127.0.0.1",
             headers: {
+              ...internalCallHeader(),
               authorization: "Bearer test-key",
               "content-type": "application/json",
               "user-agent": "codex_cli_rs/0.154.0",
@@ -8470,6 +8518,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             url: url(),
             remoteAddress: "127.0.0.1",
             headers: {
+              ...internalCallHeader(),
               ...claudeCodeHeaders(undefined),
               "x-claude-code-session-id": session,
             },
@@ -8501,6 +8550,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...claudeCodeHeaders("next"),
             "x-claude-code-session-id": base,
           },
@@ -8515,6 +8565,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...claudeCodeHeaders(undefined),
             "x-claude-code-session-id": `${base}:next`,
           },
@@ -8534,6 +8585,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...claudeCodeHeaders("leaf"),
             "x-claude-code-session-id": `${base}:next`,
           },
@@ -8707,6 +8759,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: `/v1/openai/${agent.id}/chat/completions`,
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             authorization: "Bearer test-key",
             "user-agent": "opencode/1.18.31",
             "x-archestra-user-id": userId,
@@ -8946,6 +8999,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: `/v1/openai/${agent.id}/chat/completions`,
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             authorization: "Bearer test-key",
             "user-agent": "opencode/1.18.31",
             "x-archestra-user-id": userId,
@@ -9130,6 +9184,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.0 (external, cli)",
           "x-claude-code-session-id": "pending-root-receipt",
@@ -9170,6 +9225,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": `raw-transcript-parent-${stream}`,
@@ -9226,6 +9282,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.0 (external, cli)",
           "x-claude-code-session-id": "mixed-transcript-parent",
@@ -9280,6 +9337,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.0 (external, cli)",
           "x-claude-code-session-id": "unprepared-spawn-parent",
@@ -9326,6 +9384,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": session,
@@ -9478,6 +9537,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": session,
@@ -9866,6 +9926,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.0 (external, cli)",
           "x-claude-code-session-id": "unretained-subagent",
@@ -9948,6 +10009,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.277 (external, cli)",
           "x-claude-code-session-id": "launched-agent",
@@ -9968,6 +10030,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.299 (external, cli)",
           "x-claude-code-session-id": "launched-agent",
@@ -9998,7 +10061,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers: claudeCode(parent),
+        headers: { ...claudeCode(parent) },
         payload: payload(false) as Record<string, unknown>,
       });
       expect(first.statusCode, first.body).toBe(200);
@@ -10059,7 +10122,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers: claudeCode(fork),
+        headers: { ...claudeCode(fork) },
         payload: body,
       });
 
@@ -10147,6 +10210,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.285 (external, cli)",
           "x-claude-code-session-id": session,
@@ -10221,6 +10285,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.285 (external, cli)",
           "x-claude-code-session-id": session,
@@ -10336,6 +10401,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: `/v1/openai/${agent.id}/responses`,
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             authorization: "Bearer test-key",
             "content-type": "application/json",
             "user-agent": "codex_cli_rs/0.154.0",
@@ -10569,6 +10635,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: `/v1/openai/${agent.id}/responses`,
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             authorization: "Bearer test-key",
             "content-type": "application/json",
             "user-agent": "codex_cli_rs/0.159.2",
@@ -10824,6 +10891,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: `/v1/openai/${agent.id}/responses`,
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             authorization: "Bearer test-key",
             "content-type": "application/json",
             "user-agent": mailbox
@@ -11323,6 +11391,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: `/v1/openai/${agent.id}/responses`,
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             authorization: "Bearer test-key",
             "content-type": "application/json",
             "user-agent": mailbox
@@ -11602,6 +11671,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": session,
@@ -11668,6 +11738,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": session,
@@ -11848,6 +11919,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             url: url(),
             remoteAddress: "127.0.0.1",
             headers: {
+              ...internalCallHeader(),
               ...externalClientHeaders(),
               "user-agent": "claude-cli/2.1.0 (external, cli)",
               "x-claude-code-session-id": "refusal-root",
@@ -11942,6 +12014,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": session,
@@ -12115,6 +12188,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           url: url(),
           remoteAddress: "127.0.0.1",
           headers: {
+            ...internalCallHeader(),
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": session,
@@ -13547,6 +13621,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         url: `/v1/openai/${agent.id}/chat/completions`,
         remoteAddress: "127.0.0.1",
         headers: {
+          ...internalCallHeader(),
           ...openCodeHeaders(),
           "x-session-id": "subscription-parent",
           ...(child ? { "x-opencode-session": "subscription-child" } : {}),
@@ -13842,7 +13917,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         method: "POST",
         url: `/v1/openai/${agent.id}/responses`,
         remoteAddress: "127.0.0.1",
-        headers: codexHeaders(),
+        headers: { ...internalCallHeader(), ...codexHeaders() },
         payload: {
           ...codexPayload({
             session_id: CODEX_SESSION,
@@ -13987,12 +14062,14 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         const detail = await readApp.inject({
           method: "GET",
           url: `/api/interactions/${recorded[0].id}`,
+          headers: internalCallHeader(),
         });
         expect(detail.statusCode, detail.body).toBe(200);
         expect(detail.json().response).toEqual(recorded[0].response);
         const list = await readApp.inject({
           method: "GET",
           url: `/api/interactions?profileId=${agent.id}`,
+          headers: internalCallHeader(),
         });
         expect(list.statusCode, list.body).toBe(200);
         expect(list.json().data[0].response).toEqual(recorded[0].response);
@@ -14103,7 +14180,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         method: "POST",
         url: `/v1/openai/${agent.id}/responses`,
         remoteAddress: "127.0.0.1",
-        headers: codexHeaders(),
+        headers: { ...internalCallHeader(), ...codexHeaders() },
         payload: {
           ...codexPayload({
             session_id: CODEX_SESSION,
@@ -14257,7 +14334,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         method: "POST",
         url: `/v1/openai/${agent.id}/responses`,
         remoteAddress: "127.0.0.1",
-        headers: codexHeaders(),
+        headers: { ...internalCallHeader(), ...codexHeaders() },
         payload: {
           ...codexPayload({
             session_id: CODEX_SESSION,
@@ -14402,6 +14479,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         const detail = await readApp.inject({
           method: "GET",
           url: `/api/interactions/${recorded[0].id}`,
+          headers: internalCallHeader(),
         });
         expect(detail.statusCode, detail.body).toBe(200);
         expect(detail.json().response).toEqual(recorded[0].response);
@@ -14445,6 +14523,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...openCodeHeaders(),
         "x-appa-session-id": `proxy-only-${blocked ? "blocked" : "allowed"}`,
       },
@@ -14504,7 +14583,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: {
         ...codexPayload({ session_id: session, thread_id: session }),
         stream: false,
@@ -14552,7 +14631,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         method: "POST",
         url: `/v1/openai/${agent.id}/responses`,
         remoteAddress: "127.0.0.1",
-        headers: { ...openCodeHeaders(), "x-session-id": sessionId },
+        headers: {
+          ...internalCallHeader(),
+          ...openCodeHeaders(),
+          "x-session-id": sessionId,
+        },
         payload: {
           model: "gpt-4.1",
           stream: false,
@@ -14627,7 +14710,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: payload as Record<string, unknown>,
     });
 
@@ -14645,7 +14728,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: {
         ...payload,
         previous_response_id: "resp_stored",
@@ -14718,7 +14801,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: {
         ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
         stream: false,
@@ -14872,7 +14955,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: {
         ...payload,
         stream,
@@ -15056,7 +15139,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: {
         ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
         stream,
@@ -15156,7 +15239,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: {
         ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
         stream: true,
@@ -15254,7 +15337,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: payload as Record<string, unknown>,
     });
 
@@ -15271,7 +15354,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: codexPayload({
         session_id: CODEX_SESSION,
         thread_id: CODEX_THREAD,
@@ -15290,7 +15373,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: codexPayload({
         session_id: CODEX_RESUMED_SESSION,
         thread_id: CODEX_THREAD,
@@ -15309,7 +15392,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: codexPayload({
         session_id: CODEX_RESUMED_SESSION,
         thread_id: CODEX_FORK_THREAD,
@@ -15334,7 +15417,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      headers: {
+        ...internalCallHeader(),
+        ...codexHeaders(),
+        "x-openai-subagent": "compact",
+      },
       payload: codexPayload({
         session_id: CODEX_SESSION,
         thread_id: CODEX_THREAD,
@@ -15393,7 +15480,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      headers: {
+        ...internalCallHeader(),
+        ...codexHeaders(),
+        "x-openai-subagent": "compact",
+      },
       payload: payload as Record<string, unknown>,
     });
 
@@ -15484,7 +15575,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: {
         ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
         stream,
@@ -15532,7 +15623,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: {
         ...codexPayload({
           session_id: CODEX_RESUMED_SESSION,
@@ -15576,6 +15667,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...codexHeaders(),
         "x-codex-turn-metadata": JSON.stringify({
           session_id: CODEX_SESSION,
@@ -15599,7 +15691,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: codexPayload({
         session_id: CODEX_SESSION,
         thread_id: "x".repeat(513),
@@ -15618,6 +15710,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...openCodeHeaders(),
         "x-session-id": OPENCODE_SESSION,
         "x-session-affinity": OPENCODE_SESSION,
@@ -15637,6 +15730,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...openCodeHeaders(),
         "x-session-id": OPENCODE_FORK_SESSION,
       },
@@ -15656,6 +15750,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...openCodeHeaders(),
         "x-session-id": OPENCODE_SESSION,
         "x-session-affinity": OPENCODE_FORK_SESSION,
@@ -15674,6 +15769,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         authorization: "Bearer test-key",
         "x-archestra-user-id": userId,
         "x-session-affinity": OPENCODE_SESSION,
@@ -15722,6 +15818,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...codexHeaders(),
         "x-codex-turn-metadata": JSON.stringify({
           thread_id: CODEX_FORK_THREAD,
@@ -15758,7 +15855,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      headers: {
+        ...internalCallHeader(),
+        ...codexHeaders(),
+        "x-openai-subagent": "compact",
+      },
       payload: codexPayload({
         session_id: CODEX_SESSION,
         thread_id: CODEX_THREAD,
@@ -15777,7 +15878,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: codexHeaders(),
+      headers: { ...internalCallHeader(), ...codexHeaders() },
       payload: codexPayload({
         session_id: CODEX_RESUMED_SESSION,
         thread_id: CODEX_FORK_THREAD,
@@ -15802,6 +15903,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...openCodeHeaders(),
         "x-session-id": OPENCODE_SESSION,
       },
@@ -15828,6 +15930,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         ...openCodeHeaders(),
         "x-session-id": OPENCODE_FORK_SESSION,
         "x-parent-session-id": OPENCODE_SESSION,
@@ -16307,7 +16410,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
-      headers: chatHeaders(),
+      headers: { ...internalCallHeader(), ...chatHeaders() },
       payload: chatPayload(stream) as Record<string, unknown>,
     });
 
@@ -16341,7 +16444,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
-      headers: responsesHeaders(),
+      headers: { ...internalCallHeader(), ...responsesHeaders() },
       payload: responsesPayload(stream) as Record<string, unknown>,
     });
 

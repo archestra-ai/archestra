@@ -1,6 +1,6 @@
 "use client";
 
-import { parseFullToolName } from "@archestra/shared";
+import { parseFullToolName, slugifyMcpServerName } from "@archestra/shared";
 import { FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { McpLogsDialog } from "@/app/mcp/registry/_parts/mcp-logs-dialog";
@@ -30,8 +30,9 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
   const { data: catalogDirectory } = useMcpCatalogDirectory({
     enabled: !!mcpServerName,
   });
+  // Tool names carry the server name slugified, so compare it the same way.
   const catalogId = catalogDirectory?.find(
-    (item) => item.name === mcpServerName,
+    (item) => slugifyMcpServerName(item.name) === mcpServerName,
   )?.id;
   const { data: catalogServers } = useMcpServers({
     includeAssignedAgents: false,
@@ -50,7 +51,9 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
       (
         catalogServers ??
         (readableServers ?? []).filter(
-          (server) => server.catalogName === mcpServerName,
+          (server) =>
+            !!server.catalogName &&
+            slugifyMcpServerName(server.catalogName) === mcpServerName,
         )
       )
         .filter((server) => server.serverType === "local")

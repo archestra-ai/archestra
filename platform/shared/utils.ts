@@ -16,6 +16,17 @@ export function formatSecretStorageType(
 }
 
 /**
+ * An MCP server's name as tool names carry it before the separator:
+ * lowercased, whitespace runs as `_`, anything but `[a-z0-9_-]` removed.
+ */
+export function slugifyMcpServerName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
+/**
  * Slugify a name to create a URL-safe identifier
  * Used for generating tool names from prompt/agent names
  */

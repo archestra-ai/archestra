@@ -10,6 +10,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
     data: [
       { id: "cat-github", name: "github", serverType: "local", icon: null },
       { id: "cat-other", name: "other", serverType: "remote", icon: null },
+      { id: "cat-gh", name: "GitHub Cloud", serverType: "local", icon: null },
     ],
   }),
 }));
@@ -90,5 +91,34 @@ describe("ToolErrorLogsButton", () => {
     render(<ToolErrorLogsButton toolName="unknown__tool" />);
 
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("resolves a catalog name with capitals and spaces from its tool prefix", () => {
+    useMcpServersMock.mockImplementation(
+      (params: { catalogId?: string; enabled?: boolean }) => ({
+        data:
+          params.catalogId === "cat-gh" && params.enabled !== false
+            ? [
+                {
+                  id: "srv-gh",
+                  name: "gh",
+                  serverType: "local",
+                  canUseCredential: true,
+                },
+              ]
+            : undefined,
+      }),
+    );
+
+    // Tool names carry the server name slugified: lowercase, spaces as "_".
+    render(<ToolErrorLogsButton toolName="github_cloud__create_issue" />);
+
+    expect(
+      screen.getByRole("button", { name: "View Server Logs" }),
+    ).toBeInTheDocument();
+    // No full install list for a name the directory resolves.
+    expect(useMcpServersMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: undefined, enabled: true }),
+    );
   });
 });

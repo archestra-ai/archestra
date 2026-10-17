@@ -16,6 +16,7 @@ import {
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
+  slugifyMcpServerName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -301,10 +302,7 @@ class ToolModel {
    * rejected before they collide on the global tool-name string.
    */
   static sanitizeServerNameForSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/\s+/g, "_")
-      .replace(/[^a-z0-9_-]/g, "");
+    return slugifyMcpServerName(name);
   }
 
   static slugifyName(mcpServerName: string, toolName: string): string {

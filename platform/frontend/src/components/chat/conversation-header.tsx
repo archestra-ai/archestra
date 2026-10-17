@@ -115,8 +115,8 @@ export function ConversationHeader({
     "truncate max-w-[360px] cursor-default",
     isAppConversation
       ? // Replicate the Projects detail title: text-2xl / semibold / tight.
-        "text-2xl font-semibold tracking-tight text-foreground"
-      : "text-base font-normal text-muted-foreground",
+        "text-lg md:text-2xl font-semibold tracking-tight text-foreground"
+      : "text-sm md:text-base font-normal text-muted-foreground",
   );
 
   // On phones the app shell already has a bar for the sidebar toggle, so the

@@ -2,7 +2,6 @@
 
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  type archestraApiTypes,
   getCreationDefaultArchestraToolShortNames,
 } from "@archestra/shared";
 import { Loader2, Pencil, X } from "lucide-react";
@@ -33,14 +32,19 @@ import {
 } from "@/lib/agent-tool-exclusions.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useConfig, useFeature } from "@/lib/config/config.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   type CatalogToolReference,
   groupCatalogTools,
   useAllCatalogTools,
   useCatalogTools,
-  useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  type McpRegistryRow,
+  useMcpRegistryPage,
+  useMcpRegistryRowsByIds,
+} from "@/lib/mcp/mcp-registry.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   buildExclusionPayload,
@@ -55,8 +59,8 @@ import {
 import { ToolChecklist } from "./agent-tools-editor";
 import { McpCatalogIcon } from "./mcp-catalog-icon";
 
-type InternalMcpCatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+/** A catalog item as the editor reads it: its registry row. */
+type InternalMcpCatalogItem = McpRegistryRow;
 
 export interface AgentToolExclusionsEditorRef {
   /**
@@ -139,8 +143,6 @@ export const AgentToolExclusionsEditor = forwardRef<
   ref,
 ) {
   const { catalogName } = useArchestraMcpIdentity();
-  const { data: catalogItems = [], isPending: catalogsPending } =
-    useInternalMcpCatalog();
   const { data: loadedExclusions, isFetched: exclusionsFetched } =
     useAgentToolExclusions(agentId);
   const updateExclusions = useUpdateAgentToolExclusions();
@@ -183,16 +185,16 @@ export const AgentToolExclusionsEditor = forwardRef<
   });
 
   // Excludable tools per catalog (meta dispatch tools filtered from the
-  // built-in catalog).
+  // built-in catalog). The batched list already holds only the catalogs this
+  // caller may list (app backings excluded), so it needs no catalog list to
+  // be checked against.
   const toolsByCatalog = useMemo(() => {
     const map = new Map<string, CatalogToolReference[]>();
-    const grouped = groupCatalogTools(allCatalogTools);
-    for (const catalog of catalogItems) {
-      const tools = grouped.get(catalog.id);
-      if (tools) map.set(catalog.id, filterExcludableTools(catalog.id, tools));
+    for (const [catalogId, tools] of groupCatalogTools(allCatalogTools)) {
+      map.set(catalogId, filterExcludableTools(catalogId, tools));
     }
     return map;
-  }, [catalogItems, allCatalogTools]);
+  }, [allCatalogTools]);
 
   const toolIdsByCatalog = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -209,12 +211,43 @@ export const AgentToolExclusionsEditor = forwardRef<
   // stops being pending, and initializing off no data would resolve every
   // saved exclusion to `unresolvedToolIds` — the ids survive a save, but the
   // editor would render zero pills and read as "nothing is disabled here".
-  const allToolsLoaded = !catalogsPending && allCatalogTools !== undefined;
+  const allToolsLoaded = allCatalogTools !== undefined;
 
   const [entries, setEntries] = useState<Map<string, PendingExclusionEntry>>(
     new Map(),
   );
   const [unresolvedToolIds, setUnresolvedToolIds] = useState<string[]>([]);
+
+  // The rows this editor shows, without the whole registry: the catalogs the
+  // agent disables tools of, fetched by id, plus one page of the registry for
+  // the Add list, searched on the server as the reader types.
+  const excludedCatalogRows = useMcpRegistryRowsByIds([...entries.keys()], {
+    includeBuiltIn: true,
+  });
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const debouncedCatalogSearch = useDebouncedValue(catalogSearch.trim(), 250);
+  const catalogPage = useMcpRegistryPage(
+    {
+      includeBuiltIn: true,
+      ...(debouncedCatalogSearch ? { search: debouncedCatalogSearch } : {}),
+      sortBy: "name",
+      sortDirection: "asc",
+      limit: CATALOG_PAGE_SIZE,
+      offset: 0,
+    },
+    { enabled: active, placeholderScope: "agent-tool-exclusions-editor" },
+  );
+  const isCatalogSearching =
+    catalogSearch.trim() !== debouncedCatalogSearch ||
+    (!!debouncedCatalogSearch && catalogPage.isFetching);
+  const catalogItems = useMemo(() => {
+    const byId = new Map<string, InternalMcpCatalogItem>();
+    for (const row of excludedCatalogRows.data) byId.set(row.id, row);
+    for (const row of catalogPage.data?.data ?? []) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
+    return [...byId.values()];
+  }, [excludedCatalogRows.data, catalogPage.data]);
   // Round-trip-normalized baseline; null until initialization completes.
   const [initialPayload, setInitialPayload] =
     useState<AgentToolExclusions | null>(null);
@@ -402,7 +435,7 @@ export const AgentToolExclusionsEditor = forwardRef<
           description: catalog.description || undefined,
           icon: (
             <McpCatalogIcon
-              icon={catalog.icon}
+              icon={catalog.iconUrl ?? catalog.icon}
               catalogId={catalog.id}
               size={16}
             />
@@ -443,7 +476,11 @@ export const AgentToolExclusionsEditor = forwardRef<
     );
   }
 
-  if (!initialized) {
+  // The first load of the rows behind already-disabled tools: their pills
+  // would otherwise appear one by one after the editor shows.
+  const excludedRowsLoading =
+    excludedCatalogRows.isPending && excludedCatalogs.length < entries.size;
+  if (!initialized || excludedRowsLoading) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" />
@@ -482,6 +519,8 @@ export const AgentToolExclusionsEditor = forwardRef<
         onToggle={handleCatalogToggle}
         onItemAdded={setAutoOpenCatalogId}
         label="Disable tools"
+        onSearchChange={setCatalogSearch}
+        isSearching={isCatalogSearching}
         placeholder="Search MCP servers..."
         emptyMessage="No MCP servers found."
       />
@@ -546,7 +585,7 @@ function ExclusionPill({
             className="rounded-r-none border-r-0 text-xs"
           >
             <McpCatalogIcon
-              icon={catalogItem.icon}
+              icon={catalogItem.iconUrl ?? catalogItem.icon}
               catalogId={catalogItem.id}
               size={14}
             />
@@ -617,3 +656,6 @@ function ExclusionPill({
     </Popover>
   );
 }
+
+/** Registry rows the Add list shows at a time; a search narrows on the server. */
+const CATALOG_PAGE_SIZE = 50;

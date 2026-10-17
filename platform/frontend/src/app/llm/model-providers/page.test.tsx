@@ -7,7 +7,7 @@ const mockUseLlmProviderApiKeys = vi.fn();
 const mockUseLlmProviderApiKey = vi.fn();
 const mockLlmProviderApiKeyForm = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
-const mockUseLlmOauthClients = vi.fn();
+const mockUseOauthClients = vi.fn();
 const mockDeleteApiKey = vi.fn();
 const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
   () => ({
@@ -64,8 +64,8 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/llm-oauth-clients.query", () => ({
-  useLlmOauthClients: (...args: unknown[]) => mockUseLlmOauthClients(...args),
+vi.mock("@/lib/oauth-clients.query", () => ({
+  useOauthClients: (...args: unknown[]) => mockUseOauthClients(...args),
 }));
 
 vi.mock("@/lib/organization.query");
@@ -337,7 +337,7 @@ describe("ApiKeysPage", () => {
       data: { data: [], pagination: { total: 0 } },
       isPending: false,
     });
-    mockUseLlmOauthClients.mockReturnValue({
+    mockUseOauthClients.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
       isPending: false,
     });
@@ -642,13 +642,29 @@ describe("ApiKeysPage", () => {
       },
       isPending: false,
     });
-    mockUseLlmOauthClients.mockReturnValue({
+    mockUseOauthClients.mockReturnValue({
       data: {
         data: [
           {
             id: "oc-1",
             name: "Nimbus Portal",
             clientId: "llm_oauth_1",
+            includeFutureProviders: false,
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "provider-key-1",
+                providerApiKeyName: "Shared Anthropic credential",
+              },
+            ],
+          },
+          {
+            // Follows current and future providers, so the backend keeps it
+            // and the dialog must not list it.
+            id: "oc-2",
+            name: "Everything Gateway",
+            clientId: "llm_oauth_2",
+            includeFutureProviders: true,
             providerApiKeys: [
               {
                 provider: "anthropic",
@@ -658,7 +674,7 @@ describe("ApiKeysPage", () => {
             ],
           },
         ],
-        pagination: { total: 1 },
+        pagination: { total: 2 },
       },
       isPending: false,
     });
@@ -686,6 +702,7 @@ describe("ApiKeysPage", () => {
     );
     expect(dialog).toHaveTextContent("Payments service");
     expect(dialog).toHaveTextContent("Nimbus Portal");
+    expect(dialog).not.toHaveTextContent("Everything Gateway");
     expect(
       screen.getByRole("button", { name: "Confirm delete" }),
     ).toBeEnabled();

@@ -19,7 +19,7 @@ import {
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -1741,9 +1741,7 @@ async function deleteVirtualKeysLeftWithoutProviders(
   const orphanedIds = candidateIds.filter(
     (id) => (remainingMappings.get(id) ?? []).length === 0,
   );
-  for (const id of orphanedIds) {
-    await VirtualApiKeyModel.delete(id);
-  }
+  await Promise.all(orphanedIds.map((id) => VirtualApiKeyModel.delete(id)));
   if (orphanedIds.length > 0) {
     logger.info(
       { virtualKeyIds: orphanedIds },
@@ -1764,31 +1762,33 @@ async function unmapOauthClients(params: {
   apiKeyId: string;
   organizationId: string;
 }): Promise<void> {
-  for (const client of params.clients) {
-    const remaining = client.providerApiKeys
-      .filter((mapping) => mapping.providerApiKeyId !== params.apiKeyId)
-      .map(({ provider, providerApiKeyId }) => ({
-        provider,
-        providerApiKeyId,
-      }));
-    if (remaining.length === 0 && !client.includeFutureProviders) {
-      await LlmOauthClientModel.delete({
+  await Promise.all(
+    params.clients.map(async (client) => {
+      const remaining = client.providerApiKeys
+        .filter((mapping) => mapping.providerApiKeyId !== params.apiKeyId)
+        .map(({ provider, providerApiKeyId }) => ({
+          provider,
+          providerApiKeyId,
+        }));
+      if (remaining.length === 0 && !client.includeFutureProviders) {
+        await LlmOauthClientModel.delete({
+          id: client.id,
+          organizationId: params.organizationId,
+        });
+        logger.info(
+          { oauthClientId: client.id },
+          "Deleted an OAuth client left without a provider after its provider key was deleted",
+        );
+        return;
+      }
+      await LlmOauthClientModel.update({
         id: client.id,
         organizationId: params.organizationId,
+        name: client.name,
+        providerApiKeys: remaining,
       });
-      logger.info(
-        { oauthClientId: client.id },
-        "Deleted an OAuth client left without a provider after its provider key was deleted",
-      );
-      continue;
-    }
-    await LlmOauthClientModel.update({
-      id: client.id,
-      organizationId: params.organizationId,
-      name: client.name,
-      providerApiKeys: remaining,
-    });
-  }
+    }),
+  );
 }
 
 /** Knowledge base jobs configured with the key stop until another is chosen. */

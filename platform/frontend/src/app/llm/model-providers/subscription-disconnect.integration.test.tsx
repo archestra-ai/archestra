@@ -85,7 +85,7 @@ beforeEach(() => {
   server.use(
     http.get("/api/user/permissions", () => HttpResponse.json(permissions)),
     http.get("/api/llm-virtual-keys", () => HttpResponse.json(emptyPage)),
-    http.get("/api/llm-oauth-clients", () => HttpResponse.json(emptyPage)),
+    http.get("/api/oauth-clients", () => HttpResponse.json(emptyPage)),
   );
 });
 afterEach(() => {
@@ -223,7 +223,7 @@ describe("member subscription disconnect", () => {
       http.get("/api/llm-provider-api-keys", () =>
         HttpResponse.json(connected ? [key] : []),
       ),
-      http.get("/api/llm-oauth-clients", () =>
+      http.get("/api/oauth-clients", () =>
         HttpResponse.json({
           ...emptyPage,
           data: [
@@ -231,6 +231,7 @@ describe("member subscription disconnect", () => {
               id: "dependent-credential",
               name: "Subscription client",
               clientId: "llm_oauth_sub",
+              includeFutureProviders: false,
               providerApiKeys: [
                 {
                   provider: "github-copilot",

@@ -313,6 +313,11 @@ export function useDeleteLlmProviderApiKey() {
       });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      // The backend also deletes the virtual keys and OAuth clients that
+      // mapped only the deleted key.
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }
@@ -339,6 +344,11 @@ export function useBulkDeleteLlmProviderApiKeys() {
       });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      // The backend also deletes the virtual keys and OAuth clients that
+      // mapped only the deleted key.
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }

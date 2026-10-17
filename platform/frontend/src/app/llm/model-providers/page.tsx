@@ -89,7 +89,6 @@ import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import {
   useBulkDeleteLlmProviderApiKeys,
   useDeleteLlmProviderApiKey,
@@ -97,6 +96,7 @@ import {
   useLlmProviderApiKeys,
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
+import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import {
@@ -222,7 +222,8 @@ export default function ApiKeysPage() {
       enabled: !!selectedApiKeyId && isDeleteDialogOpen,
     });
   const { data: blockingOauthClientsData, isPending: isLoadingOauthClients } =
-    useLlmOauthClients({
+    useOauthClients({
+      capability: "llm:proxy",
       providerApiKeyId: selectedApiKeyId ?? undefined,
       limit: 100,
       offset: 0,
@@ -1123,7 +1124,7 @@ const CONFIRM_DELAY_MS = 3000;
 type MappedVirtualKey =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 type MappedOauthClient =
-  archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"][number];
+  archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
 
 /** True when nothing is left to route to once this provider key is gone. */
 function virtualKeyGoesWithProviderKey(key: MappedVirtualKey): boolean {
@@ -1131,7 +1132,7 @@ function virtualKeyGoesWithProviderKey(key: MappedVirtualKey): boolean {
 }
 
 function oauthClientGoesWithProviderKey(client: MappedOauthClient): boolean {
-  return client.providerApiKeys.length <= 1;
+  return !client.includeFutureProviders && client.providerApiKeys.length <= 1;
 }
 
 function deletionSentence(params: {

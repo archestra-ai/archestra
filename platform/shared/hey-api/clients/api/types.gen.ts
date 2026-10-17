@@ -29493,6 +29493,106 @@ export type GetAuditLogsResponses = {
 
 export type GetAuditLogsResponse = GetAuditLogsResponses[keyof GetAuditLogsResponses];
 
+export type GetAuditLogResourcesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Case-insensitive substring of the resource name
+         */
+        search?: string;
+        /**
+         * Only this resource, e.g. to label a preselected filter
+         */
+        resourceId?: string;
+        limit?: number;
+    };
+    url: '/api/audit-logs/resources';
+};
+
+export type GetAuditLogResourcesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAuditLogResourcesError = GetAuditLogResourcesErrors[keyof GetAuditLogResourcesErrors];
+
+export type GetAuditLogResourcesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            resourceType: string;
+            resourceId: string;
+            name: string;
+        }>;
+    };
+};
+
+export type GetAuditLogResourcesResponse = GetAuditLogResourcesResponses[keyof GetAuditLogResourcesResponses];
+
 export type GetAuditLogData = {
     body?: never;
     path: {

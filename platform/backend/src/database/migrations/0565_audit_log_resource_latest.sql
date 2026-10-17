@@ -1,0 +1,1 @@
+CREATE INDEX "audit_logs_org_resource_latest_idx" ON "audit_logs" USING btree ("organization_id","resource_type","resource_id","created_at" DESC NULLS LAST,"event_sequence" DESC NULLS LAST,"resource_name","actor_id") WHERE "audit_logs"."resource_id" IS NOT NULL;

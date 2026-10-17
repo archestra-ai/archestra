@@ -1844,6 +1844,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAuditLog]: {
     auditLog: ["read"],
   },
+  [RouteId.GetAuditLogResources]: {
+    auditLog: ["read"],
+  },
 
   // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
   // The public marketplace git endpoint stays outside this map; it is allowlisted in

@@ -966,6 +966,7 @@ export const RouteId = {
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
   GetAuditLog: "getAuditLog",
+  GetAuditLogResources: "getAuditLogResources",
 
   // Hook File Routes
   GetHooks: "getHooks",

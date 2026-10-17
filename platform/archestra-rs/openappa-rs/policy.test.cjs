@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { createHash, randomUUID } = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
-const { setTimeout: delay } = require('node:timers/promises');
 const { Client } = require('../../backend/node_modules/pg');
 const native = require('./index.cjs');
 const { databaseUrl } = require('./test-database.cjs');
@@ -96,95 +96,148 @@ delta = {}
   );
 });
 
-test('saved text changes enforcement for new sessions and preserves existing sessions', { skip: !databaseUrl }, async () => {
+// Each test serves policies no other test in this process publishes: an
+// earlier revision's compiled engine is cached by its file and revision alone.
+const own = (policy, tag) => `${policy}[[policy.tool]]\nname = "only-${tag}"\ndelta = {}\n`;
+const callRead = (n) => ({ event: 'tool_call', operation_id: `call:read-${n}`, tool: 'read', arguments: {} });
+const POLICY_MOVED = { message: 'OpenAPPA published a newer policy revision for this organization; retry the request' };
+const rootOf = (session) => `archestra:${createHash('sha256').update(`${session.organization_id}\n${session.session_id}`).digest('hex')}`;
+
+test('a saved policy decides the next call of an open session and of a new one', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
-  const scope = () => ({ organization_id: 'policy-test', caller_id: 'user:test', session_id: randomUUID() });
+  const organization = `policy-test-${randomUUID()}`;
+  const [before, after] = [own(allow, 'saved'), own(deny, 'saved')];
+  const scope = () => ({ organization_id: organization, caller_id: 'user:test', session_id: randomUUID() });
   const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
-  const old = scope();
-  assert.equal((await hook(old, { event: 'session_start' }, allow)).decision, 'ack');
+  const open = scope();
+  assert.equal((await hook(open, { event: 'session_start' }, before)).decision, 'ack');
+  assert.equal((await hook(open, callRead(1), before)).decision, 'allow_call');
+
+  await assert.rejects(() => hook(open, callRead(2), after), /not declared in this policy/, 'the open session follows the saved policy');
   const fresh = scope();
-  assert.equal((await hook(fresh, { event: 'session_start' }, deny)).decision, 'ack');
-  const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
-  await assert.rejects(() => hook(fresh, call, deny), /not declared in this policy/);
-  assert.equal((await hook(old, call, deny)).decision, 'allow_call');
+  assert.equal((await hook(fresh, { event: 'session_start' }, after)).decision, 'ack');
+  await assert.rejects(() => hook(fresh, callRead(1), after), /not declared in this policy/);
   // A refused policy leaves the organization's last working deployment serving.
   await assert.rejects(hook(scope(), { event: 'session_start' }, '[policy]\nversion = 999'));
-  const next = scope();
-  assert.equal((await hook(next, { event: 'session_start' }, deny)).decision, 'ack');
-  await assert.rejects(() => hook(next, call, deny), /not declared in this policy/);
+  await assert.rejects(() => hook(open, callRead(3), after), /not declared in this policy/);
 });
 
-test('a fork keeps its parent policy revision when its dispatch carries newer text', { skip: !databaseUrl }, async () => {
+test('a fork follows its parent line: its next call decides under the latest saved policy', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
-  const scope = () => ({ organization_id: 'fork-policy-test', caller_id: 'user:test', session_id: randomUUID() });
+  const organization = `fork-policy-test-${randomUUID()}`;
+  const [before, after] = [own(allow, 'fork'), own(deny, 'fork')];
+  const scope = () => ({ organization_id: organization, caller_id: 'user:test', session_id: randomUUID() });
   const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
-  const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
 
   const parent = scope();
-  assert.equal((await hook(parent, { event: 'session_start' }, allow)).decision, 'ack');
-  assert.equal((await hook(parent, call, allow)).decision, 'allow_call');
+  assert.equal((await hook(parent, { event: 'session_start' }, before)).decision, 'ack');
+  assert.equal((await hook(parent, callRead(1), before)).decision, 'allow_call');
   const fork = { ...scope(), fork_of: parent.session_id };
-  assert.equal((await hook(fork, call, deny)).decision, 'allow_call');
+  await assert.rejects(() => hook(fork, callRead(1), after), /not declared in this policy/);
+  // Saving the earlier text again is the line's next revision; the fork follows it too.
+  assert.equal((await hook(fork, callRead(2), before)).decision, 'allow_call');
 });
 
-test('a new session opens under the text its dispatch carried while a stale sibling dispatches', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
-  // A pool of one would serialize fresh and stale on the same connection,
-  // masking the race: this needs both to hold a connection at once.
+test('a dispatch carrying a policy recomposed since it was read publishes nothing and decides at the head on retry', { skip: !databaseUrl }, async (t) => {
   await native.initializeOpenappa(databaseUrl, 2);
-  // An uncommitted family row parks a new session's dispatch on its own pooled
-  // connection after it pinned its deployment and before the session opens: the
-  // opening writes that row in the same transaction, and waits for the row to
-  // settle.
-  const ledger = new Client({ connectionString: databaseUrl });
-  await ledger.connect();
-  t.after(() => ledger.end());
-  const ledgerPid = (await ledger.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-  // Watched from a connection of its own: inside the ledger's open transaction
-  // the activity view would stay as it was at its first read.
-  const monitor = new Client({ connectionString: databaseUrl });
-  await monitor.connect();
-  t.after(() => monitor.end());
-  const scope = () => ({ organization_id: 'policy-race-test', caller_id: 'user:test', session_id: randomUUID() });
-  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
-  const root = (session) => `archestra:${createHash('sha256').update(`${session.organization_id}\n${session.session_id}`).digest('hex')}`;
-  const hold = (session) => ledger.query('INSERT INTO openappa_roots (root) VALUES ($1)', [root(session)]);
-  const release = () => ledger.query('ROLLBACK');
-  // Waits until `count` dispatches wait on the rows this connection holds.
-  const parked = async (count) => {
-    for (;;) {
-      const { rows } = await monitor.query(
-        'SELECT count(*)::int AS parked FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))',
-        [ledgerPid],
-      );
-      if (rows[0].parked >= count) return;
-      await delay(10);
-    }
-  };
-  const opened = async (session) => (await ledger.query('SELECT EXISTS (SELECT 1 FROM openappa_events WHERE root = $1) AS opened', [root(session)])).rows[0].opened;
-  const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  const organization = `stale-policy-test-${randomUUID()}`;
+  t.after(async () => {
+    await db.query('DELETE FROM organization WHERE id = $1', [organization]);
+    await db.end();
+  });
+  const [before, after] = [own(allow, 'stale'), own(deny, 'stale')];
+  // The organization's stored composition is the one saved after the stale read.
+  await db.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization]);
+  await db.query(
+    `INSERT INTO openappa_effective_policies (organization_id, content, content_hash, root_revision, install_fingerprint, compiled_at)
+     VALUES ($1, $2, 'saved', 1, 'test', now())`,
+    [organization, after],
+  );
+  const read = (content, compositionHash) => ({ content, credentials: {}, compositionHash });
+  const scope = () => ({ organization_id: organization, caller_id: 'user:test', session_id: randomUUID() });
+  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
 
-  // Serving the text from before the save.
-  assert.equal((await hook(scope(), { event: 'session_start' }, allow)).decision, 'ack');
   const fresh = scope();
+  assert.equal((await hook(fresh, { event: 'session_start' }, read(after, 'saved'))).decision, 'ack');
   const stale = scope();
-  await ledger.query('BEGIN');
-  await hold(fresh);
-  await hold(stale);
-  // The fresh session read the saved text.
-  const freshStart = hook(fresh, { event: 'session_start' }, deny);
-  await parked(1);
-  // A request that read the text just before the save carries that text.
-  const staleStart = hook(stale, { event: 'session_start' }, allow);
-  // Wait until the stale dispatch has pinned its deployment and reached the
-  // family row. A fixed delay cannot establish that ordering on a busy CI host.
-  await parked(2);
-  assert.equal(await opened(fresh), false, 'the stale dispatch pinned its text before the fresh session opened');
-  await release();
-  assert.equal((await freshStart).decision, 'ack');
-  assert.equal((await staleStart).decision, 'ack');
+  await assert.rejects(() => hook(stale, { event: 'session_start' }, read(before, 'before-the-save')), POLICY_MOVED);
+  const revisions = await db.query('SELECT revision FROM openappa_policy_revisions WHERE deployment = $1', [organization]);
+  assert.deepEqual(revisions.rows.map((row) => Number(row.revision)), [1], 'the text from before the save is never published over the head');
+  assert.equal((await db.query('SELECT 1 FROM openappa_events WHERE root = $1', [rootOf(stale)])).rowCount, 0, 'nothing was appended');
 
-  await assert.rejects(() => hook(fresh, call, deny), /not declared in this policy/);
-  assert.equal((await hook(stale, call, allow)).decision, 'allow_call');
+  // The host's retry reads the stored composition again.
+  assert.equal((await hook(stale, { event: 'session_start' }, read(after, 'saved'))).decision, 'ack');
+  await assert.rejects(() => hook(stale, callRead(1), read(after, 'saved')), /not declared in this policy/);
+});
+
+/**
+ * Runs `dispatches` in a process of its own, as another backend replica over the
+ * same database would, and returns each decision or error message.
+ */
+function inAnotherProcess(dispatches) {
+  const child = spawnSync(process.execPath, ['-e', `
+    const native = require('./index.cjs');
+    (async () => {
+      const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+      await native.initializeOpenappa(input.url, 2);
+      const answers = [];
+      for (const { session, event, policy } of input.dispatches) {
+        try {
+          answers.push(JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), { content: policy, credentials: {} })).decision);
+        } catch (error) {
+          answers.push(error.message);
+        }
+      }
+      process.stdout.write(JSON.stringify(answers));
+    })().catch((error) => { console.error(error.message); process.exitCode = 1; });
+  `], { cwd: __dirname, input: JSON.stringify({ url: databaseUrl, dispatches }), encoding: 'utf8', timeout: 30000 });
+  assert.equal(child.status, 0, child.stderr);
+  return JSON.parse(child.stdout);
+}
+
+test('a process pinned behind a head another process published re-pins it within the same call', { skip: !databaseUrl, timeout: 60000 }, async (t) => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  t.after(() => db.end());
+  const organization = `two-processes-${randomUUID()}`;
+  const [first, second] = [own(allow, 'pods'), own(deny, 'pods')];
+  const scope = () => ({ organization_id: organization, caller_id: 'user:test', session_id: randomUUID() });
+  const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
+  const head = async () => Number((await db.query('SELECT head FROM openappa_deployments WHERE name = $1', [organization])).rows[0].head);
+  const events = async (session) => Number((await db.query('SELECT count(*) AS n FROM openappa_events WHERE root = $1', [rootOf(session)])).rows[0].n);
+
+  const open = scope();
+  assert.equal((await hook(open, { event: 'session_start' }, first)).decision, 'ack');
+  assert.equal((await hook(open, callRead(1), first)).decision, 'allow_call');
+  assert.equal(await head(), 1);
+
+  // The other process publishes another policy, then this one's again: the head
+  // names this process's policy at a revision it never pinned.
+  const other = scope();
+  assert.deepEqual(inAnotherProcess([
+    { session: other, event: { event: 'session_start' }, policy: second },
+    { session: other, event: { event: 'session_start' }, policy: first },
+  ]), ['ack', 'ack']);
+  assert.equal(await head(), 3);
+  assert.equal((await hook(open, callRead(2), first)).decision, 'allow_call', 'the dispatch re-pinned the head and decided at it');
+  assert.equal(await head(), 3, 'pinning the head publishes nothing');
+
+  // The other process publishes a policy this one does not carry: the dispatch
+  // appends nothing and asks the host to read the policy again.
+  assert.deepEqual(inAnotherProcess([{ session: other, event: callRead(1), policy: second }]), [
+    'OpenAPPA processing interrupted: tool host/archestra/read is not declared in this policy and no wildcard covers it; the call is refused before it runs',
+  ]);
+  assert.equal(await head(), 4);
+  const appended = await events(open);
+  await assert.rejects(() => hook(open, callRead(3), first), POLICY_MOVED);
+  assert.equal(await events(open), appended, 'nothing was appended');
+  assert.equal(await head(), 4, 'the text it carried is not published over the head');
+  // The host's retry carries the policy it reads again, and decides at the head.
+  await assert.rejects(() => hook(open, callRead(3), second), /not declared in this policy/);
+  assert.equal(await head(), 4);
 });
 
 test('catch-all annotations admit unknown tools without changing trust or overriding explicit rules', { skip: !databaseUrl }, async (t) => {

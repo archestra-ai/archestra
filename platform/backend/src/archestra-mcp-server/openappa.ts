@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   isBuiltInCatalogId,
@@ -558,6 +559,7 @@ const registry = defineArchestraTools([
         toolCallId: identity.callId,
         args,
         brokeTheGlass: breakTheGlass,
+        ...(identity.needsAdmission ? { needsAdmission: true } : {}),
       });
       if (!breakTheGlass) {
         const result = report.isError
@@ -1931,14 +1933,18 @@ function peerExecution(params: {
 }
 
 /**
- * The session and call a yell reports under. A Chat or runtime
- * call knows both; an external client's call through the MCP gateway does
- * not, so the proxy left them when it allowed the call.
+ * Prefer the complete identity from the executing host or the proxy. A gateway
+ * session can be authenticated without a model call id, especially when its
+ * proxy traffic bypasses enforcement and leaves no reporting receipt.
  */
 async function yellIdentity(params: {
   args: YellArguments;
   context: ArchestraContext;
-}): Promise<{ session: OpenAppaSession; callId: string }> {
+}): Promise<{
+  session: OpenAppaSession;
+  callId: string;
+  needsAdmission?: true;
+}> {
   const { context } = params;
   const id = context.sessionId ?? context.conversationId;
   const known =
@@ -1947,29 +1953,35 @@ async function yellIdentity(params: {
     (context.organizationId && context.userId && id
       ? chatOpenAppaSession(context.organizationId, context.userId, id)
       : undefined);
-  const identity =
-    known && context.currentToolCallId
-      ? { session: known, callId: context.currentToolCallId }
-      : context.organizationId
-        ? await recallYellSession({
-            organizationId: context.organizationId,
-            args: params.args,
-          })
-        : undefined;
-  if (!identity) {
-    logger.warn(
-      {
-        agentId: context.agentId,
-        tool: "yell",
-        hasSession: Boolean(known),
-        hasToolCallId: Boolean(context.currentToolCallId),
-      },
-      "OpenAPPA yell refused: no session or tool-call identity",
-    );
-    throw new ApiError(
-      400,
-      "OpenAPPA reporting requires an authenticated session and tool-call identity",
-    );
-  }
-  return identity;
+  // A gateway client's logical id identifies its request, not a released call.
+  if (known && context.currentToolCallId && !context.tokenAuth)
+    return { session: known, callId: context.currentToolCallId };
+  const recalled = context.organizationId
+    ? await recallYellSession({
+        organizationId: context.organizationId,
+        args: params.args,
+      })
+    : undefined;
+  if (recalled) return recalled;
+  // A proxy receipt can name a child, so it must win over inherited session
+  // headers. Without one, the authenticated session can still report: give the
+  // report its own operation id, never a reusable JSON-RPC transport id.
+  if (known)
+    return {
+      session: known,
+      callId: context.currentToolCallId ?? randomUUID(),
+      needsAdmission: true,
+    };
+  logger.warn(
+    {
+      agentId: context.agentId,
+      tool: "yell",
+      hasToolCallId: Boolean(context.currentToolCallId),
+    },
+    "OpenAPPA yell refused: no session or tool-call identity",
+  );
+  throw new ApiError(
+    400,
+    "OpenAPPA reporting requires an authenticated session and tool-call identity",
+  );
 }

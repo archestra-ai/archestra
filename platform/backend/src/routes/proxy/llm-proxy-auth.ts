@@ -1,5 +1,3 @@
-import { hasInternalCall } from "@/clients/internal-call";
-import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 /**
  * Authentication and API key resolution for the LLM proxy handler.
  *
@@ -20,6 +18,7 @@ import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import { takeInternalCall } from "@/clients/internal-call";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -41,6 +40,7 @@ import { resolveOauthClientProviderMappings } from "@/services/oauth-client-prov
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
@@ -594,7 +594,7 @@ export async function assertPlatformAuthenticated(params: {
   /** A passthrough virtual key from `X-Archestra-Virtual-Key` was validated. */
   wasPassthroughKeyValidated: boolean;
   wasJwksAuthenticated: boolean;
-  /** The request carried a valid in-process proof (see `hasInternalCall`). */
+  /** The request carried a valid in-process proof (see `takeInternalCall`). */
   isInternalCall: boolean;
   /**
    * True when the backend authenticates upstream with its OWN credentials and
@@ -1175,8 +1175,9 @@ async function authenticatePassthroughProxyRequest(params: {
   // In-process callers that carry the internal proof are trusted, matching the
   // keyless-provider allowance in the instrumented handler. The proof is a
   // per-process secret, so a request arriving through the frontend rewrite
-  // cannot satisfy it.
-  if (hasInternalCall(request.headers)) return;
+  // cannot satisfy it. Taking it also keeps it off the forwarded request.
+  const proof = takeInternalCall(request.headers);
+  if (proof.inProcess || proof.guardrail) return;
 
   const unauthenticated = new ApiError(
     401,

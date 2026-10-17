@@ -272,10 +272,10 @@ export function createLLMModel(params: {
   if (baseUrl) {
     clientHeaders[PROVIDER_BASE_URL_HEADER] = baseUrl;
   }
-  // Chat sends the raw provider secret to the proxy, so the proxy can't tie
-  // the call to a chat_api_keys row. Forwarding the row ID here lets the
-  // proxy look up per-key configuration (extraHeaders). Loopback-gated on
-  // the proxy side; see CHAT_API_KEY_ID_HEADER.
+  // Names the chat_api_keys row behind this call. With a personal platform
+  // token the proxy resolves the upstream key from it; with a raw provider
+  // secret it only looks up per-key configuration (extraHeaders), and only
+  // when the in-process proof is present. See CHAT_API_KEY_ID_HEADER.
   if (chatApiKeyId) {
     clientHeaders[CHAT_API_KEY_ID_HEADER] = chatApiKeyId;
     logger.info(
@@ -1166,11 +1166,6 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 };
 
 /**
- * Creates a fetch wrapper that injects W3C trace context (traceparent/tracestate)
- * into outgoing HTTP headers. This enables the LLM proxy handler to extract the
- * parent context and create child spans, linking chat → LLM proxy traces together.
- */
-/**
  * The user's personal platform token value, created on first use. The proxy
  * resolves it to the user, the same way the MCP gateway resolves it.
  */
@@ -1189,6 +1184,11 @@ async function personalTokenValue(params: {
   return value;
 }
 
+/**
+ * Creates a fetch wrapper that injects W3C trace context (traceparent/tracestate)
+ * into outgoing HTTP headers. This enables the LLM proxy handler to extract the
+ * parent context and create child spans, linking chat → LLM proxy traces together.
+ */
 function createTracedFetch(): typeof globalThis.fetch {
   return (input, init) => {
     const headers = new Headers(init?.headers);

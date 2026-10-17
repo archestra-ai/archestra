@@ -1,6 +1,3 @@
-import { internalCallHeader } from "@/clients/internal-call";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-
 /**
  * LLM Proxy Handler Tests
  *
@@ -28,6 +25,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import {
   InteractionModel,
@@ -36,6 +34,7 @@ import {
   OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -433,6 +432,9 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       const response = await app.inject({
         method: "POST",
         url: `/v1/openai/${testAgent.id}/chat/completions`,
+        // Non-loopback: the passthrough key plus the caller's provider key is
+        // enough on its own for an external client.
+        remoteAddress: "203.0.113.5",
         headers: {
           "content-type": "application/json",
           // Raw provider key forwarded upstream; passthrough key attributes the user.
@@ -446,7 +448,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
 
       const [interaction] = await db
         .select()

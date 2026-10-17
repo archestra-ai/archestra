@@ -68,15 +68,27 @@ export function RequestContent({
       asChild
     >
       <section aria-label="Request content">
-        <PaneHeader>
-          <TabsList size="sm" aria-label="Request view" className="shrink-0">
+        <PaneHeader className="gap-3">
+          {/* Underlined text tabs sized like the Overview header beside them:
+              a pill switcher is taller than this 36px bar and reads as a
+              control panel rather than a pane title. */}
+          <TabsList
+            aria-label="Request view"
+            className="h-full shrink-0 gap-4 rounded-none bg-transparent p-0"
+          >
             {CONTENT_VIEWS.map((option) => (
-              <TabsTrigger key={option.value} value={option.value}>
+              <TabsTrigger
+                key={option.value}
+                value={option.value}
+                className="relative h-full flex-none rounded-none border-0 px-0 text-xs font-medium text-muted-foreground shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-foreground dark:text-muted-foreground dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-foreground"
+              >
                 {option.label}
               </TabsTrigger>
             ))}
           </TabsList>
-          <span className="ml-1 inline-flex min-w-0 items-center gap-1.5 rounded-sm bg-muted px-1.5 text-[11px] leading-5 text-muted-foreground">
+          {/* Which request this is; phones already show it in the Overview
+              directly above, so the bar keeps only the tabs there. */}
+          <span className="ml-auto inline-flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground max-md:hidden">
             <span
               className={cn(
                 "size-1.5 shrink-0 rounded-full",
@@ -84,23 +96,10 @@ export function RequestContent({
               )}
               aria-hidden="true"
             />
-            <span className="min-w-0 truncate font-medium text-foreground">
-              {label}
-            </span>
-            {/* Phones drop the time, so the name is what the room goes to. */}
-            <span className="shrink-0 tabular-nums max-sm:hidden">
-              · {time}
-            </span>
+            <span className="min-w-0 truncate">{label}</span>
+            <span className="shrink-0 tabular-nums">· {time}</span>
+            {latest ? <span className="shrink-0">· latest</span> : null}
           </span>
-          {latest ? (
-            <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground max-sm:hidden">
-              <span
-                className="size-1.5 rounded-full bg-primary"
-                aria-hidden="true"
-              />
-              <span>Latest request</span>
-            </span>
-          ) : null}
         </PaneHeader>
         <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           {query.isError && !record ? (

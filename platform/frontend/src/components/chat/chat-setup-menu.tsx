@@ -6,7 +6,11 @@ import {
   getChatApiKeySelectorProviderGroupTestId,
   getChatModelOptionTestId,
   modelSupportsThinkingEffort,
+  SUBSCRIPTION_CREDENTIAL_KINDS,
+  SUBSCRIPTION_CREDENTIALS,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindFromKeyMetadata,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { Command as CommandPrimitive, defaultFilter } from "cmdk";
@@ -16,6 +20,8 @@ import {
   AudioLinesIcon,
   BoxIcon,
   BrainIcon,
+  CheckIcon,
+  ExternalLinkIcon,
   EyeIcon,
   FileTextIcon,
   KeyRoundIcon,
@@ -41,6 +47,8 @@ import {
 import { AgentIcon } from "@/components/agent-icon";
 import { agentListHref } from "@/components/agent-pages/agent-page-config";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
+import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -55,6 +63,8 @@ import {
   REASONING_OPTIONS,
   useChatSetupOptions,
 } from "@/lib/chat/use-chat-setup-options";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
@@ -65,6 +75,8 @@ type Scope = "model" | "agent" | "key";
 
 export interface ChatSetupMenuProps {
   conversationId?: string;
+  /** Available space on the chosen side of the composer. */
+  maxHeight?: number;
   /** Close the menu and hand focus back to the prompt. */
   close: () => void;
   agentId: string | null | undefined;
@@ -85,6 +97,8 @@ export interface ChatSetupMenuProps {
   onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   subscriptionConnectRequired: boolean;
   onSubscriptionConnect?: () => void;
+  /** Open a connection or reconnect flow in the persistent credential selector. */
+  onSubscriptionSelect?: (keyId: string) => void;
   subscriptionSignInTitle: string;
   thinkingEffort: ThinkingEffortSetting;
   onThinkingEffortChange?: (effort: ThinkingEffortSetting) => void;
@@ -107,6 +121,38 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     agentSearch: scopeState === "agent" ? query : "",
   });
   const router = useRouter();
+  const catalog = useModelProviderCatalog();
+  const subscriptions = useMemo(
+    () =>
+      SUBSCRIPTION_CREDENTIAL_KINDS.flatMap<{
+        kind: SubscriptionCredentialKind;
+        key: LlmProviderApiKey | undefined;
+      }>((kind) => {
+        const spec = SUBSCRIPTION_CREDENTIALS[kind];
+        const connected = data.keys.filter(
+          (key) =>
+            key.provider === spec.provider &&
+            (spec.marker === null ||
+              subscriptionKindFromKeyMetadata(key) === kind),
+        );
+        if (connected.length > 0)
+          return connected.map((key) => ({ kind, key }));
+        return catalog.isHidden(spec.provider)
+          ? []
+          : [{ kind, key: undefined }];
+      }),
+    [data.keys, catalog],
+  );
+  const apiKeySections = useMemo(
+    () =>
+      data.keySections
+        .map((section) => ({
+          ...section,
+          keys: section.keys.filter((key) => !isPersonalSubscription(key)),
+        }))
+        .filter((section) => section.keys.length > 0),
+    [data.keySections],
+  );
   const [active, setActive] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -143,7 +189,11 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     // models exist, then the model. The menu still opens on Model.
     const list: Scope[] = [];
     if (ctx.onAgentChange && allAgents.length > 0) list.push("agent");
-    if (showProvider && ctx.canChangeCredential && data.keys.length > 0)
+    if (
+      showProvider &&
+      ctx.canChangeCredential &&
+      (data.keys.length > 0 || subscriptions.length > 0)
+    )
       list.push("key");
     if (showModels || showSignIn) list.push("model");
     return list;
@@ -155,6 +205,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     showProvider,
     ctx.canChangeCredential,
     data.keys.length,
+    subscriptions.length,
   ]);
   const scope: Scope | undefined = scopes.includes(scopeState)
     ? scopeState
@@ -209,11 +260,16 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             : [],
       ),
       agent: count(allAgents.map(agentKeywords)),
-      key: count(
-        data.keys.map((k) =>
-          keyKeywords(k, data.providerLabel, data.keyScopeLabel),
+      key: count([
+        ...apiKeySections
+          .flatMap((section) => section.keys)
+          .map((key) =>
+            keyKeywords(key, data.providerLabel, data.keyScopeLabel),
+          ),
+        ...subscriptions.map(({ kind, key }) =>
+          subscriptionKeywords(kind, key),
         ),
-      ),
+      ]),
     } satisfies Record<Scope, number>;
   }, [
     searching,
@@ -223,7 +279,8 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     ctx.subscriptionSignInTitle,
     allModels,
     allAgents,
-    data.keys,
+    apiKeySections,
+    subscriptions,
     data.providerLabel,
     data.keyScopeLabel,
   ]);
@@ -263,7 +320,8 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
         current ??
         list.querySelector('[cmdk-item=""]:not([aria-disabled="true"])');
       setActive(target?.getAttribute("data-value") ?? "");
-      if (current) centerIn(list, current);
+      // Keep the subscription group visible when opening credentials.
+      if (current && scope !== "key") centerIn(list, current);
       else list.scrollTop = 0;
     });
     return () => cancelAnimationFrame(frame);
@@ -330,7 +388,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
 
   if (!scope) {
     return (
-      <div className="flex h-10 w-[calc(100vw-1.5rem)] sm:w-[350px] items-center px-3 text-xs text-muted-foreground">
+      <div className="flex h-10 w-[calc(100vw-1.5rem)] sm:w-[360px] items-center px-3 text-xs text-muted-foreground">
         Nothing to change in this chat
       </div>
     );
@@ -346,34 +404,40 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       filter={(value, search, keywords) =>
         defaultFilter(keywords?.length ? keywords.join(" ") : value, search)
       }
-      className="w-[calc(100vw-1.5rem)] sm:w-[350px] rounded-none bg-transparent"
+      style={{
+        maxHeight:
+          ctx.maxHeight ?? "var(--radix-popover-content-available-height)",
+      }}
+      className="w-[calc(100vw-1.5rem)] sm:w-[360px] rounded-none bg-transparent"
     >
-      <div className="flex h-10 items-center gap-2.5 border-b pr-2 pl-3">
-        <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
-        <CommandPrimitive.Input
-          ref={inputRef}
-          value={query}
-          onValueChange={setQuery}
-          onKeyDown={onInputKeyDown}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
-        />
-        {showReasoning && (
-          <ReasoningChip
-            groupRef={reasoningRef}
-            value={ctx.thinkingEffort}
-            onChange={(effort) => ctx.onThinkingEffortChange?.(effort)}
-            onExit={() => inputRef.current?.focus({ preventScroll: true })}
+      <div className="shrink-0 px-2.5 pt-2.5 pb-1">
+        <div className="flex h-8 items-center gap-2 rounded-lg bg-muted/50 pr-1.5 pl-2.5">
+          <SearchIcon className="size-3.5 shrink-0 text-muted-foreground pointer-events-none" />
+          <CommandPrimitive.Input
+            ref={inputRef}
+            value={query}
+            onValueChange={setQuery}
+            onKeyDown={onInputKeyDown}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
           />
-        )}
+          {showReasoning && (
+            <ReasoningChip
+              groupRef={reasoningRef}
+              value={ctx.thinkingEffort}
+              onChange={(effort) => ctx.onThinkingEffortChange?.(effort)}
+              onExit={() => inputRef.current?.focus({ preventScroll: true })}
+            />
+          )}
+        </div>
       </div>
 
       {scopes.length > 1 && (
         <div
           role="tablist"
           aria-label="Current setup — choose what to change"
-          className="flex h-9 items-stretch border-b px-1"
+          className="mx-1.5 mb-1 flex h-9 shrink-0 items-stretch border-b"
         >
           {scopes.map((s) => {
             const selected = s === scope;
@@ -421,7 +485,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
           if (scope === "agent" && scrollHeight - scrollTop - clientHeight < 48)
             data.loadMoreAgents();
         }}
-        className="max-h-[300px] scroll-py-1 p-1"
+        className="min-h-0 max-h-[240px] scroll-py-1.5 px-1.5 pb-1.5"
       >
         {elsewhere ? (
           <CommandItem
@@ -545,21 +609,35 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
               })}
             </CommandGroup>
           ))}
-        {scope === "agent" && (
-          <ExitRow
-            value="action:all-agents"
-            icon={<UsersRoundIcon />}
-            label="All agents"
-            onSelect={() => {
-              ctx.close();
-              router.push(agentListHref("agent"));
-            }}
-          />
-        )}
-
         {/* ---------------- Key scope ---------------- */}
+        {scope === "key" && subscriptions.length > 0 && (
+          <CommandGroup heading="Personal subscriptions" className={GROUP}>
+            {subscriptions.map(({ kind, key }) => (
+              <SubscriptionRow
+                key={key?.id ?? kind}
+                kind={kind}
+                apiKey={key}
+                selected={!!key && key.id === currentKey?.id}
+                onSelect={() => {
+                  if (
+                    key &&
+                    key.id !== currentKey?.id &&
+                    !key.requiresReauthentication
+                  ) {
+                    pickKey(key);
+                  } else {
+                    ctx.onSubscriptionSelect?.(
+                      key?.id ?? `connect-subscription-${kind}`,
+                    );
+                    ctx.close();
+                  }
+                }}
+              />
+            ))}
+          </CommandGroup>
+        )}
         {scope === "key" &&
-          data.keySections.map((s) => (
+          apiKeySections.map((s) => (
             <CommandGroup
               key={s.provider}
               heading={s.label}
@@ -582,18 +660,31 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
               ))}
             </CommandGroup>
           ))}
-        {scope === "key" && (
-          <ExitRow
-            value="action:manage-keys"
-            icon={<SettingsIcon />}
-            label="Manage provider keys"
-            onSelect={() => {
-              ctx.close();
-              router.push("/llm/model-providers");
-            }}
-          />
-        )}
       </CommandList>
+      {(scope === "key" || scope === "agent") && (
+        <div className="flex shrink-0 items-center justify-between border-t px-1.5 py-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onKeyDown={keepKeysFromCmdk}
+            onClick={() => {
+              ctx.close();
+              router.push(
+                scope === "key"
+                  ? "/llm/model-providers"
+                  : agentListHref("agent"),
+              );
+            }}
+          >
+            {scope === "key" ? <SettingsIcon /> : <UsersRoundIcon />}
+            <span>
+              {scope === "key" ? "Manage provider keys" : "All agents"}
+            </span>
+            <ExternalLinkIcon />
+          </Button>
+        </div>
+      )}
     </Command>
   );
 }
@@ -615,14 +706,14 @@ const PLURAL: Record<Scope, string> = {
 const PLACEHOLDER: Record<Scope, string> = {
   model: "Search models…",
   agent: "Search agents…",
-  key: "Search keys…",
+  key: "Search subscriptions & keys…",
 };
 
 const GROUP =
-  "p-0 [&:not(:first-child)]:mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-1.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted-foreground";
+  "p-0 [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground";
 
 const ITEM =
-  "relative isolate h-8 gap-2 rounded-md px-2 py-0 text-sm transition-colors duration-100 motion-reduce:transition-none";
+  "relative min-h-10 cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors duration-100 motion-reduce:transition-none";
 
 function ModelRow({
   model,
@@ -643,14 +734,30 @@ function ModelRow({
       data-testid={getChatModelOptionTestId(model.id)}
       keywords={keywords}
       onSelect={onSelect}
-      className={cn(ITEM, "h-auto min-h-11 items-start py-1")}
+      className={cn(ITEM, "min-h-11")}
     >
-      <Selected on={selected} />
+      <span
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center rounded-md",
+          selected ? "bg-emerald-500/10 dark:bg-emerald-400/10" : "bg-muted",
+        )}
+      >
+        {selected ? (
+          <CheckIcon
+            role="img"
+            aria-label="Current"
+            className="size-4 text-emerald-600 dark:text-emerald-400"
+          />
+        ) : (
+          <ModelSelectorLogo
+            provider={logoNameForProvider(model.provider)}
+            className="size-3.5"
+          />
+        )}
+      </span>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-5 min-w-0 items-center gap-2">
-          <span
-            className={cn("min-w-0 flex-1 truncate", selected && "font-medium")}
-          >
+          <span className="min-w-0 flex-1 truncate font-medium">
             {model.displayName}
           </span>
           {capabilities.length > 0 && (
@@ -754,13 +861,17 @@ function AgentRow({
       onSelect={onSelect}
       className={ITEM}
     >
-      <AgentIcon icon={agent.icon} size={16} className="shrink-0" />
-      <span
-        className={cn("min-w-0 flex-1 truncate", selected && "font-medium")}
-      >
-        {agent.name}
-      </span>
-      <Meta>{meta}</Meta>
+      <PickerIcon selected={selected}>
+        <AgentIcon icon={agent.icon} size={14} />
+      </PickerIcon>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{agent.name}</div>
+        {(meta || agent.description) && (
+          <div className="truncate text-xs text-muted-foreground">
+            {meta ?? agent.description}
+          </div>
+        )}
+      </div>
       <Selected on={selected} />
     </CommandItem>
   );
@@ -785,16 +896,16 @@ function KeyRow({
       data-testid={getChatApiKeySelectorOptionTestId(apiKey.id)}
       keywords={keywords}
       onSelect={onSelect}
-      className={cn(ITEM, "h-auto min-h-11 py-1")}
+      className={cn(ITEM, "min-h-11")}
     >
-      <ModelSelectorLogo
-        provider={logoNameForProvider(apiKey.provider)}
-        className="size-4 shrink-0"
-      />
+      <PickerIcon selected={selected}>
+        <ModelSelectorLogo
+          provider={logoNameForProvider(apiKey.provider)}
+          className="size-3.5"
+        />
+      </PickerIcon>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className={cn("truncate", selected && "font-medium")}>
-          {apiKey.name}
-        </span>
+        <span className="truncate font-medium">{apiKey.name}</span>
         <span className="truncate text-xs leading-4 text-muted-foreground">
           {apiKey.requiresReauthentication ? (
             <span className="text-amber-600 dark:text-amber-400">
@@ -810,32 +921,6 @@ function KeyRow({
   );
 }
 
-function ExitRow({
-  value,
-  icon,
-  label,
-  onSelect,
-}: {
-  value: string;
-  icon: ReactNode;
-  label: string;
-  onSelect: () => void;
-}) {
-  return (
-    <CommandGroup className={cn(GROUP, "mt-1 border-t pt-1")}>
-      <CommandItem
-        value={value}
-        keywords={[label]}
-        onSelect={onSelect}
-        className={cn(ITEM, "text-muted-foreground")}
-      >
-        {icon}
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-      </CommandItem>
-    </CommandGroup>
-  );
-}
-
 function Meta({ children }: { children: ReactNode }) {
   if (children === null || children === undefined || children === "")
     return null;
@@ -846,17 +931,64 @@ function Meta({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * The current choice: a bar on the row's leading edge, under its content, so
- * trailing icons and labels keep their place.
- */
+function SubscriptionRow({
+  kind,
+  apiKey,
+  selected,
+  onSelect,
+}: {
+  kind: SubscriptionCredentialKind;
+  apiKey?: LlmProviderApiKey;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const spec = SUBSCRIPTION_CREDENTIALS[kind];
+  const status = subscriptionStatus(apiKey);
+  return (
+    <CommandItem
+      value={apiKey ? keyValue(apiKey.id) : `connect-subscription-${kind}`}
+      keywords={subscriptionKeywords(kind, apiKey)}
+      onSelect={onSelect}
+      className={ITEM}
+    >
+      <PickerIcon selected={selected}>
+        <SubscriptionBrandIcon kind={kind} provider={spec.provider} />
+      </PickerIcon>
+      <span className="min-w-0 flex-1 truncate font-medium">
+        {apiKey?.name ?? spec.label}
+      </span>
+      <Meta>{status}</Meta>
+      <Selected on={selected} />
+    </CommandItem>
+  );
+}
+
+function PickerIcon({
+  selected,
+  children,
+}: {
+  selected: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-md",
+        selected ? "bg-primary/10 ring-1 ring-primary/20" : "bg-muted",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 function Selected({ on }: { on: boolean }) {
   if (!on) return null;
   return (
-    <span
+    <CheckIcon
       role="img"
       aria-label="Current"
-      className="absolute inset-y-0 left-0 -z-10 w-[3px] rounded-l-md bg-primary/80"
+      className="size-3.5 shrink-0 text-primary"
     />
   );
 }
@@ -1017,6 +1149,26 @@ function centerIn(list: HTMLElement, el: Element) {
   const l = list.getBoundingClientRect();
   const r = el.getBoundingClientRect();
   list.scrollTop += r.top - l.top - (l.height - r.height) / 2;
+}
+
+function subscriptionStatus(key?: LlmProviderApiKey) {
+  return key?.requiresReauthentication
+    ? "Reconnect"
+    : key
+      ? "Connected"
+      : "Connect";
+}
+
+function subscriptionKeywords(
+  kind: SubscriptionCredentialKind,
+  key?: LlmProviderApiKey,
+) {
+  return [
+    SUBSCRIPTION_CREDENTIALS[kind].label,
+    key?.name ?? "",
+    "subscription",
+    subscriptionStatus(key),
+  ];
 }
 
 function score(keywords: string[], search: string) {

@@ -1,16 +1,13 @@
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
+import type { FastifyInstance } from "fastify";
 import { vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import {
   type LlmProxyPlugin,
   registerLlmProxyPlugin,
 } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import type { Agent } from "@/types";
 import {
   bedrockAdapterFactory,
@@ -30,12 +27,11 @@ const BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0";
 describe("LLM proxy buffered model response streaming", () => {
   let app: FastifyInstance;
   let agent: Agent;
+  let passthroughToken: string;
   let unregister: (() => void) | undefined;
 
-  beforeEach(async ({ makeAgent }) => {
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    app = createFastifyInstance();
     await app.register(openAiProxyRoutes);
     await app.register(bedrockProxyRoutes);
     app.post("/test/responses/:agentId", async (request, reply) =>
@@ -49,6 +45,12 @@ describe("LLM proxy buffered model response streaming", () => {
       ),
     );
     agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     for (const [provider, modelId] of [
       ["openai", "gpt-4o"],
       ["bedrock", BEDROCK_MODEL],
@@ -95,6 +97,7 @@ describe("LLM proxy buffered model response streaming", () => {
       url: `/v1/openai/${agent.id}/chat/completions`,
       headers: {
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": passthroughToken,
         "content-type": "application/json",
       },
       payload: {
@@ -193,6 +196,7 @@ describe("LLM proxy buffered model response streaming", () => {
         url: `/v1/bedrock/${agent.id}/converse-stream`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: {
@@ -253,6 +257,7 @@ describe("LLM proxy buffered model response streaming", () => {
         url: `/test/responses/${agent.id}`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "content-type": "application/json",
         },
         payload: { model: "gpt-4o", input: "hello", stream: true },

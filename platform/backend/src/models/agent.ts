@@ -2387,25 +2387,22 @@ class AgentModel {
         agentAudienceIs(filters.scope),
         eq(schema.agentsTable.builtIn, false),
       );
-    } else if (!includeBuiltIn) {
-      // Chat selection keeps the system assistant visible to every member; the
-      // platform's other built-in agents stay hidden.
-      if (chatAssistant) {
-        whereConditions.push(
-          or(
-            eq(schema.agentsTable.builtIn, false),
-            eq(
-              sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
-              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-            ),
-          ) as SQL,
-        );
-      } else {
-        whereConditions.push(eq(schema.agentsTable.builtIn, false));
-      }
     }
-    if (!isAgentAdmin && !chatAssistant) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    // Chat selection keeps the system assistant visible to every member; the
+    // platform's other built-in agents stay hidden. Non-admins get the same
+    // limit whatever scope they ask for.
+    if (!isAgentAdmin || (!includeBuiltIn && !filters?.scope)) {
+      whereConditions.push(
+        chatAssistant
+          ? (or(
+              eq(schema.agentsTable.builtIn, false),
+              eq(
+                sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+                BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+              ),
+            ) as SQL)
+          : eq(schema.agentsTable.builtIn, false),
+      );
     }
     if (filters?.teamIds?.length) {
       whereConditions.push(agentGrantsReadToAnyTeam(filters.teamIds));
@@ -2502,10 +2499,18 @@ class AgentModel {
     const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
     if (userId && restrictToAccessible) {
       whereConditions.push(
-        inArray(
-          schema.agentsTable.id,
-          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
-        ),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Apply the accessible-ID predicate directly to avoid a roster self-join.
+        and(
+          notDeleted(schema.agentsTable),
+          or(
+            explicitAgentReadCondition(principals),
+            organizationLlmProxyCondition(userId),
+          ),
+        ) as SQL,
+        // SPDX-SnippetEnd
       );
     }
 
@@ -2970,6 +2975,7 @@ class AgentModel {
      */
     environmentId: string | null;
     lookups?: PrincipalSource;
+    includeDetails?: boolean;
   }): Promise<
     Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
   > {
@@ -2989,11 +2995,17 @@ class AgentModel {
 
     if (isAdmin) {
       return db
-        .selectDistinct({
+        .select({
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
-          description: schema.agentsTable.description,
-          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+          description:
+            params.includeDetails === false
+              ? sql<string | null>`NULL`
+              : schema.agentsTable.description,
+          builtInAgentConfig:
+            params.includeDetails === false
+              ? sql<Agent["builtInAgentConfig"]>`NULL`
+              : schema.agentsTable.builtInAgentConfig,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -3008,8 +3020,14 @@ class AgentModel {
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
-        description: schema.agentsTable.description,
-        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+        description:
+          params.includeDetails === false
+            ? sql<string | null>`NULL`
+            : schema.agentsTable.description,
+        builtInAgentConfig:
+          params.includeDetails === false
+            ? sql<Agent["builtInAgentConfig"]>`NULL`
+            : schema.agentsTable.builtInAgentConfig,
       })
       .from(schema.agentsTable)
       .where(

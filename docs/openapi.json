@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.49"
+    "version": "1.4.0-rc.50"
   },
   "components": {
     "schemas": {
@@ -122148,6 +122148,9 @@
                         "allowChatFileUploads": {
                           "type": "boolean"
                         },
+                        "allowUnauthenticatedLlmProxyRequests": {
+                          "type": "boolean"
+                        },
                         "allowToolAutoAssignment": {
                           "type": "boolean"
                         },
@@ -122713,6 +122716,7 @@
                         "onlineSkillCatalogEnabled",
                         "skillMarketplaceAnonymousAccess",
                         "allowChatFileUploads",
+                        "allowUnauthenticatedLlmProxyRequests",
                         "allowToolAutoAssignment",
                         "embeddingModel",
                         "embeddingDimensions",
@@ -178294,6 +178298,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -178851,6 +178856,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -180012,6 +180018,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -180689,6 +180696,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -181366,6 +181374,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -182043,6 +182052,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -182720,6 +182730,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -183277,6 +183288,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -183834,6 +183846,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -186445,6 +186458,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -189792,6 +189806,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -190349,6 +190364,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -190906,6 +190922,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -191463,6 +191480,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -192020,6 +192038,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -192577,6 +192596,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -193134,6 +193154,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -193691,6 +193712,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -194248,6 +194270,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -194805,6 +194828,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -195362,6 +195386,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -195919,6 +195944,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -196476,6 +196502,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -199435,6 +199462,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -202389,6 +202417,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -205348,6 +205377,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -205905,6 +205935,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -206698,6 +206729,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -207677,6 +207709,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -208656,6 +208689,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -209626,6 +209660,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -211283,6 +211318,7 @@
                                 "jwks",
                                 "oauth_client_credentials",
                                 "oauth_user",
+                                "personal_token",
                                 "internal",
                                 "unknown"
                               ]
@@ -212699,6 +212735,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -213256,6 +213293,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -214417,6 +214455,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -215094,6 +215133,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -215771,6 +215811,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -216448,6 +216489,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -217125,6 +217167,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -217682,6 +217725,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -218239,6 +218283,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -220850,6 +220895,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -224197,6 +224243,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -224754,6 +224801,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -225311,6 +225359,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -225868,6 +225917,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -226425,6 +226475,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -226982,6 +227033,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -227539,6 +227591,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -228096,6 +228149,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -228653,6 +228707,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -229210,6 +229265,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -229767,6 +229823,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -230324,6 +230381,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -230881,6 +230939,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -233840,6 +233899,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -236794,6 +236854,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -239753,6 +239814,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -240310,6 +240372,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -241103,6 +241166,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -242082,6 +242146,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -243061,6 +243126,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -244031,6 +244097,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -302138,7 +302205,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Delete an LLM provider API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Delete an LLM provider API key. Virtual API keys and OAuth clients that mapped only this key are deleted with it; those that also map other provider keys keep those. Knowledge base settings that used the key are cleared.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -302931,7 +302998,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Delete several LLM provider API keys in one request. Keys outside the caller's organization, protected system keys, and keys that are still in use are reported in `failed` while the remaining keys are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Delete several LLM provider API keys in one request. Keys outside the caller's organization and protected system keys are reported in `failed` while the remaining keys are deleted. Virtual API keys and OAuth clients that mapped only a deleted key are deleted with it; those that also map other provider keys keep those. Knowledge base settings that used a deleted key are cleared.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -359335,6 +359402,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -359900,6 +359970,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -360481,6 +360552,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -361046,6 +361120,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -361753,6 +361828,9 @@
                   "allowChatFileUploads": {
                     "type": "boolean"
                   },
+                  "allowUnauthenticatedLlmProxyRequests": {
+                    "type": "boolean"
+                  },
                   "newAppsDisabledByDefault": {
                     "type": "boolean"
                   },
@@ -361863,6 +361941,9 @@
                       "type": "boolean"
                     },
                     "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
                     "allowToolAutoAssignment": {
@@ -362430,6 +362511,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -362863,6 +362945,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -363428,6 +363513,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -363861,6 +363947,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -364426,6 +364515,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -364871,6 +364961,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -365436,6 +365529,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -366000,6 +366094,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -366565,6 +366662,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -367113,6 +367211,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -367678,6 +367779,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -368181,6 +368283,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -368746,6 +368851,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -369193,6 +369299,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -369758,6 +369867,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -370236,6 +370346,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -370801,6 +370914,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -371216,6 +371330,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -371781,6 +371898,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -373400,6 +373518,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -373965,6 +374086,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -375506,284 +375628,6 @@
         "x-required-permissions": {
           "kind": "dynamic",
           "note": "All authenticated callers may search visible member identities. member:read returns the organization roster; other callers receive only teammates in the active organization.",
-          "permissions": []
-        }
-      }
-    },
-    "/api/organization/members": {
-      "get": {
-        "operationId": "getOrganizationMembers",
-        "tags": [
-          "Organization"
-        ],
-        "description": "List organization members visible to the caller. Callers with the member:read permission (admins and equivalent custom roles) receive the full organization roster; other authenticated users receive only the members they share a team with.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "email": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "name",
-                      "email"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
           "permissions": []
         }
       }
@@ -426102,6 +425946,7 @@
                 "jwks",
                 "oauth_client_credentials",
                 "oauth_user",
+                "personal_token",
                 "internal",
                 "unknown"
               ]
@@ -426254,6 +426099,7 @@
                               "jwks",
                               "oauth_client_credentials",
                               "oauth_user",
+                              "personal_token",
                               "internal",
                               "unknown"
                             ]
@@ -426303,6 +426149,7 @@
                               "jwks",
                               "oauth_client_credentials",
                               "oauth_user",
+                              "personal_token",
                               "internal",
                               "unknown"
                             ]
@@ -432832,7 +432679,16 @@
             "in": "query",
             "name": "includeRelations",
             "required": false,
-            "description": "Include team members, labels and descendant teams (default true). Disable for metadata-only pickers."
+            "description": "Include team members, labels and descendant teams (default true). Set to false to get only the team fields and memberCount."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeMembers",
+            "required": false,
+            "description": "Include the members array of each team (default true). Set to false to get labels and descendant teams without members. Use memberCount for the number of members."
           },
           {
             "schema": {
@@ -432997,6 +432853,11 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "memberCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -433009,7 +432870,8 @@
                           "createdBy",
                           "createdByServiceAccountId",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "memberCount"
                         ],
                         "additionalProperties": false
                       }
@@ -433782,8 +433644,17 @@
         "tags": [
           "Teams"
         ],
-        "description": "Get a team by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "description": "Get a team by ID, with the caller's role in it as myRole when they are a member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeMembers",
+            "required": false,
+            "description": "Include the team's members array (default true). Set to false for a large team when only its details are needed; page through members with GET /api/teams/{id}/members/page."
+          },
           {
             "schema": {
               "type": "string"
@@ -435675,6 +435546,419 @@
                     "role",
                     "syncedFromSso",
                     "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "team:read"
+          ]
+        }
+      }
+    },
+    "/api/teams/{id}/members/page": {
+      "get": {
+        "operationId": "getTeamMembersPage",
+        "tags": [
+          "Teams"
+        ],
+        "description": "Get one page of a team's members, ordered by name, with optional search\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "parameters": [
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Search by user name or email. Every whitespace-separated word must appear in the name or the email."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "userIds",
+            "required": false,
+            "description": "Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "teamId": {
+                            "type": "string"
+                          },
+                          "userId": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "syncedFromSso": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "name": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "image": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "teamId",
+                          "userId",
+                          "role",
+                          "syncedFromSso",
+                          "createdAt",
+                          "name",
+                          "email",
+                          "image"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
                   ],
                   "additionalProperties": false
                 }
@@ -439597,39 +439881,102 @@
         "tags": [
           "User"
         ],
-        "description": "List users in the caller's organization that admins can impersonate (role debugger)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:impersonate`: Temporarily sign in as another member to see the app with their access (role debugging)",
+        "description": "Search users in the caller's organization that admins can impersonate (role debugger) in bounded pages. The caller is excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:impersonate`: Temporarily sign in as another member to see the app with their access (role debugging)",
+        "parameters": [
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Matches name or email"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "email": {
-                        "type": "string"
-                      },
-                      "role": {
-                        "nullable": true,
-                        "type": "string"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email",
+                          "role"
+                        ],
+                        "additionalProperties": false
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "email",
-                      "role"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "limit",
+                        "nextCursor",
+                        "hasNext"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

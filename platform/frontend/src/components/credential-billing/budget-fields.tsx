@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, DocsPage, getDocsUrl } from "@archestra/shared";
 import { Info } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useLimits } from "@/lib/limits.query";
 import { useMyTeams, useTeams } from "@/lib/teams/team.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
@@ -482,23 +482,20 @@ function LegendItem({
  */
 function useBillableTeams(currentTeamId: string | null) {
   const { data: isCostManager } = useHasPermissions({ llmLimit: ["update"] });
-  const { data: session } = useSession();
-  const userId = session?.user?.id;
-  const { data: allTeams = [] } = useTeams({ enabled: !!isCostManager });
+  const { data: allTeams = [] } = useTeams({
+    includeRelations: false,
+    enabled: !!isCostManager,
+  });
   const { data: myTeams = [] } = useMyTeams({ enabled: !isCostManager });
   return useMemo(() => {
     const candidates = isCostManager
       ? allTeams
       : myTeams.filter(
           (team) =>
-            team.id === currentTeamId ||
-            !team.members ||
-            team.members.some(
-              (member) => member.userId === userId && member.role === "admin",
-            ),
+            team.id === currentTeamId || team.myRole === ADMIN_ROLE_NAME,
         );
     return [...candidates].sort((a, b) => a.name.localeCompare(b.name));
-  }, [allTeams, currentTeamId, isCostManager, myTeams, userId]);
+  }, [allTeams, currentTeamId, isCostManager, myTeams]);
 }
 
 const CAP_PERIODS: LimitCleanupInterval[] = [

@@ -30,6 +30,11 @@ export function useTeams(params?: {
   mine?: boolean;
   /** Omit members, labels and descendants when only team metadata is needed. */
   includeRelations?: boolean;
+  /**
+   * Omit member arrays but keep labels and descendants. Every row still has
+   * `memberCount`.
+   */
+  includeMembers?: boolean;
   /** Server-side name filter (case-insensitive substring match). */
   name?: string;
   /** Server-side label filter, serialized as `key:val1|val2;key2:val3`. */
@@ -43,6 +48,7 @@ export function useTeams(params?: {
       "teams",
       ...(mine ? ["mine"] : []),
       ...(params?.includeRelations === false ? ["metadata"] : []),
+      ...(params?.includeMembers === false ? ["without-members"] : []),
       ...(name || labels ? [{ name, labels }] : []),
     ],
     queryFn: async () => {
@@ -52,6 +58,9 @@ export function useTeams(params?: {
           offset: 0,
           ...(params?.includeRelations === false
             ? { includeRelations: false }
+            : {}),
+          ...(params?.includeMembers === false
+            ? { includeMembers: false }
             : {}),
           ...(mine ? { mine: true } : {}),
           ...(name ? { name } : {}),
@@ -67,12 +76,19 @@ export function useTeams(params?: {
   });
 }
 
+/**
+ * One team with its labels and the caller's `myRole`, without the member
+ * array: a large team's members are paged with `getTeamMembersPage`.
+ */
 export function useTeam(id: string | undefined) {
   return useQuery({
-    queryKey: ["teams", id],
+    queryKey: ["teams", id, "without-members"],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await getTeam({ path: { id } });
+      const { data, error } = await getTeam({
+        path: { id },
+        query: { includeMembers: false },
+      });
       throwOnApiError(error, { allowNotFound: true, toastOnError: false });
       return data ?? null;
     },
@@ -106,9 +122,16 @@ export function useTeamLabelValues(params?: { key?: string }) {
   });
 }
 
-/** The teams the current user is a member of. */
+/**
+ * The teams the current user is a member of, with `myRole` and `memberCount`
+ * but without members, labels or descendants.
+ */
 export function useMyTeams(params?: { enabled?: boolean }) {
-  return useTeams({ mine: true, enabled: params?.enabled });
+  return useTeams({
+    mine: true,
+    includeRelations: false,
+    enabled: params?.enabled,
+  });
 }
 
 /**

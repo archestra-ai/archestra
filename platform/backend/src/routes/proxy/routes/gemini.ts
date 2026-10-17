@@ -18,7 +18,10 @@ import {
   geminiAdapterFactory,
 } from "../adapters/gemini";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
-import { validateVirtualApiKey } from "../llm-proxy-auth";
+import {
+  createPassthroughAuthenticator,
+  validateVirtualApiKey,
+} from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { cleanForwardedBody } from "./proxy-prehandler";
 
@@ -314,24 +317,33 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default geminiProxyRoutes;
 
 function createGeminiProxyPreHandler() {
+  const authenticateGemini = createPassthroughAuthenticator("gemini");
   return async (request: FastifyRequest, reply: FastifyReply) => {
+    // A virtual key in ?key= is itself a platform credential. Any other
+    // request must pass the same platform check as every catch-all, before
+    // anything below reads the body or forwards it upstream.
+    if (!(await resolveGeminiVirtualQueryKey(request))) {
+      await authenticateGemini({
+        request,
+        agentId: (request.params as { agentId?: string } | undefined)?.agentId,
+      });
+    }
+
     const urlPath = request.url.split("?")[0];
     if (
       request.method === "POST" &&
       (urlPath.includes(":generateContent") ||
         urlPath.includes(":streamGenerateContent"))
     ) {
-      reply.code(400).send({
+      return reply.code(400).send({
         error: {
           code: 400,
           message: "generateContent requests should use the dedicated endpoint",
           status: "INVALID_ARGUMENT",
         },
       });
-      return;
     }
 
-    await resolveGeminiVirtualQueryKey(request);
     await cleanForwardedBody(request);
   };
 }
@@ -341,16 +353,21 @@ function createGeminiProxyPreHandler() {
  * Gemini uses ?key= for auth (unlike OpenAI which uses Authorization header).
  * If the key is a platform virtual key, resolve it
  * to the real provider API key and rewrite the URL. Real Gemini keys pass through unchanged.
+ *
+ * Returns true when a virtual key was resolved, i.e. the request presented a
+ * valid platform credential in the query.
  */
-async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
+async function resolveGeminiVirtualQueryKey(
+  request: FastifyRequest,
+): Promise<boolean> {
   const url = request.raw.url;
-  if (!url) return;
+  if (!url) return false;
 
   const keyMatch = url.match(/[?&]key=([^&]+)/);
-  if (!keyMatch) return;
+  if (!keyMatch) return false;
 
   const keyValue = keyMatch[1];
-  if (!hasArchestraTokenPrefix(keyValue)) return;
+  if (!hasArchestraTokenPrefix(keyValue)) return false;
 
   try {
     const resolved = await validateVirtualApiKey({
@@ -358,7 +375,7 @@ async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
       expectedProvider: "gemini",
       expectedOrganizationId: null,
     });
-    if (!resolved.apiKey) return;
+    if (!resolved.apiKey) return false;
 
     request.raw.url = url.replace(`key=${keyValue}`, `key=${resolved.apiKey}`);
 
@@ -366,6 +383,7 @@ async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
       { method: request.method, url: request.url },
       "Gemini proxy: resolved virtual API key in query parameter",
     );
+    return true;
   } catch (error) {
     logger.warn(
       { error, method: request.method, url: request.url },

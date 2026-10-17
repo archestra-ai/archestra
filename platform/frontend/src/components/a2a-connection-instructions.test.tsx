@@ -24,10 +24,7 @@ vi.mock("@/components/mcp-oauth-management", () => ({
   ),
 }));
 
-type Agent = Omit<
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
-  "pinnedAt"
->;
+type Agent = archestraApiTypes.GetAgentResponses["200"];
 
 /** These tests read rendered markup, not query state, so a stub is enough. */
 const stubQuery = <T,>(value: T) => value as never;

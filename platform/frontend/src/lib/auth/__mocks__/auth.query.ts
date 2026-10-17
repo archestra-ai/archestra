@@ -12,7 +12,6 @@ const actual = await vi.importActual<typeof import("@/lib/auth/auth.query")>(
 
 export const authQueryKeys = actual.authQueryKeys;
 export const useSession = vi.fn();
-export const useCurrentOrgMembers = vi.fn();
 export const useHasPermissions = vi.fn();
 export const useHasPagePermissions = useHasPermissions;
 const emptyCapabilities = { data: [], isPending: false, isLoading: false };

@@ -23,7 +23,7 @@ const {
   mockUseMyAgentRuns,
   mockUseAgentOptions,
   mockUseInternalMcpCatalog,
-  mockUseSkillsList,
+  mockUseSkillsPaginated,
   mockUseApps,
   mockUseProjects,
   mockUseKnowledgeBases,
@@ -37,7 +37,7 @@ const {
   mockUseMyAgentRuns: vi.fn(),
   mockUseAgentOptions: vi.fn(),
   mockUseInternalMcpCatalog: vi.fn(),
-  mockUseSkillsList: vi.fn(),
+  mockUseSkillsPaginated: vi.fn(),
   mockUseApps: vi.fn(),
   mockUseProjects: vi.fn(),
   mockUseKnowledgeBases: vi.fn(),
@@ -46,45 +46,12 @@ const {
   mockUseTeams: vi.fn(),
 }));
 
-// Legacy behavior fixtures remain local; real HTTP paging is covered by the
-// remote-selector integration suite.
+// The server applies the search; a disabled query has no rows, like the real
+// hook's.
 vi.mock("@/lib/agent-options.query", () => ({
-  useAgentOptionsByIds: (params: unknown) => mockUseAgentOptions(params),
-  useAgentOptionIds: () => ({
-    data: (mockUseAgentOptions({}).data ?? []).map(
-      (row: { id: string }) => row.id,
-    ),
-    isSuccess: true,
-  }),
-  useAgentOptionsPage: (params: { search?: string }) => {
-    const result = mockUseAgentOptions(params);
-    const search = params.search?.trim().toLowerCase() ?? "";
-    const rows = (result.data ?? []).filter(
-      (row: {
-        name?: string;
-        description?: string | null;
-        authorEmail?: string | null;
-      }) =>
-        !search ||
-        [row.name, row.description, row.authorEmail].some((value) =>
-          value?.toLowerCase().includes(search),
-        ),
-    );
-    return {
-      data: {
-        pages: [
-          { data: rows, pagination: { hasNext: false, nextCursor: null } },
-        ],
-      },
-      isSuccess: true,
-      isLoading: false,
-      isPending: false,
-      isError: false,
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-      refetch: vi.fn(),
-    };
+  useAgentOptionsPage: (params: { enabled?: boolean }) => {
+    const rows = params.enabled ? (mockUseAgentOptions(params).data ?? []) : [];
+    return { data: { pages: [{ data: rows }] } };
   },
 }));
 
@@ -145,20 +112,15 @@ vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/agent.query", () => ({
-  useAgentOptions: mockUseAgentOptions,
-}));
-
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: mockUseInternalMcpCatalog,
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({
-  useSkillsList: mockUseSkillsList,
+  useSkillsPaginated: mockUseSkillsPaginated,
 }));
 
 vi.mock("@/lib/app.query", () => ({
-  APPS_FIRST_PAGE: { limit: 100, offset: 0 },
   useApps: mockUseApps,
 }));
 
@@ -332,7 +294,7 @@ describe("ConversationSearchPalette", () => {
     });
     mockUseAgentOptions.mockReturnValue({ data: [] });
     mockUseInternalMcpCatalog.mockReturnValue({ data: [] });
-    mockUseSkillsList.mockReturnValue({ data: [] });
+    mockUseSkillsPaginated.mockReturnValue({ data: { data: [] } });
     mockUseApps.mockReturnValue({ data: { data: [] } });
     mockUseProjects.mockReturnValue({ data: [] });
     mockUseKnowledgeBases.mockReturnValue({ data: [] });
@@ -639,21 +601,32 @@ describe("ConversationSearchPalette", () => {
       target: { value: "does-not-match" },
     });
     expect(screen.queryByText("Nightly report run")).not.toBeInTheDocument();
-    expect(screen.getByText("No chats or pages found.")).toBeInTheDocument();
+    expect(screen.getByText("No results found.")).toBeInTheDocument();
   });
 
   describe("searching by name", () => {
-    it("finds an agent by its name and opens it", () => {
+    const search = (value: string) =>
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value },
+      });
+
+    it("finds an internal agent by its name and opens it", () => {
       mockUseAgentOptions.mockReturnValue({
         data: [{ id: "agent-1", name: "Support Triage" }],
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      fireEvent.change(screen.getByTestId("command-input"), {
-        target: { value: "triage" },
-      });
+      search("triage");
 
+      // The Agents group links to /agents/<id>, which only opens internal
+      // agents, so gateways and proxies must not be requested.
+      expect(mockUseAgentOptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ agentType: "agent" }),
+        }),
+      );
       expect(screen.getByText("Agents")).toBeInTheDocument();
+      expect(screen.queryByText("No results found.")).not.toBeInTheDocument();
       fireEvent.click(screen.getByText("Support Triage"));
       expect(mockRouterPush).toHaveBeenCalledWith("/agents/agent-1");
     });
@@ -664,9 +637,7 @@ describe("ConversationSearchPalette", () => {
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      fireEvent.change(screen.getByTestId("command-input"), {
-        target: { value: "github" },
-      });
+      search("github");
 
       expect(screen.getByText("MCP Servers")).toBeInTheDocument();
       fireEvent.click(screen.getByText("GitHub MCP"));
@@ -674,46 +645,41 @@ describe("ConversationSearchPalette", () => {
     });
 
     it("finds a skill through the server search and opens it", () => {
-      mockUseSkillsList.mockReturnValue({
-        data: [{ id: "skill-1", name: "Invoice Parser" }],
+      mockUseSkillsPaginated.mockReturnValue({
+        data: { data: [{ id: "skill-1", name: "Invoice Parser" }] },
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      fireEvent.change(screen.getByTestId("command-input"), {
-        target: { value: "invoice" },
-      });
+      search("invoice");
 
-      expect(mockUseSkillsList).toHaveBeenLastCalledWith(
-        { search: "invoice" },
-        expect.objectContaining({ enabled: true }),
-      );
       fireEvent.click(screen.getByText("Invoice Parser"));
       expect(mockRouterPush).toHaveBeenCalledWith("/skills/skill-1");
     });
 
-    it("finds an app through the server search and opens it on the Apps page", () => {
+    it("does not list the previous search's rows while the new one loads", () => {
       mockUseApps.mockReturnValue({
         data: {
-          data: [
-            {
-              source: "owned",
-              id: "app-1",
-              name: "Expense Tracker",
-            },
-          ],
+          data: [{ source: "owned", id: "app-1", name: "Expense Tracker" }],
+        },
+        isPlaceholderData: true,
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      search("weather");
+
+      expect(screen.queryByText("Expense Tracker")).not.toBeInTheDocument();
+    });
+
+    it("finds an app and opens the Apps page filtered to it", () => {
+      mockUseApps.mockReturnValue({
+        data: {
+          data: [{ source: "owned", id: "app-1", name: "Expense Tracker" }],
         },
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      fireEvent.change(screen.getByTestId("command-input"), {
-        target: { value: "expense" },
-      });
+      search("expense");
 
-      expect(mockUseApps).toHaveBeenLastCalledWith(
-        expect.objectContaining({ search: "expense" }),
-        expect.objectContaining({ enabled: true }),
-      );
-      expect(screen.getByText("Apps")).toBeInTheDocument();
       fireEvent.click(screen.getByText("Expense Tracker"));
       expect(mockRouterPush).toHaveBeenCalledWith(
         "/apps?search=Expense%20Tracker",
@@ -726,11 +692,8 @@ describe("ConversationSearchPalette", () => {
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      fireEvent.change(screen.getByTestId("command-input"), {
-        target: { value: "quarterly" },
-      });
+      search("quarterly");
 
-      expect(screen.getByText("Projects")).toBeInTheDocument();
       fireEvent.click(screen.getByText("Quarterly Review"));
       expect(mockRouterPush).toHaveBeenCalledWith("/projects/proj-1");
     });
@@ -741,58 +704,94 @@ describe("ConversationSearchPalette", () => {
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      fireEvent.change(screen.getByTestId("command-input"), {
-        target: { value: "jira" },
-      });
+      search("jira");
 
       fireEvent.click(screen.getByText("Jira Helper"));
       expect(mockRouterPush).toHaveBeenCalledWith("/plugins/plug-1");
     });
 
+    it("keeps each group short so chat matches stay in view", () => {
+      mockUseInternalMcpCatalog.mockReturnValue({
+        data: Array.from({ length: 8 }, (_, index) => ({
+          id: `cat-${index}`,
+          name: `GitHub MCP ${index}`,
+        })),
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      search("github");
+
+      expect(screen.getAllByText(/^GitHub MCP \d$/)).toHaveLength(5);
+    });
+
     it("finds a settings tab by its label and by its path", () => {
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      fireEvent.change(screen.getByTestId("command-input"), {
-        target: { value: "service accounts" },
-      });
+      search("service accounts");
 
       expect(screen.getByText("Settings")).toBeInTheDocument();
       fireEvent.click(screen.getByText("Service Accounts"));
       expect(mockRouterPush).toHaveBeenCalledWith("/settings/service-accounts");
     });
 
-    it("does not offer agents the reader may not read", () => {
-      vi.mocked(useHasPermissions).mockImplementation(
-        (permissions) =>
-          ({
-            data: !("agent" in permissions),
-            isPending: false,
-            isLoading: false,
-          }) as ReturnType<typeof useHasPermissions>,
+    it("does not offer agents when the reader may not open the Agents page", () => {
+      vi.mocked(usePermissionMap).mockReturnValue(
+        Object.fromEntries(
+          Object.keys(requiredPagePermissionsMap).map((url) => [
+            url,
+            url !== "/agents",
+          ]),
+        ),
       );
       mockUseAgentOptions.mockReturnValue({
         data: [{ id: "agent-1", name: "Support Triage" }],
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      expect(mockUseAgentOptions).toHaveBeenLastCalledWith(
-        expect.objectContaining({ enabled: false }),
-      );
+      search("triage");
+
+      expect(screen.queryByText("Support Triage")).not.toBeInTheDocument();
     });
 
-    it("does not report nothing found when an agent matches", () => {
-      mockUseAgentOptions.mockReturnValue({
-        data: [{ id: "agent-1", name: "Support Triage" }],
-      });
+    it.each([
+      { role: "member", offered: false },
+      { role: "admin", offered: true },
+    ] as const)("offers teams only to a reader who can see the Settings area: $role", ({
+      role,
+      offered,
+    }) => {
+      // The member baseline can read teams but has no Settings area, so the
+      // Teams page would send them away.
+      vi.mocked(usePermissionMap).mockImplementation((map) =>
+        Object.fromEntries(
+          Object.entries(map).map(([key, required]) => [
+            key,
+            hasPagePermissions({
+              userPermissions: predefinedPermissionsMap[role],
+              required,
+              capabilities: [],
+            }),
+          ]),
+        ),
+      );
+      mockUseTeams.mockImplementation(({ enabled }: { enabled: boolean }) => ({
+        data: enabled ? [{ id: "team-1", name: "Platform team" }] : [],
+      }));
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      fireEvent.change(screen.getByTestId("command-input"), {
-        target: { value: "triage" },
-      });
+      search("team");
 
-      expect(
-        screen.queryByText("No chats or pages found."),
-      ).not.toBeInTheDocument();
+      if (offered) {
+        expect(screen.getByText("Platform team")).toBeInTheDocument();
+        expect(
+          screen.getByTestId("cmd-item-settings-/settings/teams"),
+        ).toBeInTheDocument();
+      } else {
+        expect(screen.queryByText("Platform team")).not.toBeInTheDocument();
+        expect(
+          screen.queryByTestId("cmd-item-settings-/settings/teams"),
+        ).not.toBeInTheDocument();
+      }
     });
   });
 
@@ -972,7 +971,7 @@ describe("ConversationSearchPalette", () => {
       target: { value: "nothing-matches-this" },
     });
 
-    expect(screen.getByText("No chats or pages found.")).toBeInTheDocument();
+    expect(screen.getByText("No results found.")).toBeInTheDocument();
   });
 
   it("does not show the recent chats empty state in the full search palette", () => {

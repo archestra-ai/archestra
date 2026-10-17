@@ -12,14 +12,10 @@
  * direct call to a tool the client never declared is re-addressed through the
  * `run_tool` the client can route.
  */
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
+import type { FastifyInstance } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import {
@@ -28,6 +24,7 @@ import {
   createOpenAiTestClient,
   type OpenAiStubOptions,
 } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import type { Agent } from "@/types";
 import {
   anthropicAdapterFactory,
@@ -131,79 +128,86 @@ describe("LLM Proxy tool-call routing for gateway-connected clients", () => {
   let responsesRequests: unknown[];
   let proxyAgent: Agent;
   let gatewayId: string;
+  let passthroughToken: string;
 
-  beforeEach(async ({ makeAgent, makeTool, makeAgentTool }) => {
-    archestraMcpBranding.syncFromOrganization(null);
+  beforeEach(
+    async ({ makeAgent, makeMember, makeUser, makeTool, makeAgentTool }) => {
+      archestraMcpBranding.syncFromOrganization(null);
 
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-    await app.register(anthropicProxyRoutes);
-    await app.register(openAiProxyRoutes);
-    await app.register(azureProxyRoutes);
+      app = createFastifyInstance();
+      await app.register(anthropicProxyRoutes);
+      await app.register(openAiProxyRoutes);
+      await app.register(azureProxyRoutes);
 
-    anthropicStubOptions = {};
-    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
-      () => createAnthropicTestClient(anthropicStubOptions) as never,
-    );
-    openAiStubOptions = {};
-    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
-      () => createOpenAiTestClient(openAiStubOptions) as never,
-    );
-    responsesOutput = [];
-    responsesRequests = [];
-    for (const factory of [
-      openAiResponsesAdapterFactory,
-      azureResponsesAdapterFactory,
-    ]) {
-      vi.spyOn(factory, "createClient").mockImplementation(
-        () =>
-          ({
-            responses: {
-              create: async (params: { stream?: boolean }) => {
-                responsesRequests.push(structuredClone(params));
-                return params.stream
-                  ? responsesStream(responsesOutput)
-                  : responsesEnvelope(responsesOutput);
-              },
-            },
-          }) as never,
+      anthropicStubOptions = {};
+      vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+        () => createAnthropicTestClient(anthropicStubOptions) as never,
       );
-    }
+      openAiStubOptions = {};
+      vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+        () => createOpenAiTestClient(openAiStubOptions) as never,
+      );
+      responsesOutput = [];
+      responsesRequests = [];
+      for (const factory of [
+        openAiResponsesAdapterFactory,
+        azureResponsesAdapterFactory,
+      ]) {
+        vi.spyOn(factory, "createClient").mockImplementation(
+          () =>
+            ({
+              responses: {
+                create: async (params: { stream?: boolean }) => {
+                  responsesRequests.push(structuredClone(params));
+                  return params.stream
+                    ? responsesStream(responsesOutput)
+                    : responsesEnvelope(responsesOutput);
+                },
+              },
+            }) as never,
+        );
+      }
 
-    await ModelModel.upsert({
-      externalId: "anthropic/claude-3-5-sonnet-20241022",
-      provider: "anthropic",
-      modelId: "claude-3-5-sonnet-20241022",
-      inputModalities: null,
-      outputModalities: null,
-      customPricePerMillionInput: "3.00",
-      customPricePerMillionOutput: "15.00",
-      lastSyncedAt: new Date(),
-    });
-    await ModelModel.upsert({
-      externalId: "openai/gpt-4o",
-      provider: "openai",
-      modelId: "gpt-4o",
-      inputModalities: null,
-      outputModalities: null,
-      lastSyncedAt: new Date(),
-    });
+      await ModelModel.upsert({
+        externalId: "anthropic/claude-3-5-sonnet-20241022",
+        provider: "anthropic",
+        modelId: "claude-3-5-sonnet-20241022",
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "3.00",
+        customPricePerMillionOutput: "15.00",
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.upsert({
+        externalId: "openai/gpt-4o",
+        provider: "openai",
+        modelId: "gpt-4o",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
 
-    proxyAgent = await makeAgent({ name: "Gateway Client Proxy Agent" });
-    // The gateway whose client server name anchors compat resolution, and
-    // whose attestations the attested connection carries.
-    gatewayId = (
-      await makeAgent({
+      proxyAgent = await makeAgent({ name: "Gateway Client Proxy Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, proxyAgent.organizationId);
+      passthroughToken = await makePassthroughCredential({
         organizationId: proxyAgent.organizationId,
-        agentType: "mcp_gateway",
-        name: GATEWAY_NAME,
-      })
-    ).id;
+        ownerId: owner.id,
+      });
+      // The gateway whose client server name anchors compat resolution, and
+      // whose attestations the attested connection carries.
+      gatewayId = (
+        await makeAgent({
+          organizationId: proxyAgent.organizationId,
+          agentType: "mcp_gateway",
+          name: GATEWAY_NAME,
+        })
+      ).id;
 
-    const githubTool = await makeTool({ name: GITHUB_ISSUE_WRITE });
-    await makeAgentTool(proxyAgent.id, githubTool.id);
-  });
+      const githubTool = await makeTool({ name: GITHUB_ISSUE_WRITE });
+      await makeAgentTool(proxyAgent.id, githubTool.id);
+    },
+  );
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -269,6 +273,7 @@ describe("LLM Proxy tool-call routing for gateway-connected clients", () => {
       headers: {
         "content-type": "application/json",
         "x-api-key": "test-key",
+        "x-archestra-virtual-key": passthroughToken,
         "anthropic-version": "2023-06-01",
       },
       payload: {
@@ -290,6 +295,7 @@ describe("LLM Proxy tool-call routing for gateway-connected clients", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer sk-test",
+        "x-archestra-virtual-key": passthroughToken,
         "user-agent": "opencode/1.18.31",
       },
       payload: {
@@ -493,6 +499,7 @@ describe("LLM Proxy tool-call routing for gateway-connected clients", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer sk-test",
+          "x-archestra-virtual-key": passthroughToken,
           originator: "codex_exec",
         },
         payload: {
@@ -611,6 +618,7 @@ describe("LLM Proxy tool-call routing for gateway-connected clients", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer sk-test",
+          "x-archestra-virtual-key": passthroughToken,
           originator: "codex_exec",
         },
         payload: {

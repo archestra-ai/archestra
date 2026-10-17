@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  ArrowRight,
-  CornerDownRight,
-  MessageSquareText,
-  X,
-} from "lucide-react";
+import { ArrowRight, CornerDownRight, MessageSquareText } from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -22,11 +17,14 @@ import {
 } from "@/app/llm/logs/_parts/logs-table-format";
 import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpToolCallStatusIcon } from "@/components/mcp-tool-call-status";
 import { Kbd } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TablePagination } from "@/components/ui/table-pagination";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
+import {
+  MCP_TOOL_CALL_STATUS_LABELS,
+  readMcpToolCall,
+} from "@/lib/mcp-logs/tool-call-content";
 import type { McpServerDisplay } from "@/lib/mcp-logs/use-mcp-server-display";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
@@ -40,6 +38,7 @@ import {
   type TimelineSpan,
   type ToolCallSpan,
 } from "./session-timeline";
+import { StatusBarPagination } from "./status-bar-pagination";
 
 export type RequestsPagination = {
   pageIndex: number;
@@ -57,6 +56,11 @@ export type RequestsPagination = {
  * and the MCP tool calls they issued, on one shared time axis, with idle
  * stretches folded, the selection marked on the axis, and a status bar with
  * this page's totals and the pagination.
+ *
+ * The MCP tool call page reuses it for a short excerpt around one call: it
+ * names the card, replaces the status bar, and keeps the page where it is.
+ * When every row is a tool call there are no model, token or cost figures to
+ * show, so the columns become server and duration instead.
  */
 export function RequestWaterfall({
   timeline,
@@ -72,6 +76,12 @@ export function RequestWaterfall({
   totalRequests,
   notice,
   action,
+  title = "Requests",
+  countLabel,
+  hideEmptyKinds = false,
+  status,
+  emptyMessage = "No requests recorded for this session yet.",
+  revealHighlighted = true,
 }: {
   timeline: Timeline | null;
   loading: boolean;
@@ -94,11 +104,29 @@ export function RequestWaterfall({
   notice?: ReactNode;
   /** The card's own control (Export JSON), placed beside the title. */
   action: ReactNode;
+  title?: string;
+  /** Replaces the "1–50 of 203" beside the title. */
+  countLabel?: string;
+  /** List only the kinds present, for an excerpt too short to need the key. */
+  hideEmptyKinds?: boolean;
+  /** Replaces the status bar's totals and paging. */
+  status?: ReactNode;
+  emptyMessage?: string;
+  /**
+   * Scroll the page to the highlighted row once it appears. Off where the
+   * list sits mid-page and moving the page would pull the reader away.
+   */
+  revealHighlighted?: boolean;
 }) {
   const spans = timeline?.spans ?? [];
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const scrollerRef = useRef<HTMLDivElement>(null);
   const selected = spans.find((span) => span.key === selectedKey) ?? null;
+  const layout: Layout =
+    spans.length > 0 && spans.every((span) => span.type === "tool")
+      ? "tools"
+      : "trace";
+  const grid = GRIDS[layout];
 
   const kindCounts = useMemo(() => {
     const counts: Record<SpanKind, number> = {
@@ -135,7 +163,12 @@ export function RequestWaterfall({
 
   const revealedKey = useRef<string | null>(null);
   useEffect(() => {
-    if (!highlightedKey || revealedKey.current === highlightedKey) return;
+    if (
+      !revealHighlighted ||
+      !highlightedKey ||
+      revealedKey.current === highlightedKey
+    )
+      return;
     const row = rowRefs.current.get(highlightedKey);
     if (!row) return;
     revealedKey.current = highlightedKey;
@@ -177,45 +210,57 @@ export function RequestWaterfall({
 
   return (
     <div>
-      <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b px-4 py-2.5">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-sm font-semibold">Requests</h2>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {pagination
-              ? `${(pagination.offset + 1).toLocaleString()}–${Math.min(
-                  pagination.offset + pagination.pageSize,
-                  pagination.total,
-                ).toLocaleString()} of ${pagination.total.toLocaleString()}`
-              : `${totalRequests.toLocaleString()} total`}
-          </span>
+      {/* Phones: the title, the count and the action on one line, the
+          legend on one line below. Wide: one row, the legend and the action
+          at the right end. */}
+      <header className="flex flex-col gap-1.5 border-b px-4 py-2.5 lg:flex-row lg:items-center lg:gap-x-6">
+        <div className="flex min-w-0 items-center gap-2 lg:contents">
+          <div className="flex min-w-0 flex-1 items-baseline gap-2 lg:flex-none">
+            <h2 className="shrink-0 text-sm font-semibold">{title}</h2>
+            <span className="truncate text-xs text-muted-foreground tabular-nums">
+              {countLabel ??
+                (pagination
+                  ? `${(pagination.offset + 1).toLocaleString()}–${Math.min(
+                      pagination.offset + pagination.pageSize,
+                      pagination.total,
+                    ).toLocaleString()} of ${pagination.total.toLocaleString()}`
+                  : `${totalRequests.toLocaleString()} total`)}
+            </span>
+          </div>
+          {action ? (
+            <div className="-my-1 shrink-0 lg:order-last">{action}</div>
+          ) : null}
         </div>
-        {/* Phones: the action ends the title line and the legend gets a
-            line of its own. Wide: the legend and the action share the right
-            end. */}
-        <div className="order-2 ml-auto lg:order-4 lg:ml-0">{action}</div>
-        <div className="order-3 flex w-full flex-wrap items-center gap-x-5 gap-y-1 lg:ml-auto lg:w-auto">
+        <div className="flex min-w-0 items-center gap-x-5 lg:ml-auto">
           <ul
             aria-label="Request kinds"
-            className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
+            className="flex min-w-0 items-center gap-x-4 overflow-hidden text-xs whitespace-nowrap text-muted-foreground lg:flex-wrap lg:gap-y-1"
           >
-            {(Object.keys(SPAN_KINDS) as SpanKind[]).map((kind) => (
-              <li
-                key={kind}
-                className={cn(
-                  "inline-flex items-center gap-1.5",
-                  kindCounts[kind] === 0 && "opacity-40",
-                )}
-              >
-                <span
-                  className={cn("h-2 w-3 rounded-[2px]", SPAN_KINDS[kind].bar)}
-                  aria-hidden="true"
-                />
-                <span>{SPAN_KINDS[kind].label}</span>
-                <span className="text-muted-foreground/70 tabular-nums">
-                  {kindCounts[kind]}
-                </span>
-              </li>
-            ))}
+            {(Object.keys(SPAN_KINDS) as SpanKind[])
+              .filter((kind) => !hideEmptyKinds || kindCounts[kind] > 0)
+              .map((kind) => (
+                <li
+                  key={kind}
+                  className={cn(
+                    "inline-flex items-center gap-1.5",
+                    // An empty kind is a key to the colours; phones have no
+                    // room for it.
+                    kindCounts[kind] === 0 && "opacity-40 max-lg:hidden",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-2 w-3 rounded-[2px]",
+                      SPAN_KINDS[kind].bar,
+                    )}
+                    aria-hidden="true"
+                  />
+                  <span>{SPAN_KINDS[kind].label}</span>
+                  <span className="text-muted-foreground/70 tabular-nums">
+                    {kindCounts[kind]}
+                  </span>
+                </li>
+              ))}
           </ul>
           <span className="hidden items-center gap-1 text-[11px] text-muted-foreground xl:inline-flex">
             <Kbd>↑</Kbd>
@@ -236,12 +281,15 @@ export function RequestWaterfall({
           {/* Column header and axis */}
           <div
             className={cn(
-              "sticky top-0 z-20 grid h-8 border-b bg-muted text-[11px] text-muted-foreground",
-              GRID,
+              // Sticks within the list's own scroll box, above the markers.
+              "sticky top-0 z-[15] grid h-8 border-b bg-muted text-[11px] text-muted-foreground",
+              grid,
             )}
           >
             <div className="flex items-center pl-4">Name</div>
-            <div className={cn(WIDE_ONLY, "items-center px-2")}>Model</div>
+            <div className={cn(WIDE_ONLY, "items-center px-2")}>
+              {layout === "tools" ? "Server" : "Model"}
+            </div>
             <div className={cn(WIDE_ONLY, "items-center px-2")}>Time</div>
             <div className="relative mx-2 lg:mx-3">
               {/* A phone's track is too narrow for tick labels. */}
@@ -281,17 +329,21 @@ export function RequestWaterfall({
                 </span>
               ))}
             </div>
-            <div className={cn(WIDE_ONLY, "items-center justify-end px-3")}>
-              Tokens
+            {layout === "trace" ? (
+              <div className={cn(WIDE_ONLY, "items-center justify-end px-3")}>
+                Tokens
+              </div>
+            ) : null}
+            <div className="flex items-center justify-end pr-4">
+              {layout === "tools" ? "Duration" : "Cost"}
             </div>
-            <div className="flex items-center justify-end pr-4">Cost</div>
           </div>
 
           {loading ? (
-            <WaterfallSkeleton />
+            <WaterfallSkeleton layout={layout} />
           ) : !timeline || spans.length === 0 ? (
             <p className="px-4 py-12 text-center text-sm text-muted-foreground">
-              No requests recorded for this session yet.
+              {emptyMessage}
             </p>
           ) : (
             <div className="relative">
@@ -301,7 +353,7 @@ export function RequestWaterfall({
                 aria-hidden="true"
                 className={cn(
                   "pointer-events-none absolute inset-0 grid",
-                  GRID,
+                  grid,
                 )}
               >
                 <div />
@@ -337,7 +389,9 @@ export function RequestWaterfall({
                     </>
                   ) : null}
                 </div>
-                <div className="hidden lg:block" />
+                {layout === "trace" ? (
+                  <div className="hidden lg:block" />
+                ) : null}
                 <div />
               </div>
 
@@ -348,6 +402,7 @@ export function RequestWaterfall({
               >
                 {spans.map((span) => {
                   const rowProps = {
+                    layout,
                     selected: span.key === selectedKey,
                     highlighted: span.key === highlightedKey,
                     buttonRef: (el: HTMLButtonElement | null) => {
@@ -381,25 +436,13 @@ export function RequestWaterfall({
       </div>
 
       {/* Status bar */}
-      <div className="border-t bg-muted/40 px-4 py-1.5">
-        {pagination && pagination.total > pagination.pageSize ? (
-          <TablePagination
-            pageIndex={pagination.pageIndex}
-            pageSize={pagination.pageSize}
-            total={pagination.total}
-            onPaginationChange={pagination.onPaginationChange}
-            leftContent={
-              <StatusText
-                requests={spans.length - kindCounts.tool}
-                toolCalls={kindCounts.tool}
-                tokens={pageTotals.tokens}
-                billed={pageTotals.billed}
-                timeline={timeline}
-              />
-            }
-          />
+      <div className="flex h-11 items-center justify-between gap-3 overflow-hidden border-t bg-muted/40 px-4 text-xs whitespace-nowrap text-muted-foreground tabular-nums lg:h-[45px]">
+        {status ? (
+          <span className="flex min-w-0 items-center gap-x-3 overflow-hidden lg:gap-x-2">
+            {status}
+          </span>
         ) : (
-          <div className="flex h-8 items-center text-muted-foreground">
+          <>
             <StatusText
               requests={spans.length - kindCounts.tool}
               toolCalls={kindCounts.tool}
@@ -407,7 +450,15 @@ export function RequestWaterfall({
               billed={pageTotals.billed}
               timeline={timeline}
             />
-          </div>
+            {pagination && pagination.total > pagination.pageSize ? (
+              <StatusBarPagination
+                pageIndex={pagination.pageIndex}
+                pageSize={pagination.pageSize}
+                total={pagination.total}
+                onPaginationChange={pagination.onPaginationChange}
+              />
+            ) : null}
+          </>
         )}
       </div>
     </div>
@@ -427,14 +478,37 @@ export function KindChip({ kind }: { kind: SpanKind }) {
   );
 }
 
+/**
+ * A logged MCP call's chip: "Tool" for a tool call, "Method" for the
+ * protocol's own requests (`initialize`, `tools/list`), which run no tool.
+ */
+export function McpCallChip({ method }: { method: string }) {
+  if (method === "tools/call") return <KindChip kind="tool" />;
+  return (
+    <span className="shrink-0 rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium text-muted-foreground">
+      Method
+    </span>
+  );
+}
+
 // ============================================================================
 // Internal helpers
 // ============================================================================
 
-// Phones keep Name, a compact track and Cost; the Model, Time and Tokens
-// cells are display:none there, so they take no grid track.
-const GRID =
-  "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(190px,1.25fr)_148px_64px_minmax(260px,2.6fr)_108px_84px]";
+/**
+ * "trace": Name, Model, Time, track, Tokens, Cost. "tools", when every row is
+ * a tool call: Name, Server, Time, track, Duration.
+ */
+type Layout = "trace" | "tools";
+
+// Phones keep Name, a compact track and the last figure; the Model/Server,
+// Time and Tokens cells are display:none there, so they take no grid track.
+const GRIDS: Record<Layout, string> = {
+  trace:
+    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(190px,1.25fr)_148px_64px_minmax(260px,2.6fr)_108px_84px]",
+  tools:
+    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(190px,1.25fr)_148px_64px_minmax(260px,2.6fr)_84px]",
+};
 const WIDE_ONLY = "hidden lg:flex";
 /** The sticky column header, which a row scrolled to the top must clear. */
 const COLUMN_HEADER_PX = 32;
@@ -451,6 +525,17 @@ function scrollWithin(scroller: HTMLElement, row: HTMLElement) {
   }
 }
 
+/**
+ * Where a row's duration label goes: after its bar, before it when the bar
+ * runs to the end, or on the bar's end when it spans the whole track.
+ */
+function placeLatency(
+  span: Pick<TimelineSpan, "x" | "w">,
+): "after" | "before" | "inside" {
+  if (span.x + span.w <= 0.84) return "after";
+  return span.x >= 0.18 ? "before" : "inside";
+}
+
 function StatusText({
   requests,
   toolCalls,
@@ -464,8 +549,9 @@ function StatusText({
   billed: number;
   timeline: Timeline | null;
 }) {
-  // Phones keep the three figures that matter (the session's span is already
-  // in the facts strip); separators only exist where it is all one line.
+  // Phones keep the request count and the bill beside the paging (tokens
+  // and the span are in the facts card); separators only exist where it is
+  // all one line.
   const parts: { key: string; text: ReactNode; wideOnly?: boolean }[] = [
     {
       key: "count",
@@ -493,6 +579,7 @@ function StatusText({
     {
       key: "tokens",
       text: <span>{formatCompactNumber(tokens)} tokens</span>,
+      wideOnly: true,
     },
     { key: "billed", text: <span>{formatUsageCost(billed)} billed</span> },
   ];
@@ -516,7 +603,7 @@ function StatusText({
     });
   }
   return (
-    <span className="flex items-center gap-x-3 text-xs whitespace-nowrap tabular-nums lg:gap-x-2">
+    <span className="flex min-w-0 items-center gap-x-3 overflow-hidden lg:gap-x-2">
       {parts.map((part, index) => (
         <span
           key={part.key}
@@ -539,6 +626,7 @@ function StatusText({
 }
 
 type RowProps = {
+  layout: Layout;
   selected: boolean;
   highlighted: boolean;
   buttonRef: (el: HTMLButtonElement | null) => void;
@@ -550,6 +638,7 @@ type RowProps = {
 function RowShell({
   span,
   label,
+  layout,
   selected,
   highlighted,
   buttonRef,
@@ -574,7 +663,9 @@ function RowShell({
   cost: ReactNode;
 }) {
   const style = SPAN_KINDS[span.kind];
-  const nearEnd = span.x + span.w > 0.84;
+  const grid = GRIDS[layout];
+  const tools = layout === "tools";
+  const latencyPlacement = placeLatency(span);
   return (
     <li>
       <UnstyledButton
@@ -586,7 +677,7 @@ function RowShell({
         aria-label={label}
         className={cn(
           "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/50 text-left text-xs outline-none lg:h-8",
-          GRID,
+          grid,
           selected
             ? "bg-primary/[0.07] shadow-[inset_2px_0_0_var(--color-primary)]"
             : "hover:bg-muted/50",
@@ -610,7 +701,10 @@ function RowShell({
             <span className="flex min-w-0 items-center gap-2">{name}</span>
             <span className="flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground tabular-nums lg:hidden">
               {detail}
-              <span className="shrink-0">&nbsp;· {latency?.text ?? "—"}</span>
+              {/* The tools layout's last column is the duration already. */}
+              <span className="shrink-0">
+                &nbsp;· {tools ? time : (latency?.text ?? "—")}
+              </span>
             </span>
           </span>
         </span>
@@ -650,18 +744,25 @@ function RowShell({
               width: `max(5px, ${span.w * 100}%)`,
             }}
           />
-          {latency ? (
+          {latency && !tools ? (
             <span
               role="img"
               aria-label={latency.label}
               className={cn(
                 "pointer-events-none absolute top-1/2 hidden -translate-y-1/2 text-[11px] whitespace-nowrap tabular-nums lg:block",
                 selected ? "text-foreground" : "text-muted-foreground",
+                // A bar that fills the track leaves no room on either side,
+                // so the label sits on its end instead of spilling into the
+                // Time column.
+                latencyPlacement === "inside" &&
+                  "rounded-sm bg-card/90 px-1 leading-4",
               )}
               style={
-                nearEnd
-                  ? { right: `calc(${(1 - span.x) * 100}% + 6px)` }
-                  : { left: `calc(${(span.x + span.w) * 100}% + 8px)` }
+                latencyPlacement === "after"
+                  ? { left: `calc(${(span.x + span.w) * 100}% + 8px)` }
+                  : latencyPlacement === "before"
+                    ? { right: `calc(${(1 - span.x) * 100}% + 6px)` }
+                    : { right: "2px" }
               }
             >
               {latency.text}
@@ -670,18 +771,26 @@ function RowShell({
         </span>
 
         {/* Tokens */}
-        <span
-          className={cn(
-            WIDE_ONLY,
-            "items-center justify-end gap-1 px-3 text-muted-foreground tabular-nums",
-          )}
-        >
-          {tokens}
-        </span>
+        {tools ? null : (
+          <span
+            className={cn(
+              WIDE_ONLY,
+              "items-center justify-end gap-1 px-3 text-muted-foreground tabular-nums",
+            )}
+          >
+            {tokens}
+          </span>
+        )}
 
-        {/* Cost */}
+        {/* Cost, or a tool call's duration */}
         <span className="flex items-center justify-end gap-1.5 pr-4 tabular-nums">
-          {cost}
+          {tools ? (
+            <span className={cn(!selected && "text-muted-foreground")}>
+              {latency?.text ?? "—"}
+            </span>
+          ) : (
+            cost
+          )}
         </span>
       </UnstyledButton>
     </li>
@@ -801,25 +910,28 @@ function ToolCallRow({
   const name = content.toolName ?? content.method;
   const server = display?.name ?? call.mcpServerName;
   const latency = formatLatency(call.durationMs);
-  const failed = content.status === "error";
+  const { status } = content;
+  const marked =
+    status === "error" || status === "blocked" || status === "cancelled";
+  const outcome =
+    status === "error"
+      ? ", failed"
+      : marked
+        ? `, ${MCP_TOOL_CALL_STATUS_LABELS[status].toLowerCase()}`
+        : "";
 
   return (
     <RowShell
       span={span}
       {...rowProps}
-      label={`Tool call ${name} on ${server}, ${latency}${failed ? ", failed" : ""}`}
+      label={`${content.method === "tools/call" ? "Tool call" : "Method"} ${name} on ${server}, ${latency}${outcome}`}
       name={
         <>
           <span className="truncate font-mono text-[12px] font-medium">
             {name}
           </span>
-          <KindChip kind="tool" />
-          {failed ? (
-            <X
-              className="size-3.5 shrink-0 text-destructive"
-              aria-hidden="true"
-            />
-          ) : null}
+          <McpCallChip method={content.method} />
+          {marked ? <McpToolCallStatusIcon status={status} /> : null}
         </>
       }
       detail={
@@ -855,7 +967,7 @@ const SKELETON_PLACEMENTS = [
   [83, 17],
 ];
 
-function WaterfallSkeleton() {
+function WaterfallSkeleton({ layout }: { layout: Layout }) {
   return (
     <div>
       {SKELETON_PLACEMENTS.map(([x, w]) => (
@@ -863,7 +975,7 @@ function WaterfallSkeleton() {
           key={x}
           className={cn(
             "grid h-11 items-center border-b border-border/50 lg:h-8",
-            GRID,
+            GRIDS[layout],
           )}
         >
           <div className="min-w-0 px-4">
@@ -881,9 +993,11 @@ function WaterfallSkeleton() {
               style={{ left: `${x}%`, width: `${w}%` }}
             />
           </div>
-          <div className="hidden justify-end px-3 lg:flex">
-            <Skeleton className="h-3 w-14" />
-          </div>
+          {layout === "trace" ? (
+            <div className="hidden justify-end px-3 lg:flex">
+              <Skeleton className="h-3 w-14" />
+            </div>
+          ) : null}
           <div className="flex justify-end pr-4">
             <Skeleton className="h-3 w-10" />
           </div>

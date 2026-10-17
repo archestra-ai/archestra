@@ -3,7 +3,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { GitBranch, GitFork, Sparkles } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
   describeModelOrigin,
   formatCompactNumber,
@@ -24,6 +24,11 @@ import {
 } from "@/components/log-detail/facts-strip";
 import { SourceIcon } from "@/components/source-badge";
 import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -31,6 +36,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
+import { cn } from "@/lib/utils/tailwind";
 import type { InteractionSummary } from "./session-timeline";
 
 export type SessionTotals = {
@@ -50,7 +56,12 @@ export type SessionLineage = {
   forksTruncated: boolean;
 };
 
-/** Started, Requests, Tokens, Cost and Models as one hairline strip. */
+/**
+ * Started, Requests, Tokens, Cost and Models as one tight facts card. With
+ * OpenAPPA on, the trajectory identity it bound (the session id, what bound
+ * it, each origin that wrote to it, and its fork lineage) is a thin second
+ * row of the same card.
+ */
 export function SessionFacts({
   totals,
   totalRequests,
@@ -60,6 +71,7 @@ export function SessionFacts({
   lastRequest,
   fallbackType,
   providerLabel,
+  trajectory,
 }: {
   totals: SessionTotals;
   totalRequests: number;
@@ -72,6 +84,11 @@ export function SessionFacts({
   fallbackType: string | null;
   /** The organization's name for a provider. */
   providerLabel: (provider: SupportedProvider) => string;
+  /** Present when OpenAPPA is on; the second row shows only then. */
+  trajectory: {
+    session: LogSession | undefined;
+    lineage: SessionLineage | undefined;
+  } | null;
 }) {
   const cost = Number(totals.cost ?? 0);
   const subscription = Number(totals.subscriptionCost ?? 0);
@@ -93,6 +110,8 @@ export function SessionFacts({
     firstRequest && lastRequest
       ? new Date(lastRequest).getTime() - new Date(firstRequest).getTime()
       : null;
+  const ran =
+    wallClock != null && wallClock > 0 ? formatElapsed(wallClock) : null;
 
   const durations = rows
     .map((row) => row.durationMs)
@@ -107,7 +126,7 @@ export function SessionFacts({
   const slowestMs =
     durations.length > 0 ? durations[durations.length - 1] : null;
 
-  const modelEntries = models.map((id) => {
+  const modelEntries = models.map((id): ModelEntry => {
     const origin = describeModelOrigin({
       model: id,
       interactionType: fallbackType,
@@ -122,30 +141,18 @@ export function SessionFacts({
           : origin.name,
     };
   });
-  const shownModels = modelEntries.slice(0, 3);
-  const hiddenModels = modelEntries.slice(3);
+  const identity = trajectory ? readTrajectory(trajectory) : null;
 
   return (
-    <FactsStrip label="Session facts">
+    <FactsStrip
+      label="Session facts"
+      footerLabel="Trajectory"
+      footer={identity ? <TrajectoryRow t={identity} /> : null}
+    >
       <Fact label="Started">
-        {firstRequest ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <UnstyledButton className="block cursor-default text-left">
-                <FactValue>
-                  {formatDate({
-                    date: firstRequest,
-                    dateFormat: "MMM d, HH:mm",
-                  })}
-                </FactValue>
-                <FactSub>
-                  {wallClock != null && wallClock > 0
-                    ? `ran ${formatElapsed(wallClock)}`
-                    : "single request"}
-                </FactSub>
-              </UnstyledButton>
-            </TooltipTrigger>
-            <TooltipContent className="px-2 py-1.5">
+        <FactTip
+          tip={
+            firstRequest ? (
               <TooltipFigures
                 rows={[
                   ["First request", formatDate({ date: firstRequest })],
@@ -157,63 +164,51 @@ export function SessionFacts({
                         ] as const,
                       ]
                     : []),
+                  ...(ran ? [["Ran for", ran] as const] : []),
                 ]}
               />
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          <FactValue muted>—</FactValue>
-        )}
+            ) : null
+          }
+        >
+          <FactValue muted={!firstRequest}>
+            {firstRequest
+              ? formatDate({ date: firstRequest, dateFormat: "MMM d, HH:mm" })
+              : "—"}
+          </FactValue>
+          <FactSub>{ran ? `ran ${ran}` : "single request"}</FactSub>
+        </FactTip>
       </Fact>
 
       <Fact label="Requests">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <UnstyledButton className="block cursor-default text-left">
-              <FactValue>{totalRequests.toLocaleString()}</FactValue>
-              <FactSub>
-                {averageMs != null
-                  ? `${formatLatency(Math.round(averageMs))} avg latency`
-                  : "no timings"}
-              </FactSub>
-            </UnstyledButton>
-          </TooltipTrigger>
-          {medianMs != null && slowestMs != null ? (
-            <TooltipContent className="px-2 py-1.5">
-              <TooltipFigures
-                rows={[
-                  ["Median", formatLatency(medianMs)],
-                  ["Slowest", formatLatency(slowestMs)],
-                ]}
-              />
-              <p className="pt-1 text-[11px] text-muted-foreground">
-                Across the {durations.length} timed requests on this page
-              </p>
-            </TooltipContent>
-          ) : null}
-        </Tooltip>
+        <FactTip
+          tip={
+            medianMs != null && slowestMs != null ? (
+              <>
+                <TooltipFigures
+                  rows={[
+                    ["Median", formatLatency(medianMs)],
+                    ["Slowest", formatLatency(slowestMs)],
+                  ]}
+                />
+                <p className="pt-1 text-[11px] text-muted-foreground">
+                  Across the {durations.length} timed requests on this page
+                </p>
+              </>
+            ) : null
+          }
+        >
+          <FactValue>{totalRequests.toLocaleString()}</FactValue>
+          <FactSub>
+            {averageMs != null
+              ? `${formatLatency(Math.round(averageMs))} avg latency`
+              : "no timings"}
+          </FactSub>
+        </FactTip>
       </Fact>
 
       <Fact label="Tokens">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <UnstyledButton className="block cursor-default text-left">
-              <FactValue>
-                <span>{formatCompactNumber(tokens)}</span>
-                {cached > 0 ? (
-                  <CacheMeter
-                    read={totals.cacheReadTokens}
-                    write={totals.cacheWriteTokens}
-                  />
-                ) : null}
-              </FactValue>
-              <FactSub>
-                {formatCompactNumber(totals.inputTokens)} in ·{" "}
-                {formatCompactNumber(totals.outputTokens)} out
-              </FactSub>
-            </UnstyledButton>
-          </TooltipTrigger>
-          <TooltipContent className="px-2 py-1.5">
+        <FactTip
+          tip={
             <TooltipFigures
               rows={[
                 ["Input", totals.inputTokens.toLocaleString()],
@@ -222,34 +217,36 @@ export function SessionFacts({
                 ["Cache write", totals.cacheWriteTokens.toLocaleString()],
               ]}
             />
-          </TooltipContent>
-        </Tooltip>
+          }
+        >
+          <FactValue>
+            <span>{formatCompactNumber(tokens)}</span>
+            {cached > 0 ? (
+              <CacheMeter
+                read={totals.cacheReadTokens}
+                write={totals.cacheWriteTokens}
+              />
+            ) : null}
+          </FactValue>
+          {/* Phones have no room for the cached figure beside the total, so
+              it takes the second line there; the split is in the tooltip. */}
+          <FactSub>
+            {cached > 0 ? (
+              <span className="lg:hidden">
+                {formatCompactNumber(cached)} cached
+              </span>
+            ) : null}
+            <span className={cn(cached > 0 && "max-lg:hidden")}>
+              {formatCompactNumber(totals.inputTokens)} in ·{" "}
+              {formatCompactNumber(totals.outputTokens)} out
+            </span>
+          </FactSub>
+        </FactTip>
       </Fact>
 
       <Fact label="Cost">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <UnstyledButton className="block cursor-default text-left">
-              <FactValue muted={onPlanOnly}>
-                {subscription > 0 ? <PlanTag /> : null}
-                <span>
-                  {totals.cost == null
-                    ? "—"
-                    : formatUsageCost(onPlanOnly ? subscription : billed)}
-                </span>
-              </FactValue>
-              <FactSub>
-                {onPlanOnly
-                  ? "list price · not billed"
-                  : subscription > 0
-                    ? `+ ${formatUsageCost(subscription)} on plan`
-                    : saved > 0
-                      ? `saved ${formatUsageCost(saved)}`
-                      : "metered"}
-              </FactSub>
-            </UnstyledButton>
-          </TooltipTrigger>
-          <TooltipContent className="px-2 py-1.5">
+        <FactTip
+          tip={
             <TooltipFigures
               rows={[
                 ["Billed", formatCost(billed)],
@@ -267,88 +264,60 @@ export function SessionFacts({
                   : []),
               ]}
             />
-          </TooltipContent>
-        </Tooltip>
+          }
+        >
+          <FactValue muted={onPlanOnly}>
+            {subscription > 0 ? <PlanTag /> : null}
+            <span>
+              {totals.cost == null
+                ? "—"
+                : formatUsageCost(onPlanOnly ? subscription : billed)}
+            </span>
+          </FactValue>
+          <FactSub>
+            {onPlanOnly
+              ? "list price · not billed"
+              : subscription > 0
+                ? `+ ${formatUsageCost(subscription)} on plan`
+                : saved > 0
+                  ? `saved ${formatUsageCost(saved)}`
+                  : "metered"}
+          </FactSub>
+        </FactTip>
       </Fact>
 
       <Fact
         label={modelEntries.length === 1 ? "Model" : "Models"}
-        className="col-span-2 max-lg:border-b-0 lg:flex-[2_1_260px]"
+        className="col-span-2 lg:flex-[2_1_240px]"
       >
         {modelEntries.length === 0 ? (
           <FactValue muted>—</FactValue>
         ) : (
-          <ul className="grid grid-cols-2 gap-x-4 gap-y-2.5 pt-0.5 lg:flex lg:flex-wrap lg:items-center lg:gap-x-3.5 lg:gap-y-1.5">
-            {shownModels.map((model) => (
-              <li key={model.id} className="max-lg:min-w-0">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <UnstyledButton className="flex cursor-default items-center gap-1.5 text-left lg:inline-flex">
-                      <MakerDisc
-                        provider={model.provider}
-                        vendor={model.vendor}
-                        ring={false}
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-sm leading-4 font-medium max-lg:truncate">
-                          {model.name}
-                        </span>
-                        <span className="block text-[11px] leading-4 text-muted-foreground max-lg:truncate">
-                          {model.vendor}
-                        </span>
-                      </span>
-                    </UnstyledButton>
-                  </TooltipTrigger>
-                  <TooltipContent className="font-mono text-[11px]">
-                    {model.id}
-                  </TooltipContent>
-                </Tooltip>
-              </li>
-            ))}
-            {hiddenModels.length > 0 ? (
-              <li className="max-lg:self-center">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <UnstyledButton
-                      aria-label={`${hiddenModels.length} more models`}
-                      className="cursor-default rounded-sm px-1 text-xs leading-5 text-muted-foreground tabular-nums ring-1 ring-border ring-inset hover:text-foreground"
-                    >
-                      +{hiddenModels.length}
-                    </UnstyledButton>
-                  </TooltipTrigger>
-                  <TooltipContent className="px-2 py-1.5">
-                    <ul className="space-y-1">
-                      {hiddenModels.map((model) => (
-                        <li key={model.id} className="flex items-center gap-2">
-                          <MakerDisc
-                            provider={model.provider}
-                            vendor={model.vendor}
-                            size={18}
-                            ring={false}
-                          />
-                          <span className="font-medium">{model.name}</span>
-                          <span className="font-mono text-[10px] text-muted-foreground">
-                            {model.id}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </TooltipContent>
-                </Tooltip>
-              </li>
-            ) : null}
-          </ul>
+          <ModelsFact models={modelEntries} />
         )}
       </Fact>
     </FactsStrip>
   );
 }
 
-/**
- * The trajectory identity OpenAPPA bound: the session id, what bound it,
- * each origin that wrote to it, and the sessions it forked from or into.
- */
-export function TrajectoryFacts({
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+type ModelEntry = {
+  id: string;
+  name: string;
+  provider: SupportedProvider | null;
+  vendor: string;
+};
+
+type Trajectory = NonNullable<ReturnType<typeof readTrajectory>>;
+
+/** Phones list up to three; wide shows two. The rest fold into the peek. */
+const PHONE_MODELS = 3;
+const WIDE_MODELS = 2;
+
+function readTrajectory({
   session,
   lineage,
 }: {
@@ -359,89 +328,292 @@ export function TrajectoryFacts({
   const origins = uniqueSources(session);
   if (origins.length === 0 && session.source) origins.push(session.source);
   const forks = lineage?.forks ?? [];
-  const hasLineage = Boolean(lineage?.forkedFrom) || forks.length > 0;
+  const forkedFrom = lineage?.forkedFrom ?? null;
   if (
     !session.sessionId &&
     !session.sessionSource &&
     origins.length === 0 &&
-    !hasLineage
+    !forkedFrom &&
+    forks.length === 0
   ) {
     return null;
   }
+  return {
+    sessionId: session.sessionId ?? null,
+    boundBy: session.sessionSource ?? null,
+    origins,
+    forkedFrom,
+    forks,
+    forksTruncated: Boolean(lineage?.forksTruncated),
+  };
+}
 
+/** A fact whose figures open in a tooltip; a plain block without one. */
+function FactTip({ tip, children }: { tip: ReactNode; children: ReactNode }) {
+  if (!tip) return <div>{children}</div>;
   return (
-    <section
-      aria-label="Trajectory"
-      className="flex flex-col gap-3 rounded-lg border border-dashed px-4 py-3 text-xs lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6 lg:gap-y-2 lg:py-2.5"
-    >
-      <span className="inline-flex items-center gap-1.5 font-medium text-muted-foreground">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton className="block w-full min-w-0 cursor-default text-left">
+          {children}
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="px-2 py-1.5">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ModelsFact({ models }: { models: ModelEntry[] }) {
+  const phoneHidden = models.length - PHONE_MODELS;
+  const wideHidden = models.length - WIDE_MODELS;
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 pt-0.5 lg:flex-row lg:items-center lg:gap-3 lg:pt-0">
+      {models.slice(0, PHONE_MODELS).map((model, index) => (
+        <Tooltip key={model.id}>
+          <TooltipTrigger asChild>
+            <UnstyledButton
+              className={cn(
+                "flex min-w-0 cursor-default items-center gap-1.5 text-left",
+                index >= WIDE_MODELS && "lg:hidden",
+              )}
+            >
+              <MakerDisc
+                provider={model.provider}
+                vendor={model.vendor}
+                size={18}
+                ring={false}
+              />
+              {/* Phones: name and maker on one line; wide: stacked. */}
+              <span className="flex min-w-0 items-baseline gap-1.5 lg:block">
+                <span className="block text-sm leading-5 font-medium whitespace-nowrap">
+                  {model.name}
+                </span>
+                <span className="block truncate text-xs leading-4 text-muted-foreground">
+                  {model.vendor}
+                </span>
+              </span>
+            </UnstyledButton>
+          </TooltipTrigger>
+          <TooltipContent className="font-mono text-[11px]">
+            {model.id}
+          </TooltipContent>
+        </Tooltip>
+      ))}
+      {phoneHidden > 0 ? (
+        <ModelsPeek
+          models={models}
+          label={`${phoneHidden} more models`}
+          className="self-start text-xs leading-5 text-muted-foreground hover:text-foreground lg:hidden"
+        >
+          +{phoneHidden} more
+        </ModelsPeek>
+      ) : null}
+      {wideHidden > 0 ? (
+        <ModelsPeek
+          models={models}
+          label={`${wideHidden} more models`}
+          className="hidden shrink-0 rounded-sm px-1 text-xs leading-5 text-muted-foreground tabular-nums ring-1 ring-border ring-inset hover:text-foreground lg:inline-block"
+        >
+          +{wideHidden}
+        </ModelsPeek>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Every model the session used, in a hover card. A tap toggles it too, so
+ * phones reach the list.
+ */
+function ModelsPeek({
+  models,
+  className,
+  label,
+  children,
+}: {
+  models: ModelEntry[];
+  className?: string;
+  label: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <HoverCard open={open} onOpenChange={setOpen} openDelay={120}>
+      <HoverCardTrigger asChild>
+        <UnstyledButton
+          aria-label={label}
+          onClick={() => setOpen((o) => !o)}
+          className={cn("cursor-default text-left", className)}
+        >
+          {children}
+        </UnstyledButton>
+      </HoverCardTrigger>
+      <HoverCardContent align="start" className="w-auto max-w-sm p-2">
+        <p className="px-1 pb-1.5 text-[11px] text-muted-foreground">
+          {models.length} {models.length === 1 ? "model" : "models"} in this
+          session
+        </p>
+        <ul className="space-y-1">
+          {models.map((model) => (
+            <li
+              key={model.id}
+              className="flex items-center gap-2 rounded-sm px-1 py-0.5"
+            >
+              <MakerDisc
+                provider={model.provider}
+                vendor={model.vendor}
+                size={20}
+                ring={false}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm leading-4 font-medium">
+                  {model.name}
+                  <span className="pl-1.5 text-[11px] font-normal text-muted-foreground">
+                    {model.vendor}
+                  </span>
+                </span>
+                <span className="block truncate font-mono text-[10px] leading-4 text-muted-foreground">
+                  {model.id}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+/**
+ * The trajectory identity. Wide: one line of small label/value pairs, the
+ * origins as icons named on hover. Phones: Session and Bound by side by side,
+ * then the origins as one line of icons and the lineage below.
+ */
+function TrajectoryRow({ t }: { t: Trajectory }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs lg:flex lg:flex-wrap lg:items-center lg:gap-x-4 lg:gap-y-1.5">
+      <span className="col-span-2 inline-flex items-center gap-1.5 font-medium text-muted-foreground">
         <Sparkles className="size-3.5" aria-hidden="true" />
         <span>Trajectory</span>
       </span>
-      {session.sessionId ? (
-        <TrajectoryFact label="Session">
-          <span className="min-w-0 font-mono break-all max-lg:py-1 max-lg:text-[11px] max-lg:leading-5">
-            {session.sessionId}
-          </span>
+      {t.sessionId ? (
+        <TrajectoryPair label="Session">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <UnstyledButton className="min-w-0 cursor-default truncate font-mono">
+                {shortId(t.sessionId)}
+              </UnstyledButton>
+            </TooltipTrigger>
+            <TooltipContent className="font-mono text-[11px]">
+              {t.sessionId}
+            </TooltipContent>
+          </Tooltip>
           <CopyButton
-            text={session.sessionId}
+            text={t.sessionId}
             size={12}
-            className="relative after:absolute after:-inset-1 after:content-[''] lg:after:hidden"
+            className="relative after:absolute after:-inset-1 after:content-['']"
           />
-        </TrajectoryFact>
+        </TrajectoryPair>
       ) : null}
-      {session.sessionSource ? (
-        <TrajectoryFact label="Bound by">
-          <span className="font-mono">{session.sessionSource}</span>
-        </TrajectoryFact>
+      {t.boundBy ? (
+        <TrajectoryPair label="Bound by">
+          <span className="truncate font-mono">{t.boundBy}</span>
+        </TrajectoryPair>
       ) : null}
-      {origins.length > 0 ? (
-        <TrajectoryFact label={origins.length === 1 ? "Origin" : "Origins"}>
-          <span className="flex flex-wrap gap-1">
-            {origins.map((origin) => (
-              <span
-                key={origin}
-                className="inline-flex h-5 items-center gap-1 rounded-sm bg-muted px-1.5 [&_svg]:size-3"
-              >
-                <SourceIcon source={origin} />
-                <span>{sourceLabel(origin)}</span>
-              </span>
+      {t.origins.length > 0 ? (
+        <TrajectoryPair
+          label={t.origins.length === 1 ? "Origin" : "Origins"}
+          className="col-span-2"
+        >
+          <span className="flex min-w-0 gap-1 overflow-x-auto">
+            {t.origins.map((origin) => (
+              <Tooltip key={origin}>
+                <TooltipTrigger asChild>
+                  <UnstyledButton
+                    aria-label={sourceLabel(origin)}
+                    className="inline-flex h-[18px] shrink-0 cursor-default items-center rounded-sm bg-muted px-1 [&_svg]:size-3"
+                  >
+                    <SourceIcon source={origin} />
+                  </UnstyledButton>
+                </TooltipTrigger>
+                <TooltipContent>{sourceLabel(origin)}</TooltipContent>
+              </Tooltip>
             ))}
           </span>
-        </TrajectoryFact>
+        </TrajectoryPair>
       ) : null}
-      {lineage?.forkedFrom ? (
-        <TrajectoryFact
+      {t.forkedFrom ? (
+        <TrajectoryPair
           label="Forked from"
           icon={<GitBranch className="size-3" aria-hidden="true" />}
+          className="col-span-2"
         >
-          <SessionLink sessionId={lineage.forkedFrom} />
-        </TrajectoryFact>
+          <SessionLink sessionId={t.forkedFrom} />
+        </TrajectoryPair>
       ) : null}
-      {forks.length > 0 ? (
-        <TrajectoryFact
-          label={forks.length === 1 ? "Fork" : "Forks"}
+      {t.forks.length > 0 ? (
+        <TrajectoryPair
+          label={t.forks.length === 1 ? "Fork" : "Forks"}
           icon={<GitFork className="size-3" aria-hidden="true" />}
+          className="col-span-2"
         >
-          <span className="flex flex-col gap-0.5">
-            {forks.map((fork) => (
+          <span className="flex min-w-0 flex-wrap gap-x-2">
+            {t.forks.map((fork) => (
               <SessionLink key={fork} sessionId={fork} />
             ))}
-            {lineage?.forksTruncated ? (
+            {t.forksTruncated ? (
               <span className="text-muted-foreground">
                 Additional forks not shown
               </span>
             ) : null}
           </span>
-        </TrajectoryFact>
+        </TrajectoryPair>
       ) : null}
-    </section>
+    </div>
   );
 }
 
-// ============================================================================
-// Internal helpers
-// ============================================================================
+function TrajectoryPair({
+  label,
+  icon,
+  className,
+  children,
+}: {
+  label: string;
+  icon?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <span className={cn("flex min-w-0 items-center gap-1.5", className)}>
+      <span className="inline-flex shrink-0 items-center gap-1 text-muted-foreground">
+        {icon}
+        <span>{label}</span>
+      </span>
+      <span className="flex min-w-0 items-center gap-1 text-foreground">
+        {children}
+      </span>
+    </span>
+  );
+}
+
+/** A link to another session's page, by its shortened id. */
+function SessionLink({ sessionId }: { sessionId: string }) {
+  return (
+    <Link
+      href={`/llm/logs/session/${encodeURIComponent(sessionId)}`}
+      aria-label={sessionId}
+      title={sessionId}
+      className="font-mono underline-offset-2 hover:underline"
+    >
+      {shortId(sessionId)}
+    </Link>
+  );
+}
+
+function shortId(id: string) {
+  return id.length > 13 ? `${id.slice(0, 8)}…` : id;
+}
 
 function TooltipFigures({
   rows,
@@ -467,7 +639,7 @@ function CacheMeter({ read, write }: { read: number; write: number }) {
     <span className="inline-flex items-center gap-1.5 text-[11px] font-normal tracking-normal whitespace-nowrap text-muted-foreground">
       <span
         aria-hidden="true"
-        className="flex h-1 w-10 overflow-hidden rounded-full bg-muted"
+        className="flex h-1 w-8 overflow-hidden rounded-full bg-muted"
       >
         <span
           className="bg-sky-500/80 dark:bg-sky-400/80"
@@ -478,7 +650,8 @@ function CacheMeter({ read, write }: { read: number; write: number }) {
           style={{ width: `${100 - readPct}%` }}
         />
       </span>
-      <span>{formatCompactNumber(total)} cached</span>
+      {/* Phones show the figure on the line below. */}
+      <span className="max-lg:hidden">{formatCompactNumber(total)} cached</span>
     </span>
   );
 }
@@ -488,41 +661,5 @@ function PlanTag() {
     <span className="rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium tracking-wide text-muted-foreground uppercase">
       Plan
     </span>
-  );
-}
-
-function TrajectoryFact({
-  label,
-  icon,
-  children,
-}: {
-  label: string;
-  icon?: ReactNode;
-  children: ReactNode;
-}) {
-  // Phones put the label above the value, so long ids and chip lists get the
-  // full width.
-  return (
-    <span className="flex min-w-0 flex-col gap-1 lg:inline-flex lg:flex-row lg:items-center lg:gap-2">
-      <span className="inline-flex items-center gap-1 text-muted-foreground">
-        {icon}
-        <span>{label}</span>
-      </span>
-      <span className="flex min-w-0 items-start gap-1 text-foreground lg:inline-flex lg:items-center">
-        {children}
-      </span>
-    </span>
-  );
-}
-
-/** A link to another session's page, by its id. */
-function SessionLink({ sessionId }: { sessionId: string }) {
-  return (
-    <Link
-      href={`/llm/logs/session/${encodeURIComponent(sessionId)}`}
-      className="font-mono break-all underline-offset-2 hover:underline"
-    >
-      {sessionId}
-    </Link>
   );
 }

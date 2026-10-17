@@ -231,7 +231,8 @@ describe("SessionDetailPage", () => {
     renderSessionDetailPage();
 
     // The strip shows the cached share at a glance; the split is on hover.
-    const cached = await screen.findByText("110K cached");
+    // Wide and phone layouts each place the figure, so jsdom sees both.
+    const [cached] = await screen.findAllByText("110K cached");
     expect(cached).toBeVisible();
     await userEvent.hover(cached);
     const tooltip = await screen.findByRole("tooltip");
@@ -344,10 +345,11 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    // Both the desktop and mobile pagination layouts render the selector.
+    // The paging sits in the requests card's status bar.
     expect(
-      (await screen.findAllByText("Rows per page")).length,
-    ).toBeGreaterThan(0);
+      await screen.findByRole("combobox", { name: "Rows per page" }),
+    ).toBeVisible();
+    expect(screen.getByText("Page 1 of 12")).toBeVisible();
     expect(screen.getByText("1–10 of 120")).toBeVisible();
   });
 
@@ -402,8 +404,15 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(await screen.findByText("Session")).toBeVisible();
-    expect(screen.getByText("user:abc|ses_chat_1")).toBeVisible();
+    const trajectory = await screen.findByRole("region", {
+      name: "Trajectory",
+    });
+    // The id is shortened in the row; the full one is on hover.
+    const sessionId = within(trajectory).getByText("user:abc…");
+    await userEvent.hover(sessionId);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "user:abc|ses_chat_1",
+    );
     expect(screen.getByText("Bound by")).toBeVisible();
     expect(screen.getByText("conversation")).toBeVisible();
     expect(screen.getByText("Origins")).toBeVisible();

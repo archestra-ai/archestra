@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Download,
+  Info,
   Loader2,
   LockKeyhole,
   TriangleAlert,
@@ -42,7 +43,7 @@ import {
   RequestDetails,
 } from "./_parts/request-details";
 import { RequestWaterfall } from "./_parts/request-waterfall";
-import { SessionFacts, TrajectoryFacts } from "./_parts/session-facts";
+import { SessionFacts } from "./_parts/session-facts";
 import {
   SessionHeaderTitle,
   SessionIdentityLine,
@@ -200,6 +201,7 @@ export default function SessionDetailPage({
   if (sessionLoadingError) {
     return (
       <PageLayout
+        denseContent
         title="Session"
         backLink={
           <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
@@ -298,6 +300,7 @@ export default function SessionDetailPage({
   return (
     <TooltipProvider delayDuration={150}>
       <PageLayout
+        denseContent
         title={
           <SessionHeaderTitle
             session={sessionData}
@@ -311,7 +314,7 @@ export default function SessionDetailPage({
         }
         description={<SessionIdentityLine session={sessionData} />}
       >
-        <div className="space-y-6 pb-10">
+        <div className="space-y-4">
           <SessionFacts
             totals={{
               inputTokens: totalInputTokens,
@@ -330,20 +333,17 @@ export default function SessionDetailPage({
             lastRequest={lastRequest}
             fallbackType={sessionData?.lastInteractionType ?? null}
             providerLabel={providerLabel}
+            trajectory={
+              openappaEnabled ? { session: sessionData, lineage } : null
+            }
           />
 
-          {/* When OpenAPPA is enabled, the trajectory identity the proxy
-              bound: session id, what bound it, each origin that wrote to it
-              (chat, compaction, title generation), and its fork lineage. */}
-          {openappaEnabled ? (
-            <TrajectoryFacts session={sessionData} lineage={lineage} />
-          ) : null}
-
           {/* overflow-clip, not hidden, below lg: hidden would make the card
-              a scroll container and break the sticky pane headers. */}
+              a scroll container and break the sticky pane headers. isolate
+              keeps the list's sticky column header under the page header. */}
           <section
             aria-label="Requests and request details"
-            className="overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
+            className="isolate overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
           >
             <RequestWaterfall
               timeline={timeline}
@@ -440,7 +440,7 @@ function ToolCallsNotice({
 }) {
   if (!failed && !truncated && !missingToolCallId) return null;
   return (
-    <div className="space-y-2 border-b px-4 py-2.5">
+    <div className="space-y-2 border-b px-4 py-2">
       {failed ? (
         <InlineNotice variant="error">
           <TriangleAlert />
@@ -459,13 +459,15 @@ function ToolCallsNotice({
           </Button>
         </InlineNotice>
       ) : null}
+      {/* A cap, not a problem: one quiet line. */}
       {truncated ? (
-        <InlineNotice variant="info">
-          <InlineNoticeText>
-            Showing the latest 100 tool calls in this page's time range. Pick a
-            smaller page size to see them all.
-          </InlineNoticeText>
-        </InlineNotice>
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Showing the latest 100 tool calls in this page's time range. A
+            smaller page size shows them all.
+          </span>
+        </p>
       ) : null}
       {missingToolCallId ? (
         <InlineNotice variant="neutral">

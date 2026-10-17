@@ -229,13 +229,18 @@ export function SessionIdentityLine({
 
   // Every item leads with its own separator; the row is pulled left by one
   // separator's width and clipped, so the dot that would start a wrapped line
-  // is hidden instead of dangling there.
+  // is hidden instead of dangling there, and no dot ever ends one.
   return (
     <div className={IDENTITY_INSET}>
       <div className="-my-0.5 overflow-hidden py-0.5">
         <div className="-ml-6 flex flex-wrap items-center gap-y-1 text-sm text-muted-foreground">
           {items.map((item) => (
-            <span key={item.key} className="inline-flex min-w-0 items-center">
+            // Each item is one unit: it moves to the next line whole
+            // rather than breaking inside itself.
+            <span
+              key={item.key}
+              className="inline-flex max-w-full min-w-0 items-center whitespace-nowrap"
+            >
               <span
                 aria-hidden="true"
                 className="w-6 shrink-0 text-center text-muted-foreground/50"
@@ -256,10 +261,10 @@ export function SessionIdentityLine({
 // ============================================================================
 
 /**
- * Lines the identity up under the title text: avatar (44) + gap (14), plus
- * the back arrow that leads the title row from `lg`.
+ * Lines the identity up under the title text: the back arrow and its gap
+ * (32), then the avatar (44) and its gap (14).
  */
-const IDENTITY_INSET = "pl-[58px] lg:pl-[90px]";
+const IDENTITY_INSET = "pl-[90px]";
 
 function SessionHeaderAvatar({ session }: { session: LogSession }) {
   const appName = useAppName();

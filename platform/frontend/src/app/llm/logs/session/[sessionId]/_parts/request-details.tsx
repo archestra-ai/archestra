@@ -63,6 +63,11 @@ export type LoadedConversation = {
  * the left and the conversation on the right. Only the latest request's
  * conversation is loaded, so for any other request the right column says so
  * and offers a way to it.
+ *
+ * `excerpt` is for the MCP tool call page, which shows a few records around
+ * one call: its timings drop what only means something across the whole
+ * session, and the call itself drops the link to the page the reader is on
+ * and the outcome notice, which the page states above.
  */
 export function RequestDetails({
   height,
@@ -80,6 +85,7 @@ export function RequestDetails({
   conversation,
   hasConversation,
   onJumpToConversation,
+  excerpt,
 }: {
   /** The resizable pane height, applied from `lg`. */
   height: number;
@@ -101,6 +107,7 @@ export function RequestDetails({
   /** Whether the selected request is the one `conversation` came from. */
   hasConversation: boolean;
   onJumpToConversation: (() => void) | null;
+  excerpt?: { currentKey: string };
 }) {
   if (!span) {
     return (
@@ -133,6 +140,7 @@ export function RequestDetails({
   }
 
   if (span.type === "tool") {
+    const current = excerpt?.currentKey === span.key;
     return (
       <section
         aria-label="Tool call details"
@@ -147,8 +155,14 @@ export function RequestDetails({
           count={count}
           display={serverDisplayByName.get(span.call.mcpServerName)}
           onStep={onStep}
+          timing={excerpt ? "excerpt" : "session"}
+          {...(current && {
+            current: true,
+            previews: false,
+            footer: null,
+          })}
         />
-        <ToolCallPayload call={span.call} />
+        <ToolCallPayload call={span.call} outcomeNotice={!current} />
       </section>
     );
   }
@@ -175,6 +189,7 @@ export function RequestDetails({
         providerLabel={providerLabel}
         onStep={onStep}
         onOpen={() => onOpen(span)}
+        excerpt={Boolean(excerpt)}
       />
 
       <section
@@ -205,13 +220,16 @@ export function RequestDetails({
                   · {time}
                 </span>
               </span>
-              <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground max-sm:hidden">
-                <span
-                  className="size-1.5 rounded-full bg-primary"
-                  aria-hidden="true"
-                />
-                <span>Latest request</span>
-              </span>
+              {/* An excerpt loads whichever request is picked. */}
+              {excerpt ? null : (
+                <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground max-sm:hidden">
+                  <span
+                    className="size-1.5 rounded-full bg-primary"
+                    aria-hidden="true"
+                  />
+                  <span>Latest request</span>
+                </span>
+              )}
             </>
           ) : (
             <span className="ml-1 truncate text-[11px] text-muted-foreground">
@@ -272,6 +290,7 @@ function RequestOverview({
   providerLabel,
   onStep,
   onOpen,
+  excerpt,
 }: {
   span: RequestSpan;
   /** Epoch ms the session's axis starts at. */
@@ -283,6 +302,7 @@ function RequestOverview({
   providerLabel: (provider: SupportedProvider) => string;
   onStep: (delta: number) => void;
   onOpen: () => void;
+  excerpt: boolean;
 }) {
   const { row, kind } = span;
   const modelOrigin = row.model
@@ -430,16 +450,20 @@ function RequestOverview({
             <OverviewFact label="Finished">
               {formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss.SSS" })}
             </OverviewFact>
-            <OverviewFact label="Into session">
-              +{formatElapsed(span.start - origin)}
-            </OverviewFact>
-            <OverviewFact label="Before it">
-              {gapBefore == null
-                ? "First on page"
-                : gapBefore < 0
-                  ? "Overlapped previous"
-                  : `${formatElapsed(gapBefore)} idle`}
-            </OverviewFact>
+            {excerpt ? null : (
+              <OverviewFact label="Into session">
+                +{formatElapsed(span.start - origin)}
+              </OverviewFact>
+            )}
+            {excerpt && gapBefore == null ? null : (
+              <OverviewFact label="Before it">
+                {gapBefore == null
+                  ? "First on page"
+                  : gapBefore < 0
+                    ? "Overlapped previous"
+                    : `${formatElapsed(gapBefore)} idle`}
+              </OverviewFact>
+            )}
           </dl>
         </OverviewSection>
 

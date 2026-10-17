@@ -58,6 +58,7 @@ export function PageLayout({
   fillContent = false,
   compactHeader = false,
   stackHeaderOnMobile = false,
+  denseContent = false,
 }: {
   children: React.ReactNode;
   /**
@@ -143,6 +144,11 @@ export function PageLayout({
   compactHeader?: boolean;
   /** Give long detail titles the full phone width, with actions below the description. */
   stackHeaderOnMobile?: boolean;
+  /**
+   * Start the content 16px below the header at every width, for dense
+   * detail pages whose first section is a card of its own.
+   */
+  denseContent?: boolean;
 }) {
   const headerSpacing = compactHeader ? COMPACT_HEADER_SPACING : HEADER_SPACING;
   const pathname = usePathname();
@@ -222,7 +228,7 @@ export function PageLayout({
         >
           <div
             className={cn(
-              "mx-auto px-6",
+              "mx-auto px-4 sm:px-6",
               minWidth,
               maxWidth,
               headerSpacing.top,
@@ -498,7 +504,7 @@ export function PageLayout({
             } as React.CSSProperties
           }
           className={cn(
-            "sticky top-3 z-10 mx-auto mt-6 w-full space-y-2 px-6 empty:hidden md:top-[var(--page-banner-top)]",
+            "sticky top-3 z-10 mx-auto mt-6 w-full space-y-2 px-4 empty:hidden sm:px-6 md:top-[var(--page-banner-top)]",
             maxWidth,
           )}
         />
@@ -523,7 +529,8 @@ export function PageLayout({
               fillContent && "flex min-h-0 flex-1 flex-col",
               minWidth || "min-w-0",
               maxWidth,
-              "px-6 py-6 md:px-6",
+              "px-4 py-4 sm:px-6",
+              !denseContent && "sm:py-6",
             )}
           >
             {children}

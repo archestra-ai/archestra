@@ -5,14 +5,17 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { EncryptedChatContentUnavailable } from "@/components/encrypted-chat-content-unavailable";
-import { JsonCodeBlock } from "@/components/json-code-block";
 import { PaneHeader } from "@/components/log-detail/pane-header";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { Button } from "@/components/ui/button";
+import { ToolCallOutcomeNotice } from "@/components/log-detail/tool-call-outcome-notice";
 import {
-  MCP_TOOL_CALL_STATUS_LABELS,
-  readMcpToolCall,
-} from "@/lib/mcp-logs/tool-call-content";
+  PayloadSection,
+  ToolArgumentsView,
+  ToolResultView,
+} from "@/components/log-detail/tool-result-view";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpToolCallStatusLabel } from "@/components/mcp-tool-call-status";
+import { Button } from "@/components/ui/button";
+import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import type { McpServerDisplay } from "@/lib/mcp-logs/use-mcp-server-display";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
@@ -23,7 +26,7 @@ import {
   OverviewHeader,
   OverviewSection,
 } from "./overview-parts";
-import { KindChip } from "./request-waterfall";
+import { McpCallChip } from "./request-waterfall";
 import {
   type SessionToolCall,
   SPAN_KINDS,
@@ -35,6 +38,12 @@ import {
  * The left column for a selected MCP tool call: which tool on which server,
  * how it went and how long it took, a glance at its arguments and result,
  * and the way to its full record.
+ *
+ * The MCP tool call page shows its own call here inside a short excerpt:
+ * `current` tags it, `timing="excerpt"` keeps only the timings that mean
+ * something without the whole session, `previews` drops the payload glance
+ * its right-hand column already shows in full, and `footer` replaces the link
+ * to the page the reader is already on.
  */
 export function ToolCallOverview({
   span,
@@ -44,6 +53,10 @@ export function ToolCallOverview({
   count,
   display,
   onStep,
+  current = false,
+  timing = "session",
+  previews = true,
+  footer,
 }: {
   span: ToolCallSpan;
   /** Epoch ms the session's axis starts at. */
@@ -53,11 +66,32 @@ export function ToolCallOverview({
   count: number;
   display: McpServerDisplay | undefined;
   onStep: (delta: number) => void;
+  current?: boolean;
+  timing?: "session" | "excerpt";
+  previews?: boolean;
+  /** Replaces the "Open tool call" link; null drops the footer. */
+  footer?: ReactNode;
 }) {
   const { call } = span;
   const content = readMcpToolCall(call);
   const name = content.toolName ?? content.method;
   const gapBefore = previous ? span.start - previous.end : null;
+  const footerContent =
+    footer === undefined ? (
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full justify-between"
+        asChild
+      >
+        <Link href={`/mcp/logs/${call.id}`}>
+          <span>Open tool call</span>
+          <ArrowUpRight />
+        </Link>
+      </Button>
+    ) : (
+      footer
+    );
 
   return (
     <aside
@@ -79,7 +113,12 @@ export function ToolCallOverview({
             <span className="truncate font-mono text-sm font-semibold">
               {name}
             </span>
-            <KindChip kind="tool" />
+            <McpCallChip method={content.method} />
+            {current ? (
+              <span className="ml-auto shrink-0 rounded-sm bg-primary/10 px-1.5 text-[10px] leading-4 font-medium text-primary">
+                This call
+              </span>
+            ) : null}
           </div>
           <div className="mt-3 flex min-w-0 items-center gap-2.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-background">
@@ -100,7 +139,10 @@ export function ToolCallOverview({
           </div>
           <dl className="mt-3">
             <OverviewFact label="Status">
-              <ToolCallStatus status={content.status} />
+              <McpToolCallStatusLabel
+                status={content.status}
+                dotClassName="size-1.5"
+              />
             </OverviewFact>
             {content.method !== "tools/call" ? (
               <OverviewFact label="Method">
@@ -142,56 +184,69 @@ export function ToolCallOverview({
             <OverviewFact label="Finished">
               {formatDate({ date: call.createdAt, dateFormat: "HH:mm:ss.SSS" })}
             </OverviewFact>
-            <OverviewFact label="Into session">
-              +{formatElapsed(span.start - origin)}
-            </OverviewFact>
-            <OverviewFact label="After previous">
-              {gapBefore == null
-                ? "First on page"
-                : gapBefore < 0
-                  ? "Overlapped it"
-                  : formatElapsed(gapBefore)}
-            </OverviewFact>
+            {timing === "session" ? (
+              <OverviewFact label="Into session">
+                +{formatElapsed(span.start - origin)}
+              </OverviewFact>
+            ) : null}
+            {timing === "session" || gapBefore !== null ? (
+              <OverviewFact label="After previous">
+                {gapBefore == null
+                  ? "First on page"
+                  : gapBefore < 0
+                    ? "Overlapped it"
+                    : formatElapsed(gapBefore)}
+              </OverviewFact>
+            ) : null}
           </dl>
         </OverviewSection>
 
-        <OverviewSection title="Arguments">
-          <PayloadPreview
-            locked={content.lockedArgs !== null}
-            text={content.args === undefined ? null : previewJson(content.args)}
-            empty="No arguments recorded"
-          />
-        </OverviewSection>
+        {previews ? (
+          <>
+            <OverviewSection title="Arguments">
+              <PayloadPreview
+                locked={content.lockedArgs !== null}
+                text={
+                  hasArguments(content.args) ? previewJson(content.args) : null
+                }
+                empty="No arguments recorded"
+              />
+            </OverviewSection>
 
-        <OverviewSection title="Result">
-          <PayloadPreview
-            locked={content.lockedResult !== null}
-            text={content.result ? previewResult(content.result) : null}
-            empty="No result recorded"
-            error={content.status === "error"}
-          />
-        </OverviewSection>
+            <OverviewSection title="Result">
+              <PayloadPreview
+                locked={content.lockedResult !== null}
+                text={
+                  content.outcomeMessage ??
+                  (content.result ? previewResult(content.result) : null)
+                }
+                empty="No result recorded"
+                error={content.status === "error"}
+              />
+            </OverviewSection>
+          </>
+        ) : null}
       </div>
 
-      <div className="border-t bg-card/70 p-3">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full justify-between"
-          asChild
-        >
-          <Link href={`/mcp/logs/${call.id}`}>
-            <span>Open tool call</span>
-            <ArrowUpRight />
-          </Link>
-        </Button>
-      </div>
+      {footerContent ? (
+        <div className="border-t bg-card/70 p-3">{footerContent}</div>
+      ) : null}
     </aside>
   );
 }
 
-/** The right column for a selected tool call: its full arguments and result. */
-export function ToolCallPayload({ call }: { call: SessionToolCall }) {
+/**
+ * The right column for a selected tool call: why it did not succeed, if it
+ * did not, then its full arguments and result. `outcomeNotice={false}` leaves
+ * the why to a banner the page already shows.
+ */
+export function ToolCallPayload({
+  call,
+  outcomeNotice = true,
+}: {
+  call: SessionToolCall;
+  outcomeNotice?: boolean;
+}) {
   const content = readMcpToolCall(call);
   return (
     <section
@@ -205,31 +260,27 @@ export function ToolCallPayload({ call }: { call: SessionToolCall }) {
         />
         <span className="text-xs font-medium">Arguments and result</span>
       </PaneHeader>
-      <div className="space-y-5 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-        <PayloadBlock title="Arguments">
-          {content.lockedArgs ? (
+      <div className="space-y-4 px-4 pt-2 pb-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+        {outcomeNotice ? (
+          <ToolCallOutcomeNotice
+            status={content.status}
+            message={content.outcomeMessage}
+          />
+        ) : null}
+        {content.lockedArgs ? (
+          <PayloadSection title="Arguments">
             <EncryptedChatContentUnavailable value={content.lockedArgs} />
-          ) : content.args === undefined ? (
-            <p className="text-xs text-muted-foreground">
-              No arguments recorded.
-            </p>
-          ) : (
-            <JsonCodeBlock
-              value={content.args}
-              maxHeightClassName="max-h-[320px] overflow-auto"
-            />
-          )}
-        </PayloadBlock>
-        <PayloadBlock title="Result">
-          {content.lockedResult ? (
+          </PayloadSection>
+        ) : (
+          <ToolArgumentsView args={content.args} />
+        )}
+        {content.lockedResult ? (
+          <PayloadSection title="Result">
             <EncryptedChatContentUnavailable value={content.lockedResult} />
-          ) : (
-            <JsonCodeBlock
-              value={content.result}
-              maxHeightClassName="max-h-[420px] overflow-auto"
-            />
-          )}
-        </PayloadBlock>
+          </PayloadSection>
+        ) : (
+          <ToolResultView method={content.method} result={content.result} />
+        )}
       </div>
     </section>
   );
@@ -239,42 +290,13 @@ export function ToolCallPayload({ call }: { call: SessionToolCall }) {
 // Internal helpers
 // ============================================================================
 
-function ToolCallStatus({
-  status,
-}: {
-  status: ReturnType<typeof readMcpToolCall>["status"];
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        aria-hidden="true"
-        className={cn(
-          "size-1.5 rounded-full",
-          status === "success" && "bg-emerald-500",
-          status === "error" && "bg-destructive",
-          (status === "cancelled" || status === "unknown") &&
-            "bg-muted-foreground/50",
-        )}
-      />
-      <span className={cn(status === "error" && "text-destructive")}>
-        {MCP_TOOL_CALL_STATUS_LABELS[status]}
-      </span>
-    </span>
-  );
-}
-
-function PayloadBlock({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
-      {children}
-    </div>
+/** Arguments worth showing: an empty object says no more than none at all. */
+function hasArguments(args: unknown): boolean {
+  if (args === undefined || args === null) return false;
+  return !(
+    typeof args === "object" &&
+    !Array.isArray(args) &&
+    Object.keys(args).length === 0
   );
 }
 
@@ -311,13 +333,8 @@ function previewJson(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value, null, 1);
 }
 
-/** A result's first text block, or its error, before falling back to JSON. */
-function previewResult(result: {
-  isError?: boolean;
-  error?: string;
-  content?: unknown;
-}): string {
-  if (result.error) return result.error;
+/** A result's first text block before falling back to JSON. */
+function previewResult(result: { content?: unknown }): string {
   if (Array.isArray(result.content)) {
     const text = result.content.find(
       (block): block is { type: "text"; text: string } =>

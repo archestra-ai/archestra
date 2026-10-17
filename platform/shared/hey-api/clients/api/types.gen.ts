@@ -64480,6 +64480,10 @@ export type SearchMcpRegistryResponses = {
             imageApprovalRequired: boolean;
             bindsCredential: boolean;
             enterpriseManaged: boolean;
+            setupNeeds: {
+                signIn: boolean;
+                settings: number;
+            };
             install: {
                 visibleCount: number;
                 installedForViewer: boolean;
@@ -64804,6 +64808,7 @@ export type GetMcpRegistryIssueIndexResponses = {
         }>;
         servers: Array<{
             id: string;
+            name: string;
             catalogId: string;
             scope: 'personal' | 'team' | 'org';
             localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';

@@ -61,9 +61,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import {
-  useAllCatalogTools,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useAllCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import { cn } from "@/lib/utils/tailwind";
 import { AgentReachBrowser } from "./agent-reach-browser";

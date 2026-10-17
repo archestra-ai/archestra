@@ -227,7 +227,7 @@ export default function LimitsPage() {
     isLoadingError: isLimitsLoadError,
     refetch: refetchLimits,
   } = useLimits();
-  const { data: teams = [] } = useTeams();
+  const { data: teams = [] } = useTeams({ includeRelations: false });
   const { data: organization } = useOrganization();
   const { data: members = [] } = useMemberOptionsReferences({
     ids: limits

@@ -60,7 +60,7 @@ inputs:
     required: false
     default: ""
   cache-to:
-    description: "Cache export destinations. Leave empty when the job has no push credentials for the cache registry (fork PRs)."
+    description: "Cache export destinations. Leave empty when the job has no push credentials for the cache registry (fork PRs). Ignored on the persistent builder."
     required: false
     default: ""
   # Secrets must be passed as regular inputs in composite actions
@@ -80,6 +80,11 @@ inputs:
     description: "Set up a new Buildx builder; disable to reuse the current job builder"
     required: false
     default: "true"
+
+  builder-cache-key:
+    description: Optional persistent Blacksmith BuildKit cache key for trusted builds
+    required: false
+    default: ""
 
 outputs:
   digest:
@@ -119,8 +124,11 @@ runs:
         INPUT_PREVIOUS_IMAGE: ${{ inputs.previous-image }}
 
     - name: Setup Docker Builder
+      id: builder
       if: ${{ inputs.setup-builder == 'true' }}
       uses: ./.github/actions/setup-docker-builder
+      with:
+        cache-key: ${{ inputs.builder-cache-key }}
 
     - name: Build Docker image
       id: build
@@ -139,6 +147,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_CACHE_FROM: ${{ inputs.cache-from }}
         INPUT_CACHE_TO: ${{ inputs.cache-to }}
+        PERSISTENT_BUILDER: ${{ steps.builder.outputs.persistent }}
         SECRET_TURBO_TEAM: ${{ inputs.turbo-team }}
         SECRET_TURBO_TOKEN: ${{ inputs.turbo-token }}
         SECRET_SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
@@ -162,7 +171,14 @@ runs:
           cache_from="${cache_from%"${cache_from##*[![:space:]]}"}"
           [ -n "${cache_from}" ] && ARGS+=( --cache-from "${cache_from}" )
         done <<< "${INPUT_CACHE_FROM}"
-        [ -n "${INPUT_CACHE_TO}" ] && ARGS+=( --cache-to "${INPUT_CACHE_TO}" )
+        # A registry cache export from reused BuildKit state crashes buildkitd
+        # (rpc EOF) after the image is pushed. The persistent builder keeps its
+        # layers on its own disk, so it does not export one.
+        if [ -n "${INPUT_CACHE_TO}" ] && [ "${PERSISTENT_BUILDER}" = "true" ]; then
+          echo "::notice::Persistent builder keeps its own cache; skipping the registry cache export"
+        elif [ -n "${INPUT_CACHE_TO}" ]; then
+          ARGS+=( --cache-to "${INPUT_CACHE_TO}" )
+        fi
         [ -n "${INPUT_PROVENANCE}" ] && ARGS+=( --provenance "${INPUT_PROVENANCE}" )
         [ -n "${INPUT_SBOM}" ] && ARGS+=( --sbom "${INPUT_SBOM}" )
         [ -n "${INPUT_VERSION}" ] && ARGS+=( --build-arg "VERSION=${INPUT_VERSION}" )

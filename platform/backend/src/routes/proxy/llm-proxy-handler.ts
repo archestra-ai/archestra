@@ -55,6 +55,7 @@ import {
   ModelModel,
   TeamModel,
   UserModel,
+  UserTokenModel,
 } from "@/models";
 import { metrics } from "@/observability";
 import {
@@ -99,6 +100,7 @@ import {
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -116,6 +118,7 @@ import {
   type ToolCallBlock,
 } from "@/types";
 import { asRecord } from "@/utils/as-record";
+import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
@@ -123,6 +126,8 @@ import { CodexResponsesGenerationError } from "./adapters/openai-codex-translato
 import {
   discardUnadmittedResponsesOutput,
   ResponsesStreamIncompleteError,
+  withoutResponsesModelOutput,
+  withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
 import {
   assertAuthenticatedForKeylessProvider,
@@ -416,7 +421,10 @@ export async function handleLLMProxy<
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
-  const internalCall = takeInternalCall(request.headers);
+  const proof = takeInternalCall(request.headers);
+  // Credential paths accept either proof; only the guardrail proof reaches
+  // OpenAPPA as its bypass.
+  const internalCall = proof.inProcess || proof.guardrail;
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
@@ -482,6 +490,7 @@ export async function handleLLMProxy<
   let jwksUserId: string | undefined;
   let oauthUserId: string | undefined;
   let regularVirtualKeyUserId: string | undefined;
+  let personalTokenUserId: string | undefined;
 
   // Extract interaction source (chat, chatops, email, etc.)
   // Internal callers set X-Archestra-Source; external API requests default to "api".
@@ -732,7 +741,7 @@ export async function handleLLMProxy<
   const providerBaseUrlHeaderValue =
     headersForExtraction[PROVIDER_BASE_URL_HEADER.toLowerCase()];
   const isInternalChatForward =
-    isLoopbackRequest(request) &&
+    internalCall &&
     typeof chatApiKeyIdHeader === "string" &&
     chatApiKeyIdHeader.length > 0 &&
     typeof providerBaseUrlHeaderValue === "string" &&
@@ -767,9 +776,57 @@ export async function handleLLMProxy<
       }
     }
   }
+  // Personal platform token (the credential the MCP gateway accepts). The
+  // caller is that user, and the upstream key is the provider key named by
+  // CHAT_API_KEY_ID, only when the user may use it.
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
+    rawApiKey &&
+    hasArchestraTokenPrefix(rawApiKey)
+  ) {
+    const personalToken = await UserTokenModel.validateToken(rawApiKey);
+    if (personalToken) {
+      const chatKeyIdHeader =
+        headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
+      if (typeof chatKeyIdHeader !== "string" || !chatKeyIdHeader) {
+        throw new ApiError(
+          400,
+          `Missing ${CHAT_API_KEY_ID_HEADER} header naming the provider key to use.`,
+        );
+      }
+      const providerKey =
+        await LlmProviderApiKeyModel.findById(chatKeyIdHeader);
+      if (
+        !providerKey ||
+        !(await LlmProviderApiKeyModel.canUseKey(
+          providerKey,
+          personalToken.userId,
+          [],
+        ))
+      ) {
+        throw new ApiError(
+          403,
+          "The token's user may not use this provider key.",
+        );
+      }
+      personalTokenUserId = personalToken.userId;
+      userId = personalToken.userId;
+      resolvedUser = await UserModel.getById(userId);
+      apiKey = providerKey.secretId
+        ? await getSecretValueForLlmProviderApiKey(providerKey.secretId)
+        : undefined;
+      perKeyBaseUrl =
+        providerKey.inferenceBaseUrl ?? providerKey.baseUrl ?? perKeyBaseUrl;
+      perKeyChatApiKeyId = providerKey.id;
+      perKeyProviderApiKeyRow = providerKey;
+    }
+  }
+
+  if (
+    !wasJwksAuthenticated &&
+    !authOverride &&
+    !personalTokenUserId &&
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
@@ -835,7 +892,7 @@ export async function handleLLMProxy<
       headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
     const headerPresent =
       typeof headerValue === "string" && headerValue.length > 0;
-    if (isLoopbackRequest(request)) {
+    if (internalCall) {
       if (headerPresent) {
         perKeyChatApiKeyId = headerValue;
         perKeyChatApiKeyIdFromLoopbackHeader = true;
@@ -847,7 +904,7 @@ export async function handleLLMProxy<
     } else if (headerPresent) {
       logger.warn(
         { ip: request.socket.remoteAddress },
-        `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
+        `[${providerName}Proxy] ignoring provider-api-key-id header without internal proof`,
       );
     }
   }
@@ -904,7 +961,7 @@ export async function handleLLMProxy<
     apiKey,
     wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
-    isLoopbackCaller: isLoopbackRequest(request),
+    isInternalCall: internalCall,
     providerSuppliesServerCredential:
       providerSuppliesServerCredential(providerName),
   });
@@ -928,6 +985,7 @@ export async function handleLLMProxy<
     passthroughUserId ??
     jwksUserId ??
     oauthUserId ??
+    personalTokenUserId ??
     regularVirtualKeyUserId;
 
   // Fall back to the personal standard virtual key's owner for user attribution.
@@ -1262,7 +1320,7 @@ export async function handleLLMProxy<
         },
         chatSource: isInternalChat ? source : undefined,
         externalAgentId,
-        internalCall,
+        internalCall: proof.guardrail,
         installerSetupBypass,
         ingress: appaIngress,
         toolIdentity,
@@ -1360,7 +1418,7 @@ export async function handleLLMProxy<
     // External clients must NOT be able to set this header — it would be an SSRF vector
     // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
     const providerBaseUrlHeader =
-      isLoopbackRequest(request) &&
+      internalCall &&
       typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
         ? headersForExtraction["x-archestra-provider-base-url"]
         : undefined;
@@ -1448,7 +1506,7 @@ export async function handleLLMProxy<
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =
       providerName === "microsoft-365-copilot"
-        ? createDownstreamAbortSignal({ request, reply })
+        ? clientDisconnectSignal({ request, reply })
         : undefined;
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
@@ -1659,7 +1717,7 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(record, encryptedChat);
+      await persistProxyInteraction({ record, encryptedChat, streamTiming });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1898,7 +1956,7 @@ async function handleStreaming<
         outputTokens: 0,
         toolCallBlock,
       };
-      await persistProxyInteraction(record, encryptedChat);
+      await persistProxyInteraction({ record, encryptedChat, streamTiming });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -2130,8 +2188,11 @@ async function handleStreaming<
         );
       }
       const failureEvents = streamAdapter.formatToolCallsSSE([]);
-      childStream.flushModel();
-      for (const event of failureEvents) writeToClient(event);
+      childStream.dropModel();
+      for (const event of bufferModelResponse
+        ? withoutResponsesModelOutputSSE(failureEvents)
+        : failureEvents)
+        writeToClient(event);
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
       streamCompleted = true;
@@ -2446,7 +2507,7 @@ async function handleStreaming<
     }
     if (codexError?.isIncompleteTerminal) {
       // Preserve Chat's legal partial terminal only after failure cleanup.
-      childStream.flushModel();
+      childStream.dropModel();
       const terminal = streamAdapter.processChunk({
         id: codexError.completion.id,
         object: "chat.completion.chunk",
@@ -2629,7 +2690,7 @@ async function handleStreaming<
           costs,
           toolCallBlock,
         });
-        await persistProxyInteraction(record, encryptedChat);
+        await persistProxyInteraction({ record, encryptedChat, streamTiming });
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -2695,6 +2756,7 @@ async function handleNonStreaming<
     parentContext,
     teams,
     userTeams,
+    streamTiming,
     pluginRegistry,
     pluginContext,
     appaReceipts,
@@ -2877,6 +2939,10 @@ async function handleNonStreaming<
     },
   });
 
+  // Asked before failure cleanup ends the plugin session.
+  const bufferModelResponse =
+    pluginContext !== undefined &&
+    pluginRegistry?.buffersModelResponse(pluginContext) === true;
   const generationFailed = await failResponsesGeneration({
     response: responseAdapter.getOriginalResponse(),
     ctx,
@@ -3083,7 +3149,11 @@ async function handleNonStreaming<
         costs,
         toolCallBlock: toToolCallBlock(toolInvocationRefusal, []),
       });
-      await persistProxyInteraction(refusalRecord, encryptedChat);
+      await persistProxyInteraction({
+        record: refusalRecord,
+        encryptedChat,
+        streamTiming,
+      });
 
       if (pluginRegistry && pluginContext) {
         // A refusal is a terminal answer: the turn ends here, as it does on
@@ -3240,7 +3310,7 @@ async function handleNonStreaming<
       costs,
       toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
-    await persistProxyInteraction(record, encryptedChat);
+    await persistProxyInteraction({ record, encryptedChat, streamTiming });
     responsePersisted = true;
   } catch (interactionError) {
     logger.error(
@@ -3255,7 +3325,11 @@ async function handleNonStreaming<
         ? new RecordedCodexGenerationFailure(codexGenerationError)
         : codexGenerationError;
     }
-    return sendResponse(clientResponse);
+    return sendResponse(
+      bufferModelResponse
+        ? withoutUnadmittedModelOutput(clientResponse)
+        : clientResponse,
+    );
   }
   if (pluginRegistry && pluginContext) {
     await pluginRegistry.complete({
@@ -3273,6 +3347,41 @@ async function handleNonStreaming<
 class RecordedCodexGenerationFailure extends ApiError {
   constructor(error: CodexResponsesGenerationError) {
     super(502, error.message);
+  }
+}
+
+/** The client copy of a buffered generation that failed before admission. */
+function withoutUnadmittedModelOutput<TResponse>(
+  response: TResponse,
+): TResponse {
+  const record = asRecord(response);
+  switch (record?.object) {
+    case "response":
+      return withoutResponsesModelOutput(
+        response as Parameters<typeof withoutResponsesModelOutput>[0],
+      ) as TResponse;
+    case "chat.completion":
+      return {
+        ...record,
+        choices: (Array.isArray(record.choices) ? record.choices : []).map(
+          (choice) => {
+            const entry = asRecord(choice);
+            // Keeps only the role: content, refusal and reasoning all carry model text.
+            return {
+              ...entry,
+              message: {
+                role: asRecord(entry?.message)?.role ?? "assistant",
+                content: "",
+              },
+            };
+          },
+        ),
+      } as TResponse;
+    default:
+      throw new ApiError(
+        503,
+        "LLM provider cannot safely withhold a failed governed child response",
+      );
   }
 }
 
@@ -3492,44 +3601,6 @@ function normalizeVirtualKeyCandidate(
 }
 
 /**
- * Turns a premature proxy-client disconnect into an AbortSignal that the
- * Microsoft Graph adapter forwards to conversation and chat requests. Normal
- * response closure does not abort, and listeners remove each other on either
- * terminal path.
- */
-function createDownstreamAbortSignal(params: {
-  request: FastifyRequest;
-  reply: FastifyReply;
-}): AbortSignal {
-  const { request, reply } = params;
-  const controller = new AbortController();
-
-  const cleanup = () => {
-    request.raw.removeListener("aborted", onRequestAborted);
-    reply.raw.removeListener("close", onReplyClosed);
-  };
-  const onRequestAborted = () => {
-    cleanup();
-    controller.abort();
-  };
-  const onReplyClosed = () => {
-    cleanup();
-    if (!reply.raw.writableEnded) {
-      controller.abort();
-    }
-  };
-
-  if (request.raw.aborted || reply.raw.destroyed) {
-    controller.abort();
-  } else {
-    request.raw.once("aborted", onRequestAborted);
-    reply.raw.once("close", onReplyClosed);
-  }
-
-  return controller.signal;
-}
-
-/**
  * Whether the backend authenticates upstream with its OWN credentials for this
  * provider and discards whatever the caller sent.
  *
@@ -3614,10 +3685,21 @@ function extractDurationStatusCode(error: unknown): string {
  *   rather than risking a plaintext write or an unrecoverable one.
  * - `none`: ordinary write; at-rest rules apply.
  */
-async function persistProxyInteraction(
-  record: InsertInteraction,
-  encryptedChat: EncryptedChatAuditDisposition,
-): Promise<void> {
+async function persistProxyInteraction({
+  record,
+  encryptedChat,
+  streamTiming,
+}: {
+  record: InsertInteraction;
+  encryptedChat: EncryptedChatAuditDisposition;
+  streamTiming: StreamTiming;
+}): Promise<void> {
+  // Snapshot before database work; streaming calls reach here after consumption,
+  // so this includes the full stream rather than just time to its first byte.
+  record = {
+    ...record,
+    durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
+  };
   await InteractionModel.create(
     encryptedChat.kind === "redact"
       ? redactEncryptedChatInteraction(record)

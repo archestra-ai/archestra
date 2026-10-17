@@ -55,9 +55,19 @@ const { useMcpServersMock } = vi.hoisted(() => ({
 const { registryIssuesMock } = vi.hoisted(() => ({
   registryIssuesMock: new Map(),
 }));
+// What GET /api/mcp_server/:id answers per install: server lists leave the
+// agents out.
+const { assignedAgentsByServer } = vi.hoisted(() => ({
+  assignedAgentsByServer: new Map<string, unknown[]>(),
+}));
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServers: useMcpServersMock,
+  useMcpServersAssignedAgents: () => ({
+    agentsByServerId: assignedAgentsByServer,
+    isPending: false,
+    isError: false,
+  }),
   useAutoModeAgents: () => ({ data: [] }),
   useDeleteMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBulkUninstallMcpServers: () => ({ mutate: vi.fn(), isPending: false }),
@@ -289,6 +299,7 @@ describe("McpServerCard uninstall permission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     registryIssuesMock.clear();
+    assignedAgentsByServer.clear();
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: CURRENT_USER_ID } },
     } as unknown as ReturnType<typeof useSession>);
@@ -340,29 +351,24 @@ describe("McpServerCard uninstall permission", () => {
       ownerEmail: null,
     };
     useMcpServersMock.mockReturnValue({
-      data: [
-        {
-          ...personalInstall,
-          scope: "personal",
-          assignedAgents: [
-            {
-              ...agent,
-              id: "a-org",
-              name: "Org Assistant",
-              scope: "org",
-              pinned: false,
-            },
-            {
-              ...agent,
-              id: "a-mine",
-              name: "My Gateway",
-              scope: "personal",
-              pinned: true,
-            },
-          ],
-        },
-      ],
+      data: [{ ...personalInstall, scope: "personal" }],
     });
+    assignedAgentsByServer.set(personalInstall.id, [
+      {
+        ...agent,
+        id: "a-org",
+        name: "Org Assistant",
+        scope: "org",
+        pinned: false,
+      },
+      {
+        ...agent,
+        id: "a-mine",
+        name: "My Gateway",
+        scope: "personal",
+        pinned: true,
+      },
+    ]);
     renderCard(card);
 
     await user.click(screen.getByRole("button", { name: "Uninstall" }));
@@ -376,38 +382,19 @@ describe("McpServerCard uninstall permission", () => {
     expect(dialog).not.toHaveTextContent("Org Assistant");
   });
 
-  it("summarizes agent usage only for someone who manages installations", () => {
-    useMcpServersMock.mockReturnValue({
-      data: [
-        {
-          ...personalInstall,
-          scope: "personal",
-          assignedAgents: [
-            {
-              agentType: "agent",
-              ownerId: null,
-              ownerEmail: null,
-              id: "a-org",
-              name: "Org Assistant",
-              scope: "org",
-              pinned: false,
-            },
-          ],
-        },
-      ],
-    });
-    const usageLink = () =>
-      screen.queryByRole("link", { name: /can use .*, view usage/ });
+  it("loads the registry's server lists without per-install agents", async () => {
+    const user = userEvent.setup();
+    useMcpServersMock.mockReturnValue({ data: [personalInstall] });
+    renderCard(<InternalMCPCatalog initialData={[item]} />);
+    await user.click(screen.getByRole("button", { name: "Uninstall" }));
+    await screen.findByRole("dialog");
 
-    const { unmount } = renderCard(card);
-    expect(usageLink()).toHaveTextContent("1");
-    unmount();
-
-    // A member's usage would be only their own agents; the server page has no
-    // Usage tab for them to link to.
-    grantAllExcept({ mcpServerInstallation: ["update"] });
-    renderCard(card);
-    expect(usageLink()).toBeNull();
+    // Every list on the page shares the one compact request; a single caller
+    // without the flag would bring back the slow full list.
+    expect(useMcpServersMock).toHaveBeenCalled();
+    for (const [params] of useMcpServersMock.mock.calls) {
+      expect(params).toMatchObject({ includeAssignedAgents: false });
+    }
   });
 
   it("opens server settings once from the keyboard without activating the card", async () => {

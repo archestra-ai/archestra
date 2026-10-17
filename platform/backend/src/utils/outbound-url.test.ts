@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
-import { isAllowedA2aAddress, validateOutboundUrl } from "./outbound-url";
+import { isAllowedOutboundAddress, validateOutboundUrl } from "./outbound-url";
 
 beforeEach(() => {
   config.production = true;
@@ -8,14 +8,14 @@ beforeEach(() => {
 });
 
 test("allows only public unicast DNS answers in production", () => {
-  expect(isAllowedA2aAddress("8.8.8.8")).toBe(true);
-  expect(isAllowedA2aAddress("2001:4860:4860::8888")).toBe(true);
-  expect(isAllowedA2aAddress("127.0.0.1")).toBe(false);
-  expect(isAllowedA2aAddress("10.0.0.1")).toBe(false);
-  expect(isAllowedA2aAddress("169.254.169.254")).toBe(false);
-  expect(isAllowedA2aAddress("100.64.0.1")).toBe(false);
-  expect(isAllowedA2aAddress("224.0.0.1")).toBe(false);
-  expect(isAllowedA2aAddress("::")).toBe(false);
+  expect(isAllowedOutboundAddress("8.8.8.8")).toBe(true);
+  expect(isAllowedOutboundAddress("2001:4860:4860::8888")).toBe(true);
+  expect(isAllowedOutboundAddress("127.0.0.1")).toBe(false);
+  expect(isAllowedOutboundAddress("10.0.0.1")).toBe(false);
+  expect(isAllowedOutboundAddress("169.254.169.254")).toBe(false);
+  expect(isAllowedOutboundAddress("100.64.0.1")).toBe(false);
+  expect(isAllowedOutboundAddress("224.0.0.1")).toBe(false);
+  expect(isAllowedOutboundAddress("::")).toBe(false);
 });
 
 describe("validateOutboundUrl in production", () => {
@@ -63,8 +63,8 @@ describe("validateOutboundUrl outside production", () => {
   });
 
   test("allows loopback DNS answers but not private ranges", () => {
-    expect(isAllowedA2aAddress("127.0.0.1")).toBe(true);
-    expect(isAllowedA2aAddress("10.0.0.1")).toBe(false);
+    expect(isAllowedOutboundAddress("127.0.0.1")).toBe(true);
+    expect(isAllowedOutboundAddress("10.0.0.1")).toBe(false);
   });
 
   // Local development points webhooks and IdP discovery at localhost, so the

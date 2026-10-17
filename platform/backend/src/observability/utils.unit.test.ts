@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  isLongLivedMcpStream,
   isNoiseRoute,
   isNoisyMcpGatewayGetRoute,
   isNoisyMcpGatewayTransactionName,
@@ -120,5 +121,27 @@ describe("isNoisyMcpGatewayTransactionName", () => {
     expect(isNoisyMcpGatewayTransactionName("POST /v1/mcp/:profileId")).toBe(
       false,
     );
+  });
+});
+
+describe("isLongLivedMcpStream", () => {
+  test("matches the subscriptions/listen stream", () => {
+    expect(isLongLivedMcpStream("subscriptions/listen")).toBe(true);
+  });
+
+  test("does not match request-response MCP methods", () => {
+    for (const method of [
+      "tools/call",
+      "tools/list",
+      "server/discover",
+      "initialize",
+    ]) {
+      expect(isLongLivedMcpStream(method)).toBe(false);
+    }
+  });
+
+  test("does not match a span without a recorded method", () => {
+    expect(isLongLivedMcpStream(undefined)).toBe(false);
+    expect(isLongLivedMcpStream(42)).toBe(false);
   });
 });

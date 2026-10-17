@@ -255,7 +255,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // post-filtering made that request load and decorate every install
           // in the organization before discarding all but one.
           catalogId,
-          includeAssignedAgents,
+          // The API includes agent usage unless asked not to.
+          includeAssignedAgents: includeAssignedAgents !== false,
           // serverType:"app" backings are managed on the Apps surface, not
           // listed as MCP servers — keep them out of the user-facing server
           // list (and its consumers like the agent tool-assignment picker).
@@ -4042,7 +4043,7 @@ async function validateScopeAndAuthorization(params: {
   }
 
   if (scope === "team" && teamId) {
-    const team = await TeamModel.findById(teamId);
+    const team = await TeamModel.findById(teamId, { includeMembers: false });
     if (!team) {
       throw new ApiError(404, "Team not found");
     }

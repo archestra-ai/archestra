@@ -5,6 +5,7 @@ import type {
 } from "@archestra/shared";
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -41,6 +42,11 @@ const resourcePermissionPoliciesTable = pgTable(
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
+    // Subject lookups use JSONB containment across the organization catalog.
+    index("resource_permission_policies_grants_idx").using(
+      "gin",
+      table.grants.op("jsonb_path_ops"),
+    ),
     primaryKey({
       columns: [table.organizationId, table.resource, table.scope],
     }),

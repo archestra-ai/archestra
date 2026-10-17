@@ -4,6 +4,10 @@ import { EDITABLE_TEXT_FILE_MAX_BYTES } from "@archestra/shared";
 import { csvParseRows } from "d3-dsv";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { PlainTextEditor } from "@/components/chat/plain-text-editor";
 import { Button } from "@/components/ui/button";
@@ -13,8 +17,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useAttachmentContentUrl } from "@/lib/chat/encrypted-chat-attachment";
 import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
+import { formatJsonPreview } from "@/lib/chat/format-json-preview";
 import { useUpdateFileContent } from "@/lib/skills-sandbox/use-update-file-content";
 
 /** Anything previewable: a display name, a MIME type, and a byte endpoint. */
@@ -44,9 +57,12 @@ export function FilePreview({
   fileId,
   onExitEdit,
   conversationId,
+  onPreviewSummaryChange,
 }: {
   file: PreviewableFile;
   onClose?: () => void;
+  /** Hoist file dimensions into the caller's dialog header. */
+  onPreviewSummaryChange?: (summary: string | null) => void;
   /** Show the in-place editor instead of the preview (requires `fileId`). */
   editing?: boolean;
   /** The file's row id or hand-placed `obj_` ref; required to edit. */
@@ -130,8 +146,12 @@ export function FilePreview({
           className="h-full min-h-[60vh] w-full"
         />
       )}
-      {(kind === "text" || kind === "csv") && (
-        <FileTextPreview contentUrl={contentUrl} asTable={kind === "csv"} />
+      {(kind === "text" || kind === "csv" || kind === "json") && (
+        <FileTextPreview
+          contentUrl={contentUrl}
+          kind={kind}
+          onPreviewSummaryChange={onPreviewSummaryChange}
+        />
       )}
       {kind === "unsupported" && (
         <UnsupportedPreview name={file.name} contentUrl={contentUrl} />
@@ -434,10 +454,12 @@ function readAsDataUrl(blob: Blob): Promise<string> {
 
 function FileTextPreview({
   contentUrl,
-  asTable,
+  kind,
+  onPreviewSummaryChange,
 }: {
   contentUrl: string;
-  asTable: boolean;
+  kind: "text" | "csv" | "json";
+  onPreviewSummaryChange?: (summary: string | null) => void;
 }) {
   const { text, failed } = useFileText(contentUrl);
 
@@ -454,30 +476,83 @@ function FileTextPreview({
   if (text === "") {
     return <EmptyFileNotice />;
   }
-  if (asTable) {
-    const rows = csvParseRows(text);
-    return (
-      <div className="overflow-auto p-2">
-        <table className="w-full border-collapse text-xs">
-          <tbody>
-            {rows.map((cells, r) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: static CSV preview; rows never reorder
-              <tr key={`row-${r}`} className="border-b">
-                {cells.map((c, ci) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: static CSV preview; cells never reorder
-                  <td key={`cell-${r}-${ci}`} className="border-r px-2 py-1">
-                    {c}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
+  if (kind === "json") {
+    const formatted = formatJsonPreview(text);
+    if (formatted !== null) {
+      return (
+        <div className="p-4">
+          <CodeBlock code={formatted} language="json" wrapLongLines>
+            <CodeBlockCopyButton title="Copy JSON" />
+          </CodeBlock>
+        </div>
+      );
+    }
   }
+  if (kind === "csv")
+    return (
+      <CsvPreview text={text} onPreviewSummaryChange={onPreviewSummaryChange} />
+    );
   return (
     <pre className="whitespace-pre-wrap break-words p-4 text-xs">{text}</pre>
+  );
+}
+
+/** CSV values stay literal; quoted commas and line breaks are parsed by d3. */
+function CsvPreview({
+  text,
+  onPreviewSummaryChange,
+}: {
+  text: string;
+  onPreviewSummaryChange?: (summary: string | null) => void;
+}) {
+  const rows = csvParseRows(text);
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  const body = rows.slice(1);
+  const summary = `${body.length.toLocaleString()} rows · ${columnCount.toLocaleString()} columns`;
+  useEffect(() => {
+    onPreviewSummaryChange?.(summary);
+    return () => onPreviewSummaryChange?.(null);
+  }, [summary, onPreviewSummaryChange]);
+  return (
+    <div className="p-4">
+      {!onPreviewSummaryChange && (
+        <p className="mb-3 text-xs text-muted-foreground">{summary}</p>
+      )}
+      <div className="overflow-hidden rounded-md border [&_[data-slot=table-container]]:max-h-[70dvh]">
+        <Table className="min-w-max table-auto">
+          <TableHeader className="sticky top-0 z-10 bg-muted">
+            <TableRow>
+              {Array.from({ length: columnCount }, (_, i) => (
+                <TableHead
+                  // biome-ignore lint/suspicious/noArrayIndexKey: static CSV columns never reorder
+                  key={`header-${i}`}
+                  scope="col"
+                  className="whitespace-pre px-4"
+                >
+                  {rows[0]?.[i] ?? ""}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {body.map((cells, r) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static CSV rows never reorder
+              <TableRow key={`row-${r}`} className="even:bg-muted/30">
+                {Array.from({ length: columnCount }, (_, i) => (
+                  <TableCell
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static CSV columns never reorder
+                    key={`cell-${i}`}
+                    className="whitespace-pre px-4 py-3 align-top tabular-nums"
+                  >
+                    {cells[i] ?? ""}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   );
 }
 

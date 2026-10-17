@@ -265,6 +265,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by the current user's pins. Pinned results are ordered by newest pin first; unpinned results keep the requested sort.",
               ),
+            includeTools: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the agents themselves, such as name pickers: the tool refs carry every assigned tool's name and description, which on an organization of any size is most of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -306,6 +315,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           includeActivationSkillsCount,
           providerApiKeyId,
           pinned,
+          includeTools,
           limit,
           offset,
           sortBy,
@@ -368,6 +378,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           status,
           providerApiKeyId,
           pinned,
+          includeTools,
         },
         user.id,
         isAdmin,

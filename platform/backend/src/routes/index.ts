@@ -8,8 +8,6 @@ export { default as agentRuntimeRoutes } from "./agent-runtime/agent-runtime.rou
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
 export { default as appRoutes } from "./app/app.routes";
-export { default as appGalleryRoutes } from "./app-gallery/app-gallery.routes";
-export { default as appRecordingRoutes } from "./app-recording/app-recording.routes";
 export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-proxy";
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
@@ -112,7 +110,6 @@ export { default as skillSandboxArtifactRoutes } from "./skill-sandbox-artifact"
 export { default as skillShareRoutes } from "./skill-share/skill-share.routes";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
-export { default as tokenRoutes } from "./token";
 export { default as toolRoutes } from "./tool";
 export { default as userRoutes } from "./user";
 export { default as userTokenRoutes } from "./user-token";

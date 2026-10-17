@@ -148,6 +148,13 @@ overrides:
   proxy-addr: '>=2.0.8 <3'
   # CVE-2026-93749 (HIGH, improper validation of specified quantity) fixed in
   # 1.2.2.
+  # GHSA on katex (low, >=0.11.0 <0.18.2) fixed in 0.18.2. Bounded to <0.19 so
+  # mermaid is not force-jumped onto a new minor.
+  katex: '>=0.18.2 <0.19'
+  # sprintf-js <=1.1.3 has a medium advisory with no patched release. Its only
+  # path is mammoth -> argparse@1 -> sprintf-js. argparse 2.x drops that edge.
+  # mammoth only uses argparse for its CLI, not for the library API.
+  mammoth>argparse: 2.0.1
   source-map-js: '>=1.2.2'
   # CVE-2026-67213 (GHSA-2v37-7h3g-55p8, HIGH, custom generators loop forever
   # when size is 0): the 3.3.17 fix was incomplete, advisory now requires
@@ -246,11 +253,6 @@ patchedDependencies:
   # before text in non-streaming results too. Upstream master (v4, needs ai@^7)
   # has the same bug; drop the patch when moving to ai v7 after verifying a fix.
   ollama-ai-provider-v2@3.6.0: patches/ollama-ai-provider-v2@3.6.0.patch
-  # The package root eagerly re-exports its optional worker implementation. That
-  # pulls @eshaz/web-worker's Node shim into Next's Client Component SSR graph and
-  # Turbopack cannot resolve the shim's intentionally dynamic import. We use only
-  # the main-thread decoder, so keep that worker branch out of the package entry.
-  opus-decoder@0.7.11: patches/opus-decoder@0.7.11.patch
 
 # Enforce Node.js version requirements from package.json engines field.
 engineStrict: true

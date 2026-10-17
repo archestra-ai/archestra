@@ -22,6 +22,7 @@ import type {
   InteractionResponse,
   ToolCallBlock,
 } from "@/types";
+import type { InteractionSessionPreview } from "@/types/interaction";
 import agentsTable from "./agent";
 import environmentsTable from "./environment";
 import serviceAccountsTable from "./service-account";
@@ -187,6 +188,7 @@ const interactionsTable = pgTable(
      */
     billingTeamId: text("billing_team_id"),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
+    sessionPreview: jsonb("session_preview").$type<InteractionSessionPreview>(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     /**
      * Delta-encoding metadata (Claude/Anthropic interactions only — session_source
@@ -259,6 +261,8 @@ const interactionsTable = pgTable(
      * When no optimization: baselineModel = model (or null for backward compatibility)
      */
     baselineModel: varchar("baseline_model"),
+    /** Elapsed milliseconds from proxy handler entry to response processing completion. */
+    durationMs: integer("duration_ms"),
     inputTokens: integer("input_tokens"),
     inputTokensEstimated: boolean("input_tokens_estimated")
       .notNull()

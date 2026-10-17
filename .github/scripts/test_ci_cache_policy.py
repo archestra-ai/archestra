@@ -1,0 +1,197 @@
+"""Exercise cache publication and cold-cache compilation decisions from CI."""
+
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def evaluate(expression, context):
+    # These workflow predicates use the JS-compatible boolean/comparison
+    # subset of Actions expressions, plus its format function.
+    expression = re.sub(r"\.([A-Za-z_][A-Za-z0-9_-]*-[A-Za-z0-9_-]+)", r"['\1']", expression)
+    result = subprocess.run(
+        ["node", "-e", """
+const vm = require('node:vm');
+const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+input.context.format = (template, value) => template.replace('{0}', value);
+process.stdout.write(JSON.stringify(vm.runInNewContext(input.expression, input.context)));
+"""],
+        input=json.dumps({"expression": expression, "context": context}),
+        text=True, capture_output=True, check=True,
+    )
+    return json.loads(result.stdout)
+
+
+class CachePolicyTests(unittest.TestCase):
+    def test_persistent_builder_is_opt_in_and_untrusted_events_use_local_builder(self):
+        action = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
+        expression = action.split("    - name: Setup persistent Docker builder\n", 1)[1]
+        expression = re.search(r"^      if: (.*)$", expression, re.M).group(1)
+        trusted = ("push", "merge_group", "schedule", "workflow_dispatch")
+        for event in (*trusted, "pull_request", "pull_request_target", "workflow_run"):
+            for key in ("", "platform-e2e-linux-amd64"):
+                with self.subTest(event=event, key=key):
+                    selected = evaluate(expression, {
+                        "inputs": {"cache-key": key},
+                        "github": {"event_name": event},
+                    })
+                    self.assertEqual(selected, bool(key) and event in trusted)
+
+    def test_missing_or_local_persistent_builder_uses_standard_fallback(self):
+        action = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
+        inspect = action.split("    - name: Inspect persistent Docker builder\n", 1)[1]
+        inspect, fallback = inspect.split("    - name: Setup Docker builder\n", 1)
+        script = "\n".join(line[8:] for line in inspect.split("      run: |\n", 1)[1].splitlines())
+        expression = re.search(r"^      if: (.*)$", fallback, re.M).group(1)
+        for driver in ("remote", "docker-container", "docker", "unavailable"):
+            with self.subTest(driver=driver), tempfile.TemporaryDirectory() as directory:
+                directory = Path(directory)
+                output = directory / "output"
+                output.touch()
+                docker = directory / "docker"
+                docker.write_text(
+                    '#!/bin/bash\n'
+                    '[ "$*" = "buildx inspect" ] || { echo "unsupported arguments" >&2; exit 64; }\n'
+                    '[ "$ARCHESTRA_TEST_DOCKER_DRIVER" != unavailable ] || exit 1\n'
+                    'printf "Name: blacksmith-test\\nDriver:        %s\\n\\nNodes:\\n" "$ARCHESTRA_TEST_DOCKER_DRIVER"\n'
+                )
+                docker.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", "-e", "-c", script], text=True, capture_output=True,
+                    env=os.environ | {
+                        "PATH": f"{directory}:{os.environ['PATH']}",
+                        "GITHUB_OUTPUT": str(output), "ARCHESTRA_TEST_DOCKER_DRIVER": driver,
+                    },
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                persistent = "true" if "persistent=true" in output.read_text() else ""
+                self.assertEqual(evaluate(expression, {
+                    "steps": {"builder": {"outputs": {"persistent": persistent}}},
+                }), driver != "remote")
+
+    def test_persistent_builder_skips_the_registry_cache_export(self):
+        setup = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
+        reported = re.search(r"^    value: \$\{\{ (.*) \}\}$", setup, re.M).group(1)
+        action = (ROOT / ".github/actions/build-docker-image/action.yml").read_text()
+        step = action.split("    - name: Build Docker image\n", 1)[1]
+        env_block, run_block = step.split("      run: |\n", 1)
+        names = re.findall(r"^        ([A-Z_]+): ", env_block, re.M)
+        script = "\n".join(line[8:] for line in run_block.splitlines())
+        # "" is the build that reuses the job's builder and skips the setup step.
+        for persistent in ("true", "false", ""):
+            for cache_to in ("type=registry,ref=registry.test/platform:buildcache,mode=min", ""):
+                with self.subTest(persistent=persistent, cache_to=cache_to), \
+                        tempfile.TemporaryDirectory() as directory:
+                    if persistent:
+                        self.assertEqual(evaluate(reported, {
+                            "steps": {"builder": {"outputs": {
+                                "persistent": "true" if persistent == "true" else "",
+                            }}},
+                        }), persistent == "true")
+                    directory = Path(directory)
+                    calls = directory / "calls"
+                    docker = directory / "docker"
+                    docker.write_text('#!/bin/bash\nprintf "%s\\n" "$@" >> "$ARCHESTRA_TEST_DOCKER_CALLS"\n')
+                    docker.chmod(0o755)
+                    result = subprocess.run(
+                        ["bash", "-e", "-c", script], text=True, capture_output=True,
+                        env=os.environ | dict.fromkeys(names, "") | {
+                            "PATH": f"{directory}:{os.environ['PATH']}",
+                            "RUNNER_TEMP": str(directory), "GITHUB_OUTPUT": str(directory / "output"),
+                            "ARCHESTRA_TEST_DOCKER_CALLS": str(calls),
+                            "INPUT_CONTEXT": "platform", "INPUT_PUSH": "true",
+                            "INPUT_CACHE_TO": cache_to, "PERSISTENT_BUILDER": persistent,
+                        },
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    arguments = calls.read_text().splitlines()
+                    self.assertEqual(arguments[:2], ["buildx", "build"])
+                    exported = bool(cache_to) and persistent != "true"
+                    self.assertEqual("--cache-to" in arguments, exported)
+                    if exported:
+                        self.assertEqual(arguments[arguments.index("--cache-to") + 1], cache_to)
+
+    def test_only_trusted_default_branch_publishers_can_save_rust_caches(self):
+        action = (ROOT / ".github/actions/setup-rust-build/action.yml").read_text()
+        expression = re.search(r"^        save-if: \$\{\{ (.*) \}\}$", action, re.M).group(1)
+        for event in ("push", "schedule", "workflow_dispatch", "merge_group",
+                      "pull_request", "pull_request_target", "workflow_run"):
+            for ref in ("refs/heads/main", "refs/heads/feature", "refs/pull/1/merge",
+                        "refs/heads/gh-readonly-queue/main/pr-1", "refs/tags/v1"):
+                for enabled in ("true", "false"):
+                    with self.subTest(event=event, ref=ref, enabled=enabled):
+                        allowed = evaluate(expression, {
+                            "inputs": {"save-if": enabled},
+                            "github": {
+                                "ref": ref, "event_name": event,
+                                "event": {"repository": {"default_branch": "main"}},
+                            },
+                        })
+                        self.assertEqual(allowed, enabled == "true" and
+                                         ref == "refs/heads/main" and
+                                         event in ("push", "schedule", "workflow_dispatch"))
+        self.assertTrue(evaluate(expression, {
+            "inputs": {"save-if": "true"},
+            "github": {"ref": "refs/heads/trunk", "event_name": "push",
+                       "event": {"repository": {"default_branch": "trunk"}}},
+        }))
+
+    def compile_dependencies(self, hit, fail=False):
+        source = (ROOT / ".github/workflows/warm-rust-check-caches.yml").read_text()
+        section = source.split("      - name: Warm check and test dependencies\n", 1)[1]
+        section = section.split("      - name:", 1)[0]
+        condition = re.search(r"^        if: (.*)$", section, re.M).group(1)
+        # A dot in an Actions step id denotes property access; these ids have
+        # hyphens, which the expression language also permits in identifiers.
+        condition = condition.replace("steps.cargo-cache", "steps['cargo-cache']")
+        if not evaluate(condition, {"steps": {"cargo-cache": {"outputs": {"cache-hit": hit}}}}):
+            return None, []
+        script = "\n".join(line[10:] for line in section.split("        run: |\n", 1)[1].splitlines())
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            calls = directory / "calls"
+            cargo = directory / "cargo"
+            cargo.write_text(
+                '#!/bin/bash\nprintf "%s\\n" "$*" >> "$ARCHESTRA_TEST_CARGO_CALLS"\n'
+                'if [ "$ARCHESTRA_TEST_CARGO_FAIL" = true ]; then exit 23; fi\n'
+            )
+            cargo.chmod(0o755)
+            result = subprocess.run(
+                ["bash", "-eo", "pipefail", "-c", script],
+                env=os.environ | {
+                    "PATH": f"{directory}:{os.environ['PATH']}",
+                    "ARCHESTRA_TEST_CARGO_CALLS": str(calls),
+                    "ARCHESTRA_TEST_CARGO_FAIL": str(fail).lower(),
+                },
+                capture_output=True, text=True,
+            )
+            return result.returncode, calls.read_text().splitlines() if calls.exists() else []
+
+    def test_exact_hit_does_not_allocate_compilation_work(self):
+        self.assertEqual(self.compile_dependencies("true"), (None, []))
+
+    def test_misses_compile_dependencies_without_executing_test_suites(self):
+        for hit in ("false", ""):
+            with self.subTest(hit=hit):
+                status, calls = self.compile_dependencies(hit)
+                self.assertEqual(status, 0)
+                self.assertEqual(calls, [
+                    "check --workspace --all-targets --locked",
+                    "test --workspace --locked --no-run",
+                ])
+
+    def test_failed_check_does_not_continue_warming(self):
+        status, calls = self.compile_dependencies("false", fail=True)
+        self.assertNotEqual(status, 0)
+        self.assertEqual(len(calls), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

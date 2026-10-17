@@ -61,7 +61,7 @@ For every field, see the [policy reference](https://www.openappa.com/contracts).
 
 ## Human Review
 
-Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy includes a reviewer for this mark.
+Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy's reviewer covers this mark, any other mark but `blocked`, data below `trusted`, and a missing `public` audience. A policy saved earlier keeps its reviewer; copy the `hitl` authority from the starting policy into it (or into `appa.toml` with GitHub sync) to get this default.
 
 In Slack, Microsoft Teams, and Telegram, the agent pauses and posts the review in the conversation with **Approve** and **Decline** buttons. Only the person who sent the message can answer, within 24 hours. After that the action stays blocked. An approval lets the agent continue only when the policy allows it.
 
@@ -120,17 +120,17 @@ What to know:
 
 Keep a policy assumption checked over time, such as refusing an email after an agent reads untrusted data. Open **View Validations** on **Overview** to review the latest saved run, or use the **Validations** tab.
 
-1. Click **Add validation** to write a `.appa` scenario, or **Ask About Validations** for guided help.
-2. Review the expected decisions and run the draft from its editor.
+1. Click **Write a validation** and describe the case; the agent drafts a `.appa` scenario. **Explain validations** answers questions about the format.
+2. Review the expected decisions and test the draft from its editor.
 3. Save locally, or commit the file to the configured Git repository.
-4. Click **Run all** to check every saved file and retain the result in run history.
+4. Click **Run all** to check every saved file, or the run button on a row to check one. Both keep the result in run history.
 
 Each file describes ordered tool calls and expected decisions. Calls in one file share session state; separate files start fresh. Replay uses the effective policy, including batteries. It runs no tools, but asks the policy's annotators, helpers and models live with your organization's credentials, so a run can spend model tokens. See the [OpenAPPA validation guide](https://www.openappa.com/validation) for the format.
 
 What to know:
 
-- **Results:** the table shows **Passed** or **Failed** and the last run time. A file that cannot run appears as **Failed**, with its reason: replay stops at the first call whose answer did not come, such as human review, a model whose key is not set, or a helper that cannot be reached. Open a history run for details; results apply to the policy and files captured by that run.
-- **Drafts:** **Run file** checks only the current editor text. Its temporary result does not change saved suite results or history. Search filters and unsaved drafts do not change **Run all**.
+- **Results:** each file shows its newest result, **Passed**, **Failed** or **Cannot run**, from whichever run checked it last. Click a status to read why. A file cannot run when replay stops at a call whose answer did not come, such as a model whose key is not set or a helper that cannot be reached. Replay asks no person: a step that expects `authority hitl` passes when the call offers human review. The **Last run** line adds up these results and opens run history.
+- **Drafts:** **Test draft** in the editor checks unsaved text. Its result is temporary and does not change saved results or history. Search filters and unsaved drafts do not change **Run all**.
 - **Policy changes:** accepted changes from local saves or Git sync automatically queue the full suite. Unchanged syncs and validation-only edits do not trigger runs. Validation failures do not block or roll back a policy; configure repository CI if failures should block merges.
 
 ### Git-Backed Validations

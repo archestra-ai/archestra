@@ -55,7 +55,6 @@ import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
 // SPDX-SnippetEnd
 import config, {
   resolveAllowedOrigins,
-  shouldRunRenderer,
   shouldRunWebServer,
   shouldRunWorker,
 } from "@/config";
@@ -66,6 +65,7 @@ import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import {
+  createAgentToolsIndexes,
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
@@ -104,8 +104,6 @@ import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import { captureClientRuntimeEvidence } from "@/routes/proxy/utils/client-runtime-evidence";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
-import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
-import renderServiceRoutes from "@/services/apps/app-recording-render-service";
 import {
   APP_BASE_CSS_PATH,
   APP_SDK_PATH,
@@ -557,24 +555,7 @@ const loadArchestraAppSdk = (): string | null => {
   const staticDir = path.dirname(config.mcpSandbox.filePath);
   const sdkPath = path.join(staticDir, "archestra-app-sdk.js");
   try {
-    const base = readFileSync(sdkPath, "utf-8");
-    // The session recorder/replay driver is a separate appended module so the
-    // recording feature stays a deletable unit — deployments with recording
-    // disabled never deliver the capture code to apps at all.
-    if (!config.hackathonRecorder.enabled) return base;
-    const recordingPath = path.join(
-      staticDir,
-      "archestra-app-recording-sdk.js",
-    );
-    try {
-      return `${base}\n${readFileSync(recordingPath, "utf-8")}`;
-    } catch (err) {
-      logger.warn(
-        { err, recordingPath },
-        "Archestra app-recording SDK not found — apps will render without session capture",
-      );
-      return base;
-    }
+    return readFileSync(sdkPath, "utf-8");
   } catch (err) {
     logger.warn(
       { err, sdkPath },
@@ -618,21 +599,11 @@ const archestraAppBaseCss = loadArchestraAppBaseCss();
  * them is an open one: the sandbox must stay embeddable wherever the platform is
  * reached, so the policy stays `*`.
  *
- * Ancillary features may only WIDEN an already-restricted list, never create
- * one. The app-recording renderer is the case in point: its frame ancestors fall
- * back to a guessed `http://localhost:3000` when nothing is configured, and
- * pushing that guess unconditionally turned the open policy into a loopback-only
- * one — so a container reached on any other origin (a remapped published port, a
- * LAN address, a reverse proxy) had every app iframe refused with
- * `ERR_BLOCKED_BY_RESPONSE` and rendered an empty box.
- *
  * @public — exercised by server.test.ts (knip --production ignores tests)
  */
 export function buildSandboxFrameAncestors(params: {
   allowedOrigins: readonly string[];
   sandboxDomain: string | null | undefined;
-  /** Extra ancestors from the offline video renderer; empty when it is off. */
-  recorderFrameAncestors: readonly string[];
 }): string {
   const declared = [...params.allowedOrigins];
   if (params.sandboxDomain) {
@@ -640,15 +611,7 @@ export function buildSandboxFrameAncestors(params: {
   }
   if (declared.length === 0) return "*";
 
-  // The renderer loads the replay page from this deployment's own frontend,
-  // which then frames the sandbox exactly as a person's browser does. It
-  // normally reaches it at the configured frontend origin, already declared
-  // above; a deployment that points the renderer somewhere internal instead
-  // needs that address named too, or the sandbox refuses to load inside the
-  // render and the replay films an empty app pane.
-  return [...new Set([...declared, ...params.recorderFrameAncestors])].join(
-    " ",
-  );
+  return [...new Set(declared)].join(" ");
 }
 
 /**
@@ -678,9 +641,6 @@ const registerSandboxRoute = (
   const frameAncestors = buildSandboxFrameAncestors({
     allowedOrigins: config.mcpSandbox.allowedOrigins,
     sandboxDomain: config.mcpSandbox.domain,
-    recorderFrameAncestors: config.hackathonRecorder.enabled
-      ? config.hackathonRecorder.renderFrameAncestors
-      : [],
   });
   if (frameAncestors !== "*") {
     // Reaching the platform on any other origin makes the browser refuse the
@@ -1064,11 +1024,13 @@ const startWebServer = async () => {
       registerTaskHandlers(taskQueueService);
       await taskQueueService.seedPeriodicTasks();
       taskQueueService.startWorker();
-      // Fire-and-forget: concurrent (non-write-blocking) drop of legacy
-      // interactions payload indexes on deployments upgrading from before
-      // migration 0116 stopped creating them. Idempotent; errors are logged
-      // inside and retried next boot.
+      // Fire-and-forget index maintenance, all concurrent (non-write-blocking):
+      // drop the legacy interactions payload indexes on deployments upgrading
+      // from before migration 0116 stopped creating them, and build the
+      // agent_tools lookup indexes. Idempotent; errors are logged inside and
+      // retried next boot.
       void dropLegacyPayloadTrgmIndexes();
+      void createAgentToolsIndexes();
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1248,11 +1210,6 @@ const startWebServer = async () => {
     // Start WebSocket server using the same HTTP server
     websocketService.start(fastify.server);
     fastify.log.debug("WebSocket service started");
-
-    // Fetch the browser that renders session videos, if this deployment turned
-    // the recorder on. Deliberately not awaited: it is a large download and
-    // nothing else needs it to serve traffic.
-    warmRenderRuntime();
 
     registerWebServerShutdown(fastify, {
       emailRenewalIntervalId,
@@ -1539,9 +1496,10 @@ const startWorker = async () => {
     // reconcile/sweep remain web-side.
     McpServerRuntimeManager.startStateWatchersOnly();
     // SPDX-SnippetEnd
-    // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
+    // See the shouldRunWorker branch in `start` — same index maintenance,
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();
+    void createAgentToolsIndexes();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1642,68 +1600,6 @@ const startWorker = async () => {
   }
 };
 
-/**
- * Starts the process as the dedicated app-recording video render service.
- *
- * Renders drive a whole browser and hold their jobs in memory, so running them
- * in the multi-replica web tier means a render's follow-up poll and download
- * scatter across pods that never held the job. This process is the one place a
- * job lives: a single replica the web tier proxies to (see the render client),
- * with no database, worker or session of its own — it renders, and enforces
- * per-render ownership from the user id the web tier forwards.
- */
-const startRenderer = async () => {
-  logger.info(
-    "Starting in renderer-only mode (ARCHESTRA_PROCESS_TYPE=renderer)",
-  );
-
-  try {
-    const renderServer = createFastifyInstance();
-
-    renderServer.get("/health", async () => ({ status: "ok" }));
-    // Ready the instant it can take work: the render browser is fetched in the
-    // background (warmRenderRuntime) and installed on first use if that has not
-    // finished, so readiness must not block on it.
-    renderServer.get("/ready", async () => ({ status: "ok" }));
-
-    await renderServer.register(renderServiceRoutes);
-
-    await registerStandaloneMetricsEndpoint({
-      fastify: renderServer,
-      enableDefaultMetrics: true,
-    });
-
-    // Fetch (or install) Chromium now, so the first export does not pay for it.
-    warmRenderRuntime();
-
-    await renderServer.listen({ port, host });
-    logger.info(`Render service started on port ${port}`);
-
-    // A container runtime can deliver SIGTERM then SIGINT in quick succession;
-    // guard so the second signal does not start a concurrent renderServer.close()
-    // and race the first handler's process.exit.
-    let shuttingDown = false;
-    const gracefulShutdown = async (signal: string) => {
-      if (shuttingDown) return;
-      shuttingDown = true;
-      logger.info(`Renderer received ${signal}, shutting down...`);
-      try {
-        await renderServer.close();
-        process.exit(0);
-      } catch (error) {
-        logger.error({ error }, "Renderer shutdown error");
-        process.exit(1);
-      }
-    };
-
-    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-  } catch (err) {
-    logger.error(err, "Renderer failed to start");
-    process.exit(1);
-  }
-};
-
 // Dagger SDK v0.20.8 has a bug in bin.js:198-201 where it throws inside a
 // .catch() callback, creating an unhandled rejection that is never awaited.
 // This handler logs those leaks and keeps the server alive.
@@ -1733,9 +1629,7 @@ process.on("unhandledRejection", (reason) => {
  * This allows other scripts to import helper functions without starting the server
  */
 if (isMainModule) {
-  if (shouldRunRenderer) {
-    startRenderer();
-  } else if (shouldRunWorker && !shouldRunWebServer) {
+  if (shouldRunWorker && !shouldRunWebServer) {
     startWorker();
   } else if (shouldRunWebServer) {
     startWebServer();

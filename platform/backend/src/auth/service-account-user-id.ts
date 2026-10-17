@@ -27,3 +27,27 @@ export function actorFromUserId(userId: string): {
   const id = serviceAccountIdFromUserId(userId);
   return id ? { kind: "serviceAccount", id } : { kind: "user", id: userId };
 }
+
+/**
+ * Owner columns for a principal on a table owned by a person (`user_id`) or a
+ * service account (`service_account_id`); exactly one is set.
+ */
+export function ownerColumnsFromUserId(userId: string): {
+  userId: string | null;
+  serviceAccountId: string | null;
+} {
+  const serviceAccountId = serviceAccountIdFromUserId(userId);
+  return serviceAccountId
+    ? { userId: null, serviceAccountId }
+    : { userId, serviceAccountId: null };
+}
+
+/** The principal id behind a row's owner columns; inverse of {@link ownerColumnsFromUserId}. */
+export function userIdFromOwnerColumns(row: {
+  userId: string | null;
+  serviceAccountId: string | null;
+}): string {
+  if (row.userId) return row.userId;
+  if (row.serviceAccountId) return serviceAccountUserId(row.serviceAccountId);
+  throw new Error("row has no owner");
+}

@@ -175,10 +175,8 @@ describe("APPA Guide feature availability", () => {
     expect(initialPolicy()).toContain(
       "[policy.deployment]\ncontext_control = true",
     );
-    const binding =
-      '\n[externals.annotators.noop]\nurl = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"\n';
     for (const candidate of [
-      header + fallback + binding,
+      header + fallback,
       // Declarations are root-level keys, so they precede the first table.
       declarations + header,
     ]) {

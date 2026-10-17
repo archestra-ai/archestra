@@ -27,10 +27,7 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
-import {
-  OAuthConfirmationDialog,
-  type OAuthInstallResult,
-} from "@/components/oauth-confirmation-dialog";
+import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
@@ -177,8 +174,12 @@ export function InternalMCPCatalog({
     sharedWith: ownershipFilters.sharedWith,
     owner: ownershipFilters.owner,
   });
+  // Without per-install agents: building them for every install is what kept
+  // this page from loading. Every list on this page asks for the same compact
+  // shape, so they share this one request and its server-rendered data.
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
+    includeAssignedAgents: false,
   });
   useMcpInstallationStatusCacheSync();
 
@@ -356,7 +357,7 @@ export function InternalMCPCatalog({
   // (Next integrates history updates with the router), so the hook sees the
   // param; deleting the reauth param first makes the re-fired effect
   // early-return instead of looping.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: run only on searchParams changes; router/pathname are stable and handleDeepLinkReauth is a stable closure
+  // biome-ignore lint/correctness/useExhaustiveDependencies: wait for the deep-link target; router/pathname are stable and handleDeepLinkReauth uses these same query results
   useEffect(() => {
     const reauthCatalogIdParam = searchParams.get(
       MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -365,6 +366,19 @@ export function InternalMCPCatalog({
 
     // Extract highlight param before clearing URL
     const serverIdParam = searchParams.get(MCP_CATALOG_SERVER_QUERY_PARAM);
+
+    // Keep the link until both records are available. Consuming it while
+    // queries load loses the re-authentication request or its existing scope.
+    if (
+      serverIdParam &&
+      (!catalogItems?.some((item) => item.id === reauthCatalogIdParam) ||
+        !installedServers?.some(
+          (server) =>
+            server.id === serverIdParam &&
+            server.catalogId === reauthCatalogIdParam,
+        ))
+    )
+      return;
 
     // Drop the reauth/highlight params (and, when unhandled, hand off to the
     // manage dialog) before writing the URL back.
@@ -385,7 +399,7 @@ export function InternalMCPCatalog({
     if (serverIdParam) {
       handleDeepLinkReauth(reauthCatalogIdParam, serverIdParam);
     }
-  }, [searchParams]);
+  }, [searchParams, catalogItems, installedServers]);
 
   // Called to re-authenticate a highlighted credential in-place (preserves tool assignments)
   const handleDeepLinkReauth = (catalogId: string, serverId: string) => {
@@ -434,7 +448,7 @@ export function InternalMCPCatalog({
   };
 
   // OAuth confirm for re-authentication (install OAuth lives in useCatalogInstall).
-  const handleReauthOAuthConfirm = async (result: OAuthInstallResult) => {
+  const handleReauthOAuthConfirm = async () => {
     if (!selectedCatalogItem) return;
 
     try {
@@ -445,8 +459,10 @@ export function InternalMCPCatalog({
 
       setOAuthState(state);
       setOAuthCatalogId(selectedCatalogItem.id);
-      setOAuthTeamId(result.scope === "team" ? (result.teamId ?? null) : null);
-      setOAuthScope(result.scope);
+      const scope =
+        targetServerScope ?? (targetServerTeamId ? "team" : "personal");
+      setOAuthTeamId(scope === "team" ? targetServerTeamId : null);
+      setOAuthScope(scope);
 
       if (reauthServerId) {
         setOAuthMcpServerId(reauthServerId);
@@ -1364,6 +1380,7 @@ export function InternalMCPCatalog({
             }
           }}
           serverName={selectedCatalogItem?.name || ""}
+          isReauth
           onConfirm={handleReauthOAuthConfirm}
           onCancel={() => {
             closeDialog("oauth");

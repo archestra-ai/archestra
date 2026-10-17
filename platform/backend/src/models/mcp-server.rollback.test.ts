@@ -576,6 +576,33 @@ describe("McpServerModel", () => {
         expect.objectContaining({ userId: user.id, email: user.email }),
       ]);
     });
+
+    test("agent usage is attached only when asked for", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const server = await makeMcpServer({ catalogId: catalog.id });
+      const agent = await makeAgent();
+      const tool = await makeTool({ catalogId: catalog.id });
+      await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
+      const list = (includeAssignedAgents?: boolean) =>
+        McpServerModel.findAll(undefined, true, undefined, undefined, true, {
+          catalogId: catalog.id,
+          includeAssignedAgents,
+        });
+
+      const [plain] = await list();
+      const [withUsage] = await list(true);
+
+      expect(plain.assignedAgents).toEqual([]);
+      expect(withUsage.assignedAgents).toEqual([
+        expect.objectContaining({ id: agent.id }),
+      ]);
+    });
   });
 
   describe("findAll with scope filter", () => {

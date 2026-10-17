@@ -334,7 +334,7 @@ annotator = "nobody.declares"
 function root(entry: string): string {
   return `include = ["${entry}"]
 
-[server_aliases]
+[aliases.mcp]
 acme = ["acme_prod"]
 
 [policy]

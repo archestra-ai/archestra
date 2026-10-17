@@ -63,7 +63,9 @@ test.describe("Skill version history", () => {
 
       // Read the diff here: version 2 is the only one with a predecessor to
       // compare against. This is the only place the real Monaco diff renders —
-      // every unit test stubs it.
+      // every unit test stubs it. The dialog opens on Changes; the control
+      // stays disabled until version 1 has loaded as the baseline, so the
+      // click doubles as the wait for it.
       await dialog.getByRole("button", { name: /^Changes/ }).click();
       // Monaco marks each editor `role="code"`; in a unified diff the second is
       // the modified side, which carries both revisions — the removed line as an
@@ -79,7 +81,7 @@ test.describe("Skill version history", () => {
       });
       await expect(unifiedDiff).toContainText(FIRST_BODY);
 
-      const olderVersion = dialog.getByRole("button", { name: /^v1/ });
+      const olderVersion = dialog.getByRole("button", { name: /^Version 1\b/ });
       await expect(olderVersion).toBeVisible();
       await olderVersion.click();
       await expect(
@@ -91,9 +93,7 @@ test.describe("Skill version history", () => {
         dialog.getByRole("button", { name: /^Changes/ }),
       ).toBeDisabled();
 
-      await dialog
-        .getByRole("button", { name: "Restore this version" })
-        .click();
+      await dialog.getByRole("button", { name: "Restore v1" }).click();
       const confirmation = page.getByRole("dialog", {
         name: /Restore version 1/,
       });
@@ -106,7 +106,9 @@ test.describe("Skill version history", () => {
       await expect(
         dialog.getByRole("heading", { name: "Version 3" }),
       ).toBeVisible();
-      await expect(dialog.getByRole("button", { name: /^v3/ })).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: /^Version 3\b/ }),
+      ).toBeVisible();
 
       const restored = await readSkill(page, skillId);
       expect(restored.latestVersion).toBe(3);

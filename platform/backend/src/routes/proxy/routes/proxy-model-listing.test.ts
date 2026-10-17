@@ -41,6 +41,7 @@ import githubCopilotProxyRoutes from "./github-copilot";
 import openAiProxyRoutes from "./openai";
 import {
   AnthropicModelsListResponseSchema,
+  extractBearerToken,
   toAnthropicModelsList,
 } from "./proxy-model-listing";
 
@@ -613,5 +614,27 @@ describe("toAnthropicModelsList display_name fallback", () => {
       "Custom",
     ]);
     expect(() => AnthropicModelsListResponseSchema.parse(listed)).not.toThrow();
+  });
+});
+
+describe("extractBearerToken", () => {
+  test("returns the token after a case-insensitive Bearer prefix", () => {
+    expect(extractBearerToken("Bearer abc.def")).toBe("abc.def");
+    expect(extractBearerToken("bearer   token-1  ")).toBe("token-1  ");
+    expect(extractBearerToken(["Bearer first", "Bearer second"])).toBe("first");
+  });
+
+  test("rejects other schemes, missing tokens and multi-line values", () => {
+    expect(extractBearerToken("Basic abc")).toBeUndefined();
+    expect(extractBearerToken("Bearer")).toBeUndefined();
+    expect(extractBearerToken("Bearertoken")).toBeUndefined();
+    expect(extractBearerToken("Bearer abc\ndef")).toBeUndefined();
+    expect(extractBearerToken(undefined)).toBeUndefined();
+  });
+
+  test("returns quickly on a long whitespace run before a line break", () => {
+    const started = performance.now();
+    expect(extractBearerToken(`Bearer${" ".repeat(50_000)}\nx`)).toBe("x");
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });

@@ -9,6 +9,7 @@ import {
 import {
   type QueryClient,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -69,6 +70,11 @@ export function useMcpServers(params?: McpServersParams) {
   const { data: canReadInstallations } = useHasPermissions({
     mcpServerInstallation: ["read"],
   });
+  // Per-install agent usage is opt-in, unlike the API's default: building it
+  // looks up the agents of every listed install, and only a server's own page
+  // shows it. Every other list reads status and names, and with a boolean key
+  // those callers share one cached request.
+  const includeAssignedAgents = params?.includeAssignedAgents ?? false;
 
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
@@ -76,31 +82,23 @@ export function useMcpServers(params?: McpServersParams) {
       "mcp-servers",
       {
         catalogId: params?.catalogId,
-        includeAssignedAgents: params?.includeAssignedAgents,
+        includeAssignedAgents,
         assignmentScope: params?.assignmentScope,
         assignmentTeamIds: params?.assignmentTeamIds,
       },
     ],
     queryFn: async () => {
       const { data, error } = await getMcpServers({
-        query:
-          params?.includeAssignedAgents !== undefined ||
-          params?.catalogId ||
-          params?.assignmentScope ||
-          params?.assignmentTeamIds
-            ? {
-                ...(params?.includeAssignedAgents !== undefined && {
-                  includeAssignedAgents: params.includeAssignedAgents,
-                }),
-                ...(params?.catalogId && { catalogId: params.catalogId }),
-                ...(params?.assignmentScope && {
-                  assignmentScope: params.assignmentScope,
-                }),
-                ...(params?.assignmentTeamIds && {
-                  assignmentTeamIds: params.assignmentTeamIds,
-                }),
-              }
-            : undefined,
+        query: {
+          includeAssignedAgents,
+          ...(params?.catalogId && { catalogId: params.catalogId }),
+          ...(params?.assignmentScope && {
+            assignmentScope: params.assignmentScope,
+          }),
+          ...(params?.assignmentTeamIds && {
+            assignmentTeamIds: params.assignmentTeamIds,
+          }),
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
@@ -512,6 +510,46 @@ export function useMcpServerTools(mcpServerId: string | null) {
       return data ?? [];
     },
     enabled: !!mcpServerId,
+  });
+}
+
+/**
+ * The agents with tools assigned from each of these installs, read one install
+ * at a time. Server lists skip them (`includeAssignedAgents: false`): building
+ * them for every install of a catalog is what made the registry slow, and only
+ * a confirmation about specific installs needs them.
+ */
+export function useMcpServersAssignedAgents(params: {
+  serverIds: string[];
+  enabled: boolean;
+}) {
+  return useQueries({
+    queries: params.serverIds.map((id) => ({
+      // The whole install, not a bare agent array: the list caches under the
+      // same ["mcp-servers"] prefix are rewritten as arrays of servers.
+      queryKey: ["mcp-servers", id, "detail"],
+      queryFn: async () => {
+        const { data, error } = await getMcpServer({ path: { id } });
+        throwOnApiError(error, { toastOnError: false });
+        return data ?? null;
+      },
+      enabled: params.enabled,
+    })),
+    combine: (results) => ({
+      agentsByServerId: new Map(
+        params.serverIds.map((id, index) => [
+          id,
+          results[index]?.data?.assignedAgents ?? [],
+        ]),
+      ),
+      isPending: results.some((result) => result.isPending),
+      // A failed refetch keeps the agents it already showed: a server-list
+      // refresh while the confirmation is open rereads the install, which
+      // someone may have removed by then.
+      isError: results.some(
+        (result) => result.isError && result.data === undefined,
+      ),
+    }),
   });
 }
 

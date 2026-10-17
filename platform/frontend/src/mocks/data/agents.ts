@@ -94,7 +94,17 @@ export function makeAgentCatalog({
   return {
     data: [
       ...externalAgents.map((value) => ({ type: "external" as const, value })),
-      ...agents.map((value) => ({ type: "agent" as const, value })),
+      ...agents.map((value) => ({
+        type: "agent" as const,
+        // Counted as the catalog route counts them, from the mock's tools.
+        value: {
+          ...value,
+          toolsCount: value.tools.filter((tool) => !tool.delegateToAgentId)
+            .length,
+          subagentsCount: value.tools.filter((tool) => tool.delegateToAgentId)
+            .length,
+        },
+      })),
     ],
     pagination: makePagination(total),
     totals: {

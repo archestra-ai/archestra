@@ -89,8 +89,8 @@ function call(tool: string, args: Record<string, unknown>) {
 function withGithub(): string {
   const archestra = bundledEntry(ARCHESTRA_BATTERY);
   return initialPolicy().replace(
-    `include = ["${archestra}"]`,
-    `include = ["${archestra}", "${bundledEntry("github")}"]`,
+    `"${archestra}",\n`,
+    `"${archestra}",\n  "${bundledEntry("github")}",\n`,
   );
 }
 

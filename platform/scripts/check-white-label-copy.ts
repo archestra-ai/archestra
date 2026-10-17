@@ -73,11 +73,6 @@ const ALLOWLISTED_DIRS: Record<string, string> = {
   // Dev tooling that generates Archestra's own published documentation. Its
   // output is vendor docs, not deployment copy.
   "backend/src/standalone-scripts/": "generates Archestra's own docs/tooling",
-  // The in-product session recorder exists to submit demos to the Archestra
-  // Apps Hackathon — it names the real event and the real GitHub repo, and is
-  // hidden entirely unless that offer is enabled.
-  "frontend/src/components/app-session-recording/":
-    "submits to the real Archestra hackathon repo; gated behind the offer",
 };
 
 type Violation = {

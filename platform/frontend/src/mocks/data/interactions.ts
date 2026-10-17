@@ -117,6 +117,7 @@ export function makeInteraction(
     type: "openai:chatCompletions",
     model: "gpt-4o",
     baselineModel: null,
+    durationMs: null,
     inputTokens: 100,
     inputTokensEstimated: false,
     outputTokens: 50,

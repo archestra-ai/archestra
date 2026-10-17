@@ -10,7 +10,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./index";
 
@@ -78,6 +77,7 @@ describe("MCP gateway executed-as identity", () => {
     makeInternalMcpCatalog,
     makeOrganization,
     makeTool,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
@@ -91,11 +91,8 @@ describe("MCP gateway executed-as identity", () => {
       toolExposureMode: "search_and_run_only",
     });
     await makeAgentTool(agent.id, tool.id);
-    const { value: token } = await TeamTokenModel.create({
+    const { value: token } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
     // The dispatched call reached a real server through an org connection.
     executeToolCallForOwnerMock.mockResolvedValue({
@@ -123,6 +120,7 @@ describe("MCP gateway executed-as identity", () => {
     makeOrganization,
     makeUser,
     makeMember,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -132,11 +130,8 @@ describe("MCP gateway executed-as identity", () => {
       agentType: "mcp_gateway",
       toolExposureMode: "search_and_run_only",
     });
-    const { value: token } = await TeamTokenModel.create({
+    const { value: token } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
 
     const result = await callTool({

@@ -3893,6 +3893,55 @@
       "when": 1792147502647,
       "tag": "0555_drop_openappa_held_pull",
       "breakpoints": true
+    },
+    {
+      "idx": 556,
+      "version": "7",
+      "when": 1792154515594,
+      "tag": "0556_service_account_team",
+      "breakpoints": true
+    },
+    {
+      "idx": 557,
+      "version": "7",
+      "when": 1792169057965,
+      "tag": "0557_service_account_sandbox_owner",
+      "breakpoints": true
+    },
+    {
+      "idx": 558,
+      "version": "7",
+      "when": 1792176806888,
+      "tag": "0558_resource_permission_grants_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 559,
+      "version": "7",
+      "when": 1792182929184,
+      "tag": "0559_cloudy_bloodaxe",
+      "breakpoints": true
+    },
+    {
+      "idx": 560,
+      "version": "7",
+      "when": 1792182961634,
+      "tag": "0560_pale_radioactive_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 561,
+      "version": "7",
+      "when": 1792188489677,
+      "tag": "0561_public_unicorn",
+      "breakpoints": true
+    },
+    {
+      "idx": 562,
+      "version": "7",
+      "when": 1792205993272,
+      "tag": "0562_cultured_spitfire",
+      "breakpoints": true
     }
   ]
 }

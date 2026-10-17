@@ -149,7 +149,6 @@ export function McpServerAttentionList({
         scope: server.scope,
         teamId: server.teamId,
       },
-      assignedAgents: server.assignedAgents ?? [],
     }));
   const canRemoveSelected =
     !!canDeleteInstalls &&

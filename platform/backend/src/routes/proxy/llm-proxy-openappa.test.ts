@@ -26,7 +26,10 @@ import {
   buildMcpGatewayTool,
   mcpToolToModelOutput,
 } from "@/clients/chat-tool-builder";
-import { internalCallHeader } from "@/clients/internal-call";
+import {
+  guardrailCallHeader,
+  internalCallHeader,
+} from "@/clients/internal-call";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
@@ -492,7 +495,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           tokenValue: "test-token",
           tokenId: "test-token-id",
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
         },
         repeatTracker: new ToolCallRepeatTracker(),
         modelAcceptsImageToolResults: false,
@@ -2052,7 +2055,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   const guardrailCall = (
     source: string,
-    proof: Record<string, string> = internalCallHeader(),
+    proof: Record<string, string> = guardrailCallHeader(),
   ) =>
     app.inject({
       method: "POST",
@@ -2073,7 +2076,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(providerRequests).toHaveLength(1);
     expect(events).toHaveLength(0);
-    const [proofHeader] = Object.keys(internalCallHeader());
+    const [proofHeader] = Object.keys(guardrailCallHeader());
     for (const [, options] of vi.mocked(anthropicAdapterFactory.createClient)
       .mock.calls) {
       expect(options.defaultHeaders ?? {}).not.toHaveProperty(proofHeader);
@@ -2082,7 +2085,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test("block mode blocks a loopback guardrail source without the platform's proof", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
-    const [proofHeader] = Object.keys(internalCallHeader());
+    const [proofHeader] = Object.keys(guardrailCallHeader());
     for (const proof of [{}, { [proofHeader]: "forged" }]) {
       const response = await guardrailCall("guardrail:annotator", proof);
       expect(response.statusCode, response.body).toBe(400);
@@ -2151,7 +2154,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "anthropic-version": "2023-06-01",
         "x-archestra-source": "guardrail:annotator",
         "x-appa-session-id": "chat-session",
-        ...internalCallHeader(),
+        ...guardrailCallHeader(),
       },
       payload: payload(false) as Record<string, unknown>,
     });
@@ -2669,21 +2672,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       questions: [
         {
           question: questionText,
-          header: "Approval",
+          header: "Tool call",
           options: [
-            {
-              label: "Approve",
-              description: "Allow this exact tool call.",
-            },
-            {
-              label: "Deny",
-              description: "Keep this tool call blocked.",
-            },
-            {
-              label: "Inspect details",
-              description:
-                "Show the complete, unchanged review as text in the conversation before deciding.",
-            },
+            { label: "Allow", description: "This exact call." },
+            { label: "Deny", description: "Keep it blocked." },
+            { label: "Inspect", description: "Show the full review in chat." },
           ],
           multiSelect: false,
         },
@@ -3566,7 +3559,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       return next as Record<string, unknown>;
     };
     const approval =
-      'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with the user\'s answers in mind.';
+      'Your questions have been answered: "Canonical HITL review."="Allow". You can now continue with the user\'s answers in mind.';
     const answeredHistory = [
       { role: "user", content: "Check the weather" },
       {
@@ -13566,6 +13559,8 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       );
       expect(response.body).not.toContain("call_subscription_partial");
       expect(response.body).not.toContain("finished subagent");
+      if (child)
+        expect(response.body).not.toContain("Partial subscription answer");
       const frames =
         stream && response.statusCode === 200
           ? response.body
@@ -13585,9 +13580,16 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
             ),
           ).toHaveLength(1);
           expect(frames.some((frame) => frame.error)).toBe(false);
+          if (!child) {
+            expect(
+              frames
+                .map((frame) => frame.choices?.[0]?.delta?.content ?? "")
+                .join(""),
+            ).toContain("Partial subscription answer");
+          }
         } else {
           expect(response.json().choices[0]).toMatchObject({
-            message: { content: "Partial subscription answer" },
+            message: { content: child ? "" : "Partial subscription answer" },
             finish_reason: reason,
           });
         }
@@ -13694,7 +13696,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       onError: error,
       onCleanup: cleanup,
     });
-    const reasoning = { id: "rs_partial", type: "reasoning", summary: [] };
+    const reasoning = {
+      id: "rs_partial",
+      type: "reasoning",
+      summary: [{ type: "summary_text", text: "PARTIAL_REASONING_MARKER" }],
+    };
     const message = {
       id: "msg_partial",
       type: "message",
@@ -13907,10 +13913,20 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
           };
         }
       }
-      expect(released).toMatchObject({
+      const persisted = {
         ...terminal,
         output: stream ? [reasoning, releasedMessage] : [],
-      });
+      };
+      // A buffered child's failed generation was never admitted, so its text
+      // stays off the wire while the provider's partial is still recorded.
+      const withheld = stream && child;
+      expect(released).toMatchObject(
+        withheld ? { ...persisted, output: [] } : persisted,
+      );
+      if (child) {
+        expect(response.body).not.toContain("Partial answer");
+        expect(response.body).not.toContain("PARTIAL_REASONING_MARKER");
+      }
       expect(response.body).not.toContain("UNADMITTED_RAW_SEARCH_MARKER");
       expect(response.body).not.toContain("UNADMITTED_SEARCH_DERIVED_MARKER");
       expect(response.body).not.toContain("finished subagent");
@@ -13944,7 +13960,8 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       await expect.poll(findInteractions).toHaveLength(1);
       const recorded = await findInteractions();
       expect(recorded).toHaveLength(1);
-      expect(recorded[0].response).toEqual(released);
+      if (withheld) expect(recorded[0].response).toMatchObject(persisted);
+      else expect(recorded[0].response).toEqual(released);
       expect(JSON.stringify(recorded[0].response)).not.toContain("UNADMITTED_");
       expect(recorded[0].processedRequest).not.toBeNull();
       if (status === "incomplete") {
@@ -13972,13 +13989,13 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
           url: `/api/interactions/${recorded[0].id}`,
         });
         expect(detail.statusCode, detail.body).toBe(200);
-        expect(detail.json().response).toEqual(released);
+        expect(detail.json().response).toEqual(recorded[0].response);
         const list = await readApp.inject({
           method: "GET",
           url: `/api/interactions?profileId=${agent.id}`,
         });
         expect(list.statusCode, list.body).toBe(200);
-        expect(list.json().data[0].response).toEqual(released);
+        expect(list.json().data[0].response).toEqual(recorded[0].response);
       } finally {
         await readApp.close();
       }
@@ -14007,6 +14024,125 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
           feedback: expect.stringContaining("Search results are not admitted"),
         },
       ]);
+    } finally {
+      unregister();
+    }
+  });
+
+  test.for(
+    (["incomplete", "failed"] as const).flatMap((status) =>
+      [false, true].map((child) => ({ status, child })),
+    ),
+  )("withholds a buffered child's failed non-stream Responses text (status=$status, child=$child)", async ({
+    status,
+    child,
+  }) => {
+    const unadmitted = vi.fn(async () => undefined);
+    const error = vi.fn(async () => undefined);
+    const cleanup = vi.fn(async () => undefined);
+    const unregister = registerLlmProxyPlugin({
+      id: "test-non-stream-terminal-text",
+      buffersModelResponse: () => child,
+      onBufferedModelResponse: unadmitted,
+      onModelResponse: unadmitted,
+      onComplete: unadmitted,
+      onError: error,
+      onCleanup: cleanup,
+    });
+    const reasoning = {
+      id: "rs_text_only",
+      type: "reasoning",
+      summary: [{ type: "summary_text", text: "PARTIAL_REASONING_MARKER" }],
+    };
+    const message = {
+      id: "msg_text_only",
+      type: "message",
+      role: "assistant",
+      status: "incomplete",
+      content: [
+        {
+          type: "output_text",
+          text: "PARTIAL_TEXT_ONLY_MARKER",
+          annotations: [],
+        },
+      ],
+    };
+    const usage = {
+      input_tokens: 10,
+      input_tokens_details: { cached_tokens: 3 },
+      output_tokens: 7,
+      output_tokens_details: { reasoning_tokens: 5 },
+      total_tokens: 17,
+    };
+    const terminal = {
+      id: "resp_text_only",
+      object: "response",
+      created_at: 123,
+      model: "gpt-5.5",
+      status,
+      output: [reasoning, message],
+      incomplete_details:
+        status === "incomplete" ? { reason: "max_output_tokens" } : null,
+      error:
+        status === "failed"
+          ? { code: "server_error", message: "Provider failed" }
+          : null,
+      usage,
+    };
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        new OpenAIProvider({
+          apiKey: "test-key",
+          baseURL: "https://native-responses.test/v1",
+          maxRetries: 0,
+          fetch: async () => HttpResponse.json(terminal),
+        }),
+    );
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/responses`,
+        remoteAddress: "127.0.0.1",
+        headers: codexHeaders(),
+        payload: {
+          ...codexPayload({
+            session_id: CODEX_SESSION,
+            thread_id: child ? CODEX_FORK_THREAD : CODEX_THREAD,
+            ...(child ? { parent_thread_id: CODEX_THREAD } : {}),
+          }),
+          stream: false,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        ...terminal,
+        output: child ? [] : [reasoning, message],
+      });
+      if (child) {
+        expect(response.body).not.toContain("PARTIAL_TEXT_ONLY_MARKER");
+        expect(response.body).not.toContain("PARTIAL_REASONING_MARKER");
+      }
+      expect(error).toHaveBeenCalledOnce();
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(unadmitted).not.toHaveBeenCalled();
+      expect(
+        events.filter((event) =>
+          ["child_end", "turn_end"].includes(String(event.event)),
+        ),
+      ).toEqual([]);
+      const recorded = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(recorded).toHaveLength(1);
+      expect(recorded[0].response).toMatchObject({
+        ...terminal,
+        output: [reasoning, message],
+      });
+      expect(recorded[0]).toMatchObject({
+        inputTokens: 7,
+        outputTokens: 7,
+        cacheReadTokens: 3,
+      });
     } finally {
       unregister();
     }

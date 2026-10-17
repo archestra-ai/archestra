@@ -223,12 +223,9 @@ jobs:
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-ci[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
-    # On a 16-vcpu Blacksmith runner: turbo fans out six
-    # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
-    # concurrently — so it scales with cores: the same all-cache-miss
-    # check:ci measured 1m51s on 16 vcpu vs 10m16s on 4-vcpu ubuntu-latest
-    # (whole job 3 min avg vs 15.2 min avg).
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Turbo fans out six check tasks; @frontend:check:ci also runs
+    # tsc/vitest/knip/biome concurrently, so retain 16 CPUs.
+    runs-on: ubicloud-standard-16-ubuntu-2404
     # Backstop: on a turbo remote-cache hit every check here finishes well
     # under 10m, but leaked test-runner processes (vitest fork workers /
     # esbuild) occasionally orphan and hold the step's log pipe open, leaving
@@ -294,22 +291,6 @@ jobs:
       - name: Verify no immature dependencies
         run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
-      # Cold Rust NAPI builds invoke cargo. Sync the
-      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
-      # turbo's parallel crate builds each trigger a concurrent rustup
-      # download of the same components, which races and fails with
-      # "could not rename downloaded file".
-      # Reuse the warm release target restored by backend test shards. The
-      # native addons are intentionally uncached in Turbo because its remote
-      # cache is shared across architectures, but Cargo artifacts here are
-      # scoped to this CI runner and Rust toolchain.
-      - name: Restore Rust build cache
-        uses: ./.github/actions/setup-rust-build
-        with:
-          workspaces: platform/archestra-rs
-          shared-key: backend-unit-tests
-          save-if: "false"
-
       # check:commit runs the Drizzle migration linter, which diffs migrations
       # against origin/<default branch>. The checkout above is depth-1 with
       # persist-credentials: false, so that ref is absent AND git holds no
@@ -368,10 +349,29 @@ jobs:
       # Backend unit tests run in the parallel sharded "Backend Unit Tests"
       # jobs below; here the backend runs check:commit (same checks minus
       # vitest) so this job stops being serialized behind the largest suite.
-      - name: Type checking, linting, formatting, unit tests
+      - name: Fast static and copy checks
         run: |
-          pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
+          pnpm check:white-label
+
+      # Cold Rust NAPI builds invoke cargo. Sync the
+      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
+      # turbo's parallel crate builds each trigger a concurrent rustup
+      # download of the same components, which races and fails with
+      # "could not rename downloaded file".
+      # Reuse the warm release target restored by backend test shards. The
+      # native addons are intentionally uncached in Turbo because its remote
+      # cache is shared across architectures, but Cargo artifacts here are
+      # scoped to this CI runner and Rust toolchain.
+      - name: Restore Rust build cache
+        uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: "false"
+
+      - name: Type checking, linting, formatting, unit tests
+        run: pnpm exec turbo check:ci --filter=!@backend
 
       - name: Test migration upgrades across release tracks
         run: pnpm --dir backend test:migration-upgrades
@@ -381,12 +381,6 @@ jobs:
 
       - name: Test backport automation
         run: python3 ../.github/scripts/test_backport.py
-
-      # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
-      # brand instead of resolving the deployment's app name. Occurrences that
-      # legitimately name the vendor carry an inline `white-label-ok:` reason.
-      - name: White-label copy check
-        run: pnpm check:white-label
 
       # Validates the production build (Next, backend, and Rust NAPI) on the
       # merge queue's combined SHA and on release-please PRs before codegen.
@@ -503,7 +497,7 @@ jobs:
     name: Platform Rust Checks
     needs: dagger-sdk-integration
     if: always() && github.event_name == 'merge_group'
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -531,8 +525,22 @@ jobs:
         with:
           workspaces: platform/archestra-rs
           targets: x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+          shared-key: platform-rust-checks
           cache: ${{ runner.os == 'Linux' }}
           toolchain-before-cache: "true"
+
+      # Prebuilt binary instead of `cargo install` — the source compile was
+      # ~2-4 min of pure waste on ephemeral runners. The action verifies the
+      # download against its pinned manifest and picks the right platform
+      # (Linux runners and the mac mini).
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: Rust dependency policy
+        working-directory: ./platform/archestra-rs
+        run: cargo deny --config deny.toml check advisories bans licenses sources
 
       - name: Install Rust musl toolchain dependencies
         if: runner.os == 'Linux'
@@ -553,19 +561,6 @@ jobs:
           cargo test --workspace --locked
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
-      # Prebuilt binary instead of `cargo install` — the source compile was
-      # ~2-4 min of pure waste on ephemeral runners. The action verifies the
-      # download against its pinned manifest and picks the right platform
-      # (Linux runners and the mac mini).
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
-        with:
-          tool: cargo-deny@0.20.2
-
-      - name: Rust dependency policy
-        working-directory: ./platform/archestra-rs
-        run: cargo deny --config deny.toml check advisories bans licenses sources
-
   # The only job that exercises the REAL OpenAPPA runtime: the NAPI bridge, its
   # decisions, and the PostgreSQL ledger they are recorded in. Every suite above
   # this one mocks `@archestra/openappa-rs`, so without this job nothing in CI
@@ -580,7 +575,7 @@ jobs:
     name: OpenAPPA Native Tests
     # Release bumps need the real runtime/ledger checks before human review.
     if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-8-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
     timeout-minutes: 20
@@ -657,7 +652,7 @@ jobs:
     needs: supply-chain-policy
     if: github.event_name == 'merge_group'
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -676,6 +671,7 @@ jobs:
         uses: ./.github/actions/setup-rust-build
         with:
           workspaces: ai-labs
+          shared-key: ai-labs-rust-checks
           cache: ${{ runner.os == 'Linux' }}
           toolchain-before-cache: "true"
 
@@ -764,15 +760,15 @@ jobs:
           fi
           echo "run=${run}" >> "${GITHUB_OUTPUT}"
 
-  # Restore/build native dependencies once before allocating paid test runners.
-  # Standard GitHub-hosted runners are free for this public repository; a cold
-  # native cache must not compile the same four addons on every paid shard.
+  # Restore/build native dependencies once before allocating test shards.
+  # Use the same Ubicloud image as the main-branch native cache publisher;
+  # a cold cache must not compile the same four addons on every shard.
   # Keep this on Ubuntu 24.04 x64, matching the consumers' glibc/architecture.
   backend-test-dependencies:
     name: Prepare Backend Test Dependencies
     needs: [backend-test-inputs]
     if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 30
     permissions:
       contents: read
@@ -845,7 +841,7 @@ jobs:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/2)
     needs: [backend-test-inputs, backend-test-dependencies]
     if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-16-ubuntu-2404
     # A merge-queue shard can take about 15 minutes, including setup and
     # cleanup. Leave room for cold caches while bounding hung test workers.
     timeout-minutes: 25
@@ -966,7 +962,7 @@ jobs:
     name: Frontend Integration Tests (MSW runner)
     if: github.event_name == 'merge_group'
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-16-ubuntu-2404' }}
     permissions:
       contents: read
     defaults:
@@ -1041,7 +1037,10 @@ jobs:
       # Reuse compiler caches, but regenerate route manifests and server output
       # on each run. Restoring whole dev dist directories can retain stale route
       # state and return 404 for routes that exist in the current source tree.
+      # Fresh Linux queue refs cannot reuse these multi-gigabyte archives.
+      # Keep persistent macOS runners on their existing cache policy.
       - name: Cache integration test compiler output
+        if: runner.os != 'Linux'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/frontend/.next-pw-shard-*/dev/cache
@@ -1133,9 +1132,9 @@ jobs:
   # self-hosted runners, so if mac-mini-1 dies, its jobs would sit queued (and
   # block the merge queue) for up to 24h. This watchdog polls this run's own
   # jobs; if no mac-mini job has made ANY progress within the grace window it
-  # flips the MAC_MINI_CI kill switch off (routing every subsequent run back
-  # to Blacksmith) and cancels this run so the merge queue ejects the PR
-  # immediately — re-queueing then runs fully on Blacksmith. Re-enable with:
+  # flips the MAC_MINI_CI kill switch off and cancels this run so the merge
+  # queue ejects the PR immediately. Re-queueing uses the hosted fallback
+  # runners (GitHub for Rust checks, Ubicloud for frontend). Re-enable with:
   # gh variable set MAC_MINI_CI --body on
   mac-mini-watchdog:
     name: Mac Mini Watchdog
@@ -1161,7 +1160,7 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Fail over to Blacksmith if mac-mini-1 shows no progress
+      - name: Fail over to hosted runners if mac-mini-1 shows no progress
         env:
           GH_TOKEN: ${{ github.token }}
           VAR_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -1198,7 +1197,7 @@ jobs:
             echo "Waiting: $total mac-mini jobs queued, none progressed, machine idle elsewhere..."
             sleep 20
           done
-          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Blacksmith. Re-enable with: gh variable set MAC_MINI_CI --body on"
+          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to use hosted fallback runners. Re-enable with: gh variable set MAC_MINI_CI --body on"
           GH_TOKEN="$VAR_TOKEN" gh variable set MAC_MINI_CI --body off --repo "$REPO" \
             || echo "::warning::Could not flip MAC_MINI_CI — flip it manually before re-queueing."
           gh run cancel "$RUN_ID" --repo "$REPO"

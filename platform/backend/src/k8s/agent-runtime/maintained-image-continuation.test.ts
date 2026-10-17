@@ -120,7 +120,7 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
           session: run,
           spec: { ...spec, image: "registry.example/team/custom-agent:2" },
         }),
-      ).rejects.toThrow("start a new workspace instead");
+      ).rejects.toThrow("Agent's container image changed");
       expect(podImages()).toEqual([savedImage, savedImage]);
 
       await manager.continueRun({ session: run, spec });

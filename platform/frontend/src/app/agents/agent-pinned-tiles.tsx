@@ -1,7 +1,6 @@
 "use client";
 
 import type { AgentType } from "@archestra/shared";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
@@ -10,6 +9,7 @@ import {
 } from "@/components/agent-pages/agent-actions-model";
 import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { type PinnedTile, PinnedTiles } from "@/components/pinned-tiles";
 import { Button } from "@/components/ui/button";
 import { useProfile } from "@/lib/agent.query";
@@ -100,7 +100,9 @@ export function AgentPinnedTiles({
         action:
           chat.visible && chat.href ? (
             <Button size="sm" asChild>
-              <Link href={chat.href}>{chat.label}</Link>
+              <IntentPrefetchLink href={chat.href}>
+                {chat.label}
+              </IntentPrefetchLink>
             </Button>
           ) : undefined,
         // A pin the viewer made, on an agent that is not also pinned for

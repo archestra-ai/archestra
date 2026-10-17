@@ -20,10 +20,12 @@ import {
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { AgentFormInitialValues } from "@/components/agent-form";
+import { CATALOG_AGENT_ICONS } from "@/components/agent-icon.utils";
 import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { CHANNEL_ICON_SRC, ChannelIcon } from "@/components/channel-icon";
-import { ProviderIcon } from "@/components/provider-icon";
+import { ClientMarkTile } from "@/components/client-mark-tile";
+import { CATALOG_AGENT_MARKS } from "@/components/client-marks";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -67,7 +69,7 @@ export function getAgentCatalogTemplates(
       name: AGENT_CATALOG_TEMPLATE_NAMES["claude-code"],
       summary:
         "Anthropic's coding agent. Runs on each person's Claude Pro or Max, or a company Anthropic key.",
-      icon: "/model-logos/anthropic.svg",
+      icon: CATALOG_AGENT_ICONS["claude-code"],
       description: `Anthropic's coding agent with personal Claude sign-in or provider billing, connected to the ${appName} MCP gateway.`,
       platformName: appName,
       image: images["claude-code"],
@@ -77,7 +79,7 @@ export function getAgentCatalogTemplates(
       name: AGENT_CATALOG_TEMPLATE_NAMES.codex,
       summary:
         "OpenAI's coding agent. Runs on each person's ChatGPT subscription.",
-      icon: "/model-logos/openai.svg",
+      icon: CATALOG_AGENT_ICONS.codex,
       description: `OpenAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
       image: images.codex,
@@ -86,7 +88,7 @@ export function getAgentCatalogTemplates(
       id: "opencode",
       name: AGENT_CATALOG_TEMPLATE_NAMES.opencode,
       summary: `The open source coding agent. Uses any model your company set up in ${appName}.`,
-      icon: "/agent-logos/opencode.svg",
+      icon: CATALOG_AGENT_ICONS.opencode,
       description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
       image: images.opencode,
@@ -95,7 +97,7 @@ export function getAgentCatalogTemplates(
       id: "hermes",
       name: AGENT_CATALOG_TEMPLATE_NAMES.hermes,
       summary: `The Hermes coding agent. Uses any model your company set up in ${appName}.`,
-      icon: "/agent-logos/hermes.png",
+      icon: CATALOG_AGENT_ICONS.hermes,
       description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
       platformName: appName,
       image: images.hermes,
@@ -104,7 +106,7 @@ export function getAgentCatalogTemplates(
       id: "openclaw",
       name: AGENT_CATALOG_TEMPLATE_NAMES.openclaw,
       summary: `OpenClaw in an isolated task pod. Uses any model your company set up in ${appName}.`,
-      icon: "/agent-logos/openclaw.svg",
+      icon: CATALOG_AGENT_ICONS.openclaw,
       description: `OpenClaw in an isolated task pod, with inference and MCP access kept behind ${appName}.`,
       platformName: appName,
       image: images.openclaw,
@@ -278,6 +280,7 @@ export function PlatformAgentIcon({
   );
 }
 
+/** A catalog template's logo, drawn as the Connect page draws it. */
 export function CatalogAgentIcon({
   id,
   size = 22,
@@ -285,51 +288,13 @@ export function CatalogAgentIcon({
   id: AgentCatalogId;
   size?: number;
 }) {
-  const box = { width: size, height: size };
-  switch (id) {
-    case "claude-code":
-      return <ProviderIcon provider="anthropic" size={size} />;
-    case "codex":
-      return <ProviderIcon provider="openai" size={size} />;
-    case "opencode":
-      return (
-        <Image
-          src="/agent-logos/opencode.svg"
-          alt=""
-          width={size}
-          height={size}
-          style={{ height: size }}
-          className="w-auto object-contain dark:invert"
-        />
-      );
-    case "hermes": {
-      // The artwork carries its own padding, so it draws larger than its peers.
-      const hermesSize = Math.round((size * 30) / 22);
-      return (
-        <Image
-          src="/agent-logos/hermes.png"
-          alt=""
-          width={hermesSize}
-          height={hermesSize}
-          style={{ width: hermesSize, height: hermesSize }}
-          className="rounded-md object-contain"
-        />
-      );
-    }
-    case "openclaw":
-      return (
-        <Image
-          src="/agent-logos/openclaw.svg"
-          alt=""
-          width={size}
-          height={size}
-          style={box}
-          className="object-contain"
-        />
-      );
-    default:
-      return <Bot className="size-5" />;
-  }
+  return (
+    <ClientMarkTile
+      mark={CATALOG_AGENT_MARKS[id]}
+      label={AGENT_CATALOG_NAMES[id]}
+      size={size}
+    />
+  );
 }
 
 function template(params: {

@@ -401,7 +401,6 @@ class ConnectedClientModel {
     );
     const inWindow = (column: SQL) =>
       sql`${column} BETWEEN ${timestampSql(since)} AND ${timestampSql(until)}`;
-    const orgAgents = orgAgentIds(organizationId);
     const interactions = schema.interactionsTable;
     const toolCalls = schema.mcpToolCallsTable;
     type TrafficRow = {
@@ -424,45 +423,55 @@ class ConnectedClientModel {
         WHERE m.organization_id = ${organizationId}${onlyUser(sql`m.user_id`)}
       `),
       db.execute<OAuthAgentRow & TrafficRow>(sql`
-        SELECT ${toolCalls.userId} AS user_id,
-          ${toolCalls.oauthClientId} AS oauth_client_id, c.name,
-          c.redirect_uris, ${toolCalls.agentId} AS via_id, g.name AS via_name,
-          count(*) FILTER (WHERE ${inWindow(sql`${toolCalls.createdAt}`)})::int AS calls,
-          max(${toolCalls.createdAt}) FILTER (WHERE ${inWindow(sql`${toolCalls.createdAt}`)}) AS window_last_at,
-          max(${toolCalls.createdAt}) AS last_call_at,
-          -- Starting an agent logs initialize and tools/list; only a tool
-          -- call is doing something.
-          max(${toolCalls.createdAt}) FILTER (WHERE ${toolCalls.method} = 'tools/call') AS last_tool_call_at,
-          max(${toolCalls.createdAt}) FILTER (WHERE ${toolCalls.method} = 'tools/call'
-            AND ${toolCalls.createdAt} >= ${timestampSql(activeSince)}) AS last_use_at
-        FROM ${toolCalls}
-        LEFT JOIN ${schema.oauthClientsTable} c
-          ON c.client_id = ${toolCalls.oauthClientId}
-        LEFT JOIN ${schema.agentsTable} g ON g.id = ${toolCalls.agentId}
-        WHERE ${toolCalls.createdAt} >= ${timestampSql(readFrom)}
-          AND ${agentGatewayTraffic()}
-          AND ${toolCalls.userId} IS NOT NULL${onlyUser(sql`${toolCalls.userId}`)}
-          AND ${toolCalls.agentId} IN (${orgAgents})
-        GROUP BY 1, 2, 3, 4, 5, 6
+        -- Aggregate narrow traffic rows before looking up names and scope.
+        -- Materialization prevents joins from pulling the full log back into
+        -- the sort, even when the planner overestimates distinct callers.
+        WITH traffic AS MATERIALIZED (
+          SELECT ${toolCalls.userId} AS user_id,
+            ${toolCalls.oauthClientId} AS oauth_client_id,
+            ${toolCalls.agentId} AS via_id,
+            count(*) FILTER (WHERE ${inWindow(sql`${toolCalls.createdAt}`)})::int AS calls,
+            max(${toolCalls.createdAt}) FILTER (WHERE ${inWindow(sql`${toolCalls.createdAt}`)}) AS window_last_at,
+            max(${toolCalls.createdAt}) AS last_call_at,
+            -- Starting an agent isn't doing something; only a tool call is.
+            max(${toolCalls.createdAt}) FILTER (WHERE ${toolCalls.method} = 'tools/call') AS last_tool_call_at,
+            max(${toolCalls.createdAt}) FILTER (WHERE ${toolCalls.method} = 'tools/call'
+              AND ${toolCalls.createdAt} >= ${timestampSql(activeSince)}) AS last_use_at
+          FROM ${toolCalls}
+          WHERE ${toolCalls.createdAt} >= ${timestampSql(readFrom)}
+            AND ${agentGatewayTraffic()}
+            AND ${toolCalls.userId} IS NOT NULL${onlyUser(sql`${toolCalls.userId}`)}
+          GROUP BY 1, 2, 3
+        )
+        SELECT t.*, c.name, c.redirect_uris, g.name AS via_name
+        FROM traffic t
+        LEFT JOIN ${schema.oauthClientsTable} c ON c.client_id = t.oauth_client_id
+        JOIN ${schema.agentsTable} g ON g.id = t.via_id
+        WHERE g.organization_id = ${organizationId}
       `),
       db.execute<{ user_id: string; agent: string | null } & TrafficRow>(sql`
-        SELECT coalesce(k.author_id, ${interactions.userId}) AS user_id,
-          ${interactions.externalAgentId} AS agent,
-          ${interactions.profileId} AS via_id, p.name AS via_name,
-          count(*) FILTER (WHERE ${inWindow(sql`${interactions.createdAt}`)})::int AS calls,
-          max(${interactions.createdAt}) FILTER (WHERE ${inWindow(sql`${interactions.createdAt}`)}) AS window_last_at,
-          max(${interactions.createdAt}) AS last_call_at,
-          max(${interactions.createdAt}) FILTER (WHERE ${interactions.createdAt} >= ${timestampSql(activeSince)}) AS last_use_at
-        FROM ${interactions}
-        LEFT JOIN ${schema.virtualApiKeysTable} k
-          ON k.id = ${interactions.passthroughVirtualKeyId}
-        LEFT JOIN ${schema.agentsTable} p ON p.id = ${interactions.profileId}
-        WHERE ${interactions.createdAt} >= ${timestampSql(readFrom)}
-          AND ${agentLlmTraffic(organizationId)}
-          AND (${interactions.profileId} IN (${orgAgents})
-            OR ${interactions.profileId} IS NULL)
-          AND coalesce(k.author_id, ${interactions.userId}) IS NOT NULL${onlyUser(sql`coalesce(k.author_id, ${interactions.userId})`)}
-        GROUP BY 1, 2, 3, 4
+        WITH traffic AS MATERIALIZED (
+          SELECT coalesce(k.author_id, ${interactions.userId}) AS user_id,
+            ${interactions.externalAgentId} AS agent,
+            ${interactions.profileId} AS via_id,
+            count(*) FILTER (WHERE ${inWindow(sql`${interactions.createdAt}`)})::int AS calls,
+            max(${interactions.createdAt}) FILTER (WHERE ${inWindow(sql`${interactions.createdAt}`)}) AS window_last_at,
+            max(${interactions.createdAt}) AS last_call_at,
+            max(${interactions.createdAt}) FILTER (WHERE ${interactions.createdAt} >= ${timestampSql(activeSince)}) AS last_use_at
+          FROM ${interactions}
+          LEFT JOIN ${schema.virtualApiKeysTable} k
+            ON k.id = ${interactions.passthroughVirtualKeyId}
+          WHERE ${interactions.createdAt} >= ${timestampSql(readFrom)}
+            AND (${interactions.source} = 'api' OR ${interactions.source} IS NULL)
+            AND ${interactions.runId} IS NULL
+            AND coalesce(k.author_id, ${interactions.userId}) IS NOT NULL${onlyUser(sql`coalesce(k.author_id, ${interactions.userId})`)}
+          GROUP BY 1, 2, 3
+        )
+        SELECT t.*, p.name AS via_name
+        FROM traffic t
+        LEFT JOIN ${schema.agentsTable} p ON p.id = t.via_id
+        WHERE (p.organization_id = ${organizationId} OR t.via_id IS NULL)
+          AND ${externalLlmAgent({ organizationId, agent: sql`t.agent` })}
       `),
       // Redeemed setups not yet disconnected, dated by the first.
       db.execute<{
@@ -640,16 +649,24 @@ class ConnectedClientModel {
         GROUP BY 1
       `),
       db.execute<{ day: string; calls: number }>(sql`
-        SELECT to_char(date_trunc('day', ${interactions.createdAt}), 'YYYY-MM-DD') AS day,
-          count(*)::int AS calls
-        FROM ${interactions}
-        LEFT JOIN ${schema.virtualApiKeysTable} k
-          ON k.id = ${interactions.passthroughVirtualKeyId}
-        WHERE ${inWindow(sql`${interactions.createdAt}`)}
-          AND ${agentLlmTraffic(organizationId)}
-          AND (${interactions.profileId} IN (${orgAgents})
-            OR ${interactions.profileId} IS NULL)
-          AND coalesce(k.author_id, ${interactions.userId}) IN (${orgMembers})
+        WITH traffic AS MATERIALIZED (
+          SELECT date_trunc('day', ${interactions.createdAt}) AS day,
+            ${interactions.externalAgentId} AS agent,
+            ${interactions.profileId} AS via_id, count(*)::int AS calls
+          FROM ${interactions}
+          LEFT JOIN ${schema.virtualApiKeysTable} k
+            ON k.id = ${interactions.passthroughVirtualKeyId}
+          WHERE ${inWindow(sql`${interactions.createdAt}`)}
+            AND (${interactions.source} = 'api' OR ${interactions.source} IS NULL)
+            AND ${interactions.runId} IS NULL
+            AND coalesce(k.author_id, ${interactions.userId}) IN (${orgMembers})
+          GROUP BY 1, 2, 3
+        )
+        SELECT to_char(t.day, 'YYYY-MM-DD') AS day, sum(t.calls)::int AS calls
+        FROM traffic t
+        LEFT JOIN ${schema.agentsTable} p ON p.id = t.via_id
+        WHERE (p.organization_id = ${organizationId} OR t.via_id IS NULL)
+          AND ${externalLlmAgent({ organizationId, agent: sql`t.agent` })}
         GROUP BY 1
       `),
     ]);
@@ -745,19 +762,17 @@ function agentGatewayTraffic() {
 }
 
 /**
- * LLM proxy calls a member's own agent made: external API traffic, minus
- * Archestra's built-in agents. Those also reach the proxy as API traffic, but
- * agent runs stamp a run id and agent-to-agent calls name an Archestra agent
- * (`<agentId>` or `<agentId>:<agentId>`) as the external agent.
+ * Exclude agent-to-agent calls after aggregation, so organization agent ids
+ * are checked once per traffic group rather than per interaction. Built-in
+ * callers name an Archestra agent (`<agentId>` or `<agentId>:<agentId>`) as
+ * the external agent; source and run-id filtering happens before grouping.
  */
-function agentLlmTraffic(organizationId: string) {
-  const interactions = schema.interactionsTable;
-  return sql`(${interactions.source} = 'api' OR ${interactions.source} IS NULL)
-    AND ${interactions.runId} IS NULL
-    AND (${interactions.externalAgentId} IS NULL
-      OR split_part(${interactions.externalAgentId}, ':', 1) NOT IN (
-        SELECT ${schema.agentsTable.id}::text FROM ${schema.agentsTable}
-        WHERE ${schema.agentsTable.organizationId} = ${organizationId}))`;
+function externalLlmAgent(params: { organizationId: string; agent: SQL }) {
+  const { organizationId, agent } = params;
+  return sql`(${agent} IS NULL
+    OR split_part(${agent}, ':', 1) NOT IN (
+      SELECT ${schema.agentsTable.id}::text FROM ${schema.agentsTable}
+      WHERE ${schema.agentsTable.organizationId} = ${organizationId}))`;
 }
 
 /**

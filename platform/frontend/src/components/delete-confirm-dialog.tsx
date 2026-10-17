@@ -30,6 +30,11 @@ type DeleteConfirmDialogProps = {
    * undo outside the app — so a stray click cannot delete the wrong thing.
    */
   confirmationPhrase?: string;
+  /**
+   * Keeps the confirm button disabled for this long after the dialog opens,
+   * so a notice about what else goes with the removal gets read first.
+   */
+  confirmDelayMs?: number;
 };
 
 export function DeleteConfirmDialog({
@@ -44,15 +49,27 @@ export function DeleteConfirmDialog({
   confirmDisabled = false,
   confirmVariant = "destructive",
   confirmationPhrase,
+  confirmDelayMs,
 }: DeleteConfirmDialogProps) {
   const inputId = useId();
   const [typed, setTyped] = useState("");
   useEffect(() => {
     if (!open) setTyped("");
   }, [open]);
+  const [coolingDown, setCoolingDown] = useState(false);
+  useEffect(() => {
+    if (!open || !confirmDelayMs) {
+      setCoolingDown(false);
+      return;
+    }
+    setCoolingDown(true);
+    const timer = setTimeout(() => setCoolingDown(false), confirmDelayMs);
+    return () => clearTimeout(timer);
+  }, [open, confirmDelayMs]);
   const blocked =
     isPending ||
     confirmDisabled ||
+    coolingDown ||
     (confirmationPhrase !== undefined && typed.trim() !== confirmationPhrase);
 
   return (

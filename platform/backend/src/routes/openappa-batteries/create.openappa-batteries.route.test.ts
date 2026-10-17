@@ -22,7 +22,10 @@ import {
   deleteRuntimeCredentialDefinition,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  guardrailsPolicyService,
+  UNDECLARED_TOOL_ANNOTATOR,
+} from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./openappa-batteries.routes";
@@ -128,7 +131,7 @@ describe("guardrails batteries", () => {
       (battery) => battery.name === name,
     );
 
-  /** The declarations view, less the battery the shipped default includes. */
+  /** The declarations view, less the batteries the shipped default includes. */
   const declarations = async () => {
     const view = (
       await app.inject({
@@ -139,7 +142,8 @@ describe("guardrails batteries", () => {
     return {
       ...view,
       batteries: view.batteries.filter(
-        (battery: { entry: string }) => battery.entry !== SHIPPED_ENTRY,
+        (battery: { entry: string }) =>
+          !SHIPPED_ENTRIES.includes(battery.entry),
       ),
     };
   };
@@ -158,7 +162,11 @@ describe("guardrails batteries", () => {
   /** The derived rows a recompose left, in the order the model returns them. */
   const installRows = async () =>
     (await openappaBatteriesService.listBatteries(organizationId))
-      .filter((battery) => battery.name !== ARCHESTRA_BATTERY)
+      .filter(
+        (battery) =>
+          battery.name !== ARCHESTRA_BATTERY &&
+          battery.name !== CLAUDE_CODE_BATTERY,
+      )
       .flatMap((battery) => battery.installs);
 
   test("an install declares the battery and joins the composed policy once its credential is bound", async ({
@@ -1073,7 +1081,7 @@ describe("guardrails batteries", () => {
       "jev-key",
     );
     expect(updated.statusCode, updated.body).toBe(200);
-    // The initial root routes every tool to `noop`, so nothing consults jev yet.
+    // The initial root routes every call no rule names to the model annotator, so nothing consults jev yet.
     expect(batteryIn(updated, "jev")).toMatchObject({
       status: "unrouted",
       servers: [],
@@ -1090,7 +1098,7 @@ describe("guardrails batteries", () => {
       organizationId,
       userId: adminId,
       content: latest.content.replace(
-        'name = "*"\nannotator = "noop"',
+        `name = "*"\nannotator = "${UNDECLARED_TOOL_ANNOTATOR}"`,
         'name = "*"\nannotator = "jev.tool-call"',
       ),
       expectedRevision: latest.revision,
@@ -1128,7 +1136,7 @@ describe("guardrails batteries", () => {
       userId: adminId,
       content: routing.content.replace(
         'annotator = "jev.tool-call"',
-        'annotator = "noop"',
+        `annotator = "${UNDECLARED_TOOL_ANNOTATOR}"`,
       ),
       expectedRevision: routing.revision,
     });
@@ -1202,7 +1210,7 @@ describe("guardrails batteries", () => {
       organizationId,
       userId: adminId,
       content: latest.content.replace(
-        'name = "*"\nannotator = "noop"',
+        `name = "*"\nannotator = "${UNDECLARED_TOOL_ANNOTATOR}"`,
         'name = "*"\nannotator = "jev.tool-call"',
       ),
       expectedRevision: latest.revision,
@@ -1343,7 +1351,11 @@ describe("guardrails batteries", () => {
   });
 });
 
-const SHIPPED_ENTRY = bundledEntry(ARCHESTRA_BATTERY);
+const CLAUDE_CODE_BATTERY = "claude-code";
+const SHIPPED_ENTRIES = [
+  bundledEntry(ARCHESTRA_BATTERY),
+  bundledEntry(CLAUDE_CODE_BATTERY),
+];
 
 async function edited(
   content: string,

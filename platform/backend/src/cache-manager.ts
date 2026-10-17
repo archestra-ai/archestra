@@ -69,8 +69,6 @@ export const CacheKey = {
   /** Canonical result text replayed on later requests. Keep the deployed preview's
    * namespace so upgrading a live conversation does not rewrite its earlier results. */
   OpenAppaHitlReviewContinuation: "openappa-hitl-page-continuation",
-  /** Pending OpenAPPA review indexed by a verified runtime workspace */
-  OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
   /** Sessions already told once to resend a request that lacked the gateway remedy tools */
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
   /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
@@ -102,8 +100,6 @@ export const CacheKey = {
   ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
-  /** App Gallery share (GitHub device-flow) sign-in rate limiting per user */
-  AppGalleryDeviceAuthRateLimit: "app-gallery-device-auth-rate-limit",
   /** Microsoft 365 Copilot device-flow sign-in rate limiting per user */
   Microsoft365CopilotDeviceAuthRateLimit:
     "microsoft-365-copilot-device-auth-rate-limit",
@@ -118,6 +114,8 @@ export const CacheKey = {
   SlackAppInstallState: "slack-app-install-state",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
+  /** Most active users in an organization's LLM logs, for the logs user filter */
+  InteractionUserOptions: "interaction-user-options",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */
   KbGroupTokens: "kb-group-tokens",
   /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */

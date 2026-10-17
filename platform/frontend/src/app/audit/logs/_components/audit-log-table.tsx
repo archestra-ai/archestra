@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { User } from "lucide-react";
+import { Check, ShieldBan, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
@@ -10,10 +10,15 @@ import {
   FilterBar,
   FilterSelect,
 } from "@/components/filter-bar";
+import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfilesPaginated } from "@/lib/agent.query";
 import { useApps } from "@/lib/app.query";
@@ -35,7 +40,7 @@ import { useMemberSearch } from "@/lib/member.query";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { AuditActorCell } from "./audit-actor-cell";
 import {
   ACTOR_TYPE_LABEL,
   ALL_ACTIONS,
@@ -44,7 +49,6 @@ import {
   formatAction,
   formatResourceType,
   KNOWN_RESOURCE_TYPES,
-  OUTCOME_BADGE_VARIANT,
   OUTCOME_LABEL,
   resourceDisplayName,
 } from "./audit-log-action-labels";
@@ -52,7 +56,6 @@ import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 const ACTOR_FILTER_LIMIT = 100;
 const ENTITY_FILTER_LIMIT = 100;
-const RESOURCE_NAME_TRUNCATE_LENGTH = 64;
 const ALL_VALUE = "all";
 
 // The high-signal types whose names render in the Resource column and whose
@@ -287,13 +290,15 @@ export function AuditLogTable() {
 
   // Two lifecycle buckets: agents are soft-deleted, so a deleted agent's
   // history stays reachable through the picker (the audit page is admin-only,
-  // which is also what the deleted bucket requires).
+  // which is also what the deleted bucket requires). The picker shows names
+  // only, so it skips the agents' tool assignments.
   const { data: activeAgentsResponse } = useProfilesPaginated({
     limit: ENTITY_FILTER_LIMIT,
     offset: 0,
     sortBy: "name",
     sortDirection: "asc",
     status: "active",
+    includeTools: false,
   });
   const { data: deletedAgentsResponse } = useProfilesPaginated({
     limit: ENTITY_FILTER_LIMIT,
@@ -301,6 +306,7 @@ export function AuditLogTable() {
     sortBy: "name",
     sortDirection: "asc",
     status: "deleted",
+    includeTools: false,
   });
 
   // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.
@@ -427,108 +433,74 @@ export function AuditLogTable() {
   const columns = useMemo<ColumnDef<AuditLogRow>[]>(
     () => [
       {
-        id: "activity",
-        header: "Activity",
-        size: 300,
-        minSize: 240,
-        cell: ({ row }) => (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate text-sm font-medium">
-              {formatAction(row.original.action)}
-            </span>
-            <Badge
-              variant={OUTCOME_BADGE_VARIANT[row.original.outcome]}
-              className="px-1.5 py-0 text-[10px]"
-            >
-              {OUTCOME_LABEL[row.original.outcome]}
-            </Badge>
-          </div>
-        ),
+        id: "resource",
+        header: "Resource",
+        size: 340,
+        minSize: 220,
+        cell: ({ row }) => {
+          const event = row.original;
+          const name =
+            event.resourceType &&
+            LIST_NAME_RESOURCE_TYPES.has(event.resourceType)
+              ? resourceDisplayName(event)
+              : null;
+          const Icon =
+            event.outcome === "success"
+              ? Check
+              : event.outcome === "denied"
+                ? ShieldBan
+                : X;
+          return (
+            <div className="min-w-0 space-y-0.5">
+              <div
+                className="truncate text-xs font-medium"
+                title={name ?? undefined}
+              >
+                {name ?? formatResourceType(event.resourceType ?? "")}
+                {name && (
+                  <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                    {formatResourceType(event.resourceType ?? "")}
+                  </span>
+                )}
+              </div>
+              <div className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      role="img"
+                      aria-label={OUTCOME_LABEL[event.outcome]}
+                      className={
+                        event.outcome === "success"
+                          ? "shrink-0 text-muted-foreground"
+                          : "shrink-0 text-destructive"
+                      }
+                    >
+                      <Icon className="size-3" aria-hidden="true" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {OUTCOME_LABEL[event.outcome]}
+                  </TooltipContent>
+                </Tooltip>
+                <span className="truncate">{formatAction(event.action)}</span>
+              </div>
+            </div>
+          );
+        },
       },
       {
         id: "actor",
         header: "Actor",
-        size: 240,
-        minSize: 190,
-        cell: ({ row }) => {
-          const {
-            actorName,
-            actorEmail,
-            actorType,
-            impersonatedBy,
-            impersonatedByEmail,
-          } = row.original;
-          const label = actorName ?? actorEmail ?? "Deleted user";
-          return (
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                <User className="size-3.5" />
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{label}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {impersonatedBy
-                    ? `via ${impersonatedByEmail ?? "deleted user"}`
-                    : ACTOR_TYPE_LABEL[actorType]}
-                </div>
-              </div>
-            </div>
-          );
-        },
-      },
-      {
-        id: "resource",
-        header: "Resource",
-        size: 280,
-        minSize: 220,
-        cell: ({ row }) => {
-          const { resourceType } = row.original;
-          const name =
-            resourceType && LIST_NAME_RESOURCE_TYPES.has(resourceType)
-              ? resourceDisplayName(row.original)
-              : null;
-          if (!resourceType && !name) {
-            return <span className="text-xs text-muted-foreground">—</span>;
-          }
-          const displayName =
-            name && name.length > RESOURCE_NAME_TRUNCATE_LENGTH
-              ? `${name.slice(0, RESOURCE_NAME_TRUNCATE_LENGTH)}…`
-              : name;
-          return (
-            <div className="min-w-0">
-              <div
-                className="truncate text-sm font-medium"
-                title={name ?? undefined}
-              >
-                {displayName ?? formatResourceType(resourceType ?? "")}
-              </div>
-              {name && resourceType ? (
-                <div className="truncate text-xs text-muted-foreground">
-                  {formatResourceType(resourceType)}
-                </div>
-              ) : null}
-            </div>
-          );
-        },
+        size: 200,
+        minSize: 150,
+        cell: ({ row }) => <AuditActorCell event={row.original} />,
       },
       {
         id: "createdAt",
         header: "Time",
-        size: 190,
-        minSize: 175,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="text-sm">
-              {formatRelativeTimeFromNow(row.original.createdAt)}
-            </div>
-            <div className="truncate font-mono text-[11px] text-muted-foreground">
-              {formatDate({
-                date: row.original.createdAt,
-                dateFormat: "MMM d, yyyy · HH:mm:ss",
-              })}
-            </div>
-          </div>
-        ),
+        size: 154,
+        minSize: 145,
+        cell: ({ row }) => <LogTime timestamp={row.original.createdAt} />,
       },
     ],
     [],
@@ -671,6 +643,8 @@ export function AuditLogTable() {
 
       <DataTable<AuditLogRow, unknown>
         columns={columns}
+        fixedWidthColumnIds={["actor", "createdAt"]}
+        flexibleColumnIds={["resource"]}
         data={rows}
         hideSelectedCount
         cursorPagination={

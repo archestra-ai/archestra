@@ -29,6 +29,7 @@ import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RequestLatency } from "@/components/request-latency";
 import { SourceBadge } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -488,7 +489,10 @@ export default function SessionDetailPage({
                         }
                       >
                         <TableCell className="font-mono text-xs">
-                          {formatDate({ date: interaction.createdAt })}
+                          <div>
+                            {formatDate({ date: interaction.createdAt })}
+                          </div>
+                          <RequestLatency durationMs={interaction.durationMs} />
                         </TableCell>
                         <TableCell className="overflow-hidden">
                           <Badge

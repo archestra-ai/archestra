@@ -109,6 +109,85 @@ describe("chat model routes", () => {
     await app.close();
   });
 
+  test("validates complete custom prices before writing and audits a valid pricing update", async () => {
+    const model = await ModelModel.create({
+      externalId: "openai/test-price-validation",
+      provider: "openai",
+      modelId: "test-price-validation",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(),
+    });
+    const url = `/api/llm-models/${model.id}`;
+    const fields = [
+      "customPricePerMillionInput",
+      "customPricePerMillionOutput",
+      "customPricePerMillionCacheRead",
+      "customPricePerMillionCacheWrite",
+    ] as const;
+    for (const field of fields) {
+      for (const invalid of ["0,25", "1usd", "Infinity", "100000000"]) {
+        const response = await app.inject({
+          method: "PATCH",
+          url,
+          payload: {
+            customPricePerMillionInput: "1",
+            customPricePerMillionOutput: "2",
+            customPricePerMillionCacheRead: "0",
+            customPricePerMillionCacheWrite: "0.5",
+            [field]: invalid,
+          },
+        });
+        expect(response.statusCode, `${field}=${invalid}`).toBe(400);
+      }
+    }
+    expect(await ModelModel.findById(model.id)).toMatchObject({
+      customPricePerMillionInput: null,
+      customPricePerMillionOutput: null,
+      customPricePerMillionCacheRead: null,
+      customPricePerMillionCacheWrite: null,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url,
+      payload: {
+        customPricePerMillionInput: "0.25",
+        customPricePerMillionOutput: "1e1",
+        customPricePerMillionCacheRead: "0",
+        customPricePerMillionCacheWrite: "0.5",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(await ModelModel.findById(model.id)).toMatchObject({
+      customPricePerMillionInput: "0.25",
+      customPricePerMillionOutput: "10.00",
+      customPricePerMillionCacheRead: "0.00",
+      customPricePerMillionCacheWrite: "0.50",
+    });
+    await vi.waitFor(async () => {
+      const { data: rows } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "llmModel",
+        sortDirection: "asc",
+        limit: 50,
+        offset: 0,
+      });
+      const successful = rows.filter((row) => row.outcome === "success");
+      expect(successful).toHaveLength(1);
+      expect(successful[0].action).toBe("llmModel.updated");
+      expect(successful[0].before).toMatchObject({
+        isCustomPrice: false,
+        priceSource: "default",
+      });
+      expect(successful[0].after).toMatchObject({
+        isCustomPrice: true,
+        pricePerMillionInput: "0.25",
+        pricePerMillionOutput: "10.00",
+      });
+    });
+  });
+
   test("refresh reports individual failures, persists rejected subscriptions, and recovers after successful validation", async ({
     makeSecret,
     makeLlmProviderApiKey,

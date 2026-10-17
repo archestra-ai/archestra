@@ -227,7 +227,7 @@ describe("LLM proxy buffered model response streaming", () => {
     expect(done).toBeGreaterThan(toolCall);
   });
 
-  describe("failure terminals release buffered model output unreviewed", () => {
+  describe("failure terminals withhold unadmitted buffered model output", () => {
     test.for([
       { cleanupThrows: false },
       { cleanupThrows: true },
@@ -260,10 +260,19 @@ describe("LLM proxy buffered model response streaming", () => {
 
       expect(response.statusCode).toBe(200);
       expect(hooks).toEqual(["error", "cleanup"]);
-      const text = response.body.indexOf("PARTIAL RESPONSES TEXT");
-      const terminal = response.body.indexOf('"status":"incomplete"');
-      expect(text).toBeGreaterThanOrEqual(0);
-      expect(terminal).toBeGreaterThan(text);
+      expect(response.body).not.toContain("PARTIAL RESPONSES TEXT");
+      expect(response.body).not.toContain("PARTIAL RESPONSES REASONING");
+      const terminal = sseFrames(response.body).find(
+        (frame) => frame.type === "response.incomplete",
+      );
+      expect(terminal?.response).toMatchObject({
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+        usage: { total_tokens: 3 },
+      });
+      expect(response.body.indexOf("data: [DONE]")).toBeGreaterThan(
+        response.body.indexOf('"status":"incomplete"'),
+      );
       expect(response.body).not.toContain("call_held");
     });
 
@@ -296,12 +305,16 @@ describe("LLM proxy buffered model response streaming", () => {
 
       expect(response.statusCode).toBe(200);
       expect(hooks).toEqual(["error", "cleanup"]);
-      const text = response.body.indexOf("PARTIAL CODEX TEXT");
+      expect(response.body).not.toContain("PARTIAL CODEX TEXT");
       const terminal = response.body.indexOf('"finish_reason":"length"');
       const done = response.body.indexOf("data: [DONE]");
-      expect(text).toBeGreaterThanOrEqual(0);
-      expect(terminal).toBeGreaterThan(text);
+      expect(terminal).toBeGreaterThanOrEqual(0);
       expect(done).toBeGreaterThan(terminal);
+      expect(
+        sseFrames(response.body).some(
+          (frame) => frame.usage?.total_tokens === 3,
+        ),
+      ).toBe(true);
       expect(response.body).not.toContain("call_held");
     });
   });
@@ -476,8 +489,20 @@ function responsesIncompleteTurn() {
       },
     },
     {
-      type: "response.incomplete",
+      type: "response.output_item.done",
+      output_index: 2,
       sequence_number: 5,
+      item: {
+        id: "rs-buffered",
+        type: "reasoning",
+        summary: [
+          { type: "summary_text", text: "PARTIAL RESPONSES REASONING" },
+        ],
+      },
+    },
+    {
+      type: "response.incomplete",
+      sequence_number: 6,
       response: {
         ...envelope,
         status: "incomplete",
@@ -554,6 +579,8 @@ function sseFrames(body: string): SseFrame[] {
 
 type SseFrame = {
   type?: string;
+  response?: Record<string, unknown>;
+  usage?: { total_tokens?: number };
   error?: { message?: string };
   choices?: { delta?: { content?: string } }[];
 };

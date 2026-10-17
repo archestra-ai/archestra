@@ -81,8 +81,14 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
                         .targets
                         .as_ref()
                         .and_then(|targets| document(targets.multi_user.policy.as_str()));
-                    document(declared.base.as_str())
-                        .is_none_or(|base| serves_this_host(&base, target.as_ref()))
+                    document(declared.base.as_str()).is_none_or(|base| {
+                        serves_this_host(
+                            battery.name,
+                            PackageOrigin::Bundled,
+                            &base,
+                            target.as_ref(),
+                        )
+                    })
                 }
                 Role::Plugin(_) => false,
             },
@@ -97,7 +103,7 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
                     text: file.text.to_owned(),
                 })
                 .collect::<Vec<_>>();
-            inspect(&files).map_err(|error| {
+            inspect(&files, PackageOrigin::Bundled).map_err(|error| {
                 format!(
                     "bundled battery {} does not validate: {error}",
                     battery.name
@@ -107,10 +113,23 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
         .collect()
 }
 
+/// Where a package comes from: bundled with the pinned OpenAPPA checkout, or uploaded
+/// by an organization. Only a bundled package can be one this host rebinds by name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PackageOrigin {
+    Bundled,
+    Uploaded,
+}
+
+/// Bundled batteries written for another host's own tools that this host serves
+/// anyway: a root's `[aliases] host` table rebinds their rules onto the client
+/// built-ins Archestra derives as `host/archestra/<name>`.
+const HOST_ALIASED_BATTERIES: &[&str] = &["claude-code"];
+
 /// Validate a battery package from its files and read what the host needs from it.
 /// Runs the marketplace's own package validation on a scratch copy, so an uploaded
 /// package passes exactly the checks a bundled one passed.
-pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
+pub(crate) fn inspect(files: &[BatteryFile], origin: PackageOrigin) -> Result<BatteryInfo, String> {
     let dir = tempfile::tempdir().map_err(|error| error.to_string())?;
     for file in files {
         let relative = std::path::Path::new(&file.path);
@@ -158,18 +177,16 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
         .map(|targets| policy(targets.multi_user.policy.as_str()))
         .transpose()?;
     let target_document = target.as_ref().map(|(_, document)| document);
-    if !serves_this_host(&document, target_document) {
+    if !serves_this_host(package.name.as_str(), origin, &document, target_document) {
         return Err(format!(
             "battery {} governs no MCP tool and is not an annotator-only battery, so this host has nothing for it to govern",
             package.name
         ));
     }
-    // The manifest defaults a battery's namespace to its own name; one without a
-    // tool rule in any policy it deploys governs no namespace, so no server alias
-    // points it anywhere.
-    let governs_tools = std::iter::once(&document)
-        .chain(target_document)
-        .any(|document| !policy_entries(document, "tool").is_empty());
+    // The manifest defaults a battery's namespace to its own name; one without an
+    // MCP tool rule in any policy it deploys governs no MCP server, so no server
+    // alias points it anywhere.
+    let governs_tools = governs_mcp_tools(std::iter::once(&document).chain(target_document));
     let externals = helper_externals(&document)?;
     let multi_user = match target {
         None => None,
@@ -223,22 +240,37 @@ fn setup_text(steps: &[String]) -> Option<String> {
 }
 
 /// Whether a battery has anything to say under this host: a rule names an MCP tool,
-/// the only kind of tool Archestra serves, or it declares no tool rule and only
-/// annotators, which a root rule routes a tool to by name. A battery written for
-/// another host's own tools composes but never matches here, so it is not offered.
-/// A multi-user target is read together with its base, as the two deploy.
-fn serves_this_host(base: &toml::Table, target: Option<&toml::Table>) -> bool {
+/// it declares no tool rule and only annotators, which a root rule routes a tool to
+/// by name, or it is a bundled battery this host rebinds onto its client built-ins.
+/// Any other battery written for another host's own tools composes but never matches
+/// here, so it is not offered. A multi-user target is read together with its base,
+/// as the two deploy.
+fn serves_this_host(
+    name: &str,
+    origin: PackageOrigin,
+    base: &toml::Table,
+    target: Option<&toml::Table>,
+) -> bool {
     let documents = || std::iter::once(base).chain(target);
-    let rules: Vec<&toml::Value> = documents()
-        .flat_map(|document| policy_entries(document, "tool"))
-        .collect();
-    let governs_mcp_tools = rules.iter().any(|rule| {
-        rule.get("name")
-            .and_then(toml::Value::as_str)
-            .is_some_and(governs_an_mcp_tool)
-    });
-    governs_mcp_tools
-        || (rules.is_empty() && documents().any(|document| !annotator_names(document).is_empty()))
+    let rebound = match origin {
+        PackageOrigin::Bundled => HOST_ALIASED_BATTERIES.contains(&name),
+        PackageOrigin::Uploaded => false,
+    };
+    let has_rules = documents().any(|document| !policy_entries(document, "tool").is_empty());
+    rebound
+        || governs_mcp_tools(documents())
+        || (!has_rules && documents().any(|document| !annotator_names(document).is_empty()))
+}
+
+/// Whether any of `documents` has a tool rule naming an MCP tool.
+fn governs_mcp_tools<'a>(mut documents: impl Iterator<Item = &'a toml::Table>) -> bool {
+    documents.any(|document| {
+        policy_entries(document, "tool").iter().any(|rule| {
+            rule.get("name")
+                .and_then(toml::Value::as_str)
+                .is_some_and(governs_an_mcp_tool)
+        })
+    })
 }
 
 fn annotator_names(document: &toml::Table) -> Vec<String> {
@@ -352,12 +384,66 @@ mod tests {
         assert_ne!(target.setup, github.setup);
         assert!(target.setup.is_some());
         assert!(github.files.iter().any(|file| file.path == MANIFEST_FILE));
+    }
+
+    #[test]
+    fn the_bundled_claude_code_battery_is_served_for_host_aliasing_and_no_other_host_battery_is() {
+        let served = bundled().expect("bundled batteries validate");
+        let claude_code = served
+            .iter()
+            .find(|battery| battery.name == "claude-code")
+            .expect("the claude-code battery is rebound onto this host's client built-ins");
+        // Its rules name another host's tools, so no server alias points it anywhere.
+        assert!(claude_code.namespaces.is_empty());
+        assert!(!claude_code.routed_annotators.is_empty());
+        let foreign: Vec<&str> = bundled_batteries()
+            .iter()
+            .filter(|battery| !HOST_ALIASED_BATTERIES.contains(&battery.name))
+            .filter(|battery| {
+                battery.files.iter().any(|file| {
+                    toml::from_str::<toml::Table>(file.text).is_ok_and(|document| {
+                        policy_entries(&document, "tool").iter().any(|rule| {
+                            rule.get("name")
+                                .and_then(toml::Value::as_str)
+                                .is_some_and(|name| name.starts_with("host/"))
+                        })
+                    })
+                })
+            })
+            .map(|battery| battery.name)
+            .collect();
         assert!(
-            bundled()
-                .expect("bundled batteries validate")
-                .iter()
-                .all(|battery| battery.name != "claude-code")
+            !foreign.is_empty(),
+            "the bundle carries another host battery"
         );
+        for name in foreign {
+            assert!(
+                served.iter().all(|battery| battery.name != name),
+                "{name} names another host's tools and is not rebound here"
+            );
+        }
+    }
+
+    #[test]
+    fn an_uploaded_package_named_like_a_rebound_battery_is_still_refused() {
+        let bundled = bundled_batteries()
+            .iter()
+            .find(|battery| battery.name == "claude-code")
+            .expect("the claude-code battery is bundled");
+        let files: Vec<BatteryFile> = bundled
+            .files
+            .iter()
+            .map(|file| BatteryFile {
+                path: file.path.to_owned(),
+                text: file.text.to_owned(),
+            })
+            .collect();
+        assert!(inspect(&files, PackageOrigin::Bundled).is_ok());
+        assert!(uploaded(&files).is_err());
+    }
+
+    fn uploaded(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
+        inspect(files, PackageOrigin::Uploaded)
     }
 
     #[test]
@@ -401,22 +487,22 @@ mod tests {
                 },
             ]
         };
-        let info = inspect(&files(annotator.to_owned())).unwrap();
+        let info = uploaded(&files(annotator.to_owned())).unwrap();
         assert!(info.namespaces.is_empty());
         assert_eq!(info.annotators, vec!["tagger.call".to_owned()]);
         assert!(
-            inspect(&files(format!(
+            uploaded(&files(format!(
                 "{annotator}[[policy.tool]]\nname = \"host/claude-code/Bash\"\ndelta = {{}}\n"
             )))
             .is_err()
         );
         assert!(
-            inspect(&files(format!(
+            uploaded(&files(format!(
                 "{annotator}token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n"
             )))
             .is_err()
         );
-        let shared = inspect(&files(format!(
+        let shared = uploaded(&files(format!(
             "{annotator}[externals.authorities.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n"
         )))
         .expect("two kinds may use the same packaged helper");
@@ -429,7 +515,7 @@ mod tests {
             }));
         }
         assert!(
-            inspect(&files(
+            uploaded(&files(
                 "[policy]\nversion = 2\n[externals.annotators.\"tagger.call\"]\ncommand = [\"python3\", \"tag.py\"]\n".to_owned()
             ))
             .is_err()
@@ -451,7 +537,7 @@ mod tests {
             path: path.to_owned(),
             text: text.to_owned(),
         });
-        let info = inspect(&files).unwrap();
+        let info = uploaded(&files).unwrap();
         assert_eq!(info.namespaces, vec!["acme".to_owned()]);
         assert!(info.credentials.is_empty());
         assert!(info.externals.is_empty());
@@ -485,32 +571,32 @@ mod tests {
                 },
             ]
         };
-        let info = inspect(&files()).unwrap();
+        let info = uploaded(&files()).unwrap();
         assert_eq!(info.name, "acme");
         assert!(info.credentials.is_empty());
-        assert!(inspect(&files()[1..]).is_err());
+        assert!(uploaded(&files()[1..]).is_err());
         let mut escaping = files();
         escaping[1].path = "../appa.toml".to_owned();
-        assert!(inspect(&escaping).is_err());
+        assert!(uploaded(&escaping).is_err());
         let mut foreign = files();
         foreign[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/other/list\"\ndelta = {}\n"
                 .to_owned();
-        assert!(inspect(&foreign).is_err());
+        assert!(uploaded(&foreign).is_err());
         let mut another_hosts_tools = files();
         another_hosts_tools[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/claude-code/Bash\"\ndelta = {}\n"
                 .to_owned();
-        assert!(inspect(&another_hosts_tools).is_err());
+        assert!(uploaded(&another_hosts_tools).is_err());
         let mut no_identity = files();
         no_identity[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme\"\ndelta = {}\n".to_owned();
-        assert!(inspect(&no_identity).is_err());
+        assert!(uploaded(&no_identity).is_err());
         let mut selected = files();
         selected[1].text =
             "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list(path:private*)\"\ndelta = {}\n"
                 .to_owned();
-        assert!(inspect(&selected).is_ok());
+        assert!(uploaded(&selected).is_ok());
         let mut same_name = files();
         same_name[0]
             .text
@@ -520,7 +606,7 @@ mod tests {
             text: "print('{}')\n".to_owned(),
         }));
         same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.authorities.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
-        let same = inspect(&same_name).expect("two kinds may share a helper name");
+        let same = uploaded(&same_name).expect("two kinds may share a helper name");
         assert_eq!(same.externals.len(), 2);
         for (kind, helper) in [("annotators", "a.py"), ("authorities", "b.py")] {
             assert!(same.externals.iter().any(|external| {
@@ -530,12 +616,12 @@ mod tests {
             }));
         }
         same_name[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.annotators.foo]\ncommand = [\"python3\", \"a.py\"]\n[externals.annotators.foo]\ncommand = [\"python3\", \"b.py\"]\n".to_owned();
-        assert!(inspect(&same_name).is_err());
+        assert!(uploaded(&same_name).is_err());
         let mut host_variable = files();
         host_variable[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.authorities.review]\ncommand = [\"python3\", \"review.py\"]\ntoken_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"\n".to_owned();
-        assert!(inspect(&host_variable).is_err());
+        assert!(uploaded(&host_variable).is_err());
         let mut remote = files();
         remote[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\n".to_owned();
-        assert!(inspect(&remote).is_err());
+        assert!(uploaded(&remote).is_err());
     }
 }

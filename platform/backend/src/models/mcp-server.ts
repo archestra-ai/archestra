@@ -528,7 +528,11 @@ class McpServerModel {
      */
     filters?: {
       catalogId?: string;
-      /** Skip per-install agent usage for status-only consumers. */
+      /**
+       * Attach per-install agent usage (`assignedAgents`). Off unless asked:
+       * it looks up the agents of every listed install, and only the server
+       * list API returns it. Without it `assignedAgents` is empty.
+       */
       includeAssignedAgents?: boolean;
       excludeServerTypes?: InternalMcpCatalogServerType[];
     },
@@ -664,11 +668,11 @@ class McpServerModel {
     const serverIds = [...serversMap.keys()];
     const [assignedUsersByServer, assignedAgentsByServer] = await Promise.all([
       McpServerUserModel.getUserDetailsForMcpServers(serverIds),
-      filters?.includeAssignedAgents === false
-        ? Promise.resolve(
+      filters?.includeAssignedAgents
+        ? AgentToolModel.getAssignedAgentDetailsForMcpServers(serverIds)
+        : Promise.resolve(
             new Map<string, NonNullable<McpServer["assignedAgents"]>>(),
-          )
-        : AgentToolModel.getAssignedAgentDetailsForMcpServers(serverIds),
+          ),
     ]);
 
     for (const [serverId, assigned] of assignedUsersByServer) {

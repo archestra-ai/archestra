@@ -19,10 +19,11 @@ import {
   FilterBar,
   filterControlClass,
 } from "@/components/filter-bar";
+import { LogTime } from "@/components/log-time";
+import { McpCallIdentity } from "@/components/mcp-call-identity";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { UserFilterSelect } from "@/components/user-client-filter-selects";
@@ -43,7 +44,6 @@ import {
   canShowMcpToolCallStatus,
   resolveMcpToolCallStatus,
 } from "@/lib/mcp-logs/tool-call-status";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 type McpToolCallData =
@@ -342,40 +342,34 @@ function McpToolCallsTable({
         const rawServerName = row.original.mcpServerName;
         const serverDisplay = serverDisplayByName.get(rawServerName);
         const serverName = serverDisplay?.name ?? rawServerName;
+        const result = row.original.toolResult;
+        const status =
+          isEncryptedChatUnavailableContent(result) &&
+          !canShowMcpToolCallStatus(method, result)
+            ? "unknown"
+            : method === "tools/call"
+              ? resolveMcpToolCallStatus(result)
+              : "success";
         return (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <McpCallIdentity
+            name={
+              isEncryptedChatUnavailableContent(call) ? (
+                <EncryptedChatContentUnavailableLabel value={call} />
+              ) : (
+                (toolName ?? formatMcpMethod(method))
+              )
+            }
+            server={serverName || "Platform"}
+            method={method}
+            status={status}
+            icon={
               <McpCatalogIcon
                 icon={serverDisplay?.icon}
                 catalogId={serverDisplay?.catalogId}
                 size={14}
               />
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium">
-                {isEncryptedChatUnavailableContent(call) ? (
-                  <EncryptedChatContentUnavailableLabel value={call} />
-                ) : toolName ? (
-                  <code className="font-mono text-xs">{toolName}</code>
-                ) : (
-                  formatMcpMethod(method)
-                )}
-              </div>
-              <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="truncate" title={rawServerName}>
-                  {serverName || "Platform"}
-                </span>
-                {method === "tools/call" ? null : (
-                  <Badge
-                    variant="outline"
-                    className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
-                  >
-                    {method}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </div>
+            }
+          />
         );
       },
     },
@@ -383,7 +377,7 @@ function McpToolCallsTable({
       id: "agent",
       accessorFn: (row) => getGatewayDisplayName(row, agents),
       header: "Gateway",
-      size: 205,
+      size: 190,
       minSize: 160,
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-2">
@@ -404,7 +398,7 @@ function McpToolCallsTable({
     {
       id: "identity",
       header: "Identity",
-      size: 245,
+      size: 215,
       minSize: 215,
       cell: ({ row }) => {
         const { userName, authMethod } = row.original;
@@ -445,78 +439,15 @@ function McpToolCallsTable({
       },
     },
     {
-      id: "status",
-      header: "Result",
-      size: 105,
-      minSize: 95,
-      cell: ({ row }) => {
-        const result = row.original.toolResult;
-        const method = row.original.method || "tools/call";
-
-        // The status lives inside the result, so an encrypted-chat row has none to
-        // report. Falling through to the "Success" badge below would assert an
-        // outcome the row does not record.
-        if (
-          isEncryptedChatUnavailableContent(result) &&
-          !canShowMcpToolCallStatus(method, result)
-        ) {
-          return <EncryptedChatContentUnavailableLabel value={result} />;
-        }
-
-        // For tools/call, resolve success / error / cancelled (a call the
-        // user stopped mid-flight — neither a success nor a failure).
-        if (
-          method === "tools/call" &&
-          result &&
-          typeof result === "object" &&
-          "isError" in result
-        ) {
-          const status = resolveMcpToolCallStatus(result);
-          return (
-            <Badge
-              variant={
-                status === "error"
-                  ? "destructive"
-                  : status === "cancelled"
-                    ? "secondary"
-                    : "default"
-              }
-              className="text-xs whitespace-nowrap"
-            >
-              {status === "error"
-                ? "Error"
-                : status === "cancelled"
-                  ? "Cancelled"
-                  : "Success"}
-            </Badge>
-          );
-        }
-
-        // For other methods, just show success
-        return (
-          <Badge variant="default" className="text-xs whitespace-nowrap">
-            Success
-          </Badge>
-        );
-      },
-    },
-    {
       id: "createdAt",
       header: "Time",
-      size: 175,
-      minSize: 160,
+      size: 154,
+      minSize: 145,
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="text-sm">
-            {formatRelativeTimeFromNow(row.original.createdAt)}
-          </div>
-          <div className="truncate font-mono text-[11px] text-muted-foreground">
-            {formatDate({
-              date: row.original.createdAt,
-              dateFormat: "MMM d, yyyy · HH:mm:ss",
-            })}
-          </div>
-        </div>
+        <LogTime
+          timestamp={row.original.createdAt}
+          durationMs={row.original.durationMs}
+        />
       ),
     },
   ];
@@ -603,7 +534,7 @@ function McpToolCallsTable({
             <UserFilterSelect
               value={userIdFromUrl}
               onValueChange={handleUserFilterChange}
-              remote
+              source="members"
             />
           ) : null}
         </FilterBar>
@@ -611,6 +542,8 @@ function McpToolCallsTable({
 
       <DataTable
         columns={columns}
+        fixedWidthColumnIds={["agent", "identity", "createdAt"]}
+        flexibleColumnIds={["call"]}
         data={mcpToolCalls}
         hideSelectedCount
         cursorPagination={

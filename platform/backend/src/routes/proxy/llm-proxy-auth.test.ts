@@ -881,7 +881,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
     apiKey: undefined,
     wasVirtualKeyResolved: false,
     wasJwksAuthenticated: false,
-    isLoopbackCaller: false,
+    isInternalCall: false,
   };
 
   test("allows request when apiKey is present", () => {
@@ -913,11 +913,11 @@ describe("assertAuthenticatedForKeylessProvider", () => {
 
   // Which addresses count as loopback is isLoopbackRequest's contract, covered
   // in utils/network.test.ts. This function only consumes the verdict.
-  test("allows a loopback caller without any auth", () => {
+  test("allows an internal-proof caller without any auth", () => {
     expect(() =>
       assertAuthenticatedForKeylessProvider({
         ...keylessArgs,
-        isLoopbackCaller: true,
+        isInternalCall: true,
       }),
     ).not.toThrow();
   });
@@ -962,12 +962,12 @@ describe("assertAuthenticatedForKeylessProvider", () => {
     ).not.toThrow();
   });
 
-  test("still allows loopback when the server supplies the credential", () => {
+  test("still allows an internal-proof caller when the server supplies the credential", () => {
     expect(() =>
       assertAuthenticatedForKeylessProvider({
         ...keylessArgs,
         apiKey: "Bearer anything",
-        isLoopbackCaller: true,
+        isInternalCall: true,
         providerSuppliesServerCredential: true,
       }),
     ).not.toThrow();

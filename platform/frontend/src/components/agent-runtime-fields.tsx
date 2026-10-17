@@ -327,7 +327,6 @@ export function AgentRuntimeEnvironmentFields({
         staticLabel="Shared"
         installationDescription="Each user provides their own value."
         staticDescription="The same value is used for every run."
-        installationCalloutTitle="Each user provides their own value"
         requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
         promptedValueLabel="per-user"
         deferStaticSecretValue

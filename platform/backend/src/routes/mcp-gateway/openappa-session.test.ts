@@ -20,12 +20,11 @@ import {
   A2ATaskModel,
   AgentRunModel,
   AgentWorkspaceModel,
-  TeamTokenModel,
+  ServiceAccountModel,
   UserTokenModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
-import ServiceAccountModel from "@/models/service-account";
 import { scopedSessionId } from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import authRoutes from "@/routes/auth";
@@ -37,6 +36,7 @@ import {
   workloadPrincipal,
 } from "@/services/agent-runtime/runtime-identity";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { AgentRunActorKind } from "@/types";
 
 const RUNTIME_BINDING_ENV = "ARCHESTRA_AGENT_RUNTIME_BINDING";
 
@@ -229,12 +229,18 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     // organization is refused before any of this is reached.
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
+    const account = await ServiceAccountModel.create({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
+      name: "automation",
+      role: "member",
+      createdBy: null,
     });
+    const { token: value } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId: org.id,
+      name: "ci",
+    });
+    const token = { value };
     native.executeRemedyByOffer.mockResolvedValue(
       JSON.stringify({
         decision: "mcp_result",
@@ -342,14 +348,17 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
   test("a signed runtime binding spends as the workspace, and a sibling header does not", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
+    const { serviceAccount: account, value: accountKey } =
+      await makeServiceAccountToken({ organizationId: org.id });
     const task = await A2ATaskModel.create({
       contextId: (
         await A2AContextModel.create({
-          actorKind: "organization",
-          actorId: org.id,
+          actorKind: "serviceAccount",
+          actorId: account.id,
         })
       ).id,
       agentId: agent.id,
@@ -359,8 +368,8 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     const workspace = await AgentWorkspaceModel.create({
       organizationId: org.id,
       agentId: agent.id,
-      actorKind: "organization",
-      actorId: org.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
       backend: "kubernetes",
       runtimeScope: "test",
       workloadName,
@@ -373,8 +382,8 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       organizationId: org.id,
       taskId: task.id,
       agentId: agent.id,
-      actorKind: "organization",
-      actorId: org.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
       actorUserId: null,
       workloadName,
       backend: "kubernetes",
@@ -390,15 +399,9 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       workloadName,
       taskId: task.id,
       agentId: agent.id,
-      actorKind: "organization",
-      actorId: org.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
       expiresAt: Date.now() + 60_000,
-    });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
     const trajectory = currentTrajectory({
       session_id: scopedSessionId(principal, workloadName),
@@ -413,7 +416,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     const headers = {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
-      authorization: `Bearer ${token.value}`,
+      authorization: `Bearer ${accountKey}`,
       [RUNTIME_BINDING_HEADER]: binding,
       "x-appa-session-id": workloadName,
       "x-archestra-run-id": task.id,
@@ -541,7 +544,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       });
       expect(denied.statusCode, denied.body).toBe(400);
       expect(denied.json().error.message).toBe(
-        "OpenAPPA runtime credential does not match this workspace",
+        "OpenAPPA runtime credential does not match this run",
       );
       for (const credential of [
         runtimeToken.token,
@@ -595,17 +598,19 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
   test("application runtimes discover tools with OpenAPPA disabled and reject forged bindings", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccount,
   }) => {
     await GuardrailsDeploymentModel.setEnabled(false);
     vi.spyOn(enterpriseTier, "isOpenappaActive").mockReturnValue(false);
     config.openappa.offerSigningSecret = "test-runtime-binding-secret-32chars";
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
+    const account = await makeServiceAccount(org.id);
     const current = await persistBoundRun({
       organizationId: org.id,
       agentId: agent.id,
-      actorKind: "oauthClient",
-      actorId: "mcp_oauth_automation",
+      actorKind: "serviceAccount",
+      actorId: account.id,
     });
     const spec = {
       env: {},
@@ -618,11 +623,11 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       workspaceId: current.workspace.id,
       taskId: current.task.id,
     });
-    const { value } = await TeamTokenModel.create({
+    const { token: value } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
       organizationId: org.id,
       name: "Runtime token",
-      teamId: null,
-      isOrganizationToken: true,
+      expiresIn: 600,
     });
     const headers = {
       "content-type": "application/json",
@@ -685,19 +690,26 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({ organizationId: org.id });
+    const account = await ServiceAccountModel.create({
+      organizationId: org.id,
+      name: "team runner",
+      role: "member",
+      teamId: team.id,
+      createdBy: null,
+    });
     const secret = "test-offer-signing-secret-32chars";
     config.openappa = { ...config.openappa, offerSigningSecret: secret };
     const first = await persistBoundRun({
       organizationId: org.id,
       agentId: agent.id,
-      actorKind: "team",
-      actorId: team.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
     });
     const sibling = await persistBoundRun({
       organizationId: org.id,
       agentId: agent.id,
-      actorKind: "team",
-      actorId: team.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
     });
     const spec = {
       env: {} as Record<string, string>,
@@ -726,7 +738,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       await resolveGatewayRuntimeSession({
         organizationId: org.id,
         agentId: agent.id,
-        token: { teamId: team.id, isOrganizationToken: false },
+        token: { serviceAccountId: account.id, isOrganizationToken: false },
         bindingToken: expiring.secretEnv[RUNTIME_BINDING_ENV],
         secret,
         sessionName: first.workspace.workloadName,
@@ -738,7 +750,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       await resolveGatewayRuntimeSession({
         organizationId: org.id,
         agentId: agent.id,
-        token: { teamId: team.id, isOrganizationToken: false },
+        token: { serviceAccountId: account.id, isOrganizationToken: false },
         bindingToken: spec.secretEnv[RUNTIME_BINDING_ENV],
         secret,
         sessionName: first.workspace.workloadName,
@@ -754,11 +766,10 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     });
     expect(wrapped.llm).toContain(`${RUNTIME_BINDING_HEADER}: ${binding}`);
     expect(wrapped.mcp).toBe(binding);
-    const teamToken = await TeamTokenModel.create({
+    const { token: accountToken } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
       organizationId: org.id,
-      name: "Matching Team",
-      teamId: team.id,
-      isOrganizationToken: false,
+      name: "Runtime token",
     });
     native.executeRemedyByOffer.mockResolvedValue(
       JSON.stringify({
@@ -774,7 +785,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     const headers = {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
-      authorization: `Bearer ${teamToken.value}`,
+      authorization: `Bearer ${accountToken}`,
       [RUNTIME_BINDING_HEADER]: wrapped.mcp,
       "x-appa-session-id": first.workspace.workloadName,
       "x-archestra-run-id": first.task.id,
@@ -847,63 +858,6 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(
       JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
     ).toMatchObject({ caller_id: principal });
-
-    const systemRun = await persistBoundRun({
-      organizationId: org.id,
-      agentId: agent.id,
-      actorKind: "system",
-      actorId: "system",
-    });
-    const systemSpec = {
-      env: {} as Record<string, string>,
-      secretEnv: {} as Record<string, string>,
-      activeDeadlineSeconds: 60,
-    };
-    await stampRuntimeBinding({
-      spec: systemSpec,
-      organizationId: org.id,
-      workspaceId: systemRun.workspace.id,
-      taskId: systemRun.task.id,
-    });
-    const orgToken = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-    const systemPrincipal = workloadPrincipal(systemRun.workspace.id);
-    native.executeRemedyByOffer.mockClear();
-    const systemCall = await app.inject({
-      method: "POST",
-      url: `/v1/mcp/${agent.id}`,
-      headers: {
-        ...headers,
-        authorization: `Bearer ${orgToken.value}`,
-        [RUNTIME_BINDING_HEADER]: systemSpec.secretEnv[RUNTIME_BINDING_ENV],
-        "x-appa-session-id": systemRun.workspace.workloadName,
-        "x-archestra-run-id": systemRun.task.id,
-      },
-      payload: {
-        ...payload,
-        params: {
-          ...payload.params,
-          arguments: {
-            offer_id: "offer-system",
-            plan: "keep",
-            trajectory: currentTrajectory({
-              session_id: scopedSessionId(
-                systemPrincipal,
-                systemRun.workspace.workloadName,
-              ),
-            }),
-          },
-        },
-      },
-    });
-    expect(systemCall.statusCode, systemCall.body).toBe(200);
-    expect(
-      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({ caller_id: systemPrincipal });
   });
 });
 
@@ -929,7 +883,7 @@ async function stampSibling(
 async function persistBoundRun(params: {
   organizationId: string;
   agentId: string;
-  actorKind: "team" | "system" | "oauthClient" | "serviceAccount";
+  actorKind: AgentRunActorKind;
   actorId: string;
 }) {
   const task = await A2ATaskModel.create({
@@ -975,13 +929,7 @@ async function persistContinuation(current: {
     id: string;
     organizationId: string;
     agentId: string;
-    actorKind:
-      | "team"
-      | "system"
-      | "organization"
-      | "user"
-      | "oauthClient"
-      | "serviceAccount";
+    actorKind: AgentRunActorKind;
     actorId: string;
     workloadName: string;
   };

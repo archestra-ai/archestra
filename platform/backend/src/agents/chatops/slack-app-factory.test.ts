@@ -1,4 +1,4 @@
-import { TimeInMs } from "@archestra/shared";
+import { SLACK_REQUIRED_BOT_SCOPES, TimeInMs } from "@archestra/shared";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ChatOpsConfigModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
@@ -412,6 +412,43 @@ describe("SlackAppFactory", () => {
     expect(
       slack.update.mock.calls[0][0].manifest.oauth_config.scopes.bot,
     ).toContain("files:write");
+  });
+
+  test("repairs missing reaction subscriptions even when all scopes are already present", async () => {
+    await saveToken();
+    const bot = {
+      agentId: AGENT_ID,
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "s",
+      appId: "A_EVENTS",
+      managed: true,
+      configTokenUserId: USER_ID,
+    };
+    slack.exportManifest.mockResolvedValue({
+      ok: true,
+      manifest: {
+        display_information: { name: "Test bot" },
+        oauth_config: {
+          scopes: { bot: [...SLACK_REQUIRED_BOT_SCOPES, "bookmarks:read"] },
+        },
+        settings: {
+          socket_mode_enabled: true,
+          event_subscriptions: {
+            bot_events: ["app_mention", "message.channels", "channel_created"],
+          },
+        },
+      },
+    });
+    slack.update.mockResolvedValue({ ok: true });
+    await slackAppFactory.ensureManifestScopes(bot);
+    await slackAppFactory.ensureManifestScopes(bot);
+    expect(slack.update).toHaveBeenCalledTimes(1);
+    const manifest = slack.update.mock.calls[0][0].manifest;
+    expect(manifest.settings.event_subscriptions.bot_events).toEqual(
+      expect.arrayContaining(["reaction_added", "channel_created"]),
+    );
+    expect(manifest.oauth_config.scopes.bot).toContain("bookmarks:read");
   });
 
   test("leaves the manifest of an app it does not manage alone", async () => {

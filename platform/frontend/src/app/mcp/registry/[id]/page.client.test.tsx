@@ -36,6 +36,7 @@ const {
   useMcpDeploymentStatuses,
   reauthenticateMutateAsync,
   deleteMutateAsync,
+  updateCatalogMutate,
   useResourcePermissions,
   stubs,
 } = vi.hoisted(() => {
@@ -55,6 +56,7 @@ const {
     useMcpDeploymentStatuses: vi.fn(),
     reauthenticateMutateAsync: vi.fn(),
     deleteMutateAsync: vi.fn(),
+    updateCatalogMutate: vi.fn(),
     useResourcePermissions: vi.fn(),
     stubs: stubbed,
   };
@@ -86,6 +88,10 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
       useInternalMcpCatalog: (...args: unknown[]) =>
         useInternalMcpCatalog(...args),
       useCatalogTools: () => ({ data: [], isPending: false }),
+      useUpdateInternalMcpCatalogItem: () => ({
+        mutate: updateCatalogMutate,
+        isPending: false,
+      }),
     },
   ),
 }));
@@ -107,9 +113,26 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
       "useMcpDeploymentStatuses",
       "useDismissMcpServerAlerts",
       "useRestoreMcpServerAlerts",
+      "useMcpServersAssignedAgents",
     ],
     {
       useMcpServers: () => useMcpServers(),
+      // Stands in for GET /api/mcp_server/:id, which returns the same install
+      // with its agents.
+      useMcpServersAssignedAgents: ({ serverIds }: { serverIds: string[] }) => {
+        const servers: Array<{ id: string; assignedAgents?: unknown[] }> =
+          useMcpServers()?.data ?? [];
+        return {
+          agentsByServerId: new Map(
+            serverIds.map((id) => [
+              id,
+              servers.find((server) => server.id === id)?.assignedAgents ?? [],
+            ]),
+          ),
+          isPending: false,
+          isError: false,
+        };
+      },
       useAutoModeAgents: () => ({ data: [] }),
       useMcpDeploymentStatuses: () => useMcpDeploymentStatuses(),
       useMcpInstallationStatusCacheSync: () => {},
@@ -137,6 +160,10 @@ vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
   useMcpServerIssues: vi.fn(() => ({ issuesByCatalog: new Map() })),
 }));
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
+const initiateOAuth = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/oauth.query", () => ({
+  useInitiateOAuth: () => ({ mutateAsync: initiateOAuth, isPending: false }),
+}));
 vi.mock("@/lib/organization.query", () => ({
   useDefaultEnvironment: () => ({ name: "Default" }),
   useOrganization: () => ({ data: null }),
@@ -445,7 +472,13 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
   });
 
-  it("keeps the issue visible with only Dismiss because remediation is elsewhere on the page", () => {
+  it("offers Sign in instead of Dismiss on your own rejected token", async () => {
+    const user = userEvent.setup();
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
     // A remote connection whose token was rejected: a row exists, and it is
     // not working. Deriving the status from the row alone read "Connected"
     // with a green dot directly above the notice saying otherwise.
@@ -482,14 +515,21 @@ describe("McpCatalogItemDetailPage overview", () => {
       issue.getByText(/The provider rejected the stored token/),
     ).toBeVisible();
     expect(
-      issue.getByRole("button", { name: "Dismiss alert for internal-tools" }),
-    ).toBeVisible();
+      issue.queryByRole("button", { name: "Dismiss alert for internal-tools" }),
+    ).toBeNull();
     expect(issue.queryByRole("button", { name: "Re-authenticate" })).toBeNull();
     expect(
       issue.queryByRole("button", { name: "Edit configuration" }),
     ).toBeNull();
     expect(issue.queryByRole("button", { name: /More actions/ })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Status" })).toBeNull();
+
+    await user.click(issue.getByRole("button", { name: "Sign in" }));
+    expect(push).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /tab=credentials.*server=srv-1|server=srv-1.*tab=credentials/,
+      ),
+    );
   });
 
   it("keeps dismissed alerts off the server details page", () => {
@@ -519,6 +559,34 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(
       screen.queryByTestId("mcp-registry-attention-row-internal-tools"),
     ).toBeNull();
+  });
+
+  it("sends an OAuth connection straight to the provider instead of asking first", () => {
+    // Never resolves: the test stops before the browser would navigate away.
+    initiateOAuth.mockReturnValue(new Promise(() => {}));
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=credentials&server=srv-own") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    installed([
+      ownInstall({ serverType: "remote", oauthRefreshError: "refresh_failed" }),
+    ]);
+    renderPage({
+      serverType: "remote",
+      localConfig: null,
+      oauthConfig: {
+        grantType: "authorization_code",
+        client_id: "abc123",
+        tokenEndpoint: "https://auth.example.com/token",
+        scopes: ["read"],
+      },
+    });
+
+    expect(initiateOAuth).toHaveBeenCalledTimes(1);
+    expect(initiateOAuth).toHaveBeenCalledWith({ catalogId: "cat-1" });
+    expect(screen.getByText("Redirecting to sign in…")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("repairs the selected connection inline without opening a dialog", async () => {
@@ -602,7 +670,7 @@ describe("McpCatalogItemDetailPage overview", () => {
       ),
     ).toBeNull();
     expect(
-      within(installationRow).getByRole("button", { name: "Revoke" }),
+      within(installationRow).getByRole("button", { name: /^Revoke/ }),
     ).toBeInTheDocument();
     await user.type(within(form).getByLabelText(/API_TOKEN/), "new-token");
     await user.click(
@@ -668,7 +736,7 @@ describe("McpCatalogItemDetailPage overview", () => {
     renderPage({ serverType: "remote", localConfig: null });
 
     const row = screen.getByRole("row", { name: /Organization/ });
-    await user.click(within(row).getByRole("button", { name: "Revoke" }));
+    await user.click(within(row).getByRole("button", { name: /^Revoke/ }));
 
     const dialog = await screen.findByRole("dialog");
     expect(deleteMutateAsync).not.toHaveBeenCalled();
@@ -831,7 +899,7 @@ describe("McpCatalogItemDetailPage installations", () => {
     expect(
       content.queryByRole("button", { name: /Add shared installation/ }),
     ).toBeNull();
-    expect(columnNames(content)).toEqual(["Owner", "Created At", "Action"]);
+    expect(columnNames(content)).toEqual(["Owner", "Actions"]);
     const [row, ...otherRows] = content.getAllByRole("row").slice(1);
     expect(row).toHaveTextContent("member@example.com");
     expect(otherRows).toEqual([]);
@@ -851,7 +919,7 @@ describe("McpCatalogItemDetailPage installations", () => {
     renderPage({ serverType: "remote", localConfig: null });
 
     const content = connections();
-    expect(content.queryByText("Default credential")).toBeNull();
+    expect(content.queryByText("Agents connect with")).toBeNull();
     expect(content.queryByText("Service accounts")).toBeNull();
     expect(
       content.queryByRole("button", { name: /Add service account/ }),
@@ -867,7 +935,6 @@ describe("McpCatalogItemDetailPage installations", () => {
     expect(content.getByText("Shared installations")).toBeVisible();
     expect(content.getByText("Platform")).toBeVisible();
     expect(columnNames(content)).toContain("Pod");
-    expect(columnNames(content)).toContain("Secret Storage");
     expect(
       screen.getByRole("heading", { name: /Installations/ }),
     ).toHaveTextContent(/^Installations2$/);
@@ -937,12 +1004,32 @@ describe("McpCatalogItemDetailPage installations", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("keeps the default credential for someone who manages a remote server", () => {
+  it("lets someone who manages a remote server pin agents to a service account", async () => {
+    const user = userEvent.setup();
     installed([teamInstall({ serverType: "remote" })]);
     renderPage({ serverType: "remote", localConfig: null });
 
-    expect(connections().getByText("Default credential")).toBeVisible();
-    expect(connections().getByText("Service accounts")).toBeVisible();
+    const content = connections();
+    expect(content.getByText("Service accounts")).toBeVisible();
+    const picker = content.getByRole("combobox", {
+      name: "Account agents connect with",
+    });
+    expect(picker).toHaveTextContent("Each caller's own account");
+
+    // The picker's list scrolls its active option into view; jsdom has no
+    // layout to scroll.
+    const scrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      await user.click(picker);
+      await user.click(await screen.findByRole("option", { name: /Platform/ }));
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    }
+    expect(updateCatalogMutate).toHaveBeenCalledWith({
+      id: "cat-1",
+      data: { dynamicConnectionMcpServerId: "srv-team" },
+    });
   });
 
   it("shows a personal server's own installation as one row and uninstalls it after confirming", async () => {

@@ -12,6 +12,115 @@ import InteractionUserActivityModel from "./interaction-user-activity";
 setupTestCacheManager();
 
 describe("transactional interaction user activity", () => {
+  test("concurrent cold state initialization returns the same persisted singleton", async () => {
+    const states = await Promise.all([
+      InteractionUserActivityModel.state(),
+      InteractionUserActivityModel.state(),
+    ]);
+    expect(states[0]).toEqual(states[1]);
+    expect(
+      await db.select().from(schema.interactionUserActivityStateTable),
+    ).toEqual([states[0]]);
+  });
+
+  test("unsafe decoded generation, revision and reconciliation balances fail closed", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const user = await makeUser();
+    await insert({ userId: user.id, profileId: agent.id });
+    await InteractionUserActivityModel.setEnabled(true);
+    for (const column of ["generation", "revision"]) {
+      await db.execute(
+        sql`UPDATE interaction_user_activity_state SET ${sql.identifier(column)}=9007199254740993`,
+      );
+      await expect(InteractionUserActivityModel.state()).rejects.toThrow(
+        "safe integer",
+      );
+      await expect(InteractionUserActivityModel.rebuildBatch()).rejects.toThrow(
+        "safe integer",
+      );
+      await db.execute(
+        sql`UPDATE interaction_user_activity_state SET ${sql.identifier(column)}=1`,
+      );
+    }
+    const state = await InteractionUserActivityModel.state();
+    await db.execute(
+      sql`INSERT INTO interaction_user_activity_deltas(organization_id,user_id,generation,balance) VALUES(${org.id},${user.id},${state.generation},9007199254740993)`,
+    );
+    await expect(InteractionUserActivityModel.rebuildBatch()).rejects.toThrow(
+      "safe integer",
+    );
+    expect((await InteractionUserActivityModel.state()).ready).toBe(false);
+    expect(await db.select().from(schema.interactionUserActivityTable)).toEqual(
+      [],
+    );
+    await InteractionUserActivityModel.invalidate();
+    await rebuild();
+    expect(
+      (await db.select().from(schema.interactionUserActivityTable))[0]
+        .activityCount,
+    ).toBe(1);
+  });
+
+  test("negative reconciliation rolls back and keeps exact fallback until repaired and rebuilt", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const user = await makeUser();
+    await insert({ userId: user.id, profileId: agent.id });
+    await InteractionUserActivityModel.setEnabled(true);
+    await db.execute(sql`
+      CREATE FUNCTION test_negative_activity_balance() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        INSERT INTO interaction_user_activity_deltas(organization_id,user_id,generation,balance)
+        SELECT agent.organization_id, NEW.user_id, state.generation, -2
+        FROM interaction_user_activity_state state CROSS JOIN agents agent
+        WHERE agent.id=(SELECT profile_id FROM interactions WHERE user_id=NEW.user_id LIMIT 1);
+        RETURN NEW;
+      END $$;
+    `);
+    await db.execute(sql`
+      CREATE TRIGGER test_negative_activity_balance BEFORE INSERT ON interaction_user_activity_users
+        FOR EACH ROW EXECUTE FUNCTION test_negative_activity_balance();
+    `);
+    try {
+      await expect(InteractionUserActivityModel.rebuildBatch()).rejects.toThrow(
+        "negative count",
+      );
+      expect((await InteractionUserActivityModel.state()).ready).toBe(false);
+      expect(
+        await db.select().from(schema.interactionUserActivityUsersTable),
+      ).toEqual([]);
+      expect(
+        await db.select().from(schema.interactionUserActivityDeltasTable),
+      ).toEqual([]);
+      expect(
+        await db.select().from(schema.interactionUserActivityTable),
+      ).toEqual([]);
+      expect(
+        await InteractionModel.getUserFilterOptions({
+          organizationId: org.id,
+          limit: 100,
+        }),
+      ).toEqual([{ id: user.id, name: user.name }]);
+    } finally {
+      await db.execute(
+        sql`DROP TRIGGER test_negative_activity_balance ON interaction_user_activity_users`,
+      );
+      await db.execute(sql`DROP FUNCTION test_negative_activity_balance()`);
+    }
+    await InteractionUserActivityModel.invalidate();
+    await rebuild();
+    expect(await ranked(org.id)).toEqual([{ id: user.id, name: user.name }]);
+  });
+
   test("incomplete backfill falls back; resumable batches preserve exact counts, ties and historical users", async ({
     makeOrganization,
     makeAgent,

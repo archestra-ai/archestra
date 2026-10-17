@@ -127,6 +127,9 @@ BEGIN
     SELECT generation INTO STRICT checkpoint_generation FROM interaction_user_activity_users
       WHERE user_id=incoming.user_id FOR UPDATE;
   END IF;
+  -- %L quotes values as SQL literals. Column validation above restricts types to
+  -- trusted catalog attributes; format_type returns quoted SQL type syntax,
+  -- including modifiers, so %s is intentional (%I would quote the whole syntax).
   SELECT string_agg(format('%I', attribute.attname), ',' ORDER BY attribute.attnum),
     string_agg(format('%L::%s', field.value, format_type(attribute.atttypid, attribute.atttypmod)), ',' ORDER BY attribute.attnum)
     INTO column_names, column_values

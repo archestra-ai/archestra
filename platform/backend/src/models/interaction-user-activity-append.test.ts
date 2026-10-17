@@ -6,6 +6,54 @@ import { recordQueries } from "@/test/query-counter";
 import InteractionModel from "./interaction";
 import InteractionUserActivityModel from "./interaction-user-activity";
 
+test("concurrent same-user appends persist and count both interactions", async ({
+  makeOrganization,
+  makeAgent,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const user = await makeUser();
+  await InteractionUserActivityModel.setEnabled(true);
+  while (!(await InteractionUserActivityModel.rebuildBatch()).ready) {}
+  const values = {
+    userId: user.id,
+    profileId: agent.id,
+    type: "openai:chatCompletions" as const,
+    request: { model: "synthetic", messages: [] },
+    response: {
+      id: "synthetic",
+      object: "chat.completion" as const,
+      created: 0,
+      model: "synthetic",
+      choices: [],
+    },
+  };
+  const rows = await Promise.all([
+    InteractionModel.create(values),
+    InteractionModel.create(values),
+  ]);
+  expect(new Set(rows.map((row) => row.id)).size).toBe(2);
+  expect(await db.select().from(schema.interactionsTable)).toHaveLength(2);
+  expect(
+    await db.select().from(schema.interactionUserActivityTable),
+  ).toMatchObject([
+    { organizationId: org.id, userId: user.id, activityCount: 2 },
+  ]);
+  expect(
+    await InteractionModel.getUniqueUserIds({
+      organizationId: org.id,
+      limit: 100,
+    }),
+  ).toEqual(
+    await InteractionUserActivityModel.mostActive({
+      organizationId: org.id,
+      limit: 100,
+      generation: (await InteractionUserActivityModel.state()).generation,
+    }),
+  );
+});
+
 test("attributed append preserves native decimals, dates, nested JSON, defaults and encrypted content", async ({
   makeOrganization,
   makeAgent,

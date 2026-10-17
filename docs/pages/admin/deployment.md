@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-17
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -122,6 +122,7 @@ The server caches the most-active list for at most 30 seconds, including load ti
 - Before rolling back to an old binary, run the command with `--disable` and wait for it to finish. Disabled writers do not maintain summary balances; a later `--enable` starts a new rebuild.
 - Owner deletion or organization reassignment invalidates the summary. Exact queries remain active while the worker rebuilds it. User deletion removes that user's derived counts; names are joined when the list is loaded.
 - Direct SQL changes to interactions bypass maintenance. Disable the summary before such work, then run with `--enable` afterward. If counts may already have drifted, use `--invalidate` to rebuild while keeping exact fallback active. Do not use `--invalidate` on every resume; it restarts progress.
+- A negative reconciled count or an integer outside JavaScript's safe range stops the rebuild without publishing partial results. Exact fallback remains active while valid summary state is incomplete; unsafe version counters instead reject list requests rather than reuse an ambiguous cache entry. Investigate and repair the accounting fault before retrying with `--invalidate`; repeated retries do not repair inconsistent accounting.
 
 ### Scaling
 

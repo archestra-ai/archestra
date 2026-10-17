@@ -7,10 +7,47 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { recordQueries } from "@/test/query-counter";
 import type { InteractionResponse } from "@/types";
 import InteractionModel from "./interaction";
+import InteractionUserActivityModel from "./interaction-user-activity";
 
 setupTestCacheManager();
 
 describe("InteractionModel.getUserFilterOptions", () => {
+  test("settled default loads can reload after success, rejection and version churn", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const user = await makeUser();
+    await seed(agent.id, [user.id]);
+    const get = vi.spyOn(cacheManager, "get").mockResolvedValue(undefined);
+    const load = () =>
+      InteractionModel.getUserFilterOptions({
+        organizationId: org.id,
+        limit: 100,
+      });
+    const expected = [{ id: user.id, name: user.name }];
+    for (let version = 0; version < 3; version++) {
+      await InteractionUserActivityModel.invalidate();
+      get.mockClear();
+      expect(await load()).toEqual(expected);
+      expect(await load()).toEqual(expected);
+      expect(get).toHaveBeenCalledTimes(2);
+      get.mockRejectedValueOnce(new Error("Synthetic cache outage"));
+      await expect(load()).rejects.toThrow("Synthetic cache outage");
+      expect(await load()).toEqual(expected);
+      expect(get).toHaveBeenCalledTimes(4);
+      get.mockClear();
+      expect(await Promise.all([load(), load(), load()])).toEqual([
+        expected,
+        expected,
+        expected,
+      ]);
+      expect(get).toHaveBeenCalledTimes(1);
+    }
+  });
+
   test("lists the most active users first, capped at the limit", async ({
     makeOrganization,
     makeAgent,

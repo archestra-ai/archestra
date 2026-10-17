@@ -62,15 +62,22 @@ export default class InteractionUserActivityModel {
   }
 
   static async state(): Promise<InteractionUserActivityState> {
-    const [state] = await db
+    const [existing] = await db
       .select()
       .from(schema.interactionUserActivityStateTable);
-    if (state) return state;
+    if (existing) return checkedState(existing);
     await db
       .insert(schema.interactionUserActivityStateTable)
       .values({ id: 1 })
       .onConflictDoNothing();
-    return InteractionUserActivityModel.state();
+    const [state] = await db
+      .select()
+      .from(schema.interactionUserActivityStateTable);
+    if (!state)
+      throw new Error(
+        "Activity summary state disappeared during initialization",
+      );
+    return checkedState(state);
   }
 
   static async mostActive(params: {
@@ -221,6 +228,7 @@ export default class InteractionUserActivityModel {
       appId: table.appId,
       connectorId: table.connectorId,
     };
+    // Attribution rarely races; retry only when the selected checkpoint changed, with a bounded failure instead of starvation.
     for (let attempt = 0; attempt < 5; attempt++) {
       const [previous] = await db
         .select(columns)
@@ -289,6 +297,7 @@ export default class InteractionUserActivityModel {
             .from(schema.interactionUserActivityStateTable);
           if (!state)
             throw new Error("Activity summary migration is not installed");
+          checkedState(state);
           const pending = await tx.execute<{ id: string }>(sql`
         SELECT u.id FROM "user" u LEFT JOIN interaction_user_activity_users checkpoint ON checkpoint.user_id=u.id
         WHERE checkpoint.generation IS DISTINCT FROM ${state.generation}
@@ -387,7 +396,7 @@ export default class InteractionUserActivityModel {
           const previous = totals.get(key)?.delta ?? 0;
           totals.set(key, {
             ...row,
-            delta: previous + sign * Number(row.delta),
+            delta: safeInteger(previous + sign * safeInteger(row.delta)),
           });
         };
         for (const row of snapshot.counts) add(row);
@@ -437,6 +446,7 @@ export default class InteractionUserActivityModel {
         .for("update");
       if (!state)
         throw new Error("Activity summary migration is not installed");
+      checkedState(state);
       if (!state.enabled) return false;
       const pending = await tx.execute(
         sql`SELECT 1 FROM "user" u LEFT JOIN interaction_user_activity_users checkpoint ON checkpoint.user_id=u.id WHERE checkpoint.generation IS DISTINCT FROM ${state.generation} LIMIT 1`,
@@ -465,7 +475,7 @@ export default class InteractionUserActivityModel {
         .onConflictDoNothing();
       return InteractionUserActivityModel.fence(tx);
     }
-    return state;
+    return checkedState(state);
   }
 
   private static async fenceAndLockUsers(params: {
@@ -497,8 +507,8 @@ export default class InteractionUserActivityModel {
           id: row.id,
           enabled: row.enabled,
           ready: row.ready,
-          generation: Number(row.generation),
-          revision: Number(row.revision),
+          generation: safeInteger(row.generation),
+          revision: safeInteger(row.revision),
         };
         if (!state.enabled) return { state, checkpoints: [] };
         if (row.checkpointUserId !== null)
@@ -507,7 +517,7 @@ export default class InteractionUserActivityModel {
             checkpoints: [
               {
                 userId: row.checkpointUserId,
-                generation: Number(row.checkpointGeneration),
+                generation: safeInteger(row.checkpointGeneration),
               },
             ],
           };
@@ -547,17 +557,22 @@ export default class InteractionUserActivityModel {
         .from(table)
         .where(eq(table.userId, userIds[0]))
         .for("update");
-      if (existing.length) return existing;
+      if (existing.length) {
+        for (const row of existing) safeInteger(row.generation);
+        return existing;
+      }
     }
     await params.tx.execute(
       sql`INSERT INTO interaction_user_activity_users(user_id,generation) SELECT id, ${params.state.ready ? params.state.generation : 0} FROM "user" WHERE id=ANY(${sql.param(userIds)}::text[]) ORDER BY id ON CONFLICT DO NOTHING`,
     );
-    return params.tx
+    const checkpoints = await params.tx
       .select()
       .from(table)
       .where(inArray(table.userId, userIds))
       .orderBy(table.userId)
       .for("update");
+    for (const row of checkpoints) safeInteger(row.generation);
+    return checkpoints;
   }
 
   private static async apply(params: {
@@ -623,8 +638,25 @@ function deltaRow(row: DeltaRow): Delta {
   return {
     organizationId: row.organization_id,
     userId: row.user_id,
-    delta: Number(row.delta),
+    delta: safeInteger(row.delta),
   };
+}
+
+function safeInteger(value: string | number | null): number {
+  const number = value === null ? Number.NaN : Number(value);
+  if (!Number.isSafeInteger(number))
+    throw new Error(
+      "Activity summary value exceeds JavaScript safe integer range",
+    );
+  return number;
+}
+
+function checkedState(
+  state: InteractionUserActivityState,
+): InteractionUserActivityState {
+  safeInteger(state.generation);
+  safeInteger(state.revision);
+  return state;
 }
 
 function aggregate(source: SQL) {

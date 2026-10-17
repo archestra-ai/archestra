@@ -678,12 +678,12 @@ export async function handleLLMProxy<
   > = null;
   /**
    * The chat_api_key row ID for this call, if the call resolved through a
-   * DB-managed key OR was forwarded by an internal loopback caller via
+   * DB-managed key OR was forwarded by an in-process caller via
    * CHAT_API_KEY_ID_HEADER. Used at the bottom of the handler to look up
    * extra HTTP headers. `undefined` for raw-bearer calls from external IPs.
    */
   let perKeyChatApiKeyId: string | undefined;
-  let perKeyChatApiKeyIdFromLoopbackHeader = false;
+  let perKeyChatApiKeyIdFromInternalHeader = false;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
   let wasOAuthAuthenticated = false;
@@ -728,9 +728,9 @@ export async function handleLLMProxy<
   // auth tokens from raw API keys. Normalize both forms before virtual-key lookup.
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
 
-  // In-app chat forwards a stored provider secret through the local proxy
-  // (loopback) tagged with CHAT_API_KEY_ID_HEADER and a downstream
-  // PROVIDER_BASE_URL_HEADER. That secret can itself be an `arch_*` virtual key
+  // In-process callers forward a stored provider secret through the local
+  // proxy (with the in-process proof) tagged with CHAT_API_KEY_ID_HEADER and
+  // a downstream PROVIDER_BASE_URL_HEADER. That secret can itself be an `arch_*` virtual key
   // whose mapped provider is ANOTHER Archestra instance — not one of this
   // instance's keys — so it must be forwarded to that downstream base URL
   // rather than rejected by local virtual-key lookup. Requiring the base-URL
@@ -778,7 +778,10 @@ export async function handleLLMProxy<
   }
   // Personal platform token (the credential the MCP gateway accepts). The
   // caller is that user, and the upstream key is the provider key named by
-  // CHAT_API_KEY_ID, only when the user may use it.
+  // CHAT_API_KEY_ID, only when the user may use it. In-process chat already
+  // resolved that key for the user with `getCurrentApiKey`, which also admits
+  // the agent's configured key through agent access, so a call carrying the
+  // in-process proof keeps that decision instead of re-checking key grants.
   if (
     !wasJwksAuthenticated &&
     !authOverride &&
@@ -799,11 +802,12 @@ export async function handleLLMProxy<
         await LlmProviderApiKeyModel.findById(chatKeyIdHeader);
       if (
         !providerKey ||
-        !(await LlmProviderApiKeyModel.canUseKey(
-          providerKey,
-          personalToken.userId,
-          [],
-        ))
+        (!internalCall &&
+          !(await LlmProviderApiKeyModel.canUseKey(
+            providerKey,
+            personalToken.userId,
+            [],
+          )))
       ) {
         throw new ApiError(
           403,
@@ -889,7 +893,7 @@ export async function handleLLMProxy<
   }
 
   // 4. Internal callers (in-app chat) that send a raw provider secret can
-  // forward the resolved chat_api_keys row ID via a loopback-only header so
+  // forward the resolved chat_api_keys row ID via a proof-gated header so
   // the proxy can pick up per-key configuration (extraHeaders) below.
   // External clients must NOT be able to spoof this — same SSRF reasoning
   // as PROVIDER_BASE_URL_HEADER.
@@ -901,7 +905,7 @@ export async function handleLLMProxy<
     if (internalCall) {
       if (headerPresent) {
         perKeyChatApiKeyId = headerValue;
-        perKeyChatApiKeyIdFromLoopbackHeader = true;
+        perKeyChatApiKeyIdFromInternalHeader = true;
         logger.info(
           { chatApiKeyId: perKeyChatApiKeyId },
           `[${providerName}Proxy] received provider-api-key-id header`,
@@ -915,7 +919,7 @@ export async function handleLLMProxy<
     }
   }
 
-  if (perKeyChatApiKeyId && perKeyChatApiKeyIdFromLoopbackHeader) {
+  if (perKeyChatApiKeyId && perKeyChatApiKeyIdFromInternalHeader) {
     perKeyProviderApiKeyRow =
       await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
 
@@ -965,7 +969,10 @@ export async function handleLLMProxy<
   // so it intentionally does not satisfy the keyless-provider requirement.
   assertAuthenticatedForKeylessProvider({
     apiKey,
-    wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
+    wasVirtualKeyResolved:
+      wasVirtualKeyResolved ||
+      wasOAuthAuthenticated ||
+      personalTokenUserId !== undefined,
     wasJwksAuthenticated,
     isInternalCall: internalCall,
     providerSuppliesServerCredential:
@@ -1022,9 +1029,11 @@ export async function handleLLMProxy<
   if (!authMethod) {
     authMethod = passthroughVirtualKeyId
       ? "passthrough_virtual_key"
-      : isLoopbackRequest(request)
+      : internalCall
         ? "internal"
-        : "provider_key";
+        : personalTokenUserId
+          ? "personal_token"
+          : "provider_key";
   }
 
   // Encrypted chat sessions: interaction rows keep all usage/cost/session

@@ -1,6 +1,3 @@
-import { internalCallHeader } from "@/clients/internal-call";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-
 /**
  * LLM Proxy Handler Tests
  *
@@ -28,6 +25,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import {
   InteractionModel,
@@ -35,6 +33,7 @@ import {
   ModelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,

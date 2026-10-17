@@ -2083,10 +2083,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }
   });
 
-  test("block mode blocks a loopback guardrail source without the platform's proof", async () => {
+  test("block mode blocks a loopback guardrail source without the guardrail proof", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
     const [proofHeader] = Object.keys(guardrailCallHeader());
-    for (const proof of [{}, { [proofHeader]: "forged" }]) {
+    const [inProcessValue] = Object.values(internalCallHeader());
+    for (const proof of [
+      {},
+      { [proofHeader]: "forged" },
+      // The in-process proof authenticates the call but grants no bypass,
+      // under its own header or replayed under the guardrail one.
+      internalCallHeader(),
+      { [proofHeader]: inProcessValue },
+    ]) {
       const response = await guardrailCall("guardrail:annotator", proof);
       expect(response.statusCode, response.body).toBe(400);
     }

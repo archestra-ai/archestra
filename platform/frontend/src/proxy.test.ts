@@ -85,35 +85,20 @@ describe("proxy", () => {
       ).toBe("/mcp/registry");
     });
 
-    it("marks the documents of any page added to the seeded routes, and only those", () => {
-      const routes = SHELL_SEED_ROUTES as string[];
-      routes.push("/mcp/gateways");
-      try {
+    it("marks the documents of every seeded route, and only those", () => {
+      // Reads the list as it is, so a page added to it is covered here too.
+      for (const route of SHELL_SEED_ROUTES) {
         expect(
           forwarded(
-            proxy(
-              createMockRequest({
-                url: "/mcp/gateways",
-                headers: documentLoad,
-              }),
-            ),
+            proxy(createMockRequest({ url: route, headers: documentLoad })),
           ),
-        ).toBe("/mcp/gateways");
-        expect(
-          forwarded(
-            proxy(createMockRequest({ url: "/agents", headers: documentLoad })),
-          ),
-        ).toBeNull();
-      } finally {
-        routes.pop();
+        ).toBe(route);
       }
-      expect(
-        forwarded(
-          proxy(
-            createMockRequest({ url: "/mcp/gateways", headers: documentLoad }),
-          ),
-        ),
-      ).toBeNull();
+      for (const url of ["/agents", "/mcp/gateways", "/mcp/registry/abc"]) {
+        expect(
+          forwarded(proxy(createMockRequest({ url, headers: documentLoad }))),
+        ).toBeNull();
+      }
     });
 
     it("does not mark a client navigation or route prefetch", () => {

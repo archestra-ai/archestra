@@ -152,6 +152,11 @@ async function readMockJson<T>(
   return (await response.json()) as T;
 }
 
+/**
+ * The search, id, environment, author, label and install-state filters. The
+ * access, owner, shared-with and service-account filters are not mocked: the
+ * backend route tests cover them.
+ */
 function filterItems(
   items: CatalogItem[],
   installs: Install[],

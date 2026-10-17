@@ -12,6 +12,8 @@ vi.mock("./_parts/InternalMCPCatalog", () => ({
 
 describe("registry route early requests", () => {
   beforeEach(() => {
+    // Also a fresh `appLifecycle`, so a test that marks the app rendered
+    // leaves the others on a full page load, in any order.
     vi.resetModules();
     startEarlyMock.mockReset();
     window.history.pushState(null, "", "/mcp/registry");

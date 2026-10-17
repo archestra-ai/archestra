@@ -96,20 +96,11 @@ import {
 import { gatewaySubagentNames, gatewayToolNames } from "./gateway-tools";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
-type McpGatewaysInitialData = {
-  agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
-};
-
-export default function McpGatewaysPage({
-  initialData,
-}: {
-  initialData?: McpGatewaysInitialData;
-}) {
+export default function McpGatewaysPage() {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <McpGateways initialData={initialData} />
+        <McpGateways />
       </ErrorBoundary>
     </div>
   );
@@ -138,11 +129,7 @@ function SortIcon({
   );
 }
 
-function McpGateways({
-  initialData,
-}: {
-  initialData?: McpGatewaysInitialData;
-}) {
+function McpGateways() {
   const docsUrl = getFrontendDocsUrl("mcp/gateway");
   const {
     searchParams,
@@ -250,9 +237,6 @@ function McpGateways({
   } = useProfilesPaginated({
     limit: pageSize,
     offset,
-    initialData: initialData?.agents ?? undefined,
-    initialDataPinned: false,
-    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     ...listFilters,
     pinned: isDeletedView ? undefined : false,
     ...listExclusions,
@@ -266,10 +250,6 @@ function McpGateways({
   } = useProfilesPaginated({
     limit: 100,
     offset: 0,
-    initialData: initialData?.pinnedAgents ?? undefined,
-    initialDataPinned: true,
-    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
-    initialDataLimit: 100,
     enabled: !isDeletedView,
     ...listFilters,
     status: undefined,

@@ -11,21 +11,36 @@
  */
 class AppInteractive {
   private marked = false;
-  private readonly listeners: Array<() => void> = [];
+  private readonly waiting: Array<() => void> = [];
+  private draining = false;
 
   /** Called once the first commit has happened. Idempotent. */
   mark(): void {
     if (this.marked) return;
     this.marked = true;
-    for (const listener of this.listeners.splice(0)) listener();
+    this.drain();
   }
 
-  /** Resolves on the first idle period after the app became interactive. */
+  /**
+   * Resolves on an idle period after the app became interactive. Waiting
+   * work is released one item per idle callback, never all at once: each item
+   * typically loads and evaluates a chunk, and a burst of them would hold the
+   * main thread against the first keystrokes.
+   */
   whenIdle(): Promise<void> {
     return new Promise((resolve) => {
-      const onInteractive = () => scheduleIdle(resolve);
-      if (this.marked) onInteractive();
-      else this.listeners.push(onInteractive);
+      this.waiting.push(resolve);
+      if (this.marked) this.drain();
+    });
+  }
+
+  private drain(): void {
+    if (this.draining || this.waiting.length === 0) return;
+    this.draining = true;
+    scheduleIdle(() => {
+      this.draining = false;
+      this.waiting.shift()?.();
+      this.drain();
     });
   }
 }

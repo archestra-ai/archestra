@@ -180,7 +180,7 @@ export function AppShell({ children }: AppShellProps) {
                 the keyboard tabs forward into the revealed sidebar content
                 instead of skipping to <main> (WCAG 2.4.3). */}
           <NavAwareSidebarCircleToggle />
-          <DeferredSidebar />
+          <DeferredSidebar defer={isChat} />
           <SidebarResizeHandle
             width={sidebarWidth.width}
             onWidthChange={sidebarWidth.setWidth}
@@ -244,7 +244,7 @@ export function AppShell({ children }: AppShellProps) {
 }
 
 /**
- * The sidebar, after the page's first commit. Its navigation, conversation
+ * On chat pages, the sidebar after the page's first commit. Its navigation, conversation
  * list and their queries are not what the visitor came for, so the first
  * render (on the server too) draws its empty frame at the exact width, and
  * the real sidebar replaces it in a transition right after the page —
@@ -252,8 +252,11 @@ export function AppShell({ children }: AppShellProps) {
  * evaluated between the composer's commit and its first typeable frame). The
  * frame stays while the chunk loads.
  */
-function DeferredSidebar() {
-  const [mounted, setMounted] = useState(false);
+function DeferredSidebar({ defer }: { defer: boolean }) {
+  // Only where the composer is the first screen. Elsewhere the sidebar mounts
+  // with the page, as before: deferring it there buys nothing and moves its
+  // mount into the moment someone starts using the page.
+  const [mounted, setMounted] = useState(!defer);
   useEffect(() => {
     afterNextPaint(() => startTransition(() => setMounted(true)));
   }, []);

@@ -6,7 +6,16 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { format, subDays } from "date-fns";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { preloadConversationActionParts } from "@/components/chat/conversation-actions";
 
 // Mock ResizeObserver used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -430,6 +439,9 @@ function makeConv(
 function daysAgo(n: number) {
   return subDays(new Date(), n).toISOString();
 }
+
+// The conversation menu's project picker is a lazy chunk; load it first.
+beforeAll(() => preloadConversationActionParts());
 
 describe("ChatSidebarSection", () => {
   const fadeIn = {

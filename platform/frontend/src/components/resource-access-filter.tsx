@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/popover";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -43,13 +42,11 @@ import { cn } from "@/lib/utils/tailwind";
  * 3. "Owner": objects authored by a picked person.
  *
  * The selection lives in the `access`, `sharedWith` and `owner` URL
- * parameters (plus `builtIn` on Agents); read it with
- * {@link useResourceAccessParam}.
+ * parameters; read it with {@link useResourceAccessParam}.
  */
 export function ResourceAccessFilter({
   resource,
   noun,
-  offerBuiltIn = false,
   owned = true,
   offerAdminAccess = true,
   navigate,
@@ -59,8 +56,6 @@ export function ResourceAccessFilter({
   resource: ScopedResource;
   /** Plural, lower-case name of the listed objects, e.g. "agents". */
   noun: string;
-  /** Agents page only: offer the "Built-in" option, kept in the `builtIn` URL parameter. */
-  offerBuiltIn?: boolean;
   /**
    * Off for objects nobody authors (synced models): no "Mine" option and no
    * Owner box, since neither could match anything.
@@ -78,16 +73,10 @@ export function ResourceAccessFilter({
 }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const {
-    access,
-    sharedWith,
-    owner,
-    isDefault: isDefaultFilters,
-  } = useResourceAccessParam({ queryParamsAdapter, offerAdminAccess });
-  const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
-  const builtIn =
-    offerBuiltIn && activeSearchParams.get(BUILT_IN_PARAM) === "true";
-  const isDefault = isDefaultFilters && !builtIn;
+  const { access, sharedWith, owner, isDefault } = useResourceAccessParam({
+    queryParamsAdapter,
+    offerAdminAccess,
+  });
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -123,7 +112,6 @@ export function ResourceAccessFilter({
             [RESOURCE_ACCESS_PARAM]: null,
             [SHARED_WITH_PARAM]: null,
             [OWNER_PARAM]: null,
-            ...(offerBuiltIn && { [BUILT_IN_PARAM]: null }),
           })
         }
       >
@@ -138,8 +126,6 @@ export function ResourceAccessFilter({
         resource={resource}
         noun={noun}
         access={access}
-        builtIn={builtIn}
-        offerBuiltIn={offerBuiltIn}
         owned={owned}
         offerAdminAccess={offerAdminAccess}
         updateParams={updateParams}
@@ -213,16 +199,11 @@ export function useResourceAccessParam(options?: {
   }, [rawAccess, rawSharedWith, rawOwner, offerAdminAccess]);
 }
 
-/**
- * Every URL parameter the access filters own, for a page's "Clear" action.
- * The Agents-only `builtIn` parameter is included; deleting it elsewhere is
- * a no-op.
- */
+/** Every URL parameter the access filters own, for a page's "Clear" action. */
 export const RESOURCE_ACCESS_FILTER_PARAMS = [
   "access",
   "sharedWith",
   "owner",
-  "builtIn",
 ] as const;
 
 // ===
@@ -233,8 +214,6 @@ const RESOURCE_ACCESS_PARAM = "access";
 const SHARED_WITH_PARAM = "sharedWith";
 /** The URL parameter of the "Owner" filter: user ids. */
 const OWNER_PARAM = "owner";
-/** The URL parameter the Agents page keeps the "Built-in" option in. */
-const BUILT_IN_PARAM = "builtIn";
 
 /** The checkbox rows of the first box, each covering one or more relations. */
 type AccessOptionId = "mine" | "shared" | "others";
@@ -262,8 +241,6 @@ function AccessRelationFilter({
   resource,
   noun,
   access,
-  builtIn,
-  offerBuiltIn,
   owned,
   offerAdminAccess,
   updateParams,
@@ -272,8 +249,6 @@ function AccessRelationFilter({
   resource: ScopedResource;
   noun: string;
   access: ResourceAccessRelation[];
-  builtIn: boolean;
-  offerBuiltIn: boolean;
   owned: boolean;
   offerAdminAccess: boolean;
   updateParams: (updates: Record<string, string | null>) => void;
@@ -296,8 +271,6 @@ function AccessRelationFilter({
       (id !== "mine" || owned),
   );
   const onCount = options.filter(isOn).length;
-  // Only agent admins can list the built-in agents.
-  const showBuiltIn = offerBuiltIn && (!!readsEveryObject || builtIn);
 
   const toggle = (id: AccessOptionId) => {
     const turnOn = !isOn(id);
@@ -326,13 +299,12 @@ function AccessRelationFilter({
           size="sm"
           aria-label="Filter by access"
           className={filterControlClass({
-            active: serializeAccess(access) !== null || builtIn,
+            active: serializeAccess(access) !== null,
             className: "shrink-0 whitespace-nowrap max-w-none",
           })}
         >
           <Users className="size-4" />
           <span>{summarize({ access, noun, owned })}</span>
-          {builtIn && <span>+ Built-in</span>}
           <ChevronDown className="size-4 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -354,14 +326,6 @@ function AccessRelationFilter({
             />
           );
         })}
-        {showBuiltIn && (
-          <BuiltInRow
-            on={builtIn}
-            onToggle={() =>
-              updateParams({ [BUILT_IN_PARAM]: builtIn ? null : "true" })
-            }
-          />
-        )}
         {options.includes("others") && (
           <p className="px-2 pt-1.5 pb-1 text-xs leading-snug text-muted-foreground">
             Admin access: {noun} nobody shared with you. You see them only
@@ -371,20 +335,6 @@ function AccessRelationFilter({
         {reset && <div className="border-t px-1 pt-1">{reset}</div>}
       </PopoverContent>
     </Popover>
-  );
-}
-
-/** Agents page only; a component of its own so other pages skip the app-name lookup. */
-function BuiltInRow({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-  const appName = useAppName();
-  return (
-    <CheckboxRow
-      label="Built-in"
-      note={`system agents that ${appName} runs for you`}
-      on={on}
-      locked={false}
-      onToggle={onToggle}
-    />
   );
 }
 

@@ -395,7 +395,6 @@ describe("ApiKeysPage", () => {
       access: null,
       sharedWith: null,
       owner: null,
-      builtIn: null,
     });
   });
 

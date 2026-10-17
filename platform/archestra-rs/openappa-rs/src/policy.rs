@@ -808,6 +808,43 @@ delta = {}
         ));
     }
 
+    /// Two organizations that publish the same policy files at the same revisions
+    /// each decide their families on their own line: an earlier revision's engine
+    /// is cached per line, not shared by file and revision alone.
+    #[tokio::test]
+    async fn organizations_publishing_the_same_policy_keep_their_own_lines() {
+        let one = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/archestra/read_file\"\ndelta = {}\n";
+        let two = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/archestra/write_file\"\ndelta = {}\n";
+        let runtime = memory_runtime("[policy]\nversion = 2\n");
+        for organization in ["org-a", "org-b"] {
+            let line = appa_eventlog::DeploymentName::new(organization);
+            let pin = |content: &str| {
+                let prepared = runtime
+                    .prepare_deployment(compile(content).unwrap())
+                    .unwrap();
+                runtime.pinned(&runtime.publish(&line, &prepared).unwrap())
+            };
+            let first = pin(one);
+            let parent = started(&first, &format!("{organization}-parent")).await;
+            assert!(matches!(
+                hooks::handle(&first, call(&parent, "read_file")).await,
+                HookDecision::AllowCall { .. }
+            ));
+            let second = pin(two);
+            let decided = hooks::handle(&second, call(&parent, "write_file")).await;
+            assert!(
+                matches!(decided, HookDecision::AllowCall { .. }),
+                "{organization}: {decided:?}"
+            );
+            let forked = second.open_root_fork(
+                &parent.root,
+                &parent.root,
+                &TrajectoryId(format!("{organization}-fork")),
+            );
+            assert!(forked.is_ok(), "{organization}: {forked:?}");
+        }
+    }
+
     /// A family belongs to the line it opened on: another organization's view
     /// refuses it, whatever the two lines serve.
     #[tokio::test]

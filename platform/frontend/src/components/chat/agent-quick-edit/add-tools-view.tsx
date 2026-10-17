@@ -122,14 +122,30 @@ export function AddToolsView({
       refetchInterval: pollWhileInstalling ? 2_000 : false,
     },
   );
-  const allTotal = useMcpRegistryPage(
+  // The page's own total is its tab's count; one more count query covers the
+  // other tabs (all = connected + not connected).
+  const pageTotal = page.data?.pagination.total;
+  const allTotalQuery = useMcpRegistryPage(
     { ...baseQuery, limit: 1, offset: 0 },
-    { placeholderScope: "add-tools:total" },
+    { placeholderScope: "add-tools:total", enabled: filter === "connected" },
   ).data?.pagination.total;
-  const connectedTotal = useMcpRegistryPage(
+  const connectedTotalQuery = useMcpRegistryPage(
     { ...baseQuery, installState: "installed", limit: 1, offset: 0 },
-    { placeholderScope: "add-tools:connected" },
+    {
+      placeholderScope: "add-tools:connected",
+      enabled: filter !== "connected",
+    },
   ).data?.pagination.total;
+  const connectedTotal =
+    filter === "connected" ? pageTotal : connectedTotalQuery;
+  const allTotal =
+    filter === "all"
+      ? pageTotal
+      : filter === "connected"
+        ? allTotalQuery
+        : pageTotal !== undefined && connectedTotalQuery !== undefined
+          ? pageTotal + connectedTotalQuery
+          : undefined;
   // The built-in entry is ready to add without an install, but the server
   // never counts it as installed: whether the search matches it decides the
   // Connected count, and the Connected tab lists it next to the installed

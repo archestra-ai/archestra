@@ -4,8 +4,10 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { registryRows } = vi.hoisted(() => ({
+const { registryRows, sentRequests } = vi.hoisted(() => ({
   registryRows: [] as Array<Record<string, unknown>>,
+  // Each distinct request a mounted query would send (disabled ones send none).
+  sentRequests: new Set<string>(),
 }));
 
 vi.mock("@/lib/agent-tools.query", () => ({
@@ -31,13 +33,18 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 // `includeBuiltIn`, and "installed" meaning an install the viewer can use
 // (which the built-in entry never has).
 vi.mock("@/lib/mcp/mcp-registry.query", () => ({
-  useMcpRegistryPage: (params: {
-    includeBuiltIn?: boolean;
-    installState?: "installed" | "not-installed";
-    catalogIds?: string[];
-    search?: string;
-    limit?: number;
-  }) => {
+  useMcpRegistryPage: (
+    params: {
+      includeBuiltIn?: boolean;
+      installState?: "installed" | "not-installed";
+      catalogIds?: string[];
+      search?: string;
+      limit?: number;
+    },
+    options?: { enabled?: boolean },
+  ) => {
+    if (options?.enabled === false) return { data: undefined, isPending: true };
+    sentRequests.add(JSON.stringify(params));
     const rows = registryRows.filter(
       (row) =>
         (params.includeBuiltIn || row.id !== ARCHESTRA_MCP_CATALOG_ID) &&
@@ -125,6 +132,7 @@ const names = (items: string[]) =>
 
 describe("AddToolsView", () => {
   beforeEach(() => {
+    sentRequests.clear();
     registryRows.length = 0;
     registryRows.push(
       row(
@@ -164,6 +172,19 @@ describe("AddToolsView", () => {
     await user.click(screen.getByRole("button", { name: /^Not connected/ }));
     expect(group("Ready to add")).toEqual([]);
     expect(names(group("Connect first"))).toEqual(["Notion", "Slack"]);
+  });
+
+  it("asks the registry three things per search: the page, the other tab's total, the built-in entry", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    await user.type(screen.getByLabelText("Search servers"), "jira");
+    await screen.findByRole("button", { name: "All 1" });
+
+    const forSearch = [...sentRequests]
+      .map((request) => JSON.parse(request) as { search?: string })
+      .filter((request) => request.search === "jira");
+    expect(forSearch).toHaveLength(3);
   });
 
   it("counts the built-in entry only while the search matches it", async () => {

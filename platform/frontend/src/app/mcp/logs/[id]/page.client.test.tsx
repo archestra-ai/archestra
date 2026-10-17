@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import {
   useInteraction,
   useInteractionSessions,
@@ -20,7 +20,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
-vi.mock("@/lib/agent.query", () => ({ useAgentOptions: vi.fn() }));
+vi.mock("@/lib/agent-options.query", () => ({ useAgentOptionsByIds: vi.fn() }));
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteraction: vi.fn(),
@@ -51,9 +51,9 @@ describe("McpToolCallDetailPage", () => {
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
     vi.mocked(usePathname).mockReturnValue(`/mcp/logs/${CALL_ID}`);
-    vi.mocked(useAgentOptions).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: [{ id: "agent-1", name: "Release Bot" }],
-    } as unknown as ReturnType<typeof useAgentOptions>);
+    } as unknown as ReturnType<typeof useAgentOptionsByIds>);
     vi.mocked(useInteraction).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useInteraction>);

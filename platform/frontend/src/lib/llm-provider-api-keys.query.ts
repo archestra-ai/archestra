@@ -286,7 +286,9 @@ export function useDeleteLlmProviderApiKey() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    // A subscription is disconnected rather than deleted, so the toast names
+    // what the user just did.
+    mutationFn: async ({ id }: { id: string; subscription: boolean }) => {
       const { data: responseData, error } = await deleteLlmProviderApiKey({
         path: { id },
       });
@@ -296,17 +298,26 @@ export function useDeleteLlmProviderApiKey() {
       }
       return responseData;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { subscription }) => {
       if (!data) {
         return;
       }
-      toast.success("API key deleted successfully");
+      toast.success(
+        subscription
+          ? "Subscription disconnected"
+          : "API key deleted successfully",
+      );
       queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
       queryClient.invalidateQueries({
         queryKey: ["available-llm-provider-api-keys"],
       });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      // The backend also deletes the virtual keys and OAuth clients that
+      // mapped only the deleted key.
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }
@@ -333,6 +344,11 @@ export function useBulkDeleteLlmProviderApiKeys() {
       });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+      // The backend also deletes the virtual keys and OAuth clients that
+      // mapped only the deleted key.
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
 }

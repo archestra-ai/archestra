@@ -43,6 +43,7 @@ import {
   QueryChip,
   Segmented,
   SummaryTable,
+  ViewPills,
 } from "./cost-explorer-parts";
 import { fmtMetric, KpiTile } from "./cost-overview";
 
@@ -126,7 +127,7 @@ export default function CostExplorer() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
         <KpiTile
           label="API spend"
           value={fmtMetric("billed", kpis.billed.value)}
@@ -176,27 +177,18 @@ export default function CostExplorer() {
           onClick={() => update({ metric: "requests", group: "person" })}
         />
       </div>
-      {/* Saved views */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {SAVED_VIEWS.filter((v) => canGroup(v.q.group)).map((v) => (
-          <UnstyledButton
-            key={v.id}
-            type="button"
-            onClick={() => {
-              setQ(v.q);
-              setFocus(new Set());
-            }}
-            className={cn(
-              "h-7 rounded-full border px-3 text-xs transition-colors",
-              activeView?.id === v.id
-                ? "border-foreground bg-foreground text-background"
-                : "bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground dark:bg-input/30",
-            )}
-          >
-            {v.label}
-          </UnstyledButton>
-        ))}
-      </div>
+      <ViewPills
+        label="Saved views"
+        items={SAVED_VIEWS.filter((v) => canGroup(v.q.group)).map((v) => ({
+          id: v.id,
+          label: v.label,
+          active: activeView?.id === v.id,
+          onSelect: () => {
+            setQ(v.q);
+            setFocus(new Set());
+          },
+        }))}
+      />
 
       <section
         aria-label="Cost explorer"
@@ -206,6 +198,7 @@ export default function CostExplorer() {
         <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
           <QueryChip
             label="Show"
+            className="max-sm:grow"
             value={q.metric}
             tone={metric.caution ? "caution" : undefined}
             options={METRIC_IDS.filter(
@@ -220,6 +213,7 @@ export default function CostExplorer() {
           />
           <QueryChip<DimId>
             label="by"
+            className="max-sm:grow"
             value={q.group}
             options={DIM_IDS.filter(
               (d) => d !== "method" && canGroup(d) && supports(d, q.metric),
@@ -232,6 +226,7 @@ export default function CostExplorer() {
           />
           <QueryChip<SplitId>
             label="split by"
+            className="max-sm:grow"
             value={q.split}
             options={[
               { id: "none", label: "None" },
@@ -322,14 +317,16 @@ export default function CostExplorer() {
               statistics.data?.costSavings.totalSubscriptionCost ? (
                 <UnstyledButton
                   onClick={() => update({ metric: "subscription" })}
-                  className="inline-flex items-center gap-1 text-foreground underline-offset-2 hover:underline"
+                  className="text-left text-foreground underline-offset-2 hover:underline"
                 >
                   Subscription usage at API rates:{" "}
-                  {formatCost(
-                    statistics.data.costSavings.totalSubscriptionCost,
-                  )}{" "}
-                  (estimate, not a bill)
-                  <ArrowRight className="size-3" />
+                  <span className="whitespace-nowrap">
+                    {formatCost(
+                      statistics.data.costSavings.totalSubscriptionCost,
+                    )}{" "}
+                    (estimate, not a bill)
+                    <ArrowRight className="ml-1 inline size-3 align-[-2px]" />
+                  </span>
                 </UnstyledButton>
               ) : q.metric === "subscription" && statistics.data ? (
                 <span>
@@ -513,18 +510,20 @@ function MetricNote({
   extra?: React.ReactNode;
 }) {
   return (
+    // Icon gets its own column so wrapped lines and the extra line align
+    // with the note text instead of the icon.
     <div
       className={cn(
-        "flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs",
+        "flex gap-1.5 text-muted-foreground text-xs leading-relaxed",
         caution &&
           "rounded-md border border-amber-500/40 bg-amber-500/5 px-2.5 py-1.5 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200",
       )}
     >
-      <span className="inline-flex items-center gap-1.5">
-        <Info className="size-3.5 shrink-0" />
-        {note}
-      </span>
-      {extra && <span className="text-muted-foreground">{extra}</span>}
+      <Info className="mt-[3px] size-3.5 shrink-0" />
+      <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1">
+        <span>{note}</span>
+        {extra && <span className="text-muted-foreground">{extra}</span>}
+      </div>
     </div>
   );
 }

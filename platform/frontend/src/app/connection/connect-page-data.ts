@@ -17,8 +17,11 @@ import {
 } from "@archestra/shared/connection-setup";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
-import { useAgentOptions, useDefaultMcpGateway } from "@/lib/agent.query";
-import { useAgentOptionsPage } from "@/lib/agent-options.query";
+import { useDefaultMcpGateway } from "@/lib/agent.query";
+import {
+  useAgentOptionsByIds,
+  useAgentOptionsPage,
+} from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -262,16 +265,19 @@ export function useConnectPageData({
     limit: 20,
     enabled: canReadGateways === true,
   });
-  const { data: gatewayReferences, isPending: gatewaysPending } =
-    useAgentOptions({
-      filters: {
-        ...gatewayFilters,
-        ids: [pickedGatewayId, defaultGatewayId].filter(
-          (id): id is string => !!id,
-        ),
-      },
+  const gatewayReferenceIds = [pickedGatewayId, defaultGatewayId].filter(
+    (id): id is string => !!id,
+  );
+  const { data: gatewayReferences, isPending: gatewayReferencesPending } =
+    useAgentOptionsByIds({
+      ids: gatewayReferenceIds,
+      // Built-ins stay hidden, matching the gateway list above.
+      filters: { ...gatewayFilters, excludeBuiltIn: true },
       enabled: canReadGateways === true,
     });
+  // The lookup never runs without IDs, so there is nothing to wait for.
+  const gatewaysPending =
+    gatewayReferenceIds.length > 0 && gatewayReferencesPending;
   const gateways = useMemo<ConnectGateway[]>(
     () => [
       ...new Map(

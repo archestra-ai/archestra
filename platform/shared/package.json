@@ -22,6 +22,7 @@
     "./interactions/session-source": "./interactions/session-source.ts",
     "./mcp-image-pull-policy": "./mcp-image-pull-policy.ts",
     "./model-constants": "./model-constants.ts",
+    "./model-price": "./model-price.ts",
     "./opencode-family": "./opencode-family.ts",
     "./oauth": "./oauth.ts",
     "./opencode-provider-routes": "./opencode-provider-routes.ts",

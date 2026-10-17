@@ -40,6 +40,20 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
 
 export { InteractionSourceSchema };
 
+/** Content-bearing list metadata, protected by the same key as the request. */
+export const InteractionSessionPreviewSchema = z.object({
+  hasContent: z.boolean(),
+  isTitleGeneration: z.boolean(),
+  isPromptSuggestion: z.boolean(),
+  isOpenCodeSideTurn: z.boolean(),
+  contentNotStored: z.boolean(),
+  lastUserMessagePreview: z.string().nullable(),
+  claudeCodeTitle: z.string().nullable(),
+});
+export type InteractionSessionPreview = z.infer<
+  typeof InteractionSessionPreviewSchema
+>;
+
 export const UserInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -52,6 +66,7 @@ export const InteractionAuthMethodSchema = z.enum([
   "jwks",
   "oauth_client_credentials",
   "oauth_user",
+  "personal_token",
   "internal",
   "unknown",
 ]);
@@ -296,6 +311,8 @@ const DELTA_ENCODING_COLUMNS = {
  * public API surface rather than widening it for nothing.
  */
 const INTERNAL_ENCRYPTION_COLUMNS = {
+  // Derived list content is internal too, and can carry an encrypted envelope.
+  sessionPreview: true,
   encryptedChatConversationId: true,
 } as const;
 

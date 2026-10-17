@@ -11,3 +11,10 @@ export function gatewayToolNames(tools: GatewayToolRow[]): string[] {
     .filter((tool) => !tool.delegateToAgentId)
     .map((tool) => tool.name);
 }
+
+/** Names of the subagents a gateway delegates to. */
+export function gatewaySubagentNames(tools: GatewayToolRow[]): string[] {
+  return tools
+    .filter((tool) => tool.delegateToAgentId)
+    .map((tool) => tool.name);
+}

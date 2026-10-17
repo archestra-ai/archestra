@@ -17,6 +17,7 @@ import {
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -48,6 +49,7 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ],
         upstream: config.llm.azure.baseUrl,
         providerName: "Azure AI Foundry",
+        authenticate: createPassthroughAuthenticator("azure"),
       }),
     });
   }

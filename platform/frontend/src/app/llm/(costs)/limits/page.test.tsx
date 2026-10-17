@@ -107,14 +107,17 @@ vi.mock("@/lib/llm-models.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/agent.query", () => ({
-  useAgentOptions: (params?: { filters?: { agentTypes?: string[] } }) => {
-    const agentType = params?.filters?.agentTypes?.[0];
-    if (agentType === "agent") {
-      return { data: [{ id: "agent-1", name: "Test Agent" }] };
-    }
-    return { data: [] };
-  },
+vi.mock("@/lib/agent-options.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-options.query")>()),
+  useAgentOptionsByIds: (params: {
+    ids: readonly string[];
+    filters?: { agentType?: string };
+  }) => ({
+    data:
+      params.filters?.agentType === "agent" && params.ids.includes("agent-1")
+        ? [{ id: "agent-1", name: "Test Agent" }]
+        : [],
+  }),
 }));
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
@@ -131,10 +134,7 @@ import {
   useHasPermissions,
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
-import {
-  useOrganization,
-  useOrganizationMembers,
-} from "@/lib/organization.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 vi.mock("@/components/loading", () => ({
@@ -382,9 +382,6 @@ describe("LimitsPage", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: { id: "org-1", defaultUserLimitValue: 100 },
     } as unknown as ReturnType<typeof useOrganization>);
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
@@ -938,9 +935,12 @@ function limitRow({
 
 const agentServer = setupServer(
   http.get("http://localhost:9000/api/agents/options", () =>
-    HttpResponse.json([
-      { id: "agent-1", name: "Test Agent", agentType: "agent", scope: "org" },
-    ]),
+    HttpResponse.json({
+      data: [
+        { id: "agent-1", name: "Test Agent", agentType: "agent", scope: "org" },
+      ],
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
+    }),
   ),
   http.get("http://localhost:9000/api/agents/options/page", () =>
     HttpResponse.json({

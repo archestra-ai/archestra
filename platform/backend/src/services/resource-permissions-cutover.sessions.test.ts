@@ -8,6 +8,7 @@ import ProjectModel from "@/models/project";
 import ProjectAccessModel from "@/models/project-access";
 import ResourcePermissionAccessModel from "@/models/resource-permission-access";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { expect, test } from "@/test";
 import { seedLegacyShareForTest } from "@/test/sharing";
@@ -276,10 +277,12 @@ test("project permission revocation removes inherited session reads and project 
     });
   expect(await readChat()).not.toBeNull();
   expect(
-    await ProjectAccessModel.listAccessibleProjects({
-      organizationId: org.id,
-      userId: reader.id,
-    }),
+    (
+      await projectService.list({
+        organizationId: org.id,
+        userId: reader.id,
+      })
+    ).data,
   ).toEqual(
     expect.arrayContaining([expect.objectContaining({ id: project.id })]),
   );
@@ -304,10 +307,12 @@ test("project permission revocation removes inherited session reads and project 
   });
   expect(await readChat()).toBeNull();
   expect(
-    await ProjectAccessModel.listAccessibleProjects({
-      organizationId: org.id,
-      userId: reader.id,
-    }),
+    (
+      await projectService.list({
+        organizationId: org.id,
+        userId: reader.id,
+      })
+    ).data,
   ).toEqual([]);
 });
 

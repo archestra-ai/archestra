@@ -572,7 +572,7 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(await LlmProviderApiKeyModel.findById(systemKey.id)).not.toBeNull();
   });
 
-  test("refuses to delete a key backing the organization's OCR configuration", async () => {
+  test("deleting a key backing the organization's OCR configuration clears that setting", async () => {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/llm-provider-api-keys",
@@ -593,8 +593,10 @@ describe("LLM Provider API Keys CRUD", () => {
       url: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
 
-    expect(deleteResponse.statusCode).toBe(400);
-    expect(deleteResponse.json().error.message).toContain("OCR");
+    expect(deleteResponse.statusCode, deleteResponse.body).toBe(200);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.ocrChatApiKeyId,
+    ).toBeNull();
   });
 
   test("should return 404 for non-existent LLM provider API key", async () => {

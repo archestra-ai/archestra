@@ -81,9 +81,10 @@ const server = setupServer(
   ),
   http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
     expect(new URL(request.url).searchParams.get("ids")).toBe("agent-1");
-    return HttpResponse.json([
-      { id: "agent-1", name: "Support agent", agentType: "agent" },
-    ]);
+    return HttpResponse.json({
+      data: [{ id: "agent-1", name: "Support agent", agentType: "agent" }],
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
+    });
   }),
   http.get(`${API_ORIGIN}/api/oauth-clients/labels/keys`, () =>
     HttpResponse.json([]),
@@ -91,7 +92,7 @@ const server = setupServer(
   http.get(`${API_ORIGIN}/api/teams`, () =>
     HttpResponse.json(
       page([
-        { id: "team-1", name: "Platform", description: null, members: [] },
+        { id: "team-1", name: "Platform", description: null, memberCount: 0 },
       ]),
     ),
   ),

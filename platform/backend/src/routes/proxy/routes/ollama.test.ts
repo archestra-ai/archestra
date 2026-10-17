@@ -4,9 +4,11 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
+import { beforeEach, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import ollamaProxyRoutes, { rewriteOllamaProxyUrl } from "./ollama";
 
 const API_PREFIX = "/v1/ollama";
@@ -177,8 +179,18 @@ describe("rewriteOllamaProxyUrl", () => {
 describe("Ollama passthrough", () => {
   let upstream: FastifyInstance;
   let forwardedBodies: string[];
+  let passthroughToken: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    // The catch-all resolves the deployment's LLM proxy, so an organization must
+    // exist.
+    const agent = await makeAgent();
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     forwardedBodies = [];
     upstream = Fastify();
     upstream.addContentTypeParser(
@@ -218,7 +230,10 @@ describe("Ollama passthrough", () => {
       const response = await app.inject({
         method: "POST",
         url: `${API_PREFIX}/api/chat`,
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-archestra-virtual-key": passthroughToken,
+        },
         payload: {
           model: "llama3.2",
           messages: [{ role: "user", content: "Hello!" }],

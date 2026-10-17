@@ -1,5 +1,5 @@
 {
-  "id": "2c70b53a-e01b-4f08-99aa-802ec176448f",
+  "id": "ddeb3248-aa87-4eca-9497-43d960bd882e",
   "prevId": "03dcc6c4-c4e6-41a0-b7d2-0713564d4b89",
   "version": "7",
   "dialect": "postgresql",
@@ -10706,6 +10706,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "session_preview": {
+          "name": "session_preview",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "processed_request": {
           "name": "processed_request",
           "type": "jsonb",
@@ -16410,18 +16416,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "session_id": {
-          "name": "session_id",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "llm_tool_call_id": {
-          "name": "llm_tool_call_id",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
         "auth_method": {
           "name": "auth_method",
           "type": "varchar(50)",
@@ -16511,50 +16505,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mcp_tool_calls_session_created_at_idx": {
-          "name": "mcp_tool_calls_session_created_at_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"mcp_tool_calls\".\"session_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mcp_tool_calls_run_id_idx": {
-          "name": "mcp_tool_calls_run_id_idx",
-          "columns": [
-            {
-              "expression": "run_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"mcp_tool_calls\".\"run_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

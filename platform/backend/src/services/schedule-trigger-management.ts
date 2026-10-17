@@ -246,7 +246,7 @@ async function findMatchingScheduledProject(
   params: Parameters<typeof createScheduleTriggerWithProject>[0],
 ): Promise<ScheduleTrigger | null> {
   const { body, organizationId, userId } = params;
-  const projects = await projectService.list({
+  const { data: projects } = await projectService.list({
     organizationId,
     userId,
     search: body.name,

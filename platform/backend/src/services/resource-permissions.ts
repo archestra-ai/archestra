@@ -1269,12 +1269,21 @@ function expandScopedGrants(params: {
       return [];
     return policy.grants.flatMap((grant) =>
       params.subjectKeys.has(subjectKey(grant.subject))
-        ? grant.actions.map((action) => ({
-            organizationId: policy.organizationId,
-            resource: resource.data,
-            scope: policy.scope,
-            action,
-          }))
+        ? grant.actions.flatMap((action) => {
+            // Historical documents can retain actions removed from the API.
+            // Ignore those without widening the remaining grant to a preset.
+            const parsed = ResourcePermissionActionSchema.safeParse(action);
+            return parsed.success
+              ? [
+                  {
+                    organizationId: policy.organizationId,
+                    resource: resource.data,
+                    scope: policy.scope,
+                    action: parsed.data,
+                  },
+                ]
+              : [];
+          })
         : [],
     );
   });

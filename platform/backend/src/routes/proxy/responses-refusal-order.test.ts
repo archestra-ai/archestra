@@ -11,19 +11,16 @@
  */
 
 import { CHAT_API_KEY_ID_HEADER } from "@archestra/shared";
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
+import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, onTestFinished, vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import {
   type LlmProxyToolCallRefusal,
   registerLlmProxyPlugin,
 } from "@/proxy/plugins/registry";
 import { describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { openAiResponsesAdapterFactory } from "./adapters/openai-responses";
 import openAiProxyRoutes from "./routes/openai";
 
@@ -94,9 +91,7 @@ describe("Responses refusal terminal ordering", () => {
         }) as never,
     );
 
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
+    app = createFastifyInstance();
     await app.register(openAiProxyRoutes);
   });
 
@@ -107,8 +102,16 @@ describe("Responses refusal terminal ordering", () => {
 
   test("the turn a client rebuilds after a refusal carries no tool call", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const agent = await makeAgent();
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughToken = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     const unregister = registerLlmProxyPlugin({
       id: `test-refusal-${crypto.randomUUID()}`,
       async onToolCalls() {
@@ -133,6 +136,7 @@ describe("Responses refusal terminal ordering", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": passthroughToken,
         [CHAT_API_KEY_ID_HEADER]: "",
       },
       payload: {

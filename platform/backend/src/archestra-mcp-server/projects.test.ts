@@ -143,6 +143,27 @@ describe("project read tools (list_projects, get_project)", () => {
     return { project, strangerId: stranger.id as string };
   }
 
+  test("says how many projects matched when it lists only the first ones", async () => {
+    for (let i = 0; i < 101; i++) {
+      await projectService.create({
+        organizationId,
+        userId,
+        name: `bulk-${String(i).padStart(3, "0")}`,
+        description: null,
+      });
+    }
+
+    const result = await executeArchestraTool(LIST_TOOL_NAME, {}, baseContext);
+
+    expect(result.isError).toBe(false);
+    expect(
+      (result.structuredContent as { projects: unknown[] }).projects,
+    ).toHaveLength(100);
+    expect(JSON.stringify(result.content)).toContain(
+      "showing the first 100 of 101; narrow with query.",
+    );
+  });
+
   test("lists own and shared projects but not another member's private one", async ({
     makeUser,
     makeMember,

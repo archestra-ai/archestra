@@ -9,7 +9,7 @@ import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useMcpToolCall } from "@/lib/mcp/mcp-tool-call.query";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
@@ -70,9 +70,8 @@ function McpToolCallDetail({
   });
   const { displayByName } = useMcpServerDisplayByName();
 
-  const { data: agents } = useAgentOptions({
-    filters: { ids: mcpToolCall?.agentId ? [mcpToolCall.agentId] : [] },
-    enabled: !!mcpToolCall?.agentId,
+  const { data: agents } = useAgentOptionsByIds({
+    ids: mcpToolCall?.agentId ? [mcpToolCall.agentId] : [],
   });
 
   // The header stays put through loading, failure and not-found: this page

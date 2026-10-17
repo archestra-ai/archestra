@@ -13,7 +13,6 @@ import { throwOnApiError } from "@/lib/utils/api";
 export const authQueryKeys = {
   all: ["auth"] as const,
   session: () => [...authQueryKeys.all, "session"] as const,
-  orgMembers: () => [...authQueryKeys.all, "orgMembers"] as const,
   sessions: () => [...authQueryKeys.all, "sessions"] as const,
   userPermissions: () => [...authQueryKeys.all, "userPermissions"] as const,
   defaultCredentialsEnabled: () =>
@@ -54,20 +53,6 @@ export function useSession() {
     // sitting behind a session check. The persisted copy is stripped of the
     // session token, and the request below still runs and replaces it.
     meta: PERSISTED_QUERY_META,
-  });
-}
-
-export function useCurrentOrgMembers() {
-  const { data: session } = useSession();
-  const isAuthenticated = !!session?.user;
-
-  return useQuery({
-    queryKey: authQueryKeys.orgMembers(),
-    queryFn: async () => {
-      const { data } = await authClient.organization.listMembers();
-      return data?.members ?? [];
-    },
-    enabled: isAuthenticated,
   });
 }
 

@@ -5,6 +5,10 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/agent.query");
+vi.mock("@/lib/agent-options.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-options.query")>()),
+  useAgentOptionsByIds: vi.fn(),
+}));
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/llm-provider-api-keys.query");
 vi.mock("@/lib/organization.query");
@@ -76,7 +80,7 @@ vi.mock("@/components/settings/settings-block", () => ({
   ),
 }));
 
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -113,9 +117,9 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "admin" } },
   } as ReturnType<typeof useSession>);
-  vi.mocked(useAgentOptions).mockReturnValue({
+  vi.mocked(useAgentOptionsByIds).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useAgentOptions>);
+  } as unknown as ReturnType<typeof useAgentOptionsByIds>);
   vi.mocked(useLlmProviderApiKeys).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useLlmProviderApiKeys>);
@@ -436,12 +440,12 @@ describe("ConnectionSettingsForm", () => {
   });
 
   it("offers shared gateways as the default but not a member's personal one", () => {
-    vi.mocked(useAgentOptions).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: [
         { id: "shared", name: "Team Gateway", isPersonalGateway: false },
         { id: "personal", name: "My Gateway", isPersonalGateway: true },
       ],
-    } as unknown as ReturnType<typeof useAgentOptions>);
+    } as unknown as ReturnType<typeof useAgentOptionsByIds>);
     render(<ConnectionSettingsForm />);
     const options = screen.getByRole("list", {
       name: "Default MCP Gateway options",

@@ -3,12 +3,10 @@ import { render as rtlRender, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
-import { useOrganizationMembers } from "@/lib/organization.query";
 import McpGatewayLogsPage from "./page.client";
 
 // The cmdk-backed picker reaches for pointer-capture / scrollIntoView /
@@ -25,14 +23,16 @@ globalThis.ResizeObserver = class {
 
 // Legacy behavior fixtures remain local; real HTTP paging is covered by the
 // remote-selector integration suite.
+const agentOptions = vi.hoisted(() => ({ rows: [] as unknown[] }));
+const agentRows = () => ({ data: agentOptions.rows as never[] });
 vi.mock("@/lib/agent-options.query", () => ({
-  useAgentOptionsByIds: () => useAgentOptions(),
+  useAgentOptionsByIds: () => agentRows(),
   useAgentOptionIds: () => ({
-    data: (useAgentOptions().data ?? []).map((row: { id: string }) => row.id),
+    data: (agentRows().data ?? []).map((row: { id: string }) => row.id),
     isSuccess: true,
   }),
   useAgentOptionsPage: (params: { search?: string }) => {
-    const result = useAgentOptions();
+    const result = agentRows();
     const search = params.search?.trim().toLowerCase() ?? "";
     const rows = (result.data ?? []).filter(
       (row: {
@@ -68,7 +68,6 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/agent.query", () => ({ useAgentOptions: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: vi.fn(),
@@ -115,20 +114,13 @@ describe("McpGatewayLogsPage filters", () => {
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
     vi.mocked(usePathname).mockReturnValue("/mcp/logs");
-    vi.mocked(useAgentOptions).mockReturnValue({
-      data: [personalGateway, orgGateway],
-    } as unknown as ReturnType<typeof useAgentOptions>);
+    agentOptions.rows = [personalGateway, orgGateway];
     vi.mocked(useMcpServers).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useMcpServers>);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [
-        { id: "user-alex", name: "Alex Reader", email: "alex@example.com" },
-      ],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
     vi.mocked(useInternalMcpCatalog).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useInternalMcpCatalog>);

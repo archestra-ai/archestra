@@ -10,7 +10,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { withAccessibleLightTokens } from "./contrast-safe";
+import {
+  withAccessibleDarkTokens,
+  withAccessibleLightTokens,
+} from "./contrast-safe";
 import { mapThemeFontValue } from "./font-token-map";
 // Import theme configuration
 import { SUPPORTED_THEMES } from "./theme-config";
@@ -90,11 +93,11 @@ function generateThemeCSS(theme: ThemeItem): string {
   const className = `theme-${theme.name}`;
 
   // Light vars for base selector, dark vars for dark mode override.
-  // Control outlines, focus rings and muted text in the light palette are
-  // raised to WCAG minimums before emitting, and faint decorative borders to a
-  // visibility floor; dark vars are emitted verbatim.
+  // Both palettes get the text-contrast and tinted-fill floors; the light
+  // palette also gets control outlines and focus rings raised to WCAG
+  // minimums and faint decorative borders lifted to a visibility floor.
   const lightCSS = `html.${className} {\n${generateCSSVars(withAccessibleLightTokens(theme.cssVars.light))}\n}`;
-  const darkCSS = `html.dark.${className} {\n${generateCSSVars(theme.cssVars.dark)}\n}`;
+  const darkCSS = `html.dark.${className} {\n${generateCSSVars(withAccessibleDarkTokens(theme.cssVars.dark))}\n}`;
   return `/* ${theme.title} */\n${lightCSS}\n\n${darkCSS}`;
 }
 
@@ -111,9 +114,9 @@ function generateThemesCSS(): string {
  *
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
  * Generated from shared/themes/tweakcn-themes.json
- * Light-mode control outlines, focus rings and muted text are raised to WCAG
- * contrast minimums (and faint decorative borders to a visibility floor) by
- * shared/themes/contrast-safe.ts; dark mode is emitted verbatim.
+ * Text and tinted fills (muted, sidebar-accent) are raised to contrast floors
+ * in both modes, and light-mode control outlines, focus rings and decorative
+ * borders to theirs, by shared/themes/contrast-safe.ts.
  * Run: pnpm codegen:theme-css
  */\n`;
 

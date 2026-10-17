@@ -3,7 +3,6 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useInteractionSessions } from "@/lib/interactions/interaction.query";
@@ -24,14 +23,16 @@ globalThis.ResizeObserver = class {
 
 // Legacy behavior fixtures remain local; real HTTP paging is covered by the
 // remote-selector integration suite.
+const agentOptions = vi.hoisted(() => ({ rows: [] as unknown[] }));
+const agentRows = () => ({ data: agentOptions.rows as never[] });
 vi.mock("@/lib/agent-options.query", () => ({
-  useAgentOptionsByIds: () => useAgentOptions(),
+  useAgentOptionsByIds: () => agentRows(),
   useAgentOptionIds: () => ({
-    data: (useAgentOptions().data ?? []).map((row: { id: string }) => row.id),
+    data: (agentRows().data ?? []).map((row: { id: string }) => row.id),
     isSuccess: true,
   }),
   useAgentOptionsPage: (params: { search?: string }) => {
-    const result = useAgentOptions();
+    const result = agentRows();
     const search = params.search?.trim().toLowerCase() ?? "";
     const rows = (result.data ?? []).filter(
       (row: {
@@ -67,7 +68,6 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/agent.query", () => ({ useAgentOptions: vi.fn() }));
 vi.mock("@/lib/interactions/interaction.query", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("@/lib/interactions/interaction.query")
@@ -166,9 +166,7 @@ describe("LlmProxyLogsPage proxy filter", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as unknown as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useAgentOptions).mockReturnValue({
-      data: [personalProxy, orgProxy],
-    } as unknown as ReturnType<typeof useAgentOptions>);
+    agentOptions.rows = [personalProxy, orgProxy];
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [], pagination: makePagination() },
       isFetching: false,

@@ -7,6 +7,7 @@ import logger from "@/logging";
 import { constructResponseSchema, Kimi, UuidIdSchema } from "@/types";
 import { kimiAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -25,6 +26,7 @@ const kimiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
       upstream: config.llm.kimi.baseUrl,
       providerName: "Kimi",
+      authenticate: createPassthroughAuthenticator("kimi"),
     }),
   });
 

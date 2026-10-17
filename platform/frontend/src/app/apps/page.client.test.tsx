@@ -57,10 +57,6 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganizationMembers: () => ({ data: [] }),
-}));
-
 vi.mock("@/lib/apps/use-app-access", () => {
   const access = {
     isAdmin: true,

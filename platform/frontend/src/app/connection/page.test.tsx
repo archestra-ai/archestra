@@ -29,11 +29,8 @@ import {
   it,
   vi,
 } from "vitest";
-import {
-  useAgentOptions,
-  useDefaultMcpGateway,
-  useProfile,
-} from "@/lib/agent.query";
+import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import { postConnected } from "@/lib/connect-signal";
@@ -59,6 +56,10 @@ const refetchOrganizationMock = vi.fn();
 vi.mock("next/navigation");
 vi.mock("@/lib/clipboard");
 vi.mock("@/lib/agent.query");
+vi.mock("@/lib/agent-options.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-options.query")>()),
+  useAgentOptionsByIds: vi.fn(),
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/guardrails-deployment.query");
@@ -178,9 +179,9 @@ beforeEach(() => {
   vi.mocked(useAllCatalogTools).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useAllCatalogTools>);
-  vi.mocked(useAgentOptions).mockReturnValue({
+  vi.mocked(useAgentOptionsByIds).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useAgentOptions>);
+  } as unknown as ReturnType<typeof useAgentOptionsByIds>);
   vi.mocked(useConfig).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useConfig>);
@@ -875,6 +876,25 @@ describe("ConnectPage (no connect request)", () => {
     expect(tile.closest("[inert]")).toBeNull();
   });
 
+  it("does not wait on the gateway reference lookup when there is no gateway to resolve", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    // A disabled query without IDs stays pending forever.
+    vi.mocked(useAgentOptionsByIds).mockImplementation(
+      (params) =>
+        ({
+          data: undefined,
+          isPending: params.ids.length === 0,
+        }) as unknown as ReturnType<typeof useAgentOptionsByIds>,
+    );
+    render(<ConnectionPage />);
+    expect(useAgentOptionsByIds).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: [] }),
+    );
+    expect(screen.getByRole("button", { name: /Cursor/ })).toBeVisible();
+  });
+
   it("waits for the organization settings before offering agents", () => {
     mockOrganization({ data: undefined, isPending: true });
     render(<ConnectionPage />);
@@ -1129,14 +1149,12 @@ describe("ConnectPage gateway pick", () => {
     vi.mocked(useDefaultMcpGateway).mockReturnValue({
       data: gateways[0],
     } as unknown as ReturnType<typeof useDefaultMcpGateway>);
-    vi.mocked(useAgentOptions).mockImplementation(
+    vi.mocked(useAgentOptionsByIds).mockImplementation(
       (params) =>
         ({
-          data: gateways.filter((gateway) =>
-            params?.filters?.ids?.includes(gateway.id),
-          ),
+          data: gateways.filter((gateway) => params.ids.includes(gateway.id)),
           isPending: false,
-        }) as unknown as ReturnType<typeof useAgentOptions>,
+        }) as unknown as ReturnType<typeof useAgentOptionsByIds>,
     );
     vi.mocked(useProfile).mockImplementation(
       (id) =>
@@ -1158,12 +1176,8 @@ describe("ConnectPage gateway pick", () => {
     await requestToolCounts();
     expect(await screen.findByText("~2.3K tokens")).toBeVisible();
     expect(previewRequests).toBe(1);
-    expect(useAgentOptions).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({
-          ids: ["coding-gateway", "default-gateway"],
-        }),
-      }),
+    expect(useAgentOptionsByIds).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: ["coding-gateway", "default-gateway"] }),
     );
   });
 });

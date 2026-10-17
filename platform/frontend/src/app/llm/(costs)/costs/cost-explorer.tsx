@@ -320,11 +320,15 @@ export default function CostExplorer() {
                   className="text-left text-foreground underline-offset-2 hover:underline"
                 >
                   Subscription usage at API rates:{" "}
-                  {formatCost(
-                    statistics.data.costSavings.totalSubscriptionCost,
-                  )}{" "}
-                  (estimate, not a bill)
-                  <ArrowRight className="ml-1 inline size-3 align-[-2px]" />
+                  <span className="whitespace-nowrap font-medium">
+                    {formatCost(
+                      statistics.data.costSavings.totalSubscriptionCost,
+                    )}
+                  </span>{" "}
+                  <span className="whitespace-nowrap">
+                    (estimate, not a bill)
+                    <ArrowRight className="ml-1 inline size-3 align-[-2px]" />
+                  </span>
                 </UnstyledButton>
               ) : q.metric === "subscription" && statistics.data ? (
                 <span>
@@ -508,18 +512,20 @@ function MetricNote({
   extra?: React.ReactNode;
 }) {
   return (
+    // Icon gets its own column so wrapped lines and the extra line align
+    // with the note text instead of the icon.
     <div
       className={cn(
-        "flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs",
+        "flex gap-1.5 text-muted-foreground text-xs leading-relaxed",
         caution &&
           "rounded-md border border-amber-500/40 bg-amber-500/5 px-2.5 py-1.5 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200",
       )}
     >
-      <span className="inline-flex items-center gap-1.5">
-        <Info className="size-3.5 shrink-0" />
-        {note}
-      </span>
-      {extra && <span className="text-muted-foreground">{extra}</span>}
+      <Info className="mt-[3px] size-3.5 shrink-0" />
+      <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1">
+        <span>{note}</span>
+        {extra && <span className="text-muted-foreground">{extra}</span>}
+      </div>
     </div>
   );
 }

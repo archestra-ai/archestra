@@ -92,41 +92,20 @@ class KbConnectorDocumentCountModel {
   }
 
   /**
-   * Documents per knowledge base: the sum of the totals of every connector
-   * assigned to it, soft-deleted connectors included (their documents stay
-   * until the connector is purged). Knowledge bases without connectors are
-   * absent from the map.
+   * Store totals a reader counted for connectors that had no row. A row a
+   * writer stored in the meantime is newer and is kept. A failed write (a
+   * connector purged mid-request) is logged and leaves the read unaffected:
+   * the next reader counts again.
    */
-  static async sumByKnowledgeBaseIds(
-    knowledgeBaseIds: string[],
-  ): Promise<Map<string, number>> {
-    if (knowledgeBaseIds.length === 0) return new Map();
-
-    const assignments = await db
-      .select({
-        knowledgeBaseId:
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-        connectorId: schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
-      })
-      .from(schema.knowledgeBaseConnectorAssignmentsTable)
-      .where(
-        inArray(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          knowledgeBaseIds,
-        ),
-      );
-    const totals = await KbConnectorDocumentCountModel.findByConnectorIds([
-      ...new Set(assignments.map((assignment) => assignment.connectorId)),
-    ]);
-
-    const sums = new Map<string, number>();
-    for (const { knowledgeBaseId, connectorId } of assignments) {
-      sums.set(
-        knowledgeBaseId,
-        (sums.get(knowledgeBaseId) ?? 0) + (totals.get(connectorId) ?? 0),
+  static async storeFirstCounts(totals: Map<string, number>): Promise<void> {
+    try {
+      await KbConnectorDocumentCountModel.store(totals, { replace: false });
+    } catch (error) {
+      logger.warn(
+        { error, connectorIds: [...totals.keys()] },
+        "[KbConnectorDocumentCount] Could not store first document counts",
       );
     }
-    return sums;
   }
 
   // ===== Internal helpers =====
@@ -171,25 +150,6 @@ class KbConnectorDocumentCountModel {
           target: schema.kbConnectorDocumentCountsTable.connectorId,
         });
       }
-    }
-  }
-
-  /**
-   * Store totals a reader counted for connectors that had no row. A row a
-   * writer stored in the meantime is newer and is kept. A failed write (a
-   * connector purged mid-request) is logged and leaves the read unaffected:
-   * the next reader counts again.
-   */
-  private static async storeFirstCounts(
-    totals: Map<string, number>,
-  ): Promise<void> {
-    try {
-      await KbConnectorDocumentCountModel.store(totals, { replace: false });
-    } catch (error) {
-      logger.warn(
-        { error, connectorIds: [...totals.keys()] },
-        "[KbConnectorDocumentCount] Could not store first document counts",
-      );
     }
   }
 }

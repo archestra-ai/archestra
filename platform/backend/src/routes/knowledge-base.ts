@@ -88,7 +88,6 @@ import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedu
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
-  AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
   CreatedByModel,
@@ -122,7 +121,6 @@ import {
   ConnectorCredentialsSchema,
   ConnectorRunTypeSchema,
   ConnectorSyncStatusSchema,
-  type ConnectorType,
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -403,93 +401,35 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       ]);
 
-      // The trash view renders identity and `deletedAt` only, so the four
-      // enrichment queries below are skipped for it: their answers would
-      // describe links no other surface resolves while the knowledge base sits
-      // in the trash. Declared in the endpoint description, not silently
-      // narrowed.
-      // Resolved for the trash view too: "who made this" is exactly what you
-      // want when deciding whether a deleted knowledge base should come back.
-      const creators = await CreatedByModel.resolve(
-        knowledgeBases.map((kb) => CreatedByModel.id(kb, kb.createdBy)),
-      );
-
-      if (status === "deleted") {
-        return reply.send({
-          data: knowledgeBases.map((kb) => ({
-            ...kb,
-            createdBy: lookupCreator(
-              creators,
-              CreatedByModel.id(kb, kb.createdBy),
-            ),
-            connectors: [],
-            totalDocsIndexed: 0,
-            assignedAgents: [],
-            labels: [],
-          })),
-          pagination: calculatePaginationMeta(total, { limit, offset }),
-        });
-      }
-
-      const kbIds = knowledgeBases.map((kb) => kb.id);
-      const [allConnectors, docsIndexedByKbId, agentIdsByKbId, labelsByKbId] =
-        await Promise.all([
-          KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
-            canReadAll: access.canReadAll,
-            viewerTeamIds: access.teamIds,
-            viewerUserId: access.userId,
-          }),
-          KbConnectorDocumentCountModel.sumByKnowledgeBaseIds(kbIds),
-          AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
-          KnowledgeBaseLabelModel.getLabelsForMany(kbIds),
-        ]);
-
-      // Collect all unique agent IDs and batch-fetch their names
-      const allAgentIds = [...new Set([...agentIdsByKbId.values()].flat())];
-      const agentDetailsMap = new Map<
-        string,
-        { id: string; name: string; agentType: string }
-      >();
-      if (allAgentIds.length > 0) {
-        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+      // Creators, visible connectors, document totals, assigned agents and
+      // labels for the whole page, in one statement. The trash view renders
+      // identity and `deletedAt` only, so it reads just the creator — "who
+      // made this" is exactly what you want when deciding whether a deleted
+      // knowledge base should come back. Its other links resolve to nothing
+      // while the knowledge base sits in the trash; declared in the endpoint
+      // description, not silently narrowed.
+      const { byId, firstCounts } = await KnowledgeBaseModel.findListEnrichment(
+        {
+          knowledgeBaseIds: knowledgeBases.map((kb) => kb.id),
           organizationId,
-          agentIds: allAgentIds,
-        });
-        for (const agent of agents) {
-          agentDetailsMap.set(agent.id, {
-            id: agent.id,
-            name: agent.name,
-            agentType: agent.agentType,
-          });
-        }
-      }
-
-      const connectorsByKbId = new Map<
-        string,
-        { id: string; name: string; connectorType: ConnectorType }[]
-      >();
-      for (const connector of allConnectors) {
-        const list = connectorsByKbId.get(connector.knowledgeBaseId) ?? [];
-        list.push({
-          id: connector.id,
-          name: connector.name,
-          connectorType: connector.connectorType,
-        });
-        connectorsByKbId.set(connector.knowledgeBaseId, list);
+          canReadAll: access.canReadAll,
+          viewerTeamIds: access.teamIds,
+          viewerUserId: access.userId,
+          viewerPrincipal: access.principal,
+          identityOnly: status === "deleted",
+        },
+      );
+      if (firstCounts.size > 0) {
+        await KbConnectorDocumentCountModel.storeFirstCounts(firstCounts);
       }
 
       const data = knowledgeBases.map((kb) => ({
         ...kb,
-        createdBy: lookupCreator(creators, CreatedByModel.id(kb, kb.createdBy)),
-        labels: labelsByKbId.get(kb.id) ?? [],
-        connectors: connectorsByKbId.get(kb.id) ?? [],
-        totalDocsIndexed: docsIndexedByKbId.get(kb.id) ?? 0,
-        assignedAgents: (agentIdsByKbId.get(kb.id) ?? [])
-          .map((id) => agentDetailsMap.get(id))
-          .filter(
-            (a): a is { id: string; name: string; agentType: string } =>
-              a !== undefined,
-          ),
+        createdBy: byId.get(kb.id)?.createdBy ?? null,
+        labels: byId.get(kb.id)?.labels ?? [],
+        connectors: byId.get(kb.id)?.connectors ?? [],
+        totalDocsIndexed: byId.get(kb.id)?.totalDocsIndexed ?? 0,
+        assignedAgents: byId.get(kb.id)?.assignedAgents ?? [],
       }));
 
       return reply.send({

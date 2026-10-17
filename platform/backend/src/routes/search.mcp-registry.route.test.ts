@@ -1129,21 +1129,32 @@ describe("MCP registry list routes", () => {
     expect(response.json().effectiveActions).toContain("update");
   });
 
-  test("GET /api/internal_mcp_catalog/:id does not open a hidden runtime variant", async ({
+  test("GET /api/internal_mcp_catalog/:id opens a runtime variant unless asked for listed items only", async ({
     makeInternalMcpCatalog,
   }) => {
     const root = await makeItem(makeInternalMcpCatalog, "root-server");
     const variant = await makeItem(makeInternalMcpCatalog, "root-server-v", {
       parentCatalogItemId: root.id,
     });
+    const get = (query = "") =>
+      ctx.app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${variant.id}${query}`,
+      });
 
-    const response = await ctx.app.inject({
-      method: "GET",
-      url: `/api/internal_mcp_catalog/${variant.id}`,
-    });
-
-    // No list shows it, so its id opens nothing either.
-    expect(response.statusCode).toBe(404);
+    // API clients follow an install's catalogId to its variant, as before.
+    expect((await get()).statusCode).toBe(200);
+    // The registry's own pages open only what a list shows.
+    expect((await get("?listedOnly=true")).statusCode).toBe(404);
+    expect((await get("?listedOnly=false")).statusCode).toBe(200);
+    expect(
+      (
+        await ctx.app.inject({
+          method: "GET",
+          url: `/api/internal_mcp_catalog/${root.id}?listedOnly=true`,
+        })
+      ).statusCode,
+    ).toBe(200);
   });
 
   test("McpServerModel.findAll narrows to catalogIds in SQL", async ({

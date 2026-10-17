@@ -371,5 +371,12 @@ describe("loading a full catalog item for an action", () => {
 
     expect(item?.id).toBe("cat-a");
     expect(getCatalogItemMock).toHaveBeenCalledTimes(1);
+    // The registry's pages open only items a list shows.
+    expect(getCatalogItemMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: { id: "cat-a" },
+        query: { listedOnly: true },
+      }),
+    );
   });
 });

@@ -365,8 +365,10 @@ export function catalogItemQueryOptions(id: string) {
   return queryOptions({
     queryKey: ["mcp-catalog", "item", id],
     queryFn: async () => {
+      // Only what a list shows: not a hidden runtime variant behind an id.
       const { data, error } = await getInternalMcpCatalogItem({
         path: { id },
+        query: { listedOnly: true },
       });
       throwOnApiError(error, { allowNotFound: true });
       return data ?? null;

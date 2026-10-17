@@ -1283,6 +1283,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
+        querystring: z.object({
+          listedOnly: z
+            .preprocess(
+              (value) => value === "true" || value === true,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Only an item the registry lists: 404 for hidden runtime variants (default false).",
+            ),
+        }),
         response: constructResponseSchema(
           SelectInternalMcpCatalogSchema.extend({
             // The list figures a detail page or install dialog shows, so
@@ -1309,8 +1320,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
-        // Hidden runtime variants are never listed; their ids open nothing.
-        rootOnly: true,
+        // Hidden runtime variants are never listed. API clients still open
+        // one through an install's catalogId; the registry's pages do not.
+        rootOnly: request.query.listedOnly === true,
       });
 
       if (!catalogItem) {

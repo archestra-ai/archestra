@@ -65132,7 +65132,12 @@ export type GetInternalMcpCatalogItemData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Only an item the registry lists: 404 for hidden runtime variants (default false).
+         */
+        listedOnly?: boolean;
+    };
     url: '/api/internal_mcp_catalog/{id}';
 };
 

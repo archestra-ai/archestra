@@ -82,6 +82,7 @@ import {
   useConnectors as useAllConnectors,
   useAssignConnectorToKnowledgeBases,
   useConnector,
+  useConnectorsByIds,
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import {
@@ -201,13 +202,18 @@ function KnowledgeBasesList() {
   const { startChat, isCreating: isChatCreating } = useChatWithKnowledgeBase();
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
-  // One query for every connector on the page, rather than one per knowledge
-  // base as the expandable sub-table did. It also polls while any connector is
-  // syncing, so the status dots stay live.
-  const { data: allConnectorRecords } = useAllConnectors();
+  // Status for the connectors on this page only; polls while one is syncing.
+  const pageConnectorIds = useMemo(
+    () => items.flatMap((kb) => kb.connectors.map((c) => c.id)),
+    [items],
+  );
+  const { data: pageConnectorRecords } = useConnectorsByIds(pageConnectorIds, {
+    enabled: !isDeletedView,
+    pollWhileSyncing: true,
+  });
   const connectorsById = useMemo(
-    () => new Map((allConnectorRecords ?? []).map((c) => [c.id, c])),
-    [allConnectorRecords],
+    () => new Map((pageConnectorRecords ?? []).map((c) => [c.id, c])),
+    [pageConnectorRecords],
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -390,9 +396,7 @@ function KnowledgeBasesList() {
       header: "Agents",
       size: 110,
       cell: ({ row }) => (
-        <span className="tabular-nums">
-          {row.original.assignedAgents.length}
-        </span>
+        <span className="tabular-nums">{row.original.assignedAgentCount}</span>
       ),
     },
     {

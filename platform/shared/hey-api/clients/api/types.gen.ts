@@ -68439,6 +68439,14 @@ export type GetKnowledgeBasesData = {
          * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
          */
         owner?: Array<string>;
+        /**
+         * Only these knowledge bases (comma-separated IDs, at most 250), such as the ones an agent uses. All of them come back in one page; `limit` and `offset` do not apply.
+         */
+        ids?: Array<string>;
+        /**
+         * Attach each row's assigned agents (default true). False returns an empty `assignedAgents` array, meaning 'not requested'; `assignedAgentCount` is returned either way.
+         */
+        includeAssignedAgents?: boolean;
     };
     url: '/api/knowledge-bases';
 };
@@ -68551,6 +68559,7 @@ export type GetKnowledgeBasesResponses = {
                 name: string;
                 agentType: string;
             }>;
+            assignedAgentCount: number;
         }>;
         pagination: {
             currentPage: number;
@@ -69410,6 +69419,14 @@ export type GetConnectorsData = {
          * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
          */
         owner?: Array<string>;
+        /**
+         * Only these connectors (comma-separated IDs, at most 250), such as the ones a page shows or an agent uses. All of them come back in one page; `limit` and `offset` do not apply.
+         */
+        ids?: Array<string>;
+        /**
+         * Attach each row's assigned agents (default true). False returns an empty `assignedAgents` array, meaning 'not requested'; `assignedAgentCount` is returned either way.
+         */
+        includeAssignedAgents?: boolean;
     };
     url: '/api/connectors';
 };
@@ -69705,6 +69722,7 @@ export type GetConnectorsResponses = {
                 name: string;
                 agentType: string;
             }>;
+            assignedAgentCount: number;
             totalDocsIngested: number;
         }>;
         pagination: {

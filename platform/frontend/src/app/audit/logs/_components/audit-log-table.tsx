@@ -308,6 +308,7 @@ export function AuditLogTable() {
   const { data: skillsResponse } = useSkillsPaginated({
     limit: ENTITY_FILTER_LIMIT,
     offset: 0,
+    includeContent: false,
   });
 
   const rows = response?.data ?? [];

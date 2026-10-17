@@ -198,16 +198,21 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
 import { useOrganizationDefaultModel } from "@/lib/hooks/use-organization-default-model";
-import { useConnectors } from "@/lib/knowledge/connector.query";
+import {
+  useConnectors,
+  useConnectorsByIds,
+} from "@/lib/knowledge/connector.query";
 import {
   useIsKnowledgeBaseConfigured,
   useKnowledgeBases,
+  useKnowledgeBasesByIds,
 } from "@/lib/knowledge/knowledge-base.query";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { isReportedApiError } from "@/lib/utils/api";
+import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
@@ -1144,6 +1149,7 @@ export function AgentForm({
         offset: 0,
         sortBy: "name",
         sortDirection: "asc",
+        includeContent: false,
       },
       { enabled: loadSkills },
     );
@@ -1161,6 +1167,7 @@ export function AgentForm({
         sortBy: "name",
         sortDirection: "asc",
         search: debouncedSkillSearch,
+        includeContent: false,
       },
       { enabled: loadSkills && debouncedSkillSearch.trim().length > 0 },
     );
@@ -1209,17 +1216,30 @@ export function AgentForm({
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
-  const knowledgeBases = knowledgeBasesData ?? [];
   const { data: connectorsData } = useConnectors({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
-  const connectors = connectorsData ?? [];
   const {
     data: currentKnowledgeSourceExclusions,
     isSuccess: knowledgeSourceExclusionsLoaded,
   } = useAgentKnowledgeSourceExclusions(
     shouldLoadKnowledgeSources && canReadKnowledgeBase ? agent?.id : undefined,
   );
+  // Saved and excluded sources are read by id, so ones past the picker's
+  // first page still show.
+  const { data: savedKnowledgeBases } = useKnowledgeBasesByIds(
+    agent?.knowledgeBaseIds ?? [],
+    { enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase },
+  );
+  const { data: savedConnectors } = useConnectorsByIds(
+    [
+      ...(agent?.connectorIds ?? []),
+      ...(currentKnowledgeSourceExclusions?.excludedConnectorIds ?? []),
+    ],
+    { enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase },
+  );
+  const knowledgeBases = mergeById(knowledgeBasesData, savedKnowledgeBases);
+  const connectors = mergeById(connectorsData, savedConnectors);
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableLlmProviderApiKeys({
     includeKeyId: agentLlmApiKeyId ?? undefined,

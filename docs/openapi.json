@@ -262790,6 +262790,30 @@
             "name": "owner",
             "required": false,
             "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "maxItems": 250,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "description": "Only these knowledge bases (comma-separated IDs, at most 250), such as the ones an agent uses. All of them come back in one page; `limit` and `offset` do not apply."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeAssignedAgents",
+            "required": false,
+            "description": "Attach each row's assigned agents (default true). False returns an empty `assignedAgents` array, meaning 'not requested'; `assignedAgentCount` is returned either way."
           }
         ],
         "responses": {
@@ -263074,6 +263098,11 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "assignedAgentCount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -263092,7 +263121,8 @@
                           "labels",
                           "connectors",
                           "totalDocsIndexed",
-                          "assignedAgents"
+                          "assignedAgents",
+                          "assignedAgentCount"
                         ],
                         "additionalProperties": false
                       }
@@ -266498,6 +266528,30 @@
             "name": "owner",
             "required": false,
             "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "maxItems": 250,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "description": "Only these connectors (comma-separated IDs, at most 250), such as the ones a page shows or an agent uses. All of them come back in one page; `limit` and `offset` do not apply."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeAssignedAgents",
+            "required": false,
+            "description": "Attach each row's assigned agents (default true). False returns an empty `assignedAgents` array, meaning 'not requested'; `assignedAgentCount` is returned either way."
           }
         ],
         "responses": {
@@ -267735,6 +267789,11 @@
                               "additionalProperties": false
                             }
                           },
+                          "assignedAgentCount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
                           "totalDocsIngested": {
                             "type": "number"
                           }
@@ -267769,6 +267828,7 @@
                           "createdBy",
                           "labels",
                           "assignedAgents",
+                          "assignedAgentCount",
                           "totalDocsIngested"
                         ],
                         "additionalProperties": false

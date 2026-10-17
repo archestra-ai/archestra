@@ -1,5 +1,5 @@
 {
-  "id": "68afb8ad-f959-4319-a37e-b93657141a94",
+  "id": "9a9811d6-4851-4c04-8799-ed6d27343d66",
   "prevId": "c449effc-cb71-4c7f-923b-58ccb016e75d",
   "version": "7",
   "dialect": "postgresql",
@@ -4857,6 +4857,34 @@
           ],
           "isUnique": false,
           "where": "\"agents\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_org_created_at_deleted_idx": {
+          "name": "agents_org_created_at_deleted_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"agents\".\"deleted_at\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

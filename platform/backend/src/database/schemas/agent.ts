@@ -282,6 +282,10 @@ const agentsTable = softDeletablePgTable(
     index("agents_org_created_at_live_idx")
       .on(table.organizationId, table.createdAt, table.id)
       .where(sql`${table.deletedAt} IS NULL`),
+    // The Agents page's trash view lists deleted agents newest first.
+    index("agents_org_created_at_deleted_idx")
+      .on(table.organizationId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
     check(
       "agents_activation_skill_mode_check",
       sql`${table.activationSkillMode} IN ('all', 'manual')`,

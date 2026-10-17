@@ -138,6 +138,10 @@ export function mergeUpdatedConversationIntoCache(
  */
 const CONVERSATION_STALE_TIME_MS = 30_000;
 
+/** How often a scheduled chat is polled for its seeded prompt, and how long. */
+const SCHEDULE_SEED_POLL_MS = 1_000;
+const SCHEDULE_SEED_MAX_POLLS = 120;
+
 /**
  * Recent conversations the sidebar loads: it shows up to 15 and the rest go
  * through search, so this leaves a margin without paying for 250 rows.
@@ -163,13 +167,18 @@ export function useConversation(
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
     // The schedule worker links the conversation before registering its stream
-    // and seeding the prompt. Wait for that prompt before attaching to replay.
+    // and seeding the prompt. Wait for that prompt before attaching to replay,
+    // for about two minutes at most: a run that has not seeded by then is
+    // brought in by the conversation_updated push instead. Like every
+    // interval, this one pauses while the tab is hidden.
     refetchInterval: (query) =>
       query.state.data?.origin === "schedule_trigger" &&
       query.state.data.messages.length === 0 &&
-      query.state.data.chatErrors.length === 0
-        ? 1_000
+      query.state.data.chatErrors.length === 0 &&
+      query.state.dataUpdateCount < SCHEDULE_SEED_MAX_POLLS
+        ? SCHEDULE_SEED_POLL_MS
         : false,
+    refetchIntervalInBackground: false,
     retry: false, // Don't retry on error to avoid multiple 404s
   });
 }

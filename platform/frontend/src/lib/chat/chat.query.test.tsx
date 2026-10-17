@@ -1,5 +1,9 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -211,6 +215,71 @@ test("polls a scheduled chat until its replay seed arrives, then stops polling",
     });
     expect(getConversation).toHaveBeenCalledTimes(2);
   } finally {
+    unmount();
+    vi.useRealTimers();
+  }
+});
+
+test("stops polling a scheduled chat that never seeds after about two minutes", async () => {
+  vi.useFakeTimers();
+  const conversation = {
+    ...makeConversation(),
+    origin: "schedule_trigger" as const,
+  };
+  const getConversation = vi.mocked(archestraApiSdk.getChatConversation);
+  getConversation.mockReset();
+  getConversation.mockResolvedValue({
+    data: conversation,
+    error: undefined,
+  } as Awaited<ReturnType<typeof getConversation>>);
+  const { unmount } = renderHook(() => useConversation(conversation.id), {
+    wrapper: createWrapper(),
+  });
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+    });
+    const calls = getConversation.mock.calls.length;
+    // One poll a second, then nothing: the conversation_updated push takes over.
+    expect(calls).toBeGreaterThan(100);
+    expect(calls).toBeLessThanOrEqual(121);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(getConversation).toHaveBeenCalledTimes(calls);
+  } finally {
+    unmount();
+    vi.useRealTimers();
+  }
+});
+
+test("does not poll a scheduled chat while the tab is hidden", async () => {
+  vi.useFakeTimers();
+  const conversation = {
+    ...makeConversation(),
+    origin: "schedule_trigger" as const,
+  };
+  const getConversation = vi.mocked(archestraApiSdk.getChatConversation);
+  getConversation.mockReset();
+  getConversation.mockResolvedValue({
+    data: conversation,
+    error: undefined,
+  } as Awaited<ReturnType<typeof getConversation>>);
+  const { unmount } = renderHook(() => useConversation(conversation.id), {
+    wrapper: createWrapper(),
+  });
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(getConversation).toHaveBeenCalledTimes(1);
+    focusManager.setFocused(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(getConversation).toHaveBeenCalledTimes(1);
+  } finally {
+    focusManager.setFocused(undefined);
     unmount();
     vi.useRealTimers();
   }

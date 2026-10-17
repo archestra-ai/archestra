@@ -70,7 +70,7 @@ describe("useSession", () => {
     queryClient.setQueryData(authQueryKeys.userPermissions(), {
       project: ["read"],
     });
-    queryClient.setQueryData(["scoped-capabilities"], []);
+    queryClient.setQueryData(authQueryKeys.scopedCapabilities(), []);
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );

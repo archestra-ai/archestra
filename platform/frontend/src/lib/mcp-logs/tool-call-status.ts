@@ -7,10 +7,11 @@ import {
 /**
  * Status of a logged MCP tool call, as the log surfaces render it.
  *
- * Cancelled is detected through the shared `extractMcpToolError` (the same
- * schema-validated extractor every other structured-error consumer uses) —
- * deliberately checked before `isError`, because a user-initiated stop is
- * neither a success nor a failure and must not be painted as either.
+ * Cancelled and blocked are detected through the shared `extractMcpToolError`
+ * (the same schema-validated extractor every other structured-error consumer
+ * uses) — deliberately checked before `isError`. A user-initiated stop is
+ * neither a success nor a failure, and a call the platform refused never ran,
+ * so neither is painted as the tool failing.
  *
  * A row logged under the Metadata only setting has no result to inspect; its
  * marker carries the same two facts instead.
@@ -21,6 +22,9 @@ export function resolveMcpToolCallStatus(result: unknown): McpToolCallStatus {
     : extractMcpToolError(result)?.type;
   if (errorType === "cancelled") {
     return "cancelled";
+  }
+  if (isMcpToolCallRefusal(result)) {
+    return "blocked";
   }
   const isError =
     typeof result === "object" &&
@@ -52,4 +56,29 @@ export function canShowMcpToolCallStatus(
   );
 }
 
-type McpToolCallStatus = "success" | "error" | "cancelled";
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/**
+ * Whether a result is the platform refusing to run the call: the tool is not
+ * assigned, not enabled for the conversation, or excluded. Other `tool_state`
+ * errors (an unknown knowledge base, a missing skill file) come from a tool
+ * that did run, so they stay errors. A Metadata only marker keeps only the
+ * error type, not the code, so it cannot tell the two apart.
+ */
+function isMcpToolCallRefusal(result: unknown): boolean {
+  const error = extractMcpToolError(result);
+  return error?.type === "tool_state" && REFUSAL_CODES.has(error.code);
+}
+
+type McpToolCallStatus = "success" | "error" | "cancelled" | "blocked";
+
+/** The `tool_state` codes the gateway and the tool runner refuse a call with. */
+const REFUSAL_CODES = new Set([
+  "tool_not_enabled",
+  "tool_not_directly_callable",
+  "tool_not_assigned",
+  "tool_disabled",
+  "unknown_tool",
+]);

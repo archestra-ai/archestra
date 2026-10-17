@@ -1,12 +1,17 @@
 "use client";
-import { Check, HelpCircle, Minus, X } from "lucide-react";
 import type { ReactNode } from "react";
+import { McpToolCallStatusIcon } from "@/components/mcp-tool-call-status";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import {
+  MCP_TOOL_CALL_STATUS_LABELS,
+  type McpToolCallOutcomeStatus,
+} from "@/lib/mcp-logs/tool-call-content";
+
 export function McpCallIdentity({
   name,
   server,
@@ -17,27 +22,10 @@ export function McpCallIdentity({
   name: ReactNode;
   server: ReactNode;
   icon: ReactNode;
-  status: "success" | "error" | "cancelled" | "unknown";
+  status: McpToolCallOutcomeStatus;
   method: string;
 }) {
-  const Icon = {
-    success: Check,
-    error: X,
-    cancelled: Minus,
-    unknown: HelpCircle,
-  }[status];
-  const label = {
-    success: "Success",
-    error: "Error",
-    cancelled: "Cancelled",
-    unknown: "Outcome unavailable",
-  }[status];
-  const color =
-    status === "success"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : status === "error"
-        ? "text-destructive"
-        : "text-muted-foreground";
+  const label = MCP_TOOL_CALL_STATUS_LABELS[status];
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span className="relative flex size-7 shrink-0 items-center justify-center rounded bg-muted/50 text-muted-foreground">
@@ -47,9 +35,9 @@ export function McpCallIdentity({
             <UnstyledButton
               aria-label={label}
               onClick={(e) => e.stopPropagation()}
-              className={`absolute -bottom-0.5 -right-0.5 flex size-3.5 cursor-default items-center justify-center rounded-full bg-background ${color}`}
+              className="absolute -bottom-0.5 -right-0.5 flex size-3.5 cursor-default items-center justify-center rounded-full bg-background"
             >
-              <Icon className="size-2.5" aria-hidden="true" />
+              <McpToolCallStatusIcon status={status} className="size-2.5" />
             </UnstyledButton>
           </TooltipTrigger>
           <TooltipContent className="px-2 py-1 text-xs">{label}</TooltipContent>

@@ -37,6 +37,32 @@ describe("resolveMcpToolCallStatus", () => {
     ).toBe("error");
   });
 
+  it("resolves a call the platform refused to run as blocked, not failed", () => {
+    const refusal = (code: string) => ({
+      isError: true,
+      content: [{ type: "text", text: "not run" }],
+      _meta: {
+        archestraError: {
+          type: "tool_state",
+          code,
+          message: "not run",
+          toolName: "github__search_issues",
+        },
+      },
+    });
+
+    expect(resolveMcpToolCallStatus(refusal("tool_not_enabled"))).toBe(
+      "blocked",
+    );
+    expect(resolveMcpToolCallStatus(refusal("tool_not_assigned"))).toBe(
+      "blocked",
+    );
+    // A tool that ran and could not find what it was asked for still failed.
+    expect(resolveMcpToolCallStatus(refusal("unknown_knowledge_base"))).toBe(
+      "error",
+    );
+  });
+
   it("reads the outcome a metadata-only row kept in place of its result", () => {
     const notStored = { __redacted: "log_content_policy" } as const;
 

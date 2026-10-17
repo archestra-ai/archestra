@@ -335,7 +335,14 @@ class A2aRemoteAgentModel {
         assignmentCount: count(schema.agentToolsTable.id),
       })
       .from(schema.agentToolsTable)
-      .where(inArray(schema.agentToolsTable.toolId, toolIds))
+      .where(
+        and(
+          inArray(schema.agentToolsTable.toolId, toolIds),
+          // Delegation assignments never pin an MCP server, and the predicate
+          // lets the partial tool_id index serve the count.
+          isNull(schema.agentToolsTable.mcpServerId),
+        ),
+      )
       .groupBy(schema.agentToolsTable.toolId);
     return new Map(
       rows.map((row) => [row.toolId, Number(row.assignmentCount)]),

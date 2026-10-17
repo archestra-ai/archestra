@@ -131,12 +131,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
         if (status === "error") {
           if (!runtimeInstallErrorsAlreadyTracked.has(serverId)) {
             runtimeInstallErrorsAlreadyTracked.add(serverId);
-            const server = queryClient
-              .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
-                queryKey: ["mcp-servers"],
-              })
-              .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
-              .find((candidate) => candidate.id === serverId);
+            const server = findCachedMcpServer(queryClient, serverId);
             trackEvent("mcp_server_installation_failed", {
               serverId,
               serverName: server?.name,
@@ -485,14 +480,9 @@ export function useReloadMcpServerTools() {
     },
     onSuccess: async (result, variables) => {
       // Callers pass only the server id; recover name/catalogId from the
-      // cached mcp-servers lists (same lookup useMcpInstallationStatusCacheSync
-      // uses) for the toast and catalog-scoped invalidation.
-      const cachedServer = queryClient
-        .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
-          queryKey: ["mcp-servers"],
-        })
-        .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
-        .find((candidate) => candidate.id === variables.id);
+      // cache (same lookup useMcpInstallationStatusCacheSync uses) for the
+      // toast and catalog-scoped invalidation.
+      const cachedServer = findCachedMcpServer(queryClient, variables.id);
       const name = variables.name ?? cachedServer?.name;
       const catalogId = variables.catalogId ?? cachedServer?.catalogId;
 
@@ -1387,3 +1377,27 @@ function combineServerChunks<T>(results: Array<{ data: T[] | undefined }>) {
 }
 
 const MAX_CATALOG_IDS_PER_REQUEST = 100;
+
+/**
+ * An install's name and catalog from whatever the cache holds: any cached
+ * server list, else the registry's issue index (cached on every page for the
+ * sidebar badge), so pages that no longer load a full list still find it.
+ */
+function findCachedMcpServer(
+  queryClient: QueryClient,
+  serverId: string,
+): { name: string; catalogId: string | null } | undefined {
+  const listed = queryClient
+    .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
+      queryKey: ["mcp-servers"],
+    })
+    .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
+    .find((candidate) => candidate.id === serverId);
+  if (listed) return listed;
+  const indexed = queryClient
+    .getQueryData<McpRegistryIssueIndexWire>(mcpRegistryIssueIndexQueryKey)
+    ?.servers.find((candidate) => candidate.id === serverId);
+  return indexed
+    ? { name: indexed.name, catalogId: indexed.catalogId ?? null }
+    : undefined;
+}

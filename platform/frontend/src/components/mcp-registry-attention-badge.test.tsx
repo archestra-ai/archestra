@@ -8,6 +8,11 @@ import type {
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { McpRegistryAttentionBadge } from "./mcp-registry-attention-badge";
 
+// The shell's deferral gate is released here unless a test holds it.
+const mockShellReady = vi.fn(() => true);
+vi.mock("@/lib/shell-deferral", () => ({
+  useShellReady: () => mockShellReady(),
+}));
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpDeploymentStatuses: () => ({ statuses: {} }),
 }));
@@ -54,6 +59,17 @@ describe("McpRegistryAttentionBadge", () => {
     await user.hover(screen.getByRole("link"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "1 needs re-authentication",
+    );
+  });
+
+  it("holds its reads until the page's first data has settled", () => {
+    mockShellReady.mockReturnValueOnce(false);
+    givenIssues({});
+    render(<McpRegistryAttentionBadge />);
+
+    expect(vi.mocked(useMcpServerIssues)).toHaveBeenCalledWith(
+      expect.anything(),
+      { enabled: false },
     );
   });
 

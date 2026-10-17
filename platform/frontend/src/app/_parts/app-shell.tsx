@@ -39,6 +39,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
+import { useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils/tailwind";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
@@ -104,8 +105,10 @@ export function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState();
   const sidebarWidth = useSidebarWidthState();
   // Every signed-in user sees the active banner.
+  // The banner waits for the page's first data (see useShellReady).
+  const shellReady = useShellReady();
   const { data: notification } = useActiveSiteNotification({
-    enabled: !isAuthPage && !isBrowserPreview && !isAppRuntime,
+    enabled: shellReady && !isAuthPage && !isBrowserPreview && !isAppRuntime,
   });
 
   const redirectingToTwoFactorSetup = useTwoFactorEnrollmentRedirect(

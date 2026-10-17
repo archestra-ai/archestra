@@ -218,7 +218,11 @@ class KnowledgeSourceAccessControlService {
       params.lookups,
       { userId: params.userId, organizationId: params.organizationId },
     );
-    const grants = await ResourcePermissions.resolveAll(principal);
+    // Only knowledge base and connector checks read these grants.
+    const grants = await ResourcePermissions.resolveAll({
+      ...principal,
+      resources: ["knowledgeBase", "knowledgeConnector"],
+    });
     const canReadAll = hasScopedPermission({
       grants,
       required: {

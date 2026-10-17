@@ -4,9 +4,13 @@ import {
   canDelegateScopedPermissions,
   grantsAudience,
   hasScopedPermission,
+  isManagedResource,
+  isResourcePermissionScope,
+  ManagedResourceSchema,
   type ResourcePermissionGrant,
   ResourcePermissionScopeSchema,
   type ScopedPermission,
+  ScopedResourceSchema,
   widenToPreset,
   withoutWildcardCoveredGrants,
 } from "./resource-permissions";
@@ -114,6 +118,48 @@ describe("scoped permission composition", () => {
       expect(ResourcePermissionScopeSchema.safeParse(scope).success).toBe(
         false,
       );
+    }
+  });
+});
+
+describe("policy row checks", () => {
+  test("the scope check accepts exactly what the scope schema accepts", () => {
+    const scopes = [
+      "*",
+      "**",
+      "",
+      "teams:*",
+      "00000000-0000-0000-0000-000000000000",
+      "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+      "5c92ce5b-af93-469A-B00b-c38af4e88629",
+      "00000000-0000-4000-8000-000000000003",
+      "5C92CE5B-AF93-469A-800B-C38AF4E88629",
+      ...["0", "1", "4", "7", "8", "9", "f"].map(
+        (version) => `5c92ce5b-af93-${version}69a-800b-c38af4e88629`,
+      ),
+      ...["0", "7", "8", "9", "a", "b", "c", "f"].map(
+        (variant) => `5c92ce5b-af93-469a-${variant}00b-c38af4e88629`,
+      ),
+      "5c92ce5b-af93-469a-800b-c38af4e8862",
+      "5c92ce5b-af93-469a-800b-c38af4e886299",
+      "5c92ce5baf93469a800bc38af4e88629",
+      " 5c92ce5b-af93-469a-800b-c38af4e88629",
+    ];
+    for (const scope of scopes) {
+      expect([scope, isResourcePermissionScope(scope)]).toEqual([
+        scope,
+        ResourcePermissionScopeSchema.safeParse(scope).success,
+      ]);
+    }
+  });
+
+  test("the resource check accepts exactly the managed resources", () => {
+    for (const resource of [...ScopedResourceSchema.options, "unknown", ""]) {
+      expect([resource, isManagedResource(resource)]).toEqual([
+        resource,
+        ManagedResourceSchema.safeParse(resource).success,
+      ]);
     }
   });
 });

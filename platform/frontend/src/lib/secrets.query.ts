@@ -15,9 +15,10 @@ export const secretsKeys = {
   connectivity: () => [...secretsKeys.all, "connectivity"] as const,
 };
 
-export function useSecretsType() {
+export function useSecretsType({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: secretsKeys.type(),
+    enabled,
     queryFn: async () => {
       const { data, error } = await getSecretsType();
       throwOnApiError(error, { toastOnError: false });

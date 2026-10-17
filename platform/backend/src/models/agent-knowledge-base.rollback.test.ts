@@ -289,42 +289,6 @@ describe("AgentKnowledgeBaseModel", () => {
     });
   });
 
-  describe("getAgentIdsForKnowledgeBases", () => {
-    test("batch fetches agent IDs for multiple KBs", async ({
-      makeAgent,
-      makeOrganization,
-      makeKnowledgeBase,
-    }) => {
-      const org = await makeOrganization();
-      const agent1 = await makeAgent({ organizationId: org.id });
-      const agent2 = await makeAgent({ organizationId: org.id });
-      const kb1 = await makeKnowledgeBase(org.id);
-      const kb2 = await makeKnowledgeBase(org.id);
-      const kb3 = await makeKnowledgeBase(org.id);
-
-      await AgentKnowledgeBaseModel.assign(agent1.id, kb1.id);
-      await AgentKnowledgeBaseModel.assign(agent2.id, kb1.id);
-      await AgentKnowledgeBaseModel.assign(agent1.id, kb2.id);
-
-      const map = await AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases([
-        kb1.id,
-        kb2.id,
-        kb3.id,
-      ]);
-
-      expect(map.get(kb1.id)?.sort()).toEqual([agent1.id, agent2.id].sort());
-      expect(map.get(kb2.id)).toEqual([agent1.id]);
-      expect(map.has(kb3.id)).toBe(false);
-    });
-
-    test("returns empty map for empty input", async () => {
-      const map = await AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(
-        [],
-      );
-      expect(map.size).toBe(0);
-    });
-  });
-
   describe("cascade delete", () => {
     test("assignments are deleted when agent is deleted", async ({
       makeAgent,

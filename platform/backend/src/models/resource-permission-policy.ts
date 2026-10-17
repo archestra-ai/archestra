@@ -468,7 +468,12 @@ export default class ResourcePermissionPolicyModel {
       return [];
     const table = schema.resourcePermissionPoliciesTable;
     const policies = await db
-      .select()
+      .select({
+        organizationId: table.organizationId,
+        resource: table.resource,
+        scope: table.scope,
+        grants: table.grants,
+      })
       .from(table)
       .where(
         and(

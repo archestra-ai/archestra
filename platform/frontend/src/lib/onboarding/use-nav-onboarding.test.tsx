@@ -1,6 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The shell's deferral gate is released here unless a test holds it.
+const mockShellReady = vi.fn(() => true);
+vi.mock("@/lib/shell-deferral", () => ({
+  useShellReady: () => mockShellReady(),
+}));
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 
@@ -10,8 +15,12 @@ const mockSeenQuery: { data?: { items: string[] }; isSuccess: boolean } = {
   isSuccess: true,
 };
 
+const seenQueryOptions = vi.fn();
 vi.mock("@/lib/onboarding/onboarding.query", () => ({
-  useSeenNavItems: () => mockSeenQuery,
+  useSeenNavItems: (options?: { enabled?: boolean }) => {
+    seenQueryOptions(options);
+    return mockSeenQuery;
+  },
   useMarkNavItemsSeen: () => ({ mutate: markMutate }),
 }));
 
@@ -29,6 +38,7 @@ const allPermissions = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockShellReady.mockReturnValue(true);
   mockSeenQuery.data = { items: [] };
   mockSeenQuery.isSuccess = true;
   vi.mocked(usePathname).mockReturnValue("/chat");
@@ -66,6 +76,22 @@ describe("useNavOnboarding", () => {
     expect(result.current.unseenKeys.size).toBe(0);
     expect(result.current.showStudioDot).toBe(false);
     expect(result.current.showCollapsedToggleDot).toBe(false);
+    expect(markMutate).not.toHaveBeenCalled();
+  });
+
+  it("neither reads nor marks anything seen until the page's first data has settled", () => {
+    mockShellReady.mockReturnValue(false);
+    mockSeenQuery.isSuccess = false;
+    mockSeenQuery.data = undefined;
+    // /projects is a dotted route. The hook marks it seen only after the gate
+    // is released.
+    vi.mocked(usePathname).mockReturnValue("/projects");
+
+    const { result } = renderHook(() => useNavOnboarding());
+
+    expect(seenQueryOptions).toHaveBeenLastCalledWith({ enabled: false });
+    expect(result.current.unseenKeys.size).toBe(0);
+    result.current.markSeen("nav:projects");
     expect(markMutate).not.toHaveBeenCalled();
   });
 

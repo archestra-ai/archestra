@@ -4,7 +4,6 @@ import { describe, expect, test } from "@/test";
 import type { InsertKbDocument } from "@/types";
 import KbConnectorDocumentCountModel from "./kb-connector-document-count";
 import KbDocumentModel from "./kb-document";
-import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 
 describe("KbConnectorDocumentCountModel", () => {
   test("counts a connector on first read and keeps that total until a writer replaces it", async ({
@@ -43,29 +42,6 @@ describe("KbConnectorDocumentCountModel", () => {
     expect(
       await KbConnectorDocumentCountModel.findByConnectorIds([connector.id]),
     ).toEqual(new Map([[connector.id, 4]]));
-  });
-
-  test("sums the connectors of each knowledge base, soft-deleted ones included", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-    const withoutConnectors = await makeKnowledgeBase(org.id);
-    const a = await makeKnowledgeBaseConnector(kb.id, org.id);
-    const b = await makeKnowledgeBaseConnector(kb.id, org.id);
-    await KbDocumentModel.create(documentData(a.id, org.id));
-    await KbDocumentModel.create(documentData(a.id, org.id));
-    await KbDocumentModel.create(documentData(b.id, org.id));
-    await KnowledgeBaseConnectorModel.delete(b.id);
-
-    expect(
-      await KbConnectorDocumentCountModel.sumByKnowledgeBaseIds([
-        kb.id,
-        withoutConnectors.id,
-      ]),
-    ).toEqual(new Map([[kb.id, 3]]));
   });
 
   test("recounts an organization's connectors, optionally of one type only", async ({

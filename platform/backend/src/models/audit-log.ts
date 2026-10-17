@@ -220,6 +220,62 @@ class AuditLogModel {
     );
   }
 
+  /**
+   * Resources that have audit events, each with the name of its latest named
+   * event, for the log's resource filter. Deleted resources stay listed. A
+   * caller scoped to its own events (`actorId`) only sees names from those
+   * events, so this exposes no name the log itself would not show.
+   */
+  static async findResourceOptions(opts: {
+    organizationId: string;
+    resourceTypes: readonly string[];
+    actorId?: string;
+    search?: string;
+    resourceId?: string;
+    limit: number;
+  }): Promise<
+    Array<{ resourceType: string; resourceId: string; name: string }>
+  > {
+    if (opts.resourceTypes.length === 0) return [];
+    const result = await db.execute<{
+      resource_type: string;
+      resource_id: string;
+      resource_name: string;
+    }>(sql`
+      WITH latest AS (
+        SELECT DISTINCT ON (resource_type, resource_id)
+          resource_type, resource_id, resource_name
+        FROM ${schema.auditLogsTable}
+        WHERE organization_id = ${opts.organizationId}
+          AND resource_type IN (${sql.join(
+            opts.resourceTypes.map((type) => sql`${type}`),
+            sql`, `,
+          )})
+          AND resource_id IS NOT NULL
+          AND resource_name IS NOT NULL
+          ${opts.resourceId ? sql`AND resource_id = ${opts.resourceId}` : sql``}
+          ${opts.actorId ? sql`AND actor_id = ${opts.actorId}` : sql``}
+        -- NULLS LAST matches the index, so the scan needs no sort.
+        ORDER BY resource_type, resource_id,
+          created_at DESC NULLS LAST, event_sequence DESC NULLS LAST
+      )
+      SELECT resource_type, resource_id, resource_name
+      FROM latest
+      ${
+        opts.search
+          ? sql`WHERE resource_name ILIKE ${`%${escapeLikePattern(opts.search)}%`}`
+          : sql``
+      }
+      ORDER BY resource_name, resource_type, resource_id
+      LIMIT ${opts.limit}
+    `);
+    return result.rows.map((row) => ({
+      resourceType: row.resource_type,
+      resourceId: row.resource_id,
+      name: row.resource_name,
+    }));
+  }
+
   static async deleteOlderThan(opts: {
     organizationId: string;
     before: Date;

@@ -39,22 +39,28 @@ interface PinnableGateway {
 /**
  * Gateways pinned for the viewer without their pinning them, with why: their
  * personal gateway, and the one the Connect page starts on. The page's table
- * leaves these out, since they are tiles.
+ * leaves these out, since they are tiles. `isLoading` holds while either is
+ * still unknown, so the page does not list one as a row first.
  */
-export function useGatewaysPinnedForViewer(): Array<{
-  id: string;
-  reasons: string[];
-}> {
-  const { data: personalGateway } = useDefaultMcpGateway();
-  const { data: organization } = useOrganization();
+export function useGatewaysPinnedForViewer(): {
+  pins: Array<{ id: string; reasons: string[] }>;
+  isLoading: boolean;
+} {
+  const { data: personalGateway, isLoading: isPersonalGatewayLoading } =
+    useDefaultMcpGateway();
+  const { data: organization, isLoading: isOrganizationLoading } =
+    useOrganization();
   const personalGatewayId = personalGateway?.id ?? null;
   // The same pick the Connect page makes when nothing is chosen there.
   const connectDefaultId =
     organization?.connectionDefaultMcpGatewayId ?? personalGatewayId;
-  return collectPinReasons([
-    [personalGatewayId, "Personal"],
-    [connectDefaultId, "Connect default"],
-  ]);
+  return {
+    pins: collectPinReasons([
+      [personalGatewayId, "Personal"],
+      [connectDefaultId, "Connect default"],
+    ]),
+    isLoading: isPersonalGatewayLoading || isOrganizationLoading,
+  };
 }
 
 /**
@@ -80,7 +86,8 @@ export function GatewayPinnedTiles({
   renderMenu?: (id: string) => ReactNode;
 }) {
   const { data: personalGateway } = useDefaultMcpGateway();
-  const pinnedFor = useGatewaysPinnedForViewer();
+  const { pins: pinnedFor, isLoading: isPinnedForLoading } =
+    useGatewaysPinnedForViewer();
 
   // List rows first: a single-gateway read does not say when it was last used.
   const known = new Map<string, PinnableGateway>(
@@ -143,7 +150,9 @@ export function GatewayPinnedTiles({
     ];
   });
 
-  return <PinnedTiles tiles={tiles} isLoading={isLoading} />;
+  return (
+    <PinnedTiles tiles={tiles} isLoading={isLoading || isPinnedForLoading} />
+  );
 }
 
 /**

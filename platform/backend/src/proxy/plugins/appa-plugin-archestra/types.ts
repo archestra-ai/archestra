@@ -345,14 +345,15 @@ export type AskUserArguments = {
   question: string;
   /**
    * For a server-held review only: the one-line question for hosts with
-   * option previews (Claude Code), and the markdown preview of the call each
-   * option shows. Together they carry what `question` spells out.
+   * option previews (Claude Code), and the preview of the call each option
+   * shows. Together they carry what `question` spells out.
    */
   shortQuestion?: string;
   callPreview?: string;
   /** Short tab label; unvalidated here, as the model wrote it. */
   header?: unknown;
-  options: Array<{ label: string; description?: string }>;
+  /** A server-held review's option `preview` replaces its `callPreview`. */
+  options: Array<{ label: string; description?: string; preview?: string }>;
   allowMultiple?: boolean;
   remedy_offer_ids?: string[];
 };

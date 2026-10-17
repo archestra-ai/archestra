@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { expect, test } from "vitest";
-import {
-  hitlReviewOverviewCard,
-  renderHitlReviewText,
-} from "./hitl-review-overview";
+import { hitlReviewCard, renderHitlReviewText } from "./hitl-review-overview";
 
 const footer =
   "Accept only if this exact call, with these exact arguments, may run. Decline refuses it. Cancel answers nothing and leaves the call blocked. The agent's own description of what it is doing is not shown here on purpose.";
 
-test("an oversized tool label still permits inspection but cannot approve an incomplete overview", () => {
+test("an oversized tool label still permits inspection but cannot approve an incomplete card", () => {
   const review = {
     tool: `tool_${"`".repeat(3000)}`,
     text: "All conditions must remain visible",
     arguments: '{"message":"read only"}',
   };
-  const { card, approve } = hitlReviewOverviewCard({
+  const { card, approve } = hitlReviewCard({
     base: {
       question: "Approve?",
       header: "Approval",
@@ -28,7 +25,7 @@ test("an oversized tool label still permits inspection but cannot approve an inc
   expect(card.callPreview?.length).toBeLessThanOrEqual(2000);
   expect(card.options.map((option) => option.label)).toEqual([
     "Deny",
-    "Inspect details",
+    "Inspect",
   ]);
   expect(renderHitlReviewText(review)).toContain(
     "All conditions must remain visible",
@@ -137,8 +134,8 @@ test("a duplicate normalized command alias is identified without repeating or ch
   expect(result).toContain("command");
 });
 
-test("overview punctuation remains literal inside one self-contained native text preview", () => {
-  const { card } = hitlReviewOverviewCard({
+test("card punctuation stays literal in the plain text preview", () => {
+  const { card } = hitlReviewCard({
     base: {
       question: "Approve?",
       header: "Approval",
@@ -153,10 +150,9 @@ test("overview punctuation remains literal inside one self-contained native text
       summary: "Read the specification (no writes).",
     },
   });
-  expect(card.callPreview).toMatch(/^`{3,}text\n/);
-  expect(card.callPreview).toContain("example__start_run");
-  expect(card.callPreview).toContain("agent_id");
-  expect(card.callPreview).toContain("(no writes)");
+  expect(card.shortQuestion).toBe("Run example__start_run?");
+  expect(card.callPreview).toContain("agent_id: target-one");
+  expect(card.callPreview).toContain("Read the specification (no\n  writes).");
   expect(card.callPreview).not.toContain("\\_");
   expect(card.callPreview).not.toContain("\\(");
   expect(card.callPreview).not.toContain("**");

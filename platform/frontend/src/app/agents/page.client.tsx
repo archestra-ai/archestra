@@ -82,7 +82,10 @@ import {
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import { TableSectionHeading } from "@/components/table-section-heading";
+import {
+  EmptyTableSection,
+  TableSectionHeading,
+} from "@/components/table-section-heading";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -142,12 +145,13 @@ import { AgentPinnedTiles } from "./agent-pinned-tiles";
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
   pinnedAgents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 type AgentListRow =
   archestraApiTypes.GetAgentCatalogResponses["200"]["data"][number];
 type AgentData = Extract<AgentListRow, { type: "agent" }>["value"];
+/** What a row's actions hand back: the agent, without the row's counts. */
+type AgentActionTarget = Omit<AgentData, "toolsCount" | "subagentsCount">;
 type ExternalAgentData = Extract<AgentListRow, { type: "external" }>["value"];
 
 function getAgentListRowId(row: AgentListRow) {
@@ -282,8 +286,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     "limit" | "offset"
   >;
 
-  const { data: personalDefaultAgentId } = useDefaultAgentId();
-  const { data: organization } = useOrganization();
+  const { data: personalDefaultAgentId, isLoading: isDefaultAgentLoading } =
+    useDefaultAgentId();
+  const { data: organization, isLoading: isOrganizationLoading } =
+    useOrganization();
   // Exactly one agent starts this viewer's new chats, so exactly one row is
   // badged — badging a personal pin AND the organization default would put two
   // answers on screen to a question that has one.
@@ -291,7 +297,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     personalDefaultAgentId,
     organizationDefaultAgentId: organization?.defaultAgentId,
   });
-  const { data: personalChatAgentId } = usePersonalChatAgentId();
+  const { data: personalChatAgentId, isLoading: isPersonalChatAgentLoading } =
+    usePersonalChatAgentId();
+  // Until all three are known an automatic pin would show as a row first.
+  const isPinnedForViewerLoading =
+    isDefaultAgentLoading ||
+    isOrganizationLoading ||
+    isPersonalChatAgentLoading;
   // Pinned for the viewer without their pinning them: what starts their
   // chats, the assistant made for them, and the organization's default.
   const pinnedForViewer = collectPinReasons([
@@ -385,9 +397,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [deletingExternalAgent, setDeletingExternalAgent] =
     useState<A2aRemoteAgent | null>(null);
   const [permanentlyDeletingAgent, setPermanentlyDeletingAgent] =
-    useState<AgentData | null>(null);
+    useState<AgentActionTarget | null>(null);
 
-  const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
+  const [cloningAgent, setCloningAgent] = useState<AgentActionTarget | null>(
+    null,
+  );
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
@@ -789,9 +803,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <span className="text-sm text-muted-foreground">
             {row.original.value.accessAllTools
               ? "All"
-              : row.original.value.tools.filter(
-                  (tool) => !tool.delegateToAgentId,
-                ).length}
+              : row.original.value.toolsCount}
           </span>
         ),
     },
@@ -808,9 +820,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <span className="text-sm text-muted-foreground">
             {row.original.value.accessAllSubagents
               ? "All"
-              : row.original.value.tools.filter(
-                  (tool) => tool.delegateToAgentId,
-                ).length}
+              : row.original.value.subagentsCount}
           </span>
         ),
     },
@@ -1105,34 +1115,48 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                         ? renderAgentActions(row.value, "menu")
                         : null;
                     }}
-                    isLoading={isPinnedPending}
+                    isLoading={isPinnedPending || isPinnedForViewerLoading}
                     onUnpin={(agent) =>
                       pinAgent.mutate({ id: agent.id, pinned: false })
                     }
                   />
                 )}
-                {isDeletedView
-                  ? renderAgentSection({
-                      title: "Deleted agents",
-                      sectionRows: unpinnedRows,
-                      sectionPagination: {
-                        pageIndex,
-                        pageSize,
-                        total: pagination.total,
-                      },
-                    })
-                  : unpinnedRows.length > 0 ||
-                      (pinnedRows.length === 0 && pageRows.length === 0)
-                    ? renderAgentSection({
-                        title: "All agents",
-                        sectionRows: unpinnedRows,
-                        sectionPagination: {
-                          pageIndex,
-                          pageSize,
-                          total: pagination.total,
-                        },
-                      })
-                    : null}
+                {isDeletedView ? (
+                  renderAgentSection({
+                    title: "Deleted agents",
+                    sectionRows: unpinnedRows,
+                    sectionPagination: {
+                      pageIndex,
+                      pageSize,
+                      total: pagination.total,
+                    },
+                  })
+                ) : isPinnedForViewerLoading ? null : unpinnedRows.length > 0 ||
+                  isPending ||
+                  (pinnedRows.length === 0 &&
+                    pageRows.length === 0 &&
+                    // The automatic pins ignore the filters, so only an
+                    // unfiltered list can leave its table out for them.
+                    (hasActiveFilters || pinnedForViewer.length === 0)) ? (
+                  renderAgentSection({
+                    title: "All agents",
+                    sectionRows: unpinnedRows,
+                    sectionPagination: {
+                      pageIndex,
+                      pageSize,
+                      total: pagination.total,
+                    },
+                  })
+                ) : (
+                  <EmptyTableSection
+                    title="All agents"
+                    message={
+                      hasActiveFilters
+                        ? "No other agents match your filters"
+                        : "No other agents yet"
+                    }
+                  />
+                )}
               </div>
 
               {bulkDeleteOpen && (

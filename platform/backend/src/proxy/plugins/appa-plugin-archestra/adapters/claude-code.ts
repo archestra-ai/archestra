@@ -84,10 +84,10 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
-    // A review shows its call in full in each option's preview, inside the
-    // form, and asks one line about it.
+    // A review shows its call in each option's preview, inside the form, and
+    // asks one line about it.
     fromAskUser: (args: AskUserArguments) => {
-      const preview = showsCallPreview(args) ? args.callPreview : undefined;
+      const previews = showsCallPreview(args);
       return {
         questions: [
           {
@@ -97,7 +97,9 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
             options: args.options.map((option) => ({
               label: option.label,
               description: option.description ?? option.label,
-              ...(preview ? { preview } : {}),
+              ...(previews
+                ? { preview: option.preview ?? args.callPreview }
+                : {}),
             })),
             multiSelect: args.allowMultiple === true,
           },
@@ -419,7 +421,8 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
  * A review whose call each option previews, so the form can ask in one line.
  * AskUserQuestion shows previews for single-select questions only, and the
  * terminal withholds a preview that is too long or has control characters.
- * Such a review asks the full question, which carries the call itself.
+ * If any preview would be withheld, the review asks the full question, which
+ * carries the call itself.
  */
 function showsCallPreview(
   args: AskUserArguments,
@@ -427,9 +430,18 @@ function showsCallPreview(
   return (
     args.allowMultiple !== true &&
     typeof args.callPreview === "string" &&
-    args.callPreview.length <= PREVIEW_MAX_LENGTH &&
-    !CONTROL_CHARACTERS.test(args.callPreview) &&
+    showablePreview(args.callPreview) &&
+    args.options.every(
+      (option) =>
+        option.preview === undefined || showablePreview(option.preview),
+    ) &&
     typeof args.shortQuestion === "string"
+  );
+}
+
+function showablePreview(preview: string): boolean {
+  return (
+    preview.length <= PREVIEW_MAX_LENGTH && !CONTROL_CHARACTERS.test(preview)
   );
 }
 

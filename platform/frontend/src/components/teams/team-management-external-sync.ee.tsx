@@ -33,7 +33,7 @@ import {
 } from "@/lib/auth/identity-provider.query.ee";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
-type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
+type Team = archestraApiTypes.GetTeamResponses["200"];
 type ExternalGroup =
   archestraApiTypes.GetTeamExternalGroupsResponses["200"][number];
 

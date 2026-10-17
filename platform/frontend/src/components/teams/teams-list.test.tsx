@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useTeam,
   useTeamLabelKeys,
@@ -44,6 +44,7 @@ vi.mock("@/components/ui/data-table", () => ({
   }) => {
     const actionsColumn = columns.find((column) => column.id === "actions");
     const parentColumn = columns.find((column) => column.id === "parent");
+    const membersColumn = columns.find((column) => column.id === "members");
     return (
       <div>
         {data.map((team) => (
@@ -52,6 +53,11 @@ vi.mock("@/components/ui/data-table", () => ({
               ? parentColumn.cell({
                   row: { original: team },
                 } as Parameters<NonNullable<typeof parentColumn.cell>>[0])
+              : null}
+            {typeof membersColumn?.cell === "function"
+              ? membersColumn.cell({
+                  row: { original: team },
+                } as Parameters<NonNullable<typeof membersColumn.cell>>[0])
               : null}
             {typeof actionsColumn?.cell === "function"
               ? actionsColumn.cell({
@@ -122,10 +128,17 @@ vi.mock("./team-management-dialog", () => ({
   TeamManagementDialog: ({
     open,
     team,
+    readOnly,
   }: {
     open: boolean;
     team?: Team | null;
-  }) => (open ? <div>Edit dialog for {team?.name ?? "new team"}</div> : null),
+    readOnly?: boolean;
+  }) =>
+    open ? (
+      <div data-read-only={String(!!readOnly)}>
+        Edit dialog for {team?.name ?? "new team"}
+      </div>
+    ) : null,
 }));
 
 describe("TeamsList", () => {
@@ -139,9 +152,6 @@ describe("TeamsList", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "user-1" } },
-    } as ReturnType<typeof useSession>);
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
@@ -165,17 +175,9 @@ describe("TeamsList", () => {
   });
 
   it("lets literal team admins edit their team without organization-level team update permission", () => {
+    // List rows carry no member arrays; the caller's role comes from myRole.
     vi.mocked(useTeams).mockReturnValue({
-      data: [
-        makeTeam({
-          members: [
-            makeTeamMember({
-              userId: "user-1",
-              role: "admin",
-            }),
-          ],
-        }),
-      ],
+      data: [makeTeam({ myRole: "admin", memberCount: 12 })],
       isLoading: false,
     } as unknown as ReturnType<typeof useTeams>);
 
@@ -187,6 +189,71 @@ describe("TeamsList", () => {
     fireEvent.click(editButton);
 
     expect(screen.getByText("Edit dialog for Team A")).toBeInTheDocument();
+  });
+
+  it("lets a team admin opened from the URL edit by the single-team role", () => {
+    queryParamsHolder.current = new URLSearchParams("team=team-a");
+    // The single-team response has no member array, only the caller's role.
+    vi.mocked(useTeam).mockReturnValue({
+      data: makeTeam({ myRole: "admin" }),
+    } as unknown as ReturnType<typeof useTeam>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      queryParamsHolder.current as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    renderTeamsList();
+
+    expect(screen.getByText("Edit dialog for Team A")).toHaveAttribute(
+      "data-read-only",
+      "false",
+    );
+  });
+
+  it("shows the member count from memberCount without member arrays", () => {
+    vi.mocked(useTeams).mockReturnValue({
+      data: [
+        makeTeam({ id: "big", name: "Big", memberCount: 2500 }),
+        makeTeam({ id: "solo", name: "Solo", memberCount: 1 }),
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useTeams>);
+
+    renderTeamsList();
+
+    // The plural suffix is its own element, so match the cell's full text.
+    const memberCell = (text: string) =>
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "DIV" && element.textContent === text,
+      );
+    expect(memberCell("2500 members")).toBeInTheDocument();
+    expect(memberCell("1 member")).toBeInTheDocument();
+  });
+
+  it("counts member arrays from a backend that sends no memberCount", () => {
+    const oldBackendRow = {
+      ...makeTeam({ id: "old", name: "Old" }),
+      memberCount: undefined,
+      members: [
+        makeTeamMember({ id: "m1", userId: "user-1" }),
+        makeTeamMember({ id: "m2", userId: "user-2" }),
+      ],
+    } as unknown as Team;
+    vi.mocked(useTeams).mockReturnValue({
+      data: [oldBackendRow],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useTeams>);
+
+    renderTeamsList();
+
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "DIV" && element.textContent === "2 members",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows the immediate parent in the hierarchy column", () => {
@@ -211,16 +278,7 @@ describe("TeamsList", () => {
       data: false,
     } as ReturnType<typeof useHasPermissions>);
     vi.mocked(useTeams).mockReturnValue({
-      data: [
-        makeTeam({
-          members: [
-            makeTeamMember({
-              userId: "user-1",
-              role: "member",
-            }),
-          ],
-        }),
-      ],
+      data: [makeTeam({ myRole: "member" })],
       isLoading: false,
     } as unknown as ReturnType<typeof useTeams>);
 
@@ -233,16 +291,7 @@ describe("TeamsList", () => {
     // The default useHasPermissions mock grants everything except team:update,
     // so this member holds identityProvider:read but cannot manage the team.
     vi.mocked(useTeams).mockReturnValue({
-      data: [
-        makeTeam({
-          members: [
-            makeTeamMember({
-              userId: "user-1",
-              role: "member",
-            }),
-          ],
-        }),
-      ],
+      data: [makeTeam({ myRole: "member" })],
       isLoading: false,
     } as unknown as ReturnType<typeof useTeams>);
 
@@ -265,7 +314,11 @@ describe("TeamsList", () => {
     renderTeamsList();
 
     expect(useTeams).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "platform", labels: "env:prod" }),
+      expect.objectContaining({
+        name: "platform",
+        labels: "env:prod",
+        includeMembers: false,
+      }),
     );
   });
 });
@@ -297,7 +350,7 @@ function makeTeam(overrides: Partial<Team> = {}): Team {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     roles: [],
-    members: [],
+    memberCount: 0,
     ...overrides,
   };
 }

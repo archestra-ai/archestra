@@ -1689,7 +1689,7 @@ function nativeReviewRequiredResult(offerId: string): CallToolResult {
     outcome: "review_required",
     offer_id: offerId,
     instruction:
-      "The policy needs the user's approval for this plan. Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform replaces that call with its own approval card — fixed Approve and Deny choices, plus Inspect details where the client can show the complete review as conversation text — bound to this offer server-side; the card does not carry the offer ID, which is expected. Call execute_remedy_plan again only after the user approves.",
+      "The policy needs the user's approval for this plan. Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform replaces that call with its own approval card — fixed choices to approve or deny, plus Inspect where the client can show the complete review as conversation text — bound to this offer server-side; the card does not carry the offer ID, which is expected. Call execute_remedy_plan again only after the user approves.",
   });
 }
 

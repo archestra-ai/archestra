@@ -344,6 +344,122 @@ describe("GET /api/connected-clients/adoption", () => {
     });
   });
 
+  test("aggregates proxy traffic by its attributed owner before resolving proxy names", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+    makeVirtualApiKey,
+  }) => {
+    const owner = await makeUser({ name: "Key owner" });
+    const caller = await makeUser({ name: "Caller" });
+    await makeMember(owner.id, organizationId);
+    await makeMember(caller.id, organizationId);
+    const keys = await Promise.all([
+      makeVirtualApiKey(organizationId, { authorId: owner.id }),
+      makeVirtualApiKey(organizationId, { authorId: owner.id }),
+    ]);
+    const recent = new Date(Date.now() - DAY_MS);
+    const older = new Date(Date.now() - 40 * DAY_MS);
+    for (const [index, key] of keys.entries()) {
+      await makeInteraction(gateway.id, {
+        userId: index === 0 ? caller.id : null,
+        passthroughVirtualKeyId: key.id,
+        externalAgentId: "openai_codex",
+        source: "api",
+        createdAt: recent,
+      });
+    }
+    await makeInteraction(gateway.id, {
+      userId: owner.id,
+      externalAgentId: "openai_codex",
+      source: null,
+      createdAt: older,
+    });
+
+    const members = (await getAdoption()).members;
+    expect(members.find((m) => m.userId === owner.id)).toMatchObject({
+      status: "active",
+      llmLastSeenAt: recent.toISOString(),
+      llmUses: [
+        {
+          via: { id: gateway.id, name: gateway.name },
+          agent: { clientId: "codex", name: "Codex" },
+          calls: 2,
+          lastSeenAt: recent.toISOString(),
+        },
+      ],
+    });
+    expect(members.find((m) => m.userId === caller.id)).toMatchObject({
+      status: "notConnected",
+      llmUses: [],
+      llmLastSeenAt: null,
+    });
+
+    for (const userId of [undefined, owner.id, caller.id]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connected-clients/adoption/usage${userId ? `?userId=${userId}` : ""}`,
+      });
+      expect(response.statusCode).toBe(200);
+      const days = response.json().days as { llmCalls: number }[];
+      expect(days.reduce((sum, day) => sum + day.llmCalls, 0)).toBe(
+        userId === caller.id ? 0 : 2,
+      );
+    }
+  });
+
+  test("keeps unscoped proxy traffic and excludes foreign proxies and internal callers after grouping", async ({
+    makeUser,
+    makeMember,
+    makeOrganization,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const user = await makeUser();
+    await makeMember(user.id, organizationId);
+    const otherOrg = await makeOrganization();
+    const foreignProxy = await makeAgent({ organizationId: otherOrg.id });
+    const unscoped = await makeInteraction(gateway.id, {
+      userId: user.id,
+      source: "api",
+      externalAgentId: "openai_codex",
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ profileId: null })
+      .where(eq(schema.interactionsTable.id, unscoped.id));
+    await makeInteraction(foreignProxy.id, {
+      userId: user.id,
+      source: "api",
+      externalAgentId: "openai_codex",
+    });
+    for (const externalAgentId of [gateway.id, `${gateway.id}:${gateway.id}`]) {
+      await makeInteraction(gateway.id, {
+        userId: user.id,
+        source: "api",
+        externalAgentId,
+      });
+    }
+
+    expect(await memberById(user.id)).toMatchObject({
+      status: "active",
+      llmUses: [
+        {
+          via: { id: null, name: "LLM proxy" },
+          agent: { clientId: "codex", name: "Codex" },
+          calls: 1,
+        },
+      ],
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/connected-clients/adoption/usage",
+    });
+    expect(response.statusCode).toBe(200);
+    const days = response.json().days as { llmCalls: number }[];
+    expect(days.reduce((sum, day) => sum + day.llmCalls, 0)).toBe(1);
+  });
+
   test("built-in chat LLM calls do not count as agent traffic", async ({
     makeUser,
     makeMember,

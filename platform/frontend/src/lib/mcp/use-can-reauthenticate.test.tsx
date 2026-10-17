@@ -23,7 +23,7 @@ function setup({
   admin: boolean;
   teams?: Array<{
     id: string;
-    members?: Array<{ userId: string; role: string }>;
+    myRole?: string;
   }>;
 }) {
   vi.mocked(useSession).mockReturnValue({
@@ -98,7 +98,7 @@ describe("useCanReauthenticate", () => {
       teams: [
         {
           id: TEAM_ID,
-          members: [{ userId: CURRENT_USER, role: ADMIN_ROLE_NAME }],
+          myRole: ADMIN_ROLE_NAME,
         },
       ],
     });
@@ -106,9 +106,7 @@ describe("useCanReauthenticate", () => {
   });
 
   it("permits a team connection for a member with update, denies without it", () => {
-    const teams = [
-      { id: TEAM_ID, members: [{ userId: CURRENT_USER, role: "member" }] },
-    ];
+    const teams = [{ id: TEAM_ID, myRole: "member" }];
     expect(
       setup({ create: true, update: true, admin: false, teams })({
         scope: "team",
@@ -128,9 +126,7 @@ describe("useCanReauthenticate", () => {
       create: true,
       update: true,
       admin: false,
-      teams: [
-        { id: TEAM_ID, members: [{ userId: CURRENT_USER, role: "member" }] },
-      ],
+      teams: [{ id: TEAM_ID, myRole: "member" }],
     });
     expect(canReauth({ scope: null, teamId: TEAM_ID })).toBe(true);
   });

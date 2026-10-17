@@ -50,7 +50,10 @@ import {
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import { TableSectionHeading } from "@/components/table-section-heading";
+import {
+  EmptyTableSection,
+  TableSectionHeading,
+} from "@/components/table-section-heading";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -95,7 +98,6 @@ import { McpGatewayActions } from "./mcp-gateway-actions";
 type McpGatewaysInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
   pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 export default function McpGatewaysPage({
@@ -270,7 +272,8 @@ function McpGateways({
   // Gateways pinned for the viewer are tiles too, so the table leaves them
   // out like the ones they pinned themselves: each gateway shows once. The
   // server leaves them out, so the count, paging and "select all" match.
-  const autoPinned = useGatewaysPinnedForViewer();
+  const { pins: autoPinned, isLoading: isAutoPinnedLoading } =
+    useGatewaysPinnedForViewer();
   const autoPinnedIds = new Set(autoPinned.map(({ id }) => id));
   const excludeIds = isDeletedView
     ? undefined
@@ -891,8 +894,13 @@ function McpGateways({
                     />
                     {renderGatewayTable()}
                   </section>
-                ) : unpinnedAgents.length > 0 ||
-                  (pinnedAgents.length === 0 && pageAgents.length === 0) ? (
+                ) : isAutoPinnedLoading ? null : unpinnedAgents.length > 0 ||
+                  isPending ||
+                  (pinnedAgents.length === 0 &&
+                    pageAgents.length === 0 &&
+                    // The automatic pins ignore the filters, so only an
+                    // unfiltered list can leave its table out for them.
+                    (hasActiveFilters || autoPinned.length === 0)) ? (
                   <section className="space-y-3">
                     <TableSectionHeading
                       title="All gateways"
@@ -900,7 +908,16 @@ function McpGateways({
                     />
                     {renderGatewayTable()}
                   </section>
-                ) : null}
+                ) : (
+                  <EmptyTableSection
+                    title="All gateways"
+                    message={
+                      hasActiveFilters
+                        ? "No other gateways match your filters"
+                        : "No other gateways yet"
+                    }
+                  />
+                )}
               </div>
             </div>
 

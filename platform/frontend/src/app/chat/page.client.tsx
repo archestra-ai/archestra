@@ -2964,7 +2964,10 @@ export function ChatPageContent({
   // (not captured in the callback closure), and `Boolean(organization)`
   // suppresses it while the org record is still loading — so a returning admin
   // who already has a default never flashes the step during that window.
-  const { data: canSetDefaultModel } = useHasPermissions({
+  const {
+    data: canSetDefaultModel,
+    isPending: isDefaultModelPermissionPending,
+  } = useHasPermissions({
     organizationSettings: ["update"],
   });
   const [firstKeyAdded, setFirstKeyAdded] = useState(false);
@@ -2973,12 +2976,30 @@ export function ChatPageContent({
     canSetDefaultModel === true &&
     Boolean(organization) &&
     !organization?.defaultModelId;
+  // Navigating from a conversation URL remounts this page and discards the
+  // one-shot flag. Keep the current route until the model step is completed.
+  // If it does not apply, wait for permissions and the org before advancing.
+  useEffect(() => {
+    if (
+      firstKeyAdded &&
+      !isDefaultModelPermissionPending &&
+      !isOrgLoading &&
+      (!canSetDefaultModel || !organization || organization.defaultModelId)
+    ) {
+      setFirstKeyAdded(false);
+      router.push("/chat");
+    }
+  }, [
+    firstKeyAdded,
+    isDefaultModelPermissionPending,
+    isOrgLoading,
+    canSetDefaultModel,
+    organization,
+    router,
+  ]);
   const handleFirstKeyAdded = useCallback(() => {
     setFirstKeyAdded(true);
-    // Reset to a clean /chat URL after a key is added so no stale conversation
-    // param lingers; the keys query refetch reveals the composer.
-    router.push("/chat");
-  }, [router]);
+  }, []);
   const finishFirstRunOnboarding = useCallback(() => {
     setFirstKeyAdded(false);
     router.push("/chat");

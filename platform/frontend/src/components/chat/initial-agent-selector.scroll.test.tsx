@@ -180,6 +180,36 @@ it("loads one bounded page per bottom scroll, appends without duplicate selectio
   expect(onChange).toHaveBeenCalledWith("choice-44");
 });
 
+it("retries an initial page failure from the search action with the keyboard", async () => {
+  let requests = 0;
+  server.use(
+    http.get(`${origin}/api/agents/chat-roster/page`, () => {
+      requests++;
+      return requests === 1
+        ? HttpResponse.json(
+            { error: { message: "Temporarily unavailable" } },
+            { status: 503 },
+          )
+        : HttpResponse.json(pageData(choices, 0));
+    }),
+  );
+  setup();
+  await userEvent.click(
+    await screen.findByRole("combobox", { name: "Choice 00" }),
+  );
+  const retry = await screen.findByRole("button", {
+    name: "Retry loading agents",
+  });
+  expect(screen.getByRole("option", { name: /Choice 00/ })).toBeInTheDocument();
+  act(() => retry.focus());
+  await userEvent.keyboard("{Enter}");
+  await screen.findByRole("option", { name: /Choice 19/ });
+  expect(requests).toBe(2);
+  expect(
+    screen.queryByRole("button", { name: "Retry loading agents" }),
+  ).not.toBeInTheDocument();
+});
+
 it("keeps loaded choices after a failed scroll request and retries the same cursor", async () => {
   const cursors: string[] = [];
   let fail = true;

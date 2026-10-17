@@ -22,7 +22,6 @@ import {
   useSession,
 } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
   A2aRemoteAgentDetailPage,
@@ -182,9 +181,6 @@ beforeEach(() => {
   vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
     typeof useTeams
   >);
-  vi.mocked(useOrganizationMembers).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useOrganizationMembers>);
 });
 
 afterEach(() => server.resetHandlers());

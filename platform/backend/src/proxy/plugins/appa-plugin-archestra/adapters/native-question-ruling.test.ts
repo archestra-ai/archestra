@@ -106,6 +106,23 @@ describe("Claude Code approval questions", () => {
     });
   });
 
+  test("shows an option's own preview in place of the call preview", () => {
+    const asked = review("send the Q3 report");
+    asked.options[0].preview = "note: send the Q3 report\n\nAlso accepts: x";
+    const [approve, deny] = native.fromAskUser(asked).questions[0].options;
+    expect(approve.preview).toBe(asked.options[0].preview);
+    expect(deny.preview).toBe(asked.callPreview);
+  });
+
+  test("asks the full review text when any option's preview would be withheld", () => {
+    const asked = review("send the Q3 report");
+    asked.options[0].preview = "x".repeat(2001);
+    const question = native.fromAskUser(asked).questions[0];
+    expect(question.question).toBe(asked.question);
+    for (const option of question.options)
+      expect(option).not.toHaveProperty("preview");
+  });
+
   test("asks the full review text when it has no call preview", () => {
     const asked = textReview("send the Q3 report");
     const [question] = native.fromAskUser(asked).questions as Array<{

@@ -25,11 +25,9 @@ export default async function McpGatewaysPageServer() {
   let initialData: {
     agents: archestraApiTypes.GetAgentsResponses["200"] | null;
     pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
-    teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
   } = {
     agents: null,
     pinnedAgents: null,
-    teams: [],
   };
   try {
     if (!(await serverCanAccessPage("/mcp/gateways"))) {
@@ -37,48 +35,36 @@ export default async function McpGatewaysPageServer() {
     }
 
     const headers = await getServerApiHeaders();
-    const canReadTeams = await serverHasPermissions({ team: ["read"] });
     const canReadAgents = await serverHasPermissions({ agent: ["read"] });
     const gatewayAgentTypes: Array<"mcp_gateway" | "profile"> = canReadAgents
       ? ["mcp_gateway", "profile"]
       : ["mcp_gateway"];
-    const emptyTeamsResponse = {
-      data: { data: [] },
-      error: undefined,
-    };
-    const [agentsResult, pinnedAgentsResult, teamsResult] =
-      await Promise.allSettled([
-        archestraApiSdk.getAgents({
-          headers,
-          query: {
-            limit: DEFAULT_TABLE_LIMIT,
-            offset: 0,
-            sortBy: DEFAULT_SORT_BY,
-            sortDirection: DEFAULT_SORT_DIRECTION,
-            agentTypes: gatewayAgentTypes,
-            pinned: false,
-            access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
-          },
-        }),
-        archestraApiSdk.getAgents({
-          headers,
-          query: {
-            limit: 100,
-            offset: 0,
-            sortBy: DEFAULT_SORT_BY,
-            sortDirection: DEFAULT_SORT_DIRECTION,
-            agentTypes: gatewayAgentTypes,
-            pinned: true,
-            access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
-          },
-        }),
-        canReadTeams
-          ? archestraApiSdk.getTeams({
-              headers,
-              query: { limit: 100, offset: 0 },
-            })
-          : Promise.resolve(emptyTeamsResponse),
-      ]);
+    const [agentsResult, pinnedAgentsResult] = await Promise.allSettled([
+      archestraApiSdk.getAgents({
+        headers,
+        query: {
+          limit: DEFAULT_TABLE_LIMIT,
+          offset: 0,
+          sortBy: DEFAULT_SORT_BY,
+          sortDirection: DEFAULT_SORT_DIRECTION,
+          agentTypes: gatewayAgentTypes,
+          pinned: false,
+          access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+        },
+      }),
+      archestraApiSdk.getAgents({
+        headers,
+        query: {
+          limit: 100,
+          offset: 0,
+          sortBy: DEFAULT_SORT_BY,
+          sortDirection: DEFAULT_SORT_DIRECTION,
+          agentTypes: gatewayAgentTypes,
+          pinned: true,
+          access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+        },
+      }),
+    ]);
     // A failed prefetch must leave the client query able to retry, including
     // the deleted view where the active pinned section is not needed.
     const agentsResponse =
@@ -87,12 +73,9 @@ export default async function McpGatewaysPageServer() {
       pinnedAgentsResult.status === "fulfilled"
         ? pinnedAgentsResult.value
         : undefined;
-    const teamsResponse =
-      teamsResult.status === "fulfilled" ? teamsResult.value : undefined;
     initialData = {
       agents: agentsResponse?.data ?? null,
       pinnedAgents: pinnedAgentsResponse?.data ?? null,
-      teams: teamsResponse?.data?.data ?? [],
     };
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;

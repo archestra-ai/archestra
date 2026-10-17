@@ -4,6 +4,7 @@ import {
   type CursorQuery,
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   type PaginationQuery,
   PERSONAL_MCP_GATEWAY_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -173,6 +174,12 @@ type AgentListFilters = {
   providerApiKeyId?: string;
   /** Caller-relative pin filter for the paginated Agents surface. */
   pinned?: boolean;
+  /**
+   * Attach each agent's assigned tools. Defaults to true; off, agents come
+   * back with `tools: []`, meaning "not requested" rather than "none
+   * assigned".
+   */
+  includeTools?: boolean;
 };
 
 type AgentCatalogRowRef = {
@@ -2147,57 +2154,50 @@ class AgentModel {
       return createPaginatedResult([], Number(total), pagination);
     }
 
-    // Step 2: Get full agent data with tools for the paginated agent IDs
-    const [agentsData, [{ total: totalResult }]] = await Promise.all([
+    // Step 2: Get full agent data for the paginated agent IDs. Tool refs are
+    // a query of their own: joined, every agent row came back once per
+    // assigned tool, system prompt and icon included.
+    const [agentRows, toolRows, [{ total: totalResult }]] = await Promise.all([
       db
         .select()
         .from(schema.agentsTable)
-        .leftJoin(
-          schema.agentToolsTable,
-          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-        )
-        .leftJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
         .where(inArray(schema.agentsTable.id, sortedAgentIds)),
+      filters?.includeTools !== false
+        ? db
+            .select({
+              agentId: schema.agentToolsTable.agentId,
+              tool: agentToolRefColumns,
+            })
+            .from(schema.agentToolsTable)
+            .innerJoin(
+              schema.toolsTable,
+              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+            )
+            .where(inArray(schema.agentToolsTable.agentId, sortedAgentIds))
+        : Promise.resolve([]),
       db.select({ total: count() }).from(schema.agentsTable).where(whereClause),
     ]);
 
     // Sort in memory to maintain the order from the sorted query
     const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
-    agentsData.sort(
-      (a, b) =>
-        (orderMap.get(a.agents.id) ?? 0) - (orderMap.get(b.agents.id) ?? 0),
+    agentRows.sort(
+      (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
     );
 
-    // Group the flat join results by agent
-    const agentsMap = new Map<string, Agent>();
-
-    for (const row of agentsData) {
-      const agent = row.agents;
-      const tool = row.tools;
-
-      if (!agentsMap.has(agent.id)) {
-        agentsMap.set(agent.id, {
-          ...agent,
-          tools: [],
-          teams: [] as Array<{ id: string; name: string }>,
-          users: [] as Array<{ id: string; name: string; email: string }>,
-          labels: [],
-          knowledgeBaseIds: [],
-          connectorIds: [],
-          suggestedPrompts: [],
-        });
-      }
-
-      // Add tool if it exists (leftJoin returns null for agents with no tools)
-      if (tool) {
-        agentsMap.get(agent.id)?.tools.push(tool);
-      }
+    const agents: Agent[] = agentRows.map((agent) => ({
+      ...agent,
+      tools: [],
+      teams: [] as Array<{ id: string; name: string }>,
+      users: [] as Array<{ id: string; name: string; email: string }>,
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      suggestedPrompts: [],
+    }));
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+    for (const row of toolRows) {
+      agentsById.get(row.agentId)?.tools.push(row.tool);
     }
-
-    const agents = Array.from(agentsMap.values());
     const agentIds = agents.map((agent) => agent.id);
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
@@ -2235,6 +2235,69 @@ class AgentModel {
       })),
       Number(totalResult),
       pagination,
+    );
+  }
+
+  /**
+   * Each listed agent's tool and subagent counts, as its `tools` would give
+   * them, without loading the tools: subagents are delegation tools, and the
+   * knowledge search tool counts only for an agent with knowledge sources, as
+   * in filterUnavailableKnowledgeTools.
+   */
+  static async getListToolCounts(
+    agents: Array<Pick<Agent, "id" | "knowledgeBaseIds" | "connectorIds">>,
+  ): Promise<Map<string, { toolsCount: number; subagentsCount: number }>> {
+    if (agents.length === 0) return new Map();
+    const name = schema.toolsTable.name;
+    const delegate = schema.toolsTable.delegateToAgentId;
+    // Bare, or after a server prefix of at least one character. The leading
+    // `_%` is the only wildcard: the separator and name are escaped and match
+    // literally.
+    const prefixedKnowledgeTool = `_%${escapeLikePattern(
+      `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
+    )}`;
+    const isKnowledgeTool = sql`(${name} = ${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME} or ${name} like ${prefixedKnowledgeTool})`;
+    const rows = await db
+      .select({
+        agentId: schema.agentToolsTable.agentId,
+        tools: sql<number>`count(*) filter (where ${delegate} is null)`.mapWith(
+          Number,
+        ),
+        subagents:
+          sql<number>`count(*) filter (where ${delegate} is not null)`.mapWith(
+            Number,
+          ),
+        knowledgeTools:
+          sql<number>`count(*) filter (where ${delegate} is null and ${isKnowledgeTool})`.mapWith(
+            Number,
+          ),
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        inArray(
+          schema.agentToolsTable.agentId,
+          agents.map((agent) => agent.id),
+        ),
+      )
+      .groupBy(schema.agentToolsTable.agentId);
+    const countsByAgent = new Map(rows.map((row) => [row.agentId, row]));
+    return new Map(
+      agents.map((agent) => {
+        const counts = countsByAgent.get(agent.id);
+        return [
+          agent.id,
+          {
+            toolsCount:
+              (counts?.tools ?? 0) -
+              (hasKnowledgeSources(agent) ? 0 : (counts?.knowledgeTools ?? 0)),
+            subagentsCount: counts?.subagents ?? 0,
+          },
+        ];
+      }),
     );
   }
 
@@ -2439,10 +2502,18 @@ class AgentModel {
     const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
     if (userId && restrictToAccessible) {
       whereConditions.push(
-        inArray(
-          schema.agentsTable.id,
-          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
-        ),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Apply the accessible-ID predicate directly to avoid a roster self-join.
+        and(
+          notDeleted(schema.agentsTable),
+          or(
+            explicitAgentReadCondition(principals),
+            organizationLlmProxyCondition(userId),
+          ),
+        ) as SQL,
+        // SPDX-SnippetEnd
       );
     }
 
@@ -2491,10 +2562,7 @@ class AgentModel {
 
   private static filterUnavailableKnowledgeTools(agents: Agent[]): void {
     for (const agent of agents) {
-      const hasKnowledgeSources =
-        agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
-
-      if (hasKnowledgeSources) {
+      if (hasKnowledgeSources(agent)) {
         continue;
       }
 
@@ -2910,6 +2978,7 @@ class AgentModel {
      */
     environmentId: string | null;
     lookups?: PrincipalSource;
+    includeDetails?: boolean;
   }): Promise<
     Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
   > {
@@ -2929,11 +2998,17 @@ class AgentModel {
 
     if (isAdmin) {
       return db
-        .selectDistinct({
+        .select({
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
-          description: schema.agentsTable.description,
-          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+          description:
+            params.includeDetails === false
+              ? sql<string | null>`NULL`
+              : schema.agentsTable.description,
+          builtInAgentConfig:
+            params.includeDetails === false
+              ? sql<Agent["builtInAgentConfig"]>`NULL`
+              : schema.agentsTable.builtInAgentConfig,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -2948,8 +3023,14 @@ class AgentModel {
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
-        description: schema.agentsTable.description,
-        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+        description:
+          params.includeDetails === false
+            ? sql<string | null>`NULL`
+            : schema.agentsTable.description,
+        builtInAgentConfig:
+          params.includeDetails === false
+            ? sql<Agent["builtInAgentConfig"]>`NULL`
+            : schema.agentsTable.builtInAgentConfig,
       })
       .from(schema.agentsTable)
       .where(
@@ -5407,6 +5488,12 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
     parseFullToolName(toolName).toolName ===
     TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
   );
+}
+
+function hasKnowledgeSources(
+  agent: Pick<Agent, "knowledgeBaseIds" | "connectorIds">,
+): boolean {
+  return agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
 }
 
 /**

@@ -14376,6 +14376,10 @@ export type GetAgentCatalogData = {
          * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.
          */
         pinned?: boolean;
+        /**
+         * Attach each internal agent's assigned tools. Defaults to true. The Agents page passes false: it shows only `toolsCount` and `subagentsCount`, which are present either way, while the tool refs carry every assigned tool's name and description. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
+         */
+        includeTools?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'team' | 'toolsCount' | 'subagentsCount' | 'lastUsedAt';
@@ -14587,6 +14591,14 @@ export type GetAgentCatalogResponses = {
                 activationSkillsCount?: number;
                 lastUsedAt?: string | null;
                 pinnedAt: string | null;
+                /**
+                 * Assigned tools other than subagent delegations, as the Agents page shows them. Present whether or not `tools` was requested.
+                 */
+                toolsCount: number;
+                /**
+                 * Agents this agent delegates to.
+                 */
+                subagentsCount: number;
             };
         } | {
             type: 'external';
@@ -14741,6 +14753,10 @@ export type GetAgentsData = {
          * Filter by the current user's pins. Pinned results are ordered by newest pin first; unpinned results keep the requested sort.
          */
         pinned?: boolean;
+        /**
+         * Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the agents themselves, such as name pickers: the tool refs carry every assigned tool's name and description, which on an organization of any size is most of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
+         */
+        includeTools?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
@@ -27260,6 +27276,10 @@ export type GetAppResponse = GetAppResponses[keyof GetAppResponses];
 
 export type UpdateAppData = {
     body: {
+        /**
+         * Expected current content version. A stale value rejects the entire update with 409 before any changes persist.
+         */
+        baseVersion?: number;
         name?: string;
         slug?: string;
         description?: string | null;
@@ -28737,6 +28757,8 @@ export type GetAppToolsResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        mcpServerId: string | null;
+        credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
     }>;
 };
 
@@ -114011,9 +114033,13 @@ export type GetTeamsData = {
         offset?: number;
         name?: string;
         /**
-         * Include team members, labels and descendant teams (default true). Disable for metadata-only pickers.
+         * Include team members, labels and descendant teams (default true). Set to false to get only the team fields and memberCount.
          */
         includeRelations?: boolean;
+        /**
+         * Include the members array of each team (default true). Set to false to get labels and descendant teams without members. Use memberCount for the number of members.
+         */
+        includeMembers?: boolean;
         labels?: string;
         mine?: boolean;
     };
@@ -114123,6 +114149,7 @@ export type GetTeamsResponses = {
                 id: string;
                 name: string;
             }>;
+            memberCount: number;
         }>;
         pagination: {
             currentPage: number;
@@ -114355,7 +114382,12 @@ export type GetTeamData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Include the team's members array (default true). Set to false for a large team when only its details are needed; page through members with GET /api/teams/{id}/members/page.
+         */
+        includeMembers?: boolean;
+    };
     url: '/api/teams/{id}';
 };
 
@@ -114884,6 +114916,123 @@ export type AddTeamMemberResponses = {
 };
 
 export type AddTeamMemberResponse = AddTeamMemberResponses[keyof AddTeamMemberResponses];
+
+export type GetTeamMembersPageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+        /**
+         * Search by user name or email. Every whitespace-separated word must appear in the name or the email.
+         */
+        search?: string;
+        /**
+         * Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both.
+         */
+        userIds?: Array<string>;
+    };
+    url: '/api/teams/{id}/members/page';
+};
+
+export type GetTeamMembersPageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTeamMembersPageError = GetTeamMembersPageErrors[keyof GetTeamMembersPageErrors];
+
+export type GetTeamMembersPageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            syncedFromSso: boolean;
+            createdAt: string;
+            name: string | null;
+            email: string;
+            image: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetTeamMembersPageResponse = GetTeamMembersPageResponses[keyof GetTeamMembersPageResponses];
 
 export type RemoveTeamMemberData = {
     body?: never;

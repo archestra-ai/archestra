@@ -121,6 +121,15 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.",
               ),
+            includeTools: z
+              .preprocess(
+                (value) => value !== "false" && value !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Attach each internal agent's assigned tools. Defaults to true. The Agents page passes false: it shows only `toolsCount` and `subagentsCount`, which are present either way, while the tool refs carry every assigned tool's name and description. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -186,7 +195,12 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? AgentModel.findAllPaginated(
               { limit: agentIds.length, offset: 0 },
               sorting,
-              { ...filters, ids: agentIds, agentTypes: ["agent"] },
+              {
+                ...filters,
+                ids: agentIds,
+                agentTypes: ["agent"],
+                includeTools: query.includeTools,
+              },
               user.id,
               isAgentAdmin,
             ).then((result) => result.data)
@@ -197,12 +211,25 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ids: externalAgentIds,
         }),
       ]);
-      await populateAgentListActivationSkillCounts({
-        agents,
-        organizationId,
-        userId: user.id,
-      });
-      const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+      const [toolCounts] = await Promise.all([
+        AgentModel.getListToolCounts(agents),
+        populateAgentListActivationSkillCounts({
+          agents,
+          organizationId,
+          userId: user.id,
+        }),
+      ]);
+      const agentsById = new Map(
+        agents.map((agent) => [
+          agent.id,
+          {
+            ...agent,
+            toolsCount: 0,
+            subagentsCount: 0,
+            ...toolCounts.get(agent.id),
+          },
+        ]),
+      );
       const externalAgentsById = new Map(
         externalAgents.map((agent) => [agent.id, agent]),
       );

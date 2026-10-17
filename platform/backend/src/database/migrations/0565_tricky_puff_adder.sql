@@ -9,7 +9,13 @@
 -- interactions_profile_created_at_idx. Neither table is altered or locked for
 -- writes. The ALTER and the keyed UPDATE that follow are short, and
 -- lock_timeout bounds the wait for the ALTER's exclusive lock on agents.
-CREATE TEMPORARY TABLE "_agent_last_used" ON COMMIT DROP AS
+--
+-- On a fresh install this migration runs outside a transaction: migration
+-- 0125 commits the migrator's transaction, so each later statement commits on
+-- its own, and an ON COMMIT DROP table would be gone before the UPDATE. The
+-- temp table is session-scoped instead and goes away when the migrator
+-- disconnects.
+CREATE TEMPORARY TABLE "_agent_last_used" AS
 SELECT
   "agents"."id",
   GREATEST(

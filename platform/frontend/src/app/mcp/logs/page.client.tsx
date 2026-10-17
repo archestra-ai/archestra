@@ -577,7 +577,7 @@ function McpToolCallsTable({
 
 function getGatewayDisplayName(
   row: Pick<McpToolCallData, "ownerType" | "agentId" | "appName">,
-  agents: archestraApiTypes.GetAgentOptionsResponses["200"] | undefined,
+  agents: archestraApiTypes.GetAgentOptionsResponses["200"]["data"] | undefined,
 ) {
   // App-owned calls have no agent by design — attribute them to the app
   // instead of falling through to the deleted-gateway label.

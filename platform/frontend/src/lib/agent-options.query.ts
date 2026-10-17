@@ -1,4 +1,9 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  AGENT_OPTIONS_MAX_IDS,
+  AGENT_OPTIONS_MAX_PAGE_SIZE,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -58,33 +63,63 @@ export function useAgentOptionsPage({
   });
 }
 
-/** Names for explicit references, without fetching unrelated agents. */
+/**
+ * Names for explicit references, without fetching unrelated agents. Built-in
+ * agents resolve too unless `filters.excludeBuiltIn` is true.
+ */
 export function useAgentOptionsByIds({
   ids,
   filters,
   enabled = true,
 }: {
   ids: readonly string[];
-  filters?: archestraApiTypes.GetAgentOptionsData["query"];
+  filters?: Omit<
+    NonNullable<archestraApiTypes.GetAgentOptionsData["query"]>,
+    "ids" | "limit" | "cursor"
+  >;
   enabled?: boolean;
 }) {
   const uniqueIds = [...new Set(ids)].sort();
   return useQuery({
     queryKey: ["agents", "options", "ids", uniqueIds, filters],
     queryFn: async () => {
-      const options: archestraApiTypes.GetAgentOptionsResponses["200"] = [];
-      for (let offset = 0; offset < uniqueIds.length; offset += 100) {
-        const { data, error } = await archestraApiSdk.getAgentOptions({
-          query: {
-            excludeBuiltIn: false,
-            ...filters,
-            ids: uniqueIds.slice(offset, offset + 100),
-          },
-        });
-        throwOnApiError(error, { toastOnError: false });
-        options.push(...(data ?? []));
+      const batches: string[][] = [];
+      for (
+        let offset = 0;
+        offset < uniqueIds.length;
+        offset += AGENT_OPTIONS_MAX_IDS
+      ) {
+        batches.push(uniqueIds.slice(offset, offset + AGENT_OPTIONS_MAX_IDS));
       }
-      return options;
+      // Batches are independent, so fetch them in parallel.
+      const pages = await Promise.all(
+        batches.map(async (batch) => {
+          const options: archestraApiTypes.GetAgentOptionsResponses["200"]["data"] =
+            [];
+          // A batch fits one page; follow the cursor anyway.
+          let cursor: string | undefined;
+          do {
+            const { data, error } = await archestraApiSdk.getAgentOptions({
+              query: {
+                excludeBuiltIn: false,
+                ...filters,
+                ids: batch,
+                limit: AGENT_OPTIONS_MAX_PAGE_SIZE,
+                cursor,
+              },
+            });
+            throwOnApiError(error, { toastOnError: false });
+            if (!data) throw new Error("Agent options are unavailable");
+            options.push(...data.data);
+            cursor = data.pagination.nextCursor ?? undefined;
+          } while (cursor);
+          return options;
+        }),
+      );
+      // Keep one row per agent even if batches ever overlap.
+      return [
+        ...new Map(pages.flat().map((option) => [option.id, option])).values(),
+      ];
     },
     enabled: enabled && uniqueIds.length > 0,
   });

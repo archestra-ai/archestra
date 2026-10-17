@@ -52,13 +52,13 @@ vi.mock("@/lib/agent-options.query", () => ({
   useAgentOptionIds: () => ({
     data: (
       useDelegationTargetAgentsMock()
-        .data as archestraApiTypes.GetAgentOptionsResponses["200"]
+        .data as archestraApiTypes.GetAgentOptionsResponses["200"]["data"]
     ).map((row: { id: string }) => row.id),
     isSuccess: true,
   }),
   useAgentOptionsPage: (params: { search?: string }) => {
     const result = useDelegationTargetAgentsMock() as {
-      data: archestraApiTypes.GetAgentOptionsResponses["200"];
+      data: archestraApiTypes.GetAgentOptionsResponses["200"]["data"];
     };
     const search = params.search?.trim().toLowerCase() ?? "";
     const rows = (result.data ?? []).filter(
@@ -381,7 +381,6 @@ vi.mock("@/lib/agent.query", () => ({
   useCreateProfile: useCreateProfileMock,
   useDefaultAgentId: useDefaultAgentIdMock,
   useDeleteProfile: useDeleteProfileMock,
-  useDelegationTargetAgents: useDelegationTargetAgentsMock,
   useProfile: useProfileMock,
   useUpdateDefaultAgentId: useUpdateDefaultAgentIdMock,
   useUpdateProfile: useUpdateProfileMock,

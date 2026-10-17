@@ -524,7 +524,10 @@ export const handlers: HttpHandler[] = [
     pagination: { limit: 20, nextCursor: null, hasNext: false },
   }),
   ...getJson("/api/agents/options/ids", []),
-  ...getJson("/api/agents/options", []),
+  ...getJson("/api/agents/options", {
+    data: [],
+    pagination: { limit: 100, nextCursor: null, hasNext: false },
+  }),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
   ...getJson("/api/agents/activation-skills", {

@@ -54957,7 +54957,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get authorized agent names and presentation fields for selectors\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+        "description": "List authorized agent options one page at a time. Filter by up to 200 IDs; pages hold up to 1,000 items.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
         "parameters": [
           {
             "schema": {
@@ -55038,6 +55038,7 @@
           },
           {
             "schema": {
+              "maxItems": 200,
               "type": "array",
               "items": {
                 "type": "string",
@@ -55048,6 +55049,25 @@
             "in": "query",
             "name": "ids",
             "required": false
+          },
+          {
+            "schema": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
           }
         ],
         "responses": {
@@ -55056,307 +55076,340 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "slug": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "agentType": {
-                        "type": "string",
-                        "enum": [
-                          "profile",
-                          "mcp_gateway",
-                          "llm_proxy",
-                          "agent"
-                        ]
-                      },
-                      "icon": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "scope": {
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
-                      },
-                      "authorId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "authorName": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "authorEmail": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "isPersonalGateway": {
-                        "type": "boolean"
-                      },
-                      "runtime": {
-                        "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
-                          "image": {
+                          "id": {
                             "type": "string",
-                            "minLength": 1,
-                            "maxLength": 2000
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "command": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
                             "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
+                            "type": "string"
                           },
-                          "inferenceProtocol": {
+                          "agentType": {
                             "type": "string",
                             "enum": [
-                              "openai_responses",
-                              "openai_chat",
-                              "anthropic"
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
                             ]
                           },
-                          "backend": {
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "scope": {
                             "type": "string",
                             "enum": [
-                              "kubernetes"
+                              "personal",
+                              "team",
+                              "org"
                             ]
                           },
-                          "steerMode": {
-                            "type": "string",
-                            "enum": [
-                              "pipe",
-                              "tmux_keys"
-                            ]
+                          "authorId": {
+                            "nullable": true,
+                            "type": "string"
                           },
-                          "privileged": {
+                          "authorName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "authorEmail": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "isPersonalGateway": {
                             "type": "boolean"
                           },
-                          "resources": {
+                          "runtime": {
                             "nullable": true,
                             "type": "object",
                             "properties": {
-                              "cpuRequest": {
-                                "type": "string"
+                              "image": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
                               },
-                              "memoryRequest": {
-                                "type": "string"
+                              "command": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
-                              "cpuLimit": {
-                                "type": "string"
+                              "inferenceProtocol": {
+                                "type": "string",
+                                "enum": [
+                                  "openai_responses",
+                                  "openai_chat",
+                                  "anthropic"
+                                ]
                               },
-                              "memoryLimit": {
-                                "type": "string"
+                              "backend": {
+                                "type": "string",
+                                "enum": [
+                                  "kubernetes"
+                                ]
+                              },
+                              "steerMode": {
+                                "type": "string",
+                                "enum": [
+                                  "pipe",
+                                  "tmux_keys"
+                                ]
+                              },
+                              "privileged": {
+                                "type": "boolean"
+                              },
+                              "resources": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "cpuRequest": {
+                                    "type": "string"
+                                  },
+                                  "memoryRequest": {
+                                    "type": "string"
+                                  },
+                                  "cpuLimit": {
+                                    "type": "string"
+                                  },
+                                  "memoryLimit": {
+                                    "type": "string"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "ports": {
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 65535
+                                }
+                              },
+                              "environment": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "key": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "credentials": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "key": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[A-Z_][A-Z0-9_]*$"
+                                    },
+                                    "scope": {
+                                      "type": "string",
+                                      "enum": [
+                                        "shared",
+                                        "per_user"
+                                      ]
+                                    },
+                                    "credentialId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-z][a-z0-9._-]*$"
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "description": {
+                                      "type": "string",
+                                      "maxLength": 1000
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "scope",
+                                    "label",
+                                    "required"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "allowAgentSuppliedCredentialValues": {
+                                "type": "boolean"
+                              },
+                              "claudeCode": {
+                                "type": "object",
+                                "properties": {
+                                  "authentication": {
+                                    "type": "string",
+                                    "enum": [
+                                      "provider",
+                                      "subscription"
+                                    ]
+                                  },
+                                  "model": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 256
+                                  }
+                                },
+                                "required": [
+                                  "authentication"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "ttlHours": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 720
+                              },
+                              "maxCostUsd": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100000
+                              },
+                              "idleTimeoutMinutes": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
                               }
                             },
+                            "required": [
+                              "image",
+                              "command",
+                              "inferenceProtocol",
+                              "backend",
+                              "steerMode",
+                              "privileged",
+                              "resources",
+                              "environment",
+                              "credentials",
+                              "ttlHours",
+                              "idleTimeoutMinutes"
+                            ],
                             "additionalProperties": false
                           },
-                          "ports": {
-                            "maxItems": 20,
-                            "type": "array",
-                            "items": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 65535
-                            }
-                          },
-                          "environment": {
+                          "description": {
                             "nullable": true,
+                            "type": "string"
+                          },
+                          "teams": {
                             "type": "array",
                             "items": {
                               "type": "object",
                               "properties": {
-                                "key": {
-                                  "type": "string",
-                                  "minLength": 1
+                                "id": {
+                                  "type": "string"
                                 },
-                                "value": {
+                                "name": {
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "key",
-                                "value"
+                                "id",
+                                "name"
                               ],
                               "additionalProperties": false
                             }
                           },
-                          "credentials": {
-                            "nullable": true,
+                          "users": {
                             "type": "array",
                             "items": {
                               "type": "object",
                               "properties": {
-                                "key": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 128,
-                                  "pattern": "^[A-Z_][A-Z0-9_]*$"
-                                },
-                                "scope": {
-                                  "type": "string",
-                                  "enum": [
-                                    "shared",
-                                    "per_user"
-                                  ]
-                                },
-                                "credentialId": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 128,
-                                  "pattern": "^[a-z][a-z0-9._-]*$"
-                                },
-                                "label": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 200
-                                },
-                                "description": {
-                                  "type": "string",
-                                  "maxLength": 1000
-                                },
-                                "required": {
-                                  "type": "boolean"
+                                "id": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
-                                "key",
-                                "scope",
-                                "label",
-                                "required"
+                                "id"
                               ],
                               "additionalProperties": false
                             }
-                          },
-                          "allowAgentSuppliedCredentialValues": {
-                            "type": "boolean"
-                          },
-                          "claudeCode": {
-                            "type": "object",
-                            "properties": {
-                              "authentication": {
-                                "type": "string",
-                                "enum": [
-                                  "provider",
-                                  "subscription"
-                                ]
-                              },
-                              "model": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 256
-                              }
-                            },
-                            "required": [
-                              "authentication"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "ttlHours": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 720
-                          },
-                          "maxCostUsd": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 100000
-                          },
-                          "idleTimeoutMinutes": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 1440
                           }
                         },
                         "required": [
-                          "image",
-                          "command",
-                          "inferenceProtocol",
-                          "backend",
-                          "steerMode",
-                          "privileged",
-                          "resources",
-                          "environment",
-                          "credentials",
-                          "ttlHours",
-                          "idleTimeoutMinutes"
+                          "id",
+                          "name",
+                          "slug",
+                          "agentType",
+                          "icon",
+                          "scope",
+                          "authorId",
+                          "isPersonalGateway",
+                          "runtime",
+                          "description",
+                          "teams",
+                          "users"
                         ],
                         "additionalProperties": false
-                      },
-                      "description": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "teams": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "users": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id"
-                          ],
-                          "additionalProperties": false
-                        }
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "slug",
-                      "agentType",
-                      "icon",
-                      "scope",
-                      "authorId",
-                      "isPersonalGateway",
-                      "runtime",
-                      "description",
-                      "teams",
-                      "users"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "limit",
+                        "nextCursor",
+                        "hasNext"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -55688,6 +55741,7 @@
           },
           {
             "schema": {
+              "maxItems": 200,
               "type": "array",
               "items": {
                 "type": "string",
@@ -56521,6 +56575,7 @@
           },
           {
             "schema": {
+              "maxItems": 200,
               "type": "array",
               "items": {
                 "type": "string",

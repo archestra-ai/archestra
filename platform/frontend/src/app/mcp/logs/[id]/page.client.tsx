@@ -27,7 +27,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import {
   formatAuthMethod,
   formatCallerIdentity,
@@ -74,9 +74,8 @@ function McpToolCallDetail({
     initialData: initialData?.mcpToolCall,
   });
 
-  const { data: agents } = useAgentOptions({
-    filters: { ids: mcpToolCall?.agentId ? [mcpToolCall.agentId] : [] },
-    enabled: !!mcpToolCall?.agentId,
+  const { data: agents } = useAgentOptionsByIds({
+    ids: mcpToolCall?.agentId ? [mcpToolCall.agentId] : [],
   });
 
   // The header stays put through loading, failure and not-found: this page

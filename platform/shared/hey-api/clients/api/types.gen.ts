@@ -15881,6 +15881,8 @@ export type GetAgentOptionsData = {
          */
         status?: 'active' | 'deleted';
         ids?: Array<string>;
+        limit?: number;
+        cursor?: string;
     };
     url: '/api/agents/options';
 };
@@ -15957,61 +15959,68 @@ export type GetAgentOptionsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        slug: string | null;
-        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-        icon: string | null;
-        scope: 'personal' | 'team' | 'org';
-        authorId: string | null;
-        authorName?: string | null;
-        authorEmail?: string | null;
-        isPersonalGateway: boolean;
-        runtime: {
-            image: string;
-            command: Array<string> | null;
-            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
-            backend: 'kubernetes';
-            steerMode: 'pipe' | 'tmux_keys';
-            privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
-            ports?: Array<number>;
-            environment: Array<{
-                key: string;
-                value: string;
-            }> | null;
-            credentials: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                credentialId?: string;
-                label: string;
-                description?: string;
-                required: boolean;
-            }> | null;
-            allowAgentSuppliedCredentialValues?: boolean;
-            claudeCode?: {
-                authentication: 'provider' | 'subscription';
-                model?: string;
-            };
-            ttlHours: number | null;
-            maxCostUsd?: number | null;
-            idleTimeoutMinutes: number | null;
-        } | null;
-        description: string | null;
-        teams: Array<{
+    200: {
+        data: Array<{
             id: string;
             name: string;
+            slug: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            icon: string | null;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
+            authorName?: string | null;
+            authorEmail?: string | null;
+            isPersonalGateway: boolean;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: boolean;
+                resources: {
+                    cpuRequest?: string;
+                    memoryRequest?: string;
+                    cpuLimit?: string;
+                    memoryLimit?: string;
+                } | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd?: number | null;
+                idleTimeoutMinutes: number | null;
+            } | null;
+            description: string | null;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            users: Array<{
+                id: string;
+            }>;
         }>;
-        users: Array<{
-            id: string;
-        }>;
-    }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
 };
 
 export type GetAgentOptionsResponse = GetAgentOptionsResponses[keyof GetAgentOptionsResponses];

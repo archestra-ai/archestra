@@ -202,6 +202,7 @@ describe("AgentModel", () => {
     const agents = [
       await make("m-mine-1", true, true),
       await make("c-mine-2", true, true),
+      await make("q-mine-3", true, true),
       await make("x-mine-shared", true, false),
       await make("a-theirs", false, false),
       await make("k-theirs", false, false),
@@ -234,21 +235,24 @@ describe("AgentModel", () => {
         })
         .map((agent) => agent.id);
       expect(visible).toEqual(expected);
-      // Pages of 2 straddle the boundary between the caller's own agents and
-      // the rest, and must add up to the same list.
-      const paged: string[] = [];
-      for (let offset = 0; offset < expected.length; offset += 2) {
-        const page = await AgentModel.findAllPaginated(
-          { limit: 2, offset },
-          { sortBy, sortDirection: direction },
-          { organizationId: organization.id },
-          user.id,
-          true,
-        );
-        expect(page.pagination.total).toBe(expected.length);
-        paged.push(...page.data.map((agent) => agent.id));
+      // Smaller pages fall wholly within the caller's own agents, straddle
+      // the boundary to the rest, or lie past it, and must add up to the same
+      // list.
+      for (const limit of [1, 2, 3]) {
+        const paged: string[] = [];
+        for (let offset = 0; offset < expected.length; offset += limit) {
+          const page = await AgentModel.findAllPaginated(
+            { limit, offset },
+            { sortBy, sortDirection: direction },
+            { organizationId: organization.id },
+            user.id,
+            true,
+          );
+          expect(page.pagination.total).toBe(expected.length);
+          paged.push(...page.data.map((agent) => agent.id));
+        }
+        expect(paged).toEqual(expected);
       }
-      expect(paged).toEqual(expected);
     }
   });
 

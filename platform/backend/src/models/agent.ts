@@ -2572,11 +2572,15 @@ class AgentModel {
       eq(schema.agentsTable.authorId, params.userId),
       agentAudienceIs("personal"),
     );
+    // Read no further than the page's end: when the caller's own agents reach
+    // it, the page is all theirs; otherwise this read holds every one of them,
+    // so its length is where the others start.
     const own = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
       .where(and(params.whereClause, ownPersonal))
-      .orderBy(params.orderByClause);
+      .orderBy(params.orderByClause)
+      .limit(offset + limit);
     const ownPage = own.slice(offset, offset + limit);
     const remaining = limit - ownPage.length;
     if (remaining <= 0) return ownPage;

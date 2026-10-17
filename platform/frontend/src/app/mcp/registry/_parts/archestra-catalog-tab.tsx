@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  type archestraCatalogTypes,
-  E2eTestId,
-} from "@archestra/shared";
+import { type archestraCatalogTypes, E2eTestId } from "@archestra/shared";
 
 import {
   BookOpen,
@@ -60,10 +56,8 @@ const isDemoCategory = (category: string | null | undefined) =>
   category === MCP_APPS_DEMO_CATEGORY;
 
 export function ArchestraCatalogTab({
-  catalogItems: initialCatalogItems,
   onSelectServer,
 }: {
-  catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   onSelectServer: (formValues: McpCatalogFormValues) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,9 +70,7 @@ export function ArchestraCatalogTab({
   });
 
   // Get catalog items for filtering (with live updates)
-  const { data: catalogItems } = useInternalMcpCatalog({
-    initialData: initialCatalogItems,
-  });
+  const { data: catalogItems } = useInternalMcpCatalog();
 
   // Fetch available categories
   const { data: availableCategories = [] } = useMcpServerCategories();

@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  authQueryKeys,
   useHasPermissions,
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
@@ -216,7 +217,9 @@ function useCredentialMutation<TInput, TOutput>(
         queryClient.invalidateQueries({ queryKey: ["github-pats"] }),
         // Adding a credential gives its author Full access on it, and the row
         // actions read that from the reader's grants.
-        queryClient.invalidateQueries({ queryKey: ["scoped-capabilities"] }),
+        queryClient.invalidateQueries({
+          queryKey: authQueryKeys.scopedCapabilities(),
+        }),
       ]);
     },
   });

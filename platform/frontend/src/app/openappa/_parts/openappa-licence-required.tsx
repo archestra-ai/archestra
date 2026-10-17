@@ -18,8 +18,8 @@ import {
 const SALES_EMAIL = "sales@archestra.ai";
 const OPENAPPA_URL = "https://www.openappa.com/";
 
-// The tier comes from the same server fetch that chose this page: the
-// client's config cache can lag behind and contradict that choice.
+// The tier comes from the same config read that chose this page, so the
+// count shown cannot contradict that choice.
 export function OpenAppaLicenceRequired({
   tier,
 }: {

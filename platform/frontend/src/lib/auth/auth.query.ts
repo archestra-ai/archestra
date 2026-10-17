@@ -15,6 +15,10 @@ export const authQueryKeys = {
   session: () => [...authQueryKeys.all, "session"] as const,
   sessions: () => [...authQueryKeys.all, "sessions"] as const,
   userPermissions: () => [...authQueryKeys.all, "userPermissions"] as const,
+  // Under `all` so role, member and team changes, which invalidate it,
+  // refresh object grants along with the permission map.
+  scopedCapabilities: () =>
+    [...authQueryKeys.all, "scopedCapabilities"] as const,
   defaultCredentialsEnabled: () =>
     [...authQueryKeys.all, "defaultCredentialsEnabled"] as const,
 };
@@ -125,13 +129,18 @@ export function useHasPagePermissions(required: Permissions) {
 export function useScopedCapabilities(enabled = true) {
   const { data: session } = useSession();
   return useQuery({
-    queryKey: ["scoped-capabilities"],
+    queryKey: authQueryKeys.scopedCapabilities(),
     enabled: enabled && !!session?.user,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getScopedCapabilities();
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
+    // Same lifetime as the permission map it completes: page guards wait on
+    // both, so restoring only one would leave a guarded page empty on refresh.
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    meta: PERSISTED_QUERY_META,
   });
 }
 
@@ -257,7 +266,10 @@ async function seedBootstrapQueries(queryClient: QueryClient) {
     const { data } = await archestraApiSdk.getBootstrap();
     if (!data) return;
     queryClient.setQueryData(authQueryKeys.userPermissions(), data.permissions);
-    queryClient.setQueryData(["scoped-capabilities"], data.scopedCapabilities);
+    queryClient.setQueryData(
+      authQueryKeys.scopedCapabilities(),
+      data.scopedCapabilities,
+    );
     queryClient.setQueryData(["config"], data.config);
     if (data.organization) {
       queryClient.setQueryData(["organization", "details"], data.organization);

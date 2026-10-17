@@ -10,6 +10,9 @@ vi.mock("@/lib/organization.query");
 vi.mock("@/lib/teams/team.query");
 
 const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
+const { catalogItems } = vi.hoisted(() => ({
+  catalogItems: { current: undefined as CatalogItem[] | undefined },
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerPush, replace: vi.fn() }),
@@ -24,12 +27,8 @@ vi.mock("@/lib/environment.query", () => ({
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalogAccessIds: () => ({ data: undefined }),
-  useInternalMcpCatalog: ({
-    initialData,
-  }: {
-    initialData?: CatalogItem[];
-  }) => ({
-    data: initialData,
+  useInternalMcpCatalog: () => ({
+    data: catalogItems.current,
     isPending: false,
     isFetching: false,
   }),
@@ -385,7 +384,8 @@ describe("McpServerCard uninstall permission", () => {
   it("loads the registry's server lists without per-install agents", async () => {
     const user = userEvent.setup();
     useMcpServersMock.mockReturnValue({ data: [personalInstall] });
-    renderCard(<InternalMCPCatalog initialData={[item]} />);
+    catalogItems.current = [item];
+    renderCard(<InternalMCPCatalog />);
     await user.click(screen.getByRole("button", { name: "Uninstall" }));
     await screen.findByRole("dialog");
 
@@ -816,9 +816,8 @@ describe("McpServerCard uninstall permission", () => {
       data: [flaggedInstall, personalInstallForGrid],
     });
 
-    renderCard(
-      <InternalMCPCatalog initialData={[zeta, personal, alpha, flagged]} />,
-    );
+    catalogItems.current = [zeta, personal, alpha, flagged];
+    renderCard(<InternalMCPCatalog />);
 
     expect(
       screen.queryByRole("heading", { name: "Action required" }),
@@ -840,7 +839,8 @@ describe("McpServerCard uninstall permission", () => {
   it("explains that an uninstalled card must be installed before selection", async () => {
     const user = userEvent.setup();
     useMcpServersMock.mockReturnValue({ data: [] });
-    renderCard(<InternalMCPCatalog initialData={[item]} />);
+    catalogItems.current = [item];
+    renderCard(<InternalMCPCatalog />);
 
     const checkbox = screen.getByRole("checkbox", {
       name: "Select some-remote-server",

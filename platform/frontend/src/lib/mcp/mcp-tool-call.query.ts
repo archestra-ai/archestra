@@ -67,7 +67,6 @@ export function useMcpToolCalls({
   endDate,
   limit = DEFAULT_TABLE_LIMIT,
   cursor,
-  initialData,
   enabled = true,
 }: {
   agentId?: string;
@@ -77,7 +76,6 @@ export function useMcpToolCalls({
   endDate?: string;
   limit?: number;
   cursor?: string;
-  initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
   enabled?: boolean;
 } = {}) {
   return useQuery({
@@ -116,28 +114,15 @@ export function useMcpToolCalls({
         }
       );
     },
-    // Only use initialData for the newest page with default sorting and limit.
-    initialData:
-      !cursor &&
-      limit === DEFAULT_TABLE_LIMIT &&
-      !agentId &&
-      !mcpServerName &&
-      !userId &&
-      !startDate &&
-      !endDate
-        ? initialData
-        : undefined,
     enabled,
   });
 }
 
 export function useMcpToolCall({
   mcpToolCallId,
-  initialData,
   enabled = true,
 }: {
   mcpToolCallId: string;
-  initialData?: archestraApiTypes.GetMcpToolCallResponses["200"];
   enabled?: boolean;
 }) {
   return useQuery({
@@ -147,7 +132,6 @@ export function useMcpToolCall({
       throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
     },
-    initialData,
     enabled,
   });
 }

@@ -59,7 +59,6 @@ type McpServersQuery = Partial<
   NonNullable<archestraApiTypes.GetMcpServersData["query"]>
 >;
 type McpServersParams = McpServersQuery & {
-  initialData?: archestraApiTypes.GetMcpServersResponses["200"];
   hasInstallingServers?: boolean;
   enabled?: boolean;
 };
@@ -103,7 +102,6 @@ export function useMcpServers(params?: McpServersParams) {
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
-    initialData: params?.initialData,
     enabled: (params?.enabled ?? true) && !!canReadInstallations,
     refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });

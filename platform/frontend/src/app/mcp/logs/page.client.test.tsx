@@ -366,7 +366,62 @@ describe("McpGatewayLogsPage filters", () => {
     expect(screen.queryByText(/raw argument only belongs/)).toBeNull();
     expect(screen.getByLabelText("Request duration: 386ms")).toBeVisible();
   });
+
+  it("opens a call recorded in an LLM session in that session's trace", async () => {
+    const user = userEvent.setup();
+    mockCalls([listedCall({ id: "call-linked", sessionId: "session-1" })]);
+
+    render(<McpGatewayLogsPage />);
+    await user.click(screen.getByText("search_documents"));
+
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/session/session-1?toolCall=call-linked",
+    );
+  });
+
+  it("opens a call with no session on its own page", async () => {
+    const user = userEvent.setup();
+    mockCalls([listedCall({ id: "call-bare", sessionId: null })]);
+
+    render(<McpGatewayLogsPage />);
+    await user.click(screen.getByText("search_documents"));
+
+    expect(push).toHaveBeenCalledWith("/mcp/logs/call-bare");
+  });
 });
+
+function listedCall(overrides: { id: string; sessionId: string | null }) {
+  return {
+    durationMs: 386,
+    ownerType: "agent",
+    agentId: orgGateway.id,
+    appId: null,
+    mcpServerName: "document-search-deployment",
+    method: "tools/call",
+    toolCall: {
+      id: "tool-call-1",
+      name: "documents__search_documents",
+      arguments: {},
+    },
+    toolResult: { isError: false, content: [] },
+    userId: "user-1",
+    authMethod: "session",
+    createdAt: "2026-08-23T16:30:00.000Z",
+    userName: "Demo Admin",
+    appName: null,
+    ...overrides,
+  };
+}
+
+function mockCalls(rows: ReturnType<typeof listedCall>[]) {
+  vi.mocked(useMcpToolCalls).mockReturnValue({
+    data: {
+      data: rows,
+      pagination: { limit: 10, nextCursor: null, hasNext: false },
+    },
+    isFetching: false,
+  } as unknown as ReturnType<typeof useMcpToolCalls>);
+}
 
 function render(element: React.ReactElement) {
   return rtlRender(

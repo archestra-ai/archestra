@@ -68,6 +68,7 @@ export function useMcpToolCalls({
   limit = DEFAULT_TABLE_LIMIT,
   cursor,
   initialData,
+  enabled = true,
 }: {
   agentId?: string;
   mcpServerName?: string;
@@ -77,6 +78,7 @@ export function useMcpToolCalls({
   limit?: number;
   cursor?: string;
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -125,6 +127,7 @@ export function useMcpToolCalls({
       !endDate
         ? initialData
         : undefined,
+    enabled,
   });
 }
 

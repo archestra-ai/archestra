@@ -99,7 +99,10 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     await app.close();
   });
 
-  test("a user-scoped MCP client can yell without proxy state or logical call metadata", async ({
+  test.for([
+    false,
+    true,
+  ])("a user-scoped MCP client can yell without proxy state (logical metadata %s)", async (logicalMetadata, {
     makeAgent,
     makeMember,
     makeUser,
@@ -145,12 +148,23 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
         payload: {
           jsonrpc: "2.0",
           method: "tools/call",
-          params: wrapped
-            ? {
-                name: "archestra__run_tool",
-                arguments: { tool_name: "archestra__yell", tool_args: args },
-              }
-            : { name: "archestra__yell", arguments: args },
+          params: {
+            ...(wrapped
+              ? {
+                  name: "archestra__run_tool",
+                  arguments: { tool_name: "archestra__yell", tool_args: args },
+                }
+              : { name: "archestra__yell", arguments: args }),
+            ...(logicalMetadata
+              ? {
+                  _meta: {
+                    "com.archestra/logicalToolCallId": wrapped
+                      ? "logical-wrapped"
+                      : "logical-direct",
+                  },
+                }
+              : {}),
+          },
           // A reused transport ID must not collapse distinct reports.
           id: 1,
         },

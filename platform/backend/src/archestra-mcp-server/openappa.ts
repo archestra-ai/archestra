@@ -1953,7 +1953,8 @@ async function yellIdentity(params: {
     (context.organizationId && context.userId && id
       ? chatOpenAppaSession(context.organizationId, context.userId, id)
       : undefined);
-  if (known && context.currentToolCallId)
+  // A gateway client's logical id identifies its request, not a released call.
+  if (known && context.currentToolCallId && !context.tokenAuth)
     return { session: known, callId: context.currentToolCallId };
   const recalled = context.organizationId
     ? await recallYellSession({
@@ -1966,7 +1967,11 @@ async function yellIdentity(params: {
   // headers. Without one, the authenticated session can still report: give the
   // report its own operation id, never a reusable JSON-RPC transport id.
   if (known)
-    return { session: known, callId: randomUUID(), needsAdmission: true };
+    return {
+      session: known,
+      callId: context.currentToolCallId ?? randomUUID(),
+      needsAdmission: true,
+    };
   logger.warn(
     {
       agentId: context.agentId,

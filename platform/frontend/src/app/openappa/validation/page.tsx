@@ -1,6 +1,6 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
+import type { CellContext, ColumnDef } from "@tanstack/react-table";
 import {
   ChevronDown,
   Download,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import {
   openRowOnPlainClick,
   RowClickShield,
@@ -125,13 +125,7 @@ export default function ValidationPage() {
     ),
   );
   const hasFilters = Boolean(search || status !== "all");
-  const canDelete =
-    !suite.github &&
-    suite.canWrite &&
-    !suite.busy &&
-    !suite.sourceChanged &&
-    !suite.loadError &&
-    !suite.collection.error;
+  const canDelete = canDeleteValidations(suite);
   const rowSelection = Object.fromEntries(
     Array.from(suite.selected, (id) => [id, true]),
   );
@@ -148,130 +142,37 @@ export default function ValidationPage() {
   function clearFilters() {
     updateQuery({ search: null, status: null, page: null });
   }
-  function fileHref(row: ValidationRow) {
-    return validationFileHref(row.file.path);
-  }
 
-  const columns: ColumnDef<ValidationRow>[] = [
-    ...(!suite.github && suite.canWrite
-      ? [
-          createSelectColumn<ValidationRow>({
-            rowLabel: (row) => `Select ${row.file.path}`,
-            allLabel: "Select all validations on this page",
-            canSelect: () => !suite.busy,
-            disabledReason: () => "Wait for the current operation to finish",
-          }),
-        ]
-      : []),
-    {
-      id: "name",
-      header: "Name",
-      cell: ({ row }) => {
-        const { file, name, error } = row.original;
-        return (
-          <div className="max-w-md">
-            <RowClickShield>
-              <Link
-                className="block truncate font-medium"
-                href={validationFileHref(file.path)}
-                title={file.path}
-              >
-                {name}
-              </Link>
-            </RowClickShield>
-            {error && (
-              <span
-                className="block truncate text-xs text-muted-foreground"
-                title={error}
-              >
-                {error}
-              </span>
-            )}
-          </div>
-        );
+  // Cells are module-level components: tanstack renders a cell function as a
+  // component, so a closure recreated on each render would remount the cell
+  // and close its open popover or menu whenever the page re-renders.
+  const selectable = !suite.github && suite.canWrite;
+  const busy = suite.busy;
+  const columns = useMemo<ColumnDef<ValidationRow>[]>(
+    () => [
+      ...(selectable
+        ? [
+            createSelectColumn<ValidationRow>({
+              rowLabel: (row) => `Select ${row.file.path}`,
+              allLabel: "Select all validations on this page",
+              canSelect: () => !busy,
+              disabledReason: () => "Wait for the current operation to finish",
+            }),
+          ]
+        : []),
+      { id: "name", header: "Name", cell: NameCell },
+      { id: "status", header: "Status", cell: StatusColumnCell },
+      { id: "lastRunAt", header: "Last run", cell: LastRunCell },
+      {
+        id: "actions",
+        header: "Actions",
+        enableHiding: false,
+        size: 130,
+        cell: ActionsCell,
       },
-    },
-    {
-      id: "status",
-      header: "Status",
-      cell: ({ row }) =>
-        suite.runningPath === row.original.file.path ? (
-          <ValidationStatusBadge status="running">
-            <Loader2 className="animate-spin" />
-            <span>Running</span>
-          </ValidationStatusBadge>
-        ) : row.original.status ? (
-          <StatusCell row={row.original} />
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-    {
-      id: "lastRunAt",
-      header: "Last run",
-      cell: ({ row }) => (
-        <span className="whitespace-nowrap text-sm text-muted-foreground">
-          {row.original.lastRunAt
-            ? formatDate({ date: row.original.lastRunAt })
-            : "—"}
-        </span>
-      ),
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      enableHiding: false,
-      size: 130,
-      cell: ({ row }) => (
-        <RowClickShield>
-          <TableRowActions
-            itemName={row.original.file.path}
-            actions={[
-              {
-                icon:
-                  suite.runningPath === row.original.file.path ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Play />
-                  ),
-                label: "Run",
-                tooltip: "Run this validation and record the result",
-                permissions: { openappaPolicy: ["update"] },
-                disabled: !suite.runnable,
-                disabledTooltip: suite.busy
-                  ? "Wait for the current run to finish"
-                  : "Refresh the page before running",
-                onClick: () => suite.runFile(row.original.file.path),
-              },
-              {
-                icon: suite.canWrite ? <Pencil /> : <Eye />,
-                label: suite.canWrite ? "Edit" : "View",
-                href: fileHref(row.original),
-              },
-            ]}
-            dropdownActions={[
-              {
-                icon: <Download />,
-                label: "Export",
-                onClick: () => exportValidationFile(row.original.file),
-              },
-              ...(!suite.github && suite.canWrite
-                ? [
-                    {
-                      icon: <Trash2 />,
-                      label: "Delete",
-                      variant: "destructive" as const,
-                      disabled: !canDelete,
-                      onClick: () => setDeleteIds([row.original.id]),
-                    },
-                  ]
-                : []),
-            ]}
-          />
-        </RowClickShield>
-      ),
-    },
-  ];
+    ],
+    [selectable, busy],
+  );
   return (
     <div className="-mt-2 space-y-4">
       <OpenAppaPageAction>
@@ -288,96 +189,100 @@ export default function ValidationPage() {
           <InlineNoticeText>{suite.inspectionError.message}</InlineNoticeText>
         </InlineNotice>
       )}
-      <BulkActionsScope>
-        <CollectionFilters>
-          <FilterBar
-            leading
-            actions={
-              <ValidationLastRun files={filtered.map((row) => row.file)} />
-            }
-            onClearFilters={hasFilters ? clearFilters : undefined}
-            search={
-              <SearchInput
-                placeholder="Search validations…"
-                className={filterSearchClass}
-              />
-            }
-          >
-            <FilterSelect
-              ariaLabel="Filter by validation status"
-              value={status}
-              onValueChange={(value) =>
-                updateQuery({
-                  status: value === "all" ? null : value,
-                  page: "1",
-                })
+      <DeleteRequestContext.Provider value={setDeleteIds}>
+        <BulkActionsScope>
+          <CollectionFilters>
+            <FilterBar
+              leading
+              actions={
+                <ValidationLastRun files={filtered.map((row) => row.file)} />
               }
-              items={statuses}
-              placeholder="All statuses"
-            />
-          </FilterBar>
-        </CollectionFilters>
-        <BulkActions
-          count={suite.selected.size}
-          noun="validation"
-          onClear={() => suite.setSelected(new Set())}
-          busy={suite.busy}
-          maxSelection={32}
-          selectAllMatching={{
-            total: filtered.length,
-            pageFullySelected:
-              pageIds.length > 0 &&
-              pageIds.every((id) => suite.selected.has(id)),
-            active:
-              filtered.length > 0 &&
-              filtered.length === suite.selected.size &&
-              filtered.every((row) => suite.selected.has(row.id)),
-            onSelectAll: () =>
-              suite.setSelected(new Set(filtered.map((row) => row.id))),
-          }}
-        >
-          {!suite.github && suite.canWrite && (
-            <Button
-              size="sm"
-              variant="destructive"
-              disabled={!canDelete}
-              onClick={() => setDeleteIds(Array.from(suite.selected))}
+              onClearFilters={hasFilters ? clearFilters : undefined}
+              search={
+                <SearchInput
+                  placeholder="Search validations…"
+                  className={filterSearchClass}
+                />
+              }
             >
-              <Trash2 />
-              <span>Delete</span>
-            </Button>
-          )}
-        </BulkActions>
-        <DataTable
-          columns={columns}
-          data={filtered}
-          getRowId={(row) => row.id}
-          onRowClick={(row, event) =>
-            openRowOnPlainClick(event, () => router.push(fileHref(row)))
-          }
-          rowSelection={rowSelection}
-          onRowSelectionChange={(next) =>
-            suite.setSelected(
-              new Set(Object.keys(next).filter((id) => next[id])),
-            )
-          }
-          onPageRowIdsChange={setPageIds}
-          hideSelectedCount
-          tableClassName="min-w-[560px]"
-          pagination={{ pageIndex, pageSize, total: filtered.length }}
-          onPaginationChange={(next) =>
-            updateQuery({
-              page: String(next.pageIndex + 1),
-              pageSize: String(next.pageSize),
-            })
-          }
-          hasActiveFilters={hasFilters}
-          onClearFilters={clearFilters}
-          filteredEmptyMessage="No matching validation files."
-          emptyMessage="No validation files yet."
-          emptyDescription="Ask the agent to write one for a case you want to protect."
-        />
-      </BulkActionsScope>
+              <FilterSelect
+                ariaLabel="Filter by validation status"
+                value={status}
+                onValueChange={(value) =>
+                  updateQuery({
+                    status: value === "all" ? null : value,
+                    page: "1",
+                  })
+                }
+                items={statuses}
+                placeholder="All statuses"
+              />
+            </FilterBar>
+          </CollectionFilters>
+          <BulkActions
+            count={suite.selected.size}
+            noun="validation"
+            onClear={() => suite.setSelected(new Set())}
+            busy={suite.busy}
+            maxSelection={32}
+            selectAllMatching={{
+              total: filtered.length,
+              pageFullySelected:
+                pageIds.length > 0 &&
+                pageIds.every((id) => suite.selected.has(id)),
+              active:
+                filtered.length > 0 &&
+                filtered.length === suite.selected.size &&
+                filtered.every((row) => suite.selected.has(row.id)),
+              onSelectAll: () =>
+                suite.setSelected(new Set(filtered.map((row) => row.id))),
+            }}
+          >
+            {!suite.github && suite.canWrite && (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={!canDelete}
+                onClick={() => setDeleteIds(Array.from(suite.selected))}
+              >
+                <Trash2 />
+                <span>Delete</span>
+              </Button>
+            )}
+          </BulkActions>
+          <DataTable
+            columns={columns}
+            data={filtered}
+            getRowId={(row) => row.id}
+            onRowClick={(row, event) =>
+              openRowOnPlainClick(event, () =>
+                router.push(validationFileHref(row.file.path)),
+              )
+            }
+            rowSelection={rowSelection}
+            onRowSelectionChange={(next) =>
+              suite.setSelected(
+                new Set(Object.keys(next).filter((id) => next[id])),
+              )
+            }
+            onPageRowIdsChange={setPageIds}
+            hideSelectedCount
+            tableClassName="min-w-[560px]"
+            pagination={{ pageIndex, pageSize, total: filtered.length }}
+            onPaginationChange={(next) =>
+              updateQuery({
+                page: String(next.pageIndex + 1),
+                pageSize: String(next.pageSize),
+              })
+            }
+            hasActiveFilters={hasFilters}
+            onClearFilters={clearFilters}
+            filteredEmptyMessage="No matching validation files."
+            emptyMessage="No validation files yet."
+            emptyDescription="Ask the agent to write one for a case you want to protect."
+          />
+        </BulkActionsScope>
+      </DeleteRequestContext.Provider>
       <DeleteConfirmDialog
         open={deleteIds.length > 0}
         onOpenChange={(open) => {
@@ -392,6 +297,126 @@ export default function ValidationPage() {
         }}
       />
     </div>
+  );
+}
+
+/** Opens the delete confirmation for the given validation files. */
+const DeleteRequestContext = createContext<(ids: string[]) => void>(
+  () => undefined,
+);
+
+type ValidationCellProps = CellContext<ValidationRow, unknown>;
+
+function canDeleteValidations(suite: ReturnType<typeof useValidation>) {
+  return (
+    !suite.github &&
+    suite.canWrite &&
+    !suite.busy &&
+    !suite.sourceChanged &&
+    !suite.loadError &&
+    !suite.collection.error
+  );
+}
+
+function NameCell({ row }: ValidationCellProps) {
+  const { file, name, error } = row.original;
+  return (
+    <div className="max-w-md">
+      <RowClickShield>
+        <Link
+          className="block truncate font-medium"
+          href={validationFileHref(file.path)}
+          title={file.path}
+        >
+          {name}
+        </Link>
+      </RowClickShield>
+      {error && (
+        <span
+          className="block truncate text-xs text-muted-foreground"
+          title={error}
+        >
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function StatusColumnCell({ row }: ValidationCellProps) {
+  const suite = useValidation();
+  if (suite.runningPath === row.original.file.path)
+    return (
+      <ValidationStatusBadge status="running">
+        <Loader2 className="animate-spin" />
+        <span>Running</span>
+      </ValidationStatusBadge>
+    );
+  if (row.original.status) return <StatusCell row={row.original} />;
+  return <span className="text-muted-foreground">—</span>;
+}
+
+function LastRunCell({ row }: ValidationCellProps) {
+  return (
+    <span className="whitespace-nowrap text-sm text-muted-foreground">
+      {row.original.lastRunAt
+        ? formatDate({ date: row.original.lastRunAt })
+        : "—"}
+    </span>
+  );
+}
+
+function ActionsCell({ row }: ValidationCellProps) {
+  const suite = useValidation();
+  const requestDelete = useContext(DeleteRequestContext);
+  const { file, id } = row.original;
+  return (
+    <RowClickShield>
+      <TableRowActions
+        itemName={file.path}
+        actions={[
+          {
+            icon:
+              suite.runningPath === file.path ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Play />
+              ),
+            label: "Run",
+            tooltip: "Run this validation and record the result",
+            permissions: { openappaPolicy: ["update"] },
+            disabled: !suite.runnable,
+            disabledTooltip: suite.busy
+              ? "Wait for the current run to finish"
+              : "Refresh the page before running",
+            onClick: () => suite.runFile(file.path),
+          },
+          {
+            icon: suite.canWrite ? <Pencil /> : <Eye />,
+            label: suite.canWrite ? "Edit" : "View",
+            href: validationFileHref(file.path),
+          },
+        ]}
+        dropdownActions={[
+          {
+            icon: <Download />,
+            label: "Export",
+            onClick: () => exportValidationFile(file),
+          },
+          ...(!suite.github && suite.canWrite
+            ? [
+                {
+                  icon: <Trash2 />,
+                  label: "Delete",
+                  variant: "destructive" as const,
+                  disabled: !canDeleteValidations(suite),
+                  onClick: () => requestDelete([id]),
+                },
+              ]
+            : []),
+        ]}
+      />
+    </RowClickShield>
   );
 }
 

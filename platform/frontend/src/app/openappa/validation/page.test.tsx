@@ -1470,6 +1470,45 @@ test("last-run summary adds up the per-file statuses, so a refused policy passes
   );
 });
 
+test("an open status explanation stays open when run history refreshes", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const failed = {
+    ...run,
+    files: [
+      {
+        ...run.files[0],
+        status: "failed",
+        error: "Expected deny, received allow",
+      },
+    ],
+  };
+  let history: unknown[] = [failed];
+  server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json(history)));
+  showPage(client);
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Failed: show why" }),
+  );
+  const why = await screen.findByRole("dialog");
+  expect(why).toHaveTextContent("Expected deny, received allow");
+  // An unrelated older run arrives; this file's result is unchanged.
+  history = [
+    failed,
+    { ...run, id: "older", createdAt: "2026-10-01T10:00:00Z" },
+  ];
+  await act(() =>
+    client.invalidateQueries({ queryKey: ["openappa-policy-test-runs"] }),
+  );
+  await waitFor(() =>
+    expect(
+      client.getQueryData<unknown[]>(["openappa-policy-test-runs"]),
+    ).toHaveLength(2),
+  );
+  expect(screen.getByRole("dialog")).toBe(why);
+  expect(why).toBeVisible();
+});
+
 test.each([
   "/openappa/validation",
   "/openappa/validation/history",

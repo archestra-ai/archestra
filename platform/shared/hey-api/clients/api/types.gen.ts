@@ -14540,6 +14540,7 @@ export type GetAgentCatalogResponses = {
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
+                lastUsedAt?: string | null;
                 createdByServiceAccountId: string | null;
                 createdAt: string;
                 updatedAt: string;
@@ -14589,7 +14590,6 @@ export type GetAgentCatalogResponses = {
                 llmProviderRequiresPerUserCredential?: boolean;
                 sandboxAvailable?: boolean;
                 activationSkillsCount?: number;
-                lastUsedAt?: string | null;
                 pinnedAt: string | null;
                 /**
                  * Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.
@@ -14919,6 +14919,7 @@ export type GetAgentsResponses = {
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
+            lastUsedAt?: string | null;
             createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
@@ -14968,7 +14969,6 @@ export type GetAgentsResponses = {
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
-            lastUsedAt?: string | null;
             pinnedAt: string | null;
             /**
              * Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.
@@ -15330,6 +15330,7 @@ export type CreateAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -15379,7 +15380,6 @@ export type CreateAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -16587,6 +16587,7 @@ export type GetDefaultMcpGatewayResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -16636,7 +16637,6 @@ export type GetDefaultMcpGatewayResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -16877,6 +16877,7 @@ export type ImportAgentResponses = {
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
+            lastUsedAt?: string | null;
             createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
@@ -16926,7 +16927,6 @@ export type ImportAgentResponses = {
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
-            lastUsedAt?: string | null;
         };
         warnings: Array<{
             type: 'tool' | 'knowledgeBase' | 'connector' | 'delegation';
@@ -17184,6 +17184,7 @@ export type GetAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -17233,7 +17234,6 @@ export type GetAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -17479,6 +17479,7 @@ export type UpdateAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -17528,7 +17529,6 @@ export type UpdateAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -18052,6 +18052,7 @@ export type RestoreAgentVersionResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18101,7 +18102,6 @@ export type RestoreAgentVersionResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -18288,6 +18288,7 @@ export type CloneAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18337,7 +18338,6 @@ export type CloneAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -20763,6 +20763,7 @@ export type RestoreAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -20812,7 +20813,6 @@ export type RestoreAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -23586,6 +23586,10 @@ export type GetAllAgentToolsData = {
         limit?: number;
         offset?: number;
         skipPagination?: boolean;
+        /**
+         * Include each tool's description and parameter schema (default true). False returns null and {} for lightweight lists.
+         */
+        includeToolDetails?: boolean;
     };
     url: '/api/agent-tools';
 };
@@ -35287,6 +35291,10 @@ export type GetChatConversationsData = {
     path?: never;
     query?: {
         search?: string;
+        /**
+         * Include each chat's artifact and todo list (default true). False returns them as null for lightweight lists.
+         */
+        includeArtifacts?: boolean;
     };
     url: '/api/chat/conversations';
 };
@@ -68535,6 +68543,14 @@ export type GetKnowledgeBasesData = {
          * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
          */
         owner?: Array<string>;
+        /**
+         * Only these knowledge bases (comma-separated IDs, at most 250), such as the ones an agent uses. All of them come back in one page; `limit` and `offset` do not apply.
+         */
+        ids?: Array<string>;
+        /**
+         * Attach each row's assigned agents (default true). False returns an empty `assignedAgents` array, meaning 'not requested'; `assignedAgentCount` is returned either way.
+         */
+        includeAssignedAgents?: boolean;
     };
     url: '/api/knowledge-bases';
 };
@@ -68647,6 +68663,7 @@ export type GetKnowledgeBasesResponses = {
                 name: string;
                 agentType: string;
             }>;
+            assignedAgentCount: number;
         }>;
         pagination: {
             currentPage: number;
@@ -69506,6 +69523,14 @@ export type GetConnectorsData = {
          * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
          */
         owner?: Array<string>;
+        /**
+         * Only these connectors (comma-separated IDs, at most 250), such as the ones a page shows or an agent uses. All of them come back in one page; `limit` and `offset` do not apply.
+         */
+        ids?: Array<string>;
+        /**
+         * Attach each row's assigned agents (default true). False returns an empty `assignedAgents` array, meaning 'not requested'; `assignedAgentCount` is returned either way.
+         */
+        includeAssignedAgents?: boolean;
     };
     url: '/api/connectors';
 };
@@ -69801,6 +69826,7 @@ export type GetConnectorsResponses = {
                 name: string;
                 agentType: string;
             }>;
+            assignedAgentCount: number;
             totalDocsIngested: number;
         }>;
         pagination: {
@@ -76353,6 +76379,18 @@ export type GetModelsWithApiKeysData = {
          * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
+        /**
+         * Only models linked to one of these provider keys.
+         */
+        apiKeyIds?: Array<string>;
+        /**
+         * Only embedding models (models with known dimensions).
+         */
+        embedding?: boolean;
+        /**
+         * Include each model's teams, users and labels (default true). False returns them empty, for pickers that show only the models.
+         */
+        includeAssignments?: boolean;
     };
     url: '/api/llm-models';
 };
@@ -76511,6 +76549,186 @@ export type GetModelsWithApiKeysResponses = {
 };
 
 export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
+
+export type GetLlmModelIdsByKeyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-models/key-model-ids';
+};
+
+export type GetLlmModelIdsByKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmModelIdsByKeyError = GetLlmModelIdsByKeyErrors[keyof GetLlmModelIdsByKeyErrors];
+
+export type GetLlmModelIdsByKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        apiKeyId: string;
+        modelIds: Array<string>;
+    }>;
+};
+
+export type GetLlmModelIdsByKeyResponse = GetLlmModelIdsByKeyResponses[keyof GetLlmModelIdsByKeyResponses];
+
+export type GetLlmModelOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-models/options';
+};
+
+export type GetLlmModelOptionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmModelOptionsError = GetLlmModelOptionsErrors[keyof GetLlmModelOptionsErrors];
+
+export type GetLlmModelOptionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        modelId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+        description: string | null;
+        pricePerMillionInput: string | null;
+        pricePerMillionOutput: string | null;
+        isFree: boolean;
+        isBest: boolean;
+    }>;
+};
+
+export type GetLlmModelOptionsResponse = GetLlmModelOptionsResponses[keyof GetLlmModelOptionsResponses];
 
 export type BulkUpdateModelsData = {
     body: {
@@ -85927,6 +86145,10 @@ export type GetOauthClientsData = {
         capability?: 'mcp' | 'a2a' | 'llm:proxy';
         providerApiKeyId?: string;
         grantType?: 'client_credentials' | 'authorization_code';
+        /**
+         * Only clients that can reach this agent or MCP gateway: authorization-code clients, and client-credentials clients that list it, with the target's protocol (MCP for a gateway, A2A for an agent).
+         */
+        applicableTo?: string;
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */

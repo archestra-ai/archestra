@@ -65,6 +65,7 @@ export function ChooseToolsView({
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
+    includeToolDetails: false,
     enabled: !!agentId,
   });
   const { catalogName: builtInCatalogName } = useArchestraMcpIdentity();

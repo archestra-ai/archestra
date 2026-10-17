@@ -20,7 +20,7 @@ vi.mock("@/lib/integration-overrides", () => ({
 }));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/llm-models.query", () => ({
-  useModelsWithApiKeys: () => ({ data: [], isPending: false }),
+  useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/components/agent-selector", () => ({
   AgentSelector: ({ agents }: { agents: { id: string; name: string }[] }) => (

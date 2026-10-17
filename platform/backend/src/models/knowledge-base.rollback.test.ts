@@ -494,6 +494,40 @@ describe("KnowledgeBaseModel", () => {
       });
     });
 
+    test("counts the assigned agents by the same rule whether or not it lists them", async ({
+      makeAgent,
+      makeKnowledgeBase,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const live = await makeAgent({ organizationId: org.id });
+      const removed = await makeAgent({ organizationId: org.id });
+      const elsewhere = await makeAgent({ organizationId: otherOrg.id });
+      for (const agent of [live, removed, elsewhere]) {
+        await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+      }
+      await AgentModel.delete(removed.id);
+      const read = (includeAssignedAgents: boolean) =>
+        KnowledgeBaseModel.findListEnrichment({
+          knowledgeBaseIds: [kb.id],
+          organizationId: org.id,
+          canReadAll: true,
+          includeAssignedAgents,
+        });
+
+      const listed = (await read(true)).byId.get(kb.id);
+      const counted = (await read(false)).byId.get(kb.id);
+
+      expect(listed?.assignedAgents.map((agent) => agent.id)).toEqual([
+        live.id,
+      ]);
+      expect(listed?.assignedAgentCount).toBe(1);
+      expect(counted?.assignedAgents).toEqual([]);
+      expect(counted?.assignedAgentCount).toBe(1);
+    });
+
     test("reads only the creator for the trash view", async ({
       makeOrganization,
       makeAgent,
@@ -522,6 +556,7 @@ describe("KnowledgeBaseModel", () => {
         connectors: [],
         totalDocsIndexed: 0,
         assignedAgents: [],
+        assignedAgentCount: 0,
         labels: [],
       });
       expect(firstCounts.size).toBe(0);

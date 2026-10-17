@@ -426,23 +426,10 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    const accessibleKeys = (
-      await Promise.all(
-        apiKeys.map(async (key) => {
-          if (key.userId === userId) return key;
-          const apiKey =
-            key.secretId && (key.secretIsVault || key.secretIsByosVault)
-              ? await getSecretValueForLlmProviderApiKey(key.secretId)
-              : decryptApiKeyValue(key.secret);
-          return credentialRequiresPerUserScope({
-            provider: key.provider,
-            apiKey,
-          })
-            ? null
-            : key;
-        }),
-      )
-    ).filter((key) => key !== null);
+    const accessibleKeys = await withoutOthersPerUserCredentials(
+      apiKeys,
+      userId,
+    );
     const [labelsByKey, displayScopes] = await Promise.all([
       LlmProviderApiKeyLabelModel.getLabelsForMany(
         accessibleKeys.map((key) => key.id),
@@ -465,6 +452,44 @@ class LlmProviderApiKeyModel {
         })),
       ),
       (key) => key.createdBy,
+    );
+  }
+
+  /**
+   * Ids of the keys {@link getVisibleKeys} returns, without loading what a
+   * key list displays (labels, owners, scopes).
+   */
+  static async getVisibleKeyIds(
+    organizationId: string,
+    userId: string,
+  ): Promise<string[]> {
+    const keys = await db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        provider: schema.llmProviderApiKeysTable.provider,
+        userId: schema.llmProviderApiKeysTable.userId,
+        secretId: schema.llmProviderApiKeysTable.secretId,
+        secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          await LlmProviderApiKeyModel.accessCondition({
+            organizationId,
+            userId,
+            action: "read",
+          }),
+        ),
+      );
+    return (await withoutOthersPerUserCredentials(keys, userId)).map(
+      (key) => key.id,
     );
   }
   // SPDX-SnippetEnd
@@ -562,23 +587,10 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    const accessibleKeys = (
-      await Promise.all(
-        apiKeys.map(async (key) => {
-          if (key.userId === userId) return key;
-          const apiKey =
-            key.secretId && (key.secretIsVault || key.secretIsByosVault)
-              ? await getSecretValueForLlmProviderApiKey(key.secretId)
-              : decryptApiKeyValue(key.secret);
-          return credentialRequiresPerUserScope({
-            provider: key.provider,
-            apiKey,
-          })
-            ? null
-            : key;
-        }),
-      )
-    ).filter((key) => key !== null);
+    const accessibleKeys = await withoutOthersPerUserCredentials(
+      apiKeys,
+      userId,
+    );
     const [labelsByKey, displayScopes] = await Promise.all([
       LlmProviderApiKeyLabelModel.getLabelsForMany(
         accessibleKeys.map((key) => key.id),
@@ -1507,6 +1519,40 @@ async function subscriptionKindFromStoredSecret(params: {
     }
   }
   return subscriptionKindFromCredential(apiKeyValue);
+}
+
+/**
+ * Drop other people's keys whose credential works for one person only (a
+ * per-user provider, or a subscription credential): those are never shown to
+ * anyone but their owner.
+ */
+async function withoutOthersPerUserCredentials<
+  T extends {
+    userId: string | null;
+    provider: SupportedProvider;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    secretIsByosVault: boolean | null;
+  },
+>(keys: T[], userId: string): Promise<T[]> {
+  return (
+    await Promise.all(
+      keys.map(async (key) => {
+        if (key.userId === userId) return key;
+        const apiKey =
+          key.secretId && (key.secretIsVault || key.secretIsByosVault)
+            ? await getSecretValueForLlmProviderApiKey(key.secretId)
+            : decryptApiKeyValue(key.secret);
+        return credentialRequiresPerUserScope({
+          provider: key.provider,
+          apiKey,
+        })
+          ? null
+          : key;
+      }),
+    )
+  ).filter((key) => key !== null);
 }
 
 /**

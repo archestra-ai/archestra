@@ -1,5 +1,5 @@
 {
-  "id": "c449effc-cb71-4c7f-923b-58ccb016e75d",
+  "id": "68391026-7b07-4d07-973d-faa870e0d8a3",
   "prevId": "cf9ca4a0-39ce-458f-89ea-717b4dbb7e93",
   "version": "7",
   "dialect": "postgresql",
@@ -4595,6 +4595,12 @@
           "notNull": true,
           "default": 0
         },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_by_service_account_id": {
           "name": "created_by_service_account_id",
           "type": "uuid",
@@ -6469,58 +6475,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "audit_logs_org_resource_latest_idx": {
-          "name": "audit_logs_org_resource_latest_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "resource_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "resource_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "event_sequence",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "resource_name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "actor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"audit_logs\".\"resource_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

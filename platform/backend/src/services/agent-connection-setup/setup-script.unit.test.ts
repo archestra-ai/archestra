@@ -184,7 +184,8 @@ const SKILLS = {
 
 const AUTHENTICATED_SKILLS = {
   ...SKILLS,
-  cloneUrl: "http://token@stack2.localhost9002/skills/marketplace.git",
+  cloneUrl:
+    "http://token:archestra_mkt_test@stack2.localhost9002/skills/marketplace.git",
 };
 
 function fullContext(
@@ -626,7 +627,9 @@ async function runClaudeMarketplaceRegistration(params?: {
                 url: "http://stack2.localhost9002/skills/marketplace.git",
                 headers: {
                   Authorization: `Basic ${Buffer.from(
-                    `${initialSource === "changed" ? "old-token" : "token"}:`,
+                    initialSource === "changed"
+                      ? "archestra_mkt_old:"
+                      : "token:archestra_mkt_test",
                   ).toString("base64")}`,
                 },
               },
@@ -1313,7 +1316,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
             source: "git",
             url: "http://stack2.localhost9002/skills/marketplace.git",
             headers: {
-              Authorization: "Basic dG9rZW46",
+              Authorization: `Basic ${Buffer.from("token:archestra_mkt_test").toString("base64")}`,
             },
           },
         },
@@ -1376,7 +1379,9 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
         },
         [AUTHENTICATED_SKILLS.marketplaceName]: {
           source: {
-            headers: { Authorization: "Basic dG9rZW46" },
+            headers: {
+              Authorization: `Basic ${Buffer.from("token:archestra_mkt_test").toString("base64")}`,
+            },
           },
         },
       },

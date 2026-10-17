@@ -89,7 +89,7 @@ vi.mock("@/lib/virtual-api-keys.query", () => ({
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
-  useModelsWithApiKeys: () => ({
+  useLlmModelOptions: () => ({
     data: [
       {
         modelId: "gpt-4o",

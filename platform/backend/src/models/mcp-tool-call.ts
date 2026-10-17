@@ -42,6 +42,7 @@ import { resolveLogContentMode, withholdToolCallContent } from "@/log-content";
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
+import AgentUsageModel from "./agent-usage";
 import {
   interactionBelongsToOrganization,
   mcpToolCallBelongsToOrganization,
@@ -115,6 +116,10 @@ class McpToolCallModel {
         ...toolCallOutcomeColumns(data, audit !== null),
       })
       .returning();
+    AgentUsageModel.recordUseInBackground({
+      agentId: mcpToolCall.agentId,
+      usedAt: mcpToolCall.createdAt,
+    });
 
     // Decrypting on a write path is only safe because the key came from this
     // caller. A read path that might meet a row keyed to a conversation it

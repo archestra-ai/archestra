@@ -101,7 +101,10 @@ export function RequestContent({
             {latest ? <span className="shrink-0">· latest</span> : null}
           </span>
         </PaneHeader>
-        <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+        {/* Phones stack the pane at its natural height, and one captured
+          prompt can run to thousands of lines: cap it near a screenful so
+          the page stays scannable. */}
+        <div className="max-lg:max-h-[70svh] max-lg:overflow-y-auto max-lg:overscroll-contain lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           {query.isError && !record ? (
             <QueryLoadError
               title="Couldn't load this request"

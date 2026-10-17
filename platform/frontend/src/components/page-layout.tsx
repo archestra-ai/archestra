@@ -307,7 +307,11 @@ export function PageLayout({
                       ? stackHeaderOnMobile
                         ? "sm:flex-nowrap sm:overflow-hidden"
                         : "flex-nowrap overflow-hidden"
-                      : "flex-wrap",
+                      : // A long detail title wraps inside itself; wrapping
+                        // the row would drop it below the back link.
+                        stackHeaderOnMobile
+                        ? "flex-nowrap"
+                        : "flex-wrap",
                   )}
                 >
                   {/* Without an icon the back link leads the title itself;

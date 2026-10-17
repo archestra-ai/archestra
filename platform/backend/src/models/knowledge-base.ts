@@ -498,6 +498,8 @@ class KnowledgeBaseModel {
     viewerUserId?: string;
     viewerPrincipal?: GrantPrincipal;
     identityOnly?: boolean;
+    /** False lists no agents and counts them instead. Defaults to true. */
+    includeAssignedAgents?: boolean;
   }): Promise<{
     byId: Map<string, KnowledgeBaseListEnrichment>;
     firstCounts: Map<string, number>;
@@ -525,6 +527,12 @@ class KnowledgeBaseModel {
         ),
       );
     const empty = sql`'[]'::json`;
+    // The live agents of the organization assigned to the outer row.
+    const assignedLiveAgents = sql`agent_knowledge_base akb
+      INNER JOIN agents ag ON ag.id = akb.agent_id
+      WHERE akb.knowledge_base_id = ${kbId}
+        AND ag.organization_id = ${params.organizationId}
+        AND ag.deleted_at IS NULL`;
 
     const rows = await db
       .select({
@@ -558,17 +566,22 @@ class KnowledgeBaseModel {
                 LEFT JOIN kb_connector_document_counts dc
                   ON dc.connector_id = a.connector_id
               WHERE a.knowledge_base_id = ${kbId})`,
-        assignedAgents: params.identityOnly
-          ? sql<KnowledgeBaseListEnrichment["assignedAgents"]>`${empty}`
-          : sql<KnowledgeBaseListEnrichment["assignedAgents"]>`(
+        assignedAgents:
+          params.identityOnly || params.includeAssignedAgents === false
+            ? sql<KnowledgeBaseListEnrichment["assignedAgents"]>`${empty}`
+            : sql<KnowledgeBaseListEnrichment["assignedAgents"]>`(
               SELECT coalesce(json_agg(json_build_object(
                 'id', ag.id, 'name', ag.name, 'agentType', ag.agent_type
               ) ORDER BY akb.created_at, akb.agent_id), '[]'::json)
-              FROM agent_knowledge_base akb
-                INNER JOIN agents ag ON ag.id = akb.agent_id
-              WHERE akb.knowledge_base_id = ${kbId}
-                AND ag.organization_id = ${params.organizationId}
-                AND ag.deleted_at IS NULL)`,
+              FROM ${assignedLiveAgents})`,
+        // Counted in SQL only when the agents are not listed; otherwise the
+        // count is the listed agents', by the same rule.
+        assignedAgentCount:
+          params.identityOnly || params.includeAssignedAgents !== false
+            ? sql<number | null>`NULL::int`
+            : sql<
+                number | null
+              >`(SELECT count(*)::int FROM ${assignedLiveAgents})`,
         labels: params.identityOnly
           ? sql<LabelWithDetails[]>`${empty}`
           : sql<LabelWithDetails[]>`(
@@ -601,6 +614,7 @@ class KnowledgeBaseModel {
         connectors: row.connectors,
         totalDocsIndexed,
         assignedAgents: row.assignedAgents,
+        assignedAgentCount: row.assignedAgentCount ?? row.assignedAgents.length,
         labels: row.labels,
       });
     }
@@ -699,6 +713,7 @@ type KnowledgeBaseListEnrichment = {
   connectors: { id: string; name: string; connectorType: ConnectorType }[];
   totalDocsIndexed: number;
   assignedAgents: { id: string; name: string; agentType: string }[];
+  assignedAgentCount: number;
   labels: LabelWithDetails[];
 };
 

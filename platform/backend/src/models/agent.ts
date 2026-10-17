@@ -2138,47 +2138,6 @@ class AgentModel {
             sql`COALESCE(${knowledgeSourcesCountSubquery.knowledgeSourcesCount}, 0)`,
           ),
         );
-    } else if (sorting?.sortBy === "lastUsedAt") {
-      const lastUsedAtSubquery = db
-        .select({
-          agentId: schema.mcpToolCallsTable.agentId,
-          lastUsedAt: max(schema.mcpToolCallsTable.createdAt).as("lastUsedAt"),
-        })
-        .from(schema.mcpToolCallsTable)
-        .groupBy(schema.mcpToolCallsTable.agentId)
-        .as("lastUsedAts");
-
-      /**
-       * The LLM-call half of "last used", correlated rather than aggregated:
-       * an unfiltered `GROUP BY profile_id` here would aggregate the whole of
-       * `interactions` — the platform's largest table — on every sorted list
-       * request. Correlating it instead costs one backward scan of
-       * `(profile_id, created_at DESC)` per candidate agent, and agents number
-       * in the hundreds.
-       */
-      const lastInteractionAt = sql`(
-        SELECT max(${schema.interactionsTable.createdAt})
-        FROM ${schema.interactionsTable}
-        WHERE ${schema.interactionsTable.profileId} = ${schema.agentsTable.id}
-      )`;
-
-      query = query
-        .leftJoin(
-          lastUsedAtSubquery,
-          eq(schema.agentsTable.id, lastUsedAtSubquery.agentId),
-        )
-        .orderBy(
-          ...pinnedAgentOrderClauses,
-          ...personalAgentPriorityOrderClauses,
-          // Ordered by the same value the row displays: the later of the two
-          // signals. Never-used agents sort as oldest (asc first / desc last).
-          direction(
-            sql`GREATEST(
-              COALESCE(${lastUsedAtSubquery.lastUsedAt}, '-infinity'::timestamp),
-              COALESCE(${lastInteractionAt}, '-infinity'::timestamp)
-            )`,
-          ),
-        );
     } else if (sorting?.sortBy === "team") {
       query = query.orderBy(
         ...pinnedAgentOrderClauses,
@@ -2238,23 +2197,21 @@ class AgentModel {
 
     // Step 2: everything the list shows for these agents, in two statements
     // run together: findListEnrichment for the rows and their light aspects,
-    // findListToolsAndLastCall for the tools and the last MCP call.
+    // findListTools for the tools.
     const includeTools = filters?.includeTools !== false;
-    const [enriched, heavy] = await Promise.all([
+    const [enriched, toolsByAgent] = await Promise.all([
       AgentModel.findListEnrichment({
         agentIds: sortedAgentIds,
         includeTools,
         userId,
       }),
-      AgentModel.findListToolsAndLastCall({
+      AgentModel.findListTools({
         agentIds: sortedAgentIds,
         includeTools,
       }),
     ]);
     for (const entry of enriched) {
-      const aspects = heavy.get(entry.row.id);
-      entry.tools = aspects?.tools ?? [];
-      entry.lastCallAtMs = aspects?.lastCallAtMs ?? null;
+      entry.tools = toolsByAgent.get(entry.row.id) ?? [];
       entry.toolCounts ??= countListTools(entry.tools);
     }
 
@@ -2276,12 +2233,6 @@ class AgentModel {
         entry.teams.map((team) => [team.id, team.name]),
       );
       const userById = new Map(entry.users.map((user) => [user.id, user]));
-      const lastCallAt =
-        entry.lastCallAtMs === null ? null : new Date(entry.lastCallAtMs);
-      const lastInteractionAt =
-        entry.lastInteractionAtMs === null
-          ? null
-          : new Date(entry.lastInteractionAtMs);
       const provider: SupportedProvider | null =
         entry.llmKey?.provider ?? entry.model?.provider ?? null;
       return {
@@ -2312,7 +2263,6 @@ class AgentModel {
         resolvedLlmModelName: entry.row.modelId
           ? (entry.model?.modelName ?? null)
           : null,
-        lastUsedAt: mostRecent(lastCallAt, lastInteractionAt),
       } as Agent;
     });
     await AgentModel.populateGrantedScope(agents, policies);
@@ -2584,11 +2534,17 @@ class AgentModel {
         return withTieBreak(direction(schema.agentsTable.name));
       case "createdAt":
         return withTieBreak(direction(schema.agentsTable.createdAt));
+      case "lastUsedAt":
+        // Never-used agents sort as oldest (asc first / desc last).
+        return withTieBreak(
+          direction(
+            sql`COALESCE(${schema.agentsTable.lastUsedAt}, '-infinity'::timestamp)`,
+          ),
+        );
       case "toolsCount":
       case "subagentsCount":
       case "knowledgeSourcesCount":
       case "team":
-      case "lastUsedAt":
         // These sort keys use a separate query path with a dedicated subquery join.
         // This fallback should never be reached for them.
         return direction(schema.agentsTable.createdAt); // Fallback
@@ -2643,58 +2599,38 @@ class AgentModel {
   }
 
   /**
-   * The page's two heaviest aspects, read set-based in a statement of their
-   * own so they run beside findListEnrichment instead of after it: each
-   * agent's tools (when the list shows them) and its last MCP call.
+   * The page's heaviest aspect, each agent's tools, read set-based in a
+   * statement of its own so it runs beside findListEnrichment instead of
+   * after it. No statement when the list does not show tools.
    */
-  private static async findListToolsAndLastCall(params: {
+  private static async findListTools(params: {
     agentIds: string[];
     includeTools: boolean;
-  }): Promise<Map<string, { tools: ToolRef[]; lastCallAtMs: number | null }>> {
-    if (params.agentIds.length === 0) return new Map();
-    const ids = sql`ARRAY[${sql.join(
-      params.agentIds.map((id) => sql`${id}`),
-      sql`, `,
-    )}]::uuid[]`;
-    const tools = params.includeTools
-      ? sql`SELECT at.agent_id, json_agg(json_build_object(
-            'id', t.id, 'agentId', t.agent_id, 'catalogId', t.catalog_id,
-            'delegateToAgentId', t.delegate_to_agent_id,
-            'delegateToA2aConnectionId', t.delegate_to_a2a_connection_id,
-            'name', t.name, 'rawName', t.raw_name, 'description', t.description
-          )) AS tools
-          FROM agent_tools at INNER JOIN tools t ON t.id = at.tool_id
-          WHERE at.agent_id = ANY(${ids})
-          GROUP BY at.agent_id`
-      : sql`SELECT NULL::uuid AS agent_id, NULL::json AS tools WHERE false`;
-    const result = await db.execute<{
-      agent_id: string;
-      tools: ToolRef[] | null;
-      last_call_at_ms: number | null;
-    }>(sql`
-      SELECT coalesce(tl.agent_id, lc.agent_id) AS agent_id, tl.tools,
-        floor(extract(epoch from lc.last_call_at) * 1000)::float8 AS last_call_at_ms
-      FROM (${tools}) tl
-      FULL JOIN (
-        SELECT mtc.agent_id, max(mtc.created_at) AS last_call_at
-        FROM mcp_tool_calls mtc
-        WHERE mtc.agent_id = ANY(${ids})
-        GROUP BY mtc.agent_id
-      ) lc ON lc.agent_id = tl.agent_id`);
-    return new Map(
-      result.rows.map((row) => [
-        row.agent_id,
-        { tools: row.tools ?? [], lastCallAtMs: row.last_call_at_ms },
-      ]),
-    );
+  }): Promise<Map<string, ToolRef[]>> {
+    if (params.agentIds.length === 0 || !params.includeTools) return new Map();
+    const result = await db.execute<{ agent_id: string; tools: ToolRef[] }>(sql`
+      SELECT at.agent_id, json_agg(json_build_object(
+        'id', t.id, 'agentId', t.agent_id, 'catalogId', t.catalog_id,
+        'delegateToAgentId', t.delegate_to_agent_id,
+        'delegateToA2aConnectionId', t.delegate_to_a2a_connection_id,
+        'name', t.name, 'rawName', t.raw_name, 'description', t.description
+      )) AS tools
+      FROM agent_tools at INNER JOIN tools t ON t.id = at.tool_id
+      WHERE at.agent_id = ANY(ARRAY[${sql.join(
+        params.agentIds.map((id) => sql`${id}`),
+        sql`, `,
+      )}]::uuid[])
+      GROUP BY at.agent_id`);
+    return new Map(result.rows.map((row) => [row.agent_id, row.tools]));
   }
 
   /**
-   * One statement for everything an agent list row shows besides its order:
-   * the agent rows plus one correlated subselect per aspect (tool refs, the
-   * agent's own policy and the names it grants to, labels, knowledge bases,
-   * connectors, suggested prompts, the caller's pin, last use, creator and
-   * resolved model). Timestamps come back as epoch milliseconds.
+   * One statement for everything an agent list row shows besides its order
+   * and its tools: the agent rows (last use included, from the stored column)
+   * plus one correlated subselect per aspect (the agent's own policy and the
+   * names it grants to, labels, knowledge bases, connectors, suggested
+   * prompts, the caller's pin, creator, resolved model, and tool counts for a
+   * list without tools). Timestamps come back as epoch milliseconds.
    */
   private static async findListEnrichment(params: {
     agentIds: string[];
@@ -2775,10 +2711,6 @@ class AgentModel {
               SELECT ${epochMs(sql`ap.pinned_at`)} FROM agent_pins ap
               WHERE ap.user_id = ${params.userId} AND ap.agent_id = ${agentId})`
           : sql<number | null>`NULL::float8`,
-        lastInteractionAtMs: sql<number | null>`(
-          SELECT ${epochMs(sql`i.created_at`)} FROM interactions i
-          WHERE i.profile_id = ${agentId}
-          ORDER BY i.created_at DESC NULLS LAST LIMIT 1)`,
         creatorUser: sql<{ id: string; name: string; email: string } | null>`(
           SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
           FROM "user" u WHERE u.id = ${qualified(schema.agentsTable.authorId)})`,
@@ -2814,9 +2746,8 @@ class AgentModel {
       ({ creatorUser, creatorServiceAccount, access, ...entry }) => ({
         ...entry,
         ...access,
-        // Filled in by the caller from findListToolsAndLastCall.
+        // Filled in by the caller from findListTools.
         tools: [],
-        lastCallAtMs: null,
         // A service account that created the agent wins, as in CreatedByModel.id.
         creator: entry.row.createdByServiceAccountId
           ? creatorServiceAccount
@@ -5856,16 +5787,6 @@ const agentToolRefColumns = {
   description: schema.toolsTable.description,
 };
 
-/**
- * The later of two nullable timestamps, or null when both are absent. Used to
- * fold the two halves of "last used" into the single moment a row reports.
- */
-function mostRecent(a: Date | null, b: Date | null): Date | null {
-  if (!a) return b;
-  if (!b) return a;
-  return a > b ? a : b;
-}
-
 export default AgentModel;
 
 // The chat roster appears before the picker opens. Emoji and short URL icons
@@ -6300,21 +6221,8 @@ function catalogSortValue(sortBy: string | undefined): {
         external: sql`-1::bigint`,
       };
     case "lastUsedAt":
-      // The later of the two signals, as the row displays it; correlated per
-      // agent for the reason given in `findAllPaginated`'s lastUsedAt sort.
       return {
-        regular: sql`GREATEST(
-          COALESCE((
-            SELECT max(${qualified(schema.mcpToolCallsTable.createdAt)})
-            FROM ${schema.mcpToolCallsTable}
-            WHERE ${qualified(schema.mcpToolCallsTable.agentId)} = ${qualified(schema.agentsTable.id)}
-          ), '-infinity'::timestamp),
-          COALESCE((
-            SELECT max(${qualified(schema.interactionsTable.createdAt)})
-            FROM ${schema.interactionsTable}
-            WHERE ${qualified(schema.interactionsTable.profileId)} = ${qualified(schema.agentsTable.id)}
-          ), '-infinity'::timestamp)
-        )`,
+        regular: sql`COALESCE(${qualified(schema.agentsTable.lastUsedAt)}, '-infinity'::timestamp)`,
         external: sql`'-infinity'::timestamp`,
       };
     default:
@@ -6442,8 +6350,6 @@ type ListEnrichment = {
   connectorIds: string[];
   suggestedPrompts: SuggestedPromptInput[];
   pinnedAtMs: number | null;
-  lastCallAtMs: number | null;
-  lastInteractionAtMs: number | null;
   creator: CreatedBy | null;
   llmKey: { name: string; provider: SupportedProvider } | null;
   model: { provider: SupportedProvider; modelName: string } | null;

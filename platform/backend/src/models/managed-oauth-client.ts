@@ -84,6 +84,8 @@ class ManagedOauthClientModel {
     capabilities?: OAuthClientScope[];
     providerApiKeyId?: string;
     grantType?: LlmOauthClientGrantType;
+    /** Only clients that can reach this agent or MCP gateway. */
+    applicableTo?: string;
     labels?: Record<string, string[]>;
     viewer?: { userId: string };
     /** The list's `access`, `sharedWith`, and `owner` filters. */
@@ -569,6 +571,7 @@ function listWhereClause(params: {
   capabilities?: OAuthClientScope[];
   providerApiKeyId?: string;
   grantType?: LlmOauthClientGrantType;
+  applicableTo?: string;
   viewer: GrantPrincipal | null;
   /** Client ids matching a `?labels=` filter; omit when not filtering. */
   labelFilteredIds?: string[];
@@ -599,6 +602,12 @@ function listWhereClause(params: {
     // behave as client_credentials everywhere, so the filter treats them so.
     params.grantType
       ? sql`COALESCE(${schema.oauthClientsTable.metadata}->>'grantType', 'client_credentials') = ${params.grantType}`
+      : undefined,
+    params.applicableTo
+      ? applicableToCondition({
+          targetId: params.applicableTo,
+          organizationId: params.organizationId,
+        })
       : undefined,
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -811,6 +820,34 @@ function assertFutureProviderMode(params: {
       400,
       "Current and future providers require a client_credentials client with LLM Proxy access.",
     );
+}
+
+/**
+ * Clients that can reach one agent or gateway: authorization_code clients and
+ * client_credentials clients that list it, holding the target's protocol (MCP
+ * for a gateway, A2A otherwise). Scopes are read as {@link clientScopes} reads
+ * them, legacy rows included.
+ */
+function applicableToCondition(params: {
+  targetId: string;
+  organizationId: string;
+}) {
+  const metadata = schema.oauthClientsTable.metadata;
+  const scopes = schema.oauthClientsTable.scopes;
+  const legacyMcp = sql`${metadata}->>'type' = 'mcp_oauth_client'`;
+  const hasMcp = sql`('mcp' = ANY(${scopes}) OR (${scopes} IS NULL AND ${legacyMcp}))`;
+  const hasA2a = sql`('a2a' = ANY(${scopes}) OR (${legacyMcp} AND (${scopes} IS NULL OR 'mcp' = ANY(${scopes}))))`;
+  return sql`(
+    (COALESCE(${metadata}->>'grantType', 'client_credentials') = 'authorization_code'
+      OR ${metadata}->'allowedGatewayIds' @> ${JSON.stringify([params.targetId])}::jsonb)
+    AND EXISTS (
+      SELECT 1 FROM ${schema.agentsTable}
+      WHERE ${schema.agentsTable.id} = ${params.targetId}
+        AND ${schema.agentsTable.organizationId} = ${params.organizationId}
+        AND CASE WHEN ${schema.agentsTable.agentType} = 'mcp_gateway'
+          THEN ${hasMcp} ELSE ${hasA2a} END
+    )
+  )`;
 }
 
 /** The shared provider table also contains unmanaged DCR/CIMD registrations. */

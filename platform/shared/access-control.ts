@@ -1148,6 +1148,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RotateMcpOauthClientSecret]: {},
   [RouteId.DeleteMcpOauthClient]: {},
   [RouteId.GetModelsWithApiKeys]: {},
+  [RouteId.GetLlmModelIdsByKey]: {},
+  [RouteId.GetLlmModelOptions]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},
   // Delegation routes: agent-type permission checked dynamically in handler

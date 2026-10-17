@@ -7,6 +7,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { EnvironmentModel, LimitModel } from "@/models";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
 import type { User } from "@/types";
 
 describe("limits routes", () => {
@@ -337,6 +338,94 @@ describe("limits routes", () => {
       });
 
       cleanupSpy.mockRestore();
+    });
+
+    test("reads every token_cost limit's usage in one statement", async ({
+      makeAgent,
+    }) => {
+      const createWithUsage = async (model: string, tokens: number) => {
+        const agent = await makeAgent({ organizationId });
+        const limit = await LimitModel.create({
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 1000000,
+          model: [model],
+        });
+        await LimitModel.updateTokenLimitUsage(
+          "agent",
+          agent.id,
+          model,
+          tokens,
+          tokens,
+        );
+        // Not due for a reset, so the read only reports usage.
+        await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+        return limit;
+      };
+      const limits = [
+        await createWithUsage("gpt-4o", 100),
+        await createWithUsage("claude-sonnet-4", 200),
+        await createWithUsage("gemini-2.5-pro", 300),
+      ];
+
+      const { result: response, statements } = await recordQueries(() =>
+        app.inject({ method: "GET", url: "/api/limits" }),
+      );
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        statements.filter((statement) =>
+          statement.includes('from "limit_model_usage"'),
+        ),
+      ).toHaveLength(1);
+      const body: Array<{
+        id: string;
+        modelUsage?: Array<{ model: string; tokensIn: number }>;
+      }> = response.json();
+      expect(
+        limits.map(
+          (limit) => body.find((row) => row.id === limit.id)?.modelUsage,
+        ),
+      ).toEqual([
+        [expect.objectContaining({ model: "gpt-4o", tokensIn: 100 })],
+        [expect.objectContaining({ model: "claude-sonnet-4", tokensIn: 200 })],
+        [expect.objectContaining({ model: "gemini-2.5-pro", tokensIn: 300 })],
+      ]);
+    });
+
+    test("checks for elapsed windows at most once per 30 seconds per selection", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        const cleanupSpy = vi.spyOn(LimitModel, "cleanupLimitsIfNeeded");
+        const read = (url: string) => app.inject({ method: "GET", url });
+        const teamUrl = `/api/limits?entityType=team&entityId=${crypto.randomUUID()}&limitType=token_cost`;
+
+        await read("/api/limits");
+        await read("/api/limits");
+        await read(teamUrl);
+        await read(teamUrl);
+        expect(cleanupSpy).toHaveBeenCalledTimes(2);
+
+        vi.setSystemTime(Date.now() + 31_000);
+        await read("/api/limits");
+        expect(cleanupSpy).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test("tries the cleanup again on the next read after it fails", async () => {
+      const cleanupSpy = vi
+        .spyOn(LimitModel, "cleanupLimitsIfNeeded")
+        .mockRejectedValueOnce(new Error("cleanup failed"));
+      const url = `/api/limits?entityType=team&entityId=${crypto.randomUUID()}`;
+
+      const failed = await app.inject({ method: "GET", url });
+      expect(failed.statusCode).toBeGreaterThanOrEqual(500);
+      const retried = await app.inject({ method: "GET", url });
+      expect(retried.statusCode).toBe(200);
+      expect(cleanupSpy).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -1516,7 +1516,7 @@ describe("ArchestraPromptInput", () => {
       render(<ArchestraPromptInput {...defaultProps} />);
 
       expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
-        { limit: 100, forAgentId: defaultProps.agentId },
+        { limit: 100, forAgentId: defaultProps.agentId, includeContent: false },
         { enabled: false },
       );
     });
@@ -1526,8 +1526,9 @@ describe("ArchestraPromptInput", () => {
 
       render(<ArchestraPromptInput {...defaultProps} />);
 
+      // The command menu needs names and descriptions, never SKILL.md bodies.
       expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
-        { limit: 100, forAgentId: defaultProps.agentId },
+        { limit: 100, forAgentId: defaultProps.agentId, includeContent: false },
         { enabled: true },
       );
     });

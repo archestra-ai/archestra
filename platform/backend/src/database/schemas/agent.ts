@@ -233,6 +233,16 @@ const agentsTable = softDeletablePgTable(
      */
     latestVersion: integer("latest_version").notNull().default(0),
 
+    /**
+     * When anything last ran through the agent: the later of its newest MCP
+     * request (`mcp_tool_calls`) and its newest LLM call (`interactions`).
+     * Null means never used. Stamped forward-only by `AgentUsageModel` after
+     * each insert into those two tables, so lists can sort by it without
+     * scanning them. It outlives log retention: deleting old log rows does not
+     * move it back.
+     */
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+
     /** Service account creator; separate from human ownership. */
     createdByServiceAccountId: uuid("created_by_service_account_id").references(
       () => serviceAccountsTable.id,

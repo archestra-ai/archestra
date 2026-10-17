@@ -81,6 +81,7 @@ import {
   useOrganization,
 } from "@/lib/organization.query";
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
+import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 import { cn } from "@/lib/utils/tailwind";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
@@ -1179,7 +1180,8 @@ function ItemPageSkeleton() {
 }
 
 /**
- * Tab label with an optional count. The e2e hook belongs on the tab's `testId`
+ * Tab label with an optional count, abbreviated past a thousand (130K) so a
+ * busy server does not stretch the tab row; the exact figure is on hover. The e2e hook belongs on the tab's `testId`
  * rather than here — PageLayout renders each label in its desktop row, its
  * mobile row and possibly an overflow popover, so a test id on the label
  * resolves to several elements at once.
@@ -1189,8 +1191,11 @@ function TabLabel({ title, count }: { title: string; count?: number }) {
     <span className="flex items-center gap-1">
       <span>{title}</span>
       {count !== undefined && count > 0 && (
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {count}
+        <span
+          className="text-xs text-muted-foreground tabular-nums"
+          title={count >= 1000 ? count.toLocaleString() : undefined}
+        >
+          {formatCompactNumber(count)}
         </span>
       )}
     </span>

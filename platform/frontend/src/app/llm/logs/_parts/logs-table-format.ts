@@ -4,6 +4,7 @@ import {
   type InteractionSource,
   type SupportedProvider,
 } from "@archestra/shared";
+import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 
 // Pure formatting for the LLM logs table cells. Nothing here renders; the cell
 // components in this folder do.
@@ -11,6 +12,27 @@ import {
 /** One row of the LLM logs table: a session, or a lone interaction. */
 export type LogSession =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+
+// ============================================================================
+// Session titles
+// ============================================================================
+
+/**
+ * The best one-line title for a session: a client-generated title, the app
+ * chat's name, then the last user message. Coding clients wrap mid-turn user
+ * messages in harness markup (`<system-reminder>`, `<pasted_content>`, "The
+ * user sent a new message while you were working:"), which says nothing
+ * about the session, so it is stripped from the preview.
+ */
+export function sessionTitleOf(session: {
+  claudeCodeTitle?: string | null;
+  conversationTitle?: string | null;
+  lastUserMessagePreview?: string | null;
+}): string | null {
+  if (session.claudeCodeTitle) return session.claudeCodeTitle;
+  if (session.conversationTitle) return session.conversationTitle;
+  return cleanMessagePreview(session.lastUserMessagePreview);
+}
 
 // ============================================================================
 // Models
@@ -128,9 +150,7 @@ export function formatRequestCost(value: number): string {
   return `$${formatCompactNumber(value)}`;
 }
 
-export function formatCompactNumber(value: number): string {
-  return compactNumberFormatter.format(value);
-}
+export { formatCompactNumber };
 
 /** Wall-clock span between a session's first and last request. */
 export function formatSessionSpan(
@@ -233,11 +253,6 @@ const KNOWLEDGE_TASK_TITLES: Record<KnowledgeSource, string> = {
   "knowledge:ocr": "Reading scanned pages",
 };
 
-const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
 const SIZE_PATTERN = /^\d+(\.\d+)?[bmk]$/i;
 
 /**
@@ -335,4 +350,15 @@ function formatWord(part: string): string {
 
 function capitalize(part: string): string {
   return part.charAt(0).toUpperCase() + part.slice(1);
+}
+
+function cleanMessagePreview(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const cleaned = text
+    .replace(/<system-reminder>[\s\S]*?(<\/system-reminder>|$)/g, " ")
+    .replace(/<\/?pasted_content\b[^>]*>/g, " ")
+    .replace(/^\s*The user sent a new message while you were working:/, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || null;
 }

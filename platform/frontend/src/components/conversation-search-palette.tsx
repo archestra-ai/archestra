@@ -277,7 +277,12 @@ export function ConversationSearchPalette({
     enabled: canSearchEntities && canOpenPage("/agents"),
   });
   const skillsPage = useSkillsPaginated(
-    { search: entitySearch, limit: ENTITY_RESULTS_LIMIT, offset: 0 },
+    {
+      search: entitySearch,
+      limit: ENTITY_RESULTS_LIMIT,
+      offset: 0,
+      includeContent: false,
+    },
     {
       enabled: canSearchEntities && canOpenPage("/skills"),
       toastOnError: false,

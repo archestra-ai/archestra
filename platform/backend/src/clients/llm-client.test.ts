@@ -10,7 +10,11 @@ import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
 import { z } from "zod";
 import config from "@/config";
-import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
+import {
+  ConversationModel,
+  LlmProviderApiKeyModel,
+  UserTokenModel,
+} from "@/models";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, it, test } from "@/test";
 
@@ -1383,7 +1387,12 @@ describe("createLLMModel", () => {
     });
 
     expect(result.apiKeySource).toBe("org");
-    expect(capturedCreateOpenAIOptions.apiKey).toBe("EMPTY");
+    // A user's call authenticates with the user's personal platform token; the
+    // provider key stays server-side behind the chat key row.
+    const personalToken = await UserTokenModel.ensureUserToken(user.id, org.id);
+    expect(capturedCreateOpenAIOptions.apiKey).toBe(
+      await UserTokenModel.getTokenValue(personalToken.id),
+    );
     expect(capturedCreateOpenAIOptions.headers).toEqual(
       expect.objectContaining({
         [CHAT_API_KEY_ID_HEADER]: selectedKey.id,
@@ -1432,7 +1441,7 @@ describe("createLLMModel", () => {
     >;
     const [, fetchInit] = firstFetchCall;
     expect(new Headers(fetchInit?.headers).get("authorization")).toBe(
-      "Bearer EMPTY",
+      `Bearer ${await UserTokenModel.getTokenValue(personalToken.id)}`,
     );
   });
 

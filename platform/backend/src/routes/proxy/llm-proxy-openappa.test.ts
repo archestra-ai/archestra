@@ -26,7 +26,10 @@ import {
   buildMcpGatewayTool,
   mcpToolToModelOutput,
 } from "@/clients/chat-tool-builder";
-import { internalCallHeader } from "@/clients/internal-call";
+import {
+  guardrailCallHeader,
+  internalCallHeader,
+} from "@/clients/internal-call";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
@@ -2058,7 +2061,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   const guardrailCall = (
     source: string,
-    proof: Record<string, string> = internalCallHeader(),
+    proof: Record<string, string> = guardrailCallHeader(),
   ) =>
     app.inject({
       method: "POST",
@@ -2079,7 +2082,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(providerRequests).toHaveLength(1);
     expect(events).toHaveLength(0);
-    const [proofHeader] = Object.keys(internalCallHeader());
+    const [proofHeader] = Object.keys(guardrailCallHeader());
     for (const [, options] of vi.mocked(anthropicAdapterFactory.createClient)
       .mock.calls) {
       expect(options.defaultHeaders ?? {}).not.toHaveProperty(proofHeader);
@@ -2088,7 +2091,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test("block mode blocks a loopback guardrail source without the platform's proof", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
-    const [proofHeader] = Object.keys(internalCallHeader());
+    const [proofHeader] = Object.keys(guardrailCallHeader());
     for (const proof of [{}, { [proofHeader]: "forged" }]) {
       const response = await guardrailCall("guardrail:annotator", proof);
       expect(response.statusCode, response.body).toBe(400);
@@ -2157,7 +2160,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "anthropic-version": "2023-06-01",
         "x-archestra-source": "guardrail:annotator",
         "x-appa-session-id": "chat-session",
-        ...internalCallHeader(),
+        ...guardrailCallHeader(),
       },
       payload: payload(false) as Record<string, unknown>,
     });

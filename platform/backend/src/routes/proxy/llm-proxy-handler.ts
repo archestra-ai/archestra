@@ -798,6 +798,7 @@ export async function handleLLMProxy<
         await LlmProviderApiKeyModel.findById(chatKeyIdHeader);
       if (
         !providerKey ||
+        providerKey.provider !== providerName ||
         !(await LlmProviderApiKeyModel.canUseKey(
           providerKey,
           personalToken.userId,
@@ -986,14 +987,6 @@ export async function handleLLMProxy<
     oauthUserId ??
     personalTokenUserId ??
     regularVirtualKeyUserId;
-
-  // The X-Archestra-User-Id header is an unverified hint. Without a credential
-  // or the internal proof it must not decide who the caller is, so it is
-  // dropped rather than used for attribution or limits.
-  if (!authenticatedUserId && !internalCall) {
-    userId = undefined;
-    resolvedUser = null;
-  }
 
   // Fall back to the personal standard virtual key's owner for user attribution.
   // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the

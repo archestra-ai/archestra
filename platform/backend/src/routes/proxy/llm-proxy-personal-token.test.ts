@@ -131,6 +131,39 @@ describe("LLM proxy with a personal platform token", () => {
     expect(response.statusCode, response.body).toBe(403);
   });
 
+  test("rejects a named key for a different provider than the route", async ({
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    await makeMember(user.id, testAgent.organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const anthropicKey = await makeLlmProviderApiKey(
+      testAgent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const userToken = await UserTokenModel.ensureUserToken(
+      user.id,
+      testAgent.organizationId,
+    );
+    const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: completionUrl(),
+      headers: {
+        authorization: `Bearer ${tokenValue}`,
+        [CHAT_API_KEY_ID_HEADER]: anthropicKey.id,
+      },
+      payload: chatPayload,
+    });
+
+    expect(response.statusCode, response.body).toBe(403);
+  });
+
   test("rejects the token when no provider key is named", async ({
     makeUser,
     makeMember,

@@ -154,6 +154,10 @@ vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
   useMcpServerIssues: vi.fn(() => ({ issuesByCatalog: new Map() })),
 }));
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: () => ({}) }));
+const initiateOAuth = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/oauth.query", () => ({
+  useInitiateOAuth: () => ({ mutateAsync: initiateOAuth, isPending: false }),
+}));
 vi.mock("@/lib/organization.query", () => ({
   useDefaultEnvironment: () => ({ name: "Default" }),
   useOrganization: () => ({ data: null }),
@@ -462,7 +466,13 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
   });
 
-  it("keeps the issue visible with only Dismiss because remediation is elsewhere on the page", () => {
+  it("offers Sign in instead of Dismiss on your own rejected token", async () => {
+    const user = userEvent.setup();
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
     // A remote connection whose token was rejected: a row exists, and it is
     // not working. Deriving the status from the row alone read "Connected"
     // with a green dot directly above the notice saying otherwise.
@@ -499,14 +509,21 @@ describe("McpCatalogItemDetailPage overview", () => {
       issue.getByText(/The provider rejected the stored token/),
     ).toBeVisible();
     expect(
-      issue.getByRole("button", { name: "Dismiss alert for internal-tools" }),
-    ).toBeVisible();
+      issue.queryByRole("button", { name: "Dismiss alert for internal-tools" }),
+    ).toBeNull();
     expect(issue.queryByRole("button", { name: "Re-authenticate" })).toBeNull();
     expect(
       issue.queryByRole("button", { name: "Edit configuration" }),
     ).toBeNull();
     expect(issue.queryByRole("button", { name: /More actions/ })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Status" })).toBeNull();
+
+    await user.click(issue.getByRole("button", { name: "Sign in" }));
+    expect(push).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /tab=credentials.*server=srv-1|server=srv-1.*tab=credentials/,
+      ),
+    );
   });
 
   it("keeps dismissed alerts off the server details page", () => {
@@ -536,6 +553,34 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(
       screen.queryByTestId("mcp-registry-attention-row-internal-tools"),
     ).toBeNull();
+  });
+
+  it("sends an OAuth connection straight to the provider instead of asking first", () => {
+    // Never resolves: the test stops before the browser would navigate away.
+    initiateOAuth.mockReturnValue(new Promise(() => {}));
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=credentials&server=srv-own") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    installed([
+      ownInstall({ serverType: "remote", oauthRefreshError: "refresh_failed" }),
+    ]);
+    renderPage({
+      serverType: "remote",
+      localConfig: null,
+      oauthConfig: {
+        grantType: "authorization_code",
+        client_id: "abc123",
+        tokenEndpoint: "https://auth.example.com/token",
+        scopes: ["read"],
+      },
+    });
+
+    expect(initiateOAuth).toHaveBeenCalledTimes(1);
+    expect(initiateOAuth).toHaveBeenCalledWith({ catalogId: "cat-1" });
+    expect(screen.getByText("Redirecting to sign in…")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("repairs the selected connection inline without opening a dialog", async () => {

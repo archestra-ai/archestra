@@ -49,7 +49,6 @@ import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   useCanImpersonate,
   useImpersonateUser,
-  useImpersonationCandidates,
 } from "@/lib/impersonation.query";
 import {
   type Invitation,
@@ -311,10 +310,6 @@ function MembersTab({
   const { data: session } = useSession();
   const currentUserId = session?.user.id;
   const canImpersonate = useCanImpersonate();
-  const { data: impersonationCandidates } = useImpersonationCandidates();
-  const impersonableUserIds = new Set(
-    (impersonationCandidates ?? []).map((c) => c.id),
-  );
   const { mutate: impersonateUser, isPending: isImpersonatingUser } =
     useImpersonateUser();
 
@@ -557,10 +552,9 @@ function MembersTab({
           );
         }
 
+        // Every listed member except the caller can be impersonated.
         const canImpersonateThisUser =
-          canImpersonate &&
-          member.userId !== currentUserId &&
-          impersonableUserIds.has(member.userId);
+          canImpersonate && !!currentUserId && member.userId !== currentUserId;
 
         return (
           <TableRowActions

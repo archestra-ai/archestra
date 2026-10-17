@@ -29,11 +29,11 @@ import type { TeamMemberRole } from "@/types/team-role";
 export async function getTeamForOrg(params: {
   teamId: string;
   organizationId: string;
-  /** False when only the team row is needed (default true). */
+  /** True when the caller needs the member list (default false). */
   includeMembers?: boolean;
 }): Promise<Team | null> {
   const team = await TeamModel.findById(params.teamId, {
-    includeMembers: params.includeMembers,
+    includeMembers: params.includeMembers ?? false,
   });
   if (!team || team.organizationId !== params.organizationId) {
     return null;
@@ -132,21 +132,18 @@ export async function checkLastAdminInvariant(params: {
   userId: string;
   nextRole: TeamMemberRole | null;
 }): Promise<LastAdminCheck> {
-  const members = await TeamModel.getTeamMembers(params.teamId);
-  const target = members.find((member) => member.userId === params.userId);
+  const role = await TeamModel.getMemberRole(params.teamId, params.userId);
 
-  if (!target) {
+  if (!role) {
     return { ok: false, reason: "member_not_found" };
   }
 
   // Only a demotion/removal of a current admin can reduce the admin count.
-  if (target.role !== ADMIN_ROLE_NAME || params.nextRole === ADMIN_ROLE_NAME) {
+  if (role !== ADMIN_ROLE_NAME || params.nextRole === ADMIN_ROLE_NAME) {
     return { ok: true };
   }
 
-  const adminCount = members.filter(
-    (member) => member.role === ADMIN_ROLE_NAME,
-  ).length;
+  const adminCount = await TeamModel.countAdmins(params.teamId);
   if (adminCount <= 1) {
     return { ok: false, reason: "last_admin" };
   }

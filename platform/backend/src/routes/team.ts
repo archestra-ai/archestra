@@ -213,7 +213,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
         headers,
-        includeMembers,
+        includeMembers: includeMembers ?? true,
       });
 
       const [labels, myRole] = await Promise.all([

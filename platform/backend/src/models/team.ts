@@ -522,6 +522,20 @@ class TeamModel {
     return membership?.role ?? null;
   }
 
+  /** How many admins the team has, counted without loading its members. */
+  static async countAdmins(teamId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
   /**
    * Get members for multiple teams in a single query to avoid N+1
    */

@@ -14540,6 +14540,7 @@ export type GetAgentCatalogResponses = {
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
+                lastUsedAt?: string | null;
                 createdByServiceAccountId: string | null;
                 createdAt: string;
                 updatedAt: string;
@@ -14589,7 +14590,6 @@ export type GetAgentCatalogResponses = {
                 llmProviderRequiresPerUserCredential?: boolean;
                 sandboxAvailable?: boolean;
                 activationSkillsCount?: number;
-                lastUsedAt?: string | null;
                 pinnedAt: string | null;
                 /**
                  * Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.
@@ -14915,6 +14915,7 @@ export type GetAgentsResponses = {
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
+            lastUsedAt?: string | null;
             createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
@@ -14964,7 +14965,6 @@ export type GetAgentsResponses = {
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
-            lastUsedAt?: string | null;
             pinnedAt: string | null;
             /**
              * Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.
@@ -15326,6 +15326,7 @@ export type CreateAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -15375,7 +15376,6 @@ export type CreateAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -16583,6 +16583,7 @@ export type GetDefaultMcpGatewayResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -16632,7 +16633,6 @@ export type GetDefaultMcpGatewayResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -16873,6 +16873,7 @@ export type ImportAgentResponses = {
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
+            lastUsedAt?: string | null;
             createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
@@ -16922,7 +16923,6 @@ export type ImportAgentResponses = {
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
             activationSkillsCount?: number;
-            lastUsedAt?: string | null;
         };
         warnings: Array<{
             type: 'tool' | 'knowledgeBase' | 'connector' | 'delegation';
@@ -17180,6 +17180,7 @@ export type GetAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -17229,7 +17230,6 @@ export type GetAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -17475,6 +17475,7 @@ export type UpdateAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -17524,7 +17525,6 @@ export type UpdateAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -18048,6 +18048,7 @@ export type RestoreAgentVersionResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18097,7 +18098,6 @@ export type RestoreAgentVersionResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -18284,6 +18284,7 @@ export type CloneAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -18333,7 +18334,6 @@ export type CloneAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 
@@ -20759,6 +20759,7 @@ export type RestoreAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        lastUsedAt?: string | null;
         createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
@@ -20808,7 +20809,6 @@ export type RestoreAgentResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
-        lastUsedAt?: string | null;
     };
 };
 

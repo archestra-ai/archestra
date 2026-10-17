@@ -79,6 +79,7 @@ import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
+import AgentUsageModel from "./agent-usage";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
@@ -580,6 +581,11 @@ class InteractionModel {
         );
       }),
     );
+
+    AgentUsageModel.recordUseInBackground({
+      agentId: interaction.profileId,
+      usedAt: interaction.createdAt,
+    });
 
     return interaction;
   }

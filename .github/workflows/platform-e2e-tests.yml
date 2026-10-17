@@ -1746,7 +1746,7 @@ jobs:
 
       - name: Write test summary
         if: always()
-        uses: daun/playwright-report-summary@31ed947ec7a623d18a66cfd20ef546dc66ef8063 # v4.1.0
+        uses: daun/playwright-report-summary@5359ae22f265fd2dfdb7744a0cc6614c5c3abde6 # v4.1.1
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true

@@ -69,12 +69,7 @@ describe("system chat agent visibility", () => {
         .json()
         .map((row: { id: string }) => row.id)
         .sort(),
-    ).toEqual(
-      roster
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort(),
-    );
+    ).toEqual([policy.id, ordinary.id].sort());
     expect(roster.statusCode).toBe(200);
     expect(
       roster
@@ -110,12 +105,7 @@ describe("system chat agent visibility", () => {
         .json()
         .map((row: { id: string }) => row.id)
         .sort(),
-    ).toEqual(
-      roster
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort(),
-    );
+    ).toEqual([policy.id]);
     expect(roster.statusCode).toBe(200);
     expect(roster.json().data).toEqual([
       expect.objectContaining({
@@ -177,12 +167,7 @@ describe("system chat agent visibility", () => {
         .json()
         .map((row: { id: string }) => row.id)
         .sort(),
-    ).toEqual(
-      roster
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort(),
-    );
+    ).toEqual([]);
     expect(roster.statusCode).toBe(200);
     expect(roster.json().data).toEqual([]);
     expect(
@@ -235,12 +220,7 @@ describe("system chat agent visibility", () => {
         .json()
         .map((row: { id: string }) => row.id)
         .sort(),
-    ).toEqual(
-      roster
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort(),
-    );
+    ).toEqual([]);
     expect(roster.statusCode).toBe(200);
     expect(roster.json().data).toEqual([]);
     const denied = await ctx.app.inject({

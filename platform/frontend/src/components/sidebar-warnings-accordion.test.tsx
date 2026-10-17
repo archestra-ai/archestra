@@ -11,6 +11,11 @@ import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { SidebarWarningsAccordion } from "./sidebar-warnings-accordion";
 
+// The shell's deferral gate is released here unless a test holds it.
+const mockShellDeferred = vi.fn(() => true);
+vi.mock("@/lib/shell-deferral", () => ({
+  useShellDeferred: () => mockShellDeferred(),
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/environment.query", () => ({
@@ -184,6 +189,16 @@ describe("SidebarWarningsAccordion network policy warning", () => {
       </SidebarProvider>,
     );
 
+    expect(useDefaultCredentialsEnabled).toHaveBeenCalledWith({
+      enabled: false,
+    });
+  });
+
+  it("asks for nothing until the page's first data has settled", () => {
+    mockShellDeferred.mockReturnValueOnce(false);
+    setup({ canUpdateEnvironment: true });
+
+    expect(vi.mocked(useK8sCapabilities)).toHaveBeenCalledWith(false);
     expect(useDefaultCredentialsEnabled).toHaveBeenCalledWith({
       enabled: false,
     });

@@ -171,6 +171,25 @@ describe("createMcpServerIndexes", () => {
     expect(await advisoryLockCount()).toBe(0);
   });
 
+  test("rebuilds the index when an interrupted build left it invalid", async () => {
+    await createMcpServerIndexes(options);
+    const oid = await indexOid(name);
+    // What a cancelled CREATE INDEX CONCURRENTLY leaves behind.
+    await db.execute(
+      sql`update pg_index set indisvalid = false where indexrelid = ${oid}::oid`,
+    );
+
+    expect(await createMcpServerIndexes(options)).toEqual({
+      [name]: "rebuilt_invalid",
+    });
+    expect(await indexOid(name)).not.toBe(oid);
+    const rebuilt = await db.execute(
+      sql`select indisvalid from pg_index where indexrelid = to_regclass(${name})`,
+    );
+    expect(rebuilt.rows[0]?.indisvalid).toBe(true);
+    expect(await advisoryLockCount()).toBe(0);
+  });
+
   test("leaves an index of that name on another table alone", async () => {
     await db.execute(
       sql.raw(`CREATE INDEX "${name}" ON agent_tools (agent_id)`),

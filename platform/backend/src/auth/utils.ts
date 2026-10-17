@@ -240,10 +240,8 @@ async function checkUserPermissions(params: {
   organizationId: string;
   permissions: Permissions;
 }): Promise<PermissionCheckResult> {
-  const userPermissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  // The read the route makes too, so a read request resolves it once.
+  const userPermissions = await getPermissionsForUserContext(params);
   return buildPermissionCheckResult(userPermissions, params.permissions);
 }
 

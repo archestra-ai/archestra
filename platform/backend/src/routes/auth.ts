@@ -6,7 +6,6 @@ import {
   OFFLINE_ACCESS_OAUTH_SCOPE,
   RouteId,
 } from "@archestra/shared";
-import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
@@ -35,6 +34,7 @@ import {
   isConnectorTargetedResource,
   resolveAppConnectorResource,
 } from "@/services/apps/app-connector-resource";
+import { defaultAdminPasswordCheck } from "@/services/default-admin-password";
 import {
   buildOAuthIssuer,
   exchangeIdentityAssertionForAccessToken,
@@ -160,8 +160,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.send({ enabled: false });
         }
 
-        // Compare the stored password hash with the default password
-        const isDefaultPassword = await verifyPassword({
+        // Compare the stored password hash with the default password (once
+        // per hash: the verify is slow and every page asks)
+        const isDefaultPassword = await defaultAdminPasswordCheck.matches({
           password: adminDefaultPassword,
           hash: account.password,
         });

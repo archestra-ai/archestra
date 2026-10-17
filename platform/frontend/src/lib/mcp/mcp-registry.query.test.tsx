@@ -3,12 +3,17 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { searchMcpRegistryMock, getMcpServersMock, getIssueIndexMock } =
-  vi.hoisted(() => ({
-    searchMcpRegistryMock: vi.fn(),
-    getMcpServersMock: vi.fn(),
-    getIssueIndexMock: vi.fn(),
-  }));
+const {
+  searchMcpRegistryMock,
+  getMcpServersMock,
+  getIssueIndexMock,
+  getCatalogItemMock,
+} = vi.hoisted(() => ({
+  searchMcpRegistryMock: vi.fn(),
+  getMcpServersMock: vi.fn(),
+  getIssueIndexMock: vi.fn(),
+  getCatalogItemMock: vi.fn(),
+}));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -19,6 +24,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       searchMcpRegistry: searchMcpRegistryMock,
       getMcpServers: getMcpServersMock,
       getMcpRegistryIssueIndex: getIssueIndexMock,
+      getInternalMcpCatalogItem: getCatalogItemMock,
     },
   };
 });
@@ -28,6 +34,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
 }));
 
 import {
+  fetchInternalMcpCatalogItem,
   startMcpRegistryEarlyRequests,
   useMcpRegistryIssueIndex,
   useMcpRegistryPage,
@@ -300,5 +307,23 @@ describe("registry rows by id", () => {
     // A removed id leaves at once.
     rerender({ ids: ["cat-b"] });
     expect(result.current.data.map((row) => row.id)).toEqual(["cat-b"]);
+  });
+});
+
+describe("loading a full catalog item for an action", () => {
+  it("serves a second action started right after the first from the same load", async () => {
+    getCatalogItemMock.mockResolvedValue({
+      data: { id: "cat-a", name: "a", toolCount: 1, skillCount: 0 },
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    // The Add tools list loads the item, then the Choose tools view does.
+    await fetchInternalMcpCatalogItem(queryClient, "cat-a");
+    const item = await fetchInternalMcpCatalogItem(queryClient, "cat-a");
+
+    expect(item?.id).toBe("cat-a");
+    expect(getCatalogItemMock).toHaveBeenCalledTimes(1);
   });
 });

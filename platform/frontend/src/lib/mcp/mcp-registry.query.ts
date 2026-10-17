@@ -383,7 +383,12 @@ export async function fetchInternalMcpCatalogItem(
   queryClient: QueryClient,
   id: string,
 ): Promise<FullCatalogItem | null> {
-  const item = await queryClient.fetchQuery(catalogItemQueryOptions(id));
+  // An action often loads the item twice in a row (a list loads it, then the
+  // view it opens does); a few seconds of freshness lets the second reuse it.
+  const item = await queryClient.fetchQuery({
+    ...catalogItemQueryOptions(id),
+    staleTime: ACTION_ITEM_STALE_TIME_MS,
+  });
   return item ? toFullCatalogItem(item) : null;
 }
 
@@ -534,3 +539,5 @@ function normalizeIssueIndex(
     })),
   };
 }
+
+const ACTION_ITEM_STALE_TIME_MS = 5_000;

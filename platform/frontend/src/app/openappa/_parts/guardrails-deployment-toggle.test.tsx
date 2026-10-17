@@ -16,6 +16,11 @@ import { SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { GuardrailsDisabledWarning } from "./guardrails-deployment-toggle";
 
+vi.mock("@/lib/config/config.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
+  // The Guardrails status is read only while OpenAPPA is on.
+  useFeature: (feature: string) => feature === "openappaEnabled",
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 const url = "http://localhost:9000/api/guardrails-deployment";

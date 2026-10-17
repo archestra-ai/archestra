@@ -19,11 +19,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  useDefaultCredentialsEnabled,
-  useHasPermissions,
-  useSession,
-} from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useDefaultCredentialsStatus } from "@/lib/auth/default-credentials.query";
 import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
@@ -44,14 +41,21 @@ export function SidebarWarningsAccordion({
 }) {
   const { data: session } = useSession();
   const userEmail = session?.user?.email;
-  const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
-    useDefaultCredentialsEnabled();
   const disableBasicAuth = useDisableBasicAuth();
   const openappaEnabled = useFeature("openappaEnabled");
   const guardrailsDeployment = useGuardrailsDeployment();
   const { data: canUpdateOrg } = useHasPermissions({
     organization: ["update"],
   });
+  // Asked only of the one viewer the warning is for: the default admin, who
+  // can change the organization's sign-in, while password sign-in is on.
+  const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
+    useDefaultCredentialsStatus({
+      enabled:
+        canUpdateOrg === true &&
+        disableBasicAuth === false &&
+        userEmail === DEFAULT_ADMIN_EMAIL,
+    });
   // Reading capabilities needs environment:update, so gating the query on the
   // same permission keeps it from 403-ing for everyone else on every page.
   const { data: canUpdateEnvironment } = useHasPermissions({

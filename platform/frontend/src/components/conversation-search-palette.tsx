@@ -267,7 +267,7 @@ export function ConversationSearchPalette({
     (!href.startsWith("/settings/") || canSeeSettingsArea);
   const entitySearch = debouncedSearch.trim();
   const canSearchEntities = open && isAuthenticated && entitySearch.length > 0;
-  const settingsTabs = useSettingsTabs();
+  const settingsTabs = useSettingsTabs({ enabled: open });
   const agentOptions = useAgentOptionsPage({
     // The /agents page lists internal agents only; gateways and proxies
     // have their own pages.

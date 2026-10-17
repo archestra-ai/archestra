@@ -26,7 +26,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 
 /** Whether tool calls are checked against the policy at all. */
 export function OpenAppaEnforcementSetting() {
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   const update = useUpdateGuardrailsDeployment();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
@@ -82,7 +82,7 @@ export function OpenAppaEnforcementSetting() {
  * stuck agent can get unblocked.
  */
 export function OpenAppaBreakTheGlassSetting() {
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   const update = useUpdateBreakTheGlassEnabled();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
@@ -120,7 +120,7 @@ export function OpenAppaBreakTheGlassSetting() {
  * client with no built-in support that sends no OpenAPPA session headers.
  */
 export function OpenAppaClientCoverageSetting() {
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   const update = useUpdateUnsupportedClientAction();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],

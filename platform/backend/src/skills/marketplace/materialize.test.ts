@@ -994,6 +994,29 @@ describe("MarketplaceMaterializer", () => {
     });
   }
 
+  test("consolidates pack files once git's auto-gc limit is crossed", async () => {
+    const first = await materializer.materialize(makeRequest(linkId));
+    // every later import writes a pack; more than 3 packs triggers gc --auto
+    await git(first.repoPath, "config", "fastimport.unpackLimit", "1");
+    await git(first.repoPath, "config", "gc.autoPackLimit", "3");
+
+    let last = first;
+    for (let i = 0; i < 6; i++) {
+      last = await materializer.materialize(
+        makeRequest(linkId, {
+          skills: [makeSkill({ content: `# PDF Helper\n\nRevision ${i}.` })],
+        }),
+      );
+    }
+
+    const packs = (
+      await fs.readdir(path.join(first.repoPath, ".git", "objects", "pack"))
+    ).filter((name) => name.endsWith(".pack"));
+    expect(packs.length).toBeLessThanOrEqual(3);
+    expect(await commitCount(last.repoPath)).toBe(7);
+    await git(last.repoPath, "fsck", "--no-progress");
+  });
+
   test("commit author and committer use the configured identity", async () => {
     const identity = { name: "Test Marketplace", email: "test@example.com" };
     const m = new MarketplaceMaterializer({ cacheDir, identity });

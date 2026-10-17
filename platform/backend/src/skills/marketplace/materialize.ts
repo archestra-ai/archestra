@@ -526,6 +526,19 @@ export class MarketplaceMaterializer {
       const match = /^:(\d+) ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(line.trim());
       if (match) marks.set(Number(match[1]), match[2]);
     }
+
+    // each import adds a pack or loose objects; git consolidates them once its
+    // own thresholds are crossed and does nothing otherwise. In the foreground,
+    // so no background gc outlives the request or a later revoke.
+    try {
+      await runGit({
+        binary: this.gitBinaryPath,
+        cwd: params.repoPath,
+        args: ["-c", "gc.autoDetach=false", "gc", "--auto", "--quiet"],
+      });
+    } catch (err) {
+      logger.warn({ err }, "[SkillMarketplace] git gc --auto failed");
+    }
     return marks;
   }
 }

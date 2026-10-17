@@ -8,8 +8,8 @@ export const APPEARANCE_PAGES = [
   {
     id: "chat",
     label: "Chat",
-    description: "Input prompts, helpful links, and support messages.",
-    sections: ["placeholders", "links", "support"],
+    description: "Layout, input prompts, helpful links, and support messages.",
+    sections: ["layout", "placeholders", "links", "support"],
   },
   {
     id: "other",

@@ -195,6 +195,46 @@ describe("Appearance settings", () => {
     });
   });
 
+  it("saves a new chat layout and its headline animation", async () => {
+    const user = userEvent.setup();
+    const view = renderSettings();
+    view.navigate("chat");
+    expect(
+      await screen.findByRole("radio", { name: /^Classic/ }),
+    ).toBeChecked();
+    expect(
+      screen.queryByRole("switch", { name: "Animate headline" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /^Greeting/ }));
+    await user.click(screen.getByRole("switch", { name: "Animate headline" }));
+    await user.click(save());
+
+    await waitFor(() =>
+      expect(patches).toEqual([
+        { chatLandingStyle: "greeting", animateChatLandingHeadline: false },
+      ]),
+    );
+  });
+
+  it("treats an organization cached before the layout setting as Classic", async () => {
+    const {
+      chatLandingStyle: _style,
+      animateChatLandingHeadline: _animate,
+      ...cachedBeforeUpgrade
+    } = organization;
+    organization = cachedBeforeUpgrade as typeof organization;
+    const view = renderSettings();
+    view.navigate("chat");
+
+    expect(
+      await screen.findByRole("radio", { name: /^Classic/ }),
+    ).toBeChecked();
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("preserves a dirty field across refetches and discards to the latest server values", async () => {
     const user = userEvent.setup();
     const view = renderSettings();

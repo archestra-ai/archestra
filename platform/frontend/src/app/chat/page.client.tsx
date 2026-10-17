@@ -212,6 +212,7 @@ import {
   resolveChatModelState,
   resolvePreferredModelForProvider,
 } from "./chat-initial-state";
+import { ChatLanding } from "./chat-landing";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
   type ChatSubmitOptions,
@@ -3634,39 +3635,8 @@ export function ChatPageContent({
                         )}
                       </div>
                     )}
-                    <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
-                      <div className="scale-150">
-                        <AppLogo />
-                      </div>
-                      {(() => {
-                        if (isInitialRuntimeMode) return null;
-                        const prompts = initialSuggestedPrompts;
-                        if (!prompts || prompts.length === 0) return null;
-                        return (
-                          <SuggestedPromptPills
-                            prompts={prompts}
-                            disabled={
-                              isAgentSubscriptionMetadataPending ||
-                              (initialPerUserConnect.needsConnect &&
-                                Boolean(initialPerUserConnect.provider))
-                            }
-                            onPreviewChange={setHoveredSuggestionPrompt}
-                            onSelect={(sp) => {
-                              trackEvent("prompt_selected", {
-                                agentId: initialAgentId ?? undefined,
-                                promptLength: sp.prompt.length,
-                              });
-                              submitInitialMessage({
-                                text: sp.prompt,
-                                files: [],
-                              });
-                            }}
-                          />
-                        );
-                      })()}
-                      <div className="w-full max-w-4xl space-y-3">
-                        {/* Shared-element pair with the conversation composer —
-                            see the bottom-anchored ViewTransition above. */}
+                    {(() => {
+                      const landingComposer = (
                         <ViewTransition
                           name="chat-composer"
                           share="chat-composer-morph"
@@ -3824,11 +3794,87 @@ export function ChatPageContent({
                             />
                           </div>
                         </ViewTransition>
-                      </div>
-                    </div>
-                    <div className="p-4 text-center">
-                      <Version inline />
-                    </div>
+                      );
+                      const landingStyle =
+                        organization?.chatLandingStyle ?? "classic";
+                      if (landingStyle !== "classic") {
+                        return (
+                          <ChatLanding
+                            layout={landingStyle}
+                            animateHeadline={
+                              organization?.animateChatLandingHeadline ?? true
+                            }
+                            userName={session?.user?.name}
+                            composer={landingComposer}
+                            prompts={
+                              isInitialRuntimeMode
+                                ? []
+                                : (initialSuggestedPrompts ?? [])
+                            }
+                            promptsDisabled={
+                              isAgentSubscriptionMetadataPending ||
+                              (initialPerUserConnect.needsConnect &&
+                                Boolean(initialPerUserConnect.provider))
+                            }
+                            onPreviewChange={setHoveredSuggestionPrompt}
+                            onSelectPrompt={(sp) => {
+                              trackEvent("prompt_selected", {
+                                agentId: initialAgentId ?? undefined,
+                                promptLength: sp.prompt.length,
+                              });
+                              submitInitialMessage({
+                                text: sp.prompt,
+                                files: [],
+                              });
+                            }}
+                            footer={<Version inline />}
+                          />
+                        );
+                      }
+                      return (
+                        <>
+                          <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                            <div className="scale-150">
+                              <AppLogo />
+                            </div>
+                            {(() => {
+                              if (isInitialRuntimeMode) return null;
+                              const prompts = initialSuggestedPrompts;
+                              if (!prompts || prompts.length === 0) return null;
+                              return (
+                                <SuggestedPromptPills
+                                  prompts={prompts}
+                                  disabled={
+                                    isAgentSubscriptionMetadataPending ||
+                                    (initialPerUserConnect.needsConnect &&
+                                      Boolean(initialPerUserConnect.provider))
+                                  }
+                                  onPreviewChange={setHoveredSuggestionPrompt}
+                                  onSelect={(sp) => {
+                                    trackEvent("prompt_selected", {
+                                      agentId: initialAgentId ?? undefined,
+                                      promptLength: sp.prompt.length,
+                                    });
+                                    submitInitialMessage({
+                                      text: sp.prompt,
+                                      files: [],
+                                    });
+                                  }}
+                                />
+                              );
+                            })()}
+                            <div className="w-full max-w-4xl space-y-3">
+                              {/* Shared-element pair with the conversation composer —
+                            see the bottom-anchored ViewTransition above. */}
+                              {landingComposer}
+                            </div>
+                          </div>
+                          <div className="p-4 text-center">
+                            <Version inline />
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </ViewTransition>
               )}

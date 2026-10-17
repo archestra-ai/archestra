@@ -21,6 +21,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  ChatLandingStyle,
   ConnectionBaseUrl,
   ConnectionClientFutureProviders,
   ConnectionClientProviderKeys,
@@ -235,6 +236,17 @@ const organizationsTable = pgTable("organization", {
 
   /** Whether chat placeholders should use the typing animation */
   animateChatPlaceholders: boolean("animate_chat_placeholders")
+    .notNull()
+    .default(true),
+
+  /** Layout of the empty new-chat page */
+  chatLandingStyle: text("chat_landing_style")
+    .$type<ChatLandingStyle>()
+    .notNull()
+    .default("classic"),
+
+  /** Whether the `greeting` layout cycles its headline through the suggested prompts */
+  animateChatLandingHeadline: boolean("animate_chat_landing_headline")
     .notNull()
     .default(true),
 

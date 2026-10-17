@@ -858,6 +858,8 @@ class OrganizationModel {
       appName: org.appName ?? null,
       ogDescription: org.ogDescription ?? null,
       footerText: org.footerText ?? null,
+      chatLandingStyle: org.chatLandingStyle,
+      animateChatLandingHeadline: org.animateChatLandingHeadline,
       defaultUserLimitCleanupInterval:
         org.defaultUserLimitCleanupInterval ?? null,
       defaultMemberRole: org.defaultMemberRole ?? null,

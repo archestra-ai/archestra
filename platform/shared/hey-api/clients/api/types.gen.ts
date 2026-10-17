@@ -34203,6 +34203,8 @@ export type GetBootstrapResponses = {
             } | null;
             chatPlaceholders: Array<string> | null;
             animateChatPlaceholders: boolean;
+            chatLandingStyle: 'classic' | 'greeting' | 'glance';
+            animateChatLandingHeadline: boolean;
             iconLogo: string | null;
             iconLogoDark: string | null;
             chatErrorSupportMessage: string | null;
@@ -94842,6 +94844,8 @@ export type GetOrganizationResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -95046,6 +95050,8 @@ export type UpdateAppearanceSettingsData = {
         slimChatErrorUi?: boolean;
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
+        chatLandingStyle?: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline?: boolean;
     };
     path?: never;
     query?: never;
@@ -95179,6 +95185,8 @@ export type UpdateAppearanceSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -95394,6 +95402,8 @@ export type UpdateSecuritySettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -95606,6 +95616,8 @@ export type UpdateMcpSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -95818,6 +95830,8 @@ export type UpdateSkillsSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -96031,6 +96045,8 @@ export type UpdateAgentSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -96266,6 +96282,8 @@ export type UpdateConnectionSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -96514,6 +96532,8 @@ export type UpdateIntegrationSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -96736,6 +96756,8 @@ export type UpdateDefaultEnvironmentResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -96953,6 +96975,8 @@ export type UpdateAuthSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -97172,6 +97196,8 @@ export type UpdateKnowledgeSettingsResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -97381,6 +97407,8 @@ export type DropEmbeddingConfigResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
@@ -97952,6 +97980,8 @@ export type CompleteOnboardingResponses = {
         } | null;
         chatPlaceholders: Array<string> | null;
         animateChatPlaceholders: boolean;
+        chatLandingStyle: 'classic' | 'greeting' | 'glance';
+        animateChatLandingHeadline: boolean;
         iconLogo: string | null;
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;

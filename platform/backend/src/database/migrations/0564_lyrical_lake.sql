@@ -1,0 +1,2 @@
+ALTER TABLE "organization" ADD COLUMN "chat_landing_style" text DEFAULT 'classic' NOT NULL;--> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "animate_chat_landing_headline" boolean DEFAULT true NOT NULL;

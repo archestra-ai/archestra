@@ -248,6 +248,13 @@ const ChatLinkUrlSchema = z
     message: "Chat link URL must be a valid HTTP or HTTPS URL",
   });
 
+/**
+ * Layout of the empty new-chat page. `classic` is the original logo + pills
+ * layout and stays the default so upgrades change nothing.
+ */
+const ChatLandingStyleSchema = z.enum(["classic", "greeting", "glance"]);
+export type ChatLandingStyle = z.infer<typeof ChatLandingStyleSchema>;
+
 export const OrganizationChatLinkSchema = z.object({
   label: z.string().trim().min(1).max(25),
   url: ChatLinkUrlSchema,
@@ -360,6 +367,8 @@ const extendedFields = {
   slimChatErrorUi: z.boolean(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
+  chatLandingStyle: ChatLandingStyleSchema,
+  animateChatLandingHeadline: z.boolean(),
   requireTwoFactor: z.boolean(),
   sessionMaxAgeSeconds: z.number().int().nullable(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
@@ -447,6 +456,8 @@ export const UpdateAppearanceSettingsSchema = z.object({
   slimChatErrorUi: z.boolean().optional(),
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
+  chatLandingStyle: ChatLandingStyleSchema.optional(),
+  animateChatLandingHeadline: z.boolean().optional(),
 });
 
 export const UpdateSecuritySettingsSchema = z.object({

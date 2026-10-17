@@ -14,6 +14,7 @@ import {
   ChatPrompts,
   ChatShortcutLinks,
 } from "./chat-controls";
+import { ChatLayoutPicker } from "./chat-layout-picker";
 import { validateChatLink } from "./chat-links-editor.utils";
 import { validateOnboardingWizard } from "./onboarding-wizards-editor.utils";
 import { OnboardingGuide, SiteAnnouncement } from "./welcome-controls";
@@ -108,6 +109,18 @@ export function AppearanceEditor({
           values={draft}
           disabled={!canEdit}
           onChange={(field, value) => change(field, value)}
+        />
+      );
+      break;
+    case "layout":
+      content = (
+        <ChatLayoutPicker
+          value={draft.chatLandingStyle}
+          animateHeadline={draft.animateChatLandingHeadline}
+          onChange={(value) => change("chatLandingStyle", value)}
+          onAnimateHeadlineChange={(value) =>
+            change("animateChatLandingHeadline", value)
+          }
         />
       );
       break;

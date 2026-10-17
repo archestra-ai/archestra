@@ -63,6 +63,8 @@ export function makeOrganization(
     onboardingWizard: null,
     chatPlaceholders: null,
     animateChatPlaceholders: false,
+    chatLandingStyle: "classic",
+    animateChatLandingHeadline: true,
     iconLogo: null,
     iconLogoDark: null,
     chatErrorSupportMessage: null,

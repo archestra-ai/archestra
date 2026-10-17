@@ -16,6 +16,8 @@ export type AppearanceDraft = Pick<
   | "favicon"
   | "theme"
   | "animateChatPlaceholders"
+  | "chatLandingStyle"
+  | "animateChatLandingHeadline"
   | "slimChatErrorUi"
 > & {
   appName: string;
@@ -47,6 +49,9 @@ export function appearanceDefaults(
     chatLinks: organization.chatLinks ?? [],
     chatPlaceholders: organization.chatPlaceholders ?? [],
     animateChatPlaceholders: organization.animateChatPlaceholders,
+    // A persisted organization cache from before an upgrade lacks these.
+    chatLandingStyle: organization.chatLandingStyle ?? "classic",
+    animateChatLandingHeadline: organization.animateChatLandingHeadline ?? true,
     onboardingWizard: organization.onboardingWizard,
     chatErrorSupportMessage: organization.chatErrorSupportMessage ?? "",
     slimChatErrorUi: organization.slimChatErrorUi,
@@ -89,6 +94,9 @@ export function appearancePatch(
   }
   if (dirty.animateChatPlaceholders)
     patch.animateChatPlaceholders = draft.animateChatPlaceholders;
+  if (dirty.chatLandingStyle) patch.chatLandingStyle = draft.chatLandingStyle;
+  if (dirty.animateChatLandingHeadline)
+    patch.animateChatLandingHeadline = draft.animateChatLandingHeadline;
   if (dirty.onboardingWizard) {
     const wizard = sanitizeOnboardingWizard(draft.onboardingWizard);
     patch.onboardingWizard = wizard

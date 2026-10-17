@@ -187,6 +187,53 @@ describe("organization routes", () => {
     expect(after?.content).not.toContain("Archestra");
   });
 
+  describe("PATCH /api/organization/appearance-settings - chat landing style", () => {
+    test("defaults to the classic layout, then persists and audits a change", async () => {
+      const before = await OrganizationModel.getById(organizationId);
+      expect(before?.chatLandingStyle).toBe("classic");
+      expect(before?.animateChatLandingHeadline).toBe(true);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/appearance-settings",
+        payload: {
+          chatLandingStyle: "greeting",
+          animateChatLandingHeadline: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        chatLandingStyle: "greeting",
+        animateChatLandingHeadline: false,
+      });
+      await vi.waitFor(async () => {
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.action, "organization.updated"));
+        expect(audit?.before).toMatchObject({ chatLandingStyle: "classic" });
+        expect(audit?.after).toMatchObject({
+          chatLandingStyle: "greeting",
+          animateChatLandingHeadline: false,
+        });
+      });
+    });
+
+    test("rejects an unknown layout", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/appearance-settings",
+        payload: { chatLandingStyle: "bento" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(
+        (await OrganizationModel.getById(organizationId))?.chatLandingStyle,
+      ).toBe("classic");
+    });
+  });
+
   describe("PATCH /api/organization/agent-settings - model/key pair", () => {
     test("rejects a default model with no API key", async () => {
       const response = await app.inject({

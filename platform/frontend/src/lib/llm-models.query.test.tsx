@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LAZY_MODEL_SYNC_REFETCH_DELAY_MS,
   useLlmModels,
+  useModelsWithApiKeys,
 } from "./llm-models.query";
 import { PERSISTED_QUERY_META } from "./query-persistence";
 
@@ -124,6 +125,42 @@ describe("useLlmModels", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toHaveLength(1);
     expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("useModelsWithApiKeys", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(archestraApiSdk.getModelsWithApiKeys).mockResolvedValue({
+      data: [],
+    } as never);
+  });
+
+  it("sends a picker's filters and keeps it apart from the full catalog", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { result } = renderHook(
+      () => ({
+        full: useModelsWithApiKeys(),
+        picker: useModelsWithApiKeys({
+          apiKeyIds: ["key-1"],
+          includeAssignments: false,
+        }),
+      }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() =>
+      expect(
+        result.current.full.isSuccess && result.current.picker.isSuccess,
+      ).toBe(true),
+    );
+    expect(
+      vi
+        .mocked(archestraApiSdk.getModelsWithApiKeys)
+        .mock.calls.map(([options]) => options?.query),
+    ).toEqual([{}, { apiKeyIds: ["key-1"], includeAssignments: false }]);
   });
 });
 

@@ -7,9 +7,9 @@ import {
   useSession,
 } from "@/lib/auth/auth.query";
 import {
-  useAllOauthClients,
   useCreateOauthClient,
   useDeleteOauthClient,
+  useOauthClientsForResource,
   useRotateOauthClientSecret,
   useUpdateOauthClient,
 } from "@/lib/oauth-clients.query";
@@ -22,7 +22,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 vi.mock("@/lib/oauth-clients.query", () => ({
   useCreateOauthClient: vi.fn(),
   useDeleteOauthClient: vi.fn(),
-  useAllOauthClients: vi.fn(),
+  useOauthClientsForResource: vi.fn(),
   useRotateOauthClientSecret: vi.fn(),
   useUpdateOauthClient: vi.fn(),
 }));
@@ -73,14 +73,11 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);
-  vi.mocked(useAllOauthClients).mockReturnValue({
-    data: [
-      assignedClient,
-      { ...assignedClient, id: "other", name: "Other", allowedGatewayIds: [] },
-    ],
+  vi.mocked(useOauthClientsForResource).mockReturnValue({
+    data: [assignedClient, { ...assignedClient, id: "other", name: "Other" }],
     isPending: false,
     isLoadingError: false,
-  } as unknown as ReturnType<typeof useAllOauthClients>);
+  } as unknown as ReturnType<typeof useOauthClientsForResource>);
   for (const hook of [
     useCreateOauthClient,
     useUpdateOauthClient,
@@ -96,21 +93,23 @@ beforeEach(() => {
 });
 
 describe("McpOauthManagement", () => {
-  it("filters clients and independently exposes permitted operations", () => {
+  it("lists the resource's clients and independently exposes permitted operations", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permission) =>
         ({
-          data:
-            "oauthClient" in permission &&
-            permission.oauthClient.includes("read"),
+          data: permission.oauthClient?.includes("read") === true,
         }) as ReturnType<typeof useHasPermissions>,
     );
     mockClientGrants(["update"]);
 
-    render(<McpOauthManagement resourceId="resource-1" resourceKind="agent" />);
+    render(<McpOauthManagement resourceId="resource-1" />);
 
+    expect(useOauthClientsForResource).toHaveBeenCalledWith({
+      resourceId: "resource-1",
+      enabled: true,
+    });
     expect(screen.getByText("Assigned client")).toBeInTheDocument();
-    expect(screen.queryByText("Other")).not.toBeInTheDocument();
+    expect(screen.getByText("Other")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Edit Assigned client" }),
     ).toBeInTheDocument();
@@ -127,7 +126,7 @@ describe("McpOauthManagement", () => {
 
   it("opens combined create, edit, rotate, and delete dialogs", async () => {
     const user = userEvent.setup();
-    render(<McpOauthManagement resourceId="resource-1" resourceKind="agent" />);
+    render(<McpOauthManagement resourceId="resource-1" />);
 
     await user.click(
       screen.getByRole("button", { name: /Create OAuth client/ }),
@@ -150,7 +149,7 @@ describe("McpOauthManagement", () => {
   it("hides edit and delete when grants cover a different client", () => {
     mockClientGrants(["update", "delete"], "other");
 
-    render(<McpOauthManagement resourceId="resource-1" resourceKind="agent" />);
+    render(<McpOauthManagement resourceId="resource-1" />);
 
     expect(screen.getByText("Assigned client")).toBeInTheDocument();
     expect(

@@ -76275,6 +76275,18 @@ export type GetModelsWithApiKeysData = {
          * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
          */
         sharedWith?: Array<string>;
+        /**
+         * Only models linked to one of these provider keys.
+         */
+        apiKeyIds?: Array<string>;
+        /**
+         * Only embedding models (models with known dimensions).
+         */
+        embedding?: boolean;
+        /**
+         * Include each model's teams, users and labels (default true). False returns them empty, for pickers that show only the models.
+         */
+        includeAssignments?: boolean;
     };
     url: '/api/llm-models';
 };
@@ -76433,6 +76445,186 @@ export type GetModelsWithApiKeysResponses = {
 };
 
 export type GetModelsWithApiKeysResponse = GetModelsWithApiKeysResponses[keyof GetModelsWithApiKeysResponses];
+
+export type GetLlmModelIdsByKeyData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-models/key-model-ids';
+};
+
+export type GetLlmModelIdsByKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmModelIdsByKeyError = GetLlmModelIdsByKeyErrors[keyof GetLlmModelIdsByKeyErrors];
+
+export type GetLlmModelIdsByKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        apiKeyId: string;
+        modelIds: Array<string>;
+    }>;
+};
+
+export type GetLlmModelIdsByKeyResponse = GetLlmModelIdsByKeyResponses[keyof GetLlmModelIdsByKeyResponses];
+
+export type GetLlmModelOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-models/options';
+};
+
+export type GetLlmModelOptionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetLlmModelOptionsError = GetLlmModelOptionsErrors[keyof GetLlmModelOptionsErrors];
+
+export type GetLlmModelOptionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        modelId: string;
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+        description: string | null;
+        pricePerMillionInput: string | null;
+        pricePerMillionOutput: string | null;
+        isFree: boolean;
+        isBest: boolean;
+    }>;
+};
+
+export type GetLlmModelOptionsResponse = GetLlmModelOptionsResponses[keyof GetLlmModelOptionsResponses];
 
 export type BulkUpdateModelsData = {
     body: {
@@ -85849,6 +86041,10 @@ export type GetOauthClientsData = {
         capability?: 'mcp' | 'a2a' | 'llm:proxy';
         providerApiKeyId?: string;
         grantType?: 'client_credentials' | 'authorization_code';
+        /**
+         * Only clients that can reach this agent or MCP gateway: authorization-code clients, and client-credentials clients that list it, with the target's protocol (MCP for a gateway, A2A for an agent).
+         */
+        applicableTo?: string;
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */

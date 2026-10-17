@@ -86,11 +86,15 @@ export function useInvitation(invitationId: string) {
 }
 
 /**
- * Use active organization from authClient hook
- * Note: This uses the authClient hook directly as it's already optimized
+ * The caller's active organization id, from the session: no full-organization
+ * fetch, which also loads the members.
  */
-export function useActiveOrganization() {
-  return authClient.useActiveOrganization();
+export function useActiveOrganizationId() {
+  const { data: session, isPending } = useSession();
+  return {
+    data: session?.session?.activeOrganizationId ?? undefined,
+    isPending,
+  };
 }
 
 /**
@@ -99,9 +103,9 @@ export function useActiveOrganization() {
  * session is unresolved or names no active organization.
  *
  * The endpoint resolves the organization from the session itself, so this
- * gates on the session's activeOrganizationId rather than on
- * useActiveOrganization() — waiting for the full-organization fetch would put
- * an extra request in front of the role for no reason.
+ * gates on the session's activeOrganizationId rather than on a
+ * full-organization fetch, which would put an extra request in front of the
+ * role for no reason.
  */
 export function useActiveMemberRole() {
   const { data: session, isPending: isSessionPending } = useSession();

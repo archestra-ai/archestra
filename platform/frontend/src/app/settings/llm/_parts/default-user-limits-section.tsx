@@ -45,7 +45,7 @@ import {
   useUpdateDefaultUserLimit,
 } from "@/lib/default-user-limit.query";
 import { useEnvironments } from "@/lib/environment.query";
-import { useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmModelOptions } from "@/lib/llm-models.query";
 
 type FormState = {
   // GLOBAL_ENVIRONMENT_SCOPE for the org-wide default, otherwise an environment id.
@@ -81,7 +81,7 @@ export function DefaultUserLimitsSection() {
   const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
   const { data: limits = [] } = useDefaultUserLimits();
-  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const { data: modelsWithApiKeys = [] } = useLlmModelOptions();
   const createLimit = useCreateDefaultUserLimit();
   const updateLimit = useUpdateDefaultUserLimit();
   const deleteLimit = useDeleteDefaultUserLimit();

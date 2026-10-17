@@ -25,6 +25,8 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: vi.fn(),
+  // The key pickers' per-key model counts.
+  useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
 
 const PROVIDER_KEYS = [

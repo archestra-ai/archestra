@@ -94,7 +94,7 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
-import { useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmModelOptions } from "@/lib/llm-models.query";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useMemberOptionsReferences } from "@/lib/member-options.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -251,7 +251,7 @@ export default function LimitsPage() {
   });
   const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
-  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const { data: modelsWithApiKeys = [] } = useLlmModelOptions();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();

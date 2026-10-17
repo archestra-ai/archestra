@@ -16,7 +16,7 @@ import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { hasSessionCookie } from "@/lib/auth/session-cookie.server";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
-import { getDeploymentFavicon } from "@/lib/favicon.server";
+import { getCachedDeploymentFavicon } from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
@@ -233,7 +233,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const [favicon, cookieStore] = await Promise.all([
-    getDeploymentFavicon(),
+    getCachedDeploymentFavicon(),
     cookies(),
   ]);
   // Presence only; nothing is fetched for it. See WithAuthCheck.

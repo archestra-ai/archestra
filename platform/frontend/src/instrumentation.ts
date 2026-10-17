@@ -38,6 +38,9 @@ export async function register() {
     if (ERROR_REPORTING_DSN) {
       await import("../sentry.server.config");
     }
+    // Every document's <head> reads it; fetch it before the first one asks.
+    const { warmDeploymentFavicon } = await import("@/lib/favicon.server");
+    warmDeploymentFavicon();
   }
 
   if (process.env.NEXT_RUNTIME === "edge" && ERROR_REPORTING_DSN) {

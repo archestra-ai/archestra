@@ -244,6 +244,27 @@ describe("chat composer typing performance", () => {
     expect(screen.queryByTestId("chat-model-button")).toBeNull();
   });
 
+  it("puts context usage after the model picker while the pickers are inline", () => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+        tokensUsed={12_000}
+        maxContextLength={200_000}
+      />,
+    );
+    const modelButton = screen.getByTestId("chat-model-button");
+    const contextUsage = screen.getByRole("button", { name: "Context usage" });
+    expect(
+      modelButton.compareDocumentPosition(contextUsage) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("keeps context usage in the toolbar once a chat moves its setup into More options", () => {
     layoutState.isNarrow = true;
     render(

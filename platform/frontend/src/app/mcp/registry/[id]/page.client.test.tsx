@@ -36,6 +36,7 @@ const {
   useMcpDeploymentStatuses,
   reauthenticateMutateAsync,
   deleteMutateAsync,
+  updateCatalogMutate,
   useResourcePermissions,
   stubs,
 } = vi.hoisted(() => {
@@ -55,6 +56,7 @@ const {
     useMcpDeploymentStatuses: vi.fn(),
     reauthenticateMutateAsync: vi.fn(),
     deleteMutateAsync: vi.fn(),
+    updateCatalogMutate: vi.fn(),
     useResourcePermissions: vi.fn(),
     stubs: stubbed,
   };
@@ -86,6 +88,10 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
       useInternalMcpCatalog: (...args: unknown[]) =>
         useInternalMcpCatalog(...args),
       useCatalogTools: () => ({ data: [], isPending: false }),
+      useUpdateInternalMcpCatalogItem: () => ({
+        mutate: updateCatalogMutate,
+        isPending: false,
+      }),
     },
   ),
 }));
@@ -893,7 +899,7 @@ describe("McpCatalogItemDetailPage installations", () => {
     expect(
       content.queryByRole("button", { name: /Add shared installation/ }),
     ).toBeNull();
-    expect(columnNames(content)).toEqual(["Owner", "Added", "Actions"]);
+    expect(columnNames(content)).toEqual(["Owner", "Actions"]);
     const [row, ...otherRows] = content.getAllByRole("row").slice(1);
     expect(row).toHaveTextContent("member@example.com");
     expect(otherRows).toEqual([]);
@@ -913,7 +919,7 @@ describe("McpCatalogItemDetailPage installations", () => {
     renderPage({ serverType: "remote", localConfig: null });
 
     const content = connections();
-    expect(content.queryByText("Agents connect as")).toBeNull();
+    expect(content.queryByText("Agents connect with")).toBeNull();
     expect(content.queryByText("Service accounts")).toBeNull();
     expect(
       content.queryByRole("button", { name: /Add service account/ }),
@@ -998,12 +1004,32 @@ describe("McpCatalogItemDetailPage installations", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("keeps the default credential for someone who manages a remote server", () => {
+  it("lets someone who manages a remote server pin agents to a service account", async () => {
+    const user = userEvent.setup();
     installed([teamInstall({ serverType: "remote" })]);
     renderPage({ serverType: "remote", localConfig: null });
 
-    expect(connections().getByText("Agents connect as")).toBeVisible();
-    expect(connections().getByText("Service accounts")).toBeVisible();
+    const content = connections();
+    expect(content.getByText("Service accounts")).toBeVisible();
+    const picker = content.getByRole("combobox", {
+      name: "Account agents connect with",
+    });
+    expect(picker).toHaveTextContent("Each caller's own account");
+
+    // The picker's list scrolls its active option into view; jsdom has no
+    // layout to scroll.
+    const scrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      await user.click(picker);
+      await user.click(await screen.findByRole("option", { name: /Platform/ }));
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    }
+    expect(updateCatalogMutate).toHaveBeenCalledWith({
+      id: "cat-1",
+      data: { dynamicConnectionMcpServerId: "srv-team" },
+    });
   });
 
   it("shows a personal server's own installation as one row and uninstalls it after confirming", async () => {

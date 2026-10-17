@@ -4,8 +4,9 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
   isPlaywrightCatalogItem,
+  PLAYWRIGHT_MCP_CATALOG_ID,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToolChecklist } from "@/components/agent-tools-editor";
@@ -29,13 +30,16 @@ import {
   useUnassignToolFromApp,
 } from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
-  fetchCatalogTools,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+  type McpRegistryRow,
+  useMcpRegistryPage,
+  useMcpRegistryRowsByIds,
+} from "@/lib/mcp/mcp-registry.query";
 
-type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+/** A catalog item as the editor reads it: its registry row. */
+type CatalogItem = McpRegistryRow;
 type CatalogTool = Pick<
   archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number],
   "id" | "name" | "description" | "createdAt" | "group"
@@ -81,12 +85,12 @@ export function AppToolsEditor({
 }) {
   const { data: app } = useApp(environmentId === undefined ? appId : null);
   const { data: assigned, isPending } = useAppTools(appId);
-  const { data: catalogs = [] } = useInternalMcpCatalog();
   const { data: hasUpdatePermission } = useHasPermissions(
     { app: ["update"] },
     appId,
   );
   const canEdit = hasUpdatePermission === true && !readOnly;
+  const queryClient = useQueryClient();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
 
@@ -160,6 +164,49 @@ export function AppToolsEditor({
     return map;
   }, [assigned]);
 
+  // A pill stays visible while a server is added this session, even if the user
+  // then deselects all its tools inside the popover (mirrors the gateway).
+  const [activeCatalogIds, setActiveCatalogIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  // The rows this editor shows, without the whole registry: the servers the
+  // app's tools come from (and Playwright, offered everywhere), by id, plus
+  // one page of the servers in the app's environment or the Default one,
+  // searched on the server as the reader types.
+  const assignedCatalogIds = useMemo(
+    () => [...assignedIdsByCatalog.keys(), PLAYWRIGHT_MCP_CATALOG_ID],
+    [assignedIdsByCatalog],
+  );
+  const assignedCatalogRows = useMcpRegistryRowsByIds(assignedCatalogIds, {
+    includeBuiltIn: true,
+  });
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const debouncedCatalogSearch = useDebouncedValue(catalogSearch.trim(), 250);
+  const catalogPage = useMcpRegistryPage(
+    {
+      environmentIds: appEnvironmentId ? [appEnvironmentId] : [],
+      includeDefaultEnvironment: true,
+      ...(debouncedCatalogSearch ? { search: debouncedCatalogSearch } : {}),
+      sortBy: "name",
+      sortDirection: "asc",
+      limit: CATALOG_PAGE_SIZE,
+      offset: 0,
+    },
+    { enabled: canEdit, placeholderScope: "app-tools-editor" },
+  );
+  const isCatalogSearching =
+    catalogSearch.trim() !== debouncedCatalogSearch ||
+    (!!debouncedCatalogSearch && catalogPage.isFetching);
+  const catalogs = useMemo(() => {
+    const byId = new Map<string, CatalogItem>();
+    for (const row of assignedCatalogRows.data) byId.set(row.id, row);
+    for (const row of catalogPage.data?.data ?? []) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
+    return [...byId.values()];
+  }, [assignedCatalogRows.data, catalogPage.data]);
+
   // Candidate servers: every one in the app's environment or the Default
   // baseline apps may always draw from (Playwright is environment-agnostic
   // like a builtin), plus any server a current assignment already references
@@ -177,48 +224,52 @@ export function AppToolsEditor({
     [catalogs, appEnvironmentId, assignedIdsByCatalog],
   );
 
-  // Editors get the interactive checklist, so load each candidate's tools to
-  // group, count, and render them. Viewers only see assigned tools (below) and
-  // don't fetch catalog tools.
+  // Editors get the interactive checklist, so load the tools of the servers
+  // shown as pills (those the app uses and those just added); the Add list
+  // counts from each row's tool count. Viewers only see assigned tools
+  // (below) and don't fetch catalog tools.
+  const pillCandidates = useMemo(
+    () =>
+      candidates.filter(
+        (c) => assignedIdsByCatalog.has(c.id) || activeCatalogIds.has(c.id),
+      ),
+    [candidates, assignedIdsByCatalog, activeCatalogIds],
+  );
   const toolQueries = useQueries({
-    queries: candidates.map((c) => ({
-      queryKey: ["mcp-catalog", c.id, "tools", "picker"] as const,
-      queryFn: () => fetchCatalogTools(c.id),
-      enabled: canEdit,
-    })),
+    queries: pillCandidates.map((c) => catalogToolsQuery(c.id, canEdit)),
   });
 
   const toolsByCatalog = useMemo(() => {
     const map = new Map<string, CatalogTool[]>();
-    candidates.forEach((c, i) => {
+    pillCandidates.forEach((c, i) => {
       map.set(c.id, (toolQueries[i]?.data as CatalogTool[] | undefined) ?? []);
     });
     return map;
-  }, [candidates, toolQueries]);
+  }, [pillCandidates, toolQueries]);
 
   // Hide servers with no tools unless an assignment depends on them.
   const visibleCatalogs = useMemo(() => {
     const withTools = candidates.filter(
-      (c) =>
-        (toolsByCatalog.get(c.id)?.length ?? 0) > 0 ||
-        assignedIdsByCatalog.has(c.id),
+      (c) => c.toolCount > 0 || assignedIdsByCatalog.has(c.id),
     );
     return sortCatalogItems(
       withTools,
       (c) => assignedIdsByCatalog.get(c.id)?.size ?? 0,
-      (c) => toolsByCatalog.get(c.id)?.length ?? 0,
+      (c) => c.toolCount,
     );
-  }, [candidates, toolsByCatalog, assignedIdsByCatalog]);
+  }, [candidates, assignedIdsByCatalog]);
 
   // Assigned tools that map to no listed catalog (server removed, or the
   // catalog list failed/has not loaded) would otherwise be invisible and
   // unremovable in the grouped view; surface them as a removable fallback.
   const orphanedAssigned = useMemo(() => {
-    const catalogIds = new Set(catalogs.map((c) => c.id));
+    // Until the app's own servers are read, none of its tools is an orphan.
+    if (assignedCatalogRows.isPending) return [];
+    const catalogIds = new Set(assignedCatalogRows.data.map((c) => c.id));
     return (assigned ?? []).filter(
       (t) => !t.catalogId || !catalogIds.has(t.catalogId),
     );
-  }, [assigned, catalogs]);
+  }, [assigned, assignedCatalogRows.isPending, assignedCatalogRows.data]);
 
   // Only surface orphans still in the (possibly staged) selection so removing
   // one in controlled mode hides it immediately.
@@ -227,11 +278,6 @@ export function AppToolsEditor({
     [orphanedAssigned, selection],
   );
 
-  // A pill stays visible while a server is added this session, even if the user
-  // then deselects all its tools inside the popover (mirrors the gateway).
-  const [activeCatalogIds, setActiveCatalogIds] = useState<Set<string>>(
-    () => new Set(),
-  );
   // The pill whose popover should pop open right after it's added.
   const [autoOpenCatalogId, setAutoOpenCatalogId] = useState<string | null>(
     null,
@@ -277,10 +323,15 @@ export function AppToolsEditor({
 
   // Add a server (select all its tools) or remove it (clear all its tools),
   // toggled from the "+ Add" combobox or the pill's remove button.
-  const toggleCatalog = (catalogId: string) => {
+  const toggleCatalog = async (catalogId: string) => {
     const catalog = candidates.find((c) => c.id === catalogId);
     if (!catalog) return;
-    const catalogTools = toolsByCatalog.get(catalogId) ?? EMPTY_TOOLS;
+    const catalogTools =
+      toolsByCatalog.get(catalogId) ??
+      // A server added from the list: its tools load as it is added.
+      ((await queryClient.fetchQuery(
+        catalogToolsQuery(catalogId, true),
+      )) as CatalogTool[]);
     const shown =
       (selectedByCatalog.get(catalogId)?.size ?? 0) > 0 ||
       activeCatalogIds.has(catalogId);
@@ -310,7 +361,7 @@ export function AppToolsEditor({
   const comboboxItems: AssignmentComboboxItem[] = useMemo(
     () =>
       candidates.map((catalog) => {
-        const total = toolsByCatalog.get(catalog.id)?.length ?? 0;
+        const total = catalog.toolCount;
         const selected = selectedByCatalog.get(catalog.id)?.size ?? 0;
         const disabled = total === 0;
         return {
@@ -319,7 +370,7 @@ export function AppToolsEditor({
           description: catalog.description || undefined,
           icon: (
             <McpCatalogIcon
-              icon={catalog.icon}
+              icon={catalog.iconUrl ?? catalog.icon}
               catalogId={catalog.id}
               size={16}
             />
@@ -341,7 +392,7 @@ export function AppToolsEditor({
       <AssignedToolsReadOnly
         isPending={isPending && !assigned}
         assigned={assigned ?? []}
-        catalogs={catalogs}
+        catalogs={assignedCatalogRows.data}
       />
     );
   }
@@ -380,7 +431,7 @@ export function AppToolsEditor({
                     onSelectionChange={(next) =>
                       changeCatalogSelection(catalogTools, next)
                     }
-                    onRemove={() => toggleCatalog(catalog.id)}
+                    onRemove={() => void toggleCatalog(catalog.id)}
                     autoOpen={catalog.id === autoOpenCatalogId}
                     onAutoOpened={() => setAutoOpenCatalogId(null)}
                   />
@@ -389,8 +440,10 @@ export function AppToolsEditor({
               <AssignmentCombobox
                 items={comboboxItems}
                 selectedIds={shownCatalogIds}
-                onToggle={toggleCatalog}
+                onToggle={(catalogId) => void toggleCatalog(catalogId)}
                 onItemAdded={setAutoOpenCatalogId}
+                onSearchChange={setCatalogSearch}
+                isSearching={isCatalogSearching}
                 placeholder="Search MCP servers..."
                 emptyMessage="No MCP servers found."
                 createAction={{
@@ -490,7 +543,11 @@ function AppMcpServerPill({
   return (
     <McpServerPillShell
       icon={
-        <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={14} />
+        <McpCatalogIcon
+          icon={catalog.iconUrl ?? catalog.icon}
+          catalogId={catalog.id}
+          size={14}
+        />
       }
       displayName={catalog.name}
       count={selectedToolIds.size}
@@ -564,4 +621,15 @@ function AssignedToolsReadOnly({
       </LoadingWrapper>
     </div>
   );
+}
+
+/** Registry rows the Add list shows at a time; a search narrows on the server. */
+const CATALOG_PAGE_SIZE = 50;
+
+function catalogToolsQuery(catalogId: string, enabled: boolean) {
+  return {
+    queryKey: ["mcp-catalog", catalogId, "tools", "picker"] as const,
+    queryFn: () => fetchCatalogTools(catalogId),
+    enabled,
+  };
 }

@@ -55,6 +55,7 @@ const {
   useAppToolsMock,
   useInternalMcpCatalogMock,
   fetchCatalogToolsMock,
+  registryPageCalls,
 } = vi.hoisted(() => ({
   assignMutate: vi.fn(),
   unassignMutate: vi.fn(),
@@ -62,6 +63,7 @@ const {
   useAppToolsMock: vi.fn(),
   useInternalMcpCatalogMock: vi.fn(),
   fetchCatalogToolsMock: vi.fn(),
+  registryPageCalls: [] as unknown[],
 }));
 
 vi.mock("@/lib/app.query", () => ({
@@ -75,8 +77,28 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: useInternalMcpCatalogMock,
   fetchCatalogTools: fetchCatalogToolsMock,
+}));
+
+// The registry reads, answered from the catalog rows each test sets: the
+// app's servers by id, and the Add list's page.
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpRegistryRowsByIds: (ids: string[]) => ({
+    data: (useInternalMcpCatalogMock().data as Array<{ id: string }>).filter(
+      (row) => ids.includes(row.id),
+    ),
+    isPending: false,
+    isError: false,
+  }),
+  useMcpRegistryPage: (params: unknown) => {
+    registryPageCalls.push(params);
+    const rows = useInternalMcpCatalogMock().data as unknown[];
+    return {
+      data: { data: rows, pagination: { total: rows.length } },
+      isPending: false,
+      isFetching: false,
+    };
+  },
 }));
 
 // The catalog icon pulls in white-label app-name hooks the bare render lacks.
@@ -95,6 +117,8 @@ function makeCatalog(over: Record<string, unknown> = {}) {
     id: JIRA_CATALOG_ID,
     name: "JIRA",
     icon: null,
+    iconUrl: null,
+    toolCount: 2,
     serverType: "local",
     environmentId: null,
     ...over,
@@ -138,6 +162,7 @@ function renderControlled(onSelectionChange: (next: Set<string>) => void) {
 describe("AppToolsEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    registryPageCalls.length = 0;
     useAppMock.mockReturnValue({ data: { environmentId: null } });
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -332,5 +357,25 @@ describe("AppToolsEditor", () => {
     expect(await screen.findByText("create_issue")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(fetchCatalogToolsMock).not.toHaveBeenCalled();
+  });
+
+  it("lists the servers of the app's environment and the Default one a page at a time, loading tools only for its pills", async () => {
+    const NOTION_ID = "notion-catalog";
+    useAppMock.mockReturnValue({ data: { environmentId: "env-app" } });
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [makeCatalog(), makeCatalog({ id: NOTION_ID, name: "Notion" })],
+    });
+    renderTab();
+
+    await screen.findByRole("button", { name: /JIRA/ });
+
+    expect(registryPageCalls.at(-1)).toMatchObject({
+      environmentIds: ["env-app"],
+      includeDefaultEnvironment: true,
+      limit: 50,
+    });
+    // Notion is only offered in the list: its tools are not fetched.
+    expect(fetchCatalogToolsMock).toHaveBeenCalledWith(JIRA_CATALOG_ID);
+    expect(fetchCatalogToolsMock).not.toHaveBeenCalledWith(NOTION_ID);
   });
 });

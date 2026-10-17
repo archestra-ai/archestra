@@ -351,6 +351,28 @@ describe("MCP registry list routes", () => {
       ]);
     });
 
+    test("an environment filter can also take in the Default environment", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      await makeItem(makeInternalMcpCatalog, "default-env");
+      const elsewhere = crypto.randomUUID();
+
+      expect(names(await search({ environmentIds: [elsewhere] }))).toEqual([]);
+      expect(
+        names(
+          await search({
+            environmentIds: [elsewhere],
+            includeDefaultEnvironment: true,
+          }),
+        ),
+      ).toEqual(["default-env"]);
+      expect(
+        names(
+          await search({ environmentIds: [], includeDefaultEnvironment: true }),
+        ),
+      ).toEqual(["default-env"]);
+    });
+
     test("an author filter matches items a service account created", async ({
       makeInternalMcpCatalog,
       makeServiceAccount,

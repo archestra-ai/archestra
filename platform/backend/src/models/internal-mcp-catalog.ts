@@ -90,6 +90,8 @@ export type RegistryListFilters = {
   /** Label key → accepted values; every key must match one of its values. */
   labels?: Record<string, string[]>;
   environmentIds?: string[];
+  /** With `environmentIds`: also match items in the Default environment. */
+  includeDefaultEnvironment?: boolean;
   /** Items whose author is one of these users (and not a service account). */
   authorIds?: string[];
   /** Items created by one of these service accounts. */
@@ -2233,7 +2235,9 @@ class InternalMcpCatalogModel {
       ),
       // The registry page never lists the built-in Archestra entry; pickers
       // that offer it opt in.
-      filters.includeBuiltIn ? undefined : ne(catalog.id, ARCHESTRA_MCP_CATALOG_ID),
+      filters.includeBuiltIn
+        ? undefined
+        : ne(catalog.id, ARCHESTRA_MCP_CATALOG_ID),
     ];
     const search = filters.search?.trim();
     if (search) {
@@ -2269,7 +2273,15 @@ class InternalMcpCatalogModel {
       );
     }
     if (filters.environmentIds) {
-      conditions.push(inArray(catalog.environmentId, filters.environmentIds));
+      const inEnvironments =
+        filters.environmentIds.length > 0
+          ? inArray(catalog.environmentId, filters.environmentIds)
+          : sql`false`;
+      conditions.push(
+        filters.includeDefaultEnvironment
+          ? (or(inEnvironments, isNull(catalog.environmentId)) as SQL)
+          : inEnvironments,
+      );
     }
     // The author a row shows is its service account when it has one, else its
     // human author, so a user id matches only items no service account made.

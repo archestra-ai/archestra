@@ -248452,6 +248452,10 @@
                     "description": "Also list the built-in Archestra entry.",
                     "type": "boolean"
                   },
+                  "includeDefaultEnvironment": {
+                    "description": "With environmentIds: also match items in the Default environment (no environment).",
+                    "type": "boolean"
+                  },
                   "includeApps": {
                     "description": "Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.",
                     "type": "boolean"
@@ -249549,6 +249553,10 @@
                   },
                   "includeBuiltIn": {
                     "description": "Also list the built-in Archestra entry.",
+                    "type": "boolean"
+                  },
+                  "includeDefaultEnvironment": {
+                    "description": "With environmentIds: also match items in the Default environment (no environment).",
                     "type": "boolean"
                   },
                   "includeApps": {

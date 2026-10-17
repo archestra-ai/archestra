@@ -233,6 +233,12 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
     .boolean()
     .optional()
     .describe("Also list the built-in Archestra entry."),
+  includeDefaultEnvironment: z
+    .boolean()
+    .optional()
+    .describe(
+      "With environmentIds: also match items in the Default environment (no environment).",
+    ),
   includeApps: z
     .boolean()
     .optional()
@@ -3489,6 +3495,7 @@ async function resolveRegistryQuery(
     filters: {
       search: body.search,
       includeBuiltIn: body.includeBuiltIn,
+      includeDefaultEnvironment: body.includeDefaultEnvironment,
       // App backings are gated by `app:read`, as on the full list.
       includeApps:
         body.includeApps === true &&

@@ -1,3 +1,5 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,20 +28,26 @@ const {
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: () => ({
-    data: [
-      {
-        id: "catalog-posthog",
-        name: "PostHog",
-        serverType: "remote",
-        oauthConfig: { clientId: "client-123" },
-      },
-    ],
+}));
+
+// The flow loads the item it opens by id; connected installs come from the
+// registry's issue index.
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  fetchInternalMcpCatalogItem: async (_queryClient: unknown, id: string) =>
+    id === "catalog-posthog"
+      ? {
+          id: "catalog-posthog",
+          name: "PostHog",
+          serverType: "remote",
+          oauthConfig: { clientId: "client-123" },
+        }
+      : null,
+  useMcpRegistryIssueIndex: () => ({
+    data: { catalogItems: [], servers: [] },
   }),
 }));
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
-  useMcpServers: () => ({ data: [] }),
   useInstallMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useReauthenticateMcpServer: () => ({
     mutateAsync: vi.fn(),
@@ -85,6 +93,10 @@ vi.mock("@/lib/auth/oauth-session", () => ({
   setOAuthUserConfigValues: vi.fn(),
 }));
 
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+);
+
 describe("useMcpInstallOrchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -98,7 +110,7 @@ describe("useMcpInstallOrchestrator", () => {
   });
 
   it("starts OAuth immediately for pure OAuth re-authentication", async () => {
-    const { result } = renderHook(() => useMcpInstallOrchestrator());
+    const { result } = renderHook(() => useMcpInstallOrchestrator(), { wrapper });
 
     act(() => {
       result.current.triggerReauthByCatalogIdAndServerId(
@@ -125,11 +137,11 @@ describe("useMcpInstallOrchestrator", () => {
   });
 
   it("captures the return URL when starting OAuth for a first-time install", async () => {
-    const { result } = renderHook(() => useMcpInstallOrchestrator());
+    const { result } = renderHook(() => useMcpInstallOrchestrator(), { wrapper });
 
     // Opening the OAuth confirmation dialog should not start OAuth yet.
-    act(() => {
-      result.current.triggerInstallByCatalogId("catalog-posthog");
+    await act(async () => {
+      await result.current.triggerInstallByCatalogId("catalog-posthog");
     });
     expect(redirectBrowserToUrlMock).not.toHaveBeenCalled();
 
@@ -162,7 +174,7 @@ describe("useMcpInstallOrchestrator", () => {
   it("surfaces the backend error message when initiating OAuth fails", async () => {
     mutateAsyncMock.mockRejectedValue(new Error("No client ID available"));
 
-    const { result } = renderHook(() => useMcpInstallOrchestrator());
+    const { result } = renderHook(() => useMcpInstallOrchestrator(), { wrapper });
 
     act(() => {
       result.current.triggerReauthByCatalogIdAndServerId(

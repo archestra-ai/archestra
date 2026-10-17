@@ -63,9 +63,9 @@ import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
-  useInternalMcpCatalog,
   useRefreshInternalMcpCatalogImage,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { useMcpUsageSummary } from "@/lib/mcp/mcp-agent-usage.query";
 import {
   type McpDeploymentFeedState,
@@ -168,8 +168,10 @@ const MCP_CONNECTIONS_SECTION_ID = "connections";
 
 export function McpCatalogItemPage({ id }: { id: string }) {
   const router = useRouter();
-  const { data: catalogItems, isPending } = useInternalMcpCatalog({});
-  const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
+  // The one item this page shows, by id, with its list figures (tool count,
+  // the caller's actions) — not the whole registry.
+  const { data: itemById, isPending } = useInternalMcpCatalogItem(id);
+  const item = itemById ?? undefined;
 
   // Deleting this server invalidates the catalog list, and the refetch lands
   // long before the client-side navigation back to the registry has resolved
@@ -978,7 +980,11 @@ function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
   const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
-  const { data: servers = [] } = useMcpServers();
+  // Only this item's installs, without agents: the fact reads their modes.
+  const { data: servers = [] } = useMcpServers({
+    includeAssignedAgents: false,
+    catalogId: item.id,
+  });
 
   if (
     item.serverType !== "local" ||

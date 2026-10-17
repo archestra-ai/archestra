@@ -24,11 +24,14 @@ import {
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
+import { useQueryClient } from "@tanstack/react-query";
 import { getUsableConnectedCatalogIds } from "@/lib/mcp/connected-catalogs";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  fetchInternalMcpCatalogItem,
+  useMcpRegistryIssueIndex,
+} from "@/lib/mcp/mcp-registry.query";
 import {
   useInstallMcpServer,
-  useMcpServers,
   useReauthenticateMcpServer,
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
@@ -42,12 +45,13 @@ type DialogKey =
   | "manage";
 
 export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
-  const { data: catalogItems } = useInternalMcpCatalog({
+  // Every visible install's scope and owner, from the registry's slim issue
+  // index; the item a flow opens is loaded by id when it opens.
+  const queryClient = useQueryClient();
+  const { data: issueIndex } = useMcpRegistryIssueIndex({
     enabled: options?.enabled,
   });
-  const { data: installedServers } = useMcpServers({
-    enabled: options?.enabled,
-  });
+  const installedServers = issueIndex?.servers;
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
@@ -57,8 +61,9 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
 
   // Catalogs the current user can use a connected server for. An "Authentication
   // Required" install card flips to a connected state once its catalog appears
-  // here (the install/reauth mutations and the OAuth callback both invalidate
-  // `useMcpServers`, so this refreshes when a connection completes). Scoped to
+  // here (the install/reauth mutations and the OAuth callback invalidate the
+  // server lists and the issue index, so this refreshes when a connection
+  // completes). Scoped to
   // servers the user can actually use — not merely see — so an admin viewing
   // another user's personal install does not falsely resolve the prompt.
   const connectedCatalogIds = useMemo(
@@ -86,8 +91,8 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
 
   const findCatalogItem = useCallback(
-    (catalogId: string) => catalogItems?.find((item) => item.id === catalogId),
-    [catalogItems],
+    (catalogId: string) => fetchInternalMcpCatalogItem(queryClient, catalogId),
+    [queryClient],
   );
 
   const initiateOAuthRedirect = useCallback(
@@ -204,8 +209,8 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
 
   /** Open the correct install dialog for a given catalog ID */
   const triggerInstallByCatalogId = useCallback(
-    (catalogId: string) => {
-      const catalogItem = findCatalogItem(catalogId);
+    async (catalogId: string) => {
+      const catalogItem = await findCatalogItem(catalogId);
       if (!catalogItem) return;
 
       if (catalogItem.serverType === "local") {
@@ -219,8 +224,8 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
 
   /** Trigger re-authentication for a specific server, preserving tool assignments */
   const triggerReauthByCatalogIdAndServerId = useCallback(
-    (catalogId: string, serverId: string) => {
-      const catalogItem = findCatalogItem(catalogId);
+    async (catalogId: string, serverId: string) => {
+      const catalogItem = await findCatalogItem(catalogId);
       if (!catalogItem) return;
 
       setReauthServerId(serverId);

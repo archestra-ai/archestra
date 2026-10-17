@@ -1190,7 +1190,8 @@ function RemoveBatteryDialog({
  */
 function SyncToolsButton({ catalogId }: { catalogId: string }) {
   const client = useQueryClient();
-  const servers = useMcpServers();
+  // Only this entry's installs, without agents.
+  const servers = useMcpServers({ includeAssignedAgents: false, catalogId });
   const reload = useReloadMcpServerTools();
   const target = (servers.data ?? [])
     .filter((server) => server.catalogId === catalogId)

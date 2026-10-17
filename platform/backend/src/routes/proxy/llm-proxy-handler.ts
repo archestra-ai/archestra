@@ -810,6 +810,12 @@ export async function handleLLMProxy<
           "The token's user may not use this provider key.",
         );
       }
+      if (providerKey.provider !== providerName) {
+        throw new ApiError(
+          400,
+          `Provider key is not for provider "${providerName}".`,
+        );
+      }
       personalTokenUserId = personalToken.userId;
       userId = personalToken.userId;
       resolvedUser = await UserModel.getById(userId);
@@ -971,6 +977,7 @@ export async function handleLLMProxy<
     passthroughUserId,
     jwksUserId,
     oauthUserId,
+    personalTokenUserId,
     regularVirtualKeyUserId,
   ]);
 

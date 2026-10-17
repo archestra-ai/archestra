@@ -773,6 +773,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
           {
             initialPermissionGrants: body.initialGrants ?? [],
+            apiKeyValue: actualApiKeyValue ?? null,
           },
           // SPDX-SnippetEnd
         );
@@ -1169,6 +1170,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           newSecretId = secret.id;
         }
+        await LlmProviderApiKeyModel.recordCredentialKind({
+          id: apiKeyFromDB.id,
+          apiKeyValue: testValue,
+        });
       } else if (
         body.baseUrl !== undefined ||
         body.inferenceBaseUrl !== undefined ||
@@ -1434,6 +1439,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           secretId: secret.id,
         });
       }
+      await LlmProviderApiKeyModel.recordCredentialKind({
+        id: keyRow.id,
+        apiKeyValue: latestValue,
+      });
 
       await LlmProviderApiKeyModel.setRequiresReauthentication({
         id: keyRow.id,

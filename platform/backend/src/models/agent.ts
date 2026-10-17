@@ -1877,9 +1877,11 @@ class AgentModel {
         teamName: sql<string>`COALESCE(${agentFirstGrantedTeamName()}, '')`.as(
           "team_name",
         ),
+        // The author test is cheap and rejects nearly every row, so it runs
+        // before the policy probe.
         personalPriority: sql<number>`CASE
-          WHEN ${agentAudienceIs("personal")}
-            AND ${schema.agentsTable.authorId} = ${params.userId}
+          WHEN ${schema.agentsTable.authorId} = ${params.userId}
+            AND ${agentAudienceIs("personal")}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`(
           SELECT ${schema.agentPinsTable.pinnedAt}

@@ -15,6 +15,7 @@ import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
 import InteractionDeltaManager from "@/models/interaction-delta-manager";
+import InteractionUserActivityModel from "@/models/interaction-user-activity";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { openappaActor, scopedSessionId } from "@/openappa/actor";
@@ -50,6 +51,47 @@ describe("interaction routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("ready most-active user list preserves organization scope and own-log visibility", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeOrganization,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const other = await makeOrganization();
+    const foreign = await makeAgent({ organizationId: other.id });
+    const quiet = await makeUser({ name: "Alpha" });
+    const busy = await makeUser({ name: "Zulu" });
+    const excluded = await makeUser();
+    await makeInteraction(agent.id, { userId: quiet.id });
+    await makeInteraction(agent.id, { userId: busy.id });
+    await makeInteraction(agent.id, { userId: busy.id });
+    await makeInteraction(foreign.id, { userId: excluded.id });
+    await InteractionUserActivityModel.setEnabled(true);
+    expect(
+      (await InteractionUserActivityModel.rebuildBatch({ batchSize: 100 }))
+        .ready,
+    ).toBe(true);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions/user-ids?limit=2",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      { id: busy.id, name: busy.name },
+      { id: quiet.id, name: quiet.name },
+    ]);
+    await makeMember(quiet.id, organizationId, { role: "member" });
+    currentUser = quiet;
+    const own = await app.inject({
+      method: "GET",
+      url: "/api/interactions/user-ids?limit=100",
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toEqual([{ id: quiet.id, name: quiet.name }]);
   });
 
   test("returns scoped lineage and fails closed for ambiguous organization-wide lineage", async ({

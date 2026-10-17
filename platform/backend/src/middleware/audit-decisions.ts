@@ -1073,6 +1073,26 @@ export const AUDIT_DECISIONS = {
     reason:
       "internal completion ledger committed with application data upgrades",
   },
+  interactionUserActivityTable: {
+    audited: false,
+    reason: "derived log user activity counts",
+  },
+  interactionUserActivityDeltasTable: {
+    audited: false,
+    reason: "transactional rebuild delta balances",
+  },
+  interactionUserActivityStateTable: {
+    audited: false,
+    reason: "internal rebuild readiness and owner revision",
+  },
+  interactionUserActivityUsersTable: {
+    audited: false,
+    reason: "internal per-user rebuild checkpoints",
+  },
+  interactionUserActivityMissingOwnersTable: {
+    audited: false,
+    reason: "internal unresolved owner dependencies",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

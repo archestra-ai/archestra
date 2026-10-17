@@ -8,6 +8,7 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
   PluginModel,
+  SkillMarketplaceCredentialModel,
   SkillMarketplaceRepoModel,
   SkillModel,
   SkillShareLinkModel,
@@ -649,6 +650,40 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
         path.join(cloneDir, "platform-mismatch"),
       );
       expect(result.code).not.toBe(0);
+    }, 30_000);
+
+    test("the static URL clones with the token as the URL password", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      await seedSkill({ organizationId: org.id, name: "Team Wide" });
+      const { rawToken } = await SkillMarketplaceCredentialModel.create({
+        organizationId: org.id,
+        userId: user.id,
+      });
+
+      // The form the installer gets: username `token`, marketplace token as
+      // password.
+      const cloneUrl = `http://token:${encodeURIComponent(rawToken)}@127.0.0.1:${new URL(baseUrl).port}/skills/marketplace.git`;
+      const target = path.join(cloneDir, "static-setup-credential");
+      const result = await runGitClone(cloneUrl, target);
+      if (result.code !== 0) {
+        throw new Error(`git clone failed (${result.code}): ${result.stderr}`);
+      }
+      const manifest = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".claude-plugin/marketplace.json"),
+          "utf8",
+        ),
+      );
+      const pluginRoot = path.join(target, manifest.plugins[0].source);
+      expect(await fs.readdir(path.join(pluginRoot, "skills"))).toEqual([
+        "team-wide",
+      ]);
     }, 30_000);
 
     test("the static URL clones what the caller may read, and updates in place", async ({

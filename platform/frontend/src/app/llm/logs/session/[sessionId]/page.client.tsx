@@ -1,37 +1,20 @@
 "use client";
 
-import {
-  clientForExternalAgentIds,
-  DynamicInteraction,
-  INTERACTION_SOURCE_DISPLAY,
-  type InteractionSource,
-} from "@archestra/shared";
+import { DynamicInteraction } from "@archestra/shared";
 import {
   ArrowLeft,
-  Bot,
+  ArrowUpRight,
   Download,
-  Layers,
   Loader2,
   LockKeyhole,
-  User,
+  TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { use } from "react";
-import { BilledCost } from "@/components/billed-cost";
-import { ClientSourceBadge } from "@/components/client-source-badge";
-import {
-  type DetailFact,
-  DetailFacts,
-  presentFacts,
-} from "@/components/detail-facts";
-import MessageThread from "@/components/message-thread";
+import { useRouter, useSearchParams } from "next/navigation";
+import { use, useCallback, useMemo, useState } from "react";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RequestLatency } from "@/components/request-latency";
-import { SourceBadge } from "@/components/source-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -40,22 +23,12 @@ import {
   EmptyHeader,
   EmptyMedia,
 } from "@/components/ui/empty";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TablePagination } from "@/components/ui/table-pagination";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
-import { VirtualKeyBadge } from "@/components/virtual-key-badge";
 import { useFeature } from "@/lib/config/config.query";
-import { typeRole } from "@/lib/design/type-scale";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   useExportSessionInteractions,
   useInteraction,
@@ -63,8 +36,28 @@ import {
   useInteractionSummaries,
   useSessionLineage,
 } from "@/lib/interactions/interaction.query";
-import { formatDate } from "@/lib/utils/date-time";
-import { cn } from "@/lib/utils/tailwind";
+import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
+import {
+  type LoadedConversation,
+  RequestDetails,
+} from "./_parts/request-details";
+import { RequestWaterfall } from "./_parts/request-waterfall";
+import { SessionFacts, TrajectoryFacts } from "./_parts/session-facts";
+import {
+  SessionHeaderTitle,
+  SessionIdentityLine,
+} from "./_parts/session-header";
+import {
+  buildTimeline,
+  requestSpanKey,
+  type TimelineSpan,
+  toolCallSpanKey,
+} from "./_parts/session-timeline";
+import {
+  DETAILS_PANE_DEFAULT_HEIGHT,
+  SplitHandle,
+} from "./_parts/split-handle";
+import { useSessionToolCalls } from "./_parts/use-session-tool-calls";
 
 export default function SessionDetailPage({
   paramsPromise,
@@ -78,6 +71,10 @@ export default function SessionDetailPage({
   const openappaEnabled = useFeature("openappaEnabled") === true;
   const { pageIndex, pageSize, offset, setPagination } =
     useDataTableQueryParams();
+  const { label: providerLabel } = useModelProviderCatalog();
+  const { displayByName: serverDisplayByName } = useMcpServerDisplayByName();
+  // `/mcp/logs` links a session-bound tool call here, preselected.
+  const targetToolCallId = useSearchParams().get("toolCall");
 
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractionSummaries({
@@ -127,7 +124,11 @@ export default function SessionDetailPage({
     sessionData?.totalCacheWriteTokens ??
     interactions.reduce((sum, i) => sum + (i.cacheWriteTokens ?? 0), 0);
   const models = sessionData?.models ?? [
-    ...new Set(interactions.map((i) => i.model).filter(Boolean)),
+    ...new Set(
+      interactions.flatMap((interaction) =>
+        interaction.model ? [interaction.model] : [],
+      ),
+    ),
   ];
   const firstRequest = sessionData?.firstRequestTime ?? null;
   const lastRequest = sessionData?.lastRequestTime ?? null;
@@ -138,14 +139,7 @@ export default function SessionDetailPage({
   const totalSubscriptionCost = sessionData?.totalSubscriptionCost;
   const totalBaselineCost = sessionData?.totalBaselineCost;
 
-  // Session metadata from API
-  // Badge for known clients (Claude, Codex); null for non-client agent ids.
-  // Derived from the client-attribution column (external_agent_id).
-  const clientSource = clientForExternalAgentIds(
-    sessionData?.externalAgentIds ?? [],
-  );
-  const profileName = sessionData?.profileName;
-  const userNames = sessionData?.userNames ?? [];
+  const profileName = sessionData?.profileName ?? null;
 
   // Session title: prefer a generated title, then the bounded session preview.
   const getSessionTitle = () => {
@@ -158,14 +152,47 @@ export default function SessionDetailPage({
 
   const exportSession = useExportSessionInteractions();
 
-  // Build the conversation thread for the latest main interaction.
-  const lastMainInteraction = lastMainRequest
-    ? new DynamicInteraction(lastMainRequest)
-    : null;
-  const conversationMessages = lastMainInteraction
-    ? lastMainInteraction.mapToUiMessages()
-    : [];
-  const conversationChatErrors = lastMainRequest?.chatErrors ?? [];
+  // The conversation thread of the latest main request; the only one loaded.
+  const conversation = useMemo((): LoadedConversation | null => {
+    if (!lastMainRequest) return null;
+    const interaction = new DynamicInteraction(lastMainRequest);
+    const messages = interaction.mapToUiMessages();
+    if (messages.length === 0) return null;
+    return {
+      messages,
+      chatErrors: lastMainRequest.chatErrors ?? [],
+      conversationId: lastMainRequest.sessionId ?? undefined,
+      agentName: profileName ?? undefined,
+      modelName: interaction.modelName,
+    };
+  }, [lastMainRequest, profileName]);
+
+  const goToPage = useCallback(
+    (nextPageIndex: number) =>
+      setPagination({ pageIndex: nextPageIndex, pageSize }),
+    [setPagination, pageSize],
+  );
+  const sessionToolCalls = useSessionToolCalls({
+    sessionId,
+    requests: interactions,
+    requestsReady: interactionsResponse !== undefined && !interactionsLoading,
+    pageIndex,
+    pageSize,
+    offset,
+    onLocatePage: goToPage,
+    targetToolCallId,
+  });
+  const { toolCalls } = sessionToolCalls;
+
+  const timeline = useMemo(
+    () => buildTimeline({ requests: interactions, toolCalls }),
+    [interactions, toolCalls],
+  );
+  const spans = timeline?.spans ?? [];
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const [detailsHeight, setDetailsHeight] = useState(
+    DETAILS_PANE_DEFAULT_HEIGHT,
+  );
 
   const unavailableSession =
     sessionResponse !== undefined && sessionResponse.data.length === 0;
@@ -222,407 +249,237 @@ export default function SessionDetailPage({
     );
   }
 
-  // The session numbers display as one wrapping row under the header.
-  // When OpenAPPA is enabled, this row also shows the trajectory identity
-  // that the proxy bound: session ID, session source, and each origin that
-  // wrote to it (such as chat, compaction, or title generation).
-  const sessionOrigins = sessionData?.sources?.length
-    ? sessionData.sources
-    : sessionData?.source
-      ? [sessionData.source]
-      : [];
-  const facts: DetailFact[] = presentFacts([
-    openappaEnabled && sessionData?.sessionId
-      ? {
-          label: "Session",
-          value: (
-            <span className="font-mono text-xs break-all">
-              {sessionData.sessionId}
-            </span>
-          ),
-        }
-      : null,
-    openappaEnabled && sessionData?.sessionSource
-      ? {
-          label: "Session source",
-          value: (
-            <span className="font-mono text-xs">
-              {sessionData.sessionSource}
-            </span>
-          ),
-        }
-      : null,
-    openappaEnabled && lineage?.forkedFrom
-      ? {
-          label: "Forked from",
-          value: <SessionLink sessionId={lineage.forkedFrom} />,
-        }
-      : null,
-    openappaEnabled && lineage && lineage.forks.length > 0
-      ? {
-          label: lineage.forks.length === 1 ? "Fork" : "Forks",
-          value: (
-            <div className="flex flex-col gap-0.5">
-              {lineage.forks.map((fork) => (
-                <SessionLink key={fork} sessionId={fork} />
-              ))}
-              {lineage.forksTruncated && (
-                <span className="text-xs text-muted-foreground">
-                  Additional forks not shown
-                </span>
-              )}
-            </div>
-          ),
-        }
-      : null,
-    openappaEnabled && sessionOrigins.length > 0
-      ? {
-          label: sessionOrigins.length === 1 ? "Origin" : "Origins",
-          value: (
-            <div className="flex flex-wrap gap-1">
-              {sessionOrigins.map((origin) => (
-                <SourceBadge key={origin} source={origin} />
-              ))}
-            </div>
-          ),
-        }
-      : null,
-    {
-      label: "Requests",
-      value: (
-        <span className="font-mono tabular-nums">
-          {totalRequests.toLocaleString()}
-        </span>
-      ),
-    },
-    {
-      label: "Tokens",
-      value: (
-        <div className="space-y-0.5">
-          <div className="font-mono tabular-nums">
-            {totalInputTokens.toLocaleString()} in /{" "}
-            {totalOutputTokens.toLocaleString()} out
-          </div>
-          {(totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) && (
-            <div className={cn(typeRole({ role: "meta" }), "font-mono")}>
-              {totalCacheReadTokens.toLocaleString()} cache read /{" "}
-              {totalCacheWriteTokens.toLocaleString()} cache write
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      label: "Cost",
-      value:
-        totalCost && totalBaselineCost ? (
-          <TooltipProvider>
-            <BilledCost
-              cost={totalCost}
-              billedCost={totalBilledCost}
-              subscriptionCost={totalSubscriptionCost}
-              baselineCost={totalBaselineCost}
-              format="percent"
-              tooltip="hover"
-              variant="session"
-            />
-          </TooltipProvider>
-        ) : (
-          <span className="font-mono tabular-nums">-</span>
-        ),
-    },
-    ...(models.length > 0
-      ? [
-          {
-            label: models.length === 1 ? "Model" : "Models",
-            value: (
-              <div className="flex flex-wrap gap-1">
-                {models.map((model) => (
-                  <Badge key={model} variant="secondary" className="text-xs">
-                    {model}
-                  </Badge>
-                ))}
-              </div>
-            ),
-          },
-        ]
-      : []),
-    ...(firstRequest
-      ? [
-          {
-            label: "First request",
-            value: (
-              <span className="font-mono tabular-nums">
-                {formatDate({ date: firstRequest })}
-              </span>
-            ),
-          },
-        ]
-      : []),
-    ...(lastRequest
-      ? [
-          {
-            label: "Last request",
-            value: (
-              <span className="font-mono tabular-nums">
-                {formatDate({ date: lastRequest })}
-              </span>
-            ),
-          },
-        ]
-      : []),
-  ]);
+  const conversationRowId = sessionData?.lastInteractionId ?? null;
+  const conversationKey = conversationRowId
+    ? requestSpanKey(conversationRowId)
+    : null;
+  const linkedKey =
+    targetToolCallId && sessionToolCalls.targetOnPage
+      ? toolCallSpanKey(targetToolCallId)
+      : null;
+  // Selection falls back to the tool call the URL linked to, then to the
+  // request the loaded conversation came from, then to the newest record.
+  const indexOfKey = (key: string | null) =>
+    key ? spans.findIndex((span) => span.key === key) : -1;
+  let selectedIndex = indexOfKey(pickedKey);
+  if (selectedIndex < 0) selectedIndex = indexOfKey(linkedKey);
+  if (selectedIndex < 0) selectedIndex = indexOfKey(conversationKey);
+  if (selectedIndex < 0) selectedIndex = spans.length - 1;
+  const selected = selectedIndex >= 0 ? spans[selectedIndex] : null;
+  const conversationOnPage = indexOfKey(conversationKey) >= 0;
+
+  const step = (delta: number) => {
+    if (spans.length === 0) return;
+    const next = Math.min(spans.length - 1, Math.max(0, selectedIndex + delta));
+    setPickedKey(spans[next].key);
+  };
+
+  // Requests are listed newest first, so the latest one lives on page one.
+  const jumpToConversation =
+    conversation && conversationRowId
+      ? conversationOnPage
+        ? () => setPickedKey(conversationKey)
+        : pageIndex > 0
+          ? () => {
+              setPickedKey(conversationKey);
+              goToPage(0);
+            }
+          : null
+      : null;
+
+  const openSpan = (span: TimelineSpan) =>
+    router.push(
+      span.type === "request"
+        ? `/llm/logs/${span.row.id}`
+        : `/mcp/logs/${span.call.id}`,
+    );
+  const exportDisabled = exportSession.isPending || totalRequests === 0;
 
   return (
-    <PageLayout
-      title={<span className="line-clamp-2">{sessionTitle || "Session"}</span>}
-      documentTitle={sessionTitle || "Session"}
-      backLink={<PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>}
-      // Who and what this session was, beside the title rather than repeated
-      // as a second heading over a card below it.
-      description={
-        <div className="flex flex-wrap items-center gap-2">
-          {clientSource && <ClientSourceBadge client={clientSource} />}
-          <SourceBadge source={sessionData?.source} />
-          {profileName && (
-            <Badge variant="secondary" className="text-xs">
-              <Layers className="h-3 w-3 mr-1" />
-              {profileName}
-            </Badge>
-          )}
-          {userNames.map((userName) => (
-            <Badge key={userName} variant="outline" className="text-xs">
-              <User className="h-3 w-3 mr-1" />
-              <span>{userName}</span>
-            </Badge>
-          ))}
-          <UnattributedUserBadge reason={sessionData?.unattributedReason} />
-          <VirtualKeyBadge virtualKeys={sessionData?.virtualKeys} />
-        </div>
-      }
-      actionButton={
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => exportSession.mutate({ sessionId })}
-          disabled={exportSession.isPending || totalRequests === 0}
-        >
-          {exportSession.isPending ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4 mr-2" />
-          )}
-          <span>Export JSON</span>
-        </Button>
-      }
-    >
-      <div className="space-y-6">
-        {/* Reads as a continuation of the header band above it, which is where
-            these numbers belong: they describe the session, not a section of
-            the page. The hairline separates them from the content proper. */}
-        <DetailFacts facts={facts} className="border-b pb-6" />
+    <TooltipProvider delayDuration={150}>
+      <PageLayout
+        title={
+          <SessionHeaderTitle
+            session={sessionData}
+            title={sessionTitle || "Session"}
+          />
+        }
+        documentTitle={sessionTitle || "Session"}
+        stackHeaderOnMobile
+        backLink={
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+        }
+        description={<SessionIdentityLine session={sessionData} />}
+      >
+        <div className="space-y-6 pb-10">
+          <SessionFacts
+            totals={{
+              inputTokens: totalInputTokens,
+              outputTokens: totalOutputTokens,
+              cacheReadTokens: totalCacheReadTokens,
+              cacheWriteTokens: totalCacheWriteTokens,
+              cost: totalCost,
+              billedCost: totalBilledCost,
+              subscriptionCost: totalSubscriptionCost,
+              baselineCost: totalBaselineCost,
+            }}
+            totalRequests={totalRequests}
+            rows={interactions}
+            models={models}
+            firstRequest={firstRequest}
+            lastRequest={lastRequest}
+            fallbackType={sessionData?.lastInteractionType ?? null}
+            providerLabel={providerLabel}
+          />
 
-        {/* Latest Conversation */}
-        {lastMainRequest && conversationMessages.length > 0 && (
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Latest Conversation</h2>
-            <div className="border border-border rounded-lg bg-background overflow-hidden">
-              <div className="max-h-[600px] overflow-y-auto">
-                <MessageThread
-                  messages={conversationMessages}
-                  chatErrors={conversationChatErrors}
-                  conversationId={lastMainRequest.sessionId ?? undefined}
-                  containerClassName="h-auto"
-                  hideDivider
-                  agentName={profileName ?? undefined}
-                  selectedModel={lastMainInteraction?.modelName}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+          {/* When OpenAPPA is enabled, the trajectory identity the proxy
+              bound: session id, what bound it, each origin that wrote to it
+              (chat, compaction, title generation), and its fork lineage. */}
+          {openappaEnabled ? (
+            <TrajectoryFacts session={sessionData} lineage={lineage} />
+          ) : null}
 
-        {/* Interactions Table */}
-        {interactionsLoading ? null : (
-          <div className="rounded-md border overflow-x-auto">
-            <Table className="table-fixed w-full min-w-[700px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[120px]">Time</TableHead>
-                  <TableHead className="w-[115px]">Agent</TableHead>
-                  <TableHead className="w-[140px]">Model</TableHead>
-                  <TableHead className="w-[160px]">Tokens</TableHead>
-                  <TableHead className="w-[160px]">Cost</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {interactions.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center text-muted-foreground"
-                    >
-                      No interactions found for this session
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  interactions.map((interaction) => {
-                    const source = interaction.source;
-                    const typeLabel = sessionInteractionAgentLabel({
-                      source,
-                      requestType: interaction.requestType,
-                      externalAgentIdLabel: interaction.externalAgentIdLabel,
-                      externalAgentId: interaction.externalAgentId,
-                      profileName,
-                    });
-                    const showBot =
-                      Boolean(interaction.externalAgentIdLabel) ||
-                      interaction.requestType === "subagent" ||
-                      isAuxiliaryInteractionSource(source);
-
-                    return (
-                      <TableRow
-                        key={interaction.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() =>
-                          router.push(`/llm/logs/${interaction.id}`)
-                        }
-                      >
-                        <TableCell className="font-mono text-xs">
-                          <div>
-                            {formatDate({ date: interaction.createdAt })}
-                          </div>
-                          <RequestLatency durationMs={interaction.durationMs} />
-                        </TableCell>
-                        <TableCell className="overflow-hidden">
-                          <Badge
-                            variant="outline"
-                            className="text-xs max-w-full inline-flex truncate"
-                          >
-                            {showBot && (
-                              <Bot className="h-3 w-3 mr-1 shrink-0" />
-                            )}
-                            <span className="truncate">{typeLabel}</span>
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="overflow-hidden">
-                          <div className="flex flex-wrap gap-1">
-                            <Badge
-                              variant="secondary"
-                              className="text-xs max-w-full inline-flex truncate"
-                            >
-                              {interaction.model ?? "Unknown"}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {(interaction.inputTokens ?? 0).toLocaleString()} in /{" "}
-                          {(interaction.outputTokens ?? 0).toLocaleString()} out
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <TooltipProvider>
-                            <BilledCost
-                              cost={interaction.cost || "0"}
-                              billingMode={interaction.billingMode}
-                              baselineCost={
-                                interaction.baselineCost ||
-                                interaction.cost ||
-                                "0"
-                              }
-                              format="percent"
-                              tooltip="hover"
-                              variant="interaction"
-                              baselineModel={interaction.baselineModel}
-                              actualModel={interaction.model}
-                            />
-                          </TooltipProvider>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-            {paginationMeta && paginationMeta.total > 0 && (
-              <div className="px-2 py-4">
-                <TablePagination
-                  pageIndex={pageIndex}
-                  pageSize={pageSize}
-                  total={paginationMeta.total}
-                  onPaginationChange={setPagination}
-                  leftContent={
-                    <>
-                      Showing {offset + 1} to{" "}
-                      {Math.min(offset + pageSize, paginationMeta.total)} of{" "}
-                      {paginationMeta.total} requests
-                    </>
+          {/* overflow-clip, not hidden, below lg: hidden would make the card
+              a scroll container and break the sticky pane headers. */}
+          <section
+            aria-label="Requests and request details"
+            className="overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
+          >
+            <RequestWaterfall
+              timeline={timeline}
+              loading={interactionsLoading}
+              profileName={profileName}
+              serverDisplayByName={serverDisplayByName}
+              conversationRowId={conversation ? conversationRowId : null}
+              selectedKey={selected?.key ?? null}
+              highlightedKey={linkedKey}
+              onSelect={setPickedKey}
+              onOpen={openSpan}
+              notice={
+                <ToolCallsNotice
+                  failed={sessionToolCalls.isError}
+                  onRetry={() => sessionToolCalls.refetch()}
+                  truncated={sessionToolCalls.truncated}
+                  missingToolCallId={
+                    sessionToolCalls.targetMissing ? targetToolCallId : null
                   }
                 />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </PageLayout>
+              }
+              pagination={
+                paginationMeta && paginationMeta.total > 0
+                  ? {
+                      pageIndex,
+                      pageSize,
+                      offset,
+                      total: paginationMeta.total,
+                      onPaginationChange: setPagination,
+                    }
+                  : null
+              }
+              totalRequests={totalRequests}
+              action={
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => exportSession.mutate({ sessionId })}
+                  disabled={exportDisabled}
+                >
+                  {exportSession.isPending ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Download aria-hidden="true" />
+                  )}
+                  {/* Phones show the glyph alone beside the card's title. */}
+                  <span className="max-lg:sr-only">Export JSON</span>
+                </Button>
+              }
+            />
+            <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
+            <RequestDetails
+              height={detailsHeight}
+              loading={interactionsLoading}
+              span={selected}
+              origin={timeline?.origin ?? 0}
+              previous={selectedIndex > 0 ? spans[selectedIndex - 1] : null}
+              index={selectedIndex}
+              count={spans.length}
+              profileName={profileName}
+              providerLabel={providerLabel}
+              serverDisplayByName={serverDisplayByName}
+              onStep={step}
+              onOpen={openSpan}
+              conversation={conversation}
+              hasConversation={
+                Boolean(conversation) && selected?.key === conversationKey
+              }
+              onJumpToConversation={jumpToConversation}
+            />
+          </section>
+        </div>
+      </PageLayout>
+    </TooltipProvider>
   );
 }
 
-/** A link to another session's page, by its id. */
-function SessionLink({ sessionId }: { sessionId: string }) {
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/** What the request list cannot show about this page's tool calls, if anything. */
+function ToolCallsNotice({
+  failed,
+  onRetry,
+  truncated,
+  missingToolCallId,
+}: {
+  failed: boolean;
+  onRetry: () => void;
+  truncated: boolean;
+  missingToolCallId: string | null;
+}) {
+  if (!failed && !truncated && !missingToolCallId) return null;
   return (
-    <Link
-      href={`/llm/logs/session/${encodeURIComponent(sessionId)}`}
-      className="font-mono text-xs break-all underline-offset-2 hover:underline"
-    >
-      {sessionId}
-    </Link>
+    <div className="space-y-2 border-b px-4 py-2.5">
+      {failed ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <span className="font-medium">Tool calls didn't load</span>
+          <InlineNoticeText>
+            The requests are complete; the MCP tool calls between them are
+            missing.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetry}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {truncated ? (
+        <InlineNotice variant="info">
+          <InlineNoticeText>
+            Showing the latest 100 tool calls in this page's time range. Pick a
+            smaller page size to see them all.
+          </InlineNoticeText>
+        </InlineNotice>
+      ) : null}
+      {missingToolCallId ? (
+        <InlineNotice variant="neutral">
+          <InlineNoticeText>
+            The linked tool call isn't among this page's records.
+          </InlineNoticeText>
+          <Button variant="outline" size="xs" className="ml-auto" asChild>
+            <Link href={`/mcp/logs/${missingToolCallId}`}>
+              <span>Open tool call</span>
+              <ArrowUpRight />
+            </Link>
+          </Button>
+        </InlineNotice>
+      ) : null}
+    </div>
   );
 }
-
-function isAuxiliaryInteractionSource(
-  source: InteractionSource | null | undefined,
-): boolean {
-  return source != null && AUXILIARY_SOURCES.has(source);
-}
-
-function sessionInteractionAgentLabel(params: {
-  source?: InteractionSource | null;
-  requestType?: "main" | "subagent";
-  externalAgentIdLabel?: string | null;
-  externalAgentId?: string | null;
-  profileName?: string | null;
-}): string {
-  if (params.requestType === "subagent") return "Sub-agent";
-  if (isAuxiliaryInteractionSource(params.source) && params.source) {
-    return INTERACTION_SOURCE_DISPLAY[params.source].label;
-  }
-  return (
-    params.externalAgentIdLabel ||
-    params.externalAgentId ||
-    params.profileName ||
-    "Main"
-  );
-}
-
-const AUXILIARY_SOURCES = new Set<InteractionSource>([
-  "opencode:subagent",
-  "opencode:title",
-  "opencode:compaction",
-  "kilo:subagent",
-  "kilo:title",
-  "kilo:compaction",
-  "chat:compaction",
-  "a2a:compaction",
-  "chat:title_generation",
-  "chat:tool_call_repair",
-  "a2a:tool_call_repair",
-  "skill:description_generation",
-  "guardrail:annotator",
-  "knowledge:embedding",
-  "knowledge:reranker",
-  "knowledge:query-expansion",
-  "knowledge:contextual-retrieval",
-  "knowledge:ocr",
-  "app:llm_complete",
-  "app:recording_enhancement",
-]);

@@ -1,7 +1,8 @@
-import type {
-  archestraApiTypes,
-  InteractionSource,
-  SupportedProvider,
+import {
+  type archestraApiTypes,
+  INTERACTION_SOURCE_DISPLAY,
+  type InteractionSource,
+  type SupportedProvider,
 } from "@archestra/shared";
 
 // Pure formatting for the LLM logs table cells. Nothing here renders; the cell
@@ -113,6 +114,20 @@ export function formatUsageCost(value: number): string {
   return `$${formatCompactNumber(value)}`;
 }
 
+/**
+ * One request's dollars. A single request routinely costs a fraction of a
+ * cent, where {@link formatUsageCost}'s "<$0.01" would make every row look
+ * the same, so small amounts keep two significant figures ($0.005, $0.061)
+ * instead of the six decimals of the exact figure.
+ */
+export function formatRequestCost(value: number): string {
+  if (value === 0) return "$0";
+  if (value < 0.0001) return "<$0.0001";
+  if (value < 0.1) return `$${Number(value.toPrecision(2))}`;
+  if (value < 1000) return `$${value.toFixed(2)}`;
+  return `$${formatCompactNumber(value)}`;
+}
+
 export function formatCompactNumber(value: number): string {
   return compactNumberFormatter.format(value);
 }
@@ -170,6 +185,23 @@ export function identiconHue(seed: string): number {
     hash = (hash * 31 + seed.charCodeAt(i)) | 0;
   }
   return 18 + (Math.abs(hash) % 12) * 30;
+}
+
+export function sourceLabel(source: InteractionSource): string {
+  return INTERACTION_SOURCE_DISPLAY[source]?.label ?? source;
+}
+
+/** Each source that wrote to a session, once. */
+export function uniqueSources(session: {
+  sources?: (InteractionSource | null)[] | null;
+}): InteractionSource[] {
+  return Array.from(
+    new Set(
+      (session.sources ?? []).filter((source): source is InteractionSource =>
+        Boolean(source),
+      ),
+    ),
+  );
 }
 
 export function isKnowledgeSource(

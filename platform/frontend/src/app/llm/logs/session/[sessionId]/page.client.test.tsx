@@ -4,7 +4,8 @@ import {
   CLAUDE_DESKTOP_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useFeature } from "@/lib/config/config.query";
@@ -14,6 +15,12 @@ import {
   useInteractionSummaries,
   useSessionLineage,
 } from "@/lib/interactions/interaction.query";
+import {
+  useMcpToolCall,
+  useSessionMcpToolCalls,
+} from "@/lib/mcp/mcp-tool-call.query";
+import { useOrganization } from "@/lib/organization.query";
+import type { SessionToolCall } from "./_parts/session-timeline";
 import SessionDetailPage from "./page.client";
 
 vi.mock("next/navigation");
@@ -22,6 +29,8 @@ vi.mock("next/navigation");
 // real hook reads it through TanStack Query — which this suite renders without.
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/config/config.query");
+// Model vendor names follow the organization's provider renames.
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteraction: vi.fn(),
@@ -32,6 +41,20 @@ vi.mock("@/lib/interactions/interaction.query", () => ({
     mutate: vi.fn(),
     isPending: false,
   })),
+}));
+
+vi.mock("@/lib/mcp/mcp-tool-call.query", () => ({
+  useMcpToolCall: vi.fn(),
+  useSessionMcpToolCalls: vi.fn(),
+}));
+// Server display names come from the installed-server and catalog lists.
+vi.mock("@/lib/mcp-logs/use-mcp-server-display", () => ({
+  useMcpServerDisplayByName: () => ({
+    servers: [],
+    displayByName: new Map([
+      ["jira", { name: "Jira Cloud", icon: null, catalogId: "jira-catalog" }],
+    ]),
+  }),
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -58,6 +81,15 @@ describe("SessionDetailPage", () => {
       data: null,
     } as unknown as ReturnType<typeof useInteraction>);
     vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockSessionToolCalls([]);
+    vi.mocked(useMcpToolCall).mockReturnValue({
+      data: undefined,
+      isSuccess: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useMcpToolCall>);
   });
 
   it("says nothing at all while session interactions are loading", async () => {
@@ -75,7 +107,7 @@ describe("SessionDetailPage", () => {
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
     expect(
-      screen.queryByText("No interactions found for this session"),
+      screen.queryByText("No requests recorded for this session yet."),
     ).not.toBeInTheDocument();
   });
 
@@ -111,7 +143,7 @@ describe("SessionDetailPage", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Session unavailable");
     expect(screen.queryByText("Requests")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("No interactions found for this session"),
+      screen.queryByText("No requests recorded for this session yet."),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("status", { name: "Loading session logs…" }),
@@ -169,7 +201,7 @@ describe("SessionDetailPage", () => {
     renderSessionDetailPage();
 
     expect(
-      await screen.findByText("No interactions found for this session"),
+      await screen.findByText("No requests recorded for this session yet."),
     ).toBeVisible();
     expect(screen.queryByText("Forked from")).not.toBeInTheDocument();
     expect(screen.queryByText("Fork")).not.toBeInTheDocument();
@@ -198,9 +230,13 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(
-      await screen.findByText(/98,000 cache read \/ 12,000 cache write/),
-    ).toBeVisible();
+    // The strip shows the cached share at a glance; the split is on hover.
+    const cached = await screen.findByText("110K cached");
+    expect(cached).toBeVisible();
+    await userEvent.hover(cached);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(within(tooltip).getByText("98,000")).toBeInTheDocument();
+    expect(within(tooltip).getByText("12,000")).toBeInTheDocument();
   });
 
   // Legacy Claude attribution maps to Code; explicit Desktop stays separate.
@@ -235,7 +271,7 @@ describe("SessionDetailPage", () => {
     renderSessionDetailPage();
 
     expect(
-      await screen.findByText("No interactions found for this session"),
+      await screen.findByText("No requests recorded for this session yet."),
     ).toBeVisible();
     expect(screen.queryByText(/^Claude/)).not.toBeInTheDocument();
   });
@@ -279,8 +315,15 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(await screen.findByText("Sub-agent", { exact: true })).toBeVisible();
-    expect(screen.getByText(OPENCODE_CLIENT_ID, { exact: true })).toBeVisible();
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    expect(
+      within(requests).getByRole("button", { name: /^Sub-agent, / }),
+    ).toBeVisible();
+    expect(
+      within(requests).getByRole("button", {
+        name: new RegExp(`^${OPENCODE_CLIENT_ID}, `),
+      }),
+    ).toBeVisible();
   });
 
   it("renders the rows-per-page selector when the session has interactions", async () => {
@@ -305,9 +348,7 @@ describe("SessionDetailPage", () => {
     expect(
       (await screen.findAllByText("Rows per page")).length,
     ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText(/Showing 1 to 10 of 120 requests/).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getByText("1–10 of 120")).toBeVisible();
   });
 
   it("hides the cache line when the session used no caching", async () => {
@@ -330,8 +371,8 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(await screen.findByText(/1,250 in/)).toBeVisible();
-    expect(screen.queryByText(/cache read/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/1\.3K in · 430 out/)).toBeVisible();
+    expect(screen.queryByText(/cached/)).not.toBeInTheDocument();
   });
 
   it("states OpenAPPA session identity in the heading when OpenAPPA is on", async () => {
@@ -363,7 +404,7 @@ describe("SessionDetailPage", () => {
 
     expect(await screen.findByText("Session")).toBeVisible();
     expect(screen.getByText("user:abc|ses_chat_1")).toBeVisible();
-    expect(screen.getByText("Session source")).toBeVisible();
+    expect(screen.getByText("Bound by")).toBeVisible();
     expect(screen.getByText("conversation")).toBeVisible();
     expect(screen.getByText("Origins")).toBeVisible();
   });
@@ -435,16 +476,222 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(await screen.findByText("Chat Compaction")).toBeVisible();
-    expect(screen.getAllByText("My Assistant").length).toBeGreaterThanOrEqual(
-      5,
-    );
-    expect(screen.queryByText("Slack")).not.toBeInTheDocument();
-    expect(screen.queryByText("MS Teams")).not.toBeInTheDocument();
-    expect(screen.queryByText("Telegram")).not.toBeInTheDocument();
-    expect(screen.queryByText("Main")).not.toBeInTheDocument();
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    const rowNames = within(requests)
+      .getAllByRole("button")
+      .map((row) => row.getAttribute("aria-label")?.split(", ")[0]);
+    expect(rowNames.sort()).toEqual([
+      "Chat Compaction",
+      "My Assistant",
+      "My Assistant",
+      "My Assistant",
+      "My Assistant",
+    ]);
+    for (const channel of ["Slack", "MS Teams", "Telegram", "Main"]) {
+      expect(within(requests).queryByText(channel)).not.toBeInTheDocument();
+    }
   });
 });
+
+describe("SessionDetailPage tool calls", () => {
+  beforeEach(() => {
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePathname).mockReturnValue("/llm/logs/session/test-session");
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [{ profileName: "My Assistant", lastInteractionId: null }],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteraction).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useInteraction>);
+    vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useMcpToolCall).mockReturnValue({
+      data: undefined,
+      isSuccess: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useMcpToolCall>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [
+          sessionRequest({
+            id: "second",
+            createdAt: "2026-09-19T10:00:20.000Z",
+          }),
+          sessionRequest({
+            id: "first",
+            createdAt: "2026-09-19T10:00:05.000Z",
+          }),
+        ],
+        pagination: { total: 2 },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+  });
+
+  it("lays each tool call between the requests around it and opens it from the overview", async () => {
+    mockSessionToolCalls([
+      sessionToolCall({
+        id: "lookup",
+        createdAt: "2026-09-19T10:00:09.000Z",
+        toolCall: {
+          id: "tc",
+          name: "jira__get_issue",
+          arguments: { key: "OPS-12" },
+        },
+        toolResult: {
+          isError: false,
+          content: [{ type: "text", text: "OPS-12: Rotate keys" }],
+        },
+      }),
+    ]);
+    const user = userEvent.setup();
+
+    renderSessionDetailPage();
+
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    const rows = within(requests).getAllByRole("button");
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
+      expect.stringMatching(/^My Assistant, /),
+      "Tool call get_issue on Jira Cloud, 1.50s",
+      expect.stringMatching(/^My Assistant, /),
+    ]);
+    expect(
+      within(screen.getByRole("list", { name: "Request kinds" })).getByText(
+        "Tool call",
+      ),
+    ).toBeVisible();
+
+    await user.click(rows[1]);
+
+    const overview = screen.getByRole("complementary", {
+      name: "Tool call overview",
+    });
+    expect(within(overview).getByText("Success")).toBeVisible();
+    expect(within(overview).getByText("OPS-12: Rotate keys")).toBeVisible();
+    expect(
+      within(overview).getByRole("link", { name: "Open tool call" }),
+    ).toHaveAttribute("href", "/mcp/logs/lookup");
+  });
+
+  it("collapses a run_tool dispatch into the tool it ran", async () => {
+    mockSessionToolCalls([
+      sessionToolCall({
+        id: "outer",
+        llmToolCallId: "toolu_1",
+        toolCall: { id: "a", name: "archestra__run_tool", arguments: {} },
+      }),
+      sessionToolCall({ id: "inner", llmToolCallId: "toolu_1" }),
+    ]);
+
+    renderSessionDetailPage();
+
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    const toolRows = within(requests).getAllByRole("button", {
+      name: /^Tool call /,
+    });
+    expect(toolRows).toHaveLength(1);
+    expect(toolRows[0]).toHaveAccessibleName(/^Tool call get_issue /);
+  });
+
+  it("preselects the tool call named in the URL", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("toolCall=lookup") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockSessionToolCalls([
+      sessionToolCall({ id: "lookup", createdAt: "2026-09-19T10:00:09.000Z" }),
+    ]);
+
+    renderSessionDetailPage();
+
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    expect(
+      within(requests).getByRole("button", { name: /^Tool call get_issue/ }),
+    ).toHaveAttribute("aria-current", "true");
+    expect(
+      screen.getByRole("complementary", { name: "Tool call overview" }),
+    ).toBeVisible();
+  });
+
+  it("says when the session's tool calls failed to load", async () => {
+    vi.mocked(useSessionMcpToolCalls).mockReturnValue({
+      data: undefined,
+      isSuccess: false,
+      isError: true,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useSessionMcpToolCalls>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Tool calls didn't load")).toBeVisible();
+    // The requests themselves still render.
+    expect(
+      within(screen.getByRole("list", { name: "Requests" })).getAllByRole(
+        "button",
+      ),
+    ).toHaveLength(2);
+  });
+});
+
+function mockSessionToolCalls(calls: SessionToolCall[]) {
+  vi.mocked(useSessionMcpToolCalls).mockReturnValue({
+    data: { data: calls, pagination: { hasNext: false } },
+    isSuccess: true,
+    isError: false,
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof useSessionMcpToolCalls>);
+}
+
+function sessionRequest(overrides: { id: string; createdAt: string }) {
+  return {
+    requestType: "main",
+    source: "api",
+    model: "claude-sonnet-4-5",
+    inputTokens: 10,
+    outputTokens: 2,
+    cost: "0.001",
+    billingMode: "metered",
+    durationMs: 4_000,
+    externalAgentId: null,
+    ...overrides,
+  };
+}
+
+function sessionToolCall(
+  overrides: Partial<SessionToolCall> & { id: string },
+): SessionToolCall {
+  return {
+    ownerType: "agent",
+    agentId: null,
+    appId: null,
+    mcpServerName: "jira",
+    method: "tools/call",
+    toolCall: { id: "tc", name: "jira__get_issue", arguments: {} },
+    toolResult: { isError: false, content: [] },
+    userId: null,
+    runId: null,
+    authMethod: "session",
+    oauthClientId: null,
+    source: "chat",
+    durationMs: 1_500,
+    createdAt: "2026-09-19T10:00:09.000Z",
+    userName: null,
+    appName: null,
+    sessionId: "test-session",
+    llmToolCallId: null,
+    ...overrides,
+  };
+}
 
 function renderSessionDetailPage() {
   return render(

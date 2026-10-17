@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   describeModelOrigin,
+  formatRequestCost,
   formatSessionSpan,
   formatUsageCost,
   identiconHue,
@@ -97,6 +98,24 @@ describe("formatUsageCost", () => {
     [1234, "$1.2K"],
   ])("%s → %s", (value, expected) => {
     expect(formatUsageCost(value)).toBe(expected);
+  });
+});
+
+describe("formatRequestCost", () => {
+  it("keeps sub-cent requests distinguishable instead of all reading <$0.01", () => {
+    expect(formatRequestCost(0.00501)).toBe("$0.005");
+    expect(formatRequestCost(0.0012)).toBe("$0.0012");
+    expect(formatRequestCost(0.0612)).toBe("$0.061");
+  });
+
+  it("shows whole cents from ten cents up", () => {
+    expect(formatRequestCost(0.4812)).toBe("$0.48");
+    expect(formatRequestCost(12.5)).toBe("$12.50");
+  });
+
+  it("floors dust and reads zero as zero", () => {
+    expect(formatRequestCost(0.00002)).toBe("<$0.0001");
+    expect(formatRequestCost(0)).toBe("$0");
   });
 });
 

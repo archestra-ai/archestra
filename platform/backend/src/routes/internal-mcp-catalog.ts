@@ -1309,6 +1309,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
+        // Hidden runtime variants are never listed; their ids open nothing.
+        rootOnly: true,
       });
 
       if (!catalogItem) {

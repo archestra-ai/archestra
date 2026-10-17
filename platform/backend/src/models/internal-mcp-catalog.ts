@@ -740,6 +740,8 @@ class InternalMcpCatalogModel {
       userId?: string;
       isAdmin?: boolean;
       organizationId?: string;
+      /** Not a hidden runtime variant or legacy preset row. */
+      rootOnly?: boolean;
     },
   ): Promise<InternalMcpCatalog | null> {
     const {
@@ -747,6 +749,7 @@ class InternalMcpCatalogModel {
       userId,
       isAdmin,
       organizationId,
+      rootOnly = false,
     } = options ?? {};
 
     if (userId && !isAdmin && !organizationId) {
@@ -770,6 +773,9 @@ class InternalMcpCatalogModel {
         and(
           eq(schema.internalMcpCatalogTable.id, id),
           notDeleted(schema.internalMcpCatalogTable),
+          rootOnly
+            ? isNull(schema.internalMcpCatalogTable.parentCatalogItemId)
+            : undefined,
         ),
       );
 

@@ -169,7 +169,9 @@ export function McpCatalogItemPage({ id }: { id: string }) {
   // The one item this page shows, by id, with its list figures (tool count,
   // the caller's actions) — not the whole registry.
   const { data: itemById, isPending } = useInternalMcpCatalogItem(id);
-  const item = itemById ?? undefined;
+  // An app's backing entry is never listed in the registry; its id opens
+  // nothing here, as it did when the page looked the item up in the list.
+  const item = itemById && itemById.serverType !== "app" ? itemById : undefined;
 
   // Deleting this server invalidates the catalog list, and the refetch lands
   // long before the client-side navigation back to the registry has resolved

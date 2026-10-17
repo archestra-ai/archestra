@@ -57,6 +57,17 @@ describe("McpCatalogItemEditPage", () => {
     } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
   });
 
+  it("does not open an app's backing entry for editing", () => {
+    vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
+      data: { id: "app-backing", name: "app", icon: null, serverType: "app" },
+      isPending: false,
+    } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
+
+    render(<McpCatalogItemEditPage id="app-backing" />);
+
+    expect(screen.getByText("Server not found")).toBeInTheDocument();
+  });
+
   it("keeps the Test Connection page in the shared shell and advances to tool review", async () => {
     const user = userEvent.setup();
     render(<McpCatalogItemEditPage id="server-1" />);

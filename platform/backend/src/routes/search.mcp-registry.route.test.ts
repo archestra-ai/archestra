@@ -1129,6 +1129,23 @@ describe("MCP registry list routes", () => {
     expect(response.json().effectiveActions).toContain("update");
   });
 
+  test("GET /api/internal_mcp_catalog/:id does not open a hidden runtime variant", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const root = await makeItem(makeInternalMcpCatalog, "root-server");
+    const variant = await makeItem(makeInternalMcpCatalog, "root-server-v", {
+      parentCatalogItemId: root.id,
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${variant.id}`,
+    });
+
+    // No list shows it, so its id opens nothing either.
+    expect(response.statusCode).toBe(404);
+  });
+
   test("McpServerModel.findAll narrows to catalogIds in SQL", async ({
     makeInternalMcpCatalog,
     makeMcpServer,

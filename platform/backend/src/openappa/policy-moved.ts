@@ -1,3 +1,5 @@
+import logger from "@/logging";
+
 /**
  * Every open conversation of an organization decides its next call under the
  * organization's current policy revision. A dispatch that carried an older
@@ -18,18 +20,27 @@ export function isPolicyMoved(error: unknown): boolean {
 
 /**
  * Runs `run` once, and again while it fails with a moved policy, at most
- * `MAX_ATTEMPTS` times in all and never past `DEADLINE_MS`. Each retry waits a
- * random time up to an exponentially growing bound, so replicas that met the
- * same publish do not retry together. `attempt` counts from 0; a retry must
- * read the policy again rather than send the one that moved.
+ * `MAX_ATTEMPTS` times in all. No attempt starts past `DEADLINE_MS`: a wait
+ * that would end past it is not taken, and a wait that overran it, as a timer
+ * can under load, ends the retries. Each retry waits a random time up to an
+ * exponentially growing bound, so replicas that met the same publish do not
+ * retry together. `attempt` counts from 0; a retry must read the policy again
+ * rather than send the one that moved.
  */
 export async function retryWhilePolicyMoved<T>(params: {
   run: (attempt: number) => Promise<T>;
   /** Uniform in [0, 1); replaced in tests. */
   random?: () => number;
+  /** The clock and the wait; replaced in tests. */
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }): Promise<T> {
   const random = params.random ?? Math.random;
-  const deadline = Date.now() + DEADLINE_MS;
+  const now = params.now ?? Date.now;
+  const sleep =
+    params.sleep ??
+    ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = now() + DEADLINE_MS;
   for (let attempt = 0; ; attempt++) {
     try {
       return await params.run(attempt);
@@ -37,8 +48,13 @@ export async function retryWhilePolicyMoved<T>(params: {
       if (!isPolicyMoved(error) || attempt + 1 >= MAX_ATTEMPTS) throw error;
       const wait =
         random() * Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * 2 ** attempt);
-      if (Date.now() + wait > deadline) throw error;
-      await new Promise((resolve) => setTimeout(resolve, wait));
+      if (now() + wait > deadline) throw error;
+      logger.info(
+        { retry: attempt + 1, waitMs: Math.round(wait) },
+        "OpenAPPA policy moved under a dispatch; retrying with the policy read again",
+      );
+      await sleep(wait);
+      if (now() > deadline) throw error;
     }
   }
 }

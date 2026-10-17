@@ -66,4 +66,25 @@ describe("retryWhilePolicyMoved", () => {
     expect(second).toBeGreaterThanOrEqual(95);
     expect(second).toBeLessThan(500);
   });
+
+  test("starts no attempt past the deadline when a wait overruns it", async () => {
+    // The clock reads 0 until the first wait, which overruns the two-second
+    // deadline, as a timer can on a loaded event loop.
+    let clock = 0;
+    let attempts = 0;
+    await expect(
+      retryWhilePolicyMoved({
+        random: () => 0.5,
+        now: () => clock,
+        sleep: async () => {
+          clock += 5_000;
+        },
+        run: async () => {
+          attempts++;
+          throw new Error(POLICY_MOVED);
+        },
+      }),
+    ).rejects.toThrow(POLICY_MOVED);
+    expect(attempts).toBe(1);
+  });
 });

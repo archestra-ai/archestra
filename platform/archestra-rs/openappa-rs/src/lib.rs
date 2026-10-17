@@ -378,6 +378,9 @@ fn policy_moved() -> napi::Error {
 /// Whether a dispatch failed because its deployment line moved past the revision
 /// its view was pinned to. The runtime turns that refusal into the detail of an
 /// operational refusal, so its display text is what reaches this process.
+/// Contract: the text is OpenAPPA's `EventError::PolicyMoved` display as of the
+/// pinned revision 8e17f8ca. OpenAPPA carries no typed marker for it yet
+/// (requested on OpenAPPA #677); re-check it when the pin moves.
 fn is_policy_moved(error: &napi::Error) -> bool {
     error.reason.contains(" moved to policy revision ")
         && error

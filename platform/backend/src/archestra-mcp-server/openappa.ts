@@ -2023,7 +2023,13 @@ function supersededReview(result: CallToolResult): CallToolResult {
   };
 }
 
-/** The runtime's words for an offer that no longer stands. */
+/**
+ * The runtime's words for an offer that no longer stands. Contract: these are
+ * OpenAPPA's display texts for `RemedyRefusal::UnknownOffer` and for a stale
+ * offer's decline, as of the pinned revision 8e17f8ca. OpenAPPA carries no
+ * typed marker for them yet (requested on OpenAPPA #677); re-check these when
+ * the pin moves.
+ */
 const RETIRED_OFFER_TEXTS = [
   "this offer no longer stands; re-propose the call",
   "this offer no longer applies; re-propose the call",

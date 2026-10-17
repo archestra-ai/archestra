@@ -55727,6 +55727,7 @@
           },
           {
             "schema": {
+              "maxItems": 200,
               "type": "array",
               "items": {
                 "type": "string",
@@ -56560,6 +56561,7 @@
           },
           {
             "schema": {
+              "maxItems": 200,
               "type": "array",
               "items": {
                 "type": "string",

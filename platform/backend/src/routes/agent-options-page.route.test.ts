@@ -367,6 +367,28 @@ describe("bounded agent options", () => {
       expect(actual.sort()).toEqual(expected);
     }
   });
+  test("caps the ids filter at 200 on every options route", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const ids = (count: number) =>
+      Array.from({ length: count }, () => crypto.randomUUID()).join(",");
+    for (const path of [
+      "/api/agents/options",
+      "/api/agents/options/page",
+      "/api/agents/options/ids",
+    ]) {
+      const status = async (count: number) =>
+        (
+          await ctx.app.inject({
+            method: "GET",
+            url: `${path}?ids=${ids(count)}`,
+          })
+        ).statusCode;
+      expect(await status(200), path).toBe(200);
+      expect(await status(201), path).toBe(400);
+    }
+  });
   test("bounds credential readiness to requested enforcing agents without changing default eligibility", async ({
     makeMember,
     makeAgent,

@@ -3135,6 +3135,7 @@ const AgentRosterQuerySchema = z.object({
     ),
 });
 
+/** Shared by every options route; IDs stay short enough for the request line. */
 const AgentOptionsQuerySchema = AgentRosterQuerySchema.omit({
   view: true,
   includeTools: true,
@@ -3142,19 +3143,13 @@ const AgentOptionsQuerySchema = AgentRosterQuerySchema.omit({
   ids: z
     .preprocess(
       (value) => (typeof value === "string" ? value.split(",") : value),
-      z.array(z.uuid()),
+      z.array(z.uuid()).max(AGENT_OPTIONS_MAX_IDS),
     )
     .optional(),
 });
 
-/** Every response is one bounded page; IDs stay short enough for the request line. */
+/** Every response is one bounded page. */
 const AgentOptionsListQuerySchema = AgentOptionsQuerySchema.extend({
-  ids: z
-    .preprocess(
-      (value) => (typeof value === "string" ? value.split(",") : value),
-      z.array(z.uuid()).max(AGENT_OPTIONS_MAX_IDS),
-    )
-    .optional(),
   limit: z.coerce
     .number()
     .int()

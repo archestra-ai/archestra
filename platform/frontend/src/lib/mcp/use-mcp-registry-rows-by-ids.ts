@@ -2,7 +2,7 @@
 
 import { archestraApiSdk } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   type McpRegistryListQuery,
   type McpRegistryRow,
@@ -54,7 +54,6 @@ export function useMcpRegistryRowsByIds(
   // to give a new observer inside `useQueries`). Rows already known stay on
   // screen until their new chunk answers; a removed id leaves at once.
   const knownRows = useRef(new Map<string, McpRegistryRow>());
-  const everyChunkAnswered = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: idsKey stands for sortedIds
   const data = useMemo(() => {
     const requested = new Set(sortedIds);
@@ -75,8 +74,11 @@ export function useMcpRegistryRowsByIds(
   }, [results.chunks, idsKey]);
   // An empty id set has nothing to answer: a caller's ids are often empty
   // until its own source loads, so only a real set that answered counts.
-  if (sortedIds.length > 0 && !results.isPending) {
-    everyChunkAnswered.current = true;
+  // A state latch set during render: React re-renders at once with it, and a
+  // render it discards (StrictMode) leaves nothing behind.
+  const [hasLoaded, setHasLoaded] = useState(false);
+  if (!hasLoaded && sortedIds.length > 0 && !results.isPending) {
+    setHasLoaded(true);
   }
 
   return {
@@ -88,7 +90,7 @@ export function useMcpRegistryRowsByIds(
      * rows, so a loading state should wait only for this. False while there
      * are no ids; a caller with none decides from the source of its ids.
      */
-    hasLoaded: everyChunkAnswered.current,
+    hasLoaded,
     isError: results.isError,
     refetch: results.refetch,
   };

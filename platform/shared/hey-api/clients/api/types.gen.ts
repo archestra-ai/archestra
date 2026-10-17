@@ -101888,6 +101888,8 @@ export type GetProjectsData = {
     body?: never;
     path?: never;
     query?: {
+        limit?: number;
+        offset?: number;
         scope?: 'personal' | 'team' | 'org';
         search?: string;
         /**
@@ -101922,6 +101924,10 @@ export type GetProjectsData = {
          * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
          */
         owner?: Array<string>;
+        /**
+         * Only return projects the current user has pinned (true) or has not pinned (false). Omit for both.
+         */
+        pinned?: boolean;
     };
     url: '/api/projects';
 };
@@ -101998,33 +102004,43 @@ export type GetProjectsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        description: string | null;
-        icon: string | null;
-        viewerRole: 'owner' | 'shared' | 'admin';
-        ownerName: string | null;
-        createdBy: {
+    200: {
+        data: Array<{
             id: string;
-            type?: 'user' | 'service_account';
-            name: string | null;
-            email: string | null;
-        } | null;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
+            name: string;
+            description: string | null;
+            icon: string | null;
+            viewerRole: 'owner' | 'shared' | 'admin';
+            ownerName: string | null;
+            createdBy: {
+                id: string;
+                type?: 'user' | 'service_account';
+                name: string | null;
+                email: string | null;
+            } | null;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
+            conversationCount: number;
+            visibility: 'organization' | 'team' | 'user';
+            shareTeamNames: Array<string> | null;
+            shareUserNames: Array<string> | null;
+            pinnedAt: string | null;
+            createdAt: string;
+            deletedAt: string | null;
         }>;
-        conversationCount: number;
-        visibility: 'organization' | 'team' | 'user';
-        shareTeamNames: Array<string> | null;
-        shareUserNames: Array<string> | null;
-        pinnedAt: string | null;
-        createdAt: string;
-        deletedAt: string | null;
-    }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
 };
 
 export type GetProjectsResponse = GetProjectsResponses[keyof GetProjectsResponses];

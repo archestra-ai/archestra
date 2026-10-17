@@ -1032,13 +1032,8 @@ function useFilterCounts(queries: {
   all: CountQuery;
   connected: CountQuery;
   builtIn: CountQuery;
-}) {
+}): Partial<FilterCounts> {
   const { all, connected, builtIn } = queries;
-  const last = useRef<{
-    totalCount?: number;
-    connectedCount?: number;
-    notConnectedCount?: number;
-  }>({});
   const consistent =
     all.data !== undefined &&
     connected.data !== undefined &&
@@ -1046,15 +1041,32 @@ function useFilterCounts(queries: {
     !all.isPlaceholderData &&
     !connected.isPlaceholderData &&
     !builtIn.isPlaceholderData;
+  let current: FilterCounts | null = null;
   if (consistent && all.data && connected.data && builtIn.data) {
     const totalCount = all.data.pagination.total;
     const connectedCount =
       connected.data.pagination.total + (builtIn.data.data.length > 0 ? 1 : 0);
-    last.current = {
+    current = {
       totalCount,
       connectedCount,
       notConnectedCount: Math.max(0, totalCount - connectedCount),
     };
   }
-  return last.current;
+  // The last consistent counts, kept in state set during render (React's
+  // pattern for information from earlier renders), never in a ref.
+  const [last, setLast] = useState<FilterCounts | null>(null);
+  if (
+    current &&
+    (current.totalCount !== last?.totalCount ||
+      current.connectedCount !== last?.connectedCount)
+  ) {
+    setLast(current);
+  }
+  return current ?? last ?? {};
 }
+
+type FilterCounts = {
+  totalCount: number;
+  connectedCount: number;
+  notConnectedCount: number;
+};

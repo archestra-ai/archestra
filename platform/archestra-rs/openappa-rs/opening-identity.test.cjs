@@ -159,3 +159,36 @@ for (const [version, openedBy] of [
     assert.ok((await stamped(freshRoot)).some((stamp) => stamp), 'a following family stamps its decided batches');
   });
 }
+
+test('refuses a root whose stored batch no longer decodes, under a code the host classifies', { skip: !databaseUrl, timeout: 60000 }, async () => {
+  const fixture = require('./fixtures/opening-identity-v2.json');
+  const pg = new Client({ connectionString: databaseUrl });
+  await pg.connect();
+  try {
+    await pg.query('BEGIN');
+    await restore(pg, fixture);
+    // A batch in an encoding this engine no longer reads, as an earlier engine could leave it.
+    await pg.query(
+      'INSERT INTO openappa_events (root, seq, payload) SELECT root, max(seq) + 1, $2 FROM openappa_events WHERE root = $1 GROUP BY root',
+      [fixture.root, Buffer.from('[{"Return":null}]')],
+    );
+    await pg.query('COMMIT');
+  } catch (error) {
+    await pg.query('ROLLBACK');
+    throw error;
+  } finally {
+    await pg.end();
+  }
+  await native.initializeOpenappa(databaseUrl, 4);
+  const event = {
+    organization_id: fixture.organization_id,
+    caller_id: fixture.caller_id,
+    session_id: fixture.session_id,
+    event: 'tool_call',
+    operation_id: 'call:undecodable',
+    tool: 'read',
+    arguments: {},
+  };
+
+  await assert.rejects(native.dispatchHook(JSON.stringify(event), hosted(opening)), { code: 'untrusted_log' });
+});

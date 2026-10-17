@@ -1,4 +1,5 @@
 import { trace } from "@opentelemetry/api";
+import { z } from "zod";
 import { ApiError } from "@/types/api";
 import { isPolicyMoved } from "./policy-moved";
 
@@ -128,10 +129,45 @@ const POLICY_REFUSALS = [
   /^a hosted document declares /,
 ];
 
-function classify(error: unknown): {
-  statusCode: 409 | 500 | 503;
-  detail: string;
-} {
+/**
+ * The class the native binding stamps on a runtime failure as `error.code`:
+ * the runtime's refusal classes, plus the binding's own lease and session
+ * failures.
+ */
+const RuntimeFailureCode = z.enum([
+  "storage",
+  "untrusted_log",
+  "policy_unavailable",
+  "inventory_refused",
+  "engine_invariant",
+  "contended",
+  "resolution_diverged",
+  "annotation_refused",
+  "undeclared_tool",
+  "undeclared_spawn",
+  "peer_message",
+  "principal",
+  "outstanding_call",
+  "call_id_reused",
+  "trajectory_ended",
+  "trajectory",
+  "dispatch",
+  "remedy",
+  "spawn",
+  "spawn_not_taken",
+  "lease_lost",
+  "held_elsewhere",
+  "unstarted_parent",
+]);
+type RuntimeFailureCode = z.infer<typeof RuntimeFailureCode>;
+
+type Failure = { statusCode: 409 | 500 | 503; detail: string };
+
+function classify(error: unknown): Failure {
+  const code = RuntimeFailureCode.safeParse(
+    error instanceof Error ? (error as { code?: unknown }).code : undefined,
+  );
+  if (code.success) return classifyCode(code.data);
   if (error instanceof OpenappaRetiredAnnotatorError)
     return {
       statusCode: 409,
@@ -147,6 +183,8 @@ function classify(error: unknown): {
       statusCode: 500,
       detail: `${error.message}. An administrator can rebind it on the ${POLICY_PAGE} page.`,
     };
+  // The binding reports a moved policy by its text.
+  if (isPolicyMoved(error)) return POLICY_MOVED;
   const message = error instanceof Error ? error.message : "";
   if (POLICY_REFUSALS.some((pattern) => pattern.test(message)))
     return {
@@ -158,61 +196,83 @@ function classify(error: unknown): {
       statusCode: 503,
       detail: "the policy runtime has no free database connection.",
     };
-  // Another dispatch took over the operation while this one was cut off from
-  // the ledger. That dispatch answers the retry.
-  if (message === LEASE_LOST)
-    return {
-      statusCode: 503,
-      detail:
-        "another request of this session took over this operation. Retry the request.",
-    };
-  // The organization's policy changed while this request was decided, and the
-  // backend's own retries did not catch up with it. Nothing was recorded; the
-  // retry decides under the current policy.
-  if (isPolicyMoved(error))
-    return {
-      statusCode: 503,
-      detail:
-        "the organization's guardrails policy changed while this request was checked. Retry the request.",
-    };
-  // Another request still works on the same operation, such as a retry sent
-  // while the first attempt runs. The retry gets its answer.
-  if (message === HELD_ELSEWHERE)
-    return {
-      statusCode: 503,
-      detail:
-        "another request of this session is still working on this operation. Retry the request.",
-    };
-  // The runtime cannot reopen the policy this conversation started under: the
-  // stored file is gone or no longer compiles to the identity the opening
-  // recorded. Every later request of the conversation fails the same way.
-  if (message.includes(OPENING_POLICY_UNAVAILABLE))
-    return {
-      statusCode: 409,
-      detail:
-        "this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
-    };
-  // Every later request of the subagent fails the same way: no fork exists
-  // for it to open, whatever the retry.
-  if (message.includes(UNFORKED_CHILD) || message === UNSTARTED_PARENT)
-    return {
-      statusCode: 409,
-      detail:
-        "this subagent did not start through a checked spawn. This can happen when it started while Guardrails enforcement was off. OpenAPPA refuses its requests. To continue its work, start a new subagent.",
-    };
-  return { statusCode: 503, detail: "the policy runtime is unavailable." };
+  return UNAVAILABLE;
 }
 
-/** The runtime's report of a dispatch that no longer owns its operation. */
-const LEASE_LOST =
-  "OpenAPPA lost its lease on this operation; retry the request";
+function classifyCode(code: RuntimeFailureCode): Failure {
+  switch (code) {
+    // A stored record of the conversation no longer decodes, so the runtime
+    // cannot rebuild its trajectory. Every later request fails the same way.
+    case "untrusted_log":
+      return {
+        statusCode: 409,
+        detail:
+          "the policy runtime cannot read this conversation's stored guardrails record. Start a new conversation.",
+      };
+    // The stored opening policy is gone or no longer compiles to the identity
+    // the opening recorded.
+    case "policy_unavailable":
+      return {
+        statusCode: 409,
+        detail:
+          "this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
+      };
+    // No fork exists for the subagent to open, whatever the retry.
+    case "spawn_not_taken":
+    case "unstarted_parent":
+      return {
+        statusCode: 409,
+        detail:
+          "this subagent did not start through a checked spawn. This can happen when it started while Guardrails enforcement was off. OpenAPPA refuses its requests. To continue its work, start a new subagent.",
+      };
+    // Another dispatch took over the operation while this one was cut off
+    // from the ledger. That dispatch answers the retry.
+    case "lease_lost":
+      return {
+        statusCode: 503,
+        detail:
+          "another request of this session took over this operation. Retry the request.",
+      };
+    // A retry sent while the first attempt still runs gets that attempt's answer.
+    case "held_elsewhere":
+      return {
+        statusCode: 503,
+        detail:
+          "another request of this session is still working on this operation. Retry the request.",
+      };
+    case "storage":
+    case "inventory_refused":
+    case "engine_invariant":
+    case "contended":
+    case "resolution_diverged":
+    case "annotation_refused":
+    case "undeclared_tool":
+    case "undeclared_spawn":
+    case "peer_message":
+    case "principal":
+    case "outstanding_call":
+    case "call_id_reused":
+    case "trajectory_ended":
+    case "trajectory":
+    case "dispatch":
+    case "remedy":
+    case "spawn":
+      return UNAVAILABLE;
+    default:
+      return code satisfies never;
+  }
+}
 
-/** The runtime's report of an operation another live request is working on. */
-const HELD_ELSEWHERE =
-  "OpenAPPA is processing this operation in another request; retry the request";
+const POLICY_MOVED: Failure = {
+  statusCode: 503,
+  detail:
+    "the organization's guardrails policy changed while this request was checked. Retry the request.",
+};
 
-/** The runtime's refusal of a root whose opening policy it cannot load or verify. */
-const OPENING_POLICY_UNAVAILABLE = "the opening policy is unavailable: ";
+const UNAVAILABLE: Failure = {
+  statusCode: 503,
+  detail: "the policy runtime is unavailable.",
+};
 
 /**
  * The runtime's refusal of a call whose annotator gave no answer:
@@ -234,10 +294,6 @@ const NO_ANSWER_REASON: Record<string, string> = {
   malformed: "returned an answer OpenAPPA could not read",
   oversized: "returned an answer that was too large",
 };
-
-/** The runtime's refusal of a child that no approved spawn prepared. */
-const UNFORKED_CHILD = "no prepared fork to open this child";
-const UNSTARTED_PARENT = "parent session has not started";
 
 /** One line, bounded, with any URL credentials removed. */
 function summarize(message: string, max = MAX_DETAIL): string {

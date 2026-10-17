@@ -18,6 +18,8 @@ const {
   mockUseAgentDelegations,
   mockUseAllProfileTools,
   mockUseConnectors,
+  mockUseConnectorsByIds,
+  mockUseKnowledgeBasesByIds,
   mockUseMcpServersGroupedByCatalog,
   mockUseInternalMcpCatalog,
   mockUseKnowledgeBases,
@@ -79,6 +81,14 @@ const {
     data: { data: [] },
   })),
   mockUseConnectors: vi.fn((_options?: unknown) => ({ data: [] })),
+  mockUseConnectorsByIds: vi.fn((_ids: string[], _options?: unknown) => ({
+    data: [],
+    isSuccess: true,
+  })),
+  mockUseKnowledgeBasesByIds: vi.fn((_ids: string[], _options?: unknown) => ({
+    data: [],
+    isSuccess: true,
+  })),
   mockUseInternalMcpCatalog: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseKnowledgeBases: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseMcpInstallOrchestrator: vi.fn((_options?: unknown) => ({
@@ -110,20 +120,6 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/agent.query", () => ({
   useAgentCredentialReadinessPages: (options?: unknown) =>
     mockUseAgentCredentialReadiness(options),
-  useAgentSearch: ({
-    name,
-    enabled,
-  }: {
-    name?: string;
-    enabled?: boolean;
-  }) => ({
-    // Mirrors the server-side name search: only typed text narrows the page.
-    data: enabled
-      ? agents.filter((agent) =>
-          agent.name.toLowerCase().includes((name ?? "").toLowerCase()),
-        )
-      : undefined,
-  }),
   useChatAgents: () => ({ data: agents }),
   useChatAgentPages: () => ({
     data: {
@@ -140,7 +136,6 @@ vi.mock("@/lib/agent.query", () => ({
     data: agents.filter((agent) => ids.includes(agent.id)),
   }),
   useCreateProfile: () => ({ mutate: vi.fn() }),
-  useInternalAgentOptions: () => ({ data: agents }),
   usePinnedAgentIds: () => ({ data: mockPinnedIds }),
   useProfile: (id: string | undefined, options?: unknown) =>
     mockUseProfile(id, options),
@@ -172,10 +167,14 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectors: (options?: unknown) => mockUseConnectors(options),
+  useConnectorsByIds: (ids: string[], options?: unknown) =>
+    mockUseConnectorsByIds(ids, options),
 }));
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: (options?: unknown) => mockUseKnowledgeBases(options),
+  useKnowledgeBasesByIds: (ids: string[], options?: unknown) =>
+    mockUseKnowledgeBasesByIds(ids, options),
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -349,6 +348,63 @@ describe("InitialAgentSelector keyboard navigation", () => {
       expect.objectContaining({ enabled: true }),
     );
   });
+
+  it("names the agent's own knowledge sources, even past the first page of every source", async () => {
+    mockUseProfile.mockImplementation((id) => {
+      const agent = agents.find((a) => a.id === id);
+      return {
+        data: agent && {
+          ...agent,
+          accessAllTools: false,
+          knowledgeBaseIds: ["kb-far"],
+          connectorIds: [],
+        },
+      };
+    });
+    mockUseInternalMcpCatalog.mockReturnValue({
+      data: [],
+      isSuccess: true,
+    } as never);
+    // The first page of every knowledge base does not hold this one.
+    mockUseKnowledgeBases.mockReturnValue({
+      data: [],
+      isSuccess: true,
+    } as never);
+    mockUseKnowledgeBasesByIds.mockImplementation(
+      (ids: string[]) =>
+        ({
+          data: ids.includes("kb-far")
+            ? [
+                {
+                  id: "kb-far",
+                  name: "Far KB",
+                  connectors: [{ connectorType: "jira" }],
+                },
+              ]
+            : [],
+          isSuccess: true,
+        }) as never,
+    );
+    mockUseKnowledgeBases.mockClear();
+    try {
+      renderSelector();
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole("combobox", { name: "Alpha Agent" }),
+        ).toHaveAccessibleDescription(/1 knowledge source/),
+      );
+      // The organization-wide lists are the quick-edit pickers', which are
+      // closed.
+      expect(mockUseKnowledgeBases).not.toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true }),
+      );
+    } finally {
+      mockUseProfile.mockImplementation((id) => ({
+        data: agents.find((agent) => agent.id === id),
+      }));
+    }
+  });
 });
 
 describe("InitialAgentSelector quick-edit dialog", () => {
@@ -358,6 +414,7 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     description: null,
     serverType: "local",
     icon: null,
+    toolCount: 2,
   };
   const personalInstall = {
     "catalog-1": [{ id: "personal-install", scope: "personal" }],
@@ -443,6 +500,30 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows no Add tools button beside an editable agent without tools", async () => {
+    const loaded = { data: [], isSuccess: true } as never;
+    mockUseInternalMcpCatalog.mockReturnValue({
+      data: [catalog],
+      isSuccess: true,
+    } as never);
+    mockUseKnowledgeBases.mockReturnValue(loaded);
+    mockUseConnectors.mockReturnValue(loaded);
+    renderSelector();
+
+    const trigger = screen.getByRole("combobox", { name: "Alpha Agent" });
+    await waitFor(() =>
+      expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
+        enabled: true,
+      }),
+    );
+    // Adding tools goes through the agent's settings; nothing sits next to
+    // the agent button in the composer.
+    expect(trigger).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add tools" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("starts loading the dialog's data when the edit button is hovered", async () => {
     const user = userEvent.setup();
     renderSelector();
@@ -452,9 +533,11 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     await user.hover(screen.getByRole("button", { name: "Edit Alpha Agent" }));
 
     expect(mockUseProfile).toHaveBeenCalledWith("agent-1", undefined);
+    // Same options as the dialog's own read, so the prefetch fills its cache.
     expect(mockUseAllProfileTools).toHaveBeenCalledWith({
       filters: { agentId: "agent-1" },
       skipPagination: true,
+      includeToolDetails: false,
       enabled: true,
     });
     expect(mockUseAgentDelegations).toHaveBeenCalledWith("agent-1", undefined);

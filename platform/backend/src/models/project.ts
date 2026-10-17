@@ -620,6 +620,21 @@ class ProjectModel {
   }
 
   /** Conversation counts for a set of projects, in one grouped query. */
+  /**
+   * Icons for a page of projects, keyed by id. Kept out of the list's
+   * candidate query because an image icon is a data URL of up to ~1 MB.
+   */
+  static async getIcons(projectIds: string[]): Promise<Map<string, string>> {
+    if (projectIds.length === 0) return new Map();
+    const rows = await db
+      .select({ id: schema.projectsTable.id, icon: schema.projectsTable.icon })
+      .from(schema.projectsTable)
+      .where(inArray(schema.projectsTable.id, projectIds));
+    const icons = new Map<string, string>();
+    for (const row of rows) if (row.icon !== null) icons.set(row.id, row.icon);
+    return icons;
+  }
+
   static async countConversations(
     projectIds: string[],
   ): Promise<Map<string, number>> {

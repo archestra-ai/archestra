@@ -487,7 +487,9 @@ mod tests {
     use crate::deployments::HostCredentials;
     use appa_eventlog::Backend;
     use appa_runtime::hooks;
-    use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
+    use appa_runtime_api::{
+        Actor, HookDecision, HookEvent, ProposedCall, RefusalClass, TrajectoryId,
+    };
 
     const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
 
@@ -783,7 +785,7 @@ delta = {}
         assert_eq!(pin(&other, &unaliased).0, 2, "another process publishes");
         let stale = hooks::handle(&view, call(&open, prod)).await;
         assert!(
-            matches!(&stale, HookDecision::Refuse { detail } if detail.contains("moved to policy revision 2")),
+            matches!(&stale, HookDecision::Refuse { class: RefusalClass::PolicyMoved, detail } if detail.contains("moved to policy revision 2")),
             "a view pinned behind the head refuses retryably: {stale:?}"
         );
 
@@ -791,7 +793,7 @@ delta = {}
         assert_eq!(revision, 2, "the head's own bytes publish nothing");
         let decided = hooks::handle(&head, call(&open, prod)).await;
         assert!(
-            matches!(&decided, HookDecision::Refuse { detail } if !detail.contains("moved to policy revision")),
+            matches!(&decided, HookDecision::Refuse { class, .. } if *class != RefusalClass::PolicyMoved),
             "the open trajectory follows the head, which drops the alias: {decided:?}"
         );
 

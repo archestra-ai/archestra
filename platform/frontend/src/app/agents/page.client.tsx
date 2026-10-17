@@ -245,10 +245,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | null;
   const scopeFilter = useScopeFilterParams({
     includeBuiltIn: true,
+    offerAdminAccess: false,
     queryParamsAdapter,
   });
   const labelsFromUrl = searchParams.get("labels");
-  const includeBuiltIn = searchParams.get("builtIn") === "true";
   const statusFromUrl = searchParams.get("status") as
     | "active"
     | "deleted"
@@ -277,7 +277,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     access: scopeFilter.access,
     sharedWith: scopeFilter.sharedWith,
     owner: scopeFilter.owner,
-    includeBuiltIn: includeBuiltIn || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
@@ -358,7 +357,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     enabled: !isDeletedView,
     ...catalogFilters,
     status: undefined,
-    // A pinned built-in agent shows without the Built-in filter on.
+    // The list leaves built-in agents out; a pinned one still gets its tile.
     includeBuiltIn: true,
     pinned: true,
   });
@@ -610,7 +609,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
-    includeBuiltIn ||
     labelsFromUrl ||
     isDeletedView ||
     providerApiKeyIdFilter
@@ -627,7 +625,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       access: null,
       sharedWith: null,
       owner: null,
-      builtIn: null,
       labels: null,
       status: null,
       providerApiKeyId: null,
@@ -1372,5 +1369,11 @@ const AgentRowActionsContext = createContext<
 function AgentRowActionsCell({ row }: CellContext<AgentListRow, unknown>) {
   const renderActions = useContext(AgentRowActionsContext);
   // Shield the whole cell, including disabled actions' tooltip wrappers.
-  return <RowClickShield>{renderActions?.(row.original)}</RowClickShield>;
+  // Right-aligned so rows with fewer actions (external A2A agents, which have
+  // no pin or chat) still end flush with the others.
+  return (
+    <RowClickShield className="flex justify-end">
+      {renderActions?.(row.original)}
+    </RowClickShield>
+  );
 }

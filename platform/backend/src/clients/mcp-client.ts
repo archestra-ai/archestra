@@ -333,6 +333,14 @@ export type TokenAuthContext = {
   passthroughHeaders?: Record<string, string>;
   /** Durable execution that issued this gateway request, when provided. */
   runId?: string;
+  /**
+   * The LLM proxy session whose model turn issued this call, when the caller
+   * knows it exactly: the chat engine's own session id, or the session the
+   * gateway read from the request's headers. Never inferred.
+   */
+  llmSessionId?: string;
+  /** The model's own id for the tool call being executed, when known. */
+  llmToolCallId?: string;
 };
 
 /**
@@ -350,7 +358,9 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
 /**
  * Identity fields attached to every persisted tool call and returned result:
  * who called (inbound), how they authenticated, and — once a credential has
- * been resolved — whose credential the upstream call ran under.
+ * been resolved — whose credential the upstream call ran under. The run and
+ * LLM fields say which execution and model turn issued the call; they are
+ * only ever persisted, never returned.
  */
 type ToolCallAuthInfo = {
   serviceAccountId?: string;
@@ -360,6 +370,8 @@ type ToolCallAuthInfo = {
   source?: McpGatewayCallSource;
   executedAs?: McpExecutedAs;
   runId?: string;
+  llmSessionId?: string;
+  llmToolCallId?: string;
 };
 
 /**
@@ -664,6 +676,8 @@ class McpClient {
             source: tokenAuth.source,
             executedAs: platformExecutedAs(tokenAuth.userId),
             runId: tokenAuth.runId,
+            llmSessionId: tokenAuth.llmSessionId,
+            llmToolCallId: tokenAuth.llmToolCallId,
           }
         : undefined;
 
@@ -672,6 +686,7 @@ class McpClient {
       toolCall,
       owner,
       availableTool: options?.availableTool,
+      authInfo,
       encryptedChatContent,
       startedAt,
     });
@@ -2022,12 +2037,16 @@ class McpClient {
     toolCall,
     owner,
     availableTool,
+    authInfo,
     encryptedChatContent,
     startedAt,
   }: {
     toolCall: CommonToolCall;
     owner: ToolOwner;
     availableTool?: CatalogTool;
+    // Recorded on a refusal like on any other call: who asked, and which
+    // run and model turn the call came from.
+    authInfo?: ToolCallAuthInfo;
     encryptedChatContent?: ToolCallContentDisposition;
     startedAt?: number;
   }): Promise<
@@ -2134,6 +2153,7 @@ class McpClient {
           owner,
           error: message,
           mcpServerName: "unknown",
+          authInfo,
           structuredError: {
             type: "tool_state",
             code: "unknown_tool",
@@ -2166,6 +2186,7 @@ class McpClient {
           owner,
           error: message,
           mcpServerName: tool.catalogName || "unknown",
+          authInfo,
           structuredError: {
             type: "tool_state",
             code: "unknown_tool",
@@ -4091,6 +4112,8 @@ class McpClient {
           toolResult: storedToolResult,
           userId: authInfo?.userId ?? null,
           runId: authInfo?.runId ?? null,
+          sessionId: authInfo?.llmSessionId ?? null,
+          llmToolCallId: authInfo?.llmToolCallId ?? null,
           authMethod: authInfo?.authMethod ?? null,
           oauthClientId: authInfo?.oauthClientId ?? null,
           source: authInfo?.source ?? null,

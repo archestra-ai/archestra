@@ -11,6 +11,7 @@ import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
+import AgentUsageModel from "@/models/agent-usage";
 import AppModel from "@/models/app";
 import AppDataModel from "@/models/app-data";
 import AppToolModel from "@/models/app-tool";
@@ -982,6 +983,7 @@ async function makeInteraction(
       | "billingTeamId"
       | "billingMode"
       | "sessionId"
+      | "runId"
       | "cacheReadTokens"
       | "cacheWriteTokens"
       | "externalAgentId"
@@ -1065,6 +1067,13 @@ async function makeInteraction(
       ...overrides,
     })
     .returning();
+  // Inserted directly, so stamp the agent as InteractionModel.create would.
+  if (interaction.profileId) {
+    await AgentUsageModel.recordUse({
+      agentId: interaction.profileId,
+      usedAt: interaction.createdAt,
+    });
+  }
   return interaction;
 }
 

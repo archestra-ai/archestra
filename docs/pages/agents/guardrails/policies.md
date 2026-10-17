@@ -151,6 +151,8 @@ For a concrete policy change, the agent can include a focused regression check a
 
 When a remedy plan makes no sense, an agent keeps getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, the agent reports it with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. See [Reporting](https://www.openappa.com/yell). With **Break the glass** on in **Settings → Guardrails**, a yell also turns Guardrails off for that session, so the agent is no longer stuck. A yell that did this is marked in the list. The **Yells** tab lists the reports for anyone with [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read). The list shows unresolved reports. To see a resolved report or reopen it, set the status filter to **Resolved**. The link keeps the filter, so you can share it. Click **Investigate in chat** to have the agent propose a fix, then **Mark resolved**, which needs [`openappaDiagnostics:update`](/docs/reference/permissions#openappaDiagnostics:update).
 
+An authenticated runtime or client can also report from a session outside enforcement. Its feedback is saved locally without a diagnostic archive, and the session stays outside enforcement.
+
 The agent compares the report with the current policy and validations. A policy fix can include an essential regression check where replay represents the issue. Client and helper failures receive their own diagnosis rather than weaker policy.
 
 Once you confirm the fix, the agent can mark the report resolved in the chat. A report keeps its investigation chat, so **Investigate in chat** opens it again.

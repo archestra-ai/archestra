@@ -13,9 +13,8 @@ import {
 } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
 import { ApiError } from "@/types";
-import { openaiAdapterFactory } from "./adapters";
+import { ollamaAdapterFactory } from "./adapters";
 import ollamaProxyRoutes from "./routes/ollama";
-import openAiProxyRoutes from "./routes/openai";
 
 /**
  * Localhost is not a credential. A keyless call reaches the proxy as an
@@ -44,12 +43,11 @@ describe("LLM proxy internal proof", () => {
       }),
     );
     openAiStubOptions = {};
-    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+    vi.spyOn(ollamaAdapterFactory, "createClient").mockImplementation(
       () => createOpenAiTestClient(openAiStubOptions) as never,
     );
     testAgent = await makeAgent({ name: "Internal proof agent" });
     await app.register(ollamaProxyRoutes);
-    await app.register(openAiProxyRoutes);
   });
 
   afterEach(async () => {
@@ -84,23 +82,10 @@ describe("LLM proxy internal proof", () => {
     expect(response.statusCode, response.body).toBe(401);
   });
 
-  test("a call carrying the process's own proof is accepted", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/openai/${testAgent.id}/chat/completions`,
-      remoteAddress: "127.0.0.1",
-      headers: {
-        "content-type": "application/json",
-        authorization: "Bearer test-key",
-        ...internalCallHeader(),
-      },
-      payload: {
-        model: "gpt-4o",
-        messages: [{ role: "user", content: "Hello" }],
-        stream: false,
-      },
-    });
+  test("a keyless call carrying the process's own proof is accepted", async () => {
+    const response = await keylessRequest(internalCallHeader());
 
     expect(response.statusCode, response.body).toBe(200);
+    expect(ollamaAdapterFactory.createClient).toHaveBeenCalledOnce();
   });
 });

@@ -66,6 +66,20 @@ import {
   skillCatalogSearchSeed,
   skillsListSeed,
 } from "./data/skills";
+import {
+  agentStatisticsFor,
+  appStatisticsFor,
+  appUsageFor,
+  costStatisticsFor,
+  myStatisticsFor,
+  myUsageBreakdownFor,
+  proxyCostStatisticsFor,
+  skillStatisticsFor,
+  skillUsageFor,
+  teamStatisticsFor,
+  toolCallUsageFor,
+  userStatisticsFor,
+} from "./data/statistics";
 
 // Every endpoint is registered once, under its backend-relative path, which
 // MSW matches against any origin. Both consumers arrive that way: the browser
@@ -79,6 +93,17 @@ function paths(path: string): [string] {
 
 function getJson(path: string, body: JsonBodyType): HttpHandler[] {
   return paths(path).map((url) => http.get(url, () => HttpResponse.json(body)));
+}
+
+function statisticsJson(
+  path: string,
+  build: (query: URLSearchParams) => JsonBodyType,
+): HttpHandler[] {
+  return paths(path).map((url) =>
+    http.get(url, ({ request }) =>
+      HttpResponse.json(build(new URL(request.url).searchParams)),
+    ),
+  );
 }
 
 function postJson(path: string, body: JsonBodyType): HttpHandler[] {
@@ -336,15 +361,6 @@ export const handlers: HttpHandler[] = [
     sandbox: "disabled",
   }),
   ...getJson("/api/organization", organizationSeed),
-  // The roster behind owner pickers and the scope filter's "member" facet —
-  // the seeded admin, mirroring the session identity.
-  ...getJson("/api/organization/members", [
-    {
-      id: sessionSeed.user.id,
-      name: sessionSeed.user.name,
-      email: sessionSeed.user.email,
-    },
-  ]),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.
@@ -374,7 +390,7 @@ export const handlers: HttpHandler[] = [
     tools: [],
     tokenCount: { total: 0, source: "estimate", model: null, observedAt: null },
   }),
-  ...getJson("/api/projects", []),
+  ...getJson("/api/projects", paginated([], { limit: 20 })),
   ...getJson("/api/apps", {
     data: [],
     pagination: {
@@ -533,7 +549,10 @@ export const handlers: HttpHandler[] = [
     pagination: { limit: 20, nextCursor: null, hasNext: false },
   }),
   ...getJson("/api/agents/options/ids", []),
-  ...getJson("/api/agents/options", []),
+  ...getJson("/api/agents/options", {
+    data: [],
+    pagination: { limit: 100, nextCursor: null, hasNext: false },
+  }),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
   ...getJson("/api/agents/activation-skills", {
@@ -551,6 +570,17 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agent-tools", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 1,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
@@ -683,7 +713,7 @@ export const handlers: HttpHandler[] = [
     }),
   ),
 
-  // LLM proxy logs (/llm/logs list, session detail, interaction detail).
+  // LLM proxy logs (/llm/logs list and the session detail page).
   ...getJson("/api/interactions/sessions/:sessionId/lineage", {
     forkedFrom: null,
     forks: [],
@@ -772,6 +802,8 @@ export const handlers: HttpHandler[] = [
   // empty so the strict-mode unhandled-request guard doesn't fire on
   // background fetches we don't actually care about for these tests.
   ...getJson("/api/llm-models", []),
+  ...getJson("/api/llm-models/key-model-ids", []),
+  ...getJson("/api/llm-models/options", []),
   ...getJson("/api/llm-models/by-provider", []),
   ...getJson("/api/llm-models/with-api-keys", []),
   ...getJson("/api/knowledge-bases", []),
@@ -794,6 +826,20 @@ export const handlers: HttpHandler[] = [
     ),
   ),
   ...getJson("/api/identity-providers", []),
+  // Costs and My Usage: generated from one seeded activity curve so the
+  // endpoints reconcile and honour timeframe, groupBy, filters and paging.
+  ...statisticsJson("/api/statistics/costs", costStatisticsFor),
+  ...statisticsJson("/api/statistics/llm-proxy", proxyCostStatisticsFor),
+  ...statisticsJson("/api/statistics/users", userStatisticsFor),
+  ...statisticsJson("/api/statistics/teams", teamStatisticsFor),
+  ...statisticsJson("/api/statistics/agents", agentStatisticsFor),
+  ...statisticsJson("/api/statistics/app-usage", appUsageFor),
+  ...statisticsJson("/api/statistics/skill-usage", skillUsageFor),
+  ...statisticsJson("/api/statistics/mcp-tool-calls", toolCallUsageFor),
+  ...statisticsJson("/api/statistics/apps", appStatisticsFor),
+  ...statisticsJson("/api/statistics/skills", skillStatisticsFor),
+  ...statisticsJson("/api/statistics/me", myStatisticsFor),
+  ...statisticsJson("/api/statistics/me/breakdown", myUsageBreakdownFor),
 ];
 
 const USAGE_STATISTICS_BY_SKILL: Record<

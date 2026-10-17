@@ -753,6 +753,159 @@ describe("chat model routes", () => {
     expect(await list("access=mine")).toEqual([]);
   });
 
+  describe("GET /api/llm-models — slim reads", () => {
+    const createModel = (modelId: string, extra: Partial<Model> = {}) =>
+      ModelModel.create({
+        externalId: `openai/${modelId}`,
+        provider: "openai",
+        modelId,
+        description: `${modelId} description`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+        ...extra,
+      });
+
+    let seeded: {
+      orgKey: { id: string };
+      othersKey: { id: string };
+      chat: Model;
+    };
+
+    beforeEach(
+      async ({ makeSecret, makeLlmProviderApiKey, makeUser, makeMember }) => {
+        const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+        const orgKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+          provider: "openai",
+          name: "Org key",
+        });
+        const otherUser = await makeUser();
+        await makeMember(otherUser.id, organizationId);
+        const othersKey = await makeLlmProviderApiKey(
+          organizationId,
+          secret.id,
+          {
+            provider: "openai",
+            userId: otherUser.id,
+            name: "Someone else's key",
+          },
+        );
+        const chat = await createModel("gpt-chat");
+        const embedding = await createModel("text-embed", {
+          embeddingDimensions: 1536,
+        });
+        const hidden = await createModel("gpt-hidden", { ignored: true });
+        const othersOnly = await createModel("gpt-others-only");
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          orgKey.id,
+          [chat, embedding, hidden],
+          "openai",
+        );
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          othersKey.id,
+          [chat, othersOnly],
+          "openai",
+        );
+        seeded = { orgKey, othersKey, chat };
+      },
+    );
+
+    const get = async (url: string) => {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    };
+
+    test("narrows the full list by key or to embedding models, and can skip assignments", async () => {
+      const { orgKey, othersKey } = seeded;
+      const summary = (
+        models: Array<{
+          modelId: string;
+          apiKeys: Array<{ id: string }>;
+          labels: unknown[];
+        }>,
+      ) => models.map((model) => [model.modelId, model.apiKeys.length]);
+
+      expect(
+        summary(await get(`/api/llm-models?apiKeyIds=${orgKey.id}`)),
+      ).toEqual([
+        ["gpt-chat", 1],
+        ["gpt-hidden", 1],
+        ["text-embed", 1],
+      ]);
+      // Another member's personal key is not the caller's to filter by.
+      expect(await get(`/api/llm-models?apiKeyIds=${othersKey.id}`)).toEqual(
+        [],
+      );
+      // An empty key list asks for no models, not for every model.
+      expect(await get("/api/llm-models?apiKeyIds=")).toEqual([]);
+      expect(summary(await get("/api/llm-models?embedding=true"))).toEqual([
+        ["text-embed", 1],
+      ]);
+
+      const full = await get("/api/llm-models");
+      const slim = await get("/api/llm-models?includeAssignments=false");
+      expect(slim.map((model: { id: string }) => model.id)).toEqual(
+        full.map((model: { id: string }) => model.id),
+      );
+    });
+
+    test("lists each visible key's shown models for the key pickers", async () => {
+      const { orgKey } = seeded;
+
+      expect(await get("/api/llm-models/key-model-ids")).toEqual([
+        { apiKeyId: orgKey.id, modelIds: ["gpt-chat", "text-embed"] },
+      ]);
+    });
+
+    test("offers the full list's models, in order, with picker fields only", async () => {
+      const { chat } = seeded;
+      const full = await get("/api/llm-models");
+
+      const options = await get("/api/llm-models/options");
+
+      expect(options).toEqual(
+        full.map(
+          (model: {
+            id: string;
+            modelId: string;
+            provider: string;
+            description: string | null;
+            pricePerMillionInput: string | null;
+            pricePerMillionOutput: string | null;
+            isFree: boolean;
+            isBest: boolean;
+          }) => ({
+            id: model.id,
+            modelId: model.modelId,
+            provider: model.provider,
+            description: model.description,
+            pricePerMillionInput: model.pricePerMillionInput,
+            pricePerMillionOutput: model.pricePerMillionOutput,
+            isFree: model.isFree,
+            isBest: model.isBest,
+          }),
+        ),
+      );
+      expect(options.find((o: { id: string }) => o.id === chat.id)).toEqual(
+        expect.objectContaining({
+          pricePerMillionInput: "1",
+          pricePerMillionOutput: "2",
+        }),
+      );
+
+      // Without llmModel:read the grants decide, the same as for the list.
+      mockUserHasPermission.mockResolvedValue(false);
+      expect(
+        (await get("/api/llm-models/options")).map((o: { id: string }) => o.id),
+      ).toEqual(
+        (await get("/api/llm-models")).map((m: { id: string }) => m.id),
+      );
+    });
+  });
+
   describe("GET /api/llm-models — effectiveContextLength", () => {
     /**
      * The models table shows the window Ollama will actually enforce, while

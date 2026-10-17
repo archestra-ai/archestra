@@ -37,7 +37,7 @@ for (const width of [320, 360, 640, 768, 1024, 1280]) {
       });
     }
 
-    test("/llm/logs keeps its time range beside the title", async ({
+    test("/llm/logs keeps its time range with its filters", async ({
       page,
     }) => {
       await page.goto("/llm/logs");
@@ -45,14 +45,29 @@ for (const width of [320, 360, 640, 768, 1024, 1280]) {
       await expect(heading).toBeVisible();
       const header = page.locator("[data-page-header]");
       const actions = header.locator("[data-page-actions]");
-      // The time range is the header's only action: no permissions here.
-      await expect(
-        actions.getByRole("button", { name: /Any time/ }),
-      ).toBeVisible();
-      await expect(
-        actions.getByRole("button", { name: /Permissions/ }),
-      ).toHaveCount(0);
-      await expectActionsBesideTitle({ heading, actions, width });
+
+      if (width < 1024) {
+        // Compact filter bars hold the time range in their popover, so the
+        // header keeps no actions and the description has the full width.
+        await expect(
+          page.getByRole("button", { name: "Filters" }),
+        ).toBeVisible();
+        await expect(actions).toHaveCount(0);
+        await page.getByRole("button", { name: "Filters" }).click();
+        await expect(
+          page.getByRole("dialog").getByRole("button", { name: /Any time/ }),
+        ).toBeVisible();
+        await page.keyboard.press("Escape");
+      } else {
+        // The time range is the header's only action: no permissions here.
+        await expect(
+          actions.getByRole("button", { name: /Any time/ }),
+        ).toBeVisible();
+        await expect(
+          actions.getByRole("button", { name: /Permissions/ }),
+        ).toHaveCount(0);
+        await expectActionsBesideTitle({ heading, actions, width });
+      }
 
       const title = await heading.boundingBox();
       const description = await header

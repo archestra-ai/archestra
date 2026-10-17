@@ -71,6 +71,7 @@ export function useAllProfileTools({
   sorting,
   filters,
   skipPagination,
+  includeToolDetails,
   enabled = true,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
@@ -90,6 +91,8 @@ export function useAllProfileTools({
     mcpServerOwnerId?: string;
   };
   skipPagination?: boolean;
+  /** False leaves out each tool's parameter schema and description. */
+  includeToolDetails?: boolean;
   enabled?: boolean;
 }) {
   return useQuery({
@@ -106,6 +109,7 @@ export function useAllProfileTools({
         mcpServerId: filters?.mcpServerId,
         mcpServerOwnerId: filters?.mcpServerOwnerId,
         skipPagination,
+        includeToolDetails,
       },
     ],
     queryFn: async () => {
@@ -120,6 +124,7 @@ export function useAllProfileTools({
           origin: filters?.origin,
           mcpServerOwnerId: filters?.mcpServerOwnerId,
           skipPagination,
+          includeToolDetails,
         },
       });
       throwOnApiError(result.error);

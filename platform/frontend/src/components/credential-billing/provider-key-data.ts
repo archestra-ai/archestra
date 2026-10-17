@@ -8,27 +8,20 @@ import { useMemo } from "react";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { useSession } from "@/lib/auth/auth.query";
-import { useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmModelIdsByKey } from "@/lib/llm-models.query";
 
-/** Model ids each provider key serves, for the key pickers' counts. */
+/**
+ * Model ids each provider key serves, for the key pickers' counts. `pending`
+ * stays true until the counts are known.
+ */
 export function useModelIdsByKey(enabled = true) {
-  const { data: models = [] } = useModelsWithApiKeys({
-    enabled,
-    toastOnError: false,
-  });
-  return useMemo(() => {
-    const byKey = new Map<string, string[]>();
-    for (const model of models) {
-      if (model.ignored) continue;
-      for (const apiKey of model.apiKeys) {
-        const list = byKey.get(apiKey.id) ?? [];
-        list.push(model.modelId);
-        byKey.set(apiKey.id, list);
-      }
-    }
-    for (const list of byKey.values()) list.sort();
-    return byKey;
-  }, [models]);
+  const { data, isPending } = useLlmModelIdsByKey({ enabled });
+  const byKey = useMemo(
+    () =>
+      new Map((data ?? []).map((entry) => [entry.apiKeyId, entry.modelIds])),
+    [data],
+  );
+  return { byKey, pending: isPending };
 }
 
 /** Who a provider key belongs to, in a few words: "Yours", "Team: Platform". */

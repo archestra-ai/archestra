@@ -296,10 +296,14 @@ export function buildMcpGatewayTool(params: {
                 // encrypted under the conversation key, not redacted.
                 suppressContentLogging: ctx.suppressContentLogging,
                 encryptedChatAudit: ctx.encryptedChatAudit,
+                // A run_tool dispatch persists its call through mcpClient,
+                // which links the row to this turn's session and call.
                 tokenAuth: buildTokenAuthContext({
                   mcpGwToken: ctx.mcpGwToken,
                   organizationId: ctx.organizationId,
                   userId: ctx.userId,
+                  llmSessionId: ctx.sessionId,
+                  llmToolCallId: options.toolCallId,
                 }),
               },
             );
@@ -375,6 +379,7 @@ export function buildMcpGatewayTool(params: {
                 ? undefined
                 : ctx.taskBridge,
               toolCallId: options.toolCallId,
+              llmSessionId: ctx.sessionId,
               isUiProvidingTool,
               suppressContentLogging: ctx.suppressContentLogging,
               encryptedChatAudit: ctx.encryptedChatAudit,
@@ -977,8 +982,16 @@ interface ToolExecutionContext {
   elicitation?: ChatMcpElicitationBridge;
   /** Detaches this call into a cancellable task if it runs long (chat only). */
   taskBridge?: ChatTaskBridge;
-  /** The model's id for this call, linking a task card to the call it backs. */
+  /**
+   * The model's id for this call, linking a task card to the call it backs
+   * and the persisted tool-call row to the model's call.
+   */
   toolCallId?: string;
+  /**
+   * The LLM session this run's model calls are filed under (the session id
+   * the run hands the LLM proxy), recorded on the persisted tool-call row.
+   */
+  llmSessionId?: string;
   /**
    * Set when the tool's gateway-listed definition carries a `ui://` resource,
    * i.e. it may be advertised top-level while unassigned. Gates the dynamic
@@ -1025,6 +1038,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     elicitation,
     taskBridge,
     toolCallId,
+    llmSessionId,
     isUiProvidingTool,
     suppressContentLogging,
     encryptedChatAudit,
@@ -1102,6 +1116,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         serviceAccountId: mcpGwToken.serviceAccountId,
         organizationId,
         userId,
+        // Exact links to the LLM turn: the run's own session id and the
+        // model's id for this call (the row's tool_call.id stays our own).
+        ...(llmSessionId && { llmSessionId }),
+        ...(toolCallId && { llmToolCallId: toolCallId }),
       }
     : undefined;
 
@@ -1442,10 +1460,16 @@ function buildTokenAuthContext({
   mcpGwToken,
   organizationId,
   userId,
+  llmSessionId,
+  llmToolCallId,
 }: {
   mcpGwToken: McpGatewayToken | null;
   organizationId: string;
   userId: string;
+  /** Links the tool calls this context executes to the run's LLM session. */
+  llmSessionId?: string;
+  /** The model's id for the tool call this context executes. */
+  llmToolCallId?: string;
 }): TokenAuthContext | undefined {
   if (!mcpGwToken) {
     return undefined;
@@ -1459,6 +1483,8 @@ function buildTokenAuthContext({
     isUserToken: mcpGwToken.isUserToken,
     userId: mcpGwToken.isUserToken ? userId : undefined,
     serviceAccountId: mcpGwToken.serviceAccountId,
+    ...(llmSessionId && { llmSessionId }),
+    ...(llmToolCallId && { llmToolCallId }),
   };
 }
 

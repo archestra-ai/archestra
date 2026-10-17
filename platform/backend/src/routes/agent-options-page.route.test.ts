@@ -15,6 +15,15 @@ describe("bounded agent options", () => {
     expect(response.statusCode, response.body).toBe(200);
     return response.json();
   };
+  // The by-ID lookup is the roster's presentation source of truth.
+  const resolveAll = async (query: string) => {
+    const ids: string[] = await get(`/api/agents/options/ids${query}`);
+    const page = await get(
+      `/api/agents/options${query}&limit=1000&ids=${ids.join(",")}`,
+    );
+    expect(page.pagination.nextCursor).toBeNull();
+    return page.data;
+  };
   test("pages the complete authorized roster before hydration with stable timestamp ties", async ({
     makeMember,
     makeAgent,
@@ -53,9 +62,7 @@ describe("bounded agent options", () => {
     });
     const base =
       "/api/agents/options/page?excludeBuiltIn=true&agentTypes=agent&limit=2";
-    const full = await get(
-      "/api/agents/options?excludeBuiltIn=true&agentTypes=agent",
-    );
+    const full = await resolveAll("?excludeBuiltIn=true&agentTypes=agent");
     const rows = [];
     let cursor: string | null = null;
     do {
@@ -132,9 +139,7 @@ describe("bounded agent options", () => {
         { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
       ],
     });
-    const legacy = await get(
-      "/api/agents/options?excludeBuiltIn=true&agentTypes=agent",
-    );
+    const legacy = await resolveAll("?excludeBuiltIn=true&agentTypes=agent");
     const ids = await get(
       "/api/agents/options/ids?excludeBuiltIn=true&agentTypes=agent",
     );
@@ -184,7 +189,7 @@ describe("bounded agent options", () => {
       description: "Special description",
       access: { teams: [team.id] },
     });
-    const full = await get(`/api/agents/options?ids=${target.id}`);
+    const full = (await get(`/api/agents/options?ids=${target.id}`)).data;
     expect(full).toHaveLength(1);
     expect(full[0].teams).toHaveLength(1);
     for (const search of [
@@ -262,8 +267,8 @@ describe("bounded agent options", () => {
       name: "No owner",
       access: "personal",
     });
-    const legacy: AgentOption[] = await get(
-      "/api/agents/options?excludeBuiltIn=true&agentTypes=agent",
+    const legacy: AgentOption[] = await resolveAll(
+      "?excludeBuiltIn=true&agentTypes=agent",
     );
     const cases = [
       {
@@ -360,6 +365,28 @@ describe("bounded agent options", () => {
         cursor = page.pagination.nextCursor;
       } while (cursor);
       expect(actual.sort()).toEqual(expected);
+    }
+  });
+  test("caps the ids filter at 200 on every options route", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const ids = (count: number) =>
+      Array.from({ length: count }, () => crypto.randomUUID()).join(",");
+    for (const path of [
+      "/api/agents/options",
+      "/api/agents/options/page",
+      "/api/agents/options/ids",
+    ]) {
+      const status = async (count: number) =>
+        (
+          await ctx.app.inject({
+            method: "GET",
+            url: `${path}?ids=${ids(count)}`,
+          })
+        ).statusCode;
+      expect(await status(200), path).toBe(200);
+      expect(await status(201), path).toBe(400);
     }
   });
   test("bounds credential readiness to requested enforcing agents without changing default eligibility", async ({

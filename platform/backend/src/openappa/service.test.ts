@@ -617,6 +617,40 @@ describe("APPA feature boundary", () => {
     });
   });
 
+  test("an unobserved host report cannot send an archive when its admission is refused", async () => {
+    config.openappa.yellEnabled = true;
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "Reporting is refused by the policy",
+      }),
+    );
+    const result = await executeYell({
+      session,
+      toolCallId: "host-report",
+      args: { message: "Reporting feedback", with_trajectory: true },
+      needsAdmission: true,
+    });
+    expect(result.isError).toBe(true);
+    expect(native.dispatchHook).toHaveBeenCalledOnce();
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      event: "tool_call",
+      operation_id: "call:host-report",
+      tool: "yell",
+    });
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "unresolved",
+      limit: 20,
+    });
+    expect(saved.data).toEqual([
+      expect.objectContaining({
+        toolCallId: "host-report",
+        reportFailed: true,
+      }),
+    ]);
+  });
+
   test("a gateway yell reports under the session and call the proxy allowed", async () => {
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;
@@ -865,6 +899,39 @@ describe("APPA feature boundary", () => {
       { session_id: "conversation", operation_id: "yell:report" },
       { session_id: "proxy-session", operation_id: "yell:cached" },
     ]);
+  });
+
+  test("a cached child yell keeps its identity ahead of the runtime's parent headers", async () => {
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
+    const child = {
+      ...session,
+      session_id: "conversation:worker",
+      parent_id: session.session_id,
+    };
+    const args = { message: "Child reporting feedback", with_trajectory: true };
+    await rememberYellSession({
+      session: child,
+      call: { id: "child-report", name: "archestra__yell", arguments: args },
+      resolution: { canonicalize: (name) => name, looseRunToolDispatch: false },
+    });
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "mcp_result", result: { content: [] } }),
+    );
+
+    await executeArchestraTool("archestra__yell", args, {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+      openappaSession: session,
+    });
+
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      ...child,
+      event: "yell",
+      operation_id: "yell:child-report",
+    });
+    expect(await startedUnenforced(child)).toBe(true);
+    expect(await startedUnenforced(session)).toBe(false);
   });
 
   test("reporting refuses missing identity and unprotected child calls", async () => {
@@ -4276,7 +4343,9 @@ describe("remedy by offer", () => {
 
   test("a runtime refusal is not rewritten as an unavailable peer response", async () => {
     native.sendPeerMessage.mockRejectedValueOnce(
-      new Error("no prepared fork to open this child"),
+      Object.assign(new Error("no prepared fork to open this child"), {
+        code: "spawn_not_taken",
+      }),
     );
     await expect(
       sendPeerMessage({

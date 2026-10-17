@@ -1264,6 +1264,8 @@ class AgentToolModel {
     organizationId?: string;
     isAgentAdmin?: boolean;
     skipPagination?: boolean;
+    /** False returns each tool's `description` as null and `parameters` as {}. */
+    includeToolDetails?: boolean;
   }): Promise<PaginatedResult<AgentTool>> {
     const {
       pagination = { limit: 20, offset: 0 },
@@ -1273,6 +1275,7 @@ class AgentToolModel {
       organizationId,
       isAgentAdmin,
       skipPagination = false,
+      includeToolDetails = true,
     } = params;
     // Build WHERE conditions
     const whereConditions: SQL[] = [notDeleted(schema.agentsTable)];
@@ -1416,8 +1419,13 @@ class AgentToolModel {
         tool: {
           id: schema.toolsTable.id,
           name: schema.toolsTable.name,
-          description: schema.toolsTable.description,
-          parameters: schema.toolsTable.parameters,
+          // Not read without details: they hold each tool's JSON schema.
+          description: includeToolDetails
+            ? schema.toolsTable.description
+            : sql<ToolRow["description"]>`null`,
+          parameters: includeToolDetails
+            ? schema.toolsTable.parameters
+            : sql<ToolRow["parameters"]>`'{}'::jsonb`,
           createdAt: schema.toolsTable.createdAt,
           updatedAt: schema.toolsTable.updatedAt,
           catalogId: schema.toolsTable.catalogId,
@@ -1436,14 +1444,19 @@ class AgentToolModel {
       .orderBy(orderByClause)
       .$dynamic();
 
-    // Apply pagination only if not skipped
-    const dataQuery = skipPagination
-      ? baseDataQuery
-      : baseDataQuery.limit(pagination.limit).offset(pagination.offset);
+    // Without pagination the row count is the total; no count query needed.
+    // Use Math.max(1, data.length) to avoid division by zero when data is empty
+    if (skipPagination) {
+      const data = await baseDataQuery;
+      return createPaginatedResult(data, data.length, {
+        limit: Math.max(1, data.length),
+        offset: 0,
+      });
+    }
 
     // Run both queries in parallel
     const [data, [{ total }]] = await Promise.all([
-      dataQuery,
+      baseDataQuery.limit(pagination.limit).offset(pagination.offset),
       db
         .select({ total: count() })
         .from(schema.agentToolsTable)
@@ -1457,15 +1470,6 @@ class AgentToolModel {
         )
         .where(whereClause),
     ]);
-
-    // When skipping pagination, return all data with correct metadata
-    // Use Math.max(1, data.length) to avoid division by zero when data is empty
-    if (skipPagination) {
-      return createPaginatedResult(data, data.length, {
-        limit: Math.max(1, data.length),
-        offset: 0,
-      });
-    }
 
     return createPaginatedResult(data, Number(total), pagination);
   }
@@ -1675,6 +1679,8 @@ class AgentToolModel {
 }
 
 export default AgentToolModel;
+
+type ToolRow = typeof schema.toolsTable.$inferSelect;
 
 /**
  * One agent's binding of a tool: the tool plus the credential identity that

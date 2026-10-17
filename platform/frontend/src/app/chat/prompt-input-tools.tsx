@@ -228,8 +228,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const handleSubscriptionSelect = (keyId: string) =>
     credentialSelectorRef.current?.selectKey(keyId);
   const providerCatalog = useModelProviderCatalog();
-  // New chats expose their setup; existing conversations keep it in one menu.
-  const showOptionsMenu = !!conversationId || isNarrow;
+  // The pickers stay inline whenever they fit, for new and started chats
+  // alike; the menu is only the fallback for a toolbar too narrow to hold them.
+  const showOptionsMenu = isNarrow;
 
   const selectedApiKeyId = conversationId
     ? (currentConversationChatApiKeyId ?? null)
@@ -358,6 +359,33 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     [focusTextarea],
   );
 
+  // Context usage follows the model picker when the pickers are inline, and
+  // sits beside the attachment button when they collapse into the menu.
+  const contextUsage = tokensUsed > 0 && maxContextLength && (
+    <ContextWindowDialog
+      breakdown={contextWindow ?? null}
+      tokensUsed={tokensUsed}
+      cachedTokens={cachedTokens}
+      maxTokens={maxContextLength}
+      lastCompaction={lastCompaction}
+      onCompact={onCompactConversation}
+      isCompacting={isContextCompacting}
+    >
+      <UnstyledButton
+        type="button"
+        aria-label="Context usage"
+        data-testid={E2eTestId.ChatContextUsageTrigger}
+        className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ContextIndicator
+          tokensUsed={tokensUsed}
+          maxTokens={maxContextLength}
+          size="sm"
+        />
+      </UnstyledButton>
+    </ContextWindowDialog>
+  );
+
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
       {/* Not rendered visibly: it owns the key auto-selection and the
@@ -387,7 +415,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             />
           </div>
         )}
-      {/* Existing chats always use the menu; new chats use it only when space is tight. */}
+      {/* Only when the inline pickers no longer fit. */}
       {showOptionsMenu && (
         <Popover open={optionsOpen} onOpenChange={handleOptionsOpenChange}>
           <PopoverTrigger asChild>
@@ -504,32 +532,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </Tooltip>
       )}
 
-      {/* Context usage sits beside the attachment button at every width, so
-          it stays one glance away once the setup moves into the menu. */}
-      {tokensUsed > 0 && maxContextLength && (
-        <ContextWindowDialog
-          breakdown={contextWindow ?? null}
-          tokensUsed={tokensUsed}
-          cachedTokens={cachedTokens}
-          maxTokens={maxContextLength}
-          lastCompaction={lastCompaction}
-          onCompact={onCompactConversation}
-          isCompacting={isContextCompacting}
-        >
-          <UnstyledButton
-            type="button"
-            aria-label="Context usage"
-            data-testid={E2eTestId.ChatContextUsageTrigger}
-            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ContextIndicator
-              tokensUsed={tokensUsed}
-              maxTokens={maxContextLength}
-              size="sm"
-            />
-          </UnstyledButton>
-        </ContextWindowDialog>
-      )}
+      {/* With the setup in the menu, context usage stays one glance away
+          beside the attachment button. */}
+      {showOptionsMenu && contextUsage}
 
       {/* EncryptedChat toggle — placed with the always-visible controls (next to
           the attachment button) so it renders in both the wide and the
@@ -669,6 +674,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               notRecommendedForAgents={notRecommendedForAgents}
             />
           )}
+          {contextUsage}
           {!runtimeMode && toolsUnavailable && <NoToolsModelBadge />}
           {!runtimeMode && notRecommendedForAgents && (
             <NotRecommendedForAgentsNoticeBadge />

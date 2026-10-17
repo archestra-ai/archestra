@@ -322,7 +322,10 @@ function TeamUsageBar({
   subject: "key" | "client";
 }) {
   const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
-  const { data: limits } = useLimits({ enabled: !!canReadLimits });
+  const { data: limits } = useLimits({
+    enabled: !!canReadLimits,
+    filters: { entityType: "team", entityId: team.id, limitType: "token_cost" },
+  });
   const teamLimit = useMemo(
     () =>
       (limits ?? []).find(

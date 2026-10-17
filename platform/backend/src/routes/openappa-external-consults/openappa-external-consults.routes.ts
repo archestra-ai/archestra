@@ -38,6 +38,14 @@ const QuerySchema = z
       .describe("Recorded on or before this time (ISO 8601)"),
     root: z.string().min(1).optional(),
     sessionId: z.string().min(1).optional(),
+    search: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        "Case-insensitive substring of the external's name or the session ID",
+      ),
     format: ExportFormatSchema.default("json").describe(
       `\`jsonl\` streams up to ${JSONL_ROW_CAP} rows as application/x-ndjson, one consult per line, ignoring \`limit\``,
     ),

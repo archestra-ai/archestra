@@ -5,8 +5,23 @@ import {
   ProjectPinModel,
 } from "@/models";
 import { ProjectNameExistsError } from "@/models/project";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
+
+/** Every row of the list view for one caller, unpaged (see listPage). */
+async function listCandidates(params: {
+  userId: string;
+  organizationId: string;
+  includeOversight?: boolean;
+  lifecycle?: "active" | "deleted";
+}) {
+  const { rows } = await ProjectAccessModel.listPage({
+    ...params,
+    principal: await ResourcePermissionSubjectModel.resolvePrincipal(params),
+  });
+  return rows;
+}
 
 async function makeProject(params: {
   organizationId: string;
@@ -188,7 +203,13 @@ describe("ProjectModel", () => {
 
     expect((await ProjectModel.findById(project.id))?.name).toBe("recoverable");
     expect(
-      (await ProjectAccessModel.listAllOrgProjects({ organizationId: org.id }))
+      (
+        await listCandidates({
+          userId: user.id,
+          organizationId: org.id,
+          includeOversight: true,
+        })
+      )
         .map((p) => p.id)
         .includes(project.id),
     ).toBe(true);
@@ -413,7 +434,7 @@ describe("ProjectAccessModel", () => {
     expect(await can(orgMember.id)).toBe(false);
   });
 
-  test("listAccessibleProjects dedupes and orders own-first", async ({
+  test("listPage returns what the caller reaches, flags oversight rows, and splits the lifecycle", async ({
     makeUser,
     makeOrganization,
     makeTeam,
@@ -456,13 +477,13 @@ describe("ProjectAccessModel", () => {
       visibility: "organization",
       teamIds: [],
     });
-    await makeProject({
+    const privateOne = await makeProject({
       organizationId: org.id,
       userId: owner.id,
       name: "private",
     });
 
-    const listed = await ProjectAccessModel.listAccessibleProjects({
+    const listed = await listCandidates({
       userId: viewer.id,
       organizationId: org.id,
     });
@@ -471,16 +492,30 @@ describe("ProjectAccessModel", () => {
       "org-shared",
       "team-shared",
     ]);
-    expect(listed[0].id).toBe(mine.id); // own first
+    expect(listed.every((p) => p.accessible)).toBe(true);
     expect(listed.find((p) => p.id === mine.id)?.visibility).toBeNull();
+    expect(listed.find((p) => p.id === sharedToTeam.id)?.visibility).toBe(
+      "team",
+    );
     expect(listed.find((p) => p.id === orgShared.id)?.visibility).toBe(
       "organization",
     );
 
-    // soft-deleted projects vanish from every list surface, including the
-    // admin oversight base set: the retained row is invisible to the API.
+    // With oversight every project comes back, and only the unreachable one
+    // is flagged as not accessible.
+    const overseen = await listCandidates({
+      userId: viewer.id,
+      organizationId: org.id,
+      includeOversight: true,
+    });
+    expect(overseen.filter((p) => !p.accessible).map((p) => p.id)).toEqual([
+      privateOne.id,
+    ]);
+
+    // soft-deleted projects vanish from every active list surface, including
+    // the oversight base set, and appear only in the deleted slice.
     await ProjectModel.delete(orgShared.id);
-    const afterDelete = await ProjectAccessModel.listAccessibleProjects({
+    const afterDelete = await listCandidates({
       userId: viewer.id,
       organizationId: org.id,
     });
@@ -488,10 +523,19 @@ describe("ProjectAccessModel", () => {
       "mine",
       "team-shared",
     ]);
-    const allOrg = await ProjectAccessModel.listAllOrgProjects({
+    const allOrg = await listCandidates({
+      userId: viewer.id,
       organizationId: org.id,
+      includeOversight: true,
     });
     expect(allOrg.map((p) => p.id)).not.toContain(orgShared.id);
+    const deleted = await listCandidates({
+      userId: viewer.id,
+      organizationId: org.id,
+      includeOversight: true,
+      lifecycle: "deleted",
+    });
+    expect(deleted.map((p) => p.id)).toEqual([orgShared.id]);
   });
   test("a project shared by name reaches exactly the people named, and lists for them", async ({
     makeUser,
@@ -525,7 +569,7 @@ describe("ProjectAccessModel", () => {
       });
     expect(await can(named.id)).toBe(true);
     expect(await can(other.id)).toBe(false);
-    const listed = await ProjectAccessModel.listAccessibleProjects({
+    const listed = await listCandidates({
       userId: named.id,
       organizationId: org.id,
     });

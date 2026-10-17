@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  DEFAULT_RESOURCE_ACCESS_RELATIONS,
-  E2eTestId,
-} from "@archestra/shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -88,27 +84,19 @@ import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { ExposedSetCell, ExposedSetNames } from "./gateway-exposed-set-cell";
 import {
   GatewayPinnedTiles,
   useGatewaysPinnedForViewer,
 } from "./gateway-pinned-tiles";
-import { gatewayToolNames } from "./gateway-tools";
+import { gatewaySubagentNames, gatewayToolNames } from "./gateway-tools";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
-type McpGatewaysInitialData = {
-  agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
-};
-
-export default function McpGatewaysPage({
-  initialData,
-}: {
-  initialData?: McpGatewaysInitialData;
-}) {
+export default function McpGatewaysPage() {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <McpGateways initialData={initialData} />
+        <McpGateways />
       </ErrorBoundary>
     </div>
   );
@@ -137,64 +125,7 @@ function SortIcon({
   );
 }
 
-/**
- * What a gateway exposes, in the one column the list has for it.
- *
- * The column used to render `tools.length`, which is a lie for the default
- * configuration: an Auto-mode gateway has no per-tool rows at all, so it
- * showed "0" while exposing the whole catalogue. It is also a counter with no
- * denominator, which the detail-page rules forbid — and the denominator cannot
- * honestly be named here, because the catalogue a gateway reaches depends on
- * its environment's installs and on its own exclusions, and `GET /api/tools`
- * would pull every tool's JSON schema onto a list page to find out. So the set
- * is named instead of counted, and the list itself is one hover away, which is
- * what the rules say to do when the denominator is unavailable.
- */
-function ExposedSetCell({
-  exposesEverything,
-  everythingLabel,
-  names,
-  noun,
-}: {
-  exposesEverything: boolean;
-  /** What "everything" is called here — "All tools", "All subagents". */
-  everythingLabel: string;
-  names: string[];
-  noun: string;
-}) {
-  if (exposesEverything) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="text-sm">{everythingLabel}</span>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs">
-          Every {noun} this gateway's environment offers, minus its exclusions.
-          The set grows as servers are installed.
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  if (names.length === 0) {
-    return <span className="text-sm text-muted-foreground">None</span>;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="text-sm">{names.length} selected</span>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-xs">{names.join(", ")}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function McpGateways({
-  initialData,
-}: {
-  initialData?: McpGatewaysInitialData;
-}) {
+function McpGateways() {
   const docsUrl = getFrontendDocsUrl("mcp/gateway");
   const {
     searchParams,
@@ -262,6 +193,8 @@ function McpGateways({
     owner: scopeFilter.owner,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+    // The rows show counts; a cell's tooltip reads the names on its own.
+    includeTools: false,
   } satisfies Omit<
     NonNullable<archestraApiTypes.GetAgentsData["query"]>,
     "limit" | "offset"
@@ -286,6 +219,7 @@ function McpGateways({
     offset: 0,
     agentTypes: gatewayAgentTypes,
     ids: excludeIds,
+    includeTools: false,
     enabled: !!excludeIds?.length,
   });
   const automaticPinRows = automaticPinsResponse?.data ?? [];
@@ -299,9 +233,9 @@ function McpGateways({
   } = useProfilesPaginated({
     limit: pageSize,
     offset,
-    initialData: initialData?.agents ?? undefined,
-    initialDataPinned: false,
-    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+    // Asked for once the pins are known, so the personal gateway is never
+    // drawn as a row and the first page is not fetched twice.
+    enabled: isDeletedView || !isAutoPinnedLoading,
     ...listFilters,
     pinned: isDeletedView ? undefined : false,
     ...listExclusions,
@@ -315,10 +249,6 @@ function McpGateways({
   } = useProfilesPaginated({
     limit: 100,
     offset: 0,
-    initialData: initialData?.pinnedAgents ?? undefined,
-    initialDataPinned: true,
-    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
-    initialDataLimit: 100,
     enabled: !isDeletedView,
     ...listFilters,
     status: undefined,
@@ -589,8 +519,17 @@ function McpGateways({
         <ExposedSetCell
           exposesEverything={row.original.accessAllTools}
           everythingLabel="All tools"
-          names={gatewayToolNames(row.original.tools)}
+          count={row.original.toolsCount}
           noun="tool"
+          names={
+            <ExposedSetNames
+              gatewayId={row.original.id}
+              agentTypes={gatewayAgentTypes}
+              status={statusFromUrl ?? undefined}
+              noun="tool"
+              pick={gatewayToolNames}
+            />
+          }
         />
       ),
     },
@@ -612,10 +551,17 @@ function McpGateways({
         <ExposedSetCell
           exposesEverything={row.original.accessAllSubagents}
           everythingLabel="All subagents"
-          names={row.original.tools
-            .filter((tool) => tool.delegateToAgentId)
-            .map((tool) => tool.name)}
+          count={row.original.subagentsCount}
           noun="subagent"
+          names={
+            <ExposedSetNames
+              gatewayId={row.original.id}
+              agentTypes={gatewayAgentTypes}
+              status={statusFromUrl ?? undefined}
+              noun="subagent"
+              pick={gatewaySubagentNames}
+            />
+          }
         />
       ),
     },
@@ -894,7 +840,10 @@ function McpGateways({
                     />
                     {renderGatewayTable()}
                   </section>
-                ) : isAutoPinnedLoading ? null : unpinnedAgents.length > 0 ||
+                ) : isAutoPinnedLoading ||
+                  unpinnedAgents.length > 0 ||
+                  // While the list loads, often after its pins, the table
+                  // holds its place rather than appearing a moment later.
                   isPending ||
                   (pinnedAgents.length === 0 &&
                     pageAgents.length === 0 &&

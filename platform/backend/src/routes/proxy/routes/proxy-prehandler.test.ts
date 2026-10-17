@@ -1,5 +1,6 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { ApiError } from "@/types";
 import { OPENAI_HANDLED_ENDPOINT_SUFFIXES } from "../common";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -10,12 +11,15 @@ describe("createProxyPreHandler", () => {
   let mockUpstream: FastifyInstance;
   let upstreamPort: number;
   let upstreamHits: number;
+  let upstreamHeaders: Record<string, string | string[] | undefined>;
 
   beforeEach(async () => {
     mockUpstream = Fastify();
     upstreamHits = 0;
-    mockUpstream.addHook("onRequest", async () => {
+    upstreamHeaders = {};
+    mockUpstream.addHook("onRequest", async (request) => {
       upstreamHits++;
+      upstreamHeaders = request.headers;
     });
 
     mockUpstream.get("/v1/models", async () => ({
@@ -55,6 +59,10 @@ describe("createProxyPreHandler", () => {
     providerName: string;
     skipErrorResponse?: Record<string, unknown>;
     rejectUnhandledPaths?: boolean;
+    authenticate?: (params: {
+      request: FastifyRequest;
+      agentId?: string;
+    }) => Promise<void>;
   }) {
     const {
       apiPrefix,
@@ -63,6 +71,7 @@ describe("createProxyPreHandler", () => {
       providerName,
       skipErrorResponse,
       rejectUnhandledPaths,
+      authenticate,
     } = params;
     const upstream = `http://localhost:${upstreamPort}`;
 
@@ -82,11 +91,89 @@ describe("createProxyPreHandler", () => {
         rewritePrefix,
         skipErrorResponse,
         rejectUnhandledPaths,
+        authenticate,
       }),
     });
 
     return app;
   }
+
+  describe("authentication", () => {
+    test("a rejected request never reaches the upstream", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async () => {
+          throw new ApiError(401, "Authentication required");
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/openai/chat/completions",
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(upstreamHits).toBe(0);
+    });
+
+    test("runs before the UUID rewrite and receives the agent id from the URL", async () => {
+      const seen: Array<string | undefined> = [];
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async ({ agentId }) => {
+          seen.push(agentId);
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/openai/${TEST_UUID}/chat/completions`,
+      });
+
+      expect(seen).toEqual([TEST_UUID]);
+      expect(response.statusCode).toBe(200);
+      expect(upstreamHits).toBe(1);
+    });
+
+    // The passthrough key authenticates the caller to Archestra; forwarding it
+    // would hand an Archestra credential to a third-party provider.
+    test("forwards the caller's provider key but no X-Archestra headers", async () => {
+      const seenKeys: Array<string | undefined> = [];
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async ({ request }) => {
+          seenKeys.push(
+            request.headers["x-archestra-virtual-key"] as string | undefined,
+          );
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/openai/chat/completions",
+        headers: {
+          authorization: "Bearer sk-provider-key",
+          "x-archestra-virtual-key": "arch_passthrough_token",
+          "x-archestra-source": "chatops:slack",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(seenKeys).toEqual(["arch_passthrough_token"]);
+      expect(upstreamHeaders.authorization).toBe("Bearer sk-provider-key");
+      expect(
+        Object.keys(upstreamHeaders).filter((name) =>
+          name.startsWith("x-archestra-"),
+        ),
+      ).toEqual([]);
+    });
+  });
 
   describe("endpoint skipping", () => {
     test("returns 400 for POST to the custom-handled endpoint suffix", async () => {

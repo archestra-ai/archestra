@@ -595,6 +595,24 @@ class OrganizationModel {
   }
 
   /**
+   * Whether LLM proxy requests may run without a platform credential. Read
+   * straight from the row: it gates the proxy hot path, so it stays a single
+   * primary-key lookup rather than a cache entry that every patch must evict.
+   */
+  static async allowsUnauthenticatedLlmProxyRequests(
+    id: string,
+  ): Promise<boolean> {
+    const [organization] = await db
+      .select({
+        allowed: schema.organizationsTable.allowUnauthenticatedLlmProxyRequests,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+    return organization?.allowed ?? false;
+  }
+
+  /**
    * Cached per-request read of the org's auth-enforcement policies
    * (require-2FA, session max age). Same cache key as the other org
    * settings, so any OrganizationModel.patch invalidates it.
@@ -852,6 +870,8 @@ class OrganizationModel {
       // SPDX-SnippetEnd
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
+      allowUnauthenticatedLlmProxyRequests:
+        org.allowUnauthenticatedLlmProxyRequests,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
       kbContextualRetrievalMode: org.kbContextualRetrievalMode ?? null,

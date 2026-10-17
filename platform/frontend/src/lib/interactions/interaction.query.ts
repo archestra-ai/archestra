@@ -210,12 +210,10 @@ export function useInteractionSummaries({
 
 export function useInteraction({
   interactionId,
-  initialData,
   refetchInterval = 3_000,
   enabled = true,
 }: {
   interactionId?: string;
-  initialData?: archestraApiTypes.GetInteractionResponses["200"];
   refetchInterval?: number | null;
   enabled?: boolean;
 }) {
@@ -228,7 +226,6 @@ export function useInteraction({
       throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
     },
-    initialData,
     enabled: enabled && !!interactionId,
     ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
   });
@@ -329,6 +326,7 @@ export function useInteractionSessions({
   cursor,
   initialData,
   toastOnError,
+  enabled = true,
 }: {
   profileId?: string;
   userId?: string;
@@ -341,6 +339,7 @@ export function useInteractionSessions({
   cursor?: string;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
   toastOnError?: boolean;
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -394,6 +393,7 @@ export function useInteractionSessions({
       !endDate
         ? initialData
         : undefined,
+    enabled,
   });
 }
 

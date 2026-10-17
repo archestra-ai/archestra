@@ -581,6 +581,8 @@ export const RouteId = {
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
+  GetLlmModelIdsByKey: "getLlmModelIdsByKey",
+  GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
   BulkUpdateModels: "bulkUpdateModels",
 
@@ -612,7 +614,6 @@ export const RouteId = {
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",
-  GetOrganizationMembers: "getOrganizationMembers",
   GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
   CompleteOnboarding: "completeOnboarding",

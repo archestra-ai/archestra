@@ -42,11 +42,37 @@ describe("openappaFailure", () => {
     }
   });
 
-  test.each([
-    "OpenAPPA processing interrupted: the opening policy is unavailable: the stored policy file compiles to a different identity than the opening of archestra:f779b8",
-    "OpenAPPA result refused: the opening policy is unavailable: the policy file 0a1b is not stored",
-  ])("tells a conversation whose opening policy cannot reopen to start again: %s", (message) => {
-    const cause = new Error(message);
+  test("tells a conversation whose stored record no longer decodes to start again, without retrying", () => {
+    const cause = runtimeFailure(
+      "untrusted_log",
+      "OpenAPPA processing interrupted: the persisted log is refused: stored batch 7 does not decode: expected value at line 1 column 4264",
+    );
+
+    const failure = openappaFailure(cause);
+
+    expect(failure.statusCode).toBe(409);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: the policy runtime cannot read this conversation's stored guardrails record. Start a new conversation.",
+    );
+    expect(failure.cause).toBe(cause);
+  });
+
+  test("classifies by the runtime's code, not by its wording", () => {
+    const failure = openappaFailure(
+      runtimeFailure("untrusted_log", "reworded by a later runtime"),
+    );
+
+    expect(failure.statusCode).toBe(409);
+    expect(failure.shouldRetry).toBe(false);
+  });
+
+  test("tells a conversation whose opening policy cannot reopen to start again", () => {
+    const cause = runtimeFailure(
+      "policy_unavailable",
+      "OpenAPPA processing interrupted: the opening policy is unavailable: the policy file 0a1b is not stored",
+    );
 
     const failure = openappaFailure(cause);
 
@@ -70,6 +96,16 @@ describe("openappaFailure", () => {
     expect(failure.message).toBe(
       "OpenAPPA could not safely complete this operation: the policy runtime has no free database connection.",
     );
+  });
+
+  test("keeps an operational refusal with no specific remedy retryable", () => {
+    const failure = openappaFailure(
+      runtimeFailure("storage", "storage failure: disk full"),
+    );
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+    expect(failure.retryAfterSeconds).toBeGreaterThan(0);
   });
 
   test.each([
@@ -116,23 +152,20 @@ describe("openappaFailure", () => {
   });
 
   test.each([
-    "no prepared fork to open this child",
-    "parent session has not started",
-  ])("an unchecked child cannot be repaired by retrying: %s", (message) => {
-    const cause = new Error(message);
+    "spawn_not_taken",
+    "unstarted_parent",
+  ] as const)("an unchecked child cannot be repaired by retrying: %s", (code) => {
+    const cause = runtimeFailure(code, "refused");
     const failure = openappaFailure(cause);
 
     expect(failure.statusCode).toBe(409);
     expect(failure.shouldRetry).toBe(false);
     expect(failure.retryAfterSeconds).toBeUndefined();
-    expect(failure.message).toContain("start a new subagent");
     expect(failure.cause).toBe(cause);
   });
 
   test("a dispatch that lost its lease asks the client to retry", () => {
-    const failure = openappaFailure(
-      new Error("OpenAPPA lost its lease on this operation; retry the request"),
-    );
+    const failure = openappaFailure(runtimeFailure("lease_lost", "lost"));
 
     expect(failure.statusCode).toBe(503);
     expect(failure.shouldRetry).toBe(true);
@@ -143,11 +176,7 @@ describe("openappaFailure", () => {
   });
 
   test("an operation another request still works on asks the client to retry", () => {
-    const failure = openappaFailure(
-      new Error(
-        "OpenAPPA is processing this operation in another request; retry the request",
-      ),
-    );
+    const failure = openappaFailure(runtimeFailure("held_elsewhere", "held"));
 
     expect(failure.statusCode).toBe(503);
     expect(failure.shouldRetry).toBe(true);
@@ -280,3 +309,10 @@ describe("unansweredAnnotationNotice", () => {
     ).toBe(null);
   });
 });
+
+// ===
+
+/** A native failure as the binding's loader hands it over: the runtime's class on `code`. */
+function runtimeFailure(code: string, message: string): Error {
+  return Object.assign(new Error(message), { code });
+}

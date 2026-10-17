@@ -40,10 +40,7 @@ import { useOrganization } from "@/lib/organization.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { generateUuid } from "@/lib/uuid";
 
-type InternalAgent = Omit<
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
-  "pinnedAt"
->;
+type InternalAgent = archestraApiTypes.GetAgentResponses["200"];
 
 interface A2AConnectionInstructionsProps {
   agent: InternalAgent;
@@ -427,7 +424,7 @@ curl -X POST "${a2aEndpoint}" \\
           title="OAuth clients"
           description="Applications that call this agent as themselves, or on behalf of a signed-in user."
         >
-          <McpOauthManagement resourceId={agent.id} resourceKind="agent" />
+          <McpOauthManagement resourceId={agent.id} />
         </SettingsSection>
 
         <SettingsSection

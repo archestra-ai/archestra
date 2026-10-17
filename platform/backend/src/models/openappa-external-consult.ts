@@ -6,6 +6,7 @@ import {
   decodeCursor,
   encodeCursor,
 } from "@/database/utils/pagination";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import type {
   ExternalConsult,
   ExternalConsultOutcome,
@@ -147,6 +148,13 @@ class OpenappaExternalConsultModel {
     if (filters.sessionId)
       conditions.push(eq(table.sessionId, filters.sessionId));
     if (filters.callerId) conditions.push(eq(table.callerId, filters.callerId));
+    // Neither column is indexed: like the exact filters above, this narrows
+    // the newest-first walk of the (organization, created_at) index row by row.
+    const search = buildTokenizedSearchFilter({
+      query: filters.search,
+      columns: [table.externalName, table.sessionId],
+    });
+    if (search) conditions.push(search);
 
     // An unreadable cursor is treated as none: the newest page.
     const position = decodeCursor(params.cursor);
@@ -178,6 +186,8 @@ export interface ExternalConsultFilters {
   root?: string;
   sessionId?: string;
   callerId?: string;
+  /** Case-insensitive substring of the external's name or the session ID. */
+  search?: string;
 }
 
 function cursorPosition(row: ExternalConsult) {

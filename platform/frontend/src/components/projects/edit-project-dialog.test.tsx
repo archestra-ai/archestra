@@ -126,16 +126,19 @@ it.each([
           { error: { message: "Temporarily unavailable" } },
           { status: 503 },
         );
-      return HttpResponse.json([
-        {
-          id: "selected-agent",
-          name: "Saved helper",
-          agentType: "agent",
-          scope: "personal",
-          authorId: "owner",
-          users: [{ id: "colleague" }],
-        },
-      ]);
+      return HttpResponse.json({
+        data: [
+          {
+            id: "selected-agent",
+            name: "Saved helper",
+            agentType: "agent",
+            scope: "personal",
+            authorId: "owner",
+            users: [{ id: "colleague" }],
+          },
+        ],
+        pagination: { limit: 1000, hasNext: false, nextCursor: null },
+      });
     }),
     http.get(`${origin}/api/resource-permissions/project/project-1`, () =>
       HttpResponse.json({

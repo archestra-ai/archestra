@@ -7,16 +7,12 @@
  * only the upstream HTTP call.
  */
 
-import Fastify from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import anthropicProxyRoutes from "./anthropic";
 
 const MODEL = "claude-opus-4-20250514";
@@ -54,13 +50,16 @@ describe("Anthropic provider error relay", () => {
   for (const stream of [false, true]) {
     test(`relays an expired-thread 404 unchanged (stream: ${stream})`, async ({
       makeAgent,
+      makeUser,
+      makeMember,
     }) => {
       stubUpstreamError(404, THREAD_NOT_FOUND);
 
-      const response = await sendContinue({
-        stream,
-        agentId: (await makeAgent({ name: `relay-${stream}` })).id,
-      });
+      const { agentId, credential } = await makeCaller(
+        { makeAgent, makeUser, makeMember },
+        `relay-${stream}`,
+      );
+      const response = await sendContinue({ stream, agentId, credential });
 
       expect(response.statusCode).toBe(404);
       expect(response.json()).toEqual(THREAD_NOT_FOUND);
@@ -69,6 +68,8 @@ describe("Anthropic provider error relay", () => {
 
   test("relays an invalid_request_error 400 unchanged", async ({
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const body = {
       type: "error",
@@ -76,26 +77,32 @@ describe("Anthropic provider error relay", () => {
     };
     stubUpstreamError(400, body);
 
-    const response = await sendContinue({
-      stream: false,
-      agentId: (await makeAgent({ name: "relay" })).id,
-    });
+    const { agentId, credential } = await makeCaller(
+      { makeAgent, makeUser, makeMember },
+      "relay",
+    );
+    const response = await sendContinue({ stream: false, agentId, credential });
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual(body);
   });
 
-  test("relays a provider api_error 500 unchanged", async ({ makeAgent }) => {
+  test("relays a provider api_error 500 unchanged", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
     const body = {
       type: "error",
       error: { type: "api_error", message: "Internal server error" },
     };
     stubUpstreamError(500, body);
 
-    const response = await sendContinue({
-      stream: false,
-      agentId: (await makeAgent({ name: "relay" })).id,
-    });
+    const { agentId, credential } = await makeCaller(
+      { makeAgent, makeUser, makeMember },
+      "relay",
+    );
+    const response = await sendContinue({ stream: false, agentId, credential });
 
     expect(response.statusCode).toBe(500);
     expect(response.json()).toEqual(body);
@@ -112,10 +119,34 @@ function stubUpstreamError(status: number, body: unknown) {
   );
 }
 
-async function sendContinue(options: { stream: boolean; agentId: string }) {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
+/** An agent plus a passthrough credential owned by a member of its org. */
+async function makeCaller(
+  fixtures: {
+    makeAgent: (overrides: { name: string }) => Promise<{
+      id: string;
+      organizationId: string;
+    }>;
+    makeUser: () => Promise<{ id: string }>;
+    makeMember: (userId: string, organizationId: string) => Promise<unknown>;
+  },
+  name: string,
+) {
+  const owner = await fixtures.makeUser();
+  const agent = await fixtures.makeAgent({ name });
+  await fixtures.makeMember(owner.id, agent.organizationId);
+  const credential = await makePassthroughCredential({
+    organizationId: agent.organizationId,
+    ownerId: owner.id,
+  });
+  return { agentId: agent.id, credential };
+}
+
+async function sendContinue(options: {
+  stream: boolean;
+  agentId: string;
+  credential: string;
+}) {
+  const app = createFastifyInstance();
   await app.register(anthropicProxyRoutes);
   try {
     return await app.inject({
@@ -125,6 +156,7 @@ async function sendContinue(options: { stream: boolean; agentId: string }) {
         "content-type": "application/json",
         "anthropic-version": "2023-06-01",
         "x-api-key": "test-anthropic-key",
+        "x-archestra-virtual-key": options.credential,
       },
       payload: {
         model: MODEL,

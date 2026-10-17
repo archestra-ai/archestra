@@ -29,8 +29,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnBinding,
-    SpawnKind, SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
+    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, RefusalClass, Ruling,
+    SpawnBinding, SpawnKind, SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -356,15 +356,43 @@ fn error(message: impl ToString) -> napi::Error {
     napi::Error::from_reason(message.to_string())
 }
 
+/// A failure the host classifies by kind. The loader recovers the JSON body into
+/// a JS `Error` whose `code` is the kind's snake_case name; a refusal carries the
+/// runtime's own class name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+enum Failure {
+    Refused(RefusalClass),
+    Binding(BindingFailure),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum BindingFailure {
+    LeaseLost,
+    HeldElsewhere,
+    UnstartedParent,
+}
+
+fn failure(kind: Failure, message: impl ToString) -> napi::Error {
+    error(json!({ "code": kind, "message": message.to_string() }))
+}
+
 /// The host retries: the dispatch that took the operation over answers it.
 fn lease_lost() -> napi::Error {
-    error("OpenAPPA lost its lease on this operation; retry the request")
+    failure(
+        Failure::Binding(BindingFailure::LeaseLost),
+        "OpenAPPA lost its lease on this operation; retry the request",
+    )
 }
 
 /// Another dispatch holds a live lease on this operation. The host retries: that
 /// dispatch answers it, or its lease expires and the retry takes the work over.
 fn held_elsewhere() -> napi::Error {
-    error("OpenAPPA is processing this operation in another request; retry the request")
+    failure(
+        Failure::Binding(BindingFailure::HeldElsewhere),
+        "OpenAPPA is processing this operation in another request; retry the request",
+    )
 }
 
 /// The organization's policy moved past the one this dispatch carries: another
@@ -515,8 +543,11 @@ fn wire(decision: &HookDecision) -> napi::Result<Value> {
 }
 
 fn require_decision(decision: &HookDecision) -> napi::Result<()> {
-    if let HookDecision::Refuse { detail } = decision {
-        return Err(error(format!("OpenAPPA processing interrupted: {detail}")));
+    if let HookDecision::Refuse { class, detail } = decision {
+        return Err(failure(
+            Failure::Refused(*class),
+            format!("OpenAPPA processing interrupted: {detail}"),
+        ));
     }
     Ok(())
 }
@@ -2131,15 +2162,15 @@ impl State {
             // A parent is only ever looked up in the child's own organization.
             let parent = SessionKey::new(&input.organization_id, parent_id);
             sql.with_client(move |client| {
-                client
+                Ok(client
                     .query_opt(
                         "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
                         &[&parent.organization_id, &parent.actor],
                     )?
-                    .map(|row| row.get::<_, String>(0))
-                    .ok_or_else(|| PostgresError("parent session has not started".into()))
+                    .map(|row| row.get::<_, String>(0)))
             })
             .map_err(error)?
+            .ok_or_else(|| failure(Failure::Binding(BindingFailure::UnstartedParent), "parent session has not started"))?
         } else {
             self.session_root(&input, &key)?
         };
@@ -2438,7 +2469,7 @@ impl State {
                 let text = match gate {
                     HookDecision::DenyCall { feedback, .. } => feedback,
                     HookDecision::Block { reason } => reason,
-                    HookDecision::Refuse { detail } => detail,
+                    HookDecision::Refuse { detail, .. } => detail,
                     _ => return Err(error("unexpected remedy control decision")),
                 };
                 let response = runtime_refusal(text)?;
@@ -2852,8 +2883,11 @@ impl State {
             HookDecision::Block { reason } => {
                 format!("[appa] Tool output withheld: {reason}")
             }
-            HookDecision::Refuse { detail } => {
-                return Err(error(format!("OpenAPPA result refused: {detail}")));
+            HookDecision::Refuse { class, detail } => {
+                return Err(failure(
+                    Failure::Refused(*class),
+                    format!("OpenAPPA result refused: {detail}"),
+                ));
             }
             _ => return Err(error("unexpected tool result decision")),
         };

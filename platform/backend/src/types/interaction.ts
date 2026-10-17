@@ -66,6 +66,7 @@ export const InteractionAuthMethodSchema = z.enum([
   "jwks",
   "oauth_client_credentials",
   "oauth_user",
+  "personal_token",
   "internal",
   "unknown",
 ]);

@@ -102,7 +102,7 @@ describe("project default agent", () => {
     });
     expect(res.statusCode).toBe(400);
     const list = await app.inject({ method: "GET", url: "/api/projects" });
-    expect(list.json()).toEqual([]);
+    expect(list.json().data).toEqual([]);
   });
 
   test("reports a null default agent when the project pins none", async () => {

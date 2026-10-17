@@ -49,7 +49,6 @@ import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   useCanImpersonate,
   useImpersonateUser,
-  useImpersonationCandidates,
 } from "@/lib/impersonation.query";
 import {
   type Invitation,
@@ -63,7 +62,7 @@ import {
   useUpdateMemberRole,
 } from "@/lib/member.query";
 import {
-  useActiveOrganization,
+  useActiveOrganizationId,
   useDeletePendingSignupMember,
   useMemberSignupStatus,
   useOrganization,
@@ -83,7 +82,8 @@ export default function UsersPageClient() {
 
 function UsersPageContent() {
   const setActionButton = useSetSettingsAction();
-  const { data: activeOrg, isPending: isOrgPending } = useActiveOrganization();
+  const { data: activeOrganizationId, isPending: isOrgPending } =
+    useActiveOrganizationId();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -112,11 +112,13 @@ function UsersPageContent() {
 
   useEffect(() => {
     setActionButton(
-      activeOrg ? <InviteUserButton organizationId={activeOrg.id} /> : null,
+      activeOrganizationId ? (
+        <InviteUserButton organizationId={activeOrganizationId} />
+      ) : null,
     );
 
     return () => setActionButton(null);
-  }, [activeOrg, setActionButton]);
+  }, [activeOrganizationId, setActionButton]);
 
   // With invitations off there is only one thing to show, so no tablist is
   // rendered — and a tabpanel whose aria-labelledby points at a tab button that
@@ -133,7 +135,7 @@ function UsersPageContent() {
 
   return (
     <LoadingWrapper isPending={isOrgPending} loadingFallback={null}>
-      {activeOrg ? (
+      {activeOrganizationId ? (
         <div className="space-y-6" {...tabPanelProps}>
           {activeTab === "users" ? (
             <MembersTab activeTab={activeTab} onTabChange={setActiveTab} />
@@ -311,10 +313,6 @@ function MembersTab({
   const { data: session } = useSession();
   const currentUserId = session?.user.id;
   const canImpersonate = useCanImpersonate();
-  const { data: impersonationCandidates } = useImpersonationCandidates();
-  const impersonableUserIds = new Set(
-    (impersonationCandidates ?? []).map((c) => c.id),
-  );
   const { mutate: impersonateUser, isPending: isImpersonatingUser } =
     useImpersonateUser();
 
@@ -557,10 +555,9 @@ function MembersTab({
           );
         }
 
+        // Every listed member except the caller can be impersonated.
         const canImpersonateThisUser =
-          canImpersonate &&
-          member.userId !== currentUserId &&
-          impersonableUserIds.has(member.userId);
+          canImpersonate && !!currentUserId && member.userId !== currentUserId;
 
         return (
           <TableRowActions

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   guardrailCallHeader,
-  hasInternalCall,
   internalCallHeader,
   takeInternalCall,
 } from "./internal-call";
@@ -25,6 +24,22 @@ describe("internal call proofs", () => {
     });
   });
 
+  it("rejects each proof's value presented under the other header", () => {
+    const [[inProcessHeader, inProcessValue]] = Object.entries(
+      internalCallHeader(),
+    );
+    const [[guardrailHeader, guardrailValue]] = Object.entries(
+      guardrailCallHeader(),
+    );
+
+    expect(
+      takeInternalCall({
+        [guardrailHeader]: inProcessValue,
+        [inProcessHeader]: guardrailValue,
+      }),
+    ).toEqual({ inProcess: false, guardrail: false });
+  });
+
   it("takes both proofs off the headers so they never reach the provider", () => {
     const headers: Record<string, string> = {
       ...internalCallHeader(),
@@ -33,10 +48,7 @@ describe("internal call proofs", () => {
 
     takeInternalCall(headers);
 
-    expect(hasInternalCall(headers)).toBe(false);
-    expect(
-      Object.keys(headers).some((name) => name.startsWith("x-archestra-")),
-    ).toBe(false);
+    expect(headers).toEqual({});
   });
 
   it("rejects a forged value under either header name", () => {

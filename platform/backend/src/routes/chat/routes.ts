@@ -2385,6 +2385,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         querystring: z.object({
           search: z.string().optional(),
+          includeArtifacts: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Include each chat's artifact and todo list (default true). False returns them as null for lightweight lists.",
+            ),
         }),
         response: constructResponseSchema(
           z.array(
@@ -2404,11 +2410,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { search } = request.query;
+      const { search, includeArtifacts } = request.query;
       const conversations = await ConversationModel.findAll(
         request.user.id,
         request.organizationId,
         search,
+        { includeArtifacts },
       );
       const runs = await ScheduleTriggerRunModel.findByChatConversationIds({
         organizationId: request.organizationId,

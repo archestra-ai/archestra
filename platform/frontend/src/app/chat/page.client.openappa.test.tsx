@@ -233,12 +233,8 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
       { timeout: 5000 },
     ),
   ).toBeInTheDocument();
-  // A started chat keeps its agent switcher in the composer's setup menu.
-  await user.click(await composerSetupMenuButton());
-  expect(
-    await screen.findByRole("tab", { name: "Agent: APPA Keeper" }),
-  ).toBeEnabled();
-  await user.keyboard("{Escape}");
+  // A started chat keeps its agent switcher inline in the composer.
+  expect(await composerAgentPicker("APPA Keeper")).toBeEnabled();
 
   await user.type(
     await screen.findByPlaceholderText(
@@ -397,10 +393,7 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
-  await user.click(await composerSetupMenuButton());
-  await user.click(
-    await screen.findByRole("tab", { name: "Agent: APPA Keeper" }),
-  );
+  await user.click(await composerAgentPicker("APPA Keeper"));
   await user.click(
     await screen.findByRole("option", { name: /Research Agent/ }),
   );
@@ -411,13 +404,13 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   );
 });
 
-/** The composer's own "More options" (a message can have one too). */
-async function composerSetupMenuButton() {
+/** The composer's own agent picker, named after the current agent. */
+async function composerAgentPicker(agentName: string) {
   const composer = (
     await screen.findByPlaceholderText("Ask a follow-up...")
   ).closest("form");
   if (!composer) throw new Error("composer form not found");
-  return within(composer).getByRole("button", { name: "More options" });
+  return within(composer).findByRole("combobox", { name: agentName });
 }
 
 function renderChat(routeConversationId?: string) {

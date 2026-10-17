@@ -1,27 +1,37 @@
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type ErrorExtended,
-} from "@archestra/shared";
+"use client";
+
 import { notFound } from "next/navigation";
-import { ServerErrorFallback } from "@/components/error-fallback";
-import { getServerApiHeaders } from "@/lib/utils/server";
+import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
+import { useConfig } from "@/lib/config/config.query";
 import { OpenAppaLicenceRequired } from "./_parts/openappa-licence-required";
 import { OpenAppaPageLayout } from "./_parts/openappa-page-layout";
 
-export default async function OpenAppaLayout({
+export default function OpenAppaLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let config: archestraApiTypes.GetConfigResponses["200"] | undefined;
-  try {
-    const headers = await getServerApiHeaders();
-    const response = await archestraApiSdk.getConfig({ headers });
-    if (response.error) throw response.error;
-    config = response.data;
-  } catch (error) {
-    return <ServerErrorFallback error={error as ErrorExtended} />;
+  // The shell already holds the config (seeded at boot, restored on refresh),
+  // so choosing between the product and the licence page costs no request.
+  const {
+    data: config,
+    isPending,
+    isLoadingError,
+    error,
+    refetch,
+  } = useConfig();
+  if (isPending) return null;
+  if (isLoadingError) {
+    return (
+      <PageLayout title="Guardrails">
+        <QueryLoadError
+          title="Couldn't load Guardrails"
+          error={error}
+          onRetry={() => refetch()}
+        />
+      </PageLayout>
+    );
   }
   if (!config) notFound();
   // OpenAPPA is only ever off for want of a licence.

@@ -75,7 +75,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -94,7 +94,7 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
-import { useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmModelOptions } from "@/lib/llm-models.query";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useMemberOptionsReferences } from "@/lib/member-options.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -243,17 +243,15 @@ export default function LimitsPage() {
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
   const oauthClients = oauthClientsData?.data ?? [];
-  const { data: agents = [] } = useAgentOptions({
-    filters: {
-      agentTypes: ["agent"],
-      ids: limits
-        .filter((limit) => limit.entityType === "agent")
-        .map((limit) => limit.entityId),
-    },
+  const { data: agents = [] } = useAgentOptionsByIds({
+    ids: limits
+      .filter((limit) => limit.entityType === "agent")
+      .map((limit) => limit.entityId),
+    filters: { agentType: "agent" },
   });
   const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
-  const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
+  const { data: modelsWithApiKeys = [] } = useLlmModelOptions();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();

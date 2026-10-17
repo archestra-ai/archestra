@@ -1,5 +1,5 @@
 {
-  "id": "4eeb0b61-10ae-4483-b7a4-b14a4e66a946",
+  "id": "8b632ba4-6d42-43a1-b85e-7b93d367dc54",
   "prevId": "ddeb3248-aa87-4eca-9497-43d960bd882e",
   "version": "7",
   "dialect": "postgresql",
@@ -18602,6 +18602,13 @@
           "notNull": true,
           "default": true
         },
+        "allow_unauthenticated_llm_proxy_requests": {
+          "name": "allow_unauthenticated_llm_proxy_requests",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "allow_tool_auto_assignment": {
           "name": "allow_tool_auto_assignment",
           "type": "boolean",
@@ -27364,36 +27371,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.openappa_deployments": {
-      "name": "openappa_deployments",
-      "schema": "",
-      "columns": {
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "head": {
-          "name": "head",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "openappa_deployments_head_positive": {
-          "name": "openappa_deployments_head_positive",
-          "value": "\"openappa_deployments\".\"head\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.openappa_dispatch_leases": {
       "name": "openappa_dispatch_leases",
       "schema": "",
@@ -28243,112 +28220,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.openappa_policy_revisions": {
-      "name": "openappa_policy_revisions",
-      "schema": "",
-      "columns": {
-        "deployment": {
-          "name": "deployment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "revision": {
-          "name": "revision",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "hash": {
-          "name": "hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "openappa_policy_revisions_key_idx": {
-          "name": "openappa_policy_revisions_key_idx",
-          "columns": [
-            {
-              "expression": "deployment",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "revision",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "openappa_policy_revisions_deployment_fk": {
-          "name": "openappa_policy_revisions_deployment_fk",
-          "tableFrom": "openappa_policy_revisions",
-          "tableTo": "openappa_deployments",
-          "columnsFrom": [
-            "deployment"
-          ],
-          "columnsTo": [
-            "name"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "openappa_policy_revisions_hash_fk": {
-          "name": "openappa_policy_revisions_hash_fk",
-          "tableFrom": "openappa_policy_revisions",
-          "tableTo": "openappa_policy_files",
-          "columnsFrom": [
-            "hash"
-          ],
-          "columnsTo": [
-            "hash"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "openappa_policy_revisions_pk": {
-          "name": "openappa_policy_revisions_pk",
-          "columns": [
-            "deployment",
-            "revision"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "openappa_policy_revisions_revision_positive": {
-          "name": "openappa_policy_revisions_revision_positive",
-          "value": "\"openappa_policy_revisions\".\"revision\" > 0"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.openappa_processed_results": {

@@ -11,7 +11,7 @@ import {
   useAgentTools,
   useBulkUpdateAgentTools,
 } from "@/lib/agent-tools.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/mcp-registry.query";
 import { shouldOfferAppCatalogs } from "./agent-form.utils";
 
 /** One MCP catalog the agent uses that does not belong to the new environment. */
@@ -63,12 +63,6 @@ export function useAgentEnvironmentConflicts(params: {
   const { agentId, environmentId, agentType } = params;
   const enabled = params.enabled && !!agentId;
 
-  // Built exactly as the tools editor builds it, so both read the same rows:
-  // an app backing missing here would look like a catalog that cannot conflict.
-  const catalog = useInternalMcpCatalog({
-    includeApps: shouldOfferAppCatalogs(agentType),
-    enabled,
-  });
   const assignedTools = useAgentTools(agentId, { enabled });
   const bulkUpdateTools = useBulkUpdateAgentTools();
 
@@ -83,11 +77,19 @@ export function useAgentEnvironmentConflicts(params: {
     return byCatalog;
   }, [assignedTools.data]);
 
+  // Only the catalogs the agent has tools from, with the same opt-ins as the
+  // tools editor, so both read the same rows: an app backing missing here
+  // would look like a catalog that cannot conflict.
+  const catalog = useMcpRegistryRowsByIds(
+    enabled ? [...assignedToolIdsByCatalog.keys()] : [],
+    { includeBuiltIn: true, includeApps: shouldOfferAppCatalogs(agentType) },
+  );
+
   const conflicts = useMemo(
     () =>
       enabled
         ? computeMcpEnvConflicts(
-            catalog.data ?? [],
+            catalog.data,
             assignedToolIdsByCatalog.keys(),
             environmentId,
           )

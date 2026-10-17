@@ -2242,8 +2242,25 @@ class AgentModel {
       .from(schema.agentsTable)
       .where(whereClause)
       .then(([row]) => Number(row?.total ?? 0));
+    // Sorting by a plain column with the caller's personal agents first:
+    // read those few agents on their own, then the rest in column order, so
+    // the second read walks an index and stops at the page instead of
+    // ranking every visible agent.
+    const twoPhase =
+      !!userId &&
+      pinnedAgentOrderClauses.length === 0 &&
+      (sorting?.sortBy === undefined ||
+        sorting.sortBy === "name" ||
+        sorting.sortBy === "createdAt");
     const [sortedAgents, total] = await Promise.all([
-      query.limit(pagination.limit).offset(pagination.offset),
+      twoPhase
+        ? AgentModel.findPersonalFirstPage({
+            whereClause,
+            orderByClause,
+            userId,
+            pagination,
+          })
+        : query.limit(pagination.limit).offset(pagination.offset),
       totalQuery,
     ]);
 
@@ -2620,11 +2637,15 @@ class AgentModel {
   private static getOrderByClause(sorting?: SortingQuery) {
     const direction = sorting?.sortDirection === "asc" ? asc : desc;
 
+    // The id breaks ties (bulk-created agents share a creation time), so a
+    // page boundary never repeats or skips an agent.
+    const withTieBreak = (sort: SQL) =>
+      sql`${sort}, ${direction(schema.agentsTable.id)}`;
     switch (sorting?.sortBy) {
       case "name":
-        return direction(schema.agentsTable.name);
+        return withTieBreak(direction(schema.agentsTable.name));
       case "createdAt":
-        return direction(schema.agentsTable.createdAt);
+        return withTieBreak(direction(schema.agentsTable.createdAt));
       case "toolsCount":
       case "subagentsCount":
       case "knowledgeSourcesCount":
@@ -2635,8 +2656,52 @@ class AgentModel {
         return direction(schema.agentsTable.createdAt); // Fallback
       default:
         // Default: newest first
-        return desc(schema.agentsTable.createdAt);
+        return sql`${desc(schema.agentsTable.createdAt)}, ${desc(schema.agentsTable.id)}`;
     }
+  }
+
+  /**
+   * One list page ordered as `getPersonalAgentPriorityOrderClauses` then
+   * `orderByClause`: the caller's own personal agents first, then everyone
+   * else's. Same ids in the same order as the single ranked query.
+   */
+  private static async findPersonalFirstPage(params: {
+    whereClause: SQL | undefined;
+    orderByClause: SQL;
+    userId: string;
+    pagination: PaginationQuery;
+  }): Promise<Array<{ id: string }>> {
+    const { limit, offset } = params.pagination;
+    // The author test comes first so the audience lookup runs only for the
+    // caller's own agents.
+    const ownPersonal = and(
+      eq(schema.agentsTable.authorId, params.userId),
+      agentAudienceIs("personal"),
+    );
+    const own = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(and(params.whereClause, ownPersonal))
+      .orderBy(params.orderByClause);
+    const ownPage = own.slice(offset, offset + limit);
+    const remaining = limit - ownPage.length;
+    if (remaining <= 0) return ownPage;
+    const rest = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          params.whereClause,
+          or(
+            sql`${schema.agentsTable.authorId} IS DISTINCT FROM ${params.userId}`,
+            not(agentAudienceIs("personal")),
+          ),
+        ),
+      )
+      .orderBy(params.orderByClause)
+      .limit(remaining)
+      .offset(Math.max(0, offset - own.length));
+    return [...ownPage, ...rest];
   }
 
   private static getPersonalAgentPriorityOrderClauses(userId?: string) {

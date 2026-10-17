@@ -1,0 +1,3 @@
+CREATE INDEX "agents_org_name_live_idx" ON "agents" USING btree ("organization_id","name","id","agent_type","author_id","built_in","is_default") WHERE "agents"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "agents_org_name_deleted_idx" ON "agents" USING btree ("organization_id","name","id","agent_type","author_id","built_in","is_default") WHERE "agents"."deleted_at" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "agents_org_created_at_live_idx" ON "agents" USING btree ("organization_id","created_at","id") WHERE "agents"."deleted_at" IS NULL;

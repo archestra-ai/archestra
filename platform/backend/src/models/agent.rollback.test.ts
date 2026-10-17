@@ -127,6 +127,85 @@ describe("AgentModel", () => {
     });
   });
 
+  test("pages put the caller's personal agents first and walk the rest in sort order without gaps", async ({
+    makeAdmin,
+    makeAgent,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeAdmin();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const other = await makeAdmin();
+    await makeMember(other.id, organization.id, { role: "admin" });
+    const sameTime = new Date("2026-01-01T00:00:00Z");
+    const make = async (name: string, mine: boolean, personal: boolean) => {
+      const agent = await makeAgent({
+        name,
+        organizationId: organization.id,
+        authorId: mine ? user.id : other.id,
+        access: personal ? "personal" : "org",
+      });
+      // Bulk-created agents share a creation time; the id must break ties.
+      await db
+        .update(schema.agentsTable)
+        .set({ createdAt: sameTime })
+        .where(eq(schema.agentsTable.id, agent.id));
+      return { id: agent.id, name, first: mine && personal };
+    };
+    const agents = [
+      await make("m-mine-1", true, true),
+      await make("c-mine-2", true, true),
+      await make("x-mine-shared", true, false),
+      await make("a-theirs", false, false),
+      await make("k-theirs", false, false),
+      await make("b-theirs-personal", false, true),
+      await make("z-theirs", false, false),
+    ];
+    for (const [sortBy, direction] of [
+      ["name", "asc"],
+      ["name", "desc"],
+      ["createdAt", "asc"],
+      ["createdAt", "desc"],
+    ] as const) {
+      const visible = (
+        await AgentModel.findAllPaginated(
+          { limit: 100, offset: 0 },
+          { sortBy, sortDirection: direction },
+          { organizationId: organization.id },
+          user.id,
+          true,
+        )
+      ).data.map((agent) => agent.id);
+      const key = (agent: (typeof agents)[number]) =>
+        `${sortBy === "name" ? agent.name : sameTime.toISOString()}\0${agent.id}`;
+      const expected = agents
+        .filter((agent) => visible.includes(agent.id))
+        .sort((a, b) => {
+          if (a.first !== b.first) return a.first ? -1 : 1;
+          const order = key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
+          return direction === "asc" ? order : -order;
+        })
+        .map((agent) => agent.id);
+      expect(visible).toEqual(expected);
+      // Pages of 2 straddle the boundary between the caller's own agents and
+      // the rest, and must add up to the same list.
+      const paged: string[] = [];
+      for (let offset = 0; offset < expected.length; offset += 2) {
+        const page = await AgentModel.findAllPaginated(
+          { limit: 2, offset },
+          { sortBy, sortDirection: direction },
+          { organizationId: organization.id },
+          user.id,
+          true,
+        );
+        expect(page.pagination.total).toBe(expected.length);
+        paged.push(...page.data.map((agent) => agent.id));
+      }
+      expect(paged).toEqual(expected);
+    }
+  });
+
   test("filters paginated agents by configured provider key", async ({
     makeOrganization,
     makeUser,

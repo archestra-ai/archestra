@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  DEFAULT_RESOURCE_ACCESS_RELATIONS,
-  E2eTestId,
-} from "@archestra/shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,

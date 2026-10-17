@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ToolCallOutcomeNotice } from "@/components/log-detail/tool-call-outcome-notice";
@@ -19,8 +18,6 @@ import {
   ToolCallHeaderTitle,
   ToolCallIdentityLine,
 } from "./_parts/tool-call-header";
-
-type McpToolCallRecord = archestraApiTypes.GetMcpToolCallResponses["200"];
 
 export function McpToolCallDetailPage({ id }: { id: string }) {
   return (

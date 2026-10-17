@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { MessagesSquare } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";

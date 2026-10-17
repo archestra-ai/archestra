@@ -136,9 +136,9 @@ test("one visit loads a conversation and its files once, and switching re-reads 
   );
 
   requests.reset();
-  await page.getByRole("button", { name: "Load probe B" }).first().click();
+  await page.getByRole("link", { name: "Load probe B" }).first().click();
   await expect(page.getByText("Hello from Load probe B")).toBeVisible();
-  await page.getByRole("button", { name: "Load probe A" }).first().click();
+  await page.getByRole("link", { name: "Load probe A" }).first().click();
   await expect(page.getByText("Hello from Load probe A")).toBeVisible();
   await page.waitForTimeout(1500);
 

@@ -16,6 +16,7 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 const mockRouterPush = vi.fn();
+const mockRouterPrefetch = vi.fn();
 const { mockUpdateRunMutate, mockUpdateRunMutateAsync } = vi.hoisted(() => ({
   mockUpdateRunMutate: vi.fn(),
   mockUpdateRunMutateAsync: vi.fn().mockResolvedValue(undefined),
@@ -388,6 +389,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 6 /* July */, 16, 12));
   vi.mocked(useRouter).mockReturnValue({
     push: mockRouterPush,
+    prefetch: mockRouterPrefetch,
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(usePathname).mockImplementation(() => mockChatState.pathname);
   vi.mocked(useSearchParams).mockReturnValue({
@@ -562,15 +564,16 @@ describe("ChatSidebarSection", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("opens an OpenAPPA configuration session in chat", () => {
+  it("links an OpenAPPA configuration session to its chat, warming the route on hover", () => {
     mockConversations = [
       { ...makeConv("policy-session", "Review policy"), origin: "user" },
     ];
     render(<ChatSidebarSection fadeIn={fadeIn} />);
-    fireEvent.click(screen.getByText("Review policy"));
-    expect(mockRouterPush).toHaveBeenCalledExactlyOnceWith(
-      "/chat/policy-session",
-    );
+    const row = screen.getByRole("link", { name: /Review policy/ });
+    expect(row).toHaveAttribute("href", "/chat/policy-session");
+    expect(mockRouterPrefetch).not.toHaveBeenCalled();
+    fireEvent.mouseEnter(row);
+    expect(mockRouterPrefetch).toHaveBeenCalledWith("/chat/policy-session");
   });
 
   it("collapses pinned and date groups independently and restores their chats", () => {
@@ -627,13 +630,11 @@ describe("ChatSidebarSection", () => {
       },
     ];
     render(<ChatSidebarSection fadeIn={fadeIn} />);
-    const label = screen.getByText("Daily summary");
     expect(screen.getAllByLabelText("Scheduled task")).toHaveLength(1);
-    fireEvent.click(label);
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(screen.getByRole("link", { name: /Daily summary/ })).toHaveAttribute(
+      "href",
       "/chat/scheduled-chat?scheduleTriggerId=trigger-1&scheduleRunId=run-1",
     );
-    mockRouterPush.mockClear();
     fireEvent.click(
       screen.getByRole("button", { name: "Open project Reports" }),
     );

@@ -137,7 +137,7 @@ function VirtualKeysTable() {
     ? providerApiKeyIdFromUrl
     : undefined;
 
-  const providerCatalog = useModelProviderCatalog();
+  const providerCatalog = useModelProviderCatalog({ fresh: true });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canCreate } = useHasPermissions({ llmVirtualKey: ["create"] });

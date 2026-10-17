@@ -89,7 +89,7 @@ import {
  */
 export default function LlmProxyPage() {
   const { baseUrl, organization } = useConnectionBaseUrl();
-  const providerCatalog = useModelProviderCatalog();
+  const providerCatalog = useModelProviderCatalog({ fresh: true });
   const [selected, setSelected] = useState<
     "model-router" | ProxyEndpointProvider
   >("model-router");
@@ -185,7 +185,7 @@ function ProxyEndpointCard({
   selected: "model-router" | ProxyEndpointProvider;
   onSelect: (target: "model-router" | ProxyEndpointProvider) => void;
 }) {
-  const providerCatalog = useModelProviderCatalog();
+  const providerCatalog = useModelProviderCatalog({ fresh: true });
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   // Providers with a key are the ones a client can reach, so they lead; the
   // usual defaults fill the row up to its minimum width.
@@ -362,7 +362,7 @@ function ConnectSteps({
   auth: AuthMethod;
   targetLabel: string;
 }) {
-  const providerCatalog = useModelProviderCatalog();
+  const providerCatalog = useModelProviderCatalog({ fresh: true });
   const isRouter = selected === "model-router";
   const servesTarget = (provider: SupportedProvider) =>
     isRouter ? isModelRouterSupportedProvider(provider) : provider === selected;

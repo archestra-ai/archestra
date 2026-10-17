@@ -171,7 +171,7 @@ export default function ApiKeysPage() {
     enabled: apiKeyQueriesEnabled,
   });
   const { data: organization } = useOrganization();
-  const providerCatalog = useModelProviderCatalog();
+  const providerCatalog = useModelProviderCatalog({ fresh: true });
   // Read defensively: suites that render this page mock the auth query module
   // wholesale, and the Access column should fall back to the scope label
   // rather than crash the table (same convention as `user-share-field.tsx`).

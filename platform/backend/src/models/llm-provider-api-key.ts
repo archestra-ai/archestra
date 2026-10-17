@@ -459,10 +459,12 @@ class LlmProviderApiKeyModel {
     // The kind is a column, so listing resolves no secrets; only rows written
     // before it existed are classified (once) here.
     const credentialKinds = await resolveCredentialKinds(apiKeys);
-    const accessibleKeys = apiKeys.filter(
-      (key) =>
-        key.userId === userId ||
-        !isPerUserCredential(key.provider, credentialKinds.get(key.id)),
+    const accessibleKeys = apiKeys.filter((key) =>
+      isListedFor({
+        key,
+        kind: credentialKinds.get(key.id),
+        userId,
+      }),
     );
     const [labelsByKey, displayScopes] = await Promise.all([
       LlmProviderApiKeyLabelModel.getLabelsForMany(
@@ -589,10 +591,12 @@ class LlmProviderApiKeyModel {
     // The kind is a column, so listing resolves no secrets; only rows written
     // before it existed are classified (once) here.
     const credentialKinds = await resolveCredentialKinds(apiKeys);
-    const accessibleKeys = apiKeys.filter(
-      (key) =>
-        key.userId === userId ||
-        !isPerUserCredential(key.provider, credentialKinds.get(key.id)),
+    const accessibleKeys = apiKeys.filter((key) =>
+      isListedFor({
+        key,
+        kind: credentialKinds.get(key.id),
+        userId,
+      }),
     );
     const [labelsByKey, displayScopes] = await Promise.all([
       LlmProviderApiKeyLabelModel.getLabelsForMany(
@@ -1256,7 +1260,13 @@ class LlmProviderApiKeyModel {
 
       const [updated] = await tx
         .update(schema.llmProviderApiKeysTable)
-        .set(data)
+        .set({
+          ...data,
+          // A different secret may hold a different kind of credential: clear
+          // the record so the next read classifies the new value, unless the
+          // caller records it (recordCredentialKind) after this update.
+          ...(data.secretId !== undefined && { credentialKind: null }),
+        })
         .where(eq(schema.llmProviderApiKeysTable.id, id))
         .returning();
 
@@ -1601,6 +1611,28 @@ function isPerUserCredential(
   kind: LlmProviderCredentialKind | null | undefined,
 ): boolean {
   return providerRequiresPerUserCredential(provider) || kind !== "api_key";
+}
+
+/**
+ * Whether a list read shows the key to this user. A per-user credential is
+ * listed for its owner only. When the kind is unknown (a legacy secret that
+ * could not be read this time), a shared key is listed for whoever added it,
+ * so the one person who can fix it still sees it, and hidden from everyone
+ * else until a later read classifies it.
+ */
+function isListedFor(params: {
+  key: {
+    provider: SupportedProvider;
+    userId: string | null;
+    createdBy: string | null;
+  };
+  kind: LlmProviderCredentialKind | null | undefined;
+  userId: string;
+}): boolean {
+  const { key, kind, userId } = params;
+  if (key.userId === userId) return true;
+  if (!kind && key.userId === null && key.createdBy === userId) return true;
+  return !isPerUserCredential(key.provider, kind);
 }
 
 /** The subscription a key's credential encodes, for the response. */

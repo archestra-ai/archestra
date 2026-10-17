@@ -120,6 +120,71 @@ describe("LLM provider key credential kind", () => {
     expect(await storedKind(legacy.id)).toBe("chatgpt");
   });
 
+  test("a legacy shared key whose secret cannot be read stays with its creator until it can be", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const member = await makeUser();
+    await makeMember(creator.id, org.id, { role: "admin" });
+    await makeMember(member.id, org.id, { role: "member" });
+    const secret = await SecretModel.create({
+      name: "vault-backed",
+      secret: { apiKey: "sk-in-vault" },
+      isVault: true,
+    });
+    const legacy = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        createdBy: creator.id,
+        name: "Shared from Vault",
+        provider: "openai",
+        secretId: secret.id,
+        scope: "org",
+        userId: null,
+        teamId: null,
+      },
+      { publishToOrganization: true },
+    );
+    const vaultDown = vi
+      .spyOn(secretManager(), "getSecret")
+      .mockRejectedValue(new Error("vault unreachable"));
+    const listFor = async (userId: string) =>
+      (
+        await LlmProviderApiKeyModel.getAvailableKeysForUser(org.id, userId, [])
+      ).map((key) => key.id);
+
+    // Unknown kind: maybe somebody's subscription, so only its creator sees it.
+    expect(await listFor(creator.id)).toEqual([legacy.id]);
+    expect(await listFor(member.id)).toEqual([]);
+    expect(await storedKind(legacy.id)).toBeNull();
+
+    // Once the secret can be read, the next read classifies and stores it.
+    vaultDown.mockRestore();
+    expect(await listFor(member.id)).toEqual([legacy.id]);
+    expect(await storedKind(legacy.id)).toBe("api_key");
+  });
+
+  test("pointing a key at another secret clears the recorded kind", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const key = await sharedKey({
+      organizationId: org.id,
+      apiKeyValue: "sk-metered",
+    });
+    const replacement = await SecretModel.create({
+      name: "replacement",
+      secret: { apiKey: subscriptionValue() },
+    });
+
+    await LlmProviderApiKeyModel.update(key.id, { secretId: replacement.id });
+
+    expect(await storedKind(key.id)).toBeNull();
+  });
+
   test("recording a new value updates the kind", async ({
     makeOrganization,
   }) => {

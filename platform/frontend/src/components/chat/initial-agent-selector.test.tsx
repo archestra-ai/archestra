@@ -110,20 +110,6 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/agent.query", () => ({
   useAgentCredentialReadinessPages: (options?: unknown) =>
     mockUseAgentCredentialReadiness(options),
-  useAgentSearch: ({
-    name,
-    enabled,
-  }: {
-    name?: string;
-    enabled?: boolean;
-  }) => ({
-    // Mirrors the server-side name search: only typed text narrows the page.
-    data: enabled
-      ? agents.filter((agent) =>
-          agent.name.toLowerCase().includes((name ?? "").toLowerCase()),
-        )
-      : undefined,
-  }),
   useChatAgents: () => ({ data: agents }),
   useChatAgentPages: () => ({
     data: {

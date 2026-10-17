@@ -51,6 +51,9 @@ export type ToolAuthState =
 export function parseAuthRequired(
   errorText: string,
 ): AuthRequiredResult | null {
+  // Cheap rejection before JSON.parse: these run for every tool result on
+  // every render, and a tool's output can be a large JSON document.
+  if (!errorText.includes(AUTH_REQUIRED_MARKER)) return null;
   let message = errorText;
   try {
     const json = JSON.parse(errorText);
@@ -59,7 +62,7 @@ export function parseAuthRequired(
     /* not JSON, use raw text */
   }
 
-  if (!message.includes("Authentication required for")) return null;
+  if (!message.includes(AUTH_REQUIRED_MARKER)) return null;
 
   const nameMatch = message.match(/Authentication required for "([^"]+)"/);
   const urlMatch = message.match(/visit(?:\s+this\s+URL)?:\s*(https?:\/\/\S+)/);
@@ -75,6 +78,10 @@ export function parseAuthRequired(
 }
 
 export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
+  // Cheap rejection before JSON.parse (see parseAuthRequired).
+  if (!EXPIRED_AUTH_MARKERS.some((marker) => errorText.includes(marker))) {
+    return null;
+  }
   let message = errorText;
   try {
     const json = JSON.parse(errorText);
@@ -83,10 +90,7 @@ export function parseExpiredAuth(errorText: string): ExpiredAuthResult | null {
     /* not JSON, use raw text */
   }
 
-  if (
-    !message.includes("Expired or invalid authentication for") &&
-    !message.includes("Your credentials have expired")
-  ) {
+  if (!EXPIRED_AUTH_MARKERS.some((marker) => message.includes(marker))) {
     return null;
   }
 
@@ -369,3 +373,9 @@ export function isAuthInstructionText(text: string): boolean {
     )
   );
 }
+
+const AUTH_REQUIRED_MARKER = "Authentication required for";
+const EXPIRED_AUTH_MARKERS = [
+  "Expired or invalid authentication for",
+  "Your credentials have expired",
+];

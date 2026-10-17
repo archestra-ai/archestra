@@ -330,8 +330,15 @@ export function usePinnedAgentIds(params?: { enabled?: boolean }) {
   const { data: pinned } = useQuery({
     queryKey: ["agents", "pinned-ids"],
     queryFn: async () => {
+      // Only the ids are kept, so it skips the agents' tool assignments.
       const { data, error } = await getAgents({
-        query: { pinned: true, agentTypes: ["agent"], limit: 100, offset: 0 },
+        query: {
+          pinned: true,
+          agentTypes: ["agent"],
+          limit: 100,
+          offset: 0,
+          includeTools: false,
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return (data?.data ?? []).map((agent) => agent.id);
@@ -1024,8 +1031,13 @@ function findCachedAgent(
     .findAll({ queryKey: ["agents"] })) {
     // Chat and selector rosters deliberately carry partial Agent data. It is
     // enough to paint and initialize chat, but must never seed an editing form
-    // as though it came from the full detail endpoint.
-    if (["chat-roster", "options"].includes(String(query.queryKey[1])))
+    // as though it came from the full detail endpoint. Gateway tool rows hold
+    // tools, not agents.
+    if (
+      ["chat-roster", "options", "gateway-tool-rows"].includes(
+        String(query.queryKey[1]),
+      )
+    )
       continue;
     // A list fetched without tools would seed a detail with no tools, which
     // reads as "this agent has none" until the seed goes stale. The filters

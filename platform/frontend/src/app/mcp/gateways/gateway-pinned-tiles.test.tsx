@@ -24,7 +24,10 @@ type Gateway = Parameters<typeof GatewayPinnedTiles>[0]["pinned"][number];
 const gateway = (
   id: string,
   name: string,
-  tools: Pick<Gateway, "accessAllTools" | "tools"> = {
+  tools: {
+    accessAllTools: boolean;
+    tools: NonNullable<Gateway["tools"]>;
+  } = {
     accessAllTools: true,
     tools: [],
   },
@@ -176,6 +179,32 @@ describe("GatewayPinnedTiles", () => {
     ).toBeInTheDocument();
     expect(
       within(tileFor("Two-tool gateway")).getByText("2 tools"),
+    ).toBeInTheDocument();
+  });
+
+  it("counts a list row's tools from its count, which arrives without the tools", () => {
+    setUp({ personalGateway: null });
+    renderTiles({
+      pinned: [
+        {
+          ...gateway("gw-listed", "Listed gateway"),
+          accessAllTools: false,
+          tools: undefined,
+          toolsCount: 412,
+        },
+        {
+          ...gateway("gw-single", "Single read gateway"),
+          accessAllTools: false,
+          tools: [{ name: "search", delegateToAgentId: null }],
+        },
+      ],
+    });
+
+    expect(
+      within(tileFor("Listed gateway")).getByText("412 tools"),
+    ).toBeInTheDocument();
+    expect(
+      within(tileFor("Single read gateway")).getByText("1 tool"),
     ).toBeInTheDocument();
   });
 

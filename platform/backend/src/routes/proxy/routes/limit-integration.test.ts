@@ -186,6 +186,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
   });
 
   test("blocks request with 402 when user limit is exceeded", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
     makeAgent,
     makeUser,
     makeOrganization,
@@ -218,12 +220,27 @@ describe("LLM proxy limit enforcement (integration)", () => {
 
     await setupRoute();
 
+    const callerSecret = await makeSecret({
+      secret: { apiKey: "sk-test-key" },
+    });
+    const callerProviderKey = await makeLlmProviderApiKey(
+      org.id,
+      callerSecret.id,
+      { provider: "openai" },
+    );
+    const { value: callerKey } = await VirtualApiKeyModel.create({
+      name: "user limit caller",
+      authorId: user.id,
+      scope: "personal",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: callerProviderKey.id },
+      ],
+    });
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
-        "X-Archestra-User-Id": user.id,
+        ...OPENAI_HEADERS(`Bearer ${callerKey}`),
       },
       payload: SIMPLE_PAYLOAD(),
     });
@@ -241,6 +258,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
   });
 
   test("blocks request with 402 when default user limit is exceeded", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
     makeAgent,
     makeUser,
     makeOrganization,
@@ -274,12 +293,27 @@ describe("LLM proxy limit enforcement (integration)", () => {
 
     await setupRoute();
 
+    const callerSecret = await makeSecret({
+      secret: { apiKey: "sk-test-key" },
+    });
+    const callerProviderKey = await makeLlmProviderApiKey(
+      org.id,
+      callerSecret.id,
+      { provider: "openai" },
+    );
+    const { value: callerKey } = await VirtualApiKeyModel.create({
+      name: "user limit caller",
+      authorId: user.id,
+      scope: "personal",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: callerProviderKey.id },
+      ],
+    });
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
-        "X-Archestra-User-Id": user.id,
+        ...OPENAI_HEADERS(`Bearer ${callerKey}`),
       },
       payload: SIMPLE_PAYLOAD(),
     });
@@ -763,6 +797,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
   });
 
   test("blocks request with 402 when user all-models limit is exceeded", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
     makeAgent,
     makeUser,
     makeOrganization,
@@ -797,12 +833,27 @@ describe("LLM proxy limit enforcement (integration)", () => {
 
     await setupRoute();
 
+    const callerSecret = await makeSecret({
+      secret: { apiKey: "sk-test-key" },
+    });
+    const callerProviderKey = await makeLlmProviderApiKey(
+      org.id,
+      callerSecret.id,
+      { provider: "openai" },
+    );
+    const { value: callerKey } = await VirtualApiKeyModel.create({
+      name: "user limit caller",
+      authorId: user.id,
+      scope: "personal",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: callerProviderKey.id },
+      ],
+    });
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
-        "X-Archestra-User-Id": user.id,
+        ...OPENAI_HEADERS(`Bearer ${callerKey}`),
       },
       payload: SIMPLE_PAYLOAD(),
     });
@@ -968,6 +1019,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
   });
 
   test("blocks request with 402 when per-environment default user limit is exceeded", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
     makeAgent,
     makeUser,
     makeOrganization,
@@ -1006,12 +1059,27 @@ describe("LLM proxy limit enforcement (integration)", () => {
 
     await setupRoute();
 
+    const callerSecret = await makeSecret({
+      secret: { apiKey: "sk-test-key" },
+    });
+    const callerProviderKey = await makeLlmProviderApiKey(
+      org.id,
+      callerSecret.id,
+      { provider: "openai" },
+    );
+    const { value: callerKey } = await VirtualApiKeyModel.create({
+      name: "user limit caller",
+      authorId: user.id,
+      scope: "personal",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: callerProviderKey.id },
+      ],
+    });
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
-        "X-Archestra-User-Id": user.id,
+        ...OPENAI_HEADERS(`Bearer ${callerKey}`),
       },
       payload: SIMPLE_PAYLOAD(),
     });
@@ -1090,6 +1158,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
   });
 
   test("per-environment default user usage still counts interactions from a deleted agent", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
     makeAgent,
     makeUser,
     makeOrganization,
@@ -1138,12 +1208,27 @@ describe("LLM proxy limit enforcement (integration)", () => {
 
     await setupRoute();
 
+    const callerSecret = await makeSecret({
+      secret: { apiKey: "sk-test-key" },
+    });
+    const callerProviderKey = await makeLlmProviderApiKey(
+      org.id,
+      callerSecret.id,
+      { provider: "openai" },
+    );
+    const { value: callerKey } = await VirtualApiKeyModel.create({
+      name: "user limit caller",
+      authorId: user.id,
+      scope: "personal",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: callerProviderKey.id },
+      ],
+    });
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(activeAgent.id),
       headers: {
-        ...OPENAI_HEADERS(),
-        "X-Archestra-User-Id": user.id,
+        ...OPENAI_HEADERS(`Bearer ${callerKey}`),
       },
       payload: SIMPLE_PAYLOAD(),
     });

@@ -100,7 +100,7 @@ delta = {}
 // earlier revision's compiled engine is cached by its file and revision alone.
 const own = (policy, tag) => `${policy}[[policy.tool]]\nname = "only-${tag}"\ndelta = {}\n`;
 const callRead = (n) => ({ event: 'tool_call', operation_id: `call:read-${n}`, tool: 'read', arguments: {} });
-const POLICY_MOVED = { message: 'OpenAPPA published a newer policy revision for this organization; retry the request' };
+const POLICY_MOVED = { code: 'policy_moved', message: 'OpenAPPA published a newer policy revision for this organization; retry the request' };
 const rootOf = (session) => `archestra:${createHash('sha256').update(`${session.organization_id}\n${session.session_id}`).digest('hex')}`;
 
 test('a saved policy decides the next call of an open session and of a new one', { skip: !databaseUrl }, async () => {

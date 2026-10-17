@@ -1,3 +1,4 @@
+import type { ScopedPermission } from "@archestra/shared";
 import { withDbTransaction } from "@/database";
 import {
   AgentExcludedSkillModel,
@@ -66,17 +67,28 @@ class AgentSkillAssignmentService {
     organizationId: string;
     userId: string;
     skillIds: string[];
+    /** The caller's skill grants and these skills' policies, when the caller already holds them. */
+    grants?: ScopedPermission[];
+    policies?: Awaited<
+      ReturnType<typeof ResourcePermissionPolicyModel.findApplicableBatch>
+    >;
   }): Promise<Map<string, boolean>> {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const [grants, policies] = await Promise.all([
-      ResourcePermissions.resolveAll({ ...params, resources: ["skill"] }),
-      ResourcePermissionPolicyModel.findApplicableBatch({
-        organizationId: params.organizationId,
-        resource: "skill",
-        scopes: params.skillIds,
-      }),
+      params.grants ??
+        ResourcePermissions.resolveAll({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          resources: ["skill"],
+        }),
+      params.policies ??
+        ResourcePermissionPolicyModel.findApplicableBatch({
+          organizationId: params.organizationId,
+          resource: "skill",
+          scopes: params.skillIds,
+        }),
     ]);
     // SPDX-SnippetEnd
     const result = new Map<string, boolean>();

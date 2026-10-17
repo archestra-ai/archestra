@@ -25,13 +25,20 @@ import {
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
+import OpenAppaSessionModel from "@/models/openappa-session";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import { scopedSessionId } from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
+import {
+  observeUnenforcedSession,
+  startedUnenforced,
+} from "@/openappa/unenforced";
 import authRoutes from "@/routes/auth";
 import {
   issueRuntimeBinding,
   RUNTIME_BINDING_HEADER,
   resolveGatewayRuntimeSession,
+  runtimeOpenAppaSession,
   stampRuntimeBinding,
   workloadPrincipal,
 } from "@/services/agent-runtime/runtime-identity";
@@ -90,6 +97,195 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     config.openappa = openappa;
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("a user-scoped MCP client can yell without proxy state or logical call metadata", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: false });
+    const agent = await makeAgent();
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const { value: token } = await UserTokenModel.create(
+      user.id,
+      agent.organizationId,
+    );
+    let released = false;
+    native.dispatchHook.mockClear();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "tool_call") {
+        expect(event.tool).toBe("yell");
+        released = true;
+        return JSON.stringify({ decision: "allow_call" });
+      }
+      // The native reporter needs a released call as well as a session.
+      expect(event.event).toBe("yell");
+      expect(released).toBe(true);
+      released = false;
+      return JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [] },
+      });
+    });
+    const args = { message: "Reporting feedback", with_trajectory: false };
+    for (const wrapped of [false, true]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token}`,
+          "x-appa-session-id": "client-session",
+        },
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: wrapped
+            ? {
+                name: "archestra__run_tool",
+                arguments: { tool_name: "archestra__yell", tool_args: args },
+              }
+            : { name: "archestra__yell", arguments: args },
+          // A reused transport ID must not collapse distinct reports.
+          id: 1,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(JSON.stringify(response.json())).toContain(
+        "Guardrails are unchanged for this session",
+      );
+    }
+    const saved = await OpenAppaYellModel.list({
+      organizationId: agent.organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toHaveLength(2);
+    expect(new Set(saved.data.map((report) => report.toolCallId)).size).toBe(2);
+    for (const report of saved.data) {
+      expect(report).toMatchObject({
+        callerId: `user:${user.id}`,
+        sessionId: scopedSessionId(`user:${user.id}`, "client-session"),
+        message: args.message,
+        superyell: false,
+      });
+      expect(report.toolCallId).not.toBe("1");
+    }
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
+    ).toEqual(["tool_call", "yell", "tool_call", "yell"]);
+  });
+
+  test.for([
+    false,
+    true,
+  ])("a bound runtime can yell without proxy state (break the glass %s)", async (breakTheGlass, {
+    makeAgent,
+    makeOrganization,
+    makeServiceAccount,
+  }) => {
+    config.openappa.yellEnabled = true;
+    config.openappa.offerSigningSecret = "test-runtime-binding-secret-32chars";
+    await GuardrailsDeploymentModel.set({
+      breakTheGlassEnabled: breakTheGlass,
+    });
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const account = await makeServiceAccount(org.id, { role: "admin" });
+    const current = await persistBoundRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+    });
+    const spec = {
+      env: {},
+      secretEnv: {} as Record<string, string>,
+      activeDeadlineSeconds: 120,
+    };
+    await stampRuntimeBinding({
+      spec,
+      organizationId: org.id,
+      workspaceId: current.workspace.id,
+      taskId: current.task.id,
+    });
+    const runtimeToken = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId: org.id,
+      name: "Runtime gateway",
+      expiresIn: 120,
+    });
+    const session = runtimeOpenAppaSession({
+      organizationId: org.id,
+      workspaceId: current.workspace.id,
+      workloadName: current.workspace.workloadName,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+    });
+    await observeUnenforcedSession(session);
+    native.dispatchHook.mockClear();
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${runtimeToken.token}`,
+        [RUNTIME_BINDING_HEADER]: spec.secretEnv[RUNTIME_BINDING_ENV],
+        "x-appa-session-id": current.workspace.workloadName,
+        "x-archestra-run-id": current.task.id,
+      },
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "archestra__yell",
+          arguments: {
+            message: "Runtime reporting feedback",
+            with_trajectory: true,
+          },
+        },
+        id: "runtime-report",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(JSON.stringify(response.json())).toContain(
+      breakTheGlass
+        ? "Guardrails are now off for this session"
+        : "Guardrails are unchanged for this session",
+    );
+    expect(JSON.stringify(response.json())).toContain(
+      "No diagnostic archive was captured",
+    );
+    const saved = await OpenAppaYellModel.list({
+      organizationId: org.id,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toEqual([
+      expect.objectContaining({
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        superyell: breakTheGlass,
+        withTrajectory: true,
+      }),
+    ]);
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+    expect(
+      await OpenAppaSessionModel.find({
+        organizationId: org.id,
+        sessionId: session.session_id,
+      }),
+    ).toBeNull();
+    expect(await startedUnenforced(session)).toBe(true);
+    expect(
+      await startedUnenforced({ ...session, session_id: "another-workspace" }),
+    ).toBe(false);
   });
 
   test("uses bounded logical metadata for an external remedy receipt", async ({

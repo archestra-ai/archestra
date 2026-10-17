@@ -37,6 +37,7 @@ import {
   isSessionId,
   useInteractionSessions,
 } from "@/lib/interactions/interaction.query";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 import { AgentCell } from "./_parts/agent-cell";
 import type { LogSession } from "./_parts/logs-table-format";
@@ -410,13 +411,9 @@ function SessionsTable() {
         filteredEmptyMessage="No LLM logs match your filters"
         onClearFilters={clearFilters}
         onRowClick={(session) => {
-          if (session.sessionId === null && session.interactionId) {
-            router.push(`/llm/logs/${session.interactionId}`);
-          } else if (session.sessionId) {
-            router.push(
-              `/llm/logs/session/${encodeURIComponent(session.sessionId)}`,
-            );
-          }
+          // A request logged without a session is keyed by its own id.
+          const sessionKey = session.sessionId ?? session.interactionId;
+          if (sessionKey) router.push(llmSessionHref(sessionKey));
         }}
       />
     </div>

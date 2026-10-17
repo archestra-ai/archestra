@@ -112,3 +112,42 @@ export function BigFigure({
 export function paneHeight(height: number): CSSProperties {
   return { "--pane-h": `${height}px` } as CSSProperties;
 }
+
+/** A faint, fading sketch of a thread: "messages go here" without words. */
+export function GhostThread() {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex w-64 flex-col gap-2 [mask-image:linear-gradient(to_bottom,black_20%,transparent)]"
+    >
+      {GHOST_BUBBLES.map((bubble) => (
+        <div
+          key={bubble.key}
+          className={cn(
+            "flex items-end gap-2",
+            bubble.side === "end" ? "flex-row-reverse" : "flex-row",
+          )}
+        >
+          {bubble.side === "start" ? (
+            <span className="size-5 shrink-0 rounded-full border border-dashed border-muted-foreground/30" />
+          ) : null}
+          <span
+            className={cn(
+              "rounded-xl border border-dashed border-muted-foreground/30",
+              bubble.size,
+              bubble.side === "end"
+                ? "rounded-br-sm bg-muted/60"
+                : "rounded-bl-sm bg-transparent",
+            )}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const GHOST_BUBBLES = [
+  { key: "a", side: "end", size: "h-6 w-36" },
+  { key: "b", side: "start", size: "h-10 w-52" },
+  { key: "c", side: "end", size: "h-6 w-28" },
+] as const;

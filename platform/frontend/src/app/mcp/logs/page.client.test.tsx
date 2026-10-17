@@ -375,7 +375,7 @@ describe("McpGatewayLogsPage filters", () => {
     await user.click(screen.getByText("search_documents"));
 
     expect(push).toHaveBeenCalledWith(
-      "/llm/logs/session/session-1?toolCall=call-linked",
+      "/llm/logs/session-1?toolCall=call-linked",
     );
   });
 

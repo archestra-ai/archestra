@@ -1,13 +1,7 @@
 "use client";
 
 import type { SupportedProvider } from "@archestra/shared";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  MessageSquareText,
-  TriangleAlert,
-} from "lucide-react";
-import type { ComponentProps } from "react";
+import { ArrowRight } from "lucide-react";
 import {
   describeModelOrigin,
   formatRequestCost,
@@ -17,11 +11,7 @@ import {
 import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
 import { CopyButton } from "@/components/copy-button";
 import { formatCost } from "@/components/cost";
-import { PaneHeader } from "@/components/log-detail/pane-header";
-import MessageThread from "@/components/message-thread";
 import { SourceIcon } from "@/components/source-badge";
-import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -34,11 +24,13 @@ import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
   BigFigure,
+  GhostThread,
   OverviewFact,
   OverviewHeader,
   OverviewSection,
   paneHeight,
 } from "./overview-parts";
+import { RequestContent } from "./request-content";
 import { KindChip } from "./request-waterfall";
 import {
   type RequestSpan,
@@ -48,21 +40,10 @@ import {
 } from "./session-timeline";
 import { ToolCallOverview, ToolCallPayload } from "./tool-call-details";
 
-type ThreadProps = ComponentProps<typeof MessageThread>;
-
-export type LoadedConversation = {
-  messages: ThreadProps["messages"];
-  chatErrors: ThreadProps["chatErrors"];
-  conversationId: string | undefined;
-  agentName: string | undefined;
-  modelName: string | undefined;
-};
-
 /**
- * The bottom of the split, with no tabs: the selected request's overview on
- * the left and the conversation on the right. Only the latest request's
- * conversation is loaded, so for any other request the right column says so
- * and offers a way to it.
+ * The bottom of the split: the selected record's overview on the left, and on
+ * the right a request's conversation, raw request and raw response, or a tool
+ * call's arguments and result.
  *
  * `excerpt` is for the MCP tool call page, which shows a few records around
  * one call: its timings drop what only means something across the whole
@@ -81,10 +62,8 @@ export function RequestDetails({
   providerLabel,
   serverDisplayByName,
   onStep,
-  onOpen,
-  conversation,
-  hasConversation,
-  onJumpToConversation,
+  latestRequestId,
+  onJumpToLatest,
   excerpt,
 }: {
   /** The resizable pane height, applied from `lg`. */
@@ -101,12 +80,9 @@ export function RequestDetails({
   providerLabel: (provider: SupportedProvider) => string;
   serverDisplayByName: Map<string, McpServerDisplay>;
   onStep: (delta: number) => void;
-  onOpen: (span: TimelineSpan) => void;
-  /** The latest request's conversation, when one was captured. */
-  conversation: LoadedConversation | null;
-  /** Whether the selected request is the one `conversation` came from. */
-  hasConversation: boolean;
-  onJumpToConversation: (() => void) | null;
+  /** The session's latest request, whose thread is the whole conversation. */
+  latestRequestId: string | null;
+  onJumpToLatest: (() => void) | null;
   excerpt?: { currentKey: string };
 }) {
   if (!span) {
@@ -167,12 +143,11 @@ export function RequestDetails({
     );
   }
 
-  const { row, kind } = span;
+  const { row } = span;
   const label = requestLabel(row, profileName);
-  const time = formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss" });
 
   return (
-    // Phones: Overview then Conversation in the page's own flow, each with a
+    // Phones: the overview then the content in the page's own flow, each with a
     // sticky header. Wide: the fixed-height, resizable split.
     <section
       aria-label="Request details"
@@ -188,90 +163,16 @@ export function RequestDetails({
         label={label}
         providerLabel={providerLabel}
         onStep={onStep}
-        onOpen={() => onOpen(span)}
         excerpt={Boolean(excerpt)}
       />
 
-      <section
-        aria-label="Conversation"
-        className="flex min-h-[320px] min-w-0 flex-col lg:min-h-0"
-      >
-        <PaneHeader>
-          <MessageSquareText
-            className="size-3.5 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <span className="shrink-0 text-xs font-medium">Conversation</span>
-          {hasConversation ? (
-            <>
-              <span className="ml-1 inline-flex min-w-0 items-center gap-1.5 rounded-sm bg-muted px-1.5 text-[11px] leading-5 text-muted-foreground">
-                <span
-                  className={cn(
-                    "size-1.5 shrink-0 rounded-full",
-                    SPAN_KINDS[kind].bar,
-                  )}
-                  aria-hidden="true"
-                />
-                <span className="min-w-0 truncate font-medium text-foreground">
-                  {label}
-                </span>
-                {/* Phones drop the time, so the name is what the room goes to. */}
-                <span className="shrink-0 tabular-nums max-sm:hidden">
-                  · {time}
-                </span>
-              </span>
-              {/* An excerpt loads whichever request is picked. */}
-              {excerpt ? null : (
-                <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground max-sm:hidden">
-                  <span
-                    className="size-1.5 rounded-full bg-primary"
-                    aria-hidden="true"
-                  />
-                  <span>Latest request</span>
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="ml-1 truncate text-[11px] text-muted-foreground">
-              Not loaded for this request
-            </span>
-          )}
-        </PaneHeader>
-        <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-          {hasConversation && conversation ? (
-            <>
-              {kind === "auxiliary" ? (
-                <div className="px-4 pt-3">
-                  <InlineNotice variant="warning">
-                    <TriangleAlert />
-                    <InlineNoticeText>
-                      This was a side request ({label}), so this is its prompt,
-                      not the main chat thread.
-                    </InlineNoticeText>
-                  </InlineNotice>
-                </div>
-              ) : null}
-              <MessageThread
-                messages={conversation.messages}
-                chatErrors={conversation.chatErrors}
-                conversationId={conversation.conversationId}
-                containerClassName="h-auto"
-                hideDivider
-                agentName={conversation.agentName}
-                selectedModel={conversation.modelName}
-              />
-            </>
-          ) : (
-            <ConversationEmpty
-              captured={Boolean(conversation)}
-              label={label}
-              time={time}
-              onOpen={() => onOpen(span)}
-              onJumpToLatest={onJumpToConversation}
-            />
-          )}
-        </div>
-      </section>
+      <RequestContent
+        span={span}
+        label={label}
+        profileName={profileName}
+        latest={span.row.id === latestRequestId}
+        onJumpToLatest={onJumpToLatest}
+      />
     </section>
   );
 }
@@ -289,7 +190,6 @@ function RequestOverview({
   label,
   providerLabel,
   onStep,
-  onOpen,
   excerpt,
 }: {
   span: RequestSpan;
@@ -301,7 +201,6 @@ function RequestOverview({
   label: string;
   providerLabel: (provider: SupportedProvider) => string;
   onStep: (delta: number) => void;
-  onOpen: () => void;
   excerpt: boolean;
 }) {
   const { row, kind } = span;
@@ -589,20 +488,6 @@ function RequestOverview({
           </dl>
         </OverviewSection>
       </div>
-
-      {/* In flow at the end of the overview on phones; pinned under the
-          column's own scroller from `lg`. It never covers content. */}
-      <div className="border-t bg-card/70 p-3">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full justify-between"
-          onClick={onOpen}
-        >
-          <span>Open full request</span>
-          <ArrowUpRight />
-        </Button>
-      </div>
     </aside>
   );
 }
@@ -622,93 +507,3 @@ function PlanTag() {
     </span>
   );
 }
-
-function ConversationEmpty({
-  captured,
-  label,
-  time,
-  onOpen,
-  onJumpToLatest,
-}: {
-  captured: boolean;
-  label: string;
-  time: string;
-  onOpen: () => void;
-  onJumpToLatest: (() => void) | null;
-}) {
-  return (
-    <div className="flex min-h-full flex-col items-center justify-center px-6 py-10 text-center">
-      <GhostThread />
-      <div className="mt-5 space-y-1.5">
-        <p className="text-sm font-medium">
-          {captured
-            ? "Only the latest request's conversation is loaded"
-            : "No conversation was captured for this session"}
-        </p>
-        {captured ? (
-          <p className="mx-auto max-w-[52ch] text-xs leading-relaxed text-muted-foreground">
-            This is <span className="text-foreground">{label}</span> at{" "}
-            <span className="tabular-nums">{time}</span>. Open it to read the
-            exact prompt it sent and the response it got, or jump to the latest
-            request to read the conversation here.
-          </p>
-        ) : (
-          <p className="mx-auto max-w-[52ch] text-xs leading-relaxed text-muted-foreground">
-            Open the request to see the payload that was recorded for it.
-          </p>
-        )}
-      </div>
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-        <Button size="sm" onClick={onOpen}>
-          <span>Open full request</span>
-          <ArrowRight />
-        </Button>
-        {captured && onJumpToLatest ? (
-          <Button size="sm" variant="outline" onClick={onJumpToLatest}>
-            <MessageSquareText />
-            <span>Jump to latest conversation</span>
-          </Button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-/** A faint, fading sketch of a thread: "messages go here" without words. */
-function GhostThread() {
-  return (
-    <div
-      aria-hidden="true"
-      className="flex w-64 flex-col gap-2 [mask-image:linear-gradient(to_bottom,black_20%,transparent)]"
-    >
-      {GHOST_BUBBLES.map((bubble) => (
-        <div
-          key={bubble.key}
-          className={cn(
-            "flex items-end gap-2",
-            bubble.side === "end" ? "flex-row-reverse" : "flex-row",
-          )}
-        >
-          {bubble.side === "start" ? (
-            <span className="size-5 shrink-0 rounded-full border border-dashed border-muted-foreground/30" />
-          ) : null}
-          <span
-            className={cn(
-              "rounded-xl border border-dashed border-muted-foreground/30",
-              bubble.size,
-              bubble.side === "end"
-                ? "rounded-br-sm bg-muted/60"
-                : "rounded-bl-sm bg-transparent",
-            )}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const GHOST_BUBBLES = [
-  { key: "a", side: "end", size: "h-6 w-36" },
-  { key: "b", side: "start", size: "h-10 w-52" },
-  { key: "c", side: "end", size: "h-6 w-28" },
-] as const;

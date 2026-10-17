@@ -1,475 +1,503 @@
 "use client";
 
+import { DynamicInteraction } from "@archestra/shared";
 import {
-  type archestraApiTypes,
-  DynamicInteraction,
-  isEncryptedChatUnavailableContent,
-  isLogContentNotStored,
-} from "@archestra/shared";
-import { Database, Layers } from "lucide-react";
-import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { BilledCost } from "@/components/billed-cost";
-import { type DetailFact, DetailFacts } from "@/components/detail-facts";
-import { EncryptedChatContentUnavailable } from "@/components/encrypted-chat-content-unavailable";
-import { JsonCodeBlock } from "@/components/json-code-block";
-import MessageThread from "@/components/message-thread";
+  ArrowLeft,
+  ArrowUpRight,
+  Download,
+  Info,
+  Loader2,
+  LockKeyhole,
+  TriangleAlert,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { use, useCallback, useMemo, useState } from "react";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RequestLatency } from "@/components/request-latency";
-import { SourceBadge } from "@/components/source-badge";
+import { Button } from "@/components/ui/button";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+} from "@/components/ui/empty";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { describeKey } from "@/components/virtual-key-badge";
-import { useAgentOptions } from "@/lib/agent.query";
-import { typeRole } from "@/lib/design/type-scale";
-import { useInteraction } from "@/lib/interactions/interaction.query";
-import { formatDate } from "@/lib/utils/date-time";
-import { cn } from "@/lib/utils/tailwind";
+import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import {
+  useExportSessionInteractions,
+  useInteraction,
+  useInteractionSessions,
+  useInteractionSummaries,
+  useSessionLineage,
+} from "@/lib/interactions/interaction.query";
+import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
+import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
+import { RequestDetails } from "./_parts/request-details";
+import { RequestWaterfall } from "./_parts/request-waterfall";
+import { SessionFacts } from "./_parts/session-facts";
+import {
+  SessionHeaderTitle,
+  SessionIdentityLine,
+} from "./_parts/session-header";
+import {
+  buildTimeline,
+  requestSpanKey,
+  type TimelineSpan,
+  toolCallSpanKey,
+} from "./_parts/session-timeline";
+import {
+  DETAILS_PANE_DEFAULT_HEIGHT,
+  SplitHandle,
+} from "./_parts/split-handle";
+import { useLinkedRequest } from "./_parts/use-linked-request";
+import { useSessionToolCalls } from "./_parts/use-session-tool-calls";
 
-export function ChatPage({
-  initialData,
-  id,
+export default function SessionDetailPage({
+  paramsPromise,
 }: {
-  initialData?: {
-    interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-  };
-  id: string;
+  paramsPromise: Promise<{ id: string }>;
 }) {
-  return (
-    <ErrorBoundary>
-      <LogDetail initialData={initialData} id={id} />
-    </ErrorBoundary>
-  );
-}
+  // The session key: a session id, or a sessionless request's own id.
+  const sessionId = decodeURIComponent(use(paramsPromise).id);
+  const router = useRouter();
+  const appName = useAppName();
+  const openappaEnabled = useFeature("openappaEnabled") === true;
+  const { pageIndex, pageSize, offset, setPagination } =
+    useDataTableQueryParams();
+  const { label: providerLabel } = useModelProviderCatalog();
+  const { displayByName: serverDisplayByName } = useMcpServerDisplayByName();
+  // Links preselect one record: a tool call from `/mcp/logs`, or a request.
+  const searchParams = useSearchParams();
+  const targetToolCallId = searchParams.get(LLM_LOG_FOCUS_PARAM.toolCall);
+  const targetRequestId = searchParams.get(LLM_LOG_FOCUS_PARAM.request);
 
-function LogDetail({
-  initialData,
-  id,
-}: {
-  initialData?: {
-    interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-  };
-  id: string;
-}) {
+  const { data: interactionsResponse, isLoading: interactionsLoading } =
+    useInteractionSummaries({
+      sessionId: sessionId,
+      limit: pageSize,
+      offset,
+      sortBy: "createdAt",
+      sortDirection: "desc",
+    });
+
+  // Fetch session metadata (profile name, user names, etc.)
   const {
-    data: dynamicInteraction,
-    isPending,
-    isLoadingError,
-    refetch,
-  } = useInteraction({
-    interactionId: id,
-    initialData: initialData?.interaction,
+    data: sessionResponse,
+    isLoadingError: sessionLoadingError,
+    refetch: refetchSession,
+  } = useInteractionSessions({
+    sessionId: sessionId,
+    limit: 1,
+    toastOnError: false,
   });
 
-  const { data: agents } = useAgentOptions({
-    filters: {
-      ids: dynamicInteraction?.profileId ? [dynamicInteraction.profileId] : [],
-    },
-    enabled: !!dynamicInteraction?.profileId,
+  const interactions = interactionsResponse?.data ?? [];
+  const paginationMeta = interactionsResponse?.pagination;
+  const sessionData = sessionResponse?.data?.[0];
+  const { data: lineage } = useSessionLineage({
+    sessionId,
+    enabled: openappaEnabled,
+  });
+  const latestInteractionId = sessionData?.lastInteractionId ?? undefined;
+  const { data: lastMainRequest } = useInteraction({
+    interactionId: latestInteractionId,
+    refetchInterval: null,
+    enabled: latestInteractionId !== undefined,
   });
 
-  // Header first, content second: this page owns its own chrome now, so the
-  // loading and failure states keep the title and the way back rather than
-  // dropping the reader onto a bare spinner.
-  if (isPending) {
-    return <InteractionShell>null</InteractionShell>;
-  }
-
-  if (isLoadingError) {
-    return (
-      <InteractionShell>
-        <QueryLoadError
-          title="Couldn't load this interaction"
-          onRetry={() => refetch()}
-        />
-      </InteractionShell>
-    );
-  }
-
-  if (!dynamicInteraction) {
-    return (
-      <InteractionShell>
-        <div className="text-muted-foreground">Interaction not found</div>
-      </InteractionShell>
-    );
-  }
-
-  const interaction = new DynamicInteraction(dynamicInteraction);
-  const agent = agents?.find((a) => a.id === interaction.profileId);
-  const toolsUsed = interaction.getToolNamesUsed();
-  // Metadata only keeps no response, so which tools it called is unknown.
-  const toolsNotStored = isLogContentNotStored(dynamicInteraction.response);
-  const failed = isFailedResponse(dynamicInteraction.response);
-
-  const requestMessages = new DynamicInteraction(
-    dynamicInteraction,
-  ).mapToUiMessages();
-  const chatErrors = dynamicInteraction.chatErrors ?? [];
-  const authMethod = dynamicInteraction.authMethod
-    ? formatAuthMethod(dynamicInteraction.authMethod)
-    : null;
-  // Both key columns, in the order they answer "who was this?": the
-  // passthrough key carries the acting user's identity, the standard key only
-  // supplied the provider credential.
-  const virtualKeys = [
-    dynamicInteraction.passthroughVirtualKey,
-    dynamicInteraction.virtualKey,
-  ].filter((key) => key != null);
-
-  const backHref = dynamicInteraction.sessionId
-    ? `/llm/logs/session/${encodeURIComponent(dynamicInteraction.sessionId)}`
-    : "/llm/logs";
-  const backLabel = dynamicInteraction.sessionId
-    ? "Back to Session"
-    : "Back to Sessions";
-
-  const facts: DetailFact[] = [
-    {
-      label: "Tokens",
-      value: (
-        <div className="space-y-0.5">
-          <div className="font-mono tabular-nums">
-            {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
-            {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
-          </div>
-          {((dynamicInteraction.cacheReadTokens ?? 0) > 0 ||
-            (dynamicInteraction.cacheWriteTokens ?? 0) > 0) && (
-            <div className={cn(typeRole({ role: "meta" }), "font-mono")}>
-              {(dynamicInteraction.cacheReadTokens ?? 0).toLocaleString()} cache
-              read /{" "}
-              {(dynamicInteraction.cacheWriteTokens ?? 0).toLocaleString()}{" "}
-              cache write
-            </div>
-          )}
-        </div>
+  // Use session data from API for accurate totals, fall back to page data
+  const totalInputTokens =
+    sessionData?.totalInputTokens ??
+    interactions.reduce((sum, i) => sum + (i.inputTokens ?? 0), 0);
+  const totalOutputTokens =
+    sessionData?.totalOutputTokens ??
+    interactions.reduce((sum, i) => sum + (i.outputTokens ?? 0), 0);
+  const totalCacheReadTokens =
+    sessionData?.totalCacheReadTokens ??
+    interactions.reduce((sum, i) => sum + (i.cacheReadTokens ?? 0), 0);
+  const totalCacheWriteTokens =
+    sessionData?.totalCacheWriteTokens ??
+    interactions.reduce((sum, i) => sum + (i.cacheWriteTokens ?? 0), 0);
+  const models = sessionData?.models ?? [
+    ...new Set(
+      interactions.flatMap((interaction) =>
+        interaction.model ? [interaction.model] : [],
       ),
-    },
-    {
-      label: "Cost",
-      value: dynamicInteraction.cost ? (
-        <TooltipProvider>
-          <BilledCost
-            cost={dynamicInteraction.cost}
-            billingMode={dynamicInteraction.billingMode}
-            baselineCost={
-              dynamicInteraction.baselineCost || dynamicInteraction.cost
-            }
-            format="percent"
-            tooltip="always"
-            variant="interaction"
-            baselineModel={dynamicInteraction.baselineModel}
-            actualModel={dynamicInteraction.model}
-          />
-        </TooltipProvider>
-      ) : (
-        <span className="font-mono tabular-nums">-</span>
-      ),
-    },
-    ...(dynamicInteraction.durationMs != null
-      ? [
-          {
-            label: "Latency",
-            value: (
-              <RequestLatency durationMs={dynamicInteraction.durationMs} />
-            ),
-          },
-        ]
-      : []),
-    { label: "Provider", value: interaction.provider },
-    ...(failed
-      ? [
-          {
-            label: "Result",
-            value: <Badge variant="destructive">Error</Badge>,
-          },
-        ]
-      : []),
-    ...(dynamicInteraction.connectorId
-      ? [
-          {
-            label: "KB connector",
-            value: (
-              <Badge variant="secondary" className="text-xs">
-                {dynamicInteraction.connectorName ?? "Deleted connector"}
-              </Badge>
-            ),
-          },
-        ]
-      : []),
-    {
-      label: "Timestamp",
-      value: (
-        <span className="font-mono tabular-nums">
-          {formatDate({ date: interaction.createdAt })}
-        </span>
-      ),
-    },
-    ...(authMethod
-      ? [{ label: "Auth method", value: <span>{authMethod}</span> }]
-      : []),
-    ...(virtualKeys.length > 0
-      ? [
-          {
-            label: "Virtual API key",
-            value: (
-              <div className="space-y-1.5">
-                {virtualKeys.map((key) => (
-                  <div key={key.id} className="space-y-0.5">
-                    <div className="font-mono">{key.name}</div>
-                    <div className={typeRole({ role: "meta" })}>
-                      {describeKey(key)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ),
-          },
-        ]
-      : []),
-    ...(dynamicInteraction.authenticatedAppName
-      ? [
-          {
-            label: "OAuth client",
-            value: (
-              <div className="space-y-0.5">
-                <div className="font-mono">
-                  {dynamicInteraction.authenticatedAppName}
-                </div>
-                {dynamicInteraction.authenticatedAppId && (
-                  <div className={cn(typeRole({ role: "meta" }), "font-mono")}>
-                    {dynamicInteraction.authenticatedAppId}
-                  </div>
-                )}
-              </div>
-            ),
-          },
-        ]
-      : []),
-    ...(dynamicInteraction.externalAgentId
-      ? [
-          {
-            label: "External agent",
-            value: (
-              <span className="font-mono">
-                {dynamicInteraction.externalAgentId}
-              </span>
-            ),
-          },
-        ]
-      : []),
-    ...(dynamicInteraction.runId
-      ? [
-          {
-            label: "Run ID",
-            value: (
-              <span className="font-mono">{dynamicInteraction.runId}</span>
-            ),
-          },
-        ]
-      : []),
-    {
-      label: "Tools used",
-      value:
-        toolsUsed.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {toolsUsed.map((toolName) => (
-              <Badge key={toolName} variant="secondary" className="text-xs">
-                {toolName}
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <span className="text-muted-foreground">
-            {toolsNotStored ? "Not stored" : "None"}
-          </span>
-        ),
-    },
+    ),
   ];
+  const firstRequest = sessionData?.firstRequestTime ?? null;
+  const lastRequest = sessionData?.lastRequestTime ?? null;
+  const totalRequests =
+    sessionData?.requestCount ?? paginationMeta?.total ?? interactions.length;
+  const totalCost = sessionData?.totalCost;
+  const totalBilledCost = sessionData?.totalBilledCost;
+  const totalSubscriptionCost = sessionData?.totalSubscriptionCost;
+  const totalBaselineCost = sessionData?.totalBaselineCost;
 
-  return (
-    <PageLayout
-      title={<span className="font-mono">{interaction.modelName}</span>}
-      documentTitle={interaction.modelName}
-      backLink={<PageBackLink href={backHref}>{backLabel}</PageBackLink>}
-      description={
-        <div className="flex flex-wrap items-center gap-2">
-          <SourceBadge source={dynamicInteraction.source} />
-          <Badge variant="secondary" className="text-xs">
-            {dynamicInteraction.source?.startsWith("knowledge:") ? (
-              <>
-                <Database className="h-3 w-3 mr-1" />
-                <span>Knowledge Base</span>
-              </>
-            ) : (
-              <>
-                <Layers className="h-3 w-3 mr-1" />
-                <span>
-                  {agent?.name ??
-                    (interaction.profileId === null
-                      ? "Deleted LLM Proxy"
-                      : "Unknown")}
-                </span>
-              </>
-            )}
-          </Badge>
-        </div>
-      }
-    >
-      <div className="space-y-8">
-        <DetailFacts facts={facts} className="border-b pb-6" />
+  const profileName = sessionData?.profileName ?? null;
 
-        {requestMessages.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">Conversation</h2>
-            <div className="border border-border rounded-lg bg-background overflow-hidden">
-              <MessageThread
-                messages={requestMessages}
-                chatErrors={chatErrors}
-                conversationId={dynamicInteraction.sessionId ?? undefined}
-                containerClassName="h-auto"
-                hideDivider={true}
-                agentName={agent?.name ?? undefined}
-                selectedModel={interaction.modelName}
-              />
-            </div>
-          </div>
-        )}
+  // Session title: prefer a generated title, then the bounded session preview.
+  const getSessionTitle = () => {
+    if (sessionData?.claudeCodeTitle) return sessionData.claudeCodeTitle;
+    if (sessionData?.conversationTitle) return sessionData.conversationTitle;
+    return sessionData?.lastUserMessagePreview ?? null;
+  };
 
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Raw Data</h2>
-          <Accordion type="single" collapsible defaultValue="response">
-            <AccordionItem value="request" className="border rounded-lg mb-2">
-              <AccordionTrigger className="px-6 py-4 hover:no-underline">
-                <span className="text-base font-semibold">
-                  Raw Request (Original)
-                </span>
-              </AccordionTrigger>
-              <AccordionContent className="px-6 pb-4">
-                {isEncryptedChatUnavailableContent(
-                  dynamicInteraction.request,
-                ) ? (
-                  <EncryptedChatContentUnavailable
-                    value={dynamicInteraction.request}
-                  />
-                ) : (
-                  <JsonCodeBlock value={dynamicInteraction.request} />
-                )}
-              </AccordionContent>
-            </AccordionItem>
+  const sessionTitle = getSessionTitle();
 
-            {dynamicInteraction.processedRequest && (
-              <AccordionItem
-                value="processedRequest"
-                className="border rounded-lg mb-2"
-              >
-                <AccordionTrigger className="px-6 py-4 hover:no-underline">
-                  <span className="text-base font-semibold">
-                    Processed Request (Sent to LLM)
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="px-6 pb-4">
-                  {isEncryptedChatUnavailableContent(
-                    dynamicInteraction.processedRequest,
-                  ) ? (
-                    <EncryptedChatContentUnavailable
-                      value={dynamicInteraction.processedRequest}
-                    />
-                  ) : (
-                    <JsonCodeBlock
-                      value={dynamicInteraction.processedRequest}
-                    />
-                  )}
-                  <p className="text-xs text-muted-foreground mt-2">
-                    This shows the request after policy updates.
-                  </p>
-                </AccordionContent>
-              </AccordionItem>
-            )}
+  const exportSession = useExportSessionInteractions();
 
-            <AccordionItem
-              value="response"
-              className="border rounded-lg !border-b"
-            >
-              <AccordionTrigger className="px-6 py-4 hover:no-underline">
-                <span className="text-base font-semibold">Raw Response</span>
-              </AccordionTrigger>
-              <AccordionContent className="px-6 pb-4">
-                {isEncryptedChatUnavailableContent(
-                  dynamicInteraction.response,
-                ) ? (
-                  <EncryptedChatContentUnavailable
-                    value={dynamicInteraction.response}
-                  />
-                ) : (
-                  <JsonCodeBlock value={dynamicInteraction.response} />
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </div>
-      </div>
-    </PageLayout>
+  // Whether the latest main request captured a thread: its thread is the
+  // whole conversation, so the list marks it and the details offer a way to it.
+  const latestHasConversation = useMemo(
+    () =>
+      lastMainRequest
+        ? new DynamicInteraction(lastMainRequest).mapToUiMessages().length > 0
+        : false,
+    [lastMainRequest],
   );
-}
 
-type InteractionAuthMethod = NonNullable<
-  archestraApiTypes.GetInteractionResponses["200"]["authMethod"]
->;
+  const goToPage = useCallback(
+    (nextPageIndex: number) =>
+      setPagination({ pageIndex: nextPageIndex, pageSize }),
+    [setPagination, pageSize],
+  );
+  const sessionToolCalls = useSessionToolCalls({
+    sessionId,
+    requests: interactions,
+    requestsReady: interactionsResponse !== undefined && !interactionsLoading,
+    pageIndex,
+    pageSize,
+    offset,
+    onLocatePage: goToPage,
+    targetToolCallId,
+  });
+  const { toolCalls } = sessionToolCalls;
+  const linkedRequest = useLinkedRequest({
+    sessionId,
+    requests: interactions,
+    requestsReady: interactionsResponse !== undefined && !interactionsLoading,
+    pageIndex,
+    pageSize,
+    onLocatePage: goToPage,
+    targetRequestId,
+  });
 
-function formatAuthMethod(authMethod: InteractionAuthMethod) {
-  switch (authMethod) {
-    case "oauth_client_credentials":
-      return "OAuth Client Credentials";
-    case "oauth_user":
-      return "OAuth User";
-    case "virtual_key":
-      return "Virtual Key";
-    case "passthrough_virtual_key":
-      return "Passthrough Virtual Key";
-    case "provider_key":
-      return "Provider Key";
-    case "jwks":
-      return "JWKS";
-    case "internal":
-      return "Internal";
-    default:
-      return authMethod;
+  const timeline = useMemo(
+    () => buildTimeline({ requests: interactions, toolCalls }),
+    [interactions, toolCalls],
+  );
+  const spans = timeline?.spans ?? [];
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const [detailsHeight, setDetailsHeight] = useState(
+    DETAILS_PANE_DEFAULT_HEIGHT,
+  );
+
+  const unavailableSession =
+    sessionResponse !== undefined && sessionResponse.data.length === 0;
+
+  if (sessionLoadingError) {
+    return (
+      <PageLayout
+        denseContent
+        title="Session"
+        backLink={
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load this session"
+          onRetry={() => refetchSession()}
+        />
+      </PageLayout>
+    );
   }
-}
 
-/**
- * The page's header while there is no interaction to name it with. The back
- * link goes to the session list rather than to a session: which session this
- * request belongs to is a field of the record that has not loaded.
- */
-function InteractionShell({ children }: { children: React.ReactNode }) {
+  if (unavailableSession) {
+    return (
+      <div className="flex h-full min-h-0 w-full items-center justify-center overflow-y-auto p-6">
+        <title>{`Session unavailable - ${appName}`}</title>
+        <Empty className="flex-none py-12 md:py-12">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <LockKeyhole aria-hidden="true" />
+            </EmptyMedia>
+            <div role="alert" className="space-y-2">
+              <h1 className="text-lg font-medium tracking-tight">
+                Session unavailable
+              </h1>
+              <EmptyDescription>
+                You may not have permission to view this session, or it may no
+                longer exist.
+              </EmptyDescription>
+            </div>
+          </EmptyHeader>
+          <EmptyContent>
+            <p className="text-sm text-muted-foreground">
+              If someone shared this link with you, ask an administrator to
+              check your log access.
+            </p>
+            <Button variant="outline" asChild>
+              <Link href="/llm/logs">
+                <ArrowLeft aria-hidden="true" />
+                <span>Back to Sessions</span>
+              </Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
+      </div>
+    );
+  }
+
+  const conversationRowId = sessionData?.lastInteractionId ?? null;
+  const conversationKey = conversationRowId
+    ? requestSpanKey(conversationRowId)
+    : null;
+  const linkedKey =
+    targetToolCallId && sessionToolCalls.targetOnPage
+      ? toolCallSpanKey(targetToolCallId)
+      : targetRequestId && linkedRequest.targetOnPage
+        ? requestSpanKey(targetRequestId)
+        : null;
+  // Selection falls back to the record the URL linked to, then to the latest
+  // request, whose thread is the whole conversation, then to the newest record.
+  const indexOfKey = (key: string | null) =>
+    key ? spans.findIndex((span) => span.key === key) : -1;
+  let selectedIndex = indexOfKey(pickedKey);
+  if (selectedIndex < 0) selectedIndex = indexOfKey(linkedKey);
+  if (selectedIndex < 0) selectedIndex = indexOfKey(conversationKey);
+  if (selectedIndex < 0) selectedIndex = spans.length - 1;
+  const selected = selectedIndex >= 0 ? spans[selectedIndex] : null;
+  const conversationOnPage = indexOfKey(conversationKey) >= 0;
+
+  const step = (delta: number) => {
+    if (spans.length === 0) return;
+    const next = Math.min(spans.length - 1, Math.max(0, selectedIndex + delta));
+    setPickedKey(spans[next].key);
+  };
+
+  // Requests are listed newest first, so the latest one lives on page one.
+  const jumpToConversation =
+    latestHasConversation && conversationRowId
+      ? conversationOnPage
+        ? () => setPickedKey(conversationKey)
+        : pageIndex > 0
+          ? () => {
+              setPickedKey(conversationKey);
+              goToPage(0);
+            }
+          : null
+      : null;
+
+  // A request's whole record is in the details pane; a tool call has a page.
+  const openSpan = (span: TimelineSpan) => {
+    if (span.type === "tool") router.push(`/mcp/logs/${span.call.id}`);
+  };
+  const exportDisabled = exportSession.isPending || totalRequests === 0;
+
   return (
-    <PageLayout
-      title="Request"
-      backLink={<PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>}
-    >
-      {children}
-    </PageLayout>
+    <TooltipProvider delayDuration={150}>
+      <PageLayout
+        denseContent
+        title={
+          <SessionHeaderTitle
+            session={sessionData}
+            title={sessionTitle || "Session"}
+          />
+        }
+        documentTitle={sessionTitle || "Session"}
+        stackHeaderOnMobile
+        backLink={
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+        }
+        description={<SessionIdentityLine session={sessionData} />}
+      >
+        <div className="space-y-4">
+          <SessionFacts
+            totals={{
+              inputTokens: totalInputTokens,
+              outputTokens: totalOutputTokens,
+              cacheReadTokens: totalCacheReadTokens,
+              cacheWriteTokens: totalCacheWriteTokens,
+              cost: totalCost,
+              billedCost: totalBilledCost,
+              subscriptionCost: totalSubscriptionCost,
+              baselineCost: totalBaselineCost,
+            }}
+            totalRequests={totalRequests}
+            rows={interactions}
+            models={models}
+            firstRequest={firstRequest}
+            lastRequest={lastRequest}
+            fallbackType={sessionData?.lastInteractionType ?? null}
+            providerLabel={providerLabel}
+            trajectory={
+              openappaEnabled ? { session: sessionData, lineage } : null
+            }
+          />
+
+          {/* overflow-clip, not hidden, below lg: hidden would make the card
+              a scroll container and break the sticky pane headers. isolate
+              keeps the list's sticky column header under the page header. */}
+          <section
+            aria-label="Requests and request details"
+            className="isolate overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
+          >
+            <RequestWaterfall
+              timeline={timeline}
+              loading={interactionsLoading}
+              profileName={profileName}
+              serverDisplayByName={serverDisplayByName}
+              conversationRowId={
+                latestHasConversation ? conversationRowId : null
+              }
+              selectedKey={selected?.key ?? null}
+              highlightedKey={linkedKey}
+              onSelect={setPickedKey}
+              onOpen={openSpan}
+              openHint="Enter or double-click opens a tool call"
+              notice={
+                <ToolCallsNotice
+                  failed={sessionToolCalls.isError}
+                  onRetry={() => sessionToolCalls.refetch()}
+                  truncated={sessionToolCalls.truncated}
+                  missingToolCallId={
+                    sessionToolCalls.targetMissing ? targetToolCallId : null
+                  }
+                  missingRequest={linkedRequest.targetMissing}
+                />
+              }
+              pagination={
+                paginationMeta && paginationMeta.total > 0
+                  ? {
+                      pageIndex,
+                      pageSize,
+                      offset,
+                      total: paginationMeta.total,
+                      onPaginationChange: setPagination,
+                    }
+                  : null
+              }
+              totalRequests={totalRequests}
+              action={
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => exportSession.mutate({ sessionId })}
+                  disabled={exportDisabled}
+                >
+                  {exportSession.isPending ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Download aria-hidden="true" />
+                  )}
+                  {/* Phones show the glyph alone beside the card's title. */}
+                  <span className="max-lg:sr-only">Export JSON</span>
+                </Button>
+              }
+            />
+            <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
+            <RequestDetails
+              height={detailsHeight}
+              loading={interactionsLoading}
+              span={selected}
+              origin={timeline?.origin ?? 0}
+              previous={selectedIndex > 0 ? spans[selectedIndex - 1] : null}
+              index={selectedIndex}
+              count={spans.length}
+              profileName={profileName}
+              providerLabel={providerLabel}
+              serverDisplayByName={serverDisplayByName}
+              onStep={step}
+              latestRequestId={conversationRowId}
+              onJumpToLatest={jumpToConversation}
+            />
+          </section>
+        </div>
+      </PageLayout>
+    </TooltipProvider>
   );
 }
 
-/**
- * Whether the provider call failed: the proxy stores a failure as
- * `{ error: string }`, and Metadata only keeps just that outcome on the
- * not-stored marker.
- */
-function isFailedResponse(response: unknown): boolean {
-  if (isLogContentNotStored(response)) return response.isError === true;
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/** What the request list cannot show about this page's records, if anything. */
+function ToolCallsNotice({
+  failed,
+  onRetry,
+  truncated,
+  missingToolCallId,
+  missingRequest,
+}: {
+  failed: boolean;
+  onRetry: () => void;
+  truncated: boolean;
+  missingToolCallId: string | null;
+  missingRequest: boolean;
+}) {
+  if (!failed && !truncated && !missingToolCallId && !missingRequest) {
+    return null;
+  }
   return (
-    typeof response === "object" &&
-    response !== null &&
-    typeof (response as { error?: unknown }).error === "string"
+    <div className="space-y-2 border-b px-4 py-2">
+      {failed ? (
+        <InlineNotice variant="error">
+          <TriangleAlert />
+          <span className="font-medium">Tool calls didn't load</span>
+          <InlineNoticeText>
+            The requests are complete; the MCP tool calls between them are
+            missing.
+          </InlineNoticeText>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={onRetry}
+          >
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {/* A cap, not a problem: one quiet line. */}
+      {truncated ? (
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Showing the latest 100 tool calls in this page's time range. A
+            smaller page size shows them all.
+          </span>
+        </p>
+      ) : null}
+      {missingToolCallId ? (
+        <InlineNotice variant="neutral">
+          <InlineNoticeText>
+            The linked tool call isn't among this page's records.
+          </InlineNoticeText>
+          <Button variant="outline" size="xs" className="ml-auto" asChild>
+            <Link href={`/mcp/logs/${missingToolCallId}`}>
+              <span>Open tool call</span>
+              <ArrowUpRight />
+            </Link>
+          </Button>
+        </InlineNotice>
+      ) : null}
+      {missingRequest ? (
+        <InlineNotice variant="neutral">
+          <InlineNoticeText>
+            The linked request isn't one of this session's requests.
+          </InlineNoticeText>
+        </InlineNotice>
+      ) : null}
+    </div>
   );
 }

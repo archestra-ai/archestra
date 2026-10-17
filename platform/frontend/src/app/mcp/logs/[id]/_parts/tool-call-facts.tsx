@@ -20,6 +20,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import {
   formatAuthMethod,
   formatCallerIdentity,
@@ -147,7 +148,7 @@ function LinksRow({ call }: { call: McpToolCallRecord }) {
           ) : (
             <>
               <Link
-                href={`/llm/logs/session/${encodeURIComponent(sessionId)}?toolCall=${encodeURIComponent(call.id)}`}
+                href={llmSessionHref(sessionId, { toolCall: call.id })}
                 aria-label={`Session ${sessionId}`}
                 title={sessionId}
                 className="inline-flex items-center gap-1 font-mono underline-offset-2 hover:underline"

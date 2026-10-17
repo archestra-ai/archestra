@@ -81,10 +81,7 @@ describe("McpToolCallDetailPage", () => {
     });
     expect(
       within(excerpt).getByRole("link", { name: "Open full trace" }),
-    ).toHaveAttribute(
-      "href",
-      `/llm/logs/session/${SESSION_ID}?toolCall=${CALL_ID}`,
-    );
+    ).toHaveAttribute("href", `/llm/logs/${SESSION_ID}?toolCall=${CALL_ID}`);
     expect(
       screen.getByRole("link", { name: `Session ${SESSION_ID}` }),
     ).toBeVisible();

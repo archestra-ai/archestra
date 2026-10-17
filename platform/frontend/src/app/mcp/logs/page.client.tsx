@@ -33,6 +33,7 @@ import { resourceOwnerLabel } from "@/lib/agent-owner-label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import {
   formatAuthMethod,
   formatCallerIdentity,
@@ -549,7 +550,7 @@ function McpToolCallsTable({
  */
 function mcpToolCallHref(row: Pick<McpToolCallData, "id" | "sessionId">) {
   return row.sessionId
-    ? `/llm/logs/session/${encodeURIComponent(row.sessionId)}?toolCall=${encodeURIComponent(row.id)}`
+    ? llmSessionHref(row.sessionId, { toolCall: row.id })
     : `/mcp/logs/${row.id}`;
 }
 

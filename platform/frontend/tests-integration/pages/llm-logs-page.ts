@@ -12,7 +12,9 @@ export class LlmLogsPage {
     this.page = page;
     this.table = page.getByRole("table");
     this.requestList = page.getByRole("list", { name: "Requests" });
-    this.conversationPane = page.getByRole("region", { name: "Conversation" });
+    this.conversationPane = page.getByRole("tabpanel", {
+      name: "Conversation",
+    });
   }
 
   async goto() {
@@ -20,7 +22,7 @@ export class LlmLogsPage {
   }
 
   async gotoSession(sessionId: string) {
-    await this.page.goto(`/llm/logs/session/${encodeURIComponent(sessionId)}`);
+    await this.page.goto(`/llm/logs/${encodeURIComponent(sessionId)}`);
   }
 
   // The filter bar renders four SearchableSelect comboboxes in order:

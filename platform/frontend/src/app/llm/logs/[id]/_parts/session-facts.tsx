@@ -34,6 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
@@ -601,7 +602,7 @@ function TrajectoryPair({
 function SessionLink({ sessionId }: { sessionId: string }) {
   return (
     <Link
-      href={`/llm/logs/session/${encodeURIComponent(sessionId)}`}
+      href={llmSessionHref(sessionId)}
       aria-label={sessionId}
       title={sessionId}
       className="font-mono underline-offset-2 hover:underline"

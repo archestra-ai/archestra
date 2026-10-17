@@ -72,6 +72,7 @@ export function RequestWaterfall({
   highlightedKey,
   onSelect,
   onOpen,
+  openHint = "Enter or double-click to open",
   pagination,
   totalRequests,
   notice,
@@ -88,7 +89,7 @@ export function RequestWaterfall({
   profileName: string | null;
   /** Catalog names and icons for the servers tool calls went to. */
   serverDisplayByName: Map<string, McpServerDisplay>;
-  /** The request whose conversation is loaded, marked in its row. */
+  /** The latest request, whose thread is the whole conversation, marked in its row. */
   conversationRowId: string | null;
   selectedKey: string | null;
   /**
@@ -97,7 +98,9 @@ export function RequestWaterfall({
    */
   highlightedKey: string | null;
   onSelect: (key: string) => void;
+  /** Enter or a double-click on a row; `openHint` says what it opens. */
   onOpen: (span: TimelineSpan) => void;
+  openHint?: string;
   pagination: RequestsPagination | null;
   totalRequests: number;
   /** Shown between the header and the list, such as a failed load. */
@@ -265,9 +268,7 @@ export function RequestWaterfall({
           <span className="hidden items-center gap-1 text-[11px] text-muted-foreground xl:inline-flex">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>
-            <span className="ml-1">
-              to step · Enter or double-click to open
-            </span>
+            <span className="ml-1">to step · {openHint}</span>
           </span>
         </div>
       </header>
@@ -820,7 +821,7 @@ function RequestRow({
     <RowShell
       span={span}
       {...rowProps}
-      label={`${label}, ${modelName}, ${latency}${isConversation ? ", conversation loaded" : ""}`}
+      label={`${label}, ${modelName}, ${latency}${isConversation ? ", latest conversation" : ""}`}
       name={
         <>
           <span

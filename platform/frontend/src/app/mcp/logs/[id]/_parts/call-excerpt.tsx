@@ -1,31 +1,29 @@
 "use client";
 
-import { type archestraApiTypes, DynamicInteraction } from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { ArrowUpRight, TriangleAlert, Waypoints } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
-import {
-  type LoadedConversation,
-  RequestDetails,
-} from "@/app/llm/logs/session/[sessionId]/_parts/request-details";
-import { RequestWaterfall } from "@/app/llm/logs/session/[sessionId]/_parts/request-waterfall";
+import { RequestDetails } from "@/app/llm/logs/[id]/_parts/request-details";
+import { RequestWaterfall } from "@/app/llm/logs/[id]/_parts/request-waterfall";
 import {
   type InteractionSummary,
   type Timeline,
   type TimelineSpan,
   toolCallSpanKey,
-} from "@/app/llm/logs/session/[sessionId]/_parts/session-timeline";
+} from "@/app/llm/logs/[id]/_parts/session-timeline";
 import {
   DETAILS_PANE_DEFAULT_HEIGHT,
   SplitHandle,
-} from "@/app/llm/logs/session/[sessionId]/_parts/split-handle";
+} from "@/app/llm/logs/[id]/_parts/split-handle";
 import { Button } from "@/components/ui/button";
 import { InlineNotice } from "@/components/ui/inline-notice";
+import { useInteractionSummaries } from "@/lib/interactions/interaction.query";
 import {
-  useInteraction,
-  useInteractionSummaries,
-} from "@/lib/interactions/interaction.query";
+  llmRequestHref,
+  llmSessionHref,
+} from "@/lib/interactions/llm-log-links";
 import {
   useMcpToolCalls,
   useSessionMcpToolCalls,
@@ -136,7 +134,7 @@ function SessionExcerpt({
   );
 
   const failed = older.isError || newer.isError || toolCalls.isError;
-  const href = sessionHref(call.id, sessionId);
+  const href = llmSessionHref(sessionId, { toolCall: call.id });
   const requestsShown =
     excerpt?.timeline?.spans.filter((span) => span.type === "request").length ??
     0;
@@ -340,35 +338,10 @@ function ExcerptCard({
     if (span.key === selfKey) return;
     router.push(
       span.type === "request"
-        ? `/llm/logs/${span.row.id}`
+        ? llmRequestHref(span.row)
         : `/mcp/logs/${span.call.id}`,
     );
   };
-
-  // A picked request shows its own conversation: the turn that asked for
-  // this call is one click away.
-  const selectedRequestId =
-    selected?.type === "request" ? selected.row.id : undefined;
-  const { data: selectedInteraction } = useInteraction({
-    interactionId: selectedRequestId,
-    refetchInterval: null,
-    enabled: selectedRequestId !== undefined,
-  });
-  const conversation = useMemo((): LoadedConversation | null => {
-    if (!selectedInteraction || selectedInteraction.id !== selectedRequestId) {
-      return null;
-    }
-    const interaction = new DynamicInteraction(selectedInteraction);
-    const messages = interaction.mapToUiMessages();
-    if (messages.length === 0) return null;
-    return {
-      messages,
-      chatErrors: selectedInteraction.chatErrors ?? [],
-      conversationId: selectedInteraction.sessionId ?? undefined,
-      agentName: profileName ?? undefined,
-      modelName: interaction.modelName,
-    };
-  }, [selectedInteraction, selectedRequestId, profileName]);
 
   return (
     // overflow-clip, not hidden, below lg: hidden would make the card a
@@ -432,10 +405,8 @@ function ExcerptCard({
         providerLabel={(provider) => provider}
         serverDisplayByName={serverDisplayByName}
         onStep={step}
-        onOpen={openSpan}
-        conversation={conversation}
-        hasConversation={conversation !== null}
-        onJumpToConversation={null}
+        latestRequestId={null}
+        onJumpToLatest={null}
         excerpt={{ currentKey: selfKey }}
       />
     </section>
@@ -482,10 +453,6 @@ function LoadFailedNotice({ onRetry }: { onRetry: () => void }) {
       </InlineNotice>
     </div>
   );
-}
-
-function sessionHref(toolCallId: string, sessionId: string): string {
-  return `/llm/logs/session/${encodeURIComponent(sessionId)}?toolCall=${encodeURIComponent(toolCallId)}`;
 }
 
 /** Epoch ms a record started: it is written when it finishes. */

@@ -688,8 +688,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ]);
 
       const skillIds = skills.map((skill) => skill.id);
-      // One read of these skills' policies serves both the publication
-      // check and each skill's audience; it runs alongside the reads below.
+      // One read of these skills' policies serves the publication check and
+      // each skill's audience. It runs in parallel with the reads below.
       const skillPolicies =
         skillIds.length > 0
           ? ResourcePermissionPolicyModel.findApplicableBatch({

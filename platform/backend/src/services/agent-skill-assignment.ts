@@ -67,8 +67,9 @@ class AgentSkillAssignmentService {
     organizationId: string;
     userId: string;
     skillIds: string[];
-    /** The caller's skill grants and these skills' policies, when the caller already holds them. */
+    /** The caller's skill grants, when the caller already holds them. */
     grants?: ScopedPermission[];
+    /** These skills' policies, when the caller already holds them. */
     policies?: Awaited<
       ReturnType<typeof ResourcePermissionPolicyModel.findApplicableBatch>
     >;

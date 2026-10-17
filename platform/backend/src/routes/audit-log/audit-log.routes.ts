@@ -115,7 +115,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAuditLogResources,
         description:
-          "Resources that have audit events, with the name from their latest event, for the log's resource filter. Requires auditLog:read; without auditLog:admin only resources from the caller's own events are listed.",
+          "Get the resources that have audit events, for the log's resource filter. Covers agents, apps, environments, MCP servers, roles, skills and teams. Each resource has the name from its latest named event. Requires auditLog:read. Without auditLog:admin, only resources from the caller's own events are listed.",
         tags: ["Audit Log"],
         querystring: z.object({
           search: z
@@ -127,8 +127,16 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resourceId: z
             .string()
             .optional()
-            .describe("Only this resource, e.g. to label a preselected filter"),
-          limit: z.coerce.number().int().min(1).max(100).default(50),
+            .describe(
+              "Return only this resource, e.g. to label a preselected filter",
+            ),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .default(50)
+            .describe("Maximum number of resources to return"),
         }),
         response: constructResponseSchema(
           z.object({
@@ -213,7 +221,7 @@ export default auditLogRoutes;
 
 // === Internal helpers
 
-/** Resource types whose audit events carry a resource name worth picking. */
+/** Resource types that the log's resource filter lists by name. */
 const RESOURCE_FILTER_TYPES = [
   "agent",
   "app",

@@ -11,12 +11,7 @@ import A2aRemoteAgentDetailPageServer from "@/app/agents/a2a/[id]/page";
 import NewA2aRemoteAgentPageServer from "@/app/agents/a2a/new/page";
 import NewAgentPageServer from "@/app/agents/new/page";
 import NewMcpCatalogItemPageServer from "@/app/mcp/registry/new/page";
-import {
-  useAllPermissions,
-  useHasPagePermissions,
-  usePermissionMap,
-  useScopedCapabilities,
-} from "@/lib/auth/auth.query";
+import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
 import { WithPagePermissions } from "./with-page-permissions";
 
@@ -154,15 +149,6 @@ async function renderAt({
         typeof useHasPagePermissions
       >,
   );
-  // The guard itself reads the role permissions and the object grants.
-  vi.mocked(useAllPermissions).mockReturnValue({
-    data: permissions,
-    isPending: false,
-  } as unknown as ReturnType<typeof useAllPermissions>);
-  vi.mocked(useScopedCapabilities).mockReturnValue({
-    data: [],
-    isPending: false,
-  } as unknown as ReturnType<typeof useScopedCapabilities>);
   const content = await page();
   render(<WithPagePermissions>{content}</WithPagePermissions>);
 }

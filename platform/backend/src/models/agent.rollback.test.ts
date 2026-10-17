@@ -1534,7 +1534,7 @@ describe("AgentModel", () => {
       expect(await sorted("asc")).toEqual([...descending].reverse());
     });
 
-    test("counts tools the same whether or not the list carries them", async ({
+    test("applies the knowledge search tool name rule the same whether or not the list carries the tools", async ({
       makeAdmin,
       makeAgent,
       makeAgentTool,
@@ -1546,9 +1546,9 @@ describe("AgentModel", () => {
       const admin = await makeAdmin();
       const org = await makeOrganization();
       await makeMember(admin.id, org.id, { role: "admin" });
-      // Names on both sides of the knowledge search tool rule. Counted as it:
-      // the bare name, a server prefix, a longer separator run. Not: nothing
-      // before the separator, a further segment, a longer short name.
+      // Tool names on both sides of the knowledge search tool rule. Counted as
+      // that tool: the bare name, a server prefix, a longer separator run. Not
+      // counted: an empty prefix, a further segment, a longer short name.
       const server = `srv${crypto.randomUUID().slice(0, 8)}`;
       const names = [
         "query_knowledge_sources",

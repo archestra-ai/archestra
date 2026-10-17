@@ -10,14 +10,7 @@ import {
 } from "@/app/_parts/settings-navigation";
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ClientRedirect } from "@/components/client-redirect";
-import {
-  useAllPermissions,
-  useScopedCapabilities,
-} from "@/lib/auth/auth.query";
-import {
-  hasPagePermissions,
-  pageUsesCapabilities,
-} from "@/lib/auth/auth.utils";
+import { useHasPagePermissions } from "@/lib/auth/auth.query";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
@@ -26,18 +19,9 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
-  // A page decided by role permissions alone does not wait for the scoped
-  // capabilities.
-  const needsCapabilities = pageUsesCapabilities(requiredPermissions ?? {});
-  const permissions = useAllPermissions();
-  const capabilities = useScopedCapabilities(needsCapabilities);
-  const hasRequiredPermissions = hasPagePermissions({
-    userPermissions: permissions.data,
-    required: requiredPermissions ?? {},
-    capabilities: capabilities.data ?? [],
-  });
-  const isPending =
-    permissions.isPending || (needsCapabilities && capabilities.isPending);
+  const { data: hasRequiredPermissions, isPending } = useHasPagePermissions(
+    requiredPermissions || {},
+  );
   const canSeeSettings = useSettingsAreaAccess();
 
   // No loader while the permission check is in flight. It used to render one

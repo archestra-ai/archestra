@@ -34,7 +34,6 @@ import {
 // validation rules (team existence, org ownership, the ≥1-team invariant) that
 // must keep running in those tests rather than silently becoming no-ops.
 import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
-import { RequestLookups } from "@/auth/request-lookups";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -283,7 +282,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional()
               .describe(
-                "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows: the count is skipped, `hasNext` stays exact, and `total` is then only a lower bound (the agents up to this page, plus one when there are more).",
+                "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows. With false, the count is skipped and `hasNext` stays exact. `total` is then a lower bound: the agents up to this page, plus one when more follow.",
               ),
           })
           .merge(PaginationQuerySchema)
@@ -342,13 +341,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const effectiveTypes =
         agentTypes || (agentType ? [agentType] : undefined);
 
-      // The caller's roles, teams and grants are resolved once and shared by
-      // the permission checks and the list's visibility filter.
-      const lookups = new RequestLookups();
+      // Single DB query for all permission checks
       const checker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
-        lookups,
       });
 
       const permittedTypes = getPermittedAgentTypesForList({
@@ -395,7 +391,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           pinned,
           includeTools,
           includeTotal,
-          lookups,
         },
         user.id,
         isAdmin,

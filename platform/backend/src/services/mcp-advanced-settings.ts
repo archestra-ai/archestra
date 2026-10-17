@@ -130,13 +130,13 @@ function sameRuntimeValue(
 }
 
 /** Redact stored YAML everywhere it occurs in an authenticated API response,
- * including nested installed-server catalogs and audit snapshots. Which
- * responses can carry a `deploymentSpecYaml` field is decided per route when
- * it is registered, per status code: a status whose schema declares the key or
- * leaves part of the body untyped (audit snapshots, error details) walks the
- * payload, and so does any status without a schema, which is serialized as is.
- * A typed schema without the key strips it in serialization, so those
- * responses skip the walk. */
+ * including nested installed-server catalogs and audit snapshots. Each route
+ * decides at registration, per status code, whether its response can carry a
+ * `deploymentSpecYaml` field. The filter walks the payload when the status's
+ * schema declares the key, leaves part of the body untyped (audit snapshots,
+ * error details), or is missing, because Fastify then sends the body as is. A
+ * typed schema without the key drops the field in serialization, so the
+ * filter skips those responses. */
 export function registerMcpDeploymentYamlResponseFilter(
   app: FastifyInstance,
 ): void {
@@ -226,11 +226,12 @@ async function redactDeploymentYamlPayload(
 }
 
 /**
- * For a route's response schemas (keyed by status code, `2xx`-style range or
- * `default`, matched the way Fastify picks one), whether the response sent
- * with a status could let a `deploymentSpecYaml` field through: its schema
- * has the key or an open-JSON part, or no schema applies. Anything the schema
- * check does not recognise counts as "could".
+ * Build a check that tells, for a status code, whether the route's response
+ * could carry a `deploymentSpecYaml` field. It matches the response schemas
+ * by exact status code, then `2xx`-style range, then `default`, as Fastify
+ * does. A response could carry the field when its schema has the key or an
+ * open-JSON part, or when no schema applies. A schema the check does not
+ * recognise counts as "could carry".
  */
 function deploymentYamlStatusCheck(
   response: unknown,
@@ -254,9 +255,9 @@ function deploymentYamlStatusCheck(
 }
 
 // Reads Zod 4's schema definitions (`_zod.def`), which are not a stable API.
-// An unknown or changed shape counts as "could carry", so a Zod change can
-// only cost the skip, never a redaction; the typed-list case in
-// internal-mcp-catalog.advanced-settings.test.ts fails if the skip is lost.
+// An unknown schema type counts as "could carry". If a Zod change loses the
+// redaction or the skip, the typed-catalog or typed-list case in
+// internal-mcp-catalog.advanced-settings.test.ts fails.
 function schemaMayCarryDeploymentYaml(
   schema: unknown,
   seen: Set<unknown>,

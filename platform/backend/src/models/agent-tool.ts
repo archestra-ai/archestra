@@ -713,8 +713,8 @@ class AgentToolModel {
    * credential resolution) and the tool belongs to the server's catalog — a
    * dynamic assignment can resolve to any install of the catalog at call time.
    *
-   * The two rules are fetched as two queries rather than one join with an OR'd
-   * condition. An OR across two different columns gives the planner nothing it
+   * The two rules are two branches of a union rather than one join with an
+   * OR'd condition. An OR across two different columns gives the planner nothing it
    * can drive an index from, so it paired every server with every assignment
    * row and filtered afterwards — on a modest organization that is already a
    * seven-figure intermediate result, and it grows with servers × assignments.
@@ -732,10 +732,10 @@ class AgentToolModel {
       return agentsMap;
     }
 
-    // One statement: each rule is its own equi-join (see above), the union is
-    // deduplicated per (server, agent) with pinned winning, and every server's
-    // agents come back as one JSON array. Drizzle row mapping and a JS dedupe
-    // over every assignment row blocked the event loop on large installs.
+    // One statement. Each rule is its own equi-join (see above). The union
+    // keeps one row per (server, agent), pinned over unpinned. Each server's
+    // agents come back as one JSON array, because mapping and deduplicating
+    // every assignment row in JS blocks the event loop on large installs.
     const serverIds = sql`ARRAY[${sql.join(
       mcpServerIds.map((id) => sql`${id}`),
       sql`, `,

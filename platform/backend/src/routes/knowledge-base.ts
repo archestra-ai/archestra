@@ -442,14 +442,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       ]);
 
-      // Creators, visible connectors, document totals, assigned agents (or,
-      // with includeAssignedAgents=false, only their count) and labels for
-      // the whole page, in one statement. The trash view renders
-      // identity and `deletedAt` only, so it reads just the creator — "who
-      // made this" is exactly what you want when deciding whether a deleted
-      // knowledge base should come back. Its other links resolve to nothing
-      // while the knowledge base sits in the trash; declared in the endpoint
-      // description, not silently narrowed.
+      // Read the page's creators, visible connectors, document totals,
+      // assigned agents and labels in one statement. With
+      // includeAssignedAgents=false, it reads only the agent count. The trash
+      // view reads only the creator, which helps decide whether to restore a
+      // deleted knowledge base. Its other links resolve to nothing in the
+      // trash, as the endpoint description states.
       const { byId, firstCounts } = await KnowledgeBaseModel.findListEnrichment(
         {
           knowledgeBaseIds: knowledgeBases.map((kb) => kb.id),
@@ -466,15 +464,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await KbConnectorDocumentCountModel.storeFirstCounts(firstCounts);
       }
 
-      const data = knowledgeBases.map((kb) => ({
-        ...kb,
-        createdBy: byId.get(kb.id)?.createdBy ?? null,
-        labels: byId.get(kb.id)?.labels ?? [],
-        connectors: byId.get(kb.id)?.connectors ?? [],
-        totalDocsIndexed: byId.get(kb.id)?.totalDocsIndexed ?? 0,
-        assignedAgents: byId.get(kb.id)?.assignedAgents ?? [],
-        assignedAgentCount: byId.get(kb.id)?.assignedAgentCount ?? 0,
-      }));
+      const data = knowledgeBases.map((kb) => {
+        const details = byId.get(kb.id);
+        return {
+          ...kb,
+          createdBy: details?.createdBy ?? null,
+          labels: details?.labels ?? [],
+          connectors: details?.connectors ?? [],
+          totalDocsIndexed: details?.totalDocsIndexed ?? 0,
+          assignedAgents: details?.assignedAgents ?? [],
+          assignedAgentCount: details?.assignedAgentCount ?? 0,
+        };
+      });
 
       return reply.send({
         data,

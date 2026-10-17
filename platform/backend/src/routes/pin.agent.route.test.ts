@@ -252,9 +252,9 @@ describe.each([
       app,
       `name=${encodeURIComponent(resource.name)}`,
     );
-    expect(
-      list.data.find((row) => row.id === resource.id)?.pinnedAt,
-    ).not.toBeNull();
+    expect(list.data.find((row) => row.id === resource.id)?.pinnedAt).toEqual(
+      expect.any(String),
+    );
   });
 
   test("pin routes are registered for dynamic agent authorization", () => {

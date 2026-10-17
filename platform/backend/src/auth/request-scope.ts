@@ -1,11 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
- * Caller lookups (principal, role permissions) shared by everything one read
- * request runs: the auth middleware, the route and the models it calls each
- * resolved the same caller again, several statements apiece. Bound per
- * request by the auth plugin; reads only, so a request that changes roles or
- * teams never sees an answer from before its own write.
+ * Caller lookups (principal, role permissions) that one read request shares
+ * across the auth middleware, the route and the models it calls. The auth
+ * plugin binds a scope to each request. Only reads memoize, so a request that
+ * changes roles or teams never sees an answer from before its own write.
  */
 class RequestScope {
   private storage = new AsyncLocalStorage<Map<
@@ -13,7 +12,7 @@ class RequestScope {
     Promise<unknown>
   > | null>();
 
-  /** Start a request's scope: memoizing for reads, none for anything else. */
+  /** Start a request's scope. Reads get a memo; other requests get none. */
   enter(params: { memoize: boolean }): void {
     // Always rebinds, so a write on a keep-alive connection never inherits
     // the scope of the read before it.
@@ -37,10 +36,11 @@ class RequestScope {
 export const requestScope = new RequestScope();
 
 /**
- * Which requests share caller lookups: reads of the REST API. Not Better
- * Auth's routes, whose sign-in and SSO callbacks write the caller's role and
- * teams during a GET, and not long-lived streams (the MCP gateway's SSE GET,
- * WebSockets), which would keep one answer for hours.
+ * True for reads of the REST API: GET and HEAD under /api/. Better Auth's
+ * routes under /api/auth/ are excluded, because their sign-in and SSO
+ * callbacks write the caller's role and teams during a GET. Long-lived
+ * streams, such as the MCP gateway's SSE GET and WebSockets, are outside
+ * /api/, so they never keep one answer for hours.
  */
 export function shouldShareCallerLookups(request: {
   method: string;

@@ -609,6 +609,7 @@ describe("internal MCP catalog deployment YAML permission", () => {
       );
     }
   });
+
   test("typed routes redact the field only where their response schema can carry it", async () => {
     const resolve = vi.spyOn(ResourcePermissions, "resolve");
     // Every response map carries the shared error schemas, whose 403 has open

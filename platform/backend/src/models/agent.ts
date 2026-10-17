@@ -29,7 +29,6 @@ import {
   eq,
   exists,
   getTableColumns,
-  getTableName,
   gte,
   ilike,
   inArray,
@@ -57,6 +56,7 @@ import {
   decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { qualified } from "@/database/utils/qualified-column";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
@@ -147,8 +147,6 @@ type AgentRosterOptions = {
 
 type AgentListFilters = {
   organizationId?: string;
-  /** The request's caller lookups, so the list resolves the caller once. */
-  lookups?: PrincipalSource;
   authorization?: { organizationId: string; baseReadTypes: AgentType[] };
   ids?: string[];
   /** Rows the list shows elsewhere, such as the viewer's automatic pins. */
@@ -178,13 +176,13 @@ type AgentListFilters = {
   providerApiKeyId?: string;
   /** Caller-relative pin filter for the paginated Agents surface. */
   pinned?: boolean;
+  /** False skips the count; `total` is then a lower bound. */
+  includeTotal?: boolean;
   /**
    * Attach each agent's assigned tools. Defaults to true; off, agents come
    * back with `tools: []`, meaning "not requested" rather than "none
    * assigned".
    */
-  /** False skips the count; `total` is then a lower bound. */
-  includeTotal?: boolean;
   includeTools?: boolean;
 };
 
@@ -2030,7 +2028,8 @@ class AgentModel {
           direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
         );
     } else if (sorting?.sortBy === "toolsCount") {
-      // Ordered by the count the Tools column shows (see findAllPaginated):
+      // Ordered by the count the Tools column shows (see countListTools and
+      // the toolCounts subselect in findListEnrichment):
       // all assignments, minus subagent delegations, minus the knowledge
       // search tool when the agent has no knowledge sources. Only the few
       // special tools are joined; the plain count needs no join.
@@ -2165,9 +2164,9 @@ class AgentModel {
       : Promise.resolve(null);
     const pageSize = pagination.limit + (countTotal ? 0 : 1);
     // Sorting by a plain column with the caller's personal agents first:
-    // read those few agents on their own, then the rest in column order, so
-    // the second read walks an index and stops at the page instead of
-    // ranking every visible agent.
+    // read those agents on their own, then the rest in column order. The
+    // second read walks an index and stops at the page, without ranking every
+    // visible agent.
     const twoPhase =
       !!userId &&
       pinnedAgentOrderClauses.length === 0 &&
@@ -2319,7 +2318,6 @@ class AgentModel {
           userId,
           organizationId:
             filters?.authorization?.organizationId ?? filters?.organizationId,
-          lookups: filters?.lookups,
         })
       : [];
     const whereConditions: SQL[] = [
@@ -2556,8 +2554,8 @@ class AgentModel {
 
   /**
    * One list page ordered as `getPersonalAgentPriorityOrderClauses` then
-   * `orderByClause`: the caller's own personal agents first, then everyone
-   * else's. Same ids in the same order as the single ranked query.
+   * `orderByClause`: the caller's own personal agents first, then every other
+   * agent. Same ids in the same order as the single ranked query.
    */
   private static async findPersonalFirstPage(params: {
     whereClause: SQL | undefined;
@@ -2632,11 +2630,11 @@ class AgentModel {
 
   /**
    * One statement for everything an agent list row shows besides its order
-   * and its tools: the agent rows (last use included, from the stored column)
-   * plus one correlated subselect per aspect (the agent's own policy and the
-   * names it grants to, labels, knowledge bases, connectors, suggested
-   * prompts, the caller's pin, creator, resolved model, and tool counts for a
-   * list without tools). Timestamps come back as epoch milliseconds.
+   * and its tools. It reads the agent rows plus one correlated subselect per
+   * aspect: the agent's policy and the teams and users it grants to, labels,
+   * knowledge bases, connectors, suggested prompts, the caller's pin,
+   * creator, LLM key, model, and tool counts for a list without tools. The
+   * pin time comes back as epoch milliseconds.
    *
    * Every subselect runs once per row, which suits a list page: callers pass
    * at most 100 ids (PaginationQuerySchema caps `limit`).
@@ -2696,8 +2694,7 @@ class AgentModel {
             LEFT JOIN ${schema.labelKeysTable} lk ON lk.id = al.key_id
             LEFT JOIN ${schema.labelValuesTable} lv ON lv.id = al.value_id
           WHERE al.agent_id = ${agentId})`,
-        // Assignment order. The ids are a set; the batch reads this replaced
-        // left their order to the plan.
+        // Ids in assignment order, here and in connectorIds.
         knowledgeBaseIds: sql<string[]>`(
           SELECT coalesce(json_agg(akb.knowledge_base_id
             ORDER BY akb.created_at, akb.knowledge_base_id), '[]'::json)
@@ -5723,11 +5720,6 @@ function hasKnowledgeSources(
 }
 
 /**
- * Whether a tool is the knowledge search tool: its bare name, or the name
- * after a server prefix. Only the leading `_%` is a wildcard. Shared by the
- * list's Tools count and its sort so the two agree.
- */
-/**
  * The list's tool counts from an agent's tools, by the rule the `toolCounts`
  * SQL applies: delegations are subagents, and the knowledge search tool is
  * counted apart (isQueryKnowledgeSourcesTool, the JS twin of
@@ -5748,6 +5740,11 @@ function countListTools(
   return counts;
 }
 
+/**
+ * Whether a tool is the knowledge search tool: its bare name, or the name
+ * after a server prefix. Only the leading `_%` is a wildcard. Shared by the
+ * list's Tools count and its sort so the two agree.
+ */
 function isKnowledgeSearchToolName(name: AnyPgColumn | SQL): SQL {
   const prefixed = `_%${escapeLikePattern(
     `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
@@ -6240,16 +6237,6 @@ function catalogSortValue(sortBy: string | undefined): {
 }
 
 const ALL_SORTS_ABOVE_ANY_COUNT = 2147483647;
-
-/**
- * A column with its table's name. Selected inside the catalog's UNION, Drizzle
- * renders a bare column name, which a correlated subquery would resolve
- * against its own table: `"agent_id" = "id"` compares two `mcp_tool_calls`
- * columns instead of reaching out to `agents`.
- */
-function qualified(column: AnyPgColumn): SQL {
-  return sql`${sql.identifier(getTableName(column.table))}.${sql.identifier(column.name)}`;
-}
 
 /** Shared by the startup preflight and the per-member creation guard. */
 function personalChatAgentConditions(params: {

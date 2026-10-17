@@ -4,20 +4,18 @@ import {
   count,
   desc,
   eq,
-  getTableName,
   ilike,
   inArray,
   isNotNull,
   not,
   notInArray,
   or,
-  type SQL,
   sql,
 } from "drizzle-orm";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
+import { qualified } from "@/database/utils/qualified-column";
 import type {
   InsertKnowledgeBase,
   KnowledgeBase,
@@ -476,19 +474,18 @@ class KnowledgeBaseModel {
   }
 
   /**
-   * Everything the list shows beside each knowledge base's own row, in ONE
+   * Everything the list shows besides each knowledge base's own row, in one
    * statement over the page's ids: its creator, the connectors the viewer can
    * see, its document total, the live agents in its organization assigned to
    * it, and its labels.
    *
-   * The document total is the sum over every assigned connector, soft-deleted
-   * and unseen ones included, of its stored total, or of a live count for a
-   * connector never counted. Those live counts come back in `firstCounts` for
-   * the caller to store, as KbConnectorDocumentCountModel.findByConnectorIds
-   * does. `identityOnly` (the trash view) reads the creator alone.
+   * The document total sums every assigned connector, soft-deleted and unseen
+   * ones included. A connector gives its stored total, or a live count when
+   * it has none. The live counts come back in `firstCounts` for the caller to
+   * store, as KbConnectorDocumentCountModel.findByConnectorIds does.
+   * `identityOnly` (the trash view) reads the creator alone.
    *
-   * Connectors come by name and agents in assignment order; the batch reads
-   * this replaced left both orders to the plan.
+   * Connectors come by name, agents in assignment order.
    */
   static async findListEnrichment(params: {
     knowledgeBaseIds: string[];
@@ -697,15 +694,6 @@ function ownAudienceContext(organizationId: string) {
     scopeColumn: schema.knowledgeBasesTable.id,
     ownerColumn: schema.knowledgeBasesTable.createdBy,
   };
-}
-
-/**
- * A column with its table's name, for subselects correlated to the outer
- * `knowledge_bases` row: a single-table select renders its own columns bare,
- * which would bind to the subselect's tables instead.
- */
-function qualified(column: AnyPgColumn): SQL {
-  return sql`${sql.identifier(getTableName(column.table))}.${sql.identifier(column.name)}`;
 }
 
 type KnowledgeBaseListEnrichment = {

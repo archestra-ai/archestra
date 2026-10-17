@@ -10,7 +10,8 @@ export const authPlugin = fp(async (app: FastifyInstance) => {
   app.decorateRequest("user");
   app.decorateRequest("organizationId");
 
-  // Reads share one caller lookup across middleware, route and models.
+  // Bind the request scope, so a read resolves the caller once for the
+  // middleware, the route and the models.
   app.addHook("onRequest", (request, _reply, done) => {
     requestScope.enter({ memoize: shouldShareCallerLookups(request) });
     done();

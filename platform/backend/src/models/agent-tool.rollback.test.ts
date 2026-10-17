@@ -177,7 +177,7 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
     ]);
   });
 
-  test("returns each agent's full usage entry once per server, pinned first, without deleted agents", async ({
+  test("returns each agent's full usage entry once per server, pinned over unpinned, without deleted agents", async ({
     makeAgent,
     makeUser,
     makeTool,

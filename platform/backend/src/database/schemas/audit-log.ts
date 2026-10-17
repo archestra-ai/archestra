@@ -87,8 +87,9 @@ const auditLogsTable = pgTable(
       table.resourceType,
       table.resourceId,
     ),
-    // The resource picker's options: each resource's latest name, read as an
-    // index-only scan. The actor is kept for callers scoped to their own events.
+    // The resource picker's option list: each resource's latest name, read as
+    // an index-only scan. The actor is kept for callers scoped to their own
+    // events.
     index("audit_logs_org_resource_latest_idx")
       .on(
         table.organizationId,
@@ -100,8 +101,8 @@ const auditLogsTable = pgTable(
         table.actorId,
       )
       .where(sql`${table.resourceId} IS NOT NULL`),
-    // resourceId filter without a resourceType (the UI's resource picker) — the
-    // index above can't serve it past the org prefix.
+    // resourceId filter without a resourceType (the UI's resource picker) —
+    // audit_logs_org_resource_idx can't serve it past the org prefix.
     index("audit_logs_org_resource_id_created_at_idx").on(
       table.organizationId,
       table.resourceId,

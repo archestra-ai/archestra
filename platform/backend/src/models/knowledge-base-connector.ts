@@ -317,9 +317,9 @@ class KnowledgeBaseConnectorModel {
   }
 
   /**
-   * The viewer's reach over `knowledge_base_connectors` that
-   * findByKnowledgeBaseIds applies, for a statement that embeds the same
-   * filter. Undefined when it filters nothing.
+   * The viewer's read reach over `knowledge_base_connectors`, as
+   * findByKnowledgeBaseIds applies it without a `visibilityScope`, for a
+   * statement that embeds the same filter. Undefined when it filters nothing.
    */
   static async visibilityCondition(params: {
     canReadAll?: boolean;

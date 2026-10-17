@@ -447,14 +447,14 @@ describe("KnowledgeBaseModel", () => {
           null,
         ),
       });
-      const later = await makeAgent({ organizationId: org.id, name: "Later" });
-      const earlier = await makeAgent({
+      const first = await makeAgent({ organizationId: org.id, name: "First" });
+      const second = await makeAgent({
         organizationId: org.id,
-        name: "Earlier",
+        name: "Second",
       });
       const removed = await makeAgent({ organizationId: org.id });
       const elsewhere = await makeAgent({ organizationId: otherOrg.id });
-      for (const agent of [earlier, later, removed, elsewhere]) {
+      for (const agent of [first, second, removed, elsewhere]) {
         await AgentKnowledgeBaseModel.assign(agent.id, byUser.id);
       }
       await AgentModel.delete(removed.id);
@@ -471,12 +471,13 @@ describe("KnowledgeBaseModel", () => {
         ...(await memberReach(viewerUser.id, org.id)),
       });
 
-      // One transaction stamps every assignment alike, so no order to assert.
+      // The test transaction gives every assignment the same created_at, so
+      // the order is not asserted.
       expect(byId.get(byUser.id)?.assignedAgents).toHaveLength(2);
       expect(byId.get(byUser.id)?.assignedAgents).toEqual(
         expect.arrayContaining([
-          { id: earlier.id, name: "Earlier", agentType: earlier.agentType },
-          { id: later.id, name: "Later", agentType: later.agentType },
+          { id: first.id, name: "First", agentType: first.agentType },
+          { id: second.id, name: "Second", agentType: second.agentType },
         ]),
       );
       expect(byId.get(byUser.id)?.labels.map((l) => l.key)).toEqual([

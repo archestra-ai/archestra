@@ -17,7 +17,7 @@ export interface SkillPermissionChecker {
   canRead: boolean;
   /** Holds `update` on every skill — a grant at `*` scope. */
   isAdmin: boolean;
-  /** The caller's skill grants, for callers that check more than one skill. */
+  /** The caller's skill grants, for other checks in the same request to reuse. */
   grants: ScopedPermission[];
 }
 

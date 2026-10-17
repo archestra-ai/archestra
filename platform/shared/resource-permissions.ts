@@ -75,9 +75,10 @@ export const ResourcePermissionScopeSchema = z.union([
 
 /**
  * Plain-function forms of {@link ManagedResourceSchema} and
- * {@link ResourcePermissionScopeSchema}, for loops over every policy a caller
- * holds, where a schema parse per row adds up. The scope pattern is the RFC
- * 9562 form `z.string().uuid()` accepts, plus the nil and max ids.
+ * {@link ResourcePermissionScopeSchema}. Loops over every policy a caller
+ * holds use them, because a schema parse per row is slow. The scope pattern
+ * is the RFC 9562 form that `z.string().uuid()` accepts, plus the nil and
+ * max ids.
  */
 export function isManagedResource(
   value: string,

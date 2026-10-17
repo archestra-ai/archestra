@@ -1999,7 +1999,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  // Every choice on the chooser, connecting an external agent included, creates
+  // an agent.
+  "/agents/new": { agent: ["create"] },
   "/agents/a2a": { agent: ["read"] },
+  "/agents/a2a/new": { agent: ["read"] },
+  "/agents/a2a/[id]": { agent: ["read"] },
   "/messaging-channels": { organizationSettings: ["read"] },
   "/messaging-channels/slack": { organizationSettings: ["read"] },
   "/messaging-channels/ms-teams": { organizationSettings: ["read"] },

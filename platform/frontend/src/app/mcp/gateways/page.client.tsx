@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  DEFAULT_RESOURCE_ACCESS_RELATIONS,
-  E2eTestId,
-} from "@archestra/shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -96,20 +92,11 @@ import {
 import { gatewaySubagentNames, gatewayToolNames } from "./gateway-tools";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
-type McpGatewaysInitialData = {
-  agents: archestraApiTypes.GetAgentsResponses["200"] | null;
-  pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
-};
-
-export default function McpGatewaysPage({
-  initialData,
-}: {
-  initialData?: McpGatewaysInitialData;
-}) {
+export default function McpGatewaysPage() {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
-        <McpGateways initialData={initialData} />
+        <McpGateways />
       </ErrorBoundary>
     </div>
   );
@@ -138,11 +125,7 @@ function SortIcon({
   );
 }
 
-function McpGateways({
-  initialData,
-}: {
-  initialData?: McpGatewaysInitialData;
-}) {
+function McpGateways() {
   const docsUrl = getFrontendDocsUrl("mcp/gateway");
   const {
     searchParams,
@@ -252,9 +235,9 @@ function McpGateways({
   } = useProfilesPaginated({
     limit: pageSize,
     offset,
-    initialData: initialData?.agents ?? undefined,
-    initialDataPinned: false,
-    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+    // Asked for once the pins are known, so the personal gateway is never
+    // drawn as a row and the first page is not fetched twice.
+    enabled: isDeletedView || !isAutoPinnedLoading,
     ...listFilters,
     pinned: isDeletedView ? undefined : false,
     ...listExclusions,
@@ -268,10 +251,6 @@ function McpGateways({
   } = useProfilesPaginated({
     limit: 100,
     offset: 0,
-    initialData: initialData?.pinnedAgents ?? undefined,
-    initialDataPinned: true,
-    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
-    initialDataLimit: 100,
     enabled: !isDeletedView,
     ...listFilters,
     status: undefined,
@@ -865,7 +844,10 @@ function McpGateways({
                     />
                     {renderGatewayTable()}
                   </section>
-                ) : isAutoPinnedLoading ? null : unpinnedAgents.length > 0 ||
+                ) : isAutoPinnedLoading ||
+                  unpinnedAgents.length > 0 ||
+                  // While the list loads, often after its pins, the table
+                  // holds its place rather than appearing a moment later.
                   isPending ||
                   (pinnedAgents.length === 0 &&
                     pageAgents.length === 0 &&

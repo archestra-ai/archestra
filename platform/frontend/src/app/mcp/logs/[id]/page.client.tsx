@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ToolCallOutcomeNotice } from "@/components/log-detail/tool-call-outcome-notice";
@@ -20,21 +19,11 @@ import {
   ToolCallIdentityLine,
 } from "./_parts/tool-call-header";
 
-type McpToolCallRecord = archestraApiTypes.GetMcpToolCallResponses["200"];
-
-export function McpToolCallDetailPage({
-  initialData,
-  id,
-}: {
-  initialData?: {
-    mcpToolCall: McpToolCallRecord | undefined;
-  };
-  id: string;
-}) {
+export function McpToolCallDetailPage({ id }: { id: string }) {
   return (
     <ErrorBoundary>
       <TooltipProvider delayDuration={150}>
-        <McpToolCallDetail initialData={initialData} id={id} />
+        <McpToolCallDetail id={id} />
       </TooltipProvider>
     </ErrorBoundary>
   );
@@ -50,24 +39,13 @@ export function McpToolCallDetailPage({
  * session page's own request list, trimmed to the records on either side of
  * this call, with its details pane open on the call.
  */
-function McpToolCallDetail({
-  initialData,
-  id,
-}: {
-  initialData?: {
-    mcpToolCall: McpToolCallRecord | undefined;
-  };
-  id: string;
-}) {
+function McpToolCallDetail({ id }: { id: string }) {
   const {
     data: mcpToolCall,
     isPending,
     isLoadingError,
     refetch,
-  } = useMcpToolCall({
-    mcpToolCallId: id,
-    initialData: initialData?.mcpToolCall,
-  });
+  } = useMcpToolCall({ mcpToolCallId: id });
   const { displayByName } = useMcpServerDisplayByName();
 
   const { data: agents } = useAgentOptionsByIds({

@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { MessagesSquare } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -36,29 +35,17 @@ import type { McpToolCallRow } from "./_parts/types";
 
 type McpToolCallData = McpToolCallRow;
 
-export default function McpGatewayLogsPage({
-  initialData,
-}: {
-  initialData?: {
-    mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-  };
-}) {
+export default function McpGatewayLogsPage() {
   return (
     <div>
       <ErrorBoundary>
-        <McpToolCallsTable initialData={initialData} />
+        <McpToolCallsTable />
       </ErrorBoundary>
     </div>
   );
 }
 
-function McpToolCallsTable({
-  initialData,
-}: {
-  initialData?: {
-    mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-  };
-}) {
+function McpToolCallsTable() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -197,7 +184,6 @@ function McpToolCallsTable({
     cursor: cursorPagination.cursor,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    initialData: initialData?.mcpToolCalls,
   });
 
   const { servers: mcpServers, displayByName: serverDisplayByName } =

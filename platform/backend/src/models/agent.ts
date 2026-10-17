@@ -5936,6 +5936,7 @@ function catalogAccessCandidateIds(params: {
       FROM resource_permission_policies access_policy
       WHERE access_policy.organization_id = ${params.organizationId}
         AND access_policy.resource = 'agent'
+        AND access_policy.scope <> '*'
         AND access_policy.grants @> ANY(ARRAY[${sql.join(patterns, sql`, `)}]::jsonb[])`);
   }
   if (params.includeBuiltIn)

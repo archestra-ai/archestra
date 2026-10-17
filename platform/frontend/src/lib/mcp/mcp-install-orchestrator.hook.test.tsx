@@ -24,22 +24,33 @@ const {
   setOAuthTeamIdMock: vi.fn(),
 }));
 
+const { catalogQueryMock, serversQueryMock } = vi.hoisted(() => ({
+  // Like the real queries, nothing is returned while a query is disabled.
+  catalogQueryMock: vi.fn((params?: { enabled?: boolean }) => ({
+    data:
+      params?.enabled === false
+        ? undefined
+        : [
+            {
+              id: "catalog-posthog",
+              name: "PostHog",
+              serverType: "remote",
+              oauthConfig: { clientId: "client-123" },
+            },
+          ],
+  })),
+  serversQueryMock: vi.fn((params?: { enabled?: boolean }) => ({
+    data: params?.enabled === false ? undefined : [],
+  })),
+}));
+
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: () => ({
-    data: [
-      {
-        id: "catalog-posthog",
-        name: "PostHog",
-        serverType: "remote",
-        oauthConfig: { clientId: "client-123" },
-      },
-    ],
-  }),
+  useInternalMcpCatalog: catalogQueryMock,
 }));
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
-  useMcpServers: () => ({ data: [] }),
+  useMcpServers: serversQueryMock,
   useInstallMcpServer: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useReauthenticateMcpServer: () => ({
     mutateAsync: vi.fn(),
@@ -95,6 +106,21 @@ describe("useMcpInstallOrchestrator", () => {
       authorizationUrl: "https://posthog.example.com/oauth/authorize",
       state: "oauth-state-123",
     });
+  });
+
+  it("loads nothing while disabled, and a trigger loads the catalog and then runs", async () => {
+    const { result } = renderHook(() =>
+      useMcpInstallOrchestrator({ enabled: false }),
+    );
+    expect(catalogQueryMock).toHaveBeenLastCalledWith({ enabled: false });
+    expect(serversQueryMock).toHaveBeenLastCalledWith({ enabled: false });
+
+    act(() => {
+      result.current.triggerInstallByCatalogId("catalog-posthog");
+    });
+
+    expect(catalogQueryMock).toHaveBeenLastCalledWith({ enabled: true });
+    await waitFor(() => expect(openDialogMock).toHaveBeenCalledTimes(1));
   });
 
   it("starts OAuth immediately for pure OAuth re-authentication", async () => {

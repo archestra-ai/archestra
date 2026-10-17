@@ -4566,6 +4566,23 @@ describe("mcp server core route coverage", () => {
         listed.assignedAgents.map((a: { name: string }) => a.name).sort(),
       ).toEqual(["Mine", "Shared"]);
 
+      // Visibility is checked for the agents the response names, never by
+      // listing every agent the member can reach; a status-only list names
+      // none and checks nothing.
+      const { default: AgentModel } = await import("@/models/agent");
+      const accessibleIds = vi.spyOn(AgentModel, "findAccessibleIdsForUser");
+      await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=false",
+      });
+      expect(accessibleIds).not.toHaveBeenCalled();
+      await app.inject({ method: "GET", url: "/api/mcp_server" });
+      expect(accessibleIds).toHaveBeenCalledTimes(1);
+      expect(
+        [...(accessibleIds.mock.calls[0]?.[3]?.among ?? [])].sort(),
+      ).toEqual(agents.map((agent) => agent.id).sort());
+      accessibleIds.mockRestore();
+
       const single = await app.inject({
         method: "GET",
         url: `/api/mcp_server/${server.id}`,

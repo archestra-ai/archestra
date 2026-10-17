@@ -2943,7 +2943,12 @@ class AgentModel {
     userId: string,
     isAgentAdmin = false,
     principals?: GrantPrincipal[],
+    options?: {
+      /** Only check these agents, rather than list every one the user reaches. */
+      among?: string[];
+    },
   ): Promise<string[]> {
+    if (options?.among?.length === 0) return [];
     const readers =
       principals ??
       (await ResourcePermissionSubjectModel.resolvePrincipals({ userId }));
@@ -2951,6 +2956,7 @@ class AgentModel {
       userId,
       isAgentAdmin,
       principals: readers,
+      among: options?.among,
     });
 
     return rows.map((row) => row.id);
@@ -5650,6 +5656,7 @@ function accessibleAgentIdsQuery(params: {
   userId: string;
   isAgentAdmin: boolean;
   principals: GrantPrincipal[];
+  among?: string[];
 }) {
   return db
     .select({ id: schema.agentsTable.id })
@@ -5657,6 +5664,7 @@ function accessibleAgentIdsQuery(params: {
     .where(
       and(
         notDeleted(schema.agentsTable),
+        params.among ? inArray(schema.agentsTable.id, params.among) : undefined,
         or(
           explicitAgentReadCondition(params.principals),
           params.isAgentAdmin ? sql`true` : undefined,

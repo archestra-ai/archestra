@@ -267,12 +267,16 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: () => ({ data: [] }),
 }));
 
-vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
-  useMcpInstallOrchestrator: () => ({
+const { mockUseMcpInstallOrchestrator } = vi.hoisted(() => ({
+  mockUseMcpInstallOrchestrator: vi.fn((_options?: { enabled?: boolean }) => ({
     triggerInstallByCatalogId: vi.fn(),
     triggerReauthByCatalogIdAndServerId: vi.fn(),
     connectedCatalogIds: new Set<string>(),
-  }),
+  })),
+}));
+
+vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
+  useMcpInstallOrchestrator: mockUseMcpInstallOrchestrator,
 }));
 
 vi.mock("@/lib/organization.query");
@@ -1518,6 +1522,46 @@ describe("ChatMessages", () => {
     expect(
       screen.queryByText(/To re-authenticate, visit this URL:/),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads the MCP install helper only once the transcript shows an auth prompt", () => {
+    const plain = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Here is the summary you asked for." }],
+      },
+    ] as UIMessage[];
+    const { rerender } = render(
+      <ChatMessages conversationId="conv-1" messages={plain} status="ready" />,
+    );
+    expect(mockUseMcpInstallOrchestrator).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+
+    const withPrompt = [
+      ...plain,
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: 'Authentication required for "jwks demo".\n\nNo credentials were found for your account (user: usr_123).\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_abc',
+          },
+        ],
+      },
+    ] as UIMessage[];
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={withPrompt}
+        status="ready"
+      />,
+    );
+    expect(mockUseMcpInstallOrchestrator).toHaveBeenLastCalledWith({
+      enabled: true,
+    });
   });
 
   it("renders assistant auth-required text as the inline install tool UI", () => {

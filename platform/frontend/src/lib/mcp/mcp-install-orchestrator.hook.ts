@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { LocalServerInstallResult } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
@@ -41,13 +41,22 @@ type DialogKey =
   | "no-auth"
   | "manage";
 
+/**
+ * @param options.enabled Whether to load the catalog and installed servers up
+ *   front. Disabled callers still work: the first install or re-auth trigger
+ *   loads them and then runs.
+ */
 export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
-  const { data: catalogItems } = useInternalMcpCatalog({
-    enabled: options?.enabled,
-  });
-  const { data: installedServers } = useMcpServers({
-    enabled: options?.enabled,
-  });
+  // A trigger fired before the data loaded, kept until the catalog arrives.
+  const [pendingTrigger, setPendingTrigger] = useState<
+    | { kind: "install"; catalogId: string }
+    | { kind: "reauth"; catalogId: string; serverId: string }
+    | null
+  >(null);
+  const [demanded, setDemanded] = useState(false);
+  const enabled = (options?.enabled ?? true) || demanded;
+  const { data: catalogItems } = useInternalMcpCatalog({ enabled });
+  const { data: installedServers } = useMcpServers({ enabled });
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
@@ -397,10 +406,50 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
     setManageCatalogId(null);
   }, [closeDialog]);
 
-  return {
-    // Public API
+  const triggerInstall = useCallback(
+    (catalogId: string) => {
+      if (!catalogItems) {
+        setDemanded(true);
+        setPendingTrigger({ kind: "install", catalogId });
+        return;
+      }
+      triggerInstallByCatalogId(catalogId);
+    },
+    [catalogItems, triggerInstallByCatalogId],
+  );
+  const triggerReauth = useCallback(
+    (catalogId: string, serverId: string) => {
+      if (!catalogItems) {
+        setDemanded(true);
+        setPendingTrigger({ kind: "reauth", catalogId, serverId });
+        return;
+      }
+      triggerReauthByCatalogIdAndServerId(catalogId, serverId);
+    },
+    [catalogItems, triggerReauthByCatalogIdAndServerId],
+  );
+  useEffect(() => {
+    if (!pendingTrigger || !catalogItems) return;
+    setPendingTrigger(null);
+    if (pendingTrigger.kind === "install") {
+      triggerInstallByCatalogId(pendingTrigger.catalogId);
+    } else {
+      triggerReauthByCatalogIdAndServerId(
+        pendingTrigger.catalogId,
+        pendingTrigger.serverId,
+      );
+    }
+  }, [
+    pendingTrigger,
+    catalogItems,
     triggerInstallByCatalogId,
     triggerReauthByCatalogIdAndServerId,
+  ]);
+
+  return {
+    // Public API
+    triggerInstallByCatalogId: triggerInstall,
+    triggerReauthByCatalogIdAndServerId: triggerReauth,
     connectedCatalogIds,
 
     // Dialog state (for rendering)

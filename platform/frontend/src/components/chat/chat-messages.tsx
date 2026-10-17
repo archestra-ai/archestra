@@ -285,7 +285,20 @@ export function ChatMessages({
   const { data: organization } = useOrganization();
   const appIconLogo = useAppIconLogo();
   const { getToolName, getToolShortName } = useArchestraMcpIdentity();
-  const orchestrator = useMcpInstallOrchestrator();
+  // The install helper loads the registry catalog and the installed servers,
+  // which only an auth prompt in the transcript reads. Once one has appeared
+  // it stays loaded, so the prompt can flip to connected.
+  const transcriptHasAuthPrompt = useMemo(
+    () => messages.some(messageHasAuthPrompt),
+    [messages],
+  );
+  const [installHelperNeeded, setInstallHelperNeeded] = useState(false);
+  if (transcriptHasAuthPrompt && !installHelperNeeded) {
+    setInstallHelperNeeded(true);
+  }
+  const orchestrator = useMcpInstallOrchestrator({
+    enabled: installHelperNeeded,
+  });
   const nonCompactToolNames = useMemo(
     () =>
       new Set([
@@ -2523,6 +2536,18 @@ function renderAssistantAuthPart(params: {
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
   return renderToolAuthPart(params);
+}
+
+/** Whether a message renders an install or re-auth prompt. */
+function messageHasAuthPrompt(message: UIMessage): boolean {
+  return (
+    hasMessageAuthToolError(message) ||
+    (message.role === "assistant" &&
+      (message.parts ?? []).some(
+        (part) =>
+          part.type === "text" && !!resolveAssistantTextAuthState(part.text),
+      ))
+  );
 }
 
 function hasMessageAuthToolError(message: UIMessage): boolean {

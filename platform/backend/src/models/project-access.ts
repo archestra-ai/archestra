@@ -116,15 +116,15 @@ class ProjectAccessModel {
     offset?: number;
   }): Promise<{ rows: ProjectListCandidate[]; total: number }> {
     const table = schema.projectsTable;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const visibility = ResourcePermissionPolicyModel.sharedAudience({
       organizationId: table.organizationId,
       resource: "project",
       scopeColumn: table.id,
       ownerColumn: table.userId,
     });
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const accessible = ResourcePermissionPolicyModel.grantCondition({
       ...params.principal,
       resource: "project",
@@ -140,6 +140,14 @@ class ProjectAccessModel {
           userId: params.userId,
           subjects: params.principal.subjects,
           ...params.access,
+        })
+      : undefined;
+    const sharedWithTeams = params.teamIds?.length
+      ? ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+          organizationId: params.organizationId,
+          resource: "project",
+          scopeColumn: table.id,
+          teamIds: params.teamIds,
         })
       : undefined;
     // SPDX-SnippetEnd
@@ -164,14 +172,7 @@ class ProjectAccessModel {
             ? sql`${visibility} = 'organization'`
             : undefined,
       accessRelations,
-      params.teamIds?.length
-        ? ResourcePermissionPolicyModel.grantsReadToAnyTeam({
-            organizationId: params.organizationId,
-            resource: "project",
-            scopeColumn: table.id,
-            teamIds: params.teamIds,
-          })
-        : undefined,
+      sharedWithTeams,
       params.authorIds?.length
         ? inArray(table.userId, params.authorIds)
         : undefined,

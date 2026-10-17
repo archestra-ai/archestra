@@ -71,12 +71,20 @@ export function proxy(req: NextRequest) {
   return NextResponse.next({ request: { headers } });
 }
 
-/** A full document load of a page whose rows are server-rendered. */
+/**
+ * A full document load (or refresh) of a page whose rows are server-rendered.
+ * Next removes the router's flight headers (`rsc` and the like) before the
+ * proxy runs, so a client navigation or route prefetch looks like any other
+ * GET here. Fetch Metadata tells them apart: the browser sends
+ * `Sec-Fetch-Dest: document` only for top-level document loads (router
+ * fetches carry `empty`), and page scripts cannot set it. A browser without
+ * Fetch Metadata gets no seed and loads its first page itself.
+ */
 function rendersFirstPageOnServer(req: NextRequest) {
   return (
     req.method === "GET" &&
     isShellSeedRoute(req.nextUrl.pathname) &&
-    req.headers.get("rsc") !== "1"
+    req.headers.get("sec-fetch-dest") === "document"
   );
 }
 

@@ -67,10 +67,21 @@ describe("proxy", () => {
   describe("server-rendered first page marker", () => {
     const forwarded = (response: Response) =>
       response.headers.get("x-middleware-request-x-archestra-shell-seed");
+    // The request headers the proxy hands on; a stripped header is missing.
+    const handedOn = (response: Response) =>
+      (response.headers.get("x-middleware-override-headers") ?? "").split(",");
+    const documentLoad = { "sec-fetch-dest": "document" };
 
     it("marks a document load of the registry list", () => {
       expect(
-        forwarded(proxy(createMockRequest({ url: "/mcp/registry?page=2" }))),
+        forwarded(
+          proxy(
+            createMockRequest({
+              url: "/mcp/registry?page=2",
+              headers: documentLoad,
+            }),
+          ),
+        ),
       ).toBe("/mcp/registry");
     });
 
@@ -79,40 +90,77 @@ describe("proxy", () => {
       routes.push("/mcp/gateways");
       try {
         expect(
-          forwarded(proxy(createMockRequest({ url: "/mcp/gateways" }))),
+          forwarded(
+            proxy(
+              createMockRequest({
+                url: "/mcp/gateways",
+                headers: documentLoad,
+              }),
+            ),
+          ),
         ).toBe("/mcp/gateways");
         expect(
-          forwarded(proxy(createMockRequest({ url: "/agents" }))),
+          forwarded(
+            proxy(createMockRequest({ url: "/agents", headers: documentLoad })),
+          ),
         ).toBeNull();
       } finally {
         routes.pop();
       }
       expect(
-        forwarded(proxy(createMockRequest({ url: "/mcp/gateways" }))),
+        forwarded(
+          proxy(
+            createMockRequest({ url: "/mcp/gateways", headers: documentLoad }),
+          ),
+        ),
       ).toBeNull();
     });
 
-    it("does not mark client navigations, other pages, or trust a client's header", () => {
+    it("does not mark a client navigation or route prefetch", () => {
+      // What the proxy sees of a router fetch: Next has already removed the
+      // flight headers, and the browser marks the fetch as not a document.
+      const response = proxy(
+        createMockRequest({
+          url: "/mcp/registry",
+          headers: {
+            "sec-fetch-dest": "empty",
+            "x-archestra-shell-seed": "/mcp/registry",
+          },
+        }),
+      );
+
+      expect(forwarded(response)).toBeNull();
+      expect(handedOn(response)).not.toContain("x-archestra-shell-seed");
+    });
+
+    it("does not mark a request without Fetch Metadata", () => {
       expect(
-        forwarded(
-          proxy(
-            createMockRequest({
-              url: "/mcp/registry",
-              headers: { rsc: "1" },
-            }),
-          ),
-        ),
+        forwarded(proxy(createMockRequest({ url: "/mcp/registry" }))),
       ).toBeNull();
-      expect(
-        forwarded(
-          proxy(
-            createMockRequest({
-              url: "/agents",
-              headers: { "x-archestra-shell-seed": "1" },
-            }),
-          ),
-        ),
-      ).toBeNull();
+    });
+
+    it("never hands on a client's own marker", () => {
+      for (const request of [
+        { url: "/mcp/registry", headers: documentLoad },
+        { url: "/mcp/registry", headers: { "sec-fetch-dest": "empty" } },
+        { url: "/agents", headers: documentLoad },
+        { url: "/agents", headers: {} },
+      ]) {
+        const response = proxy(
+          createMockRequest({
+            url: request.url,
+            headers: {
+              ...request.headers,
+              "x-archestra-shell-seed": "/forged",
+            },
+          }),
+        );
+
+        expect(forwarded(response)).not.toBe("/forged");
+        if (request.url === "/agents") {
+          expect(handedOn(response)).not.toContain("x-archestra-shell-seed");
+        }
+      }
     });
   });
 

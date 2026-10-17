@@ -240,7 +240,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, body, organizationId, headers, user }, reply) => {
       // Verify the team exists and belongs to the user's organization
-      const existingTeam = await TeamModel.findById(id);
+      const existingTeam = await TeamModel.findById(id, {
+        includeMembers: false,
+      });
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -365,7 +367,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, headers }, reply) => {
       // Verify the team exists and belongs to the user's organization
-      const existingTeam = await TeamModel.findById(id);
+      const existingTeam = await TeamModel.findById(id, {
+        includeMembers: false,
+      });
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -711,7 +715,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(id);
+      const team = await TeamModel.findById(id, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -774,7 +778,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(id);
+      const team = await TeamModel.findById(id, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -839,7 +843,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(id);
+      const team = await TeamModel.findById(id, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }

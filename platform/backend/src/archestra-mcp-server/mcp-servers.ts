@@ -1925,7 +1925,7 @@ async function authorizeDeployScope(params: {
   }
 
   if (scope === "team" && teamId) {
-    const team = await TeamModel.findById(teamId);
+    const team = await TeamModel.findById(teamId, { includeMembers: false });
     if (!team) {
       return "Team not found.";
     }

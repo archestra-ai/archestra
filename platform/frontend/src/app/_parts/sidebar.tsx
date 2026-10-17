@@ -33,6 +33,7 @@ import {
   type NavGroup,
   type NavItem,
 } from "@/app/_parts/studio-nav";
+import { preloadAgentsPage } from "@/app/agents/preload";
 import { AppLogo } from "@/components/app-logo";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { OnboardingDot } from "@/components/onboarding-dot";
@@ -763,6 +764,10 @@ function SidebarPrefetchLink(
         // Route prefetch doesn't mount client query hooks. Start the matching
         // first page alongside it, not after the destination's JavaScript loads.
         if (href === "/apps") void prefetchApps(queryClient);
+        // The route prefetch stops at the Agents page's loading boundary;
+        // load its code as well. Its data streams from the server on the
+        // click, so nothing is fetched for it here.
+        if (href === "/agents") preloadAgentsPage();
       }}
     />
   );

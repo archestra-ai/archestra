@@ -273,6 +273,8 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
         sessionId: session.session_id,
         superyell: breakTheGlass,
         withTrajectory: true,
+        reportFailed: false,
+        reportedAt: null,
       }),
     ]);
     expect(native.dispatchHook).not.toHaveBeenCalled();

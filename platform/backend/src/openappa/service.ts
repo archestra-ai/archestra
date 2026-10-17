@@ -365,6 +365,7 @@ export async function executeYell(params: {
     if (params.needsAdmission) {
       // Opening a native session just to report would enroll a session that
       // started outside enforcement. Keep its feedback locally without doing so.
+      // No archive is sent, so there is no delivery attempt to record.
       if (await startedUnenforced(params.session)) {
         return {
           content: [

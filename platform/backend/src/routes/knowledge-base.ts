@@ -3806,7 +3806,11 @@ function assignedAgentFields(assigned: AssignedAgents, rowId: string) {
   };
 }
 
-/** The page a list reads: the requested one, or all of `ids` at once. */
+/**
+ * The page a list reads: the requested one, or all of `ids` at once. An empty
+ * `ids` keeps a limit of 1 because the page metadata divides by the limit and
+ * must report at least 1; the id filter already returns no rows.
+ */
 function listPage(params: {
   ids: string[] | undefined;
   limit: number;

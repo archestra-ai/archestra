@@ -10,8 +10,9 @@ import {
 } from "@/plugins/delivery-budget";
 import type {
   MarketplaceRepoRef,
+  ReplayRevision,
+  RevisionHead,
   RevisionPayloadFile,
-  SkillShareLinkRevision,
 } from "@/types/skill-share-link-revision";
 import { computeLayout, type MaterializeRequest } from "./layout";
 
@@ -23,6 +24,13 @@ import { computeLayout, type MaterializeRequest } from "./layout";
  * the clone.
  */
 const REVISION_APPEND_MAX_ATTEMPTS = 5;
+
+/**
+ * How many first-parent disk commits to search for a stored base. A replica
+ * that is merely behind matches at HEAD; a lost append race leaves one orphan
+ * on top. Anything deeper falls back to a full rebuild.
+ */
+const INCREMENTAL_BASE_SEARCH_DEPTH = 8;
 
 /**
  * Materializes a marketplace git repository on disk, backed by an append-only
@@ -160,7 +168,7 @@ export class MarketplaceMaterializer {
     if (deliveryError) throw new Error(deliveryError);
     const repoPath = this.repoPathFor(req.ref);
 
-    let latest = await SkillShareLinkRevisionModel.getLatest(req.ref);
+    let latest = await SkillShareLinkRevisionModel.getLatestHead(req.ref);
 
     for (let attempt = 0; ; attempt++) {
       const currentSequence = latest?.sequence ?? 0;
@@ -168,7 +176,7 @@ export class MarketplaceMaterializer {
       const currentContentHash = computeContentHash(currentFiles);
 
       if (latest && latest.contentHash === currentContentHash) {
-        await this.syncDiskToRevisions(req.ref, latest.commitSha);
+        await this.syncDiskToRevisions(req.ref, latest);
         return {
           repoPath,
           commitHash: latest.commitSha,
@@ -180,7 +188,7 @@ export class MarketplaceMaterializer {
       const sequence = currentSequence + 1;
       const files = computeLayout(req, sequence);
       const contentHash = computeContentHash(files);
-      await this.syncDiskToRevisions(req.ref, latest?.commitSha ?? null);
+      await this.syncDiskToRevisions(req.ref, latest);
 
       const createdAt = roundToSeconds(new Date());
       const message = formatMessage(sequence, contentHash);
@@ -219,7 +227,7 @@ export class MarketplaceMaterializer {
         // rerender against its sequence. If the winner carried different
         // source bytes, this request is stale and must never append on top of
         // it (that would roll the marketplace back at a higher version).
-        latest = await SkillShareLinkRevisionModel.getLatest(req.ref);
+        latest = await SkillShareLinkRevisionModel.getLatestHead(req.ref);
         if (!latest) throw new MarketplaceMaterializationConflictError();
         const rerenderedHash = computeContentHash(
           computeLayout(req, latest.sequence),
@@ -233,14 +241,14 @@ export class MarketplaceMaterializer {
 
   private async syncDiskToRevisions(
     ref: MarketplaceRepoRef,
-    expectedHead: string | null,
+    expectedHead: RevisionHead | null,
   ): Promise<void> {
     const repoPath = this.repoPathFor(ref);
 
     // every git request of a clone lands here; only load the full revision
     // history (all file payloads) when the disk actually needs a replay
     const diskHead = await this.readDiskHead(repoPath);
-    if (diskHead === expectedHead) {
+    if (diskHead === (expectedHead?.commitSha ?? null)) {
       // already in sync — but a brand-new repo still needs `.git` initialized
       // so the upcoming commit has somewhere to land
       if (expectedHead === null) await this.initEmptyRepo(repoPath);
@@ -294,59 +302,72 @@ export class MarketplaceMaterializer {
 
   /**
    * Commit SHAs are deterministic over the whole parent chain, so a disk commit
-   * equal to a stored `commitSha` proves the disk history up to it matches the
-   * stored chain. Rewind `main` to the newest such commit (HEAD itself when this
-   * replica is merely behind; its parent when a lost append left an orphan) and
-   * replay only the newer revisions. Returns a reason string when the disk can't
+   * equal to the stored `commitSha` at its sequence proves the disk history up
+   * to it matches the stored chain. Rewind `main` to the newest such commit
+   * (HEAD itself when this replica is merely behind; its parent when a lost
+   * append left an orphan) and replay only the newer revisions. Our commit
+   * subjects (`Snapshot <n>`) only choose which stored rows to compare against;
+   * SHA equality stays the proof. Returns a reason string when the disk can't
    * be caught up this way and the caller should rebuild from scratch.
    */
   private async replayIncremental(params: {
     ref: MarketplaceRepoRef;
     repoPath: string;
-    expectedHead: string;
+    expectedHead: RevisionHead;
   }): Promise<{ baseSequence: number; replayed: number } | string> {
     const { ref, repoPath, expectedHead } = params;
-    const index = await SkillShareLinkRevisionModel.listCommitIndex(ref);
-    const sequenceBySha = new Map(
-      index.map((rev) => [rev.commitSha, rev.sequence]),
-    );
-    const expectedSequence = sequenceBySha.get(expectedHead);
-    if (expectedSequence === undefined) {
-      return "expected head is not in the stored chain";
-    }
-
-    const history = await runGit({
+    const recent = await runGit({
       binary: this.gitBinaryPath,
       cwd: repoPath,
-      args: ["rev-list", "--first-parent", "HEAD"],
+      args: [
+        "log",
+        "--first-parent",
+        `--max-count=${INCREMENTAL_BASE_SEARCH_DEPTH}`,
+        "--format=%H%x09%s",
+        "HEAD",
+      ],
     });
-    const base = history.stdout
+    const candidates = recent.stdout
       .split("\n")
-      .map((line) => line.trim())
-      .find((sha) => sequenceBySha.has(sha));
-    if (!base) return "no stored commit in the disk history";
-    const baseSequence = sequenceBySha.get(base) ?? 0;
-    if (baseSequence > expectedSequence) {
-      return "disk base is newer than the expected head";
-    }
+      .map(parseSnapshotLine)
+      .filter(
+        (line): line is { sha: string; sequence: number } =>
+          line !== null && line.sequence <= expectedHead.sequence,
+      );
+    const stored = new Map(
+      (
+        await SkillShareLinkRevisionModel.listCommitShas(ref, [
+          ...new Set(candidates.map((line) => line.sequence)),
+        ])
+      ).map((rev) => [rev.sequence, rev.commitSha]),
+    );
+    const base = candidates.find(
+      (line) => stored.get(line.sequence) === line.sha,
+    );
+    if (!base) return "no stored commit in the recent disk history";
 
     await runGit({
       binary: this.gitBinaryPath,
       cwd: repoPath,
-      args: ["update-ref", "refs/heads/main", base],
+      args: ["update-ref", "refs/heads/main", base.sha],
     });
     const revisions = await SkillShareLinkRevisionModel.listAfter(
       ref,
-      baseSequence,
+      base.sequence,
     );
-    await this.replayRevisions({ ref, repoPath, revisions, parentSha: base });
-    return { baseSequence, replayed: revisions.length };
+    await this.replayRevisions({
+      ref,
+      repoPath,
+      revisions,
+      parentSha: base.sha,
+    });
+    return { baseSequence: base.sequence, replayed: revisions.length };
   }
 
   private async replayRevisions(params: {
     ref: MarketplaceRepoRef;
     repoPath: string;
-    revisions: SkillShareLinkRevision[];
+    revisions: ReplayRevision[];
     parentSha: string | null;
   }): Promise<void> {
     const { ref, repoPath } = params;
@@ -533,6 +554,14 @@ function toGitDate(d: Date): string {
 
 function formatMessage(sequence: number, contentHash: string): string {
   return `Snapshot ${sequence}\n\ncontent-hash: ${contentHash}\n`;
+}
+
+/** `<sha>\t<subject>` from `git log`, where the subject is ours (`formatMessage`). */
+function parseSnapshotLine(
+  line: string,
+): { sha: string; sequence: number } | null {
+  const match = /^([0-9a-f]{40})\tSnapshot (\d+)$/.exec(line.trim());
+  return match ? { sha: match[1], sequence: Number(match[2]) } : null;
 }
 
 async function wipeWorkingTree(repoPath: string): Promise<void> {

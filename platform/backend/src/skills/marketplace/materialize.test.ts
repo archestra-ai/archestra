@@ -719,6 +719,33 @@ describe("MarketplaceMaterializer", () => {
       }
     });
 
+    test("an up-to-date request loads no revision payload", async () => {
+      await materializer.materialize(v1());
+      await replicaB.materialize(v1());
+      const headSpy = vi.spyOn(SkillShareLinkRevisionModel, "getLatestHead");
+      const payloadSpies = [
+        vi.spyOn(SkillShareLinkRevisionModel, "list"),
+        vi.spyOn(SkillShareLinkRevisionModel, "listAfter"),
+      ];
+
+      try {
+        const result = await replicaB.materialize(v1());
+
+        expect(result.reused).toBe(true);
+        for (const spy of payloadSpies) expect(spy).not.toHaveBeenCalled();
+        expect(headSpy).toHaveBeenCalledTimes(1);
+        const head = await headSpy.mock.results[0].value;
+        expect(Object.keys(head ?? {}).sort()).toEqual([
+          "commitSha",
+          "contentHash",
+          "sequence",
+        ]);
+      } finally {
+        headSpy.mockRestore();
+        for (const spy of payloadSpies) spy.mockRestore();
+      }
+    });
+
     test("drops an orphan commit left on top of a stored revision", async () => {
       const first = await materializer.materialize(v1());
       const onB = await replicaB.materialize(v1());

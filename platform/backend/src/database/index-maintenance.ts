@@ -396,7 +396,7 @@ async function buildMaintainedIndex(params: {
       "Dropping invalid index",
     );
     await client.query(
-      `DROP INDEX ${concurrently ? "CONCURRENTLY " : ""}"${index.name}"`,
+      `DROP INDEX ${concurrently ? "CONCURRENTLY " : ""}IF EXISTS "${index.name}"`,
     );
   }
 

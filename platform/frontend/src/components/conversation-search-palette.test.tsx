@@ -639,7 +639,8 @@ describe("ConversationSearchPalette", () => {
 
       search("github");
 
-      // Searched by the server, a bounded page by name, not the whole catalog.
+      // Searched by the server, by name, including the built-in Archestra
+      // entry the registry page leaves out.
       expect(mockUseMcpRegistryPage).toHaveBeenLastCalledWith(
         expect.objectContaining({
           search: "github",
@@ -651,6 +652,46 @@ describe("ConversationSearchPalette", () => {
       expect(screen.getByText("MCP Servers")).toBeInTheDocument();
       fireEvent.click(screen.getByText("GitHub MCP"));
       expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry/cat-1");
+    });
+
+    it("offers the built-in Archestra entry when it matches", () => {
+      mockUseMcpRegistryPage.mockReturnValue({
+        data: {
+          data: [
+            { id: "00000000-0000-4000-8000-000000000001", name: "Archestra" },
+          ],
+        },
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "arch" },
+      });
+
+      expect(screen.getByText("MCP Servers")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Archestra"));
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/mcp/registry/00000000-0000-4000-8000-000000000001",
+      );
+    });
+
+    it("offers the built-in Archestra entry when it matches", () => {
+      mockUseMcpRegistryPage.mockReturnValue({
+        data: {
+          data: [
+            { id: "00000000-0000-4000-8000-000000000001", name: "Archestra" },
+          ],
+        },
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      search("arch");
+
+      expect(screen.getByText("MCP Servers")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Archestra"));
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/mcp/registry/00000000-0000-4000-8000-000000000001",
+      );
     });
 
     it("finds a skill through the server search and opens it", () => {

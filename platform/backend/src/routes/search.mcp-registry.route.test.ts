@@ -569,6 +569,36 @@ describe("MCP registry list routes", () => {
       expect(names(page)).toEqual(["first", "second", "fourth", "third"]);
     });
 
+    test("lists the built-in entry and app backings only when asked", async ({
+      makeInternalMcpCatalog,
+      makeApp,
+    }) => {
+      await makeInternalMcpCatalog({
+        id: ARCHESTRA_MCP_CATALOG_ID,
+        name: "Archestra",
+        serverType: "builtin",
+        organizationId: null,
+      });
+      await makeItem(makeInternalMcpCatalog, "github");
+      const app = await makeApp({
+        organizationId: ctx.organizationId,
+        authorId: ctx.user.id,
+        name: "Expense App",
+      });
+
+      expect(names(await search())).toEqual(["github"]);
+      expect(names(await search({ includeBuiltIn: true }))).toEqual([
+        "Archestra",
+        "github",
+      ]);
+      const withApps = await search({ includeApps: true });
+      const appRow = withApps.data.find(
+        (row) => (row as { serverType?: string }).serverType === "app",
+      ) as unknown as { appId: string; appEnabled: boolean | null };
+      expect(appRow.appId).toBe(app.id);
+      expect(names(withApps)).toContain("github");
+    });
+
     test("serves image icons by URL and keeps emoji inline", async ({
       makeInternalMcpCatalog,
     }) => {

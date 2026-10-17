@@ -97,6 +97,10 @@ export type RegistryListFilters = {
   /** Installed means an install the viewer can see and use. */
   installState?: "installed" | "not-installed";
   catalogIds?: string[];
+  /** Also list the built-in Archestra entry (the registry page does not). */
+  includeBuiltIn?: boolean;
+  /** Also list app backing entries; the caller checks `app:read`. */
+  includeApps?: boolean;
 };
 
 export type RegistrySorting = {
@@ -2200,11 +2204,12 @@ class InternalMcpCatalogModel {
    */
   private static async buildVisibleCondition(
     options: CatalogListOptions,
+    includeApps = false,
   ): Promise<SQL | undefined> {
     const catalog = schema.internalMcpCatalogTable;
     const base = await InternalMcpCatalogModel.buildListCondition(
       options,
-      false,
+      includeApps,
     );
     if (!options.organizationId) return base;
     return and(
@@ -2222,9 +2227,13 @@ class InternalMcpCatalogModel {
   ): Promise<SQL | undefined> {
     const catalog = schema.internalMcpCatalogTable;
     const conditions: Array<SQL | undefined> = [
-      await InternalMcpCatalogModel.buildVisibleCondition(options),
-      // The registry never lists the built-in Archestra entry.
-      ne(catalog.id, ARCHESTRA_MCP_CATALOG_ID),
+      await InternalMcpCatalogModel.buildVisibleCondition(
+        options,
+        filters.includeApps,
+      ),
+      // The registry page never lists the built-in Archestra entry; pickers
+      // that offer it opt in.
+      filters.includeBuiltIn ? undefined : ne(catalog.id, ARCHESTRA_MCP_CATALOG_ID),
     ];
     const search = filters.search?.trim();
     if (search) {

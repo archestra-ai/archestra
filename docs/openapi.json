@@ -248448,6 +248448,14 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
+                  "includeBuiltIn": {
+                    "description": "Also list the built-in Archestra entry.",
+                    "type": "boolean"
+                  },
+                  "includeApps": {
+                    "description": "Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.",
+                    "type": "boolean"
+                  },
                   "rankTiers": {
                     "description": "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.",
                     "maxItems": 1000,
@@ -248602,6 +248610,14 @@
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "appId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "appEnabled": {
+                            "nullable": true,
+                            "type": "boolean"
                           },
                           "icon": {
                             "nullable": true,
@@ -249525,6 +249541,14 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "includeBuiltIn": {
+                    "description": "Also list the built-in Archestra entry.",
+                    "type": "boolean"
+                  },
+                  "includeApps": {
+                    "description": "Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.",
+                    "type": "boolean"
                   },
                   "rankTiers": {
                     "description": "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.",

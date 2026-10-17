@@ -229,6 +229,16 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
     .describe(
       "Only these items. An empty list matches nothing; omit it for every item.",
     ),
+  includeBuiltIn: z
+    .boolean()
+    .optional()
+    .describe("Also list the built-in Archestra entry."),
+  includeApps: z
+    .boolean()
+    .optional()
+    .describe(
+      "Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.",
+    ),
   rankTiers: z
     .array(z.array(z.string().uuid()).max(10_000))
     .max(1_000)
@@ -260,6 +270,8 @@ const McpRegistryRowSchema = ListInternalMcpCatalogSchema.pick({
   providesSkills: true,
   catalogReinstallRequired: true,
   dynamicConnectionMcpServerId: true,
+  appId: true,
+  appEnabled: true,
 }).extend({
   /** An emoji icon; image icons are served from `iconUrl` instead. */
   icon: z.string().nullable(),
@@ -577,6 +589,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           pagination: { limit, offset },
         });
       const ids = items.map((item) => item.id);
+      // App backings carry their app's id and state, as on the full list.
+      const appCatalogIds = items
+        .filter((item) => item.serverType === "app")
+        .map((item) => item.id);
+      const [appIdByCatalog, appEnabledByCatalog] = await Promise.all([
+        AppModel.getAppIdsByCatalogIds(appCatalogIds),
+        AppModel.getAppEnabledByCatalogIds(appCatalogIds),
+      ]);
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -652,6 +672,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             providesSkills: item.providesSkills,
             catalogReinstallRequired: item.catalogReinstallRequired,
             dynamicConnectionMcpServerId: item.dynamicConnectionMcpServerId,
+            appId:
+              item.serverType === "app"
+                ? (appIdByCatalog.get(item.id) ?? null)
+                : null,
+            appEnabled:
+              item.serverType === "app"
+                ? (appEnabledByCatalog.get(item.id) ?? null)
+                : null,
             icon: imageIcon ? null : (item.icon ?? null),
             iconUrl:
               imageIcon && item.icon && isServableIconDataUrl(item.icon)
@@ -3458,6 +3486,11 @@ async function resolveRegistryQuery(
     },
     filters: {
       search: body.search,
+      includeBuiltIn: body.includeBuiltIn,
+      // App backings are gated by `app:read`, as on the full list.
+      includeApps:
+        body.includeApps === true &&
+        (await hasPermission({ app: ["read"] }, request.headers)).success,
       labels: body.labels,
       environmentIds: body.environmentIds,
       authorIds: body.authorIds,

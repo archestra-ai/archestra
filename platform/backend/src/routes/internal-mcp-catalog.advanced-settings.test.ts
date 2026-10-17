@@ -3,6 +3,7 @@ import {
   resourcePermissionPresets,
   topResourcePermissionPreset,
 } from "@archestra/shared";
+import type { FastifyReply } from "fastify";
 import { type Mock, vi } from "vitest";
 import { z } from "zod";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -12,7 +13,7 @@ import { InternalMcpCatalogModel, ServiceAccountModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import { constructResponseSchema, type User } from "@/types";
 
 vi.mock("@/auth");
 
@@ -610,13 +611,15 @@ describe("internal MCP catalog deployment YAML permission", () => {
   });
   test("typed routes redact the field only where their response schema can carry it", async () => {
     const resolve = vi.spyOn(ResourcePermissions, "resolve");
+    // Every response map carries the shared error schemas, whose 403 has open
+    // `details`, as real routes do.
     const route = (url: string, response: z.ZodType) =>
       app.get(
         url,
         {
           schema: {
             operationId: RouteId.GetInternalMcpCatalog,
-            response: { 200: response },
+            response: constructResponseSchema(response),
           },
         },
         async () => ({
@@ -642,6 +645,20 @@ describe("internal MCP catalog deployment YAML permission", () => {
       "/api/typed-list-fixture",
       z.object({ items: z.array(z.object({ name: z.string() })) }),
     );
+    // A status the route declares no schema for is sent as is, so it walks.
+    app.get(
+      "/api/undeclared-status-fixture",
+      {
+        schema: {
+          operationId: RouteId.GetInternalMcpCatalog,
+          response: { 200: z.object({ name: z.string() }) },
+        },
+      },
+      async (_request, reply: FastifyReply) =>
+        reply
+          .code(202)
+          .send({ name: "entry", deploymentSpecYaml: DEPLOYMENT_YAML }),
+    );
     currentUser = editor;
 
     for (const url of [
@@ -656,9 +673,14 @@ describe("internal MCP catalog deployment YAML permission", () => {
     resolve.mockClear();
     const list = await app.inject("/api/typed-list-fixture");
     expect(list.statusCode, list.body).toBe(200);
-    // Nothing to redact: the schema drops the field, so no grant is checked.
+    // Nothing to redact: the schema drops the field, so no grant is checked,
+    // although the route's shared 403 schema has open error details.
     expect(list.json()).toEqual({ items: [{ name: "entry" }] });
     expect(resolve).not.toHaveBeenCalled();
+
+    const undeclared = await app.inject("/api/undeclared-status-fixture");
+    expect(undeclared.statusCode, undeclared.body).toBe(202);
+    expect(undeclared.json().deploymentSpecYaml).toBeNull();
   });
 
   test("nested responses check each catalog id rather than treating one grant as global", async ({

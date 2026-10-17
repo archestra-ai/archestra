@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { hasScopedPermission } from "@archestra/shared";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { userHasPermission } from "@/auth/utils";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { LocalConfig } from "@/types";
@@ -130,21 +130,26 @@ function sameRuntimeValue(
 }
 
 /** Redact stored YAML everywhere it occurs in an authenticated API response,
- * including nested installed-server catalogs and audit snapshots. Decided per
- * route when it is registered: only a route whose response schema can carry a
- * `deploymentSpecYaml` field (the key itself, or untyped JSON such as audit
- * snapshots, or no schema at all) walks its payload. The serializer strips
- * every key a typed response does not declare, so other routes cannot leak it,
- * and they skip the walk. */
+ * including nested installed-server catalogs and audit snapshots. Which
+ * responses can carry a `deploymentSpecYaml` field is decided per route when
+ * it is registered, per status code: a status whose schema declares the key or
+ * leaves part of the body untyped (audit snapshots, error details) walks the
+ * payload, and so does any status without a schema, which is serialized as is.
+ * A typed schema without the key strips it in serialization, so those
+ * responses skip the walk. */
 export function registerMcpDeploymentYamlResponseFilter(
   app: FastifyInstance,
 ): void {
   app.addHook("onRoute", (route) => {
-    if (!responseMayCarryDeploymentYaml(route.schema?.response)) return;
+    const mayCarry = deploymentYamlStatusCheck(route.schema?.response);
     const existing = route.preSerialization;
     route.preSerialization = [
       ...(existing ? [existing].flat() : []),
-      redactDeploymentYaml,
+      async function redactDeploymentYaml(request, reply, payload) {
+        return mayCarry(reply.statusCode)
+          ? redactDeploymentYamlPayload(request, payload)
+          : payload;
+      },
     ];
   });
 }
@@ -182,9 +187,8 @@ function containsDeploymentYaml(value: unknown): boolean {
   );
 }
 
-async function redactDeploymentYaml(
+async function redactDeploymentYamlPayload(
   request: FastifyRequest,
-  _reply: FastifyReply,
   payload: unknown,
 ): Promise<unknown> {
   if (!containsDeploymentYaml(payload)) return payload;
@@ -222,15 +226,31 @@ async function redactDeploymentYaml(
 }
 
 /**
- * Whether a route's response schemas (one per status code) could let a
- * `deploymentSpecYaml` field through: the key itself, or any part typed as
- * open JSON. Anything this does not recognise counts as "could".
+ * For a route's response schemas (keyed by status code, `2xx`-style range or
+ * `default`, matched the way Fastify picks one), whether the response sent
+ * with a status could let a `deploymentSpecYaml` field through: its schema
+ * has the key or an open-JSON part, or no schema applies. Anything the schema
+ * check does not recognise counts as "could".
  */
-function responseMayCarryDeploymentYaml(response: unknown): boolean {
-  if (!response || typeof response !== "object") return true;
-  return Object.values(response).some((schema) =>
-    schemaMayCarryDeploymentYaml(schema, new Set()),
+function deploymentYamlStatusCheck(
+  response: unknown,
+): (statusCode: number) => boolean {
+  if (!response || typeof response !== "object") return () => true;
+  const carrying = new Map(
+    Object.entries(response).map(([key, schema]) => [
+      key,
+      schemaMayCarryDeploymentYaml(schema, new Set()),
+    ]),
   );
+  return (statusCode) => {
+    const code = String(statusCode);
+    return (
+      carrying.get(code) ??
+      carrying.get(`${code[0]}xx`) ??
+      carrying.get("default") ??
+      true
+    );
+  };
 }
 
 function schemaMayCarryDeploymentYaml(

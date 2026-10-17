@@ -4,11 +4,13 @@ import {
   topResourcePermissionPreset,
 } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
+import { z } from "zod";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel, ServiceAccountModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -606,6 +608,59 @@ describe("internal MCP catalog deployment YAML permission", () => {
       );
     }
   });
+  test("typed routes redact the field only where their response schema can carry it", async () => {
+    const resolve = vi.spyOn(ResourcePermissions, "resolve");
+    const route = (url: string, response: z.ZodType) =>
+      app.get(
+        url,
+        {
+          schema: {
+            operationId: RouteId.GetInternalMcpCatalog,
+            response: { 200: response },
+          },
+        },
+        async () => ({
+          items: [{ name: "entry", deploymentSpecYaml: DEPLOYMENT_YAML }],
+        }),
+      );
+    route(
+      "/api/typed-catalog-fixture",
+      z.object({
+        items: z.array(
+          z.object({
+            name: z.string(),
+            deploymentSpecYaml: z.string().nullable(),
+          }),
+        ),
+      }),
+    );
+    route(
+      "/api/audit-snapshot-fixture",
+      z.object({ items: z.array(z.record(z.string(), z.unknown())) }),
+    );
+    route(
+      "/api/typed-list-fixture",
+      z.object({ items: z.array(z.object({ name: z.string() })) }),
+    );
+    currentUser = editor;
+
+    for (const url of [
+      "/api/typed-catalog-fixture",
+      "/api/audit-snapshot-fixture",
+    ]) {
+      const response = await app.inject(url);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().items[0].deploymentSpecYaml).toBeNull();
+    }
+
+    resolve.mockClear();
+    const list = await app.inject("/api/typed-list-fixture");
+    expect(list.statusCode, list.body).toBe(200);
+    // Nothing to redact: the schema drops the field, so no grant is checked.
+    expect(list.json()).toEqual({ items: [{ name: "entry" }] });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
   test("nested responses check each catalog id rather than treating one grant as global", async ({
     makeInternalMcpCatalog,
   }) => {

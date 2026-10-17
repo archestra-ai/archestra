@@ -125,19 +125,19 @@ export function AddToolsView({
   // The counts on the filter come from their own queries, on every tab, so a
   // tab's label does not change while that tab's page loads; each keeps its
   // last total across a search until the new one answers.
-  const allTotal = useMcpRegistryPage(
+  const allTotalQuery = useMcpRegistryPage(
     { ...baseQuery, limit: 1, offset: 0 },
     { placeholderScope: "add-tools:total" },
-  ).data?.pagination.total;
-  const connectedTotal = useMcpRegistryPage(
+  );
+  const connectedTotalQuery = useMcpRegistryPage(
     { ...baseQuery, installState: "installed", limit: 1, offset: 0 },
     { placeholderScope: "add-tools:connected" },
-  ).data?.pagination.total;
+  );
   // The built-in entry is ready to add without an install, but the server
   // never counts it as installed: whether the search matches it decides the
   // Connected count, and the Connected tab lists it next to the installed
   // servers.
-  const builtInPage = useMcpRegistryPage(
+  const builtInQuery = useMcpRegistryPage(
     {
       ...baseQuery,
       catalogIds: [ARCHESTRA_MCP_CATALOG_ID],
@@ -145,7 +145,8 @@ export function AddToolsView({
       offset: 0,
     },
     { placeholderScope: "add-tools:built-in" },
-  ).data;
+  );
+  const builtInPage = builtInQuery.data;
   const builtInRow = builtInPage?.data[0];
   const isPending = page.isPending;
   const pageRows = useMemo(() => {
@@ -202,15 +203,11 @@ export function AddToolsView({
 
   // Unknown until its totals answer: a count of the visible rows would be
   // wrong on every tab but All.
-  const totalCount = allTotal;
-  const connectedCount =
-    connectedTotal !== undefined && builtInPage !== undefined
-      ? connectedTotal + (builtInRow ? 1 : 0)
-      : undefined;
-  const notConnectedCount =
-    totalCount !== undefined && connectedCount !== undefined
-      ? Math.max(0, totalCount - connectedCount)
-      : undefined;
+  const { totalCount, connectedCount, notConnectedCount } = useFilterCounts({
+    all: allTotalQuery,
+    connected: connectedTotalQuery,
+    builtIn: builtInQuery,
+  });
   const readyRows = rows
     .filter((row) => row.connected && filter !== "not-connected")
     .sort(
@@ -1018,4 +1015,46 @@ const ADD_TOOLS_PAGE_SIZE = 100;
 
 function withCount(label: string, count: number | undefined) {
   return count === undefined ? label : `${label} ${count}`;
+}
+
+type CountQuery = {
+  data?: { data: unknown[]; pagination: { total: number } };
+  isPlaceholderData?: boolean;
+};
+
+/**
+ * The filter's counts from one search's answers: while any of the three
+ * still shows the previous search's (placeholder) data, the last consistent
+ * counts stay, so a label never mixes two searches. Unknown until the first
+ * full set answers.
+ */
+function useFilterCounts(queries: {
+  all: CountQuery;
+  connected: CountQuery;
+  builtIn: CountQuery;
+}) {
+  const { all, connected, builtIn } = queries;
+  const last = useRef<{
+    totalCount?: number;
+    connectedCount?: number;
+    notConnectedCount?: number;
+  }>({});
+  const consistent =
+    all.data !== undefined &&
+    connected.data !== undefined &&
+    builtIn.data !== undefined &&
+    !all.isPlaceholderData &&
+    !connected.isPlaceholderData &&
+    !builtIn.isPlaceholderData;
+  if (consistent && all.data && connected.data && builtIn.data) {
+    const totalCount = all.data.pagination.total;
+    const connectedCount =
+      connected.data.pagination.total + (builtIn.data.data.length > 0 ? 1 : 0);
+    last.current = {
+      totalCount,
+      connectedCount,
+      notConnectedCount: Math.max(0, totalCount - connectedCount),
+    };
+  }
+  return last.current;
 }

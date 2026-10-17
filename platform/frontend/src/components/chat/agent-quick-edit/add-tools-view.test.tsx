@@ -9,6 +9,9 @@ const { registryRows, sentRequests, stillLoading } = vi.hoisted(() => ({
   // Requests that have not answered yet (and have nothing to show meanwhile).
   stillLoading: {
     test: (_params: Record<string, unknown>): boolean => false,
+    // Like the real hook: a loading query shows its scope's last answer.
+    keepsPrevious: false,
+    previous: new Map<string, unknown>(),
   },
   // Each distinct request a mounted query would send (disabled ones send none).
   sentRequests: new Set<string>(),
@@ -45,11 +48,18 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
       search?: string;
       limit?: number;
     },
-    options?: { enabled?: boolean },
+    options?: { enabled?: boolean; placeholderScope?: string },
   ) => {
     if (options?.enabled === false) return { data: undefined, isPending: true };
     sentRequests.add(JSON.stringify(params));
-    if (stillLoading.test(params)) return { data: undefined, isPending: true };
+    if (stillLoading.test(params)) {
+      const previous = stillLoading.keepsPrevious
+        ? stillLoading.previous.get(options?.placeholderScope ?? "")
+        : undefined;
+      return previous
+        ? { data: previous, isPending: false, isPlaceholderData: true }
+        : { data: undefined, isPending: true };
+    }
     const rows = registryRows.filter(
       (row) =>
         (params.includeBuiltIn || row.id !== ARCHESTRA_MCP_CATALOG_ID) &&
@@ -63,14 +73,13 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
             (row.install as { installedForViewer: boolean })
               .installedForViewer),
     );
-    return {
-      data: {
-        data: rows.slice(0, params.limit ?? rows.length),
-        pagination: { total: rows.length },
-        installs: [],
-      },
-      isPending: false,
+    const data = {
+      data: rows.slice(0, params.limit ?? rows.length),
+      pagination: { total: rows.length },
+      installs: [],
     };
+    stillLoading.previous.set(options?.placeholderScope ?? "", data);
+    return { data, isPending: false, isPlaceholderData: false };
   },
   fetchInternalMcpCatalogItem: vi.fn(),
 }));
@@ -139,6 +148,8 @@ describe("AddToolsView", () => {
   beforeEach(() => {
     sentRequests.clear();
     stillLoading.test = () => false;
+    stillLoading.keepsPrevious = false;
+    stillLoading.previous.clear();
     registryRows.length = 0;
     registryRows.push(
       row(
@@ -212,11 +223,40 @@ describe("AddToolsView", () => {
     await user.click(screen.getByRole("button", { name: /^Not connected/ }));
     expect(labels()).toEqual(settled);
 
-    // Nothing has answered for a new search: no count is made up meanwhile.
+    // Nothing has answered for a new search: the last counts stay, and no
+    // count is made up from the visible rows meanwhile.
     stillLoading.test = (params) => params.search === "jira";
     await user.type(screen.getByLabelText("Search servers"), "jira");
     await new Promise((resolve) => setTimeout(resolve, 300));
-    for (const label of labels()) expect(label).not.toMatch(/\d/);
+    expect(labels()).toEqual(settled);
+  });
+
+  it("never mixes the counts of two searches", async () => {
+    const user = userEvent.setup();
+    renderView();
+    const labels = () =>
+      ["All", "Connected", "Not connected"].map(
+        (name) =>
+          screen.getByRole("button", { name: new RegExp(`^${name}`) })
+            .textContent,
+      );
+    expect(labels()).toEqual(["All 4", "Connected 2", "Not connected 2"]);
+
+    // The new search's built-in probe answers (no built-in entry matches
+    // "jira") before its totals, which still show the last search's.
+    stillLoading.keepsPrevious = true;
+    stillLoading.test = (params) =>
+      params.search === "jira" && params.limit === 1 && !params.catalogIds;
+    await user.type(screen.getByLabelText("Search servers"), "jira");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(labels()).toEqual(["All 4", "Connected 2", "Not connected 2"]);
+
+    stillLoading.test = () => false;
+    await user.type(screen.getByLabelText("Search servers"), " ");
+    await user.keyboard("{Backspace}");
+    expect(
+      await screen.findByRole("button", { name: "Connected 1" }),
+    ).toBeInTheDocument();
   });
 
   it("counts the built-in entry only while the search matches it", async () => {

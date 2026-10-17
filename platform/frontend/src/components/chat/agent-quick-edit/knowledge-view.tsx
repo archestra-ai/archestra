@@ -25,6 +25,7 @@ export function KnowledgeView({
   agent,
   allKnowledgeBases,
   allConnectors,
+  isLoading = false,
   onBack,
 }: {
   agent: {
@@ -35,6 +36,8 @@ export function KnowledgeView({
   };
   allKnowledgeBases: KnowledgeBase[];
   allConnectors: Connector[];
+  /** Hides the empty state while the lists load. */
+  isLoading?: boolean;
   onBack: () => void;
 }) {
   const updateProfile = useUpdateProfile();
@@ -101,7 +104,8 @@ export function KnowledgeView({
       { onSuccess: onBack },
     );
 
-  const empty = allKnowledgeBases.length === 0 && allConnectors.length === 0;
+  const empty =
+    !isLoading && allKnowledgeBases.length === 0 && allConnectors.length === 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">

@@ -23,6 +23,7 @@ import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
   useIsKnowledgeBaseConfigured,
   useKnowledgeBases,
+  useKnowledgeBasesByIds,
 } from "@/lib/knowledge/knowledge-base.query";
 import {
   type AgentFormFooterState,
@@ -456,10 +457,12 @@ vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectors: vi.fn(() => ({ data: [] })),
+  useConnectorsByIds: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: vi.fn(() => ({ data: [] })),
+  useKnowledgeBasesByIds: vi.fn(() => ({ data: [] })),
   useIsKnowledgeBaseConfigured: vi.fn(() => true),
 }));
 
@@ -2140,6 +2143,42 @@ describe("AgentForm knowledge in Auto mode", () => {
         }),
       ),
     );
+  });
+
+  it("shows a saved knowledge base the picker's first page does not hold", async () => {
+    // The picker lists a first page of every knowledge base; a source saved on
+    // the record from past that page is read by id so its pill still renders
+    // and can be removed.
+    const savedAgent = {
+      ...baseAgent,
+      accessAllTools: false,
+      knowledgeBaseIds: ["kb-far"],
+    };
+    vi.mocked(useKnowledgeBases).mockReturnValue({
+      data: [{ id: "kb1", name: "Company Handbook", connectors: [] }],
+    } as unknown as ReturnType<typeof useKnowledgeBases>);
+    vi.mocked(useKnowledgeBasesByIds).mockImplementation(
+      (ids) =>
+        ({
+          data: ids.includes("kb-far")
+            ? [{ id: "kb-far", name: "Far Handbook", connectors: [] }]
+            : [],
+        }) as unknown as ReturnType<typeof useKnowledgeBasesByIds>,
+    );
+    useProfileMock.mockReturnValue({ data: savedAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={savedAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const picker = within(section).getByTestId(E2eTestId.AgentKnowledgeSources);
+    expect(
+      within(picker).getAllByTestId(E2eTestId.AgentKnowledgeSourcePill),
+    ).toHaveLength(1);
+    expect(within(picker).getByText("Far Handbook")).toBeVisible();
+    vi.mocked(useKnowledgeBasesByIds).mockReset();
+    vi.mocked(useKnowledgeBasesByIds).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useKnowledgeBasesByIds>);
   });
 
   it("keeps quiet about knowledge search once it is configured", async () => {

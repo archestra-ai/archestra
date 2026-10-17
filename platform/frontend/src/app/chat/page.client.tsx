@@ -622,7 +622,11 @@ export function ChatPageContent({
   // (forAgentId) applies here; a cross-environment skill resolves
   // "unavailable" rather than prefilling a token the composer can't parse.
   const urlSkillCommandsQuery = useSkillsPaginated(
-    { limit: 100, forAgentId: initialAgentId ?? undefined },
+    {
+      limit: 100,
+      forAgentId: initialAgentId ?? undefined,
+      includeContent: false,
+    },
     {
       enabled:
         (urlSkillWanted || hasAnyExternalMcpSkillParam) &&

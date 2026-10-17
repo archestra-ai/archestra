@@ -255,6 +255,8 @@ function SkillsList() {
    * visible page and "every matching skill" differ only by limit/offset.
    */
   const listFilters = {
+    // The table shows names and descriptions, never the SKILL.md body.
+    includeContent: false,
     search: search || undefined,
     sourceRepo: sourceRepo || undefined,
     skillIds: hasImportFilter ? importedIds : undefined,

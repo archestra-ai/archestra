@@ -90,11 +90,18 @@ import {
 import { useFeature } from "@/lib/config/config.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
-import { useConnectors } from "@/lib/knowledge/connector.query";
-import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+import {
+  useConnectors,
+  useConnectorsByIds,
+} from "@/lib/knowledge/connector.query";
+import {
+  useKnowledgeBases,
+  useKnowledgeBasesByIds,
+} from "@/lib/knowledge/knowledge-base.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
 import {
   AddToolsView,
@@ -323,37 +330,42 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     triggerDelegations.map((agent) => agent.id),
   );
 
-  const { data: knowledgeBasesData, isSuccess: knowledgeBasesLoaded } =
-    useKnowledgeBases({
-      enabled: shouldLoadAgentManagementDetails && !!canReadKnowledgeBase,
-    });
-  const { data: connectorsData, isSuccess: connectorsLoaded } = useConnectors({
-    enabled: shouldLoadAgentManagementDetails && !!canReadKnowledgeBase,
+  // The trigger reads exactly this agent's knowledge sources by id.
+  const currentKnowledgeBaseIds = currentAgent?.knowledgeBaseIds ?? [];
+  const currentConnectorIds = currentAgent?.connectorIds ?? [];
+  const knowledgeLookupEnabled =
+    shouldLoadAgentManagementDetails && !!canReadKnowledgeBase;
+  const {
+    data: currentKnowledgeBases,
+    isSuccess: currentKnowledgeBasesLoaded,
+  } = useKnowledgeBasesByIds(currentKnowledgeBaseIds, {
+    enabled: knowledgeLookupEnabled,
   });
-  const allKnowledgeBases = knowledgeBasesData ?? [];
-  const allConnectors = connectorsData ?? [];
-  const knowledgeSources = useMemo(() => {
-    const knowledgeBaseIds = currentAgent?.knowledgeBaseIds ?? [];
-    const connectorIds = currentAgent?.connectorIds ?? [];
-    return [
-      ...(knowledgeBasesData ?? [])
-        .filter((kb) => knowledgeBaseIds.includes(kb.id))
-        .map((kb) => ({
-          id: kb.id,
-          name: kb.name,
-          kind: "knowledge base",
-          connectorType: kb.connectors?.[0]?.connectorType,
-        })),
-      ...(connectorsData ?? [])
-        .filter((connector) => connectorIds.includes(connector.id))
-        .map((connector) => ({
-          id: connector.id,
-          name: connector.name,
-          kind: "connector",
-          connectorType: connector.connectorType,
-        })),
-    ];
-  }, [currentAgent, knowledgeBasesData, connectorsData]);
+  const { data: currentConnectors, isSuccess: currentConnectorsLoaded } =
+    useConnectorsByIds(currentConnectorIds, {
+      enabled: knowledgeLookupEnabled,
+    });
+  const knowledgeBasesLoaded =
+    currentKnowledgeBaseIds.length === 0 || currentKnowledgeBasesLoaded;
+  const connectorsLoaded =
+    currentConnectorIds.length === 0 || currentConnectorsLoaded;
+  const knowledgeSources = useMemo(
+    () => [
+      ...(currentKnowledgeBases ?? []).map((kb) => ({
+        id: kb.id,
+        name: kb.name,
+        kind: "knowledge base",
+        connectorType: kb.connectors?.[0]?.connectorType,
+      })),
+      ...(currentConnectors ?? []).map((connector) => ({
+        id: connector.id,
+        name: connector.name,
+        kind: "connector",
+        connectorType: connector.connectorType,
+      })),
+    ],
+    [currentKnowledgeBases, currentConnectors],
+  );
 
   // The icons are "known" once this agent's own data has arrived; until then
   // the slot shows placeholders, never the previous agent's icons.
@@ -408,6 +420,33 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const updateProfile = useUpdateProfile();
 
   const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
+  // Quick-edit pickers: load once the menu or dialog opens, merged with the
+  // edited agent's own sources so ones past the first page still show.
+  const knowledgePickerEnabled =
+    (open || !!editingAgentId) && !!canReadKnowledgeBase;
+  const { data: knowledgeBasesPage, isPending: knowledgeBasesPagePending } =
+    useKnowledgeBases({ enabled: knowledgePickerEnabled });
+  const { data: connectorsPage, isPending: connectorsPagePending } =
+    useConnectors({ enabled: knowledgePickerEnabled });
+  const { data: editingKnowledgeBases } = useKnowledgeBasesByIds(
+    editingAgent?.knowledgeBaseIds ?? [],
+    { enabled: knowledgePickerEnabled },
+  );
+  const { data: editingConnectors } = useConnectorsByIds(
+    editingAgent?.connectorIds ?? [],
+    { enabled: knowledgePickerEnabled },
+  );
+  const allKnowledgeBases = useMemo(
+    () => mergeById(knowledgeBasesPage, editingKnowledgeBases),
+    [knowledgeBasesPage, editingKnowledgeBases],
+  );
+  const allConnectors = useMemo(
+    () => mergeById(connectorsPage, editingConnectors),
+    [connectorsPage, editingConnectors],
+  );
+  const knowledgePickerLoading =
+    knowledgePickerEnabled &&
+    (knowledgeBasesPagePending || connectorsPagePending);
   // The settings view also needs the agent's tools and subagents. Fetch them
   // with the agent, not after it renders, and start all three when the pointer
   // or focus reaches a row's edit button, ahead of the click.
@@ -884,6 +923,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               agent={editingAgent}
               allKnowledgeBases={allKnowledgeBases}
               allConnectors={allConnectors}
+              isLoading={knowledgePickerLoading}
               onBack={() => showSettings()}
             />
           ) : null}

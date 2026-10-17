@@ -18,6 +18,8 @@ const {
   mockUseAgentDelegations,
   mockUseAllProfileTools,
   mockUseConnectors,
+  mockUseConnectorsByIds,
+  mockUseKnowledgeBasesByIds,
   mockUseMcpServersGroupedByCatalog,
   mockUseInternalMcpCatalog,
   mockUseKnowledgeBases,
@@ -79,6 +81,14 @@ const {
     data: { data: [] },
   })),
   mockUseConnectors: vi.fn((_options?: unknown) => ({ data: [] })),
+  mockUseConnectorsByIds: vi.fn((_ids: string[], _options?: unknown) => ({
+    data: [],
+    isSuccess: true,
+  })),
+  mockUseKnowledgeBasesByIds: vi.fn((_ids: string[], _options?: unknown) => ({
+    data: [],
+    isSuccess: true,
+  })),
   mockUseInternalMcpCatalog: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseKnowledgeBases: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseMcpInstallOrchestrator: vi.fn((_options?: unknown) => ({
@@ -157,10 +167,14 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectors: (options?: unknown) => mockUseConnectors(options),
+  useConnectorsByIds: (ids: string[], options?: unknown) =>
+    mockUseConnectorsByIds(ids, options),
 }));
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: (options?: unknown) => mockUseKnowledgeBases(options),
+  useKnowledgeBasesByIds: (ids: string[], options?: unknown) =>
+    mockUseKnowledgeBasesByIds(ids, options),
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -333,6 +347,63 @@ describe("InitialAgentSelector keyboard navigation", () => {
     expect(mockUseAllProfileTools).not.toHaveBeenCalledWith(
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  it("names the agent's own knowledge sources, even past the first page of every source", async () => {
+    mockUseProfile.mockImplementation((id) => {
+      const agent = agents.find((a) => a.id === id);
+      return {
+        data: agent && {
+          ...agent,
+          accessAllTools: false,
+          knowledgeBaseIds: ["kb-far"],
+          connectorIds: [],
+        },
+      };
+    });
+    mockUseInternalMcpCatalog.mockReturnValue({
+      data: [],
+      isSuccess: true,
+    } as never);
+    // The first page of every knowledge base does not hold this one.
+    mockUseKnowledgeBases.mockReturnValue({
+      data: [],
+      isSuccess: true,
+    } as never);
+    mockUseKnowledgeBasesByIds.mockImplementation(
+      (ids: string[]) =>
+        ({
+          data: ids.includes("kb-far")
+            ? [
+                {
+                  id: "kb-far",
+                  name: "Far KB",
+                  connectors: [{ connectorType: "jira" }],
+                },
+              ]
+            : [],
+          isSuccess: true,
+        }) as never,
+    );
+    mockUseKnowledgeBases.mockClear();
+    try {
+      renderSelector();
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole("combobox", { name: "Alpha Agent" }),
+        ).toHaveAccessibleDescription(/1 knowledge source/),
+      );
+      // The organization-wide lists are the quick-edit pickers', which are
+      // closed.
+      expect(mockUseKnowledgeBases).not.toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true }),
+      );
+    } finally {
+      mockUseProfile.mockImplementation((id) => ({
+        data: agents.find((agent) => agent.id === id),
+      }));
+    }
   });
 });
 

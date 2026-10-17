@@ -1,7 +1,6 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Check, ShieldBan, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
@@ -10,15 +9,9 @@ import {
   FilterBar,
   FilterSelect,
 } from "@/components/filter-bar";
-import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfilesPaginated } from "@/lib/agent.query";
 import { useApps } from "@/lib/app.query";
@@ -42,6 +35,11 @@ import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { AuditActorCell } from "./audit-actor-cell";
 import {
+  AuditEventCell,
+  AuditRequestCell,
+  AuditTimeCell,
+} from "./audit-event-cells";
+import {
   ACTOR_TYPE_LABEL,
   ALL_ACTIONS,
   ALL_ACTOR_TYPES,
@@ -50,26 +48,12 @@ import {
   formatResourceType,
   KNOWN_RESOURCE_TYPES,
   OUTCOME_LABEL,
-  resourceDisplayName,
 } from "./audit-log-action-labels";
 import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 const ACTOR_FILTER_LIMIT = 100;
 const ENTITY_FILTER_LIMIT = 100;
 const ALL_VALUE = "all";
-
-// The high-signal types whose names render in the Resource column and whose
-// entities populate the "Filter by resource" picker. Every other type keeps a
-// bare type label in the list; its full identity lives in the detail dialog.
-const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
-  "agent",
-  "app",
-  "environment",
-  "mcpServer",
-  "role",
-  "skill",
-  "team",
-]);
 
 // TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
 // large string-literal union, failing with a spurious "two unrelated ColumnDef
@@ -309,7 +293,7 @@ export function AuditLogTable() {
     includeTools: false,
   });
 
-  // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.
+  // The remaining named entity types for the entity picker.
   const { data: mcpServers } = useMcpServers();
   const { data: teams } = useTeams({ includeRelations: false });
   const { data: rolesResponse } = useRolesPaginated({
@@ -434,73 +418,31 @@ export function AuditLogTable() {
     () => [
       {
         id: "resource",
-        header: "Resource",
-        size: 340,
-        minSize: 220,
-        cell: ({ row }) => {
-          const event = row.original;
-          const name =
-            event.resourceType &&
-            LIST_NAME_RESOURCE_TYPES.has(event.resourceType)
-              ? resourceDisplayName(event)
-              : null;
-          const Icon =
-            event.outcome === "success"
-              ? Check
-              : event.outcome === "denied"
-                ? ShieldBan
-                : X;
-          return (
-            <div className="min-w-0 space-y-0.5">
-              <div
-                className="truncate text-xs font-medium"
-                title={name ?? undefined}
-              >
-                {name ?? formatResourceType(event.resourceType ?? "")}
-                {name && (
-                  <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
-                    {formatResourceType(event.resourceType ?? "")}
-                  </span>
-                )}
-              </div>
-              <div className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      role="img"
-                      aria-label={OUTCOME_LABEL[event.outcome]}
-                      className={
-                        event.outcome === "success"
-                          ? "shrink-0 text-muted-foreground"
-                          : "shrink-0 text-destructive"
-                      }
-                    >
-                      <Icon className="size-3" aria-hidden="true" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {OUTCOME_LABEL[event.outcome]}
-                  </TooltipContent>
-                </Tooltip>
-                <span className="truncate">{formatAction(event.action)}</span>
-              </div>
-            </div>
-          );
-        },
+        header: "Event",
+        size: 360,
+        minSize: 280,
+        cell: ({ row }) => <AuditEventCell event={row.original} />,
       },
       {
         id: "actor",
         header: "Actor",
-        size: 200,
-        minSize: 150,
+        size: 272,
+        minSize: 230,
         cell: ({ row }) => <AuditActorCell event={row.original} />,
       },
       {
+        id: "request",
+        header: () => <div className="text-right">Request</div>,
+        size: 112,
+        minSize: 100,
+        cell: ({ row }) => <AuditRequestCell event={row.original} />,
+      },
+      {
         id: "createdAt",
-        header: "Time",
-        size: 154,
-        minSize: 145,
-        cell: ({ row }) => <LogTime timestamp={row.original.createdAt} />,
+        header: () => <div className="text-right">Time</div>,
+        size: 128,
+        minSize: 120,
+        cell: ({ row }) => <AuditTimeCell event={row.original} />,
       },
     ],
     [],
@@ -643,7 +585,7 @@ export function AuditLogTable() {
 
       <DataTable<AuditLogRow, unknown>
         columns={columns}
-        fixedWidthColumnIds={["actor", "createdAt"]}
+        fixedWidthColumnIds={["actor", "request", "createdAt"]}
         flexibleColumnIds={["resource"]}
         data={rows}
         hideSelectedCount

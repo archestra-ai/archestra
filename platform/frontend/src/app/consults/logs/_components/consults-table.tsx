@@ -1,6 +1,5 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
 import { Download, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
@@ -9,7 +8,6 @@ import {
   FilterBar,
   FilterSelect,
 } from "@/components/filter-bar";
-import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
@@ -25,10 +23,10 @@ import {
   useExportExternalConsults,
   useExternalConsults,
 } from "@/lib/openappa/external-consults.query";
+import { buildConsultColumns } from "./consult-columns";
 import { ConsultDetailSheet } from "./consult-detail-sheet";
 import { type ConsultView, toConsultView } from "./consult-details";
 import { ALL_OUTCOMES, OUTCOME_LABEL } from "./consult-outcome-badge";
-import { ConsultServiceCell } from "./consult-service-cell";
 
 export function ConsultsTable() {
   const { searchParams, updateQueryParams: updateUrlParams } =
@@ -67,8 +65,7 @@ export function ConsultsTable() {
   useLogsHeaderAction(timeRangePicker);
 
   const filters: ExternalConsultFilters = {
-    externalName: searchParams.get("externalName") || undefined,
-    sessionId: searchParams.get("sessionId") || undefined,
+    search: searchParams.get("search") || undefined,
     outcome: parseOutcome(searchParams.get("outcome")),
     from: dateTimePicker.startDateParam,
     to: dateTimePicker.endDateParam,
@@ -90,6 +87,13 @@ export function ConsultsTable() {
     () => (response?.data ?? []).map(toConsultView),
     [response],
   );
+  const columns = useMemo(
+    () =>
+      buildConsultColumns(
+        Math.max(1, ...rows.map((row) => row.consult.durationMs ?? 0)),
+      ),
+    [rows],
+  );
   const paginationMeta = response?.pagination;
 
   const hasFilters = Object.values(filters).some(
@@ -100,8 +104,7 @@ export function ConsultsTable() {
     cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
-      externalName: null,
-      sessionId: null,
+      search: null,
       outcome: null,
       startDate: null,
       endDate: null,
@@ -125,8 +128,8 @@ export function ConsultsTable() {
           onClearFilters={hasFilters ? clearFilters : undefined}
           search={
             <SearchInput
-              paramName="externalName"
-              placeholder="Service name"
+              paramName="search"
+              placeholder="Service or session ID"
               paginationMode="cursor"
               onSearchChange={cursorPagination.goNewest}
               isLoading={isFetching}
@@ -148,13 +151,6 @@ export function ConsultsTable() {
             </Button>
           }
         >
-          <SearchInput
-            paramName="sessionId"
-            placeholder="Session ID"
-            paginationMode="cursor"
-            onSearchChange={cursorPagination.goNewest}
-            className="w-56"
-          />
           <FilterSelect
             value={filters.outcome ?? ALL_VALUE}
             onValueChange={(value) => {
@@ -169,9 +165,9 @@ export function ConsultsTable() {
       </CollectionFilters>
 
       <DataTable<ConsultView, unknown>
-        columns={COLUMNS}
-        fixedWidthColumnIds={["tool", "createdAt"]}
-        flexibleColumnIds={["service"]}
+        columns={columns}
+        fixedWidthColumnIds={["signal", "latency", "time"]}
+        flexibleColumnIds={["service", "tool"]}
         data={rows}
         hideSelectedCount
         cursorPagination={
@@ -222,41 +218,3 @@ function parseOutcome(
 ): ExternalConsultOutcome | undefined {
   return ALL_OUTCOMES.find((outcome) => outcome === value);
 }
-
-const COLUMNS: ColumnDef<ConsultView>[] = [
-  {
-    id: "service",
-    header: "Service",
-    accessorFn: (view) => view.consult.externalName,
-    size: 280,
-    minSize: 190,
-    cell: ({ row }) => <ConsultServiceCell consult={row.original.consult} />,
-  },
-  {
-    id: "tool",
-    header: "Tool",
-    accessorFn: (view) => view.toolCall?.name ?? "",
-    size: 260,
-    minSize: 180,
-    cell: ({ row }) => (
-      <span
-        className="block truncate font-mono text-xs text-muted-foreground"
-        title={row.original.toolCall?.name}
-      >
-        {row.original.toolCall?.name ?? "No tool context"}
-      </span>
-    ),
-  },
-  {
-    id: "createdAt",
-    header: "Time",
-    size: 154,
-    minSize: 145,
-    cell: ({ row }) => (
-      <LogTime
-        timestamp={row.original.consult.createdAt}
-        durationMs={row.original.consult.durationMs}
-      />
-    ),
-  },
-];

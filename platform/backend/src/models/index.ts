@@ -82,6 +82,7 @@ export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
 export { default as KbChunkModel } from "./kb-chunk";
+export { default as KbConnectorDocumentCountModel } from "./kb-connector-document-count";
 export { default as KbContainerAclModel } from "./kb-container-acl";
 export { default as KbDirectoryModel } from "./kb-directory";
 export { default as KbDocumentModel } from "./kb-document";

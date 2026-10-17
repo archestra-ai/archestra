@@ -528,12 +528,19 @@ describe("knowledge file routes", () => {
         },
       });
       expect(indexed.json()).toMatchObject({ indexed: 2, failures: [] });
+      // Stored by the writers themselves; no reader has asked yet.
+      const storedTotals = async () =>
+        (await db.select().from(schema.kbConnectorDocumentCountsTable)).map(
+          (row) => row.documentCount,
+        );
+      expect(await storedTotals()).toEqual([2]);
 
       const deleted = await app.inject({
         method: "DELETE",
         url: `/api/knowledge-files/${deletedFileId}`,
       });
       expect(deleted.statusCode).toBe(200);
+      expect(await storedTotals()).toEqual([1]);
       expect(
         (await db.select().from(schema.kbFilesTable)).map((row) => row.id),
       ).toEqual([retainedFileId]);

@@ -145,6 +145,31 @@ describe("agent routes", () => {
     expect(emptyResponse.json().pagination.total).toBe(0);
   });
 
+  test("includeTools=false lists the agents without their tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, name: "Picker Agent" });
+    const tool = await makeTool({ name: "picker_tool", parameters: {} });
+    await makeAgentTool(agent.id, tool.id);
+    const toolsOf = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?name=Picker%20Agent${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json()
+        .data.map((listed: { tools: Array<{ id: string }> }) =>
+          listed.tools.map((ref) => ref.id),
+        );
+    };
+
+    expect(await toolsOf("")).toEqual([expect.arrayContaining([tool.id])]);
+    expect(await toolsOf("&includeTools=false")).toEqual([[]]);
+  });
+
   async function expectAgentTypeSoftDelete(
     agentType: "mcp_gateway",
     makeAgent: (overrides: {

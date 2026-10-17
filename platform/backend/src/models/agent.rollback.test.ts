@@ -1283,6 +1283,46 @@ describe("AgentModel", () => {
       expect(result.data[0].tools.length).toBe(30); // Only the 30 regular tools, Archestra tools excluded
     });
 
+    test("includeTools false keeps the page and leaves the tools out", async ({
+      makeAdmin,
+      makeTool,
+      makeAgentTool,
+      makeAgent,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      const withTools = await makeAgent({
+        organizationId: org.id,
+        name: "Agent A",
+      });
+      await makeAgent({ organizationId: org.id, name: "Agent B" });
+      const tool = await makeTool({ name: "lookup", parameters: {} });
+      await makeAgentTool(withTools.id, tool.id);
+      const page = (includeTools?: boolean) =>
+        AgentModel.findAllPaginated(
+          { limit: 20, offset: 0 },
+          { sortBy: "name", sortDirection: "asc" },
+          { includeTools },
+          admin.id,
+          true,
+        );
+
+      const full = await page();
+      const names = await page(false);
+
+      expect(names.data.map((agent) => agent.id)).toEqual(
+        full.data.map((agent) => agent.id),
+      );
+      expect(names.pagination.total).toBe(full.pagination.total);
+      expect(full.data[0].tools).toContainEqual(
+        expect.objectContaining({ id: tool.id, name: "lookup" }),
+      );
+      expect(names.data.every((agent) => agent.tools.length === 0)).toBe(true);
+    });
+
     test("pagination with different sort options returns correct agent count", async ({
       makeAdmin,
       makeOrganization,

@@ -245,14 +245,45 @@ export function useUniqueExternalAgentIds() {
   });
 }
 
-export function useUniqueUserIds() {
+/**
+ * Users for the logs user filter: the most active users, or the users whose
+ * name matches `search`. The server caps the list, so search finds the rest.
+ */
+export function useInteractionUserOptions({
+  search,
+  enabled,
+}: {
+  search: string;
+  enabled: boolean;
+}) {
   return useQuery({
-    queryKey: ["interactions", "userIds"],
-    queryFn: async () => {
-      const response = await getUniqueUserIds();
-      throwOnApiError(response.error);
+    queryKey: ["interactions", "userIds", "options", search],
+    queryFn: async ({ signal }) => {
+      const response = await getUniqueUserIds({
+        signal,
+        query: { search: search || undefined, limit: LOG_USER_OPTIONS_LIMIT },
+      });
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? [];
     },
+    enabled,
+  });
+}
+
+/** Resolve the logs users the filter refers to, such as one saved in the URL. */
+export function useInteractionUserReferences({ ids }: { ids: string[] }) {
+  const uniqueIds = [...new Set(ids)].sort();
+  return useQuery({
+    queryKey: ["interactions", "userIds", "references", uniqueIds],
+    queryFn: async ({ signal }) => {
+      const response = await getUniqueUserIds({
+        signal,
+        query: { ids: uniqueIds, limit: 100 },
+      });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data ?? [];
+    },
+    enabled: uniqueIds.length > 0,
   });
 }
 
@@ -441,3 +472,5 @@ function downloadSessionInteractionsFile(
     URL.revokeObjectURL(url);
   }, 10_000);
 }
+
+const LOG_USER_OPTIONS_LIMIT = 50;

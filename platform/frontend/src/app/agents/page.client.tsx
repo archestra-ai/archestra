@@ -148,6 +148,8 @@ type AgentsInitialData = {
 type AgentListRow =
   archestraApiTypes.GetAgentCatalogResponses["200"]["data"][number];
 type AgentData = Extract<AgentListRow, { type: "agent" }>["value"];
+/** What a row's actions hand back: the agent, without the row's counts. */
+type AgentActionTarget = Omit<AgentData, "toolsCount" | "subagentsCount">;
 type ExternalAgentData = Extract<AgentListRow, { type: "external" }>["value"];
 
 function getAgentListRowId(row: AgentListRow) {
@@ -385,9 +387,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [deletingExternalAgent, setDeletingExternalAgent] =
     useState<A2aRemoteAgent | null>(null);
   const [permanentlyDeletingAgent, setPermanentlyDeletingAgent] =
-    useState<AgentData | null>(null);
+    useState<AgentActionTarget | null>(null);
 
-  const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
+  const [cloningAgent, setCloningAgent] = useState<AgentActionTarget | null>(
+    null,
+  );
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
@@ -789,9 +793,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <span className="text-sm text-muted-foreground">
             {row.original.value.accessAllTools
               ? "All"
-              : row.original.value.tools.filter(
-                  (tool) => !tool.delegateToAgentId,
-                ).length}
+              : row.original.value.toolsCount}
           </span>
         ),
     },
@@ -808,9 +810,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <span className="text-sm text-muted-foreground">
             {row.original.value.accessAllSubagents
               ? "All"
-              : row.original.value.tools.filter(
-                  (tool) => tool.delegateToAgentId,
-                ).length}
+              : row.original.value.subagentsCount}
           </span>
         ),
     },

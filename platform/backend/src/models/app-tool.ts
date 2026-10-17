@@ -68,14 +68,21 @@ class AppToolModel {
   /** Tools attached to an app. */
   static async getToolsForApp(appId: string) {
     const results = await db
-      .select({ tool: schema.toolsTable })
+      .select({
+        tool: schema.toolsTable,
+        mcpServerId: schema.appToolsTable.mcpServerId,
+        credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
+      })
       .from(schema.appToolsTable)
       .innerJoin(
         schema.toolsTable,
         eq(schema.appToolsTable.toolId, schema.toolsTable.id),
       )
       .where(eq(schema.appToolsTable.appId, appId));
-    return results.map((r) => r.tool);
+    return results.map(({ tool, ...assignment }) => ({
+      ...tool,
+      ...assignment,
+    }));
   }
 
   /** Attach a tool to an app. */

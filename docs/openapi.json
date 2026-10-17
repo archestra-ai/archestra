@@ -48516,6 +48516,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeTools",
+            "required": false,
+            "description": "Attach each internal agent's assigned tools. Defaults to true. The Agents page passes false: it shows only `toolsCount` and `subagentsCount`, which are present either way, while the tool refs carry every assigned tool's name and description. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'."
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -49289,6 +49298,18 @@
                                     "nullable": true,
                                     "type": "string",
                                     "format": "date-time"
+                                  },
+                                  "toolsCount": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Assigned tools other than subagent delegations, as the Agents page shows them. Present whether or not `tools` was requested."
+                                  },
+                                  "subagentsCount": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Agents this agent delegates to."
                                   }
                                 },
                                 "required": [
@@ -49336,7 +49357,9 @@
                                   "knowledgeBaseIds",
                                   "connectorIds",
                                   "suggestedPrompts",
-                                  "pinnedAt"
+                                  "pinnedAt",
+                                  "toolsCount",
+                                  "subagentsCount"
                                 ],
                                 "additionalProperties": false
                               }
@@ -50179,6 +50202,15 @@
             "name": "pinned",
             "required": false,
             "description": "Filter by the current user's pins. Pinned results are ordered by newest pin first; unpinned results keep the requested sort."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeTools",
+            "required": false,
+            "description": "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the agents themselves, such as name pickers: the tool refs carry every assigned tool's name and description, which on an organization of any size is most of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'."
           },
           {
             "schema": {
@@ -95803,6 +95835,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "baseVersion": {
+                    "description": "Expected current content version. A stale value rejects the entire update with 409 before any changes persist.",
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -100737,7 +100775,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "List the tools assigned to an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "List the tools assigned to an app, including each assignment's stored server pin and credential resolution mode.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -100857,6 +100895,20 @@
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "mcpServerId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "credentialResolutionMode": {
+                        "type": "string",
+                        "enum": [
+                          "static",
+                          "dynamic",
+                          "enterprise_managed"
+                        ]
                       }
                     },
                     "required": [
@@ -100872,7 +100924,9 @@
                       "clonedPendingDiscovery",
                       "createdAt",
                       "updatedAt",
-                      "deletedAt"
+                      "deletedAt",
+                      "mcpServerId",
+                      "credentialResolutionMode"
                     ],
                     "additionalProperties": false
                   }
@@ -212197,7 +212251,41 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get user IDs represented in visible logs in the active organization. `log:read` returns the caller's identity; `log:admin` returns every represented user in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
+        "description": "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. `log:read` returns only the caller; `log:admin` returns users from every log in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "ids",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -266039,7 +266127,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`. The deleted slice carries identity only: `assignedAgents` comes back empty, since those links resolve to nothing while the connector is in the trash. It is also the one slice that never hides a row whose stored `config` no longer matches a known connector shape — the trash is the only place restore and permanent delete are offered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "description": "List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`. The deleted slice carries identity only: `assignedAgents` comes back empty, since those links resolve to nothing while the connector is in the trash, and `totalDocsIngested` is not counted and comes back 0. It is also the one slice that never hides a row whose stored `config` no longer matches a known connector shape — the trash is the only place restore and permanent delete are offered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -267491,6 +267579,9 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "totalDocsIngested": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -267522,7 +267613,8 @@
                           "deletedAt",
                           "createdBy",
                           "labels",
-                          "assignedAgents"
+                          "assignedAgents",
+                          "totalDocsIngested"
                         ],
                         "additionalProperties": false
                       }

@@ -93,6 +93,7 @@ import {
   ConnectorRunModel,
   CreatedByModel,
   GithubAppConfigModel,
+  KbConnectorDocumentCountModel,
   KbContainerAclModel,
   KbDocumentModel,
   KbExternalGroupModel,
@@ -207,6 +208,7 @@ const KnowledgeBaseConnectorReadResponseSchema =
 const KnowledgeBaseConnectorListItemSchema =
   KnowledgeBaseConnectorReadResponseSchema.extend({
     assignedAgents: z.array(AssignedAgentSummarySchema),
+    totalDocsIngested: z.number(),
   });
 
 // `containerKey` is internal permission-sync bookkeeping; API consumers see
@@ -437,7 +439,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
           }),
-          KbDocumentModel.countByKnowledgeBaseIds(kbIds),
+          KbConnectorDocumentCountModel.sumByKnowledgeBaseIds(kbIds),
           AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
           KnowledgeBaseLabelModel.getLabelsForMany(kbIds),
         ]);
@@ -871,8 +873,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "active-only filter and is rejected with a 400 alongside " +
           "`status=deleted`. The deleted slice carries identity only: " +
           "`assignedAgents` comes back empty, since those links resolve to " +
-          "nothing while the connector is in the trash. It is also the one " +
-          "slice that never hides a row whose stored `config` no longer " +
+          "nothing while the connector is in the trash, and " +
+          "`totalDocsIngested` is not counted and comes back 0. It is also " +
+          "the one slice that never hides a row whose stored `config` no longer " +
           "matches a known connector shape — the trash is the only place " +
           "restore and permanent delete are offered.",
         tags: ["Connectors"],
@@ -1009,6 +1012,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ),
             assignedAgents: [],
             labels: [],
+            totalDocsIngested: 0,
           })),
           pagination: calculatePaginationMeta(total, { limit, offset }),
         });
@@ -1016,10 +1020,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Enrich connectors with assigned agents (batch query to avoid N+1)
       const connectorIds = data.map((c) => c.id);
-      const [agentIdsByConnector, labelsByConnector] = await Promise.all([
-        AgentConnectorAssignmentModel.getAgentIdsForConnectors(connectorIds),
-        KnowledgeBaseConnectorLabelModel.getLabelsForMany(connectorIds),
-      ]);
+      const [agentIdsByConnector, labelsByConnector, docsByConnector] =
+        await Promise.all([
+          AgentConnectorAssignmentModel.getAgentIdsForConnectors(connectorIds),
+          KnowledgeBaseConnectorLabelModel.getLabelsForMany(connectorIds),
+          KbConnectorDocumentCountModel.findByConnectorIds(connectorIds),
+        ]);
 
       const allAgentIdsForConnectors = [
         ...new Set([...agentIdsByConnector.values()].flat()),
@@ -1045,6 +1051,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const enrichedData = data.map((connector) => ({
         ...connector,
         labels: labelsByConnector.get(connector.id) ?? [],
+        totalDocsIngested: docsByConnector.get(connector.id) ?? 0,
         assignedAgents: (agentIdsByConnector.get(connector.id) ?? [])
           .map((id) => connectorAgentDetailsMap.get(id))
           .filter(
@@ -1396,10 +1403,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
-      const totalDocsIngested = await KbDocumentModel.countByConnector(id);
+      const totals = await KbConnectorDocumentCountModel.findByConnectorIds([
+        id,
+      ]);
       return reply.send({
         ...(await withConnectorDetails(connector)),
-        totalDocsIngested,
+        totalDocsIngested: totals.get(id) ?? 0,
       });
     },
   );
@@ -1583,6 +1592,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               })
             : undefined,
         });
+        await KbConnectorDocumentCountModel.refresh(connectorId);
         return reply.send({ affected, succeeded: [], failed: [] });
       }
 
@@ -1611,6 +1621,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await KbDocumentModel.delete(id);
         },
       });
+      await KbConnectorDocumentCountModel.refresh(connectorId);
 
       return reply.send(outcome);
     },
@@ -1644,6 +1655,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await KbDocumentModel.delete(docId);
+      await KbConnectorDocumentCountModel.refresh(id);
       return reply.send({ success: true });
     },
   );
@@ -2794,6 +2806,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Delete all documents (chunks cascade via FK) and run history
       await KbDocumentModel.deleteByConnector(id);
+      await KbConnectorDocumentCountModel.refresh(id);
       await ConnectorRunModel.deleteByConnector(id);
 
       // Reset connector checkpoint and sync status ("queued" until the

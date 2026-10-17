@@ -1953,7 +1953,7 @@ export const restoreAppVersion = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * List the tools assigned to an app.
+ * List the tools assigned to an app, including each assignment's stored server pin and credential resolution mode.
  *
  * Authentication:
  *
@@ -4911,7 +4911,7 @@ export const getInteractionSessionLineage = <ThrowOnError extends boolean = fals
 export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueExternalAgentIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueExternalAgentIdsResponses, GetUniqueExternalAgentIdsErrors, ThrowOnError>({ url: '/api/interactions/external-agent-ids', ...options });
 
 /**
- * Get user IDs represented in visible logs in the active organization. `log:read` returns the caller's identity; `log:admin` returns every represented user in the organization.
+ * Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. `log:read` returns only the caller; `log:admin` returns users from every log in the organization.
  *
  * Authentication:
  *
@@ -5555,7 +5555,7 @@ export const permanentlyDeleteKnowledgeBase = <ThrowOnError extends boolean = fa
 export const getKnowledgeBaseHealth = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeBaseHealthData, ThrowOnError>) => (options.client ?? client).get<GetKnowledgeBaseHealthResponses, GetKnowledgeBaseHealthErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/health', ...options });
 
 /**
- * List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`. The deleted slice carries identity only: `assignedAgents` comes back empty, since those links resolve to nothing while the connector is in the trash. It is also the one slice that never hides a row whose stored `config` no longer matches a known connector shape — the trash is the only place restore and permanent delete are offered.
+ * List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`. The deleted slice carries identity only: `assignedAgents` comes back empty, since those links resolve to nothing while the connector is in the trash, and `totalDocsIngested` is not counted and comes back 0. It is also the one slice that never hides a row whose stored `config` no longer matches a known connector shape — the trash is the only place restore and permanent delete are offered.
  *
  * Authentication:
  *

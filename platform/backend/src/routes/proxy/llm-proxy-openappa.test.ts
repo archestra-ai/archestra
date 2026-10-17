@@ -26,7 +26,10 @@ import {
   buildMcpGatewayTool,
   mcpToolToModelOutput,
 } from "@/clients/chat-tool-builder";
-import { internalCallHeader } from "@/clients/internal-call";
+import {
+  guardrailCallHeader,
+  internalCallHeader,
+} from "@/clients/internal-call";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
@@ -2052,7 +2055,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   const guardrailCall = (
     source: string,
-    proof: Record<string, string> = internalCallHeader(),
+    proof: Record<string, string> = guardrailCallHeader(),
   ) =>
     app.inject({
       method: "POST",
@@ -2073,7 +2076,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(providerRequests).toHaveLength(1);
     expect(events).toHaveLength(0);
-    const [proofHeader] = Object.keys(internalCallHeader());
+    const [proofHeader] = Object.keys(guardrailCallHeader());
     for (const [, options] of vi.mocked(anthropicAdapterFactory.createClient)
       .mock.calls) {
       expect(options.defaultHeaders ?? {}).not.toHaveProperty(proofHeader);
@@ -2082,7 +2085,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test("block mode blocks a loopback guardrail source without the platform's proof", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
-    const [proofHeader] = Object.keys(internalCallHeader());
+    const [proofHeader] = Object.keys(guardrailCallHeader());
     for (const proof of [{}, { [proofHeader]: "forged" }]) {
       const response = await guardrailCall("guardrail:annotator", proof);
       expect(response.statusCode, response.body).toBe(400);
@@ -2151,7 +2154,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "anthropic-version": "2023-06-01",
         "x-archestra-source": "guardrail:annotator",
         "x-appa-session-id": "chat-session",
-        ...internalCallHeader(),
+        ...guardrailCallHeader(),
       },
       payload: payload(false) as Record<string, unknown>,
     });
@@ -2669,21 +2672,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       questions: [
         {
           question: questionText,
-          header: "Approval",
+          header: "Tool call",
           options: [
-            {
-              label: "Approve",
-              description: "Allow this exact tool call.",
-            },
-            {
-              label: "Deny",
-              description: "Keep this tool call blocked.",
-            },
-            {
-              label: "Inspect details",
-              description:
-                "Show the complete, unchanged review as text in the conversation before deciding.",
-            },
+            { label: "Allow", description: "This exact call." },
+            { label: "Deny", description: "Keep it blocked." },
+            { label: "Inspect", description: "Show the full review in chat." },
           ],
           multiSelect: false,
         },
@@ -3566,7 +3559,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       return next as Record<string, unknown>;
     };
     const approval =
-      'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with the user\'s answers in mind.';
+      'Your questions have been answered: "Canonical HITL review."="Allow". You can now continue with the user\'s answers in mind.';
     const answeredHistory = [
       { role: "user", content: "Check the weather" },
       {

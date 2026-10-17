@@ -1696,16 +1696,37 @@ async function deleteProviderApiKeyAtomically(params: {
           return apiKey;
         });
 
-  await deleteVirtualKeysLeftWithoutProviders(mappedVirtualKeys);
-  await unmapOauthClients({
-    clients: mappedOauthClients,
-    apiKeyId: params.apiKeyId,
-    organizationId: params.organizationId,
-  });
-  await clearKnowledgeBaseSettings({
-    apiKeyId: params.apiKeyId,
-    organizationId: params.organizationId,
-  });
+  try {
+    await deleteVirtualKeysLeftWithoutProviders(mappedVirtualKeys);
+  } catch (error) {
+    logger.error(
+      { error, apiKeyId: params.apiKeyId },
+      "Failed to delete the virtual keys left without a provider after deleting a provider API key",
+    );
+  }
+  try {
+    await unmapOauthClients({
+      clients: mappedOauthClients,
+      apiKeyId: params.apiKeyId,
+      organizationId: params.organizationId,
+    });
+  } catch (error) {
+    logger.error(
+      { error, apiKeyId: params.apiKeyId },
+      "Failed to remove a deleted provider API key from the OAuth clients that mapped it",
+    );
+  }
+  try {
+    await clearKnowledgeBaseSettings({
+      apiKeyId: params.apiKeyId,
+      organizationId: params.organizationId,
+    });
+  } catch (error) {
+    logger.error(
+      { error, apiKeyId: params.apiKeyId },
+      "Failed to clear the knowledge base settings that used a deleted provider API key",
+    );
+  }
 
   if (!deleted.secretId) return;
 
@@ -1770,6 +1791,9 @@ async function unmapOauthClients(params: {
           provider,
           providerApiKeyId,
         }));
+      // Only clients that map the key are passed in, so something is always
+      // removed; the guard keeps a no-op write out of the path regardless.
+      if (remaining.length === client.providerApiKeys.length) return;
       if (remaining.length === 0 && !client.includeFutureProviders) {
         await LlmOauthClientModel.delete({
           id: client.id,

@@ -182,13 +182,14 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
   });
 
   test.for([
-    false,
-    true,
-  ])("a bound runtime can yell without proxy state (break the glass %s)", async (breakTheGlass, {
-    makeAgent,
-    makeOrganization,
-    makeServiceAccount,
-  }) => {
+    { breakTheGlass: false, logicalMetadata: false },
+    { breakTheGlass: true, logicalMetadata: false },
+    { breakTheGlass: false, logicalMetadata: true },
+    { breakTheGlass: true, logicalMetadata: true },
+  ])("a bound runtime can yell without proxy state (%o)", async ({
+    breakTheGlass,
+    logicalMetadata,
+  }, { makeAgent, makeOrganization, makeServiceAccount }) => {
     config.openappa.yellEnabled = true;
     config.openappa.offerSigningSecret = "test-runtime-binding-secret-32chars";
     await GuardrailsDeploymentModel.set({
@@ -245,6 +246,9 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
         method: "tools/call",
         params: {
           name: "archestra__yell",
+          ...(logicalMetadata
+            ? { _meta: { "com.archestra/logicalToolCallId": "logical-report" } }
+            : {}),
           arguments: {
             message: "Runtime reporting feedback",
             with_trajectory: true,

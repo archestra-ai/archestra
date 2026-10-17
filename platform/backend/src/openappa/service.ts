@@ -362,20 +362,20 @@ export async function executeYell(params: {
     superyell: params.brokeTheGlass ?? false,
   });
   try {
+    // Opening a native session just to report would enroll a session that
+    // started outside enforcement. Keep its feedback locally without doing so.
+    // No archive is sent, so there is no delivery attempt to record.
+    if (await startedUnenforced(params.session)) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Report recorded for review in Guardrails → Yells. No diagnostic archive was captured because Guardrails was not enforcing this session.",
+          },
+        ],
+      };
+    }
     if (params.needsAdmission) {
-      // Opening a native session just to report would enroll a session that
-      // started outside enforcement. Keep its feedback locally without doing so.
-      // No archive is sent, so there is no delivery attempt to record.
-      if (await startedUnenforced(params.session)) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Report recorded for review in Guardrails → Yells. No diagnostic archive was captured because Guardrails was not enforcing this session.",
-            },
-          ],
-        };
-      }
       // The native reporter requires a released yell, even when the host can
       // authenticate its session. Admit this report under its own operation id.
       const [decision] = await evaluateToolCalls(

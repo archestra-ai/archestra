@@ -251,12 +251,14 @@ function getCacheKey(
  * Generate the full cache key for tool cache
  * Includes the isolation key because browser tools need correct tab selection
  */
-function getToolCacheKey(
-  agentId: string,
-  userId: string,
-  isolationKey?: string,
-  delegationChain?: string,
-): `${typeof CacheKey.ChatMcpTools}-${string}` {
+function getToolCacheKey(params: {
+  agentId: string;
+  userId: string;
+  isolationKey?: string;
+  delegationChain?: string;
+  sessionId?: string;
+}): `${typeof CacheKey.ChatMcpTools}-${string}` {
+  const { agentId, userId, isolationKey, delegationChain, sessionId } = params;
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
   if (isolationKey) parts.push(isolationKey);
@@ -264,6 +266,11 @@ function getToolCacheKey(
   // under one isolation key. Each depth needs its own entry: the tools close
   // over the chain, which the executor reads to detect delegation cycles.
   if (delegationChain) parts.push(delegationChain);
+  // The tools close over the session id too, and record it on every call they
+  // persist, so a run filed under another session must not reuse them. UI
+  // chat keys both by the conversation id, which leaves its key unchanged.
+  if (sessionId && sessionId !== isolationKey)
+    parts.push(`session=${sessionId}`);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -509,7 +516,7 @@ export function closeChatMcpClient(
   }
 
   // Also clear tool cache for this conversation/execution
-  deleteToolCacheScope(getToolCacheKey(agentId, userId, isolationKey));
+  deleteToolCacheScope(getToolCacheKey({ agentId, userId, isolationKey }));
 }
 
 /**
@@ -918,12 +925,13 @@ export async function getChatMcpTools({
   openappaReviewPause?: boolean;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
-  const toolCacheKey = getToolCacheKey(
+  const toolCacheKey = getToolCacheKey({
     agentId,
     userId,
-    scopeKey,
+    isolationKey: scopeKey,
     delegationChain,
-  );
+    sessionId,
+  });
   const shouldUseToolCache =
     !abortSignal && !appaSubagent && !openappaReviewPause;
 

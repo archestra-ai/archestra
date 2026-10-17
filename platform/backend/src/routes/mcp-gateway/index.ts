@@ -48,6 +48,7 @@ import {
   openLegacySseStream,
   wantsLegacySseStream,
 } from "./legacy-sse";
+import { gatewayLlmSessionId, gatewayLlmToolCallId } from "./llm-link";
 import {
   clientSupportsInputRequest,
   deriveStatePrincipal,
@@ -1248,6 +1249,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       }
 
       const runId = readHeader(request, RUN_ID_HEADER);
+      const llmSessionId = gatewayLlmSessionId(request);
+      const llmToolCallId = gatewayLlmToolCallId(request.body);
       const tokenAuthContext: TokenAuthContext = {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,
@@ -1268,6 +1271,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         }),
         source: gatewayCallSource(request),
         ...(runId && { runId }),
+        ...(llmSessionId && { llmSessionId }),
+        ...(llmToolCallId && { llmToolCallId }),
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist

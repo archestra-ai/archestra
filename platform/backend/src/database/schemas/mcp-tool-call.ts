@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -76,6 +77,20 @@ const mcpToolCallsTable = pgTable(
     }),
     /** Agent run or external run that issued this gateway call. */
     runId: varchar("run_id"),
+    /**
+     * The LLM proxy session (`interactions.session_id`) whose model turn
+     * issued this call. Written only from an exact signal: the chat engine's
+     * own session id, or the session headers a gateway client sends, read the
+     * same way the LLM proxy reads them. Null when there is none; readers may
+     * still resolve it through `run_id` (see McpToolCallModel).
+     */
+    sessionId: varchar("session_id"),
+    /**
+     * The model's own id for the tool call this row executed (the provider's
+     * `tool_use` / `tool_calls[].id`), when the caller passed it. Distinct from
+     * `tool_call.id`, which is minted by the platform.
+     */
+    llmToolCallId: varchar("llm_tool_call_id"),
     authMethod: varchar("auth_method", {
       length: 50,
     }).$type<MCPGatewayAuthMethod>(),
@@ -102,6 +117,16 @@ const mcpToolCallsTable = pgTable(
     userIdIdx: index("mcp_tool_calls_user_id_idx").on(table.userId),
     appIdIdx: index("mcp_tool_calls_app_id_idx").on(table.appId),
     createdAtIdx: index("mcp_tool_calls_created_at_idx").on(table.createdAt),
+    // A session's calls in time order (the session view's keyset walk).
+    // Partial: most rows carry no session, so the index stays small.
+    sessionCreatedAtIdx: index("mcp_tool_calls_session_created_at_idx")
+      .on(table.sessionId, table.createdAt, table.id)
+      .where(sql`${table.sessionId} IS NOT NULL`),
+    // Resolving a session for rows linked only by run id, and the session
+    // filter's run branch.
+    runIdIdx: index("mcp_tool_calls_run_id_idx")
+      .on(table.runId)
+      .where(sql`${table.runId} IS NOT NULL`),
   }),
 );
 

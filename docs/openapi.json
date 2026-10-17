@@ -314759,7 +314759,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get MCP tool calls in the active organization with cursor pagination. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+        "description": "Get MCP tool calls in the active organization with cursor pagination, newest first. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -314811,6 +314811,17 @@
             "name": "userId",
             "required": false,
             "description": "Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "in": "query",
+            "name": "sessionId",
+            "required": false,
+            "description": "Filter by the LLM proxy session that issued the call: calls recorded with that session, and tool calls whose run resolves to it."
           },
           {
             "schema": {
@@ -314956,6 +314967,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "sessionId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "llmToolCallId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "authMethod": {
                             "nullable": true,
                             "type": "string",
@@ -315011,6 +315030,8 @@
                           "toolResult",
                           "userId",
                           "runId",
+                          "sessionId",
+                          "llmToolCallId",
                           "authMethod",
                           "oauthClientId",
                           "source",
@@ -315435,6 +315456,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "sessionId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "llmToolCallId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "authMethod": {
                       "nullable": true,
                       "type": "string",
@@ -315490,6 +315519,8 @@
                     "toolResult",
                     "userId",
                     "runId",
+                    "sessionId",
+                    "llmToolCallId",
                     "authMethod",
                     "oauthClientId",
                     "source",

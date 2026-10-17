@@ -82013,6 +82013,10 @@ export type GetMcpToolCallsData = {
          * Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller.
          */
         userId?: string;
+        /**
+         * Filter by the LLM proxy session that issued the call: calls recorded with that session, and tool calls whose run resolves to it.
+         */
+        sessionId?: string;
         limit?: number;
         cursor?: string;
     };
@@ -82115,6 +82119,8 @@ export type GetMcpToolCallsResponses = {
             toolResult: unknown;
             userId: string | null;
             runId: string | null;
+            sessionId: string | null;
+            llmToolCallId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
             source: 'api' | 'chat';
@@ -82237,6 +82243,8 @@ export type GetMcpToolCallResponses = {
         toolResult: unknown;
         userId: string | null;
         runId: string | null;
+        sessionId: string | null;
+        llmToolCallId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
         source: 'api' | 'chat';

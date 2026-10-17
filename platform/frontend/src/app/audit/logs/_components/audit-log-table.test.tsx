@@ -332,7 +332,7 @@ describe("AuditLogTable", () => {
     );
   });
 
-  it("loads resource options only once the picker opens, then applies the picked resourceId", async () => {
+  it("loads resource options only while the picker is open, then applies the picked resourceId", async () => {
     const push = vi.fn();
     vi.mocked(useRouter).mockReturnValue({
       push,
@@ -366,6 +366,10 @@ describe("AuditLogTable", () => {
     expect(push).toHaveBeenCalled();
     const url = String(push.mock.calls[push.mock.calls.length - 1][0]);
     expect(url).toContain("resourceId=mcp-1");
+    // Picking closes the picker, and a closed picker loads no options.
+    expect(mockUseResourceSearch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
   });
 
   it("labels a resource preselected from the URL without opening the picker", () => {

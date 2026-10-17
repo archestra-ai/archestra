@@ -250,10 +250,11 @@ export function AuditLogTable() {
     resourceId,
   });
 
-  // The actor and resource pickers search on the server and load nothing
-  // until they first open (or the URL already holds a selection to label).
-  const [actorPickerOpened, setActorPickerOpened] = useState(false);
-  const [resourcePickerOpened, setResourcePickerOpened] = useState(false);
+  // The actor and resource pickers search on the server and load their
+  // options only while open, so a closed picker does not refetch on window
+  // focus. A selection from the URL still loads its label.
+  const [actorPickerOpen, setActorPickerOpen] = useState(false);
+  const [resourcePickerOpen, setResourcePickerOpen] = useState(false);
   const { data: canSeeAllAuditLogs } = useHasPermissions({
     auditLog: ["admin"],
   });
@@ -264,10 +265,10 @@ export function AuditLogTable() {
   } = useMemberSearch({
     limit: ACTOR_FILTER_LIMIT,
     selectedUserIds: actorId ? [actorId] : [],
-    enabled: !!canSeeAllAuditLogs && (actorPickerOpened || !!actorId),
+    enabled: !!canSeeAllAuditLogs && (actorPickerOpen || !!actorId),
   });
   const resourceSearch = useAuditLogResourceSearch({
-    enabled: resourcePickerOpened,
+    enabled: resourcePickerOpen,
     selectedResourceId: resourceId,
   });
 
@@ -466,9 +467,7 @@ export function AuditLogTable() {
                   items={entityOptions}
                   pinnedItems={[{ value: ALL_VALUE, label: "All resources" }]}
                   onSearchQueryChange={resourceSearch.onSearchQueryChange}
-                  onOpenChange={(open) => {
-                    if (open) setResourcePickerOpened(true);
-                  }}
+                  onOpenChange={setResourcePickerOpen}
                   emptyMessage={
                     resourceSearch.isSearching
                       ? "Searching…"
@@ -496,9 +495,7 @@ export function AuditLogTable() {
                           { value: ALL_VALUE, label: "All actors" },
                         ]}
                         onSearchQueryChange={onActorSearchChange}
-                        onOpenChange={(open) => {
-                          if (open) setActorPickerOpened(true);
-                        }}
+                        onOpenChange={setActorPickerOpen}
                         emptyMessage={actorEmptyMessage}
                         inactiveValue={ALL_VALUE}
                       />

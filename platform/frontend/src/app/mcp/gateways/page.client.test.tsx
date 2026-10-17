@@ -110,4 +110,42 @@ describe("McpGatewaysPage", () => {
     expect(screen.getByText("All gateways")).toBeVisible();
     expect(screen.queryByText("No MCP gateways found")).toBeNull();
   });
+
+  // A page asked for before the pins are known would include the personal
+  // gateway, which would then flash as a table row.
+  it.each([
+    false,
+    true,
+  ])("asks for the table only once the automatic pins are known (automatic pins loading: %s)", (autoPinsLoading) => {
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: autoPinsLoading ? undefined : { id: "gw-personal" },
+      isLoading: autoPinsLoading,
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    vi.mocked(useProfilesPaginated).mockClear();
+    vi.mocked(useProfilesPaginated).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isFetching: false,
+      isLoadingError: false,
+    } as unknown as ReturnType<typeof useProfilesPaginated>);
+
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <McpGatewaysPage />
+      </QueryClientProvider>,
+    );
+
+    const tableCall = vi
+      .mocked(useProfilesPaginated)
+      .mock.calls.map(([params]) => params)
+      .find((params) => params?.pinned === false);
+    expect(tableCall?.enabled).toBe(!autoPinsLoading);
+    if (!autoPinsLoading) {
+      expect(tableCall?.excludeIds).toEqual(["gw-personal"]);
+    }
+  });
 });

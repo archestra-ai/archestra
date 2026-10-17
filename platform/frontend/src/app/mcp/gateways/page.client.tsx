@@ -233,6 +233,9 @@ function McpGateways() {
   } = useProfilesPaginated({
     limit: pageSize,
     offset,
+    // Asked for once the pins are known, so the personal gateway is never
+    // drawn as a row and the first page is not fetched twice.
+    enabled: isDeletedView || !isAutoPinnedLoading,
     ...listFilters,
     pinned: isDeletedView ? undefined : false,
     ...listExclusions,

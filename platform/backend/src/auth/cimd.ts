@@ -43,9 +43,8 @@ export async function fetchAndValidateCimdDocument(
 ): Promise<CimdMetadata> {
   const url = new URL(clientIdUrl);
 
-  // Warn about HTTP CIMD URLs — HTTPS is recommended but not enforced.
-  // The MCP spec says the AS "SHOULD" reject HTTP (not "MUST"), and
-  // enforcement here breaks internal environments (CI, K8s pod-to-pod).
+  // Warn about HTTP CIMD URLs — HTTPS is recommended but not enforced, since
+  // the MCP spec says the AS "SHOULD" reject HTTP (not "MUST").
   if (url.protocol !== "https:") {
     logger.warn(
       { clientIdUrl },
@@ -53,18 +52,19 @@ export async function fetchAndValidateCimdDocument(
     );
   }
 
-  // SSRF mitigation: block private/loopback IP addresses.
-  // Hostnames that resolve to private IPs are still possible (DNS rebinding),
-  // but blocking obvious cases covers the common attack surface.
+  // SSRF mitigation. The client_id comes from unauthenticated callers, so the
+  // document host must be public in every environment: literal private and
+  // loopback addresses are refused here, and hostnames are resolved below and
+  // refused if any answer is private or loopback (cluster-internal Service
+  // names included).
   if (isPrivateHost(url.hostname)) {
     throw new CimdError(
       `CIMD client_id URL must not point to a private or loopback address: ${url.hostname}`,
     );
   }
 
-  // Hostnames that resolve to private addresses are the other half of SSRF.
-  // The dispatcher pins the dial to the address that passed the check. Loopback
-  // is refused here even outside production, matching the literal check above.
+  // The dispatcher pins the dial to the address that passed the check, so the
+  // name cannot be re-resolved to an internal address in between (DNS rebinding).
   const pinned = await createPinnedOutboundDispatcher({
     hostname: url.hostname,
     allowLoopback: false,

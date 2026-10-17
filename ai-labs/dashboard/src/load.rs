@@ -328,11 +328,11 @@ pub fn list_runs(experiments_dir: &Path) -> Result<Vec<RunListEntry>> {
     let mut runs = Vec::new();
     for entry in entries {
         let entry = entry.wrap_err("reading experiments dir entry")?;
-        let dir = entry.path();
-        if !is_run_dir(&dir) {
-            continue;
-        }
         let id = entry.file_name().to_string_lossy().to_string();
+        // Same rules as `load_run`, so every listed run can also be opened.
+        let Some(dir) = resolve_run_dir(&root, &id) else {
+            continue;
+        };
         let run = load_run_dir(&dir, &id)?;
         runs.push(RunListEntry {
             id: run.id.clone(),

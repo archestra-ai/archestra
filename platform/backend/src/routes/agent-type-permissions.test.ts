@@ -815,10 +815,7 @@ describe("agent type permission isolation (routes)", () => {
         method: "GET",
         url: "/api/agents?agentType=agent&includeBuiltIn=true",
       });
-      if (adminRes.statusCode !== 200) {
-        console.error("ADMIN ALL ERROR:", adminRes.json());
-      }
-      expect(adminRes.statusCode).toBe(200);
+      expect(adminRes.statusCode, adminRes.body).toBe(200);
       const adminAgents = adminRes.json().data;
       const adminBuiltIn = adminAgents.filter(
         (a: { builtIn: boolean }) => a.builtIn,

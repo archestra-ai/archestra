@@ -2,9 +2,9 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it } from "vitest";
-import { SessionUsage } from "./session-usage";
+import { UsageCell } from "./usage-cell";
 
-const session: ComponentProps<typeof SessionUsage>["session"] = {
+const session: ComponentProps<typeof UsageCell>["session"] = {
   requestCount: 4,
   totalInputTokens: 4210,
   totalOutputTokens: 318,
@@ -16,12 +16,12 @@ const session: ComponentProps<typeof SessionUsage>["session"] = {
   totalBaselineCost: "0.03",
 };
 
-describe("SessionUsage", () => {
+describe("UsageCell", () => {
   it("shows exact billed, token and savings details on focus", async () => {
     const user = userEvent.setup();
-    render(<SessionUsage session={session} />);
-    expect(screen.getByText("4.2k in")).toBeVisible();
-    expect(screen.getByText("318 out")).toBeVisible();
+    render(<UsageCell session={session} />);
+    expect(screen.getByText("$0.02")).toBeVisible();
+    expect(screen.getByText("4.5K tokens")).toBeVisible();
     await user.tab();
     const details = within(await screen.findByRole("tooltip"));
     expect(details.getByText("4,210 / 318")).toBeInTheDocument();
@@ -42,18 +42,20 @@ describe("SessionUsage", () => {
     ...costs
   }) => {
     render(
-      <SessionUsage session={{ ...session, totalCost: "0.125", ...costs }} />,
+      <UsageCell session={{ ...session, totalCost: "0.125", ...costs }} />,
     );
     expect(screen.getByText(expected, { exact: true })).toBeVisible();
+    expect(screen.getByText("Plan")).toBeVisible();
     expect(
       screen.getByRole("button", { name: /includes subscription usage/ }),
     ).toBeVisible();
     expect(screen.queryByText("$0.13")).toBeNull();
   });
 
-  it("keeps sub-cent spend visible", () => {
+  it("keeps sub-cent spend visible", async () => {
+    const user = userEvent.setup();
     render(
-      <SessionUsage
+      <UsageCell
         session={{
           ...session,
           totalCost: "0.00004",
@@ -61,6 +63,10 @@ describe("SessionUsage", () => {
         }}
       />,
     );
-    expect(screen.getByText("$0.000040")).toBeVisible();
+    expect(screen.getByText("<$0.01")).toBeVisible();
+    await user.tab();
+    expect(
+      within(await screen.findByRole("tooltip")).getByText("$0.000040"),
+    ).toBeInTheDocument();
   });
 });

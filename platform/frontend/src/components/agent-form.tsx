@@ -224,10 +224,7 @@ import {
   shouldShowDescriptionField,
 } from "./agent-form.utils";
 
-type Agent = Omit<
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
-  "pinnedAt"
->;
+type Agent = archestraApiTypes.GetAgentResponses["200"];
 type AgentOption =
   archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number];
 type ToolExposureMode = Agent["toolExposureMode"];

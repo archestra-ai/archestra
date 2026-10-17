@@ -10,15 +10,11 @@
 
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockProxyRoutes from "./bedrock";
 
@@ -44,11 +40,8 @@ const HEADERS = {
 
 const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
 
-function createFastifyApp(): FastifyInstance {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  return app;
+function createFastifyApp() {
+  return createFastifyInstance();
 }
 
 async function* asyncIterable<T>(items: T[]): AsyncIterable<T> {
@@ -88,6 +81,8 @@ describe("Bedrock Converse proxy — reasoning content", () => {
 
   test("returns reasoning blocks from a non-streaming response", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -121,11 +116,17 @@ describe("Bedrock Converse proxy — reasoning content", () => {
     const app = createFastifyApp();
     await app.register(bedrockProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-reasoning-agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/${agent.id}/converse`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         modelId: MODEL_ID,
         messages: [{ role: "user", content: [{ text: "Days in a week?" }] }],
@@ -151,6 +152,8 @@ describe("Bedrock Converse proxy — reasoning content", () => {
 
   test("forwards a redacted reasoning delta on the stream", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
       () =>
@@ -187,11 +190,17 @@ describe("Bedrock Converse proxy — reasoning content", () => {
     const app = createFastifyApp();
     await app.register(bedrockProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-reasoning-stream-agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/${agent.id}/converse-stream`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         modelId: MODEL_ID,
         messages: [{ role: "user", content: [{ text: "Days in a week?" }] }],
@@ -218,6 +227,8 @@ describe("Bedrock Converse proxy — reasoning content", () => {
 
   test("forwards an echoed redacted reasoning block upstream unchanged", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const captured: Record<string, unknown>[] = [];
     vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
@@ -242,11 +253,17 @@ describe("Bedrock Converse proxy — reasoning content", () => {
     const app = createFastifyApp();
     await app.register(bedrockProxyRoutes);
     const agent = await makeAgent({ name: "bedrock-reasoning-echo-agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/bedrock/${agent.id}/converse`,
-      headers: HEADERS,
+      headers: { ...HEADERS, "x-archestra-virtual-key": passthroughKey },
       payload: {
         modelId: MODEL_ID,
         messages: [

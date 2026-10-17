@@ -85,12 +85,30 @@ describe("audit row content funnel", () => {
       setServerKey(SERVER_SECRET);
 
       const values = encryptInteractionContent(
-        { request, response, type: "anthropic:messages" },
+        {
+          request,
+          response,
+          sessionPreview: { lastUserMessagePreview: "private preview" },
+          type: "anthropic:messages",
+        },
         audit,
       ) as Record<string, unknown>;
 
       expect(isContentEnvelope(values.request)).toBe(true);
       expect(isContentEnvelope(values.response)).toBe(true);
+      expect(isContentEnvelope(values.sessionPreview)).toBe(true);
+      expect(() =>
+        decryptContentValue(
+          values.sessionPreview,
+          "interactions.session_preview",
+        ),
+      ).toThrow();
+      expect(
+        decryptEncryptedChatValue(values.sessionPreview, {
+          ...audit,
+          context: "interactions.session_preview",
+        }),
+      ).toEqual({ lastUserMessagePreview: "private preview" });
       expect(values.encryptedChatConversationId).toBe(CONVERSATION_ID);
 
       // The server key cannot open it...
@@ -196,7 +214,12 @@ describe("audit row content funnel", () => {
   describe("read path", () => {
     test("a locked interaction row reads as the locked sentinel instead of throwing", () => {
       const stored = encryptInteractionContent(
-        { request, response, type: "anthropic:messages" },
+        {
+          request,
+          response,
+          sessionPreview: { lastUserMessagePreview: "private preview" },
+          type: "anthropic:messages",
+        },
         audit,
       ) as Record<string, unknown>;
       // A deployment that later turned server-key encryption on: the naive
@@ -209,6 +232,7 @@ describe("audit row content funnel", () => {
       const read = readInteractionRow({ ...stored }) as Record<string, unknown>;
       expect(isEncryptedChatSealedContent(read.request)).toBe(true);
       expect(isEncryptedChatSealedContent(read.response)).toBe(true);
+      expect(isEncryptedChatSealedContent(read.sessionPreview)).toBe(true);
       expect(read.request).toEqual({ __encryptedChatSealed: CONVERSATION_ID });
     });
 

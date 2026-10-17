@@ -627,15 +627,18 @@ async function resolveAutoDelegationTarget(params: {
       isAdmin: isAgentAdmin,
       organizationId,
       excludeAgentId: agentId,
+      includeDetails: false,
       environmentId,
     }),
     AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agentId),
   ]);
 
   const excluded = new Set(excludedIds);
-  const match = sortDelegationTargets(targets).find(
-    (t) => !excluded.has(t.id) && slugify(t.name) === targetAgentSlug,
-  );
+  const match = sortDelegationTargets(
+    targets.filter(
+      (t) => !excluded.has(t.id) && slugify(t.name) === targetAgentSlug,
+    ),
+  )[0];
 
   if (!match) {
     return { error: noDelegationConfiguredError(targetAgentSlug) };

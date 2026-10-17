@@ -19,6 +19,8 @@ describe("agent selector presentation parity", () => {
     makeTeamMember,
     makeOrganization,
     makeServiceAccount,
+    makeTool,
+    makeAgentTool,
   }) => {
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
     const owner = await makeUser();
@@ -46,7 +48,9 @@ describe("agent selector presentation parity", () => {
       agentType: "agent",
       name: "Own",
       icon: "🔎",
+      systemPrompt: "Configuration content",
     });
+    await makeAgentTool(own.id, (await makeTool({})).id);
     const shared = await make("Shared");
     const teamed = await make("Team");
     const organization = await make("Organization");
@@ -140,6 +144,19 @@ describe("agent selector presentation parity", () => {
     };
     const query = "?excludeBuiltIn=true&agentTypes=agent";
     const admin = await compare(query);
+    // Selectors get names and presentation only; editing content stays on the
+    // detail route.
+    const ownOption = admin.find((row: { id: string }) => row.id === own.id);
+    for (const field of [
+      "systemPrompt",
+      "tools",
+      "labels",
+      "knowledgeBaseIds",
+      "connectorIds",
+      "suggestedPrompts",
+    ]) {
+      expect(ownOption).not.toHaveProperty(field);
+    }
     expect(
       admin.find((row: { id: string }) => row.id === shared.id),
     ).toMatchObject({

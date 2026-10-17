@@ -4,7 +4,6 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authQueryKeys,
-  useCurrentOrgMembers,
   useDefaultCredentialsEnabled,
   useHasPermissions,
   usePermissionMap,
@@ -157,29 +156,6 @@ describe("useSession", () => {
 
     expect(result.current.data).toEqual(mockSession);
     expect(authClient.getSession).toHaveBeenCalled();
-  });
-});
-
-describe("useCurrentOrgMembers", () => {
-  it("should return organization members", async () => {
-    const mockMembers = [
-      { id: "user1", email: "user1@example.com", role: "admin" },
-      { id: "user2", email: "user2@example.com", role: "member" },
-    ];
-
-    vi.mocked(authClient.organization.listMembers).mockResolvedValue({
-      data: { members: mockMembers },
-    } as ReturnType<typeof authClient.organization.listMembers>);
-
-    const { result } = renderHook(() => useCurrentOrgMembers(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.data).toEqual(mockMembers);
   });
 });
 

@@ -4,7 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useInteractionSessions } from "@/lib/interactions/interaction.query";
+import { useOrganization } from "@/lib/organization.query";
 import LlmProxyLogsPage from "./page.client";
 
 // The cmdk-backed picker reaches for pointer-capture / scrollIntoView /
@@ -64,6 +66,7 @@ vi.mock("@/lib/agent-options.query", () => ({
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/interactions/interaction.query", async (importOriginal) => ({
   ...(await importOriginal<
@@ -168,6 +171,11 @@ describe("LlmProxyLogsPage proxy filter", () => {
       data: { data: [], pagination: makePagination() },
       isFetching: false,
     } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
   });
 
   it("shows the owner email of a personal proxy alongside its name", async () => {
@@ -242,11 +250,15 @@ describe("LlmProxyLogsPage proxy filter", () => {
     }
     expect(screen.getByText("Summarize the quarterly report")).toBeVisible();
     expect(
+      screen.getByRole("button", { name: "Demo Admin via API" }),
+    ).toBeVisible();
+    expect(
       screen.getByRole("button", { name: /3 requests,.*100 input tokens/ }),
     ).toBeVisible();
-    expect(screen.getByText("100 in")).toBeVisible();
+    expect(screen.getByText("150 tokens")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "Spend" })).toBeNull();
-    expect(screen.getByText("+1 more")).toBeVisible();
+    expect(screen.getByText("GPT-5.4")).toBeVisible();
+    expect(screen.getByText("+ 1 more model")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Details" })).toBeNull();
   });
@@ -285,7 +297,8 @@ describe("LlmProxyLogsPage proxy filter", () => {
     render(<LlmProxyLogsPage />);
 
     expect(screen.getByText("ci-runners")).toBeVisible();
-    expect(screen.getByText("No user — shared key")).toBeVisible();
+    expect(screen.getByText("org")).toBeVisible();
+    expect(screen.getByText("Shared key")).toBeVisible();
   });
 
   it("names the key and its owner for an attributed session", () => {
@@ -342,7 +355,9 @@ describe("LlmProxyLogsPage proxy filter", () => {
 
     render(<LlmProxyLogsPage />);
 
-    expect(screen.getByText("No user — provider key")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Provider key via API" }),
+    ).toBeVisible();
     expect(screen.queryByText(/archestra_/)).toBeNull();
   });
 
@@ -359,5 +374,84 @@ describe("LlmProxyLogsPage proxy filter", () => {
 
     expect(screen.getByText("Content not stored")).toBeVisible();
     expect(screen.queryByText("No message")).toBeNull();
+  });
+
+  // The knowledge base has no prompt, and the row already says "Knowledge
+  // base", so the title says what the call did rather than repeating it.
+  it("titles a knowledge-base row by its task without repeating its source", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            source: "knowledge:embedding",
+            sources: ["knowledge:embedding"],
+            profileId: null,
+            profileName: null,
+            unattributedReason: "internal",
+          }),
+        ],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    expect(screen.getByText("Embedding documents")).toBeVisible();
+    expect(screen.queryByText("Knowledge - Embedding")).toBeNull();
+    expect(screen.queryByText("Deleted LLM proxy")).toBeNull();
+  });
+
+  // Every cell's tooltip trigger is a button; a click on one must still open
+  // the row, while the chat link goes to the chat instead.
+  it("opens the session from anywhere in the row except the chat link", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            sessionId: "chat-session",
+            source: "chat",
+            sources: ["chat"],
+            conversationTitle: "Quarterly planning",
+          }),
+        ],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    await user.click(screen.getByText("GPT-5.4"));
+    expect(push).toHaveBeenCalledWith("/llm/logs/session/chat-session");
+
+    push.mockClear();
+    const chatLink = screen.getByRole("link", { name: "Open chat" });
+    expect(chatLink).toHaveAttribute("href", "/chat/chat-session");
+    await user.click(chatLink);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("opens a lone interaction at its own detail page", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            sessionId: null,
+            interactionId: "interaction-1",
+            lastUserMessagePreview: "One-off request",
+          }),
+        ],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    await user.click(screen.getByText("One-off request"));
+    expect(push).toHaveBeenCalledWith("/llm/logs/interaction-1");
   });
 });

@@ -92,7 +92,7 @@ const server = setupServer(
   http.get(`${API_ORIGIN}/api/teams`, () =>
     HttpResponse.json(
       page([
-        { id: "team-1", name: "Platform", description: null, members: [] },
+        { id: "team-1", name: "Platform", description: null, memberCount: 0 },
       ]),
     ),
   ),

@@ -7,6 +7,7 @@ import {
   ChatSetupMenu,
   type ChatSetupMenuProps,
 } from "@/components/chat/chat-setup-menu";
+import { useChatSetupMenuPosition } from "@/components/chat/use-chat-setup-menu-position";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -31,7 +32,10 @@ export function ChatModelButton({
   onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpenState] = useState(false);
+  const { triggerRef, position, updatePosition } =
+    useChatSetupMenuPosition(open);
   const setOpen = (next: boolean) => {
+    if (next) updatePosition();
     setOpenState(next);
     onOpenChange?.(next);
   };
@@ -49,6 +53,7 @@ export function ChatModelButton({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          ref={triggerRef}
           type="button"
           variant="ghost"
           size="sm"
@@ -57,6 +62,12 @@ export function ChatModelButton({
               ? `Model: ${data.modelName}, reasoning ${level?.label ?? "Auto"}`
               : `Model: ${data.modelName}`
           }
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
           data-testid={E2eTestId.ChatModelSelectorTrigger}
           className="h-8 min-w-0 max-w-72 gap-1.5 px-2 font-normal"
         >
@@ -85,13 +96,17 @@ export function ChatModelButton({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        side="bottom"
+        side={position.side}
         align="start"
         sideOffset={8}
         collisionPadding={12}
-        className="w-auto overflow-hidden p-0"
+        className="w-auto overflow-hidden rounded-xl p-0"
       >
-        <ChatSetupMenu {...menuProps} close={() => setOpen(false)} />
+        <ChatSetupMenu
+          {...menuProps}
+          maxHeight={position.maxHeight}
+          close={() => setOpen(false)}
+        />
       </PopoverContent>
     </Popover>
   );

@@ -6,6 +6,7 @@ import {
   exists,
   gte,
   inArray,
+  ne,
   notExists,
   or,
   sql,
@@ -319,33 +320,47 @@ class MemberModel {
   }
 
   /**
-   * Get all members of an organization with user details
+   * One page of the organization's members other than `excludeUserId`, with
+   * their org role, ordered by name. `search` matches name or email.
    */
-  static async findAllByOrganization(organizationId: string) {
-    logger.debug(
-      { organizationId },
-      "MemberModel.findAllByOrganization: fetching members",
-    );
-    const results = await db
+  static async findImpersonationCandidates(params: {
+    organizationId: string;
+    excludeUserId: string;
+    pagination: CursorQuery;
+    search?: string;
+  }) {
+    const table = schema.usersTable;
+    const cursor = decodeCursor(params.pagination.cursor);
+    const rows = await db
       .select({
-        id: schema.usersTable.id,
-        name: schema.usersTable.name,
-        email: schema.usersTable.email,
+        id: table.id,
+        name: table.name,
+        email: table.email,
         role: schema.membersTable.role,
-        systemRole: schema.usersTable.role,
       })
       .from(schema.membersTable)
-      .innerJoin(
-        schema.usersTable,
-        eq(schema.membersTable.userId, schema.usersTable.id),
+      .innerJoin(table, eq(schema.membersTable.userId, table.id))
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          ne(table.id, params.excludeUserId),
+          params.search?.trim()
+            ? buildTokenizedSearchFilter({
+                query: params.search,
+                columns: [table.name, table.email],
+              })
+            : undefined,
+          cursor
+            ? sql`(${table.name} COLLATE "C", ${table.id} COLLATE "C") > (${cursor.value} COLLATE "C", ${cursor.id} COLLATE "C")`
+            : undefined,
+        ),
       )
-      .where(eq(schema.membersTable.organizationId, organizationId))
-      .orderBy(schema.usersTable.name);
-    logger.debug(
-      { organizationId, count: results.length },
-      "MemberModel.findAllByOrganization: completed",
-    );
-    return results;
+      .orderBy(sql`${table.name} COLLATE "C"`, sql`${table.id} COLLATE "C"`)
+      .limit(params.pagination.limit + 1);
+    return createCursorPaginatedResult(rows, params.pagination, (row) => ({
+      value: row.name,
+      id: row.id,
+    }));
   }
 
   /** At most `limit` member emails of the organization. */
@@ -366,9 +381,9 @@ class MemberModel {
   }
 
   /**
-   * Members of the organization whose user id is in `userIds`, same shape as
-   * findAllByOrganization. Lets a caller resolve a known subset (e.g. a member's
-   * teammates) without scanning the full roster.
+   * Members of the organization whose user id is in `userIds`, with user
+   * details. Lets a caller resolve a known subset without scanning the full
+   * roster.
    */
   static async findByUserIdsInOrganization(params: {
     organizationId: string;

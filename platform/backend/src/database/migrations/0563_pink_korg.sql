@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "allow_unauthenticated_llm_proxy_requests" boolean DEFAULT false NOT NULL;

@@ -83,6 +83,18 @@ const organizationsTable = pgTable("organization", {
     .default(true),
 
   /**
+   * Lets LLM proxy requests run without an Archestra platform credential: a
+   * raw provider key alone is accepted, and catch-all provider routes forward
+   * anonymous requests. Off by default, so every request must present a
+   * platform virtual key, OAuth token, or identity token.
+   */
+  allowUnauthenticatedLlmProxyRequests: boolean(
+    "allow_unauthenticated_llm_proxy_requests",
+  )
+    .notNull()
+    .default(false),
+
+  /**
    * @deprecated No longer consulted. Dynamic tool access is now gated solely
    * by the per-agent `access_all_tools` setting. The column is retained (not
    * dropped) to avoid a backwards-incompatible migration and to keep the

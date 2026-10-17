@@ -3,10 +3,12 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
+Every call to the proxy carries an Archestra credential, so each request in the logs names an app or a person. A call with only a provider key is rejected.
 
 First, add your provider keys on [Model Providers](/docs/llm-proxy/providers). They stay in Archestra. Then pick how each app or person signs in to the proxy, by what your client supports:
 
@@ -44,6 +46,7 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 - With **Selected providers**, the key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Model Router](/docs/llm-proxy/model-router), the model's prefix picks the mapping.
 - Self-hosted providers can map several endpoints. Archestra sends each request to the endpoint that serves the model. You can edit a virtual key to add providers or endpoints without changing its token.
 - Choose **Current and future providers** to automatically use each provider's shared **Primary** API key, including providers added later. Personal and subscription keys are excluded. You can optionally select a different key for an existing provider. Connect settings apply this option to newly issued keys.
+- After you confirm, deleting a provider key or disconnecting a subscription also deletes the virtual keys and OAuth clients that map only that key. A key or client that also maps other providers keeps those. Knowledge base settings that used the key are cleared.
 - **To share a key** with a team, add the team under its permissions, when you create the key or later.
 - To bill a team, pick it as the payer. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget), not its creator's. A spend cap there limits the key itself.
 
@@ -68,7 +71,7 @@ Use your own subscription or key, and still show up in costs and logs. Claude Co
 
 - The passthrough key only says who you are. It gives no access to Archestra's provider keys.
 - It belongs to one person.
-- <span id="direct-provider-api-key"></span>Without it, the call still works, but the logs cannot name you.
+- <span id="direct-provider-api-key"></span>Without it, the call is rejected with `401`. A provider key alone is not accepted. See [Allow Requests Without a Virtual Key](#allow-requests-without-a-virtual-key).
 
 <span id="llm-oauth-clients"></span><span id="managing-oauth-clients"></span>
 
@@ -133,6 +136,16 @@ Already signed in to Okta or Entra ID? Send that token. Each call uses that pers
 3. Send the JWT as `Authorization: Bearer` on a provider route. The Model Router does not take it.
 
 Archestra checks the signature and issuer, then matches the email claim to an Archestra user. If either fails, the request is rejected.
+
+## Allow Requests Without a Virtual Key
+
+Keep this off unless a client cannot send any Archestra credential. When it is on, a call with only a provider key, or no key, reaches the provider.
+
+Turn on **Allow requests without a virtual key** under **Settings → LLM**. You need [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+
+- These calls are not tied to a person, so per-person limits and attribution do not apply.
+- A self-hosted provider with no key of its own, such as Ollama or vLLM, becomes open to anyone who can reach the proxy.
+- Providers whose credentials Archestra holds, such as Vertex AI or Bedrock with IAM, still need an Archestra credential.
 
 <span id="attribution-in-logs"></span><span id="api-key-scoping"></span><span id="custom-base-urls"></span>
 

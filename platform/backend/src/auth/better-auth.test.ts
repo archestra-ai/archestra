@@ -1930,8 +1930,8 @@ describe("handleAfterHook", () => {
 
       const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member?.role).toBe("member");
-      const teams = await TeamModel.getUserTeams(user.id);
-      expect(teams.map((t) => t.id)).toContain(team.id);
+      const teamIds = await TeamModel.getUserTeamIds(user.id);
+      expect(teamIds).toContain(team.id);
     });
 
     test("skips role and team sync through the SSO callback for linked-token-only providers", async ({
@@ -1995,8 +1995,8 @@ describe("handleAfterHook", () => {
       // Connecting a linked-token-only provider must not change role or teams.
       const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member?.role).toBe("admin");
-      const teams = await TeamModel.getUserTeams(user.id);
-      expect(teams.map((t) => t.id)).not.toContain(team.id);
+      const teamIds = await TeamModel.getUserTeamIds(user.id);
+      expect(teamIds).not.toContain(team.id);
     });
 
     test("should clean up rows created by a rejected first-time SSO login", async ({

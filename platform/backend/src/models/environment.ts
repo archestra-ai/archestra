@@ -131,7 +131,15 @@ class EnvironmentModel {
     id: string,
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
-    return EnvironmentModel.findByIdForOrganization(id, organizationId);
+    const environment = await EnvironmentModel.findByIdForOrganization(
+      id,
+      organizationId,
+    );
+    if (!environment) return null;
+    return {
+      ...environment,
+      labels: await EnvironmentLabelModel.getLabelsFor(id),
+    };
   }
 
   static async create(params: {
@@ -215,6 +223,11 @@ class EnvironmentModel {
     if (validationRegex !== undefined) patch.validationRegex = validationRegex;
     if (trustedImageRegistries !== undefined)
       patch.trustedImageRegistries = trustedImageRegistries;
+
+    // Labels are updated separately; a labels-only request has no row fields.
+    if (Object.keys(patch).length === 0) {
+      return EnvironmentModel.findByIdForOrganization(id, organizationId);
+    }
 
     const [row] = await db
       .update(schema.environmentsTable)

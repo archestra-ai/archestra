@@ -134,10 +134,7 @@ import {
   useHasPermissions,
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
-import {
-  useOrganization,
-  useOrganizationMembers,
-} from "@/lib/organization.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 vi.mock("@/components/loading", () => ({
@@ -385,9 +382,6 @@ describe("LimitsPage", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: { id: "org-1", defaultUserLimitValue: 100 },
     } as unknown as ReturnType<typeof useOrganization>);
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },

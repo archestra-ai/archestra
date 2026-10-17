@@ -67,7 +67,6 @@ import {
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
-import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -75,8 +74,6 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
-// Reattach attempts per stall episode. A successful stream resets the count.
-const MAX_STALL_RECOVERIES = 3;
 const MCP_ELICITATION_FAILURE_CLEAR_MS = 30_000;
 
 export type ContextCompactionState = {
@@ -130,8 +127,6 @@ interface ChatSession {
   transportActivitySequence: number;
   /** Monotonic signal advanced only when the assistant response progresses. */
   responseProgressSequence: number;
-  /** True once silent-stall reattaches are used up; the stall notice shows only then. */
-  stallRecoveryExhausted: boolean;
   sendMessage: (
     message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
   ) => void;
@@ -600,10 +595,6 @@ function ChatSessionHook({
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
-  // Silent recovery from a stalled connection: "aborting" while the hung request
-  // is being cancelled, "replaying" while the active-run replay streams back.
-  const stallRecoveryPhaseRef = useRef<"aborting" | "replaying" | null>(null);
-  const stallRecoveryCountRef = useRef(0);
   // Set while auto-retrying a *structured* (backend-persisted) error, so a
   // successful retry can wipe the now-stale persisted error card the backend
   // never clears on its own.
@@ -801,14 +792,7 @@ function ChatSessionHook({
       // either keeps a recovery in flight or clears the flag for terminal
       // errors.
       if (!isError) {
-        if (!isAbort) {
-          stallRecoveryCountRef.current = 0;
-        }
-        // The stall recovery's own abort ends this stream, but the reattach is
-        // still in flight: its promise clears the flag once the replay ends.
-        if (stallRecoveryPhaseRef.current === null) {
-          setIsRecovering(false);
-        }
+        setIsRecovering(false);
         // A structured error we silently auto-retried just succeeded — clear the
         // stale persisted error card the backend leaves behind (it never clears it
         // on a new run). Reset the flag first so a re-entrant finish can't double-fire.
@@ -1284,59 +1268,6 @@ function ChatSessionHook({
     });
   }, [status, setMessages]);
 
-  // A silent stall is treated like a dropped connection. The hung request is
-  // aborted client-side (the backend run keeps going: a client disconnect only
-  // stops it when a stop flag is set), then the run is reattached through the
-  // active-run replay, the same path the duplicate-run 409 uses.
-  const { isTransportStalled } = useStreamStall({
-    status,
-    transportActivitySequence: streamActivity.transportSequence,
-    responseProgressSequence: streamActivity.responseProgressSequence,
-    messages,
-  });
-  // Keyed on the stall alone: re-running on identity changes of `stop` would
-  // start a second recovery for the same stall.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per stall
-  useEffect(() => {
-    if (
-      !isTransportStalled ||
-      stallRecoveryCountRef.current >= MAX_STALL_RECOVERIES
-    ) {
-      return;
-    }
-    stallRecoveryCountRef.current += 1;
-    stallRecoveryPhaseRef.current = "aborting";
-    // Same queued follow-ups an explicit steering stop keeps.
-    preserveQueuedMessagesOnAbortRef.current = {
-      userMessageId: latestMessagesRef.current.findLast(
-        (message) => message.role === "user",
-      )?.id,
-    };
-    if (previousMessagesRef.current.length > 0) {
-      frozenMessagesRef.current = previousMessagesRef.current;
-    }
-    previousMessagesRef.current = [];
-    setIsRecovering(true);
-    stop();
-  }, [isTransportStalled]);
-
-  // Reattach once the aborted request has settled and the status is ready.
-  useEffect(() => {
-    if (status !== "ready" || stallRecoveryPhaseRef.current !== "aborting") {
-      return;
-    }
-    stallRecoveryPhaseRef.current = "replaying";
-    const errorSeq = errorSeqRef.current;
-    void resumeStream().then(() => {
-      stallRecoveryPhaseRef.current = null;
-      // Same as the duplicate-run reattach: no onError means the replay ended
-      // cleanly, so nothing else would clear the recovery flag.
-      if (recoveringRef.current && errorSeqRef.current === errorSeq) {
-        setIsRecovering(false);
-      }
-    });
-  }, [status, resumeStream, setIsRecovering]);
-
   const resumeAttemptedRef = useRef(false);
   useEffect(() => {
     if (!shouldResume || resumeAttemptedRef.current) {
@@ -1680,8 +1611,6 @@ function ChatSessionHook({
     messages: displayedMessages,
     transportActivitySequence: streamActivity.transportSequence,
     responseProgressSequence: streamActivity.responseProgressSequence,
-    stallRecoveryExhausted:
-      stallRecoveryCountRef.current >= MAX_STALL_RECOVERIES,
     sendMessage,
     regenerateUserMessage,
     stop: stopSession,

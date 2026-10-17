@@ -47,3 +47,25 @@ function HeadingRow({ title }: { title: string }) {
     </div>
   );
 }
+
+/**
+ * A table section with nothing left to list because everything in it is
+ * pinned above. Keeps the section's heading, so the page still says where
+ * other items would appear, with one slim line instead of an empty table.
+ */
+export function EmptyTableSection({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  return (
+    <section className="space-y-3">
+      <TableSectionHeading title={title} bulkActions={null} />
+      <p className="flex min-h-11 items-center rounded-lg border border-dashed bg-muted/30 px-4 text-sm text-muted-foreground">
+        {message}
+      </p>
+    </section>
+  );
+}

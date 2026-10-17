@@ -336,15 +336,6 @@ export const handlers: HttpHandler[] = [
     sandbox: "disabled",
   }),
   ...getJson("/api/organization", organizationSeed),
-  // The roster behind owner pickers and the scope filter's "member" facet —
-  // the seeded admin, mirroring the session identity.
-  ...getJson("/api/organization/members", [
-    {
-      id: sessionSeed.user.id,
-      name: sessionSeed.user.name,
-      email: sessionSeed.user.email,
-    },
-  ]),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.
@@ -604,9 +595,22 @@ export const handlers: HttpHandler[] = [
   // MCP OAuth clients (bare array, unlike the LLM half's envelope) — the
   // unified OAuth Clients page reads both.
   ...getJson("/api/mcp-oauth-clients", []),
-  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page
-  // and the LLM keys delete dialog as a blocking-deps probe.
+  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page.
   ...getJson("/api/llm-oauth-clients", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
+  // Managed OAuth clients (paginated envelope) — the LLM keys delete dialog
+  // lists the clients that map the key from here, because this list carries
+  // the current-and-future-providers flag the dialog needs.
+  ...getJson("/api/oauth-clients", {
     data: [],
     pagination: {
       currentPage: 1,

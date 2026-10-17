@@ -3,6 +3,7 @@ import {
   hashKey,
   type QueryClient,
   queryOptions,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -276,6 +277,47 @@ export type McpCatalogDirectoryItem = NonNullable<
   ReturnType<typeof useMcpCatalogDirectory>["data"]
 >[number];
 
+/**
+ * The registry rows of the given catalog items, in any number: one request per
+ * hundred ids (the page limit). For pickers that show what a record already
+ * uses, whose ids can be anywhere in the list.
+ */
+export function useMcpRegistryRowsByIds(
+  ids: string[],
+  options?: Pick<McpRegistryListQuery, "includeBuiltIn" | "includeApps">,
+) {
+  const sortedIds = [...new Set(ids)].sort();
+  const chunks: string[][] = [];
+  for (let i = 0; i < sortedIds.length; i += MAX_REGISTRY_PAGE_SIZE) {
+    chunks.push(sortedIds.slice(i, i + MAX_REGISTRY_PAGE_SIZE));
+  }
+  return useQueries({
+    queries: chunks.map((catalogIds) => ({
+      queryKey: [...mcpRegistryQueryKey, "rows-by-id", catalogIds, options],
+      queryFn: async () => {
+        const { data, error } = await searchMcpRegistry({
+          body: {
+            ...options,
+            catalogIds,
+            sortBy: "name",
+            sortDirection: "asc",
+            limit: MAX_REGISTRY_PAGE_SIZE,
+            offset: 0,
+          },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        return data?.data ?? [];
+      },
+    })),
+    combine: (results) => ({
+      data: results.flatMap((result) => result.data ?? []),
+      isPending: results.some((result) => result.isPending),
+      isError: results.some((result) => result.isError),
+      refetch: () => Promise.all(results.map((result) => result.refetch())),
+    }),
+  });
+}
+
 export function catalogItemQueryOptions(id: string) {
   return queryOptions({
     queryKey: ["mcp-catalog", "item", id],
@@ -322,6 +364,9 @@ function toFullCatalogItem(
 }
 
 // ===== Internal =====
+
+/** The most rows one registry page request returns. */
+const MAX_REGISTRY_PAGE_SIZE = 100;
 
 function registryPageQueryOptions(
   queryClient: QueryClient,

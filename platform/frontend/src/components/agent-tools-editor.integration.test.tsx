@@ -33,7 +33,8 @@ const AGENT_ID = "agent-1";
 const CATALOG_ID = "catalog-1";
 
 type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+  archestraApiTypes.SearchMcpRegistryResponses["200"]["data"][number];
+type SearchBody = NonNullable<archestraApiTypes.SearchMcpRegistryData["body"]>;
 
 /**
  * A server with a large tool set. `builtin` keeps the picker's connectivity
@@ -51,9 +52,52 @@ const catalogItem = {
   labels: [],
   teams: [],
   skillCount: 0,
+  icon: null,
+  iconUrl: null,
+  docsUrl: null,
+  enterpriseManaged: false,
+  environmentId: null,
 } as unknown as CatalogItem;
 
 const server = setupServer();
+
+/**
+ * The registry search route over `rows`: the picker's two reads are the
+ * record's catalogs by id and one page of the registry, searched by name.
+ */
+function registrySearch(
+  rows: CatalogItem[],
+  onRequest?: (body: SearchBody) => void,
+) {
+  return http.post(
+    `${API_ORIGIN}/api/internal_mcp_catalog/registry/search`,
+    async ({ request }) => {
+      const body = (await request.json()) as SearchBody;
+      onRequest?.(body);
+      const matching = rows.filter(
+        (row) =>
+          (!body.catalogIds || body.catalogIds.includes(row.id)) &&
+          (!body.search ||
+            row.name.toLowerCase().includes(body.search.toLowerCase())),
+      );
+      const offset = body.offset ?? 0;
+      const limit = body.limit ?? 20;
+      return HttpResponse.json({
+        data: matching.slice(offset, offset + limit),
+        pagination: {
+          currentPage: 1,
+          limit,
+          total: matching.length,
+          totalPages: Math.ceil(matching.length / limit),
+          hasNext: offset + limit < matching.length,
+          hasPrev: offset > 0,
+        },
+        selectableTotal: 0,
+        installs: [],
+      });
+    },
+  );
+}
 
 /**
  * Everything the editor reads EXCEPT the per-catalog tool lists, which each
@@ -62,9 +106,7 @@ const server = setupServer();
  */
 function baseHandlers() {
   return [
-    http.get(`${API_ORIGIN}/api/internal_mcp_catalog`, () =>
-      HttpResponse.json([catalogItem]),
-    ),
+    registrySearch([catalogItem]),
     http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/tools`, () =>
       HttpResponse.json([]),
     ),
@@ -106,16 +148,14 @@ describe("AgentToolsEditor", () => {
     const selected: string[][] = [];
     const views: (string | null)[] = [];
     server.use(
-      http.get(`${API_ORIGIN}/api/internal_mcp_catalog`, () =>
-        HttpResponse.json([
-          {
-            ...catalogItem,
-            id: ARCHESTRA_MCP_CATALOG_ID,
-            name: "Platform tools",
-            toolCount: 2,
-          },
-        ]),
-      ),
+      registrySearch([
+        {
+          ...catalogItem,
+          id: ARCHESTRA_MCP_CATALOG_ID,
+          name: "Platform tools",
+          toolCount: 2,
+        },
+      ]),
       http.get(`${API_ORIGIN}/api/mcp_server`, () => HttpResponse.json([])),
       http.get(
         `${API_ORIGIN}/api/internal_mcp_catalog/:id/tools`,
@@ -165,12 +205,15 @@ describe("AgentToolsEditor", () => {
     // nothing else on screen contradicts it.
     let catalogRequests = 0;
     server.use(
-      http.get(`${API_ORIGIN}/api/internal_mcp_catalog`, () => {
-        catalogRequests += 1;
-        return catalogRequests === 1
-          ? HttpResponse.json({ error: { message: "boom" } }, { status: 500 })
-          : HttpResponse.json([catalogItem]);
-      }),
+      http.post(
+        `${API_ORIGIN}/api/internal_mcp_catalog/registry/search`,
+        () => {
+          catalogRequests += 1;
+          return catalogRequests === 1
+            ? HttpResponse.json({ error: { message: "boom" } }, { status: 500 })
+            : undefined;
+        },
+      ),
     );
 
     const user = userEvent.setup();
@@ -259,5 +302,74 @@ describe("AgentToolsEditor", () => {
       await screen.findByRole("menuitemcheckbox", { name: /example-server/ }),
     ).toHaveTextContent("2/150");
     expect(toolRequests).toBe(0);
+  });
+
+  it("offers the registry a page at a time and finds the rest by searching", async () => {
+    // A registry far larger than the Add list shows: only one page loads up
+    // front, and a server beyond it is found by asking the server, not by
+    // filtering what happened to load.
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    const requests: SearchBody[] = [];
+    server.use(registrySearch(many, (body) => requests.push(body)));
+
+    const user = userEvent.setup();
+    renderEditor();
+    await user.click(await screen.findByRole("button", { name: /add/i }));
+
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /server-00/ }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /server-79/ }),
+    ).toBeNull();
+    expect(requests.every((body) => (body.limit ?? 0) <= 50)).toBe(true);
+
+    await user.type(screen.getByPlaceholderText(/search mcp servers/i), "79");
+
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /server-79/ }),
+    ).toBeTruthy();
+    expect(requests.some((body) => body.search === "79")).toBe(true);
+  });
+
+  it("shows a server the record uses even when the first page does not hold it", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    const requests: SearchBody[] = [];
+    server.use(
+      registrySearch(many, (body) => requests.push(body)),
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/tools`, () =>
+        HttpResponse.json([
+          {
+            id: "tool-1",
+            name: "server_79__one",
+            catalogId: "catalog-79",
+            mcpServerId: null,
+            credentialResolutionMode: "dynamic",
+          },
+        ]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/internal_mcp_catalog/:id/tools`,
+        () => new Promise<never>(() => {}),
+      ),
+    );
+
+    renderEditor();
+
+    expect(await screen.findByText("server-79")).toBeTruthy();
+    expect(
+      requests.some(
+        (body) =>
+          body.catalogIds?.length === 1 && body.catalogIds[0] === "catalog-79",
+      ),
+    ).toBe(true);
   });
 });

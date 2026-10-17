@@ -2387,25 +2387,22 @@ class AgentModel {
         agentAudienceIs(filters.scope),
         eq(schema.agentsTable.builtIn, false),
       );
-    } else if (!includeBuiltIn) {
-      // Chat selection keeps the system assistant visible to every member; the
-      // platform's other built-in agents stay hidden.
-      if (chatAssistant) {
-        whereConditions.push(
-          or(
-            eq(schema.agentsTable.builtIn, false),
-            eq(
-              sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
-              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-            ),
-          ) as SQL,
-        );
-      } else {
-        whereConditions.push(eq(schema.agentsTable.builtIn, false));
-      }
     }
-    if (!isAgentAdmin && !chatAssistant) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    // Chat selection keeps the system assistant visible to every member; the
+    // platform's other built-in agents stay hidden. Non-admins get the same
+    // limit whatever scope they ask for.
+    if (!isAgentAdmin || (!includeBuiltIn && !filters?.scope)) {
+      whereConditions.push(
+        chatAssistant
+          ? (or(
+              eq(schema.agentsTable.builtIn, false),
+              eq(
+                sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+                BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+              ),
+            ) as SQL)
+          : eq(schema.agentsTable.builtIn, false),
+      );
     }
     if (filters?.teamIds?.length) {
       whereConditions.push(agentGrantsReadToAnyTeam(filters.teamIds));

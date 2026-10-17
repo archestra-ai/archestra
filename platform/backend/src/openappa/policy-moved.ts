@@ -10,12 +10,16 @@ import logger from "@/logging";
 
 /**
  * Whether `error` reports that the organization's policy moved past the one the
- * dispatch carried. The second form is the runtime's own refusal text, which the
- * native binding normally turns into `POLICY_MOVED`.
+ * dispatch carried: the `policy_moved` code the native binding stamps, or, from
+ * a runtime that does not class the refusal yet, its fixed text or the
+ * runtime's own refusal text.
  */
 export function isPolicyMoved(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : "";
-  return message === POLICY_MOVED || RUNTIME_POLICY_MOVED.test(message);
+  if (!(error instanceof Error)) return false;
+  if ((error as { code?: unknown }).code === "policy_moved") return true;
+  return (
+    error.message === POLICY_MOVED || RUNTIME_POLICY_MOVED.test(error.message)
+  );
 }
 
 /**

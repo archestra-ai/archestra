@@ -188,6 +188,11 @@ describe("openappaFailure", () => {
 
   test("a policy that moved past the dispatch asks the client to retry and is never model feedback", () => {
     for (const cause of [
+      runtimeFailure(
+        "policy_moved",
+        "OpenAPPA published a newer policy revision for this organization; retry the request",
+      ),
+      // A runtime that does not class the refusal yet reports it in text.
       new Error(
         "OpenAPPA published a newer policy revision for this organization; retry the request",
       ),

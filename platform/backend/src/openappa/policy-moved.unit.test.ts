@@ -34,6 +34,22 @@ describe("retryWhilePolicyMoved", () => {
     expect(attempts).toBe(3);
   });
 
+  test("retries a failure the binding codes as policy_moved, whatever its text", async () => {
+    let attempts = 0;
+    const decided = await retryWhilePolicyMoved({
+      random: () => 0,
+      run: async () => {
+        attempts++;
+        if (attempts === 1)
+          throw Object.assign(new Error("moved"), { code: "policy_moved" });
+        return "allow_call";
+      },
+    });
+
+    expect(decided).toBe("allow_call");
+    expect(attempts).toBe(2);
+  });
+
   test("never retries any other failure", async () => {
     let attempts = 0;
     await expect(

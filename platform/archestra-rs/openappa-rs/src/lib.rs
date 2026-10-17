@@ -372,6 +372,9 @@ enum BindingFailure {
     LeaseLost,
     HeldElsewhere,
     UnstartedParent,
+    /// Spelled as the runtime's `RefusalClass::PolicyMoved`, so the host reads one
+    /// code whichever side reported it.
+    PolicyMoved,
 }
 
 fn failure(kind: Failure, message: impl ToString) -> napi::Error {
@@ -400,20 +403,31 @@ fn held_elsewhere() -> napi::Error {
 /// was recomposed before it was published. Nothing was appended; the host's retry
 /// reads the policy again and decides at the new head.
 fn policy_moved() -> napi::Error {
-    error("OpenAPPA published a newer policy revision for this organization; retry the request")
+    failure(
+        Failure::Binding(BindingFailure::PolicyMoved),
+        "OpenAPPA published a newer policy revision for this organization; retry the request",
+    )
 }
 
 /// Whether a dispatch failed because its deployment line moved past the revision
-/// its view was pinned to. The runtime turns that refusal into the detail of an
-/// operational refusal, so its display text is what reaches this process.
-/// Contract: the text is OpenAPPA's `EventError::PolicyMoved` display as of the
-/// pinned revision 8e17f8ca. OpenAPPA carries no typed marker for it yet
-/// (requested on OpenAPPA #677); re-check it when the pin moves.
+/// its view was pinned to: the runtime refuses it as `RefusalClass::PolicyMoved`,
+/// which [`failure`] stamps as the code `policy_moved`. A failure without that
+/// code is matched on OpenAPPA's `EventError::PolicyMoved` display text, as an
+/// unclassed refusal carries it.
 fn is_policy_moved(error: &napi::Error) -> bool {
-    error.reason.contains(" moved to policy revision ")
-        && error
-            .reason
-            .contains("while this event was decided; retry it")
+    let envelope = serde_json::from_str::<Value>(&error.reason).ok();
+    let field = |name: &str| {
+        envelope
+            .as_ref()
+            .and_then(|envelope| envelope.get(name))
+            .and_then(Value::as_str)
+    };
+    if field("code") == Some("policy_moved") {
+        return true;
+    }
+    let text = field("message").unwrap_or(&error.reason);
+    text.contains(" moved to policy revision ")
+        && text.contains("while this event was decided; retry it")
 }
 
 /// Runs `work` through a view pinned to the head of the organization's deployment
@@ -5226,5 +5240,39 @@ mod opening_key_tests {
                 "{payload}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::{
+        BindingFailure, Failure, RefusalClass, error, failure, is_policy_moved, lease_lost,
+        policy_moved,
+    };
+    use serde_json::json;
+
+    /// The runtime's class and the binding's own failure share one code, and an
+    /// unclassed refusal is still recognized by its text.
+    #[test]
+    fn a_moved_policy_is_recognized_by_its_code_or_its_text() {
+        for kind in [
+            Failure::Refused(RefusalClass::PolicyMoved),
+            Failure::Binding(BindingFailure::PolicyMoved),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), json!("policy_moved"));
+        }
+        assert!(is_policy_moved(&policy_moved()));
+        assert!(is_policy_moved(&failure(
+            Failure::Refused(RefusalClass::PolicyMoved),
+            "OpenAPPA processing interrupted: any wording"
+        )));
+        assert!(is_policy_moved(&error(
+            "OpenAPPA processing interrupted: deployment org-a moved to policy revision 3 while this event was decided; retry it"
+        )));
+        assert!(!is_policy_moved(&lease_lost()));
+        assert!(!is_policy_moved(&failure(
+            Failure::Refused(RefusalClass::PolicyUnavailable),
+            "OpenAPPA processing interrupted: the policy is unavailable"
+        )));
     }
 }

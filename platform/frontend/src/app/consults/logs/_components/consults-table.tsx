@@ -135,6 +135,7 @@ export function ConsultsTable() {
               isLoading={isFetching}
             />
           }
+          tuckActionsWhenCompact
           actions={
             <Button
               variant="outline"

@@ -91,6 +91,9 @@ export function CollectionFilters({
  * currently narrowing the table — a hidden active filter reads as an empty
  * table with no explanation.
  * @param actions - Trailing controls (sort, view toggle) pinned to the right.
+ * @param tuckActionsWhenCompact - On compact screens, move `actions` into the
+ * filter popover instead of giving them a row of their own. For secondary
+ * actions such as an export, not for controls people reach for constantly.
  * @param contextualActions - Selection actions rendered in the same grid cell
  * as the filters. Presenting them swaps the bar in place instead of reserving
  * an empty slot or moving the collection once rows are ticked.
@@ -117,6 +120,7 @@ export function FilterBar({
   onClearFilters,
   moreFilters,
   actions,
+  tuckActionsWhenCompact = false,
   leading = false,
 }: {
   children?: ReactNode;
@@ -129,6 +133,7 @@ export function FilterBar({
   onClearFilters?: () => void;
   moreFilters?: OverflowFilter[];
   actions?: ReactNode;
+  tuckActionsWhenCompact?: boolean;
   leading?: boolean;
 }) {
   const compact = useSyncExternalStore(
@@ -143,6 +148,8 @@ export function FilterBar({
   const bulkActionsScope = useBulkActionsScope();
   const actionsTargetId =
     contextualActionsTargetId ?? bulkActionsScope?.targetId;
+  const actionsInPopover =
+    tuckActionsWhenCompact && compact && hasFilters && !!actions;
   const appliedOverflow = moreFilters?.filter((filter) => filter.active) ?? [];
   const tuckedAway = moreFilters?.filter((filter) => !filter.active) ?? [];
 
@@ -218,6 +225,11 @@ export function FilterBar({
                   <span>Clear</span>
                 </Button>
               )}
+              {actionsInPopover && (
+                <div className="flex flex-col gap-1.5 border-t pt-3 [&>button]:w-full">
+                  {actions}
+                </div>
+              )}
             </PopoverContent>
           </Popover>
         ) : (
@@ -271,7 +283,7 @@ export function FilterBar({
             )}
           </>
         )}
-        {actions && (
+        {actions && !actionsInPopover && (
           <div className="flex basis-full items-center justify-start gap-1.5 md:ml-auto md:basis-auto">
             {actions}
           </div>

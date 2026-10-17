@@ -255,6 +255,40 @@ describe("compact filters", () => {
     expect(screen.queryByText("Deleted entry")).not.toBeInTheDocument();
   });
 
+  it("moves secondary actions into the filter popover only when asked", async () => {
+    const onExport = vi.fn();
+    const bar = (tuck: boolean) => (
+      <FilterBar
+        search={<input aria-label="Search" />}
+        tuckActionsWhenCompact={tuck}
+        actions={
+          <button type="button" onClick={onExport}>
+            Export
+          </button>
+        }
+      >
+        <FilterSelect
+          value="all"
+          onValueChange={() => {}}
+          placeholder="Filter by action"
+          items={ITEMS}
+        />
+      </FilterBar>
+    );
+
+    const { rerender } = render(bar(true));
+    expect(
+      screen.queryByRole("button", { name: "Export" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    await userEvent.click(screen.getByRole("button", { name: "Export" }));
+    expect(onExport).toHaveBeenCalledTimes(1);
+
+    rerender(bar(false));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Export" })).toBeVisible();
+  });
+
   it("does not show a filter button on search-only lists", () => {
     render(<FilterBar search={<input aria-label="Search" />} />);
     expect(screen.getByRole("textbox")).toBeVisible();

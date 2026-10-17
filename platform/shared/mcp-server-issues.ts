@@ -440,10 +440,19 @@ export function tidyMcpServerErrorText(
 ): string | null {
   const trimmed = text?.trim();
   if (!trimmed) return null;
-  return trimmed
+  // Words and the whitespace between them, so an identifier leaves with the
+  // whitespace before it. A regex that starts with `\s+` rescans long
+  // whitespace runs and slows down on crafted input.
+  const parts = trimmed
     .replace(/^Deployment \S+ failed:\s*/i, "")
-    .replace(/\s+(?:container|pod)=\S+/g, "")
-    .trim();
+    .split(/(\s+)/);
+  let kept = parts[0] ?? "";
+  for (let i = 2; i < parts.length; i += 2) {
+    if (!/^(?:container|pod)=\S/.test(parts[i] ?? "")) {
+      kept += `${parts[i - 1]}${parts[i]}`;
+    }
+  }
+  return kept.trim();
 }
 
 // ===== Internal pieces =====

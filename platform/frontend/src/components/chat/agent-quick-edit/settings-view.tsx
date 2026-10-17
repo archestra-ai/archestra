@@ -63,6 +63,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useAllCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 import { cn } from "@/lib/utils/tailwind";
 import { AgentReachBrowser } from "./agent-reach-browser";
 import { summarizeAllToolAccess } from "./all-access.utils";
@@ -491,6 +492,15 @@ function ToolsSection({
         ),
     [catalogItems, assignedByCatalog, highlightCatalogId],
   );
+  // The registry row counts the tools its picker lists.
+  const assignedRows = useMcpRegistryRowsByIds([...assignedByCatalog.keys()], {
+    includeBuiltIn: true,
+    includeApps: true,
+  });
+  const toolCountByCatalog = useMemo(
+    () => new Map(assignedRows.data.map((row) => [row.id, row.toolCount])),
+    [assignedRows.data],
+  );
 
   const removeServer = (catalogId: string) => {
     const entry = assignedByCatalog.get(catalogId);
@@ -549,8 +559,7 @@ function ToolsSection({
           {assignedCatalogs.map((catalog) => {
             const entry = assignedByCatalog.get(catalog.id);
             const assignedCount = entry?.toolIds.length ?? 0;
-            // The catalog row counts the tools its picker lists.
-            const total = catalog.toolCount;
+            const total = toolCountByCatalog.get(catalog.id);
             const builtIn = isBuiltInCatalogId(catalog.id);
             const displayName =
               catalog.id === ARCHESTRA_MCP_CATALOG_ID

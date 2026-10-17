@@ -7537,8 +7537,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       test("the teammate itself is refused at once, with a way to continue", async () => {
         runtime((event) => {
           if (event.event === "session_start" && event.parent_id) {
-            throw new Error(
-              '{"decision":"refuse","detail":"the spawn did not take: no prepared fork to open this child"}',
+            throw Object.assign(
+              new Error(
+                "the spawn did not take: no prepared fork to open this child",
+              ),
+              { code: "spawn_not_taken" },
             );
           }
           return undefined;

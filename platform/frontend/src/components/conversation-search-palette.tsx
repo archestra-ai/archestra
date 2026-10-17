@@ -54,7 +54,7 @@ import {
 } from "@/consts";
 import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
-import { APPS_FIRST_PAGE, useApps } from "@/lib/app.query";
+import { useApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -76,7 +76,7 @@ import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { usePlugins } from "@/lib/plugins/plugin.query";
 import { useProjects } from "@/lib/projects/projects.query";
-import { useSkillsList } from "@/lib/skills/skill.query";
+import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 /**
@@ -102,8 +102,13 @@ function extractTextFromMessages(
   return textParts.join(" ");
 }
 
-/** A row in a link group: settings tabs, agents, skills, MCP servers. */
-type LinkIcon = LucideIcon | React.ComponentType<{ className?: string }>;
+/** A row in one of the search-only groups: a settings tab or a named entity. */
+type SearchLink = {
+  key: string;
+  href: string;
+  label: string;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
+};
 
 /**
  * Search synonyms, for words a reader might type that the destination's own
@@ -140,8 +145,9 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
  * the reader may not open is not offered here, and a page named or moved in
  * one surface cannot go stale in the other.
  */
-function useNavigationDestinations() {
-  const permissionMap = useNavPermissionMap();
+function useNavigationDestinations(
+  permissionMap: Record<string, boolean> | null,
+) {
   const openappaEnabled = useFeature("openappaEnabled");
   // Connect is useful with either half, exactly as the sidebar gates its row.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
@@ -247,90 +253,67 @@ export function ConversationSearchPalette({
     [runsQuery.data, pinnedRunsQuery.data],
   );
 
-  const navigationDestinations = useNavigationDestinations();
+  const permissionMap = useNavPermissionMap();
+  const navigationDestinations = useNavigationDestinations(permissionMap);
   const isNavigationPending = navigationDestinations === null;
 
-  // Entities are searched by name, so the palette reaches the reader's own
-  // agents, skills and MCP servers, not only the pages that list them. Each
-  // list is fetched only while the palette is open and gated by the same
-  // permission its page needs.
+  // Entity groups appear only while typing, so nothing is fetched before
+  // then. Each group follows the gate of the page its rows open, including
+  // the Settings-area rule for pages under /settings, so the palette never
+  // lists something the reader's own navigation hides.
+  const canSeeSettingsArea = permissionMap?.["/settings"] === true;
+  const canOpenPage = (href: string) =>
+    permissionMap?.[href] === true &&
+    (!href.startsWith("/settings/") || canSeeSettingsArea);
+  const entitySearch = debouncedSearch.trim();
+  const canSearchEntities = open && isAuthenticated && entitySearch.length > 0;
   const settingsTabs = useSettingsTabs();
-  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
-  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  const { data: canReadMcpRegistry } = useHasPermissions({
-    mcpRegistry: ["read"],
-  });
   const agentOptions = useAgentOptionsPage({
-    filters: { searchMode: "name" },
-    search: debouncedSearch.trim(),
-    enabled:
-      open &&
-      isAuthenticated &&
-      canReadAgents === true &&
-      debouncedSearch.trim().length > 0,
+    // The /agents page lists internal agents only; gateways and proxies
+    // have their own pages.
+    filters: { agentType: "agent", searchMode: "name" },
+    search: entitySearch,
+    limit: ENTITY_RESULTS_LIMIT,
+    enabled: canSearchEntities && canOpenPage("/agents"),
   });
-  const agents = useMemo(
-    () => agentOptions.data?.pages.flatMap((page) => page.data) ?? [],
-    [agentOptions.data],
-  );
-  const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({
-    enabled: open && isAuthenticated && canReadMcpRegistry === true,
-  });
-  const isSearchingEntities = debouncedSearch.trim().length > 0;
-  // Apps are searched by the server like skills; useApps already withholds
-  // the request from readers without app:read.
-  const { data: appsPage } = useApps(
-    { ...APPS_FIRST_PAGE, search: debouncedSearch },
+  const skillsPage = useSkillsPaginated(
+    { search: entitySearch, limit: ENTITY_RESULTS_LIMIT, offset: 0 },
     {
-      enabled: open && isAuthenticated && isSearchingEntities,
+      enabled: canSearchEntities && canOpenPage("/skills"),
       toastOnError: false,
     },
   );
-  const { data: canReadKnowledgeBases } = useHasPermissions({
-    knowledgeSource: ["read"],
-  });
-  const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
-  // The environments page is gated on update, not read, so match that.
-  const { data: canUpdateEnvironments } = useHasPermissions({
-    environment: ["update"],
-  });
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  // Projects, knowledge bases and teams are searched by the server; plugins
-  // and environments are small lists, fetched once and matched here.
-  const { data: projectsPage } = useProjects({
-    search: debouncedSearch,
-    enabled: open && isAuthenticated && isSearchingEntities,
+  const appsPage = useApps(
+    { search: entitySearch, limit: ENTITY_RESULTS_LIMIT, offset: 0 },
+    {
+      enabled: canSearchEntities && canOpenPage("/apps"),
+      toastOnError: false,
+    },
+  );
+  const { data: projects = [] } = useProjects({
+    search: entitySearch,
+    enabled: canSearchEntities && canOpenPage("/projects"),
+    toastOnError: false,
   });
   const { data: knowledgeBases = [] } = useKnowledgeBases({
-    query: { search: debouncedSearch },
-    enabled:
-      open &&
-      isAuthenticated &&
-      canReadKnowledgeBases === true &&
-      isSearchingEntities,
+    query: { search: entitySearch, limit: ENTITY_RESULTS_LIMIT },
+    enabled: canSearchEntities && canOpenPage("/knowledge/knowledge-bases"),
   });
   const { data: teams = [] } = useTeams({
     includeRelations: false,
-    name: debouncedSearch,
-    enabled:
-      open && isAuthenticated && canReadTeams === true && isSearchingEntities,
+    name: entitySearch,
+    enabled: canSearchEntities && canOpenPage("/settings/teams"),
+  });
+  // No server-side name search for these; their pages also hold the whole
+  // list and filter it in the browser.
+  const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({
+    enabled: canSearchEntities && canOpenPage("/mcp/registry"),
   });
   const { data: plugins = [] } = usePlugins(
-    open && isAuthenticated && canReadPlugins === true,
+    canSearchEntities && canOpenPage("/plugins"),
   );
   const { data: environmentList } = useEnvironments(
-    open && isAuthenticated && canUpdateEnvironments === true,
-  );
-  const environments = environmentList?.environments ?? [];
-  const { data: skills = [] } = useSkillsList(
-    { search: debouncedSearch },
-    {
-      enabled:
-        open &&
-        isAuthenticated &&
-        canReadSkills === true &&
-        isSearchingEntities,
-    },
+    canSearchEntities && canOpenPage("/settings/environments"),
   );
 
   // Show skeleton during typing or initial fetch
@@ -355,69 +338,141 @@ export function ConversationSearchPalette({
     );
   }, [searchQuery, navigationDestinations]);
 
-  // Settings tabs match on their label and on their path under /settings, so
-  // "oauth-clients" finds its tab while "settings" stays on the Settings page
-  // rather than pulling in every tab.
-  const matchingSettingsTabs = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return [];
-    return settingsTabs.filter((tab) =>
-      `${tab.label} ${tab.href.replace("/settings/", "")}`
-        .toLocaleLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [searchQuery, settingsTabs]);
+  // Server-searched rows are shown only for the current search: the skills
+  // and apps hooks keep the previous search's rows as placeholder data, which
+  // would list them under a query they do not match.
+  const serverResults = <T,>(rows: T[] | undefined, isPlaceholder = false) =>
+    entitySearch && !isPlaceholder
+      ? (rows ?? []).slice(0, ENTITY_RESULTS_LIMIT)
+      : [];
+  const typedQuery = searchQuery.trim().toLocaleLowerCase();
+  const nameMatches = <T,>(rows: T[], name: (row: T) => string) =>
+    typedQuery
+      ? rows
+          .filter((row) => name(row).toLocaleLowerCase().includes(typedQuery))
+          .slice(0, ENTITY_RESULTS_LIMIT)
+      : [];
 
-  const matchingAgents = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return [];
-    return agents.filter((agent) =>
-      agent.name.toLocaleLowerCase().includes(normalizedQuery),
-    );
-  }, [searchQuery, agents]);
-
-  const matchingMcpCatalogItems = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return [];
-    return mcpCatalogItems.filter((item) =>
-      item.name.toLocaleLowerCase().includes(normalizedQuery),
-    );
-  }, [searchQuery, mcpCatalogItems]);
-
-  // Skills are already filtered by the server's search, so no local pass.
-  const matchingSkills = isSearchingEntities ? skills : [];
-  const matchingApps = isSearchingEntities ? (appsPage?.data ?? []) : [];
-  const matchingProjects = isSearchingEntities ? (projectsPage ?? []) : [];
-  const matchingKnowledgeBases = isSearchingEntities ? knowledgeBases : [];
-  const matchingTeams = isSearchingEntities ? teams : [];
-
-  const matchingPlugins = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return [];
-    return plugins.filter((plugin) =>
-      plugin.displayName.toLocaleLowerCase().includes(normalizedQuery),
-    );
-  }, [searchQuery, plugins]);
-
-  const matchingEnvironments = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return [];
-    return environments.filter((environment) =>
-      environment.name.toLocaleLowerCase().includes(normalizedQuery),
-    );
-  }, [searchQuery, environments]);
-
-  const hasEntityMatches =
-    matchingSettingsTabs.length > 0 ||
-    matchingAgents.length > 0 ||
-    matchingMcpCatalogItems.length > 0 ||
-    matchingSkills.length > 0 ||
-    matchingApps.length > 0 ||
-    matchingProjects.length > 0 ||
-    matchingKnowledgeBases.length > 0 ||
-    matchingPlugins.length > 0 ||
-    matchingEnvironments.length > 0 ||
-    matchingTeams.length > 0;
+  const searchGroups: { heading: string; links: SearchLink[] }[] = [
+    {
+      heading: "Settings",
+      // Matched on the label and on the path under /settings, so
+      // "oauth-clients" finds its tab while "settings" stays on the Settings
+      // page rather than pulling in every tab.
+      links: (canSeeSettingsArea
+        ? nameMatches(
+            settingsTabs,
+            (tab) => `${tab.label} ${tab.href.replace("/settings/", "")}`,
+          )
+        : []
+      ).map((tab) => ({
+        key: `settings-${tab.href}`,
+        href: tab.href,
+        label: tab.label,
+        icon: tab.Icon,
+      })),
+    },
+    {
+      heading: "Agents",
+      links: serverResults(
+        agentOptions.data?.pages.flatMap((page) => page.data),
+      ).map((agent) => ({
+        key: `agent-${agent.id}`,
+        href: `/agents/${agent.id}`,
+        label: agent.name,
+        icon: Bot,
+      })),
+    },
+    {
+      heading: "Skills",
+      links: serverResults(
+        skillsPage.data?.data,
+        skillsPage.isPlaceholderData,
+      ).map((skill) => ({
+        key: `skill-${skill.id}`,
+        href: `/skills/${skill.id}`,
+        label: skill.name,
+        icon: Sparkles,
+      })),
+    },
+    {
+      heading: "Apps",
+      links: serverResults(appsPage.data?.data, appsPage.isPlaceholderData).map(
+        (app) => ({
+          key:
+            app.source === "owned"
+              ? `app-${app.id}`
+              : `app-${app.mcpServerId}-${app.toolName}`,
+          // Opens the Apps page filtered to the app, where its row offers
+          // every way to open it.
+          href: `/apps?search=${encodeURIComponent(app.name)}`,
+          label: app.name,
+          icon: AppWindow,
+        }),
+      ),
+    },
+    {
+      heading: "Projects",
+      links: serverResults(projects).map((project) => ({
+        key: `project-${project.id}`,
+        href: `/projects/${project.id}`,
+        label: project.name,
+        icon: FolderKanban,
+      })),
+    },
+    {
+      heading: "Knowledge Bases",
+      links: serverResults(knowledgeBases).map((knowledgeBase) => ({
+        key: `knowledge-base-${knowledgeBase.id}`,
+        // No per-base page exists; the list opens filtered to it.
+        href: `/knowledge/knowledge-bases?search=${encodeURIComponent(knowledgeBase.name)}`,
+        label: knowledgeBase.name,
+        icon: Database,
+      })),
+    },
+    {
+      heading: "Plugins",
+      links: nameMatches(plugins, (plugin) => plugin.displayName).map(
+        (plugin) => ({
+          key: `plugin-${plugin.id}`,
+          href: `/plugins/${plugin.id}`,
+          label: plugin.displayName,
+          icon: Puzzle,
+        }),
+      ),
+    },
+    {
+      heading: "Environments",
+      links: nameMatches(
+        environmentList?.environments ?? [],
+        (environment) => environment.name,
+      ).map((environment) => ({
+        key: `environment-${environment.id}`,
+        href: "/settings/environments",
+        label: environment.name,
+        icon: Boxes,
+      })),
+    },
+    {
+      heading: "Teams",
+      links: serverResults(teams).map((team) => ({
+        key: `team-${team.id}`,
+        href: `/settings/teams?search=${encodeURIComponent(team.name)}`,
+        label: team.name,
+        icon: UsersRound,
+      })),
+    },
+    {
+      heading: "MCP Servers",
+      links: nameMatches(mcpCatalogItems, (item) => item.name).map((item) => ({
+        key: `mcp-${item.id}`,
+        href: `/mcp/registry/${item.id}`,
+        label: item.name,
+        icon: Route,
+      })),
+    },
+  ];
+  const hasEntityMatches = searchGroups.some((group) => group.links.length > 0);
 
   // The server searches run titles. Filter cached pins too while their
   // independent browse feed is disabled during search.
@@ -834,12 +889,7 @@ export function ConversationSearchPalette({
     </CommandItem>
   );
 
-  const renderLinkItem = (link: {
-    key: string;
-    href: string;
-    label: string;
-    icon: LinkIcon;
-  }) => {
+  const renderLinkItem = (link: SearchLink) => {
     const Icon = link.icon;
     return (
       <CommandItem
@@ -912,149 +962,13 @@ export function ConversationSearchPalette({
               </CommandGroup>
             )}
 
-            {matchingSettingsTabs.length > 0 && (
-              <CommandGroup heading="Settings">
-                {matchingSettingsTabs.map((tab) =>
-                  renderLinkItem({
-                    key: `settings-${tab.href}`,
-                    href: tab.href,
-                    label: tab.label,
-                    icon: tab.Icon,
-                  }),
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingAgents.length > 0 && (
-              <CommandGroup heading="Agents">
-                {matchingAgents.map((agent) =>
-                  renderLinkItem({
-                    key: `agent-${agent.id}`,
-                    href: `/agents/${agent.id}`,
-                    label: agent.name,
-                    icon: Bot,
-                  }),
-                )}
-                {agentOptions.hasNextPage && (
-                  <CommandItem
-                    value="load-more-agents"
-                    disabled={agentOptions.isFetchingNextPage}
-                    onSelect={() => void agentOptions.fetchNextPage()}
-                  >
-                    <span>More agents</span>
-                  </CommandItem>
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingSkills.length > 0 && (
-              <CommandGroup heading="Skills">
-                {matchingSkills.map((skill) =>
-                  renderLinkItem({
-                    key: `skill-${skill.id}`,
-                    href: `/skills/${skill.id}`,
-                    label: skill.name,
-                    icon: Sparkles,
-                  }),
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingApps.length > 0 && (
-              <CommandGroup heading="Apps">
-                {matchingApps.map((app) =>
-                  renderLinkItem({
-                    key:
-                      app.source === "owned"
-                        ? `app-${app.id}`
-                        : `app-${app.mcpServerId}-${app.toolName}`,
-                    // The Apps page is the one place an app opens; its search
-                    // field shows the app.
-                    href: `/apps?search=${encodeURIComponent(app.name)}`,
-                    label: app.name,
-                    icon: AppWindow,
-                  }),
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingProjects.length > 0 && (
-              <CommandGroup heading="Projects">
-                {matchingProjects.map((project) =>
-                  renderLinkItem({
-                    key: `project-${project.id}`,
-                    href: `/projects/${project.id}`,
-                    label: project.name,
-                    icon: FolderKanban,
-                  }),
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingKnowledgeBases.length > 0 && (
-              <CommandGroup heading="Knowledge Bases">
-                {matchingKnowledgeBases.map((knowledgeBase) =>
-                  renderLinkItem({
-                    key: `knowledge-base-${knowledgeBase.id}`,
-                    // No per-base page exists; the list is where a base opens.
-                    href: "/knowledge/knowledge-bases",
-                    label: knowledgeBase.name,
-                    icon: Database,
-                  }),
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingPlugins.length > 0 && (
-              <CommandGroup heading="Plugins">
-                {matchingPlugins.map((plugin) =>
-                  renderLinkItem({
-                    key: `plugin-${plugin.id}`,
-                    href: `/plugins/${plugin.id}`,
-                    label: plugin.displayName,
-                    icon: Puzzle,
-                  }),
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingEnvironments.length > 0 && (
-              <CommandGroup heading="Environments">
-                {matchingEnvironments.map((environment) =>
-                  renderLinkItem({
-                    key: `environment-${environment.id}`,
-                    href: "/settings/environments",
-                    label: environment.name,
-                    icon: Boxes,
-                  }),
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingTeams.length > 0 && (
-              <CommandGroup heading="Teams">
-                {matchingTeams.map((team) =>
-                  renderLinkItem({
-                    key: `team-${team.id}`,
-                    href: "/settings/teams",
-                    label: team.name,
-                    icon: UsersRound,
-                  }),
-                )}
-              </CommandGroup>
-            )}
-
-            {matchingMcpCatalogItems.length > 0 && (
-              <CommandGroup heading="MCP Servers">
-                {matchingMcpCatalogItems.map((item) =>
-                  renderLinkItem({
-                    key: `mcp-${item.id}`,
-                    href: `/mcp/registry/${item.id}`,
-                    label: item.name,
-                    icon: Route,
-                  }),
-                )}
-              </CommandGroup>
+            {searchGroups.map(
+              (group) =>
+                group.links.length > 0 && (
+                  <CommandGroup key={group.heading} heading={group.heading}>
+                    {group.links.map(renderLinkItem)}
+                  </CommandGroup>
+                ),
             )}
 
             {isSearchingAndFetching ? (
@@ -1067,7 +981,7 @@ export function ConversationSearchPalette({
                 {matchingRuns.map((run) => renderRunItem(run))}
               </CommandGroup>
             ) : matchingNavigationItems.length === 0 && !hasEntityMatches ? (
-              <CommandEmpty>No chats or pages found.</CommandEmpty>
+              <CommandEmpty>No results found.</CommandEmpty>
             ) : null}
           </>
         ) : (
@@ -1246,6 +1160,9 @@ function FooterShortcut({ keys, label }: { keys: string[]; label: string }) {
 
 /** Recent chats shown before a search; older ones are found by typing. */
 const RECENT_CHATS_LIMIT = 5;
+
+/** Rows per entity group; a longer list pushes the chat matches out of view. */
+const ENTITY_RESULTS_LIMIT = 5;
 
 // cmdk moves the selection in DOM order, so a grid of items keeps arrow-key
 // navigation reaching every option while using the dialog's width.

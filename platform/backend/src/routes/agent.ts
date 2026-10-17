@@ -531,11 +531,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ query, user, organizationId }, reply) =>
       reply.send(
         (
-          await findPermittedAgentRoster({
+          await findPermittedAgentOptions({
             query,
             userId: user.id,
             organizationId,
-            optionsView: true,
             ids: query.ids,
           })
         ).map((agent) => ({
@@ -3151,21 +3150,15 @@ type AgentRosterRequest = {
   ids?: string[];
 };
 
-function findPermittedAgentRoster(
-  params: AgentRosterRequest & { optionsView: true },
-): Promise<AgentOption[]>;
-function findPermittedAgentRoster(
-  params: AgentRosterRequest & { optionsView?: false },
-): Promise<Agent[]>;
-async function findPermittedAgentRoster(params: AgentRosterRequest) {
+async function findPermittedAgentOptions(
+  params: Omit<AgentRosterRequest, "optionsView">,
+): Promise<AgentOption[]> {
   const { userId, isAgentAdmin, options } =
     await getPermittedAgentRosterOptions(params);
-  return params.optionsView
-    ? AgentModel.findAll(userId, isAgentAdmin, { ...options, view: "options" })
-    : AgentModel.findAll(userId, isAgentAdmin, {
-        ...options,
-        view: params.query.view,
-      });
+  return AgentModel.findAll(userId, isAgentAdmin, {
+    ...options,
+    view: "options",
+  });
 }
 
 async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {

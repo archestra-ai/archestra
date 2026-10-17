@@ -276,6 +276,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'.",
               ),
+            includeTotal: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows: the count is skipped, `hasNext` stays exact, and `total` is then only a lower bound (the agents up to this page, plus one when there are more).",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -318,6 +327,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           providerApiKeyId,
           pinned,
           includeTools,
+          includeTotal,
           limit,
           offset,
           sortBy,
@@ -384,6 +394,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           providerApiKeyId,
           pinned,
           includeTools,
+          includeTotal,
           lookups,
         },
         user.id,

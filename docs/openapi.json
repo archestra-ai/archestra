@@ -50214,6 +50214,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeTotal",
+            "required": false,
+            "description": "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows: the count is skipped, `hasNext` stays exact, and `total` is then only a lower bound (the agents up to this page, plus one when there are more)."
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,

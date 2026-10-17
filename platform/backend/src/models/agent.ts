@@ -183,6 +183,8 @@ type AgentListFilters = {
    * back with `tools: []`, meaning "not requested" rather than "none
    * assigned".
    */
+  /** False skips the count; `total` is then a lower bound. */
+  includeTotal?: boolean;
   includeTools?: boolean;
 };
 
@@ -2238,12 +2240,17 @@ class AgentModel {
     }
 
     // The count does not depend on the page, so it runs alongside it on
-    // another connection instead of after it.
-    const totalQuery = db
-      .select({ total: count() })
-      .from(schema.agentsTable)
-      .where(whereClause)
-      .then(([row]) => Number(row?.total ?? 0));
+    // another connection instead of after it. Without a count, one extra row
+    // tells whether another page follows.
+    const countTotal = filters?.includeTotal !== false;
+    const totalQuery = countTotal
+      ? db
+          .select({ total: count() })
+          .from(schema.agentsTable)
+          .where(whereClause)
+          .then(([row]) => Number(row?.total ?? 0))
+      : Promise.resolve(null);
+    const pageSize = pagination.limit + (countTotal ? 0 : 1);
     // Sorting by a plain column with the caller's personal agents first:
     // read those few agents on their own, then the rest in column order, so
     // the second read walks an index and stops at the page instead of
@@ -2254,17 +2261,19 @@ class AgentModel {
       (sorting?.sortBy === undefined ||
         sorting.sortBy === "name" ||
         sorting.sortBy === "createdAt");
-    const [sortedAgents, total] = await Promise.all([
+    const [fetchedAgents, countedTotal] = await Promise.all([
       twoPhase
         ? AgentModel.findPersonalFirstPage({
             whereClause,
             orderByClause,
             userId,
-            pagination,
+            pagination: { limit: pageSize, offset: pagination.offset },
           })
-        : query.limit(pagination.limit).offset(pagination.offset),
+        : query.limit(pageSize).offset(pagination.offset),
       totalQuery,
     ]);
+    const sortedAgents = fetchedAgents.slice(0, pagination.limit);
+    const total = countedTotal ?? pagination.offset + fetchedAgents.length;
 
     const sortedAgentIds = sortedAgents.map((a) => a.id);
 

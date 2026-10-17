@@ -127,6 +127,50 @@ describe("AgentModel", () => {
     });
   });
 
+  test("lists that skip the total still know whether another page follows", async ({
+    makeAdmin,
+    makeAgent,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeAdmin();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    for (const name of ["a", "b", "c", "d", "e"]) {
+      await makeAgent({
+        name,
+        organizationId: organization.id,
+        authorId: user.id,
+      });
+    }
+    const page = (offset: number, includeTotal: boolean) =>
+      AgentModel.findAllPaginated(
+        { limit: 2, offset },
+        { sortBy: "name", sortDirection: "asc" },
+        { organizationId: organization.id, includeTotal },
+        user.id,
+        true,
+      );
+    const counted = await page(0, true);
+    const total = counted.pagination.total;
+    for (let offset = 0; offset < total + 2; offset += 2) {
+      const [withTotal, withoutTotal] = await Promise.all([
+        page(offset, true),
+        page(offset, false),
+      ]);
+      expect(withoutTotal.data.map((agent) => agent.id)).toEqual(
+        withTotal.data.map((agent) => agent.id),
+      );
+      expect(withoutTotal.pagination.hasNext).toBe(
+        withTotal.pagination.hasNext,
+      );
+      // A lower bound: the agents up to this page, plus one when more follow.
+      expect(withoutTotal.pagination.total).toBe(
+        offset + Math.min(3, Math.max(0, total - offset)),
+      );
+    }
+  });
+
   test("pages put the caller's personal agents first and walk the rest in sort order without gaps", async ({
     makeAdmin,
     makeAgent,

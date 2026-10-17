@@ -64,6 +64,8 @@ export default async function McpGatewaysPageServer() {
           pinned: true,
           access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
           includeTools: false,
+          // The pinned group shows no total.
+          includeTotal: false,
         },
       }),
     ]);

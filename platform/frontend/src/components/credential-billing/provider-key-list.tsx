@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -61,10 +60,7 @@ export function ProviderKeyList({
   alwaysOpen?: boolean;
 }) {
   const catalog = useModelProviderCatalog();
-  const modelIdsByKey = useModelIdsByKey();
-  const { isPending: modelsPending } = useModelsWithApiKeys({
-    toastOnError: false,
-  });
+  const { byKey: modelIdsByKey, pending: modelsPending } = useModelIdsByKey();
   const [open, setOpen] = useState(false);
   const grouped = useMemo(
     () => keysByProvider(providerApiKeys),

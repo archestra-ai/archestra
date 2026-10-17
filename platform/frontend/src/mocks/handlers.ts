@@ -802,6 +802,8 @@ export const handlers: HttpHandler[] = [
   // empty so the strict-mode unhandled-request guard doesn't fire on
   // background fetches we don't actually care about for these tests.
   ...getJson("/api/llm-models", []),
+  ...getJson("/api/llm-models/key-model-ids", []),
+  ...getJson("/api/llm-models/options", []),
   ...getJson("/api/llm-models/by-provider", []),
   ...getJson("/api/llm-models/with-api-keys", []),
   ...getJson("/api/knowledge-bases", []),

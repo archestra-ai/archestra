@@ -210,21 +210,26 @@ export function useBulkDeleteOauthClients() {
   });
 }
 
-/** Resource pages filter locally, so collect every server page first. */
-export function useAllOauthClients({
+/**
+ * The clients that can reach one agent or MCP gateway. The server filters, so
+ * this is one page unless more than 100 clients match.
+ */
+export function useOauthClientsForResource({
+  resourceId,
   enabled = true,
 }: {
+  resourceId: string;
   enabled?: boolean;
-} = {}) {
+}) {
   return useQuery({
-    queryKey: ["oauth-clients", "all"],
+    queryKey: ["oauth-clients", "applicable", resourceId],
     enabled,
     queryFn: async () => {
       const clients: archestraApiTypes.GetOauthClientsResponses["200"]["data"] =
         [];
       for (let offset = 0; ; offset += 100) {
         const { data, error } = await getOauthClients({
-          query: { limit: 100, offset },
+          query: { applicableTo: resourceId, limit: 100, offset },
         });
         throwOnApiError(error, { toastOnError: false });
         clients.push(...(data?.data ?? []));

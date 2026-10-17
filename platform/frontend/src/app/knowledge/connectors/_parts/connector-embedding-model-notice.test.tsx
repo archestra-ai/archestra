@@ -57,6 +57,13 @@ describe("ConnectorEmbeddingModelNotice", () => {
     render(<ConnectorEmbeddingModelNotice connectorType="gdrive" />);
 
     expect(await screen.findByRole("note")).toBeInTheDocument();
+    // Only the embedding key's models are read, without their assignments.
+    expect(useModelsWithApiKeys).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKeyIds: [EMBEDDING_API_KEY_ID],
+        includeAssignments: false,
+      }),
+    );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     const note = screen.getByRole("note");
     expect(note).toHaveTextContent("openai/text-embedding-model");

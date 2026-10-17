@@ -935,11 +935,7 @@ export default function ApiKeysPage() {
                   : []
               }
               virtualKeys={blockingVirtualKeys?.data ?? []}
-              totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
               oauthClients={blockingOauthClients}
-              totalOauthClients={
-                blockingOauthClientsData?.pagination.total ?? 0
-              }
               isLoading={isLoadingVirtualKeys || isLoadingOauthClients}
             />
           }
@@ -988,9 +984,7 @@ function DeleteApiKeyDescription({
   isSubscription,
   knowledgeBaseUsages,
   virtualKeys,
-  totalVirtualKeys,
   oauthClients,
-  totalOauthClients,
   isLoading,
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
@@ -998,9 +992,7 @@ function DeleteApiKeyDescription({
   /** Knowledge base jobs ("embedding", "OCR") configured with this key. */
   knowledgeBaseUsages: string[];
   virtualKeys: MappedVirtualKey[];
-  totalVirtualKeys: number;
   oauthClients: MappedOauthClient[];
-  totalOauthClients: number;
   isLoading: boolean;
 }) {
   if (!apiKey) {

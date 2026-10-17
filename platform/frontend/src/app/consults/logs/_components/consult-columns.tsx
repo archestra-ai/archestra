@@ -86,19 +86,20 @@ function ServiceCell({ view }: { view: ConsultView }) {
         >
           {consult.externalName}
         </div>
-        <div className="flex h-4 min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
+        {/* One inline run that truncates as a whole, so a narrow column cuts
+            the line short instead of pushing it into the next cell. */}
+        <div className="h-4 truncate text-xs leading-4 text-muted-foreground">
           {tone !== "ok" ? (
             <>
-              <span className={cn("shrink-0 font-medium", WORD_TONE[tone])}>
+              <span className={cn("font-medium", WORD_TONE[tone])}>
                 {OUTCOME_WORD[consult.outcome] ??
                   OUTCOME_LABEL[consult.outcome]}
-              </span>
-              <Dot />
+              </span>{" "}
+              <Dot />{" "}
             </>
           ) : null}
-          <span className="truncate capitalize">{role}</span>
-          <span className="shrink-0 text-muted-foreground/70">via</span>
-          <span className="shrink-0 truncate">{backend}</span>
+          <span className="capitalize">{role}</span>{" "}
+          <span className="text-muted-foreground/70">via</span> {backend}
         </div>
       </div>
     </div>

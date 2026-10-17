@@ -93,23 +93,28 @@ export function AuditEventCell({ event }: { event: AuditEventRow }) {
         >
           {name ?? typeLabel}
         </div>
-        <div className="flex h-4 min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
+        {/* One inline run that truncates as a whole, so a narrow column cuts
+            the line short instead of pushing it into the next cell. */}
+        <div className="h-4 truncate text-xs leading-4 text-muted-foreground">
           {failed ? (
             <>
-              <span className="flex shrink-0 items-center gap-0.5 font-medium text-destructive">
-                <OutcomeIcon className="size-3" aria-hidden="true" />
+              <span className="font-medium text-destructive">
+                <OutcomeIcon
+                  className="mr-0.5 inline size-3 align-[-2px]"
+                  aria-hidden="true"
+                />
                 {OUTCOME_LABEL[event.outcome]}
-              </span>
-              <Dot />
+              </span>{" "}
+              <Dot />{" "}
             </>
           ) : null}
-          <span className="shrink-0 text-foreground/80">
+          <span className="text-foreground/80">
             {verbOf(event.action, typeLabel)}
           </span>
           {name ? (
             <>
-              <Dot />
-              <span className="truncate">{typeLabel}</span>
+              {" "}
+              <Dot /> {typeLabel}
             </>
           ) : null}
         </div>

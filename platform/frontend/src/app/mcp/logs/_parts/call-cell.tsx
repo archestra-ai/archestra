@@ -111,29 +111,25 @@ export function CallCell({
             </span>
           ) : null}
         </div>
-        <div className="flex h-4 min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
+        {/* One inline run that truncates as a whole, so a narrow column cuts
+            the line short instead of pushing it into the next cell. */}
+        <div className="h-4 truncate text-xs leading-4 text-muted-foreground">
           <span
-            className={cn(
-              "min-w-0 truncate",
-              caller.kind === "person" && "text-foreground/80",
-            )}
+            className={cn(caller.kind === "person" && "text-foreground/80")}
           >
             {caller.label}
-          </span>
-          <span className="shrink-0 text-muted-foreground/70">on</span>
-          <span className="shrink-0 truncate">{serverName}</span>
+          </span>{" "}
+          <span className="text-muted-foreground/70">on</span> {serverName}
           {row.source === "chat" ? (
             <>
-              <Dot />
-              <span className="shrink-0">Chat</span>
+              {" "}
+              <Dot /> Chat
             </>
           ) : null}
           {errorText ? (
             <>
-              <Dot />
-              <span className="min-w-0 truncate text-destructive/80">
-                {errorText}
-              </span>
+              {" "}
+              <Dot /> <span className="text-destructive/80">{errorText}</span>
             </>
           ) : null}
         </div>

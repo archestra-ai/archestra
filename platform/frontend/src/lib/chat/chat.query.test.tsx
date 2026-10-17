@@ -19,6 +19,7 @@ import {
   useKeepViewedConversationRead,
   useMarkConversationRead,
   useMemberDefaultModel,
+  useRefreshConversationFilesAfterTurn,
   useResolveChatMcpElicitation,
   useStopChatStream,
   useUpdateConversation,
@@ -656,6 +657,84 @@ describe("conversation read-state hooks", () => {
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["conversations"] });
+    // The open conversation is cached as fresh, so the push must mark it stale.
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["conversation", "c1"],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["conversation-files", "c1"],
+    });
+  });
+});
+
+describe("useRefreshConversationFilesAfterTurn", () => {
+  function setup(initial: {
+    conversationId?: string;
+    projectId?: string | null;
+    status: string;
+  }) {
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const hook = renderHook(
+      (props: typeof initial) => useRefreshConversationFilesAfterTurn(props),
+      { wrapper, initialProps: initial },
+    );
+    const refreshedFiles = () =>
+      invalidateSpy.mock.calls.filter(
+        ([filters]) => filters?.queryKey?.[0] === "conversation-files",
+      ).length;
+    return { ...hook, refreshedFiles, invalidateSpy };
+  }
+
+  test("does not refresh when a conversation opens or its project resolves", () => {
+    const { rerender, refreshedFiles } = setup({
+      conversationId: "c1",
+      status: "ready",
+    });
+    rerender({ conversationId: "c1", projectId: "p1", status: "ready" });
+    expect(refreshedFiles()).toBe(0);
+  });
+
+  test("does not refresh when switching to another conversation", () => {
+    const { rerender, refreshedFiles } = setup({
+      conversationId: "c1",
+      status: "ready",
+    });
+    rerender({ conversationId: "c2", status: "ready" });
+    expect(refreshedFiles()).toBe(0);
+  });
+
+  test("refreshes once when a turn ends, including the project's files", () => {
+    const { rerender, refreshedFiles, invalidateSpy } = setup({
+      conversationId: "c1",
+      projectId: "p1",
+      status: "ready",
+    });
+    rerender({ conversationId: "c1", projectId: "p1", status: "submitted" });
+    rerender({ conversationId: "c1", projectId: "p1", status: "streaming" });
+    expect(refreshedFiles()).toBe(0);
+
+    rerender({ conversationId: "c1", projectId: "p1", status: "ready" });
+    expect(refreshedFiles()).toBe(1);
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["projects", "p1", "files"],
+    });
+
+    rerender({ conversationId: "c1", projectId: "p1", status: "ready" });
+    expect(refreshedFiles()).toBe(1);
+  });
+
+  test("a turn that fails to start still refreshes when it settles", () => {
+    const { rerender, refreshedFiles } = setup({
+      conversationId: "c1",
+      status: "ready",
+    });
+    rerender({ conversationId: "c1", status: "submitted" });
+    rerender({ conversationId: "c1", status: "ready" });
+    expect(refreshedFiles()).toBe(1);
   });
 });
 

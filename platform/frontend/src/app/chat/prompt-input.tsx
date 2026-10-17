@@ -352,7 +352,9 @@ const PromptInputContent = ({
 
   // /debug needs the conversation below; fetched early so the encrypted-chat gate
   // can read it too.
-  const { data: conversation } = useConversation(conversationId);
+  const { data: conversation } = useConversation(conversationId, {
+    refetchOnMount: false,
+  });
 
   // EncryptedChat is "active" for the composer both while chatting in an encrypted
   // chat and while the new-chat toggle is on. It drives the composer's own

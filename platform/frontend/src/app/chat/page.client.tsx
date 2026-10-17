@@ -135,6 +135,7 @@ import {
   useHasPlaywrightMcpTools,
   useKeepViewedConversationRead,
   useMemberDefaultModel,
+  useRefreshConversationFilesAfterTurn,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
@@ -2161,17 +2162,13 @@ export function ChatPageContent({
     queryClient,
   ]);
 
-  // Refresh the Files list and the conversation (for the artifact) whenever the
-  // chat settles to "ready" — the initial open and the end of every turn. This
-  // surfaces `download_file` outputs and picks up a rewritten artifact, so the
-  // Files panel can follow the latest output.
-  useEffect(() => {
-    if (!conversationId || status !== "ready") return;
-    invalidateConversationFileQueries(queryClient, {
-      conversationId,
-      projectId: conversation?.projectId,
-    });
-  }, [status, conversationId, conversation?.projectId, queryClient]);
+  // Surface `download_file` outputs and a rewritten artifact when a turn ends,
+  // so the Files panel can follow the latest output.
+  useRefreshConversationFilesAfterTurn({
+    conversationId,
+    projectId: conversation?.projectId,
+    status,
+  });
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)

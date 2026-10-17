@@ -321,7 +321,9 @@ export function ChatMessages({
   const updateChatMessageMutation = useUpdateChatMessage(conversationId);
   // Resolved once for the whole transcript: an encrypted chat's attachments cannot
   // be copied into a knowledge base, so their chips do not offer it.
-  const { data: messagesConversation } = useConversation(conversationId);
+  const { data: messagesConversation } = useConversation(conversationId, {
+    refetchOnMount: false,
+  });
   const canSaveToKnowledge = isActionAvailableForConversation(
     messagesConversation,
     "saveToKnowledge",

@@ -13,7 +13,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { callApi } from "@/lib/chat/api-call";
@@ -131,12 +131,29 @@ export function mergeUpdatedConversationIntoCache(
   return merged;
 }
 
-export function useConversation(conversationId?: string) {
+/**
+ * How long a loaded conversation (and its Files list) counts as fresh. Changes
+ * arrive by invalidation instead: the end of a turn on this page, the
+ * conversation_updated push for turns elsewhere, and every mutation.
+ */
+const CONVERSATION_STALE_TIME_MS = 30_000;
+
+export function useConversation(
+  conversationId?: string,
+  options?: {
+    /**
+     * False for components that only read the conversation the chat page
+     * already loads, so mounting them never starts a request of its own.
+     */
+    refetchOnMount?: boolean;
+  },
+) {
   return useQuery({
     queryKey: ["conversation", conversationId],
     queryFn: () => (conversationId ? fetchConversation(conversationId) : null),
     enabled: !!conversationId,
-    staleTime: 0, // Always refetch to ensure we have the latest messages
+    staleTime: CONVERSATION_STALE_TIME_MS,
+    refetchOnMount: options?.refetchOnMount ?? true,
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
     // The schedule worker links the conversation before registering its stream
@@ -208,10 +225,46 @@ export function useConversationFiles(conversationId?: string) {
       );
     },
     enabled: !!conversationId,
-    staleTime: 0,
+    staleTime: CONVERSATION_STALE_TIME_MS,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+}
+
+/**
+ * Refresh the Files list and the conversation (for a rewritten artifact) when
+ * a turn on this page ends: the status moving from submitted or streaming to
+ * ready. Opening or switching to a conversation is not a turn ending — those
+ * load through the queries themselves.
+ */
+export function useRefreshConversationFilesAfterTurn({
+  conversationId,
+  projectId,
+  status,
+}: {
+  conversationId?: string;
+  projectId?: string | null;
+  status: string;
+}) {
+  const queryClient = useQueryClient();
+  const previous = useRef({ conversationId, status });
+  // Read through a ref: the project id resolving must not count as a change.
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = { conversationId, status };
+    if (!conversationId || before.conversationId !== conversationId) return;
+    const turnEnded =
+      status === "ready" &&
+      (before.status === "streaming" || before.status === "submitted");
+    if (!turnEnded) return;
+    invalidateConversationFileQueries(queryClient, {
+      conversationId,
+      projectId: projectIdRef.current,
+    });
+  }, [conversationId, status, queryClient]);
 }
 
 /** Route a single file to its delete endpoint by source. */
@@ -382,8 +435,16 @@ export function useConversationUpdatedCacheSync(enabled = true) {
     if (!enabled) return;
 
     websocketService.connect();
-    return websocketService.subscribe("conversation_updated", () => {
+    return websocketService.subscribe("conversation_updated", (message) => {
       void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // The conversation itself stays fresh for a while once loaded, so a turn
+      // that finished elsewhere must mark it stale here.
+      void queryClient.invalidateQueries({
+        queryKey: ["conversation", message.payload.conversationId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["conversation-files", message.payload.conversationId],
+      });
     });
   }, [enabled, queryClient]);
 }

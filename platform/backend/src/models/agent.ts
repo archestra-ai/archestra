@@ -59,6 +59,7 @@ import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import {
   type Agent,
+  type AgentAccessContext,
   type AgentActivationSkillMode,
   AgentActivationSkillModeSchema,
   type AgentListItem,
@@ -3078,6 +3079,37 @@ class AgentModel {
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
         createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return agent ?? null;
+  }
+
+  /**
+   * The one row a read authorization needs — type (for the type-specific RBAC
+   * check), name, and the access-context columns
+   * {@link AgentTeamModel.userHasAgentAccess} takes — without the tool join and
+   * hydration {@link findById} does. For routes that only authorize the agent
+   * before reading something else about it.
+   */
+  static async findByIdForAccess(
+    id: string,
+  ): Promise<
+    | (AgentAccessContext &
+        Pick<Agent, "agentType" | "name" | "createdByServiceAccountId">)
+    | null
+  > {
+    const [agent] = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        scope: schema.agentsTable.scope,
+        authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
+        agentType: schema.agentsTable.agentType,
+        name: schema.agentsTable.name,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))

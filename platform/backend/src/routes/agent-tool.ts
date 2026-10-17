@@ -17,6 +17,7 @@ import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { type Transaction } from "@/database";
 import {
   AgentModel,
+  AgentTeamModel,
   AgentToolModel,
   AgentVersionModel,
   InternalMcpCatalogModel,
@@ -539,8 +540,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { params: { agentId }, query: { catalogId }, user, organizationId },
       reply,
     ) => {
-      // Fetch the resource first so we can enforce type- and scope-aware access.
-      const agent = await AgentModel.findById(agentId, user.id, true);
+      // Only the access columns: the tools are read on their own below.
+      const agent = await AgentModel.findByIdForAccess(agentId);
       if (!agent) {
         throw new ApiError(404, `Agent with ID ${agentId} not found`);
       }
@@ -557,15 +558,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const isAgentTypeAdmin = checker.isAdmin(agent.agentType);
-      if (!isAgentTypeAdmin) {
-        const filteredAgent = await AgentModel.findById(
+      if (
+        !isAgentTypeAdmin &&
+        !(await AgentTeamModel.userHasAgentAccess({
+          userId: user.id,
           agentId,
-          user.id,
-          false,
-        );
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
+          isAgentAdmin: false,
+          agentAccessContext: agent,
+        }))
+      ) {
+        throw new ApiError(404, "Agent not found");
       }
 
       // A catalog id that is not a uuid matches no tool; the column would
@@ -709,8 +711,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { agentId }, organizationId, user }, reply) => {
-      // Fetch agent first to determine its type (admin=true to bypass team filter)
-      const agent = await AgentModel.findById(agentId, user.id, true);
+      // Only the access columns, to learn the type; the targets are read below.
+      const agent = await AgentModel.findByIdForAccess(agentId);
       if (!agent) {
         throw new ApiError(404, "Agent not found");
       }
@@ -739,15 +741,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // If not admin, verify team access
-      if (!admin) {
-        const filteredAgent = await AgentModel.findById(
+      if (
+        !admin &&
+        !(await AgentTeamModel.userHasAgentAccess({
+          userId: user.id,
           agentId,
-          user.id,
-          false,
-        );
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
+          isAgentAdmin: false,
+          agentAccessContext: agent,
+        }))
+      ) {
+        throw new ApiError(404, "Agent not found");
       }
 
       const delegations = await AgentToolModel.getDelegationTargets(

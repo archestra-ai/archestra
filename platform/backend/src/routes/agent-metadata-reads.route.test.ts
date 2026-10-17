@@ -152,4 +152,41 @@ describe("agent metadata reads", () => {
       },
     ]);
   });
+  test("default suggested prompts are offered only on an agent the caller can read", async ({
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "member" });
+    const owner = await makeUser();
+    const team = await makeTeam(ctx.organizationId, owner.id, {
+      name: "Other",
+    });
+    const hidden = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      agentType: "agent",
+      access: { teams: [team.id] },
+    });
+    const own = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      access: "personal",
+    });
+
+    const denied = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agents/${hidden.id}/default-suggested-prompts`,
+    });
+    expect(denied.statusCode).toBe(404);
+
+    const allowed = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agents/${own.id}/default-suggested-prompts`,
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toEqual([]);
+  });
 });

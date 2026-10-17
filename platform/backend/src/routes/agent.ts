@@ -48,6 +48,7 @@ import {
   OrganizationModel,
   ProjectModel,
 } from "@/models";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
 import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
@@ -83,6 +84,7 @@ import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
+  type AgentAccessContext,
   AgentActivationSkillPolicyResponseSchema,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
@@ -946,14 +948,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
+      // Only the agent's own prompts matter here, not the full agent.
       const agent = await requireReadableAgent({
         id,
         userId: user.id,
         organizationId,
+        load: AgentModel.findByIdForAccess,
       });
+      const suggestedPrompts =
+        (await AgentSuggestedPromptModel.getForAgents([agent.id])).get(
+          agent.id,
+        ) ?? [];
       return reply.send(
         await getDocsSuggestedPrompts({
-          agent,
+          agent: { id: agent.id, suggestedPrompts },
           userId: user.id,
           organizationId,
         }),
@@ -2803,13 +2811,19 @@ export default agentRoutes;
  * themselves, so resolving the live agent here (findById excludes deleted
  * rows) is what keeps a deleted agent's history unreachable.
  */
-async function requireReadableAgent(params: {
+async function requireReadableAgent<
+  T extends AgentAccessContext & Pick<Agent, "agentType"> = Agent,
+>(params: {
   id: string;
   userId: string;
   organizationId: string;
-}): Promise<Agent> {
+  /** How to read the agent; the full agent unless the caller needs less. */
+  load?: (id: string) => Promise<T | null>;
+}): Promise<T> {
   // admin lookup first to learn the type, then enforce type-specific RBAC
-  const agent = await AgentModel.findById(params.id, params.userId, true);
+  const agent = params.load
+    ? await params.load(params.id)
+    : ((await AgentModel.findById(params.id, params.userId, true)) as T | null);
   if (!agent || agent.organizationId !== params.organizationId) {
     throw new ApiError(404, "Agent not found");
   }

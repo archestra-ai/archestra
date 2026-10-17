@@ -955,12 +955,18 @@ export async function handleLLMProxy<
     });
   }
 
-  // 5. Enforce a platform credential on external requests. A passthrough key
-  // authenticates the user but carries no provider credential, so a provider
-  // key alone is rejected unless the organization allows unauthenticated requests.
+  // 5. Enforce a platform credential on external requests. A validated
+  // passthrough key or personal token is one: each authenticates the acting
+  // user, even when the provider credential comes from elsewhere. A provider
+  // key alone is rejected unless the organization allows unauthenticated
+  // requests.
   assertPlatformAuthenticated({
     apiKey,
-    wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
+    wasVirtualKeyResolved:
+      wasVirtualKeyResolved ||
+      wasOAuthAuthenticated ||
+      passthroughVirtualKeyId !== undefined ||
+      personalTokenUserId !== undefined,
     wasJwksAuthenticated,
     isInternalCall: internalCall,
     providerSuppliesServerCredential:

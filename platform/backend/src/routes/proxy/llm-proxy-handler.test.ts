@@ -44,6 +44,7 @@ import {
   createOpenAiTestClient,
   type OpenAiStubOptions,
 } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import type { Agent } from "@/types";
 import { ApiError } from "@/types";
 
@@ -135,6 +136,8 @@ async function reconstructWithSdk(sseBody: string) {
   return MessageStream.fromReadableStream(stream).finalMessage();
 }
 
+let platformCredential: string;
+
 describe("LLM Proxy Handler Prometheus Metrics", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
@@ -145,7 +148,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
   };
   let geminiStubOptions: { interruptAtChunk?: number };
 
-  beforeEach(async ({ makeAgent }) => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
     vi.clearAllMocks();
 
     // Create Fastify app
@@ -169,6 +172,12 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
 
     // Create test agent
     testAgent = await makeAgent({ name: "Test Metrics Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, testAgent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: testAgent.organizationId,
+      ownerId: owner.id,
+    });
 
     // Initialize metrics
     metrics.llm.initializeMetrics([]);
@@ -238,6 +247,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         url: `/v1/openai/${testAgent.id}/chat/completions`,
         headers: {
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "content-type": "application/json",
         },
         payload: {
@@ -262,6 +272,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "user-agent": "test-client",
         },
         payload: {
@@ -375,6 +386,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "user-agent": "test-client",
         },
         payload: {
@@ -525,6 +537,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "user-agent": "test-client",
         },
         payload: {
@@ -559,6 +572,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "user-agent": "test-client",
         },
         payload: {
@@ -598,6 +612,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "user-agent": "test-client",
         },
         payload: {
@@ -632,6 +647,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           [SOURCE_HEADER]: "chatops:slack",
           [SESSION_ID_HEADER]: sessionId,
         },
@@ -685,6 +701,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           headers: {
             "content-type": "application/json",
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformCredential,
             [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID,
             [OPENCODE_AGENT_HEADER]: params.agent,
             "x-opencode-session": params.sessionId,
@@ -746,6 +763,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           headers: {
             "content-type": "application/json",
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformCredential,
             [EXTERNAL_AGENT_ID_HEADER]: "kilo",
             [OPENCODE_AGENT_HEADER]: params.agent,
             "x-opencode-session": params.sessionId,
@@ -816,6 +834,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -885,6 +904,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -938,6 +958,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -998,6 +1019,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           "x-goog-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
         },
         payload: {
           contents: [
@@ -1068,6 +1090,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           "x-goog-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
         },
         payload: {
           contents: [
@@ -1155,6 +1178,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
         },
         payload: {
           modelId: BEDROCK_MODEL,
@@ -1185,6 +1209,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
         },
         payload: {
           modelId: BEDROCK_MODEL,
@@ -1222,7 +1247,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   let anthropicStubOptions: AnthropicStubOptions;
   let anthropicResponseHeaders: Headers | undefined;
 
-  beforeEach(async ({ makeAgent }) => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
     vi.clearAllMocks();
 
     app = Fastify().withTypeProvider<ZodTypeProvider>();
@@ -1246,6 +1271,16 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     );
 
     testAgent = await makeAgent({ name: "Blocked Tools Agent" });
+
+    const owner = await makeUser();
+
+    await makeMember(owner.id, testAgent.organizationId);
+
+    platformCredential = await makePassthroughCredential({
+      organizationId: testAgent.organizationId,
+
+      ownerId: owner.id,
+    });
 
     metrics.llm.initializeMetrics([]);
 
@@ -1304,6 +1339,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
         },
         payload: {
           model: "gpt-4o",
@@ -1338,6 +1374,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
         },
         payload: {
           model: "gpt-4o",
@@ -1369,6 +1406,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
         },
         payload: {
           model: "gpt-4o",
@@ -1423,6 +1461,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
         },
         payload: {
           model: "gpt-4o",
@@ -1456,6 +1495,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "user-agent": "test-client",
         },
         payload: {
@@ -1488,6 +1528,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "user-agent": "test-client",
         },
         payload: {
@@ -1518,6 +1559,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
           "user-agent": "test-client",
         },
         payload: {
@@ -1575,6 +1617,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1624,6 +1667,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1668,6 +1712,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1708,6 +1753,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1741,6 +1787,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1782,6 +1829,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": key,
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1872,6 +1920,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "sk-ant-oat-token",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1906,6 +1955,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1952,6 +2002,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -1998,6 +2049,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -2035,6 +2087,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -2061,6 +2114,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -2085,7 +2139,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
   let testAgent: Agent;
   const createClientSpy = vi.fn();
 
-  beforeEach(async ({ makeAgent }) => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
     vi.clearAllMocks();
     createClientSpy.mockReset();
 
@@ -2120,6 +2174,16 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
     );
 
     testAgent = await makeAgent({ name: "Test Extra Headers Agent" });
+
+    const owner = await makeUser();
+
+    await makeMember(owner.id, testAgent.organizationId);
+
+    platformCredential = await makePassthroughCredential({
+      organizationId: testAgent.organizationId,
+
+      ownerId: owner.id,
+    });
     metrics.llm.initializeMetrics([]);
 
     await app.register(openAiProxyRoutes);
@@ -2163,6 +2227,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
         ...internalCallHeader(),
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         [CHAT_API_KEY_ID_HEADER]: apiKey.id,
       },
       payload: {
@@ -2209,6 +2274,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         [CHAT_API_KEY_ID_HEADER]: apiKey.id,
       },
       payload: {
@@ -2550,7 +2616,7 @@ describe("LLM Proxy Handler — team-restricted models", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
 
-  beforeEach(async ({ makeAgent }) => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
     vi.clearAllMocks();
 
     app = Fastify().withTypeProvider<ZodTypeProvider>();
@@ -2566,6 +2632,16 @@ describe("LLM Proxy Handler — team-restricted models", () => {
     );
 
     testAgent = await makeAgent({ name: "Test Restricted Models Agent" });
+
+    const owner = await makeUser();
+
+    await makeMember(owner.id, testAgent.organizationId);
+
+    platformCredential = await makePassthroughCredential({
+      organizationId: testAgent.organizationId,
+
+      ownerId: owner.id,
+    });
     metrics.llm.initializeMetrics([]);
 
     await app.register(openAiProxyRoutes);

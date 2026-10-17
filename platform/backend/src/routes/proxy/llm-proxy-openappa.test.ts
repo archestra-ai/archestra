@@ -85,6 +85,7 @@ import {
   createAnthropicTestClient,
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { type Agent, ApiError } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
@@ -13230,6 +13231,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   let app: FastifyInstance;
   let agent: Agent;
   let userId: string;
+  let platformCredential: string;
   let events: Array<Record<string, unknown>>;
   let providerCalls: number;
   let providerBodies: unknown[];
@@ -13263,6 +13265,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     agent = await makeAgent({ name: "Native proxy OpenAI test" });
     userId = (await makeUser()).id;
     await makeMember(userId, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: userId,
+    });
     events = [];
     providerCalls = 0;
     providerBodies = [];
@@ -13386,6 +13392,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
 
   const codexHeaders = () => ({
     authorization: "Bearer test-key",
+    "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "codex_cli_rs/0.153.0 (Linux 6.6; x86_64)",
     originator: "codex_cli_rs",
@@ -13427,6 +13434,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
 
   const openCodeHeaders = () => ({
     authorization: "Bearer test-key",
+    "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
   });
@@ -15681,6 +15689,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       remoteAddress: "127.0.0.1",
       headers: {
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "x-archestra-user-id": userId,
         "x-session-affinity": OPENCODE_SESSION,
       },
@@ -15870,6 +15879,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
   let app: FastifyInstance;
   let agent: Agent;
   let userId: string;
+  let platformCredential: string;
   let events: Array<Record<string, unknown>>;
   let providerBodies: unknown[];
   let denyTools: Set<string>;
@@ -15903,6 +15913,10 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     agent = await makeAgent({ name: "Native proxy batch matrix" });
     userId = (await makeUser()).id;
     await makeMember(userId, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: userId,
+    });
     events = [];
     providerBodies = [];
     denyTools = new Set();
@@ -16169,6 +16183,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
 
   const chatHeaders = () => ({
     authorization: "Bearer test-key",
+    "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
     "x-session-id": CHAT_SESSION,
@@ -16194,6 +16209,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
 
   const responsesHeaders = () => ({
     authorization: "Bearer test-key",
+    "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "codex_cli_rs/0.153.0 (Linux 6.6; x86_64)",
     originator: "codex_cli_rs",

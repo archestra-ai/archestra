@@ -1,10 +1,5 @@
 import { eq } from "drizzle-orm";
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
+import type { FastifyInstance } from "fastify";
 import type OpenAI from "openai";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
@@ -15,6 +10,8 @@ import {
 } from "@/models";
 import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
+import TeamModel from "@/models/team";
+
 /**
  * Integration tests for end-to-end LLM proxy limit enforcement.
  *
@@ -23,19 +20,18 @@ import AgentTeamModel from "@/models/agent-team";
  * Only the upstream LLM client is mocked via createHarness.
  */
 
+import { createFastifyInstance } from "@/fastify-instance";
 import LimitModel from "@/models/limit";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { openaiAdapterFactory } from "../adapters/openai";
 import openAiProxyRoutes from "./openai";
 
 const DEFAULT_USAGE = { inputTokens: 100, outputTokens: 20 };
 
 function createFastifyApp() {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  return app;
+  return createFastifyInstance();
 }
 
 function createOpenAiHarness(options: { usage?: typeof DEFAULT_USAGE } = {}) {
@@ -79,9 +75,15 @@ function createOpenAiHarness(options: { usage?: typeof DEFAULT_USAGE } = {}) {
 const OPENAI_ENDPOINT = (agentId: string) =>
   `/v1/openai/${agentId}/chat/completions`;
 
-const OPENAI_HEADERS = (authToken = "Bearer test-key") => ({
+const OPENAI_HEADERS = (
+  authToken = "Bearer test-key",
+  platformCredential?: string,
+) => ({
   Authorization: authToken,
   "Content-Type": "application/json",
+  ...(platformCredential
+    ? { "x-archestra-virtual-key": platformCredential }
+    : {}),
 });
 
 const SIMPLE_PAYLOAD = (model = "gpt-4o") => ({
@@ -222,7 +224,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
+        ...OPENAI_HEADERS(
+          "Bearer test-key",
+          await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: user.id,
+          }),
+        ),
         "X-Archestra-User-Id": user.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -278,7 +286,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
+        ...OPENAI_HEADERS(
+          "Bearer test-key",
+          await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: user.id,
+          }),
+        ),
         "X-Archestra-User-Id": user.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -344,7 +358,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
+        ...OPENAI_HEADERS(
+          "Bearer test-key",
+          await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: user.id,
+          }),
+        ),
         "X-Archestra-User-Id": user.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -353,8 +373,14 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("allows request when limits are not exceeded", async ({ makeAgent }) => {
+  test("allows request when limits are not exceeded", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
     const agent = await makeAgent({ name: "Under Limit Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     // Create agent limit with a very high threshold (1B tokens)
     await LimitModel.create({
@@ -373,7 +399,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS(),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
+      ),
       payload: SIMPLE_PAYLOAD(),
     });
 
@@ -383,12 +415,16 @@ describe("LLM proxy limit enforcement (integration)", () => {
   test("blocks org-scoped agent with 402 when organization limit is exceeded", async ({
     makeAgent,
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       organizationId: org.id,
       name: "Org Limit Agent",
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     await LimitModel.create({
       entityType: "organization",
@@ -412,7 +448,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS(),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
+      ),
       payload: SIMPLE_PAYLOAD(),
     });
 
@@ -431,8 +473,12 @@ describe("LLM proxy limit enforcement (integration)", () => {
 
   test("records usage in limit after successful request", async ({
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const agent = await makeAgent({ name: "Usage Record Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     // Create agent limit with high threshold
     const limit = await LimitModel.create({
@@ -453,7 +499,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS(),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
+      ),
       payload: SIMPLE_PAYLOAD(),
     });
 
@@ -573,6 +625,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     makeAdmin,
     makeTeam,
     makeMember,
+    makeUser,
   }) => {
     const org = await makeOrganization();
     const admin = await makeAdmin();
@@ -583,7 +636,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
       name: "Team All-Models Agent",
       access: { teams: [team.id] },
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
     // Team limits follow the agent's team assignment, not its grants.
+    await TeamModel.addMember(team.id, owner.id);
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create team-level all-models limit (model: null)
@@ -604,7 +660,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS(),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
+      ),
       payload: SIMPLE_PAYLOAD(),
     });
 
@@ -628,6 +690,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     makeAdmin,
     makeTeam,
     makeMember,
+    makeUser,
   }) => {
     const org = await makeOrganization();
     const admin = await makeAdmin();
@@ -639,7 +702,11 @@ describe("LLM proxy limit enforcement (integration)", () => {
       name: "Multi-Team All-Models Agent",
       access: { teams: [team1.id, team2.id] },
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
     // Team limits follow the agent's team assignment, not its grants.
+    await TeamModel.addMember(team1.id, owner.id);
+    await TeamModel.addMember(team2.id, owner.id);
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
 
     // Create all-models limit on team1 ONLY
@@ -678,7 +745,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS(),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
+      ),
       payload: SIMPLE_PAYLOAD(),
     });
 
@@ -715,6 +788,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     makeAdmin,
     makeTeam,
     makeMember,
+    makeUser,
   }) => {
     const org = await makeOrganization();
     const admin = await makeAdmin();
@@ -725,7 +799,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
       name: "Team All-Models Blocked Agent",
       access: { teams: [team.id] },
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
     // Team limits follow the agent's team assignment, not its grants.
+    await TeamModel.addMember(team.id, owner.id);
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create team all-models limit with threshold of 1
@@ -752,7 +829,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS(),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
+      ),
       payload: SIMPLE_PAYLOAD(),
     });
 
@@ -801,7 +884,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
+        ...OPENAI_HEADERS(
+          "Bearer test-key",
+          await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: user.id,
+          }),
+        ),
         "X-Archestra-User-Id": user.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -875,6 +964,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
   test("blocks request with 402 when environment limit is exceeded", async ({
     makeAgent,
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const environment = await EnvironmentModel.create({
@@ -886,6 +977,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
       name: "Env Limit Agent",
       environmentId: environment.id,
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     await LimitModel.create({
       entityType: "environment",
@@ -908,7 +1001,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS(),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
+      ),
       payload: SIMPLE_PAYLOAD(),
     });
 
@@ -927,6 +1026,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
   test("does not apply an environment limit to an agent in a different environment", async ({
     makeAgent,
     makeOrganization,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const limitedEnv = await EnvironmentModel.create({
@@ -938,6 +1039,8 @@ describe("LLM proxy limit enforcement (integration)", () => {
       organizationId: org.id,
       name: "No-Env Agent",
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
 
     await LimitModel.create({
       entityType: "environment",
@@ -960,7 +1063,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: OPENAI_HEADERS(),
+      headers: OPENAI_HEADERS(
+        "Bearer test-key",
+        await makePassthroughCredential({
+          organizationId: agent.organizationId,
+          ownerId: owner.id,
+        }),
+      ),
       payload: SIMPLE_PAYLOAD(),
     });
 
@@ -1010,7 +1119,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
+        ...OPENAI_HEADERS(
+          "Bearer test-key",
+          await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: user.id,
+          }),
+        ),
         "X-Archestra-User-Id": user.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -1080,7 +1195,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
-        ...OPENAI_HEADERS(),
+        ...OPENAI_HEADERS(
+          "Bearer test-key",
+          await makePassthroughCredential({
+            organizationId: agent.organizationId,
+            ownerId: user.id,
+          }),
+        ),
         "X-Archestra-User-Id": user.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -1142,7 +1263,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(activeAgent.id),
       headers: {
-        ...OPENAI_HEADERS(),
+        ...OPENAI_HEADERS(
+          "Bearer test-key",
+          await makePassthroughCredential({
+            organizationId: deletedAgent.organizationId,
+            ownerId: user.id,
+          }),
+        ),
         "X-Archestra-User-Id": user.id,
       },
       payload: SIMPLE_PAYLOAD(),

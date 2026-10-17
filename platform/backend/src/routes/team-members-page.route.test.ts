@@ -87,6 +87,29 @@ describe("single team and team member pages", () => {
     expect(loadAllMembers).not.toHaveBeenCalled();
   });
 
+  test("rejects an empty user id list and an overlong search", async ({
+    makeMember,
+    makeTeam,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const team = await makeTeam(ctx.organizationId, ctx.user.id);
+
+    const emptyIds = await ctx.app.inject({
+      method: "GET",
+      url: `/api/teams/${team.id}/members/page?userIds=`,
+    });
+    expect(emptyIds.statusCode).toBe(400);
+
+    const longSearch = await ctx.app.inject({
+      method: "GET",
+      url: `/api/teams/${team.id}/members/page?search=${"a".repeat(513)}`,
+    });
+    expect(longSearch.statusCode).toBe(400);
+    expect(longSearch.json().error.message).toContain(
+      "Search must be at most 512 characters",
+    );
+  });
+
   test("hides another organization's team and a team the member cannot read", async ({
     makeMember,
     makeOrganization,

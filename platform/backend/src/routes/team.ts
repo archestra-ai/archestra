@@ -430,7 +430,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: PaginationQuerySchema.extend({
           search: z
             .string()
-            .max(512)
+            .max(512, "Search must be at most 512 characters")
             .optional()
             .describe(
               "Search by user name or email. Every whitespace-separated word must appear in the name or the email.",
@@ -438,7 +438,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userIds: z
             .preprocess(
               (value) => (typeof value === "string" ? value.split(",") : value),
-              z.array(z.string().min(1)).max(100),
+              z.array(z.string().min(1)).min(1).max(100),
             )
             .optional()
             .describe(

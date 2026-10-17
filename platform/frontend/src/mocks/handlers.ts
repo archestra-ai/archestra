@@ -601,9 +601,22 @@ export const handlers: HttpHandler[] = [
   // MCP OAuth clients (bare array, unlike the LLM half's envelope) — the
   // unified OAuth Clients page reads both.
   ...getJson("/api/mcp-oauth-clients", []),
-  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page
-  // and the LLM keys delete dialog as a blocking-deps probe.
+  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients page.
   ...getJson("/api/llm-oauth-clients", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
+  // Managed OAuth clients (paginated envelope) — the LLM keys delete dialog
+  // lists the clients that map the key from here, because this list carries
+  // the current-and-future-providers flag the dialog needs.
+  ...getJson("/api/oauth-clients", {
     data: [],
     pagination: {
       currentPage: 1,

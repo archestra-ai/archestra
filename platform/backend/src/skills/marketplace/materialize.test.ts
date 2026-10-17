@@ -961,6 +961,39 @@ describe("MarketplaceMaterializer", () => {
     }
   });
 
+  for (const [outcome, stop] of [
+    ["is killed", "kill -9 $$"],
+    ["exits early", "exit 0"],
+  ] as const) {
+    test(`a fast-import that ${outcome} mid-stream fails the write and stores no revision`, async () => {
+      const binDir = await fs.mkdtemp(
+        path.join(tmpdir(), "archestra-git-wrapper-"),
+      );
+      try {
+        // real git for everything else; fast-import reads a little, then stops
+        const wrapper = path.join(binDir, "git");
+        await fs.writeFile(
+          wrapper,
+          `#!/bin/sh\nif [ "$1" = "fast-import" ]; then head -c 64 > /dev/null; ${stop}; fi\nexec git "$@"\n`,
+          { mode: 0o755 },
+        );
+        const broken = new MarketplaceMaterializer({
+          cacheDir,
+          gitBinaryPath: wrapper,
+        });
+
+        await expect(broken.materialize(makeRequest(linkId))).rejects.toThrow(
+          /fast-import/,
+        );
+        expect(
+          await SkillShareLinkRevisionModel.list({ kind: "link", id: linkId }),
+        ).toEqual([]);
+      } finally {
+        await fs.rm(binDir, { recursive: true, force: true });
+      }
+    });
+  }
+
   test("commit author and committer use the configured identity", async () => {
     const identity = { name: "Test Marketplace", email: "test@example.com" };
     const m = new MarketplaceMaterializer({ cacheDir, identity });

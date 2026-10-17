@@ -470,6 +470,8 @@ export class MarketplaceMaterializer {
             Buffer.from(formatMessage(rev.sequence, rev.contentHash), "utf8"),
           );
           if (previous === null) {
+            // later commits in this stream continue from the previous commit
+            // on refs/heads/main, so only the first one names its parent
             if (params.parentSha) {
               await importer.write(`from ${params.parentSha}\n`);
             }
@@ -704,6 +706,11 @@ class FastImportWriter {
     }
     if (stdin.write(chunk)) return;
     await Promise.race([once(stdin, "drain"), this.exited]);
+    // `exited` wins the race when git stops reading and exits 0; the rest of
+    // the stream would go nowhere
+    if (this.proc.exitCode !== null || this.proc.signalCode) {
+      throw new Error(`git fast-import exited early: ${this.stderr.trim()}`);
+    }
   }
 
   /** `data <n>` + the exact bytes + LF. */

@@ -409,12 +409,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await KnowledgeBaseLabelModel.getIdsMatchingLabels(parsedLabels)
         : undefined;
       // `ids` narrows the same way the label filter does, so both compose.
+      const labelMatchedIdSet = labelMatchedIds && new Set(labelMatchedIds);
       const labelFilteredIds =
         ids === undefined
           ? labelMatchedIds
-          : labelMatchedIds === undefined
+          : labelMatchedIdSet === undefined
             ? ids
-            : ids.filter((id) => labelMatchedIds.includes(id));
+            : ids.filter((id) => labelMatchedIdSet.has(id));
 
       const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({

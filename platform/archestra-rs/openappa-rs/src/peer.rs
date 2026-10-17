@@ -74,20 +74,17 @@ async fn execute(
     kind: PeerKind,
 ) -> napi::Result<Value> {
     let state = initialized().await?;
-    let deployment = state
-        .deployments
-        .deployment(
-            &state.runtime,
-            &input.organization_id,
-            &policy,
-            state.reporting.is_some(),
-        )
-        .await
-        .map_err(error)?;
-    let state = state.pinned(&deployment);
+    super::on_deployment(&state, &input.organization_id, &policy, |pinned| {
+        execute_pinned(pinned, &input, kind)
+    })
+    .await
+}
+
+async fn execute_pinned(state: State, input: &PeerInput, kind: PeerKind) -> napi::Result<Value> {
+    let state = &state;
     let pg = &Sql(&state.store);
-    let root = acting_root(pg, &input)?;
-    let actor = acting_actor(pg, &input, &root)?;
+    let root = acting_root(pg, input)?;
+    let actor = acting_actor(pg, input, &root)?;
     // A receipt recovered here is one a dispatch left pending when it stopped
     // and its lease expired. The peer stores deduplicate their own effects (a
     // resubmitted send with the same payload replays its stored row), so a
@@ -96,10 +93,10 @@ async fn execute(
     let receipts = lease::Receipts::new(state.store.clone());
     let work = async {
         match kind {
-            PeerKind::Send => send(&state, &receipts, pg, &input, &actor).await,
-            PeerKind::Admit => admit(&state, pg, &input, &actor).await,
-            PeerKind::List => list(&state, &receipts, pg, &input, &actor).await,
-            PeerKind::Read => read(&state, &receipts, pg, &input, &actor).await,
+            PeerKind::Send => send(state, &receipts, pg, input, &actor).await,
+            PeerKind::Admit => admit(state, pg, input, &actor).await,
+            PeerKind::List => list(state, &receipts, pg, input, &actor).await,
+            PeerKind::Read => read(state, &receipts, pg, input, &actor).await,
         }
     };
     let failure = match receipts.hold(work).await {

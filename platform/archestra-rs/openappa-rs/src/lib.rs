@@ -23,7 +23,7 @@ use appa_eventlog::{
 };
 use appa_runtime::{
     api::{
-        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PreparedDeployment, RemedyOutcome,
+        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PublishedDeployment, RemedyOutcome,
         RemedyPresentation, RemedyRefusal, Runtime,
     },
     hooks,
@@ -64,9 +64,11 @@ pub struct ContentEncryption {
 }
 
 /// Process-wide runtime slot. The mutex covers initialize only. Every dispatch
-/// runs through a view pinned to its organization's deployment (see
-/// [`deployments`]), so dispatches run concurrently and none changes what another
-/// serves. A root keeps its opening policy revision, and a fork its parent's.
+/// runs through a view pinned to the head of its organization's deployment line
+/// (see [`deployments`]), so dispatches run concurrently and none changes what
+/// another serves. Every family decides its next event under its line's head,
+/// whichever revision opened it; a family the previous OpenAPPA version opened
+/// keeps its opening policy until it ends.
 /// No dispatch holds a database connection or a lock while it works: the event
 /// log serializes each read-decide-append step of a family on the family's row,
 /// receipts carry a lease per operation (see [`lease`]), and every write is one
@@ -361,6 +363,67 @@ fn lease_lost() -> napi::Error {
 /// dispatch answers it, or its lease expires and the retry takes the work over.
 fn held_elsewhere() -> napi::Error {
     error("OpenAPPA is processing this operation in another request; retry the request")
+}
+
+/// Another process published a newer policy revision for this organization while
+/// this dispatch was decided, and this process could not pin it in time. Nothing
+/// was appended; the host retries and the retry decides at the new head.
+fn policy_moved() -> napi::Error {
+    error("OpenAPPA published a newer policy revision for this organization; retry the request")
+}
+
+/// Whether a dispatch failed because its deployment line moved past the revision
+/// its view was pinned to. The runtime turns that refusal into the detail of an
+/// operational refusal, so its display text is what reaches this process.
+fn is_policy_moved(error: &napi::Error) -> bool {
+    error.reason.contains(" moved to policy revision ")
+        && error
+            .reason
+            .contains("while this event was decided; retry it")
+}
+
+/// Runs `work` through a view pinned to the head of the organization's deployment
+/// line. When the line moved past that head while `work` was decided, which only
+/// happens when another process published, nothing was appended: the
+/// organization's deployment is pinned at the new head when it names the same
+/// policy, and `work` runs once more. When the head names another policy, or moves
+/// again, the dispatch fails as retryable and the host's retry reads the policy
+/// again.
+async fn on_deployment<T, Work>(
+    state: &State,
+    organization_id: &str,
+    policy: &deployments::HostedPolicy,
+    work: impl Fn(State) -> Work,
+) -> napi::Result<T>
+where
+    Work: std::future::Future<Output = napi::Result<T>>,
+{
+    let deployment = state
+        .deployments
+        .deployment(
+            &state.runtime,
+            organization_id,
+            policy,
+            state.reporting.is_some(),
+        )
+        .await
+        .map_err(error)?;
+    match work(state.pinned(&deployment)).await {
+        Err(moved) if is_policy_moved(&moved) => {
+            let Some(head) = state
+                .deployments
+                .repin(&state.runtime, &state.store, organization_id, &deployment)
+                .map_err(error)?
+            else {
+                return Err(policy_moved());
+            };
+            match work(state.pinned(&head)).await {
+                Err(moved) if is_policy_moved(&moved) => Err(policy_moved()),
+                result => result,
+            }
+        }
+        result => result,
+    }
 }
 
 /// A completion this dispatch may no longer write, as the host sees it.
@@ -1302,17 +1365,11 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
-        let deployment = state
-            .deployments
-            .deployment(
-                &state.runtime,
-                &input.organization_id,
-                &policy,
-                state.reporting.is_some(),
-            )
-            .await
-            .map_err(error)?;
-        state.pinned(&deployment).dispatch(input).await
+        on_deployment(&state, &input.organization_id, &policy, |pinned| {
+            let input = input.clone();
+            async move { pinned.dispatch(input).await }
+        })
+        .await
     })
     .catch_unwind()
     .await;
@@ -2005,7 +2062,7 @@ impl State {
 
     /// This state with its runtime pinned to `deployment`: every lease of it, and
     /// every view made of such a lease, serves that deployment.
-    fn pinned(&self, deployment: &PreparedDeployment) -> State {
+    fn pinned(&self, deployment: &PublishedDeployment) -> State {
         State {
             runtime: Arc::new(self.runtime.pinned(deployment)),
             ..self.clone()

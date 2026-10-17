@@ -4,6 +4,7 @@ import {
   type InteractionSource,
   type SupportedProvider,
 } from "@archestra/shared";
+import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 
 // Pure formatting for the LLM logs table cells. Nothing here renders; the cell
 // components in this folder do.
@@ -128,9 +129,7 @@ export function formatRequestCost(value: number): string {
   return `$${formatCompactNumber(value)}`;
 }
 
-export function formatCompactNumber(value: number): string {
-  return compactNumberFormatter.format(value);
-}
+export { formatCompactNumber };
 
 /** Wall-clock span between a session's first and last request. */
 export function formatSessionSpan(
@@ -232,11 +231,6 @@ const KNOWLEDGE_TASK_TITLES: Record<KnowledgeSource, string> = {
   "knowledge:contextual-retrieval": "Adding context to chunks",
   "knowledge:ocr": "Reading scanned pages",
 };
-
-const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
 
 const SIZE_PATTERN = /^\d+(\.\d+)?[bmk]$/i;
 

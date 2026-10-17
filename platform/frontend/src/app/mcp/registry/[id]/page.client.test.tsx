@@ -619,7 +619,7 @@ describe("McpCatalogItemDetailPage overview", () => {
       ),
     ).toBeNull();
     expect(
-      within(installationRow).getByRole("button", { name: "Revoke" }),
+      within(installationRow).getByRole("button", { name: /^Revoke/ }),
     ).toBeInTheDocument();
     await user.type(within(form).getByLabelText(/API_TOKEN/), "new-token");
     await user.click(
@@ -685,7 +685,7 @@ describe("McpCatalogItemDetailPage overview", () => {
     renderPage({ serverType: "remote", localConfig: null });
 
     const row = screen.getByRole("row", { name: /Organization/ });
-    await user.click(within(row).getByRole("button", { name: "Revoke" }));
+    await user.click(within(row).getByRole("button", { name: /^Revoke/ }));
 
     const dialog = await screen.findByRole("dialog");
     expect(deleteMutateAsync).not.toHaveBeenCalled();
@@ -848,7 +848,7 @@ describe("McpCatalogItemDetailPage installations", () => {
     expect(
       content.queryByRole("button", { name: /Add shared installation/ }),
     ).toBeNull();
-    expect(columnNames(content)).toEqual(["Owner", "Created At", "Action"]);
+    expect(columnNames(content)).toEqual(["Owner", "Added", "Actions"]);
     const [row, ...otherRows] = content.getAllByRole("row").slice(1);
     expect(row).toHaveTextContent("member@example.com");
     expect(otherRows).toEqual([]);
@@ -868,7 +868,7 @@ describe("McpCatalogItemDetailPage installations", () => {
     renderPage({ serverType: "remote", localConfig: null });
 
     const content = connections();
-    expect(content.queryByText("Default credential")).toBeNull();
+    expect(content.queryByText("Agents connect as")).toBeNull();
     expect(content.queryByText("Service accounts")).toBeNull();
     expect(
       content.queryByRole("button", { name: /Add service account/ }),
@@ -884,7 +884,6 @@ describe("McpCatalogItemDetailPage installations", () => {
     expect(content.getByText("Shared installations")).toBeVisible();
     expect(content.getByText("Platform")).toBeVisible();
     expect(columnNames(content)).toContain("Pod");
-    expect(columnNames(content)).toContain("Secret Storage");
     expect(
       screen.getByRole("heading", { name: /Installations/ }),
     ).toHaveTextContent(/^Installations2$/);
@@ -958,7 +957,7 @@ describe("McpCatalogItemDetailPage installations", () => {
     installed([teamInstall({ serverType: "remote" })]);
     renderPage({ serverType: "remote", localConfig: null });
 
-    expect(connections().getByText("Default credential")).toBeVisible();
+    expect(connections().getByText("Agents connect as")).toBeVisible();
     expect(connections().getByText("Service accounts")).toBeVisible();
   });
 

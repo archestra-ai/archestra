@@ -5,7 +5,6 @@ import {
   type archestraApiTypes,
   DocsPage,
   E2eTestId,
-  formatSecretStorageType,
   getDocsUrl,
   isPlaywrightCatalogItem,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -13,12 +12,27 @@ import {
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import { format } from "date-fns";
-import { KeyRound, Plus, RefreshCw, Trash, User, Zap } from "lucide-react";
+import {
+  Building2,
+  Info,
+  KeyRound,
+  Plus,
+  RefreshCw,
+  Trash,
+  Trash2,
+  TriangleAlert,
+  User,
+  Users,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { EmptyListState } from "@/components/empty-list-state";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { Badge } from "@/components/ui/badge";
+import {
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -620,7 +634,7 @@ interface RowRenderProps {
   handleRevoke: (s: ServerEntry) => void;
   isDeleting: boolean;
   onOpenPodLogs?: (serverId: string) => void;
-  /** The Pod and Secret Storage columns, for those who manage installations. */
+  /** The Pod column, for those who manage installations. */
   showInfrastructure: boolean;
 }
 
@@ -642,11 +656,18 @@ function ConnectionsSection({
   tableTestId: string;
 } & RowRenderProps) {
   return (
-    <div className="space-y-3">
+    <section className="space-y-2">
       {title ? (
-        <div className="space-y-0.5">
+        <div className="flex items-center gap-1.5">
           <h4 className="text-sm font-medium">{title}</h4>
-          <p className="text-xs text-muted-foreground">{description}</p>
+          {rows.length > 0 && (
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {rows.length}
+            </span>
+          )}
+          <InfoHint label={`About ${title.toLowerCase()}`}>
+            {description}
+          </InfoHint>
         </div>
       ) : null}
       {rows.length > 0 ? (
@@ -661,13 +682,58 @@ function ConnectionsSection({
       ) : (
         <p className="text-sm text-muted-foreground">{emptyText}</p>
       )}
-    </div>
+    </section>
   );
 }
 
 function ConnectionsTable({
   rows,
   testId,
+  ...rowProps
+}: {
+  rows: ConnectionRow[];
+  testId: string;
+} & RowRenderProps) {
+  const hasDeploymentStatuses =
+    rowProps.showInfrastructure &&
+    rows.some((r) => rowProps.deploymentStatuses[r.server.id]);
+
+  return (
+    // A fixed-layout table squeezes its unsized columns to nothing on a
+    // narrow screen; a floor width makes it scroll sideways instead.
+    <Table
+      data-testid={testId}
+      className={hasDeploymentStatuses ? "min-w-[620px]" : "min-w-[440px]"}
+    >
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead>Owner</TableHead>
+          {hasDeploymentStatuses && (
+            <TableHead className="w-[34%]">Pod</TableHead>
+          )}
+          <TableHead className="w-[120px]">Added</TableHead>
+          <TableHead className="w-[96px]">
+            <span className="sr-only">Actions</span>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <ConnectionTableRow
+            key={row.server.id}
+            row={row}
+            showPod={hasDeploymentStatuses}
+            {...rowProps}
+          />
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function ConnectionTableRow({
+  row: { server, isYou },
+  showPod,
   deploymentStatuses,
   canonicalStateByPod,
   getCredentialOwnerName,
@@ -679,195 +745,196 @@ function ConnectionsTable({
   handleRevoke,
   isDeleting,
   onOpenPodLogs,
-  showInfrastructure,
 }: {
-  rows: ConnectionRow[];
-  testId: string;
+  row: ConnectionRow;
+  showPod: boolean;
 } & RowRenderProps) {
-  const hasDeploymentStatuses =
-    showInfrastructure && rows.some((r) => deploymentStatuses[r.server.id]);
+  const owner = getCredentialOwnerName(server);
+  const scope = resolveServerScope(server);
+  const createdBy = scope !== "personal" ? server.ownerEmail : null;
+  const createdAt = new Date(server.createdAt);
+
+  const actions: TableRowAction[] = [];
+  if (server.oauthRefreshError) {
+    actions.push({
+      icon: <RefreshCw className="size-4" />,
+      label: "Re-authenticate",
+      onClick: () => handleReauthenticate(server),
+      disabled: !canReauthenticate(server),
+      disabledTooltip: getReauthTooltip(server),
+    });
+  }
+  actions.push({
+    icon: <Trash2 className="size-4" />,
+    label: "Revoke",
+    variant: "destructive",
+    onClick: () => handleRevoke(server),
+    disabled: isDeleting || !canRevoke(server),
+    disabledTooltip: canRevoke(server) ? undefined : getRevokeTooltip(server),
+    testId: isYou
+      ? `${E2eTestId.RevokeCredentialButton}-personal`
+      : `${E2eTestId.RevokeCredentialButton}-${owner}`,
+  });
 
   return (
-    // A fixed-layout table squeezes its unsized columns to nothing on a
-    // narrow screen; a floor width makes it scroll sideways instead.
-    <Table
-      data-testid={testId}
-      className={hasDeploymentStatuses ? "min-w-[780px]" : "min-w-[600px]"}
-    >
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-[200px] whitespace-nowrap">Owner</TableHead>
-          {hasDeploymentStatuses && (
-            <TableHead className="whitespace-nowrap">Pod</TableHead>
-          )}
-          {showInfrastructure && (
-            <TableHead className="w-[120px] whitespace-nowrap">
-              Secret Storage
-            </TableHead>
-          )}
-          <TableHead className="w-[120px] whitespace-nowrap">
-            Created At
-          </TableHead>
-          <TableHead className="w-[200px] whitespace-nowrap text-right">
-            Action
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map(({ server, isYou }) => (
-          <TableRow
-            key={server.id}
-            data-testid={E2eTestId.CredentialRow}
-            data-server-id={server.id}
-          >
-            <TableCell className="font-medium">
-              <div className="flex items-center gap-2">
-                <span
-                  className="truncate"
-                  data-testid={E2eTestId.CredentialOwner}
-                >
-                  {getCredentialOwnerName(server)}
+    <TableRow data-testid={E2eTestId.CredentialRow} data-server-id={server.id}>
+      <TableCell>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <OwnerAvatar owner={owner} scope={scope} />
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-baseline gap-1">
+              <span
+                className="truncate"
+                data-testid={E2eTestId.CredentialOwner}
+              >
+                {owner}
+              </span>
+              {isYou && (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  (you)
                 </span>
-                {isYou && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    You
-                  </Badge>
-                )}
-              </div>
-              {(server.teamId || server.scope === "org") &&
-                server.ownerEmail && (
-                  <span
-                    className="block truncate text-xs font-normal text-muted-foreground"
-                    title={`Created by ${server.ownerEmail}`}
-                  >
-                    {server.ownerEmail}
+              )}
+            </div>
+            {server.oauthRefreshError || createdBy ? (
+              <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                {server.oauthRefreshError ? (
+                  <span className="flex shrink-0 items-center gap-1 text-amber-600 dark:text-amber-500">
+                    <span className="size-1.5 rounded-full bg-current" />
+                    Needs re-authentication
                   </span>
-                )}
-            </TableCell>
-            {hasDeploymentStatuses && (
-              <TableCell className="max-w-[260px]">
-                {(() => {
-                  const status = deploymentStatuses[server.id];
-                  if (!status) {
-                    return <span className="text-muted-foreground">—</span>;
-                  }
-                  const podName = status.podName;
-                  const effectiveState = resolveDeploymentState(
-                    status,
-                    canonicalStateByPod,
-                  );
-                  const dot = <DeploymentStatusDot state={effectiveState} />;
-                  if (!podName) {
-                    // SPDX-SnippetBegin
-                    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-                    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-                    // An idle-scaled deployment has no pod BY DESIGN — naming
-                    // its state beats a placeholder that reads like telemetry
-                    // went missing.
-                    // SPDX-SnippetEnd
-                    return (
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
-                        {dot}
-                        <span>
-                          {
-                            /* SPDX-SnippetBegin */
-                            /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
-                            /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
-                            effectiveState === "hibernated" ||
-                            effectiveState === "waking"
-                              ? getDeploymentLabel(effectiveState)
-                              : /* SPDX-SnippetEnd */ "Pod not reported yet"
-                          }
-                        </span>
-                      </div>
-                    );
-                  }
-                  return (
-                    <UnstyledButton
-                      type="button"
-                      onClick={() => onOpenPodLogs?.(server.id)}
-                      className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
-                    >
-                      {dot}
-                      <span className="truncate min-w-0 flex-1 text-left">
-                        {podName}
-                      </span>
-                    </UnstyledButton>
-                  );
-                })()}
-              </TableCell>
-            )}
-            {showInfrastructure && (
-              <TableCell className="text-muted-foreground">
-                {formatSecretStorageType(server.secretStorageType)}
-              </TableCell>
-            )}
-            <TableCell
-              className="whitespace-nowrap text-muted-foreground"
-              title={format(new Date(server.createdAt), "PPpp")}
-            >
-              {format(new Date(server.createdAt), "PP")}
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                {server.oauthRefreshError && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <Button
-                            onClick={() => handleReauthenticate(server)}
-                            disabled={!canReauthenticate(server)}
-                            size="xs"
-                            variant="outline"
-                          >
-                            <RefreshCw className="mr-1 h-3 w-3" />
-                            Re-authenticate
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {!canReauthenticate(server) && (
-                        <TooltipContent>
-                          {getReauthTooltip(server)}
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Button
-                          onClick={() => handleRevoke(server)}
-                          disabled={isDeleting || !canRevoke(server)}
-                          size="xs"
-                          variant="ghost"
-                          className="text-muted-foreground hover:text-foreground"
-                          data-testid={
-                            isYou
-                              ? `${E2eTestId.RevokeCredentialButton}-personal`
-                              : `${E2eTestId.RevokeCredentialButton}-${getCredentialOwnerName(server)}`
-                          }
-                        >
-                          <Trash className="mr-1 h-3 w-3" />
-                          Revoke
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    {!canRevoke(server) && (
-                      <TooltipContent>
-                        {getRevokeTooltip(server)}
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
+                ) : null}
+                {server.oauthRefreshError && createdBy ? (
+                  <span aria-hidden="true">·</span>
+                ) : null}
+                {createdBy ? (
+                  <span className="truncate" title={`Created by ${createdBy}`}>
+                    {createdBy}
+                  </span>
+                ) : null}
               </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+            ) : null}
+          </div>
+        </div>
+      </TableCell>
+      {showPod && (
+        <TableCell className="max-w-[260px]">
+          {(() => {
+            const status = deploymentStatuses[server.id];
+            if (!status) {
+              return <span className="text-muted-foreground">—</span>;
+            }
+            const podName = status.podName;
+            const effectiveState = resolveDeploymentState(
+              status,
+              canonicalStateByPod,
+            );
+            const dot = <DeploymentStatusDot state={effectiveState} />;
+            if (!podName) {
+              // SPDX-SnippetBegin
+              // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+              // An idle-scaled deployment has no pod BY DESIGN — naming
+              // its state beats a placeholder that reads like telemetry
+              // went missing.
+              // SPDX-SnippetEnd
+              return (
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
+                  {dot}
+                  <span>
+                    {
+                      /* SPDX-SnippetBegin */
+                      /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
+                      /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+                      effectiveState === "hibernated" ||
+                      effectiveState === "waking"
+                        ? getDeploymentLabel(effectiveState)
+                        : /* SPDX-SnippetEnd */ "Pod not reported yet"
+                    }
+                  </span>
+                </div>
+              );
+            }
+            return (
+              <UnstyledButton
+                type="button"
+                onClick={() => onOpenPodLogs?.(server.id)}
+                className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
+              >
+                {dot}
+                <span className="truncate min-w-0 flex-1 text-left">
+                  {podName}
+                </span>
+              </UnstyledButton>
+            );
+          })()}
+        </TableCell>
+      )}
+      <TableCell
+        className="whitespace-nowrap text-muted-foreground"
+        title={format(createdAt, "PPpp")}
+      >
+        {format(createdAt, "PP")}
+      </TableCell>
+      <TableCell>
+        <div className="flex justify-end">
+          <TableRowActions actions={actions} itemName={owner} />
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/** Initials for a person; a team or organization icon for a shared account. */
+function OwnerAvatar({
+  owner,
+  scope,
+}: {
+  owner: string;
+  scope: "personal" | "team" | "org";
+}) {
+  const shared = scope !== "personal";
+  return (
+    <Avatar className={cn("size-6", shared && "rounded-md")}>
+      <AvatarFallback
+        className={cn(
+          "text-[10px] font-medium text-muted-foreground",
+          shared && "rounded-md",
+        )}
+      >
+        {scope === "team" ? (
+          <Users className="size-3.5" />
+        ) : scope === "org" ? (
+          <Building2 className="size-3.5" />
+        ) : (
+          initialsOf(owner)
+        )}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+/** A muted (i) whose tooltip carries the explanation a paragraph used to. */
+function InfoHint({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <UnstyledButton
+            aria-label={label}
+            className="inline-flex text-muted-foreground/70 transition-colors hover:text-foreground"
+          >
+            <Info className="size-3.5" />
+          </UnstyledButton>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-72">{children}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -1027,9 +1094,8 @@ function computeCanonicalStateByPod(
   return canonicalStateByPod;
 }
 
-// The catalog-level "default credential" setting as a standard settings row:
-// title, a plain-language description that names the current choice, and a
-// dedicated select whose options are self-explanatory. It governs every tool
+// The catalog-level "default credential" setting as one line: "Agents connect
+// as [select]", with the explanation in a tooltip. It governs every tool
 // assignment that resolves credentials at call time — Auto mode always, and
 // Custom-mode assignments unless a specific connection is pinned on the
 // assignment itself. NULL (default) = agents act on behalf of whoever is
@@ -1079,69 +1145,28 @@ function AgentConnectionsSection({
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="max-w-xl space-y-1">
-        <h4 className="text-sm font-medium">Default credential</h4>
-        <p className="text-sm text-muted-foreground">
-          {!pinnedId ? (
-            <>
-              Agents connect on behalf of whoever is calling — each person uses
-              their own connection if they have one, otherwise a team or
-              organization connection they can access. Applies in Auto mode and
-              to Custom tool assignments that resolve at call time.
-            </>
-          ) : pinUnresolved ? (
-            <>
-              The selected connection is unavailable. Agents connect on behalf
-              of whoever is calling until you choose another one.
-            </>
-          ) : (
-            <>
-              Agents connect as{" "}
-              <span className="font-medium text-foreground">
-                {pinnedConnection ? (
-                  <span>{connectionLabel(pinnedConnection)}</span>
-                ) : null}
-              </span>
-              , no matter who is calling. Applies in Auto mode and to Custom
-              tool assignments that resolve at call time.
-            </>
-          )}{" "}
-          <ExternalDocsLink
-            href={getDocsUrl(
-              DocsPage.McpAuthentication,
-              "resolve-at-call-time",
-            )}
-            className="underline"
-            showIcon={false}
-          >
-            Learn more
-          </ExternalDocsLink>
-        </p>
-      </div>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
+      <span className="text-muted-foreground">Agents connect as</span>
       <Select
         value={pinUnresolved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
         disabled={!canModify || updateMutation.isPending}
         onValueChange={handleSelectDefault}
       >
-        <SelectTrigger className="w-[320px]">
-          <SelectValue placeholder="Connection unavailable" />
+        <SelectTrigger size="sm" className="min-w-[200px]">
+          <SelectValue placeholder="Unavailable account" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem
             value={ON_BEHALF_OF_VALUE}
             className="cursor-pointer"
-            description="Everyone connects their own account."
+            description="Recommended"
           >
-            <div className="flex items-center gap-1.5">
-              <Zap className="h-3.5! w-3.5! text-amber-500" />
-              <span>On behalf of the user (Recommended)</span>
-            </div>
+            The caller
           </SelectItem>
           {serviceAccountConnections.length > 0 && (
             <>
               <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
-                Always use one service account
+                Always use
               </div>
               {serviceAccountConnections.map((connection) => (
                 <SelectItem
@@ -1149,16 +1174,43 @@ function AgentConnectionsSection({
                   value={connection.id}
                   className="cursor-pointer"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
-                    <span>{connectionLabel(connection)}</span>
-                  </div>
+                  <KeyRound className="size-3.5 text-muted-foreground" />
+                  {connectionLabel(connection)}
                 </SelectItem>
               ))}
             </>
           )}
         </SelectContent>
       </Select>
+      {pinUnresolved ? (
+        <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
+          <TriangleAlert className="size-3.5" />
+          Selected account is unavailable — using the caller
+        </span>
+      ) : null}
+      <InfoHint label="How agents pick a credential">
+        {pinnedConnection
+          ? "Every call uses this account, no matter who is calling."
+          : "Each caller uses their own connection, or a team or organization one they can access."}{" "}
+        Applies in Auto mode and to Custom tools resolved at call time.
+      </InfoHint>
+      <ExternalDocsLink
+        href={getDocsUrl(DocsPage.McpAuthentication, "resolve-at-call-time")}
+        className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
     </div>
   );
+}
+
+function initialsOf(name: string) {
+  const local = name.split("@")[0] ?? name;
+  const parts = local.split(/[\s._-]+/).filter(Boolean);
+  const letters =
+    parts.length > 1
+      ? `${parts[0][0]}${parts[1][0]}`
+      : (parts[0]?.slice(0, 1) ?? "?");
+  return letters.toUpperCase();
 }

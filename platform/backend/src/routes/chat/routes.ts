@@ -2311,7 +2311,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { user, organizationId } = request;
-      const conversation = await ConversationModel.findAccessibleById({
+      // Authorization only: the replay comes from the run, not the transcript.
+      const conversation = await ConversationModel.findAccessibleMetadataById({
         id,
         userId: user.id,
         organizationId,
@@ -2551,7 +2552,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { user, organizationId } = request;
-      const conversation = await findReadableConversationById({
+      // The label lives on the session, so only read access is checked here.
+      const conversation = await findReadableConversationMetadataById({
         conversationId: id,
         userId: user.id,
         organizationId,

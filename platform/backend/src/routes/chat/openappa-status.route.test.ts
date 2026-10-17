@@ -74,6 +74,15 @@ test("reads the current status of an accessible protected conversation", async (
   });
 });
 
+test("reads the status without loading the transcript", async () => {
+  statusRead.mockResolvedValue({ trust: "trusted", audience: "public" });
+  // findAccessibleById reads every message; the status needs only access.
+  const transcriptRead = vi.spyOn(ConversationModel, "findAccessibleById");
+  const response = await app.inject({ method: "GET", url: statusUrl() });
+  expect(response.statusCode).toBe(200);
+  expect(transcriptRead).not.toHaveBeenCalled();
+});
+
 test("returns null before a session has opened", async () => {
   statusRead.mockResolvedValue(null);
   const response = await app.inject({ method: "GET", url: statusUrl() });

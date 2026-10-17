@@ -198,6 +198,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
   // installs mock holds one for the item.
   useMcpRegistryPage: (params: {
     installState?: string;
+    catalogIds?: string[];
     limit?: number;
     search?: string;
   }) => {
@@ -220,12 +221,15 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
           primaryServerId: null,
         },
       }))
-      .filter((row) =>
-        params.installState === "installed"
-          ? row.install.visibleCount > 0
-          : params.installState === "not-installed"
-            ? row.install.visibleCount === 0
-            : true,
+      // As the server filters: "installed" is an install the viewer can use.
+      .filter(
+        (row) =>
+          (!params.catalogIds || params.catalogIds.includes(row.id)) &&
+          (params.installState === "installed"
+            ? row.install.installedForViewer
+            : params.installState === "not-installed"
+              ? !row.install.installedForViewer
+              : true),
       );
     return {
       data: {

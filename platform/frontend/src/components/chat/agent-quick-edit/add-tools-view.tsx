@@ -128,8 +128,31 @@ export function AddToolsView({
     { ...baseQuery, installState: "installed", limit: 1, offset: 0 },
     { placeholderScope: "add-tools:connected" },
   ).data?.pagination.total;
+  // The built-in entry is ready to add without an install, but the server
+  // never counts it as installed: whether the search matches it decides the
+  // Connected count, and the Connected tab lists it next to the installed
+  // servers.
+  const builtInPage = useMcpRegistryPage(
+    {
+      ...baseQuery,
+      catalogIds: [ARCHESTRA_MCP_CATALOG_ID],
+      limit: 1,
+      offset: 0,
+    },
+    { placeholderScope: "add-tools:built-in" },
+  ).data;
+  const builtInRow = builtInPage?.data[0];
   const isPending = page.isPending;
-  const pageRows = page.data?.data ?? [];
+  const pageRows = useMemo(() => {
+    const listed = page.data?.data ?? [];
+    if (filter === "connected") {
+      return builtInRow ? [builtInRow, ...listed] : listed;
+    }
+    if (filter === "not-connected") {
+      return listed.filter((row) => row.id !== ARCHESTRA_MCP_CATALOG_ID);
+    }
+    return listed;
+  }, [page.data, filter, builtInRow]);
   const pageInstalls = page.data?.installs ?? [];
 
   const assignedCatalogIds = useMemo(() => {
@@ -148,9 +171,12 @@ export function AddToolsView({
             server.catalogId === catalog.id &&
             isInstallInProgress(server.localInstallationStatus),
         );
+        // One rule for rows, tabs and counts: connected means the viewer can
+        // use an install (what the server's "installed" filter matches), so
+        // its tools can be added to the agent.
         const connected =
           catalog.serverType === "builtin" ||
-          (catalog.install.visibleCount > 0 && !installing);
+          (catalog.install.installedForViewer && !installing);
         return {
           catalog,
           name:
@@ -169,15 +195,11 @@ export function AddToolsView({
     setPollWhileInstalling(anyInstalling);
   }, [anyInstalling]);
 
-  // The built-in entry has no install, so the server counts it as not
-  // installed; it is ready to add all the same.
-  const builtInListed = rows.some(
-    (row) => row.catalog.id === ARCHESTRA_MCP_CATALOG_ID,
-  );
   const totalCount = allTotal ?? rows.length;
   const connectedCount =
-    (connectedTotal ?? rows.filter((row) => row.connected).length) +
-    (builtInListed && connectedTotal !== undefined ? 1 : 0);
+    connectedTotal !== undefined && builtInPage !== undefined
+      ? connectedTotal + (builtInRow ? 1 : 0)
+      : rows.filter((row) => row.connected).length;
   const readyRows = rows
     .filter((row) => row.connected && filter !== "not-connected")
     .sort(
@@ -190,9 +212,18 @@ export function AddToolsView({
         Number(b.installing) - Number(a.installing) ||
         a.name.localeCompare(b.name),
     );
+  // The page's total counts the built-in entry on the Not connected query
+  // (shown under Connected instead) and leaves it out of the Connected one.
+  const builtInAdjustment = !builtInRow
+    ? 0
+    : filter === "connected"
+      ? 1
+      : filter === "not-connected"
+        ? -1
+        : 0;
   const unlisted = Math.max(
     0,
-    (page.data?.pagination.total ?? 0) - rows.length,
+    (page.data?.pagination.total ?? 0) + builtInAdjustment - rows.length,
   );
 
   /** The full item an action works on, loaded when the action starts. */

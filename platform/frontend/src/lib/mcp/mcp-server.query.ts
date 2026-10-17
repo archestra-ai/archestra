@@ -582,7 +582,6 @@ export function useMcpServerInstallationStatus(
       if (!installingMcpServerId) {
         await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
         void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
-        void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
         return "success";
       }
       const response = await getMcpServer({
@@ -597,7 +596,6 @@ export function useMcpServerInstallationStatus(
       }
       if (result === "error") {
         await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
-        void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
         void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
         toast.error("Failed to install server");
       }

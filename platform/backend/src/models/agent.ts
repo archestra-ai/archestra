@@ -7,6 +7,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type PaginationQuery,
   PERSONAL_MCP_GATEWAY_NAME,
+  type PermissionSubject,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
@@ -1749,9 +1750,20 @@ class AgentModel {
       userId: params.userId,
       isAgentAdmin: params.isAgentAdmin,
     });
-    const regularAccessCandidates = await catalogAccessCandidateIds({
+    // The Show filter's internal prefilter and external branch share one
+    // resolution of the caller's subjects.
+    const accessSubjects = params.filters?.access
+      ? (
+          await ResourcePermissionSubjectModel.resolvePrincipals({
+            userId: params.userId,
+            organizationId: params.filters.organizationId,
+          })
+        ).flatMap((principal) => principal.subjects)
+      : [];
+    const regularAccessCandidates = catalogAccessCandidateIds({
       organizationId: params.filters?.organizationId,
       userId: params.userId,
+      subjects: accessSubjects,
       selection: params.filters?.access,
       includeBuiltIn:
         params.filters?.includeBuiltIn === true &&
@@ -1830,9 +1842,9 @@ class AgentModel {
       }
     }
     if (params.filters?.access) {
-      const externalAccessCondition = await externalAgentAccessCondition({
+      const externalAccessCondition = externalAgentAccessCondition({
         userId: params.userId,
-        organizationId: params.filters.organizationId,
+        subjects: accessSubjects,
         selection: params.filters.access,
       });
       if (externalAccessCondition)
@@ -5729,16 +5741,13 @@ function agentAccessCondition(params: {
  * The "Show" filter for external A2A agents, read from their own policies like
  * internal agents.
  */
-async function externalAgentAccessCondition(params: {
+function externalAgentAccessCondition(params: {
   userId: string;
-  organizationId?: string;
+  /** The caller's subjects, e.g. from `resolvePrincipals`. */
+  subjects: PermissionSubject[];
   selection: ResourceAccessSelection;
-}): Promise<SQL | undefined> {
+}): SQL | undefined {
   const table = schema.a2aRemoteAgentsTable;
-  const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
-    userId: params.userId,
-    organizationId: params.organizationId,
-  });
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -5748,7 +5757,7 @@ async function externalAgentAccessCondition(params: {
     scopeColumn: table.id,
     ownerColumn: table.authorId,
     userId: params.userId,
-    subjects: principals.flatMap((principal) => principal.subjects),
+    subjects: params.subjects,
     ...params.selection,
   });
   // SPDX-SnippetEnd
@@ -5853,12 +5862,14 @@ function agentGrantedTeamIds() {
  * every relation (no relation filter at all). The catalog's regular branch
  * lists only `agent` rows, so only `agent` policies are read.
  */
-async function catalogAccessCandidateIds(params: {
+function catalogAccessCandidateIds(params: {
   organizationId: string | undefined;
   userId: string;
+  /** The caller's subjects, e.g. from `resolvePrincipals`. */
+  subjects: PermissionSubject[];
   selection: ResourceAccessSelection | undefined;
   includeBuiltIn: boolean;
-}): Promise<SQL | undefined> {
+}): SQL | undefined {
   const selected = new Set(
     params.selection?.relations ?? RESOURCE_ACCESS_RELATIONS,
   );
@@ -5874,11 +5885,7 @@ async function catalogAccessCandidateIds(params: {
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   const grantedSubjects: Array<{ type: string; id?: string }> = [];
   if (selected.has("shared")) {
-    const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
-      userId: params.userId,
-      organizationId: params.organizationId,
-    });
-    for (const subject of principals.flatMap(({ subjects }) => subjects)) {
+    for (const subject of params.subjects) {
       if (subject.type === "team") grantedSubjects.push(subject);
       // The relation matches the caller's own ids under either self type.
       if (subject.type === "user" || subject.type === "serviceAccount")

@@ -145,10 +145,6 @@ vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/agent.query", () => ({
-  useAgentOptions: mockUseAgentOptions,
-}));
-
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: mockUseInternalMcpCatalog,
 }));

@@ -20,8 +20,8 @@ const hasUpdatePermission = vi.fn(() => true);
 const hasAgentUpdatePermission = vi.fn(() => true);
 
 vi.mock("@/app/_parts/use-settings-area-access");
-vi.mock("@/lib/agent.query", () => ({
-  useAgentOptions: vi.fn(),
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -138,7 +138,7 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
     ) : null,
 }));
 
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import {
   useAllChatOpsBindings,
   useChatOpsStatus,
@@ -279,7 +279,7 @@ describe("AgentChatAppsEditor", () => {
       isLoadingError: false,
       refetch: vi.fn(),
     } as never);
-    vi.mocked(useAgentOptions).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: [{ id: "agent-2", name: "Incident Agent" }],
       isPending: false,
       isLoadingError: false,
@@ -325,7 +325,7 @@ describe("AgentChatAppsEditor", () => {
 
   it("falls back to a placeholder when the holding agent cannot be read", async () => {
     const user = userEvent.setup();
-    vi.mocked(useAgentOptions).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: [],
       isPending: false,
       isLoadingError: false,
@@ -1076,7 +1076,7 @@ describe("AgentChatAppsEditor", () => {
   });
 
   it("shows an error when assigned agent names cannot load", () => {
-    vi.mocked(useAgentOptions).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: undefined,
       isPending: false,
       isLoadingError: true,
@@ -1093,7 +1093,7 @@ describe("AgentChatAppsEditor", () => {
   });
 
   it("does not wait for agent names when no channel belongs to another agent", () => {
-    vi.mocked(useAgentOptions).mockReturnValue({
+    vi.mocked(useAgentOptionsByIds).mockReturnValue({
       data: undefined,
       isPending: true,
       isLoadingError: false,

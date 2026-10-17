@@ -228,7 +228,8 @@ type Agent = Omit<
   archestraApiTypes.GetAgentsResponses["200"]["data"][number],
   "pinnedAt"
 >;
-type AgentOption = archestraApiTypes.GetAgentOptionsResponses["200"][number];
+type AgentOption =
+  archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
 type A2aRemoteAgent =

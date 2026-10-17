@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { AGENT_OPTIONS_MAX_IDS, archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -83,10 +83,12 @@ describe("server-backed agent choices", () => {
       http.get(`${ORIGIN}/api/agents/options`, ({ request }) => {
         const ids = references(request);
         expect(ids.length).toBeGreaterThan(0);
-        expect(ids.length).toBeLessThanOrEqual(100);
+        expect(ids.length).toBeLessThanOrEqual(AGENT_OPTIONS_MAX_IDS);
         return HttpResponse.json(
-          ids.map((id) =>
-            option(id, id === "retained" ? "Saved choice" : "Later choice"),
+          page(
+            ids.map((id) =>
+              option(id, id === "retained" ? "Saved choice" : "Later choice"),
+            ),
           ),
         );
       }),
@@ -178,7 +180,7 @@ describe("server-backed agent choices", () => {
       http.get(`${ORIGIN}/api/agents/options`, ({ request }) => {
         const wanted = references(request);
         referenceSizes.push(wanted.length);
-        return HttpResponse.json(wanted.map((id) => option(id)));
+        return HttpResponse.json(page(wanted.map((id) => option(id))));
       }),
       http.get(`${ORIGIN}/api/agents/options/ids`, () => {
         allIdReads += 1;

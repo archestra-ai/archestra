@@ -6,8 +6,10 @@ import { useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { WizardStep } from "@/components/wizard-step";
-import { useAgentOptions } from "@/lib/agent.query";
-import { useAgentOptionsPage } from "@/lib/agent-options.query";
+import {
+  useAgentOptionsByIds,
+  useAgentOptionsPage,
+} from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { isInstallerClientId, visibleClients } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
@@ -97,16 +99,15 @@ export function ConnectionFlow({
     limit: 20,
     enabled: canReadMcpGateway === true,
   });
-  const { data: gatewayReferences } = useAgentOptions({
-    filters: {
-      ...gatewayFilters,
-      ids: [
-        selectedMcpId,
-        urlGatewayId,
-        adminDefaultMcpGatewayId,
-        defaultMcpGatewayId,
-      ].filter((id): id is string => !!id),
-    },
+  const { data: gatewayReferences } = useAgentOptionsByIds({
+    ids: [
+      selectedMcpId,
+      urlGatewayId,
+      adminDefaultMcpGatewayId,
+      defaultMcpGatewayId,
+    ].filter((id): id is string => !!id),
+    // Built-ins stay hidden, matching the gateway list above.
+    filters: { ...gatewayFilters, excludeBuiltIn: true },
     enabled: canReadMcpGateway === true,
   });
   const mcpGateways = [

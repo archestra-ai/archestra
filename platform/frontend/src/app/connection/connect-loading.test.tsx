@@ -5,7 +5,8 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
-import { useAgentOptions, useProfiles } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { fetchAllSkills } from "@/lib/skills/skill.query";
 import { useGatewayServers } from "./use-gateway-servers";
 
@@ -173,9 +174,12 @@ it("keeps lightweight option data separate from full editing data and retains it
             },
             { status: 503 },
           )
-        : HttpResponse.json([
-            { id: "gateway", name: "Gateway", agentType: "mcp_gateway" },
-          ]),
+        : HttpResponse.json({
+            data: [
+              { id: "gateway", name: "Gateway", agentType: "mcp_gateway" },
+            ],
+            pagination: { limit: 1000, hasNext: false, nextCursor: null },
+          }),
     ),
     http.get(`${origin}/api/agents`, () =>
       HttpResponse.json({
@@ -192,7 +196,7 @@ it("keeps lightweight option data separate from full editing data and retains it
   );
   const { result } = renderHook(
     () => {
-      const options = useAgentOptions();
+      const options = useAgentOptionsByIds({ ids: ["gateway"] });
       const full = useProfiles();
       return { options, full, isOptionsError: options.isError };
     },

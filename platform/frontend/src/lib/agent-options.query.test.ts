@@ -5,13 +5,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { createElement, type ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
-import {
-  useAgentOptions,
-  useDelegationTargetAgents,
-  useInternalAgentOptions,
-  useOrgScopedAgents,
-  useProfile,
-} from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 
 const API_ORIGIN = "http://localhost:9000";
 const server = setupServer();
@@ -22,91 +16,84 @@ beforeAll(() => {
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-it.each([
-  useDelegationTargetAgents,
-  useInternalAgentOptions,
-])("loads internal selector metadata only when enabled and never seeds editable settings from it (%s)", async (useOptions) => {
-  const requests: URL[] = [];
-  const metadata = [
-    {
-      id: "agent-1",
-      name: "Target",
-      description: "A delegation target",
-      agentType: "agent",
-    },
-  ];
-  server.use(
-    http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
-      requests.push(new URL(request.url));
-      return HttpResponse.json(metadata);
-    }),
-    http.get(`${API_ORIGIN}/api/agents/agent-1`, () =>
-      HttpResponse.json({
-        ...metadata[0],
-        systemPrompt: "Full editable settings",
-        tools: [{ id: "tool-1" }],
-      }),
-    ),
-  );
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { staleTime: 60_000, retry: false } },
-  });
-  const wrapper = ({ children }: { children: ReactNode }) =>
-    createElement(QueryClientProvider, { client: queryClient }, children);
-  const roster = renderHook(({ enabled }) => useOptions({ enabled }), {
-    wrapper,
-    initialProps: { enabled: false },
-  });
-  expect(roster.result.current.fetchStatus).toBe("idle");
-  expect(requests).toHaveLength(0);
-  roster.rerender({ enabled: true });
-  await waitFor(() => expect(roster.result.current.data).toEqual(metadata));
-  expect(requests).toHaveLength(1);
-  expect(Object.fromEntries(requests[0].searchParams)).toEqual({
-    agentType: "agent",
-    excludeBuiltIn: "true",
-  });
-  const detail = renderHook(() => useProfile("agent-1"), { wrapper });
-  expect(detail.result.current.data).toBeUndefined();
-  await waitFor(() =>
-    expect(detail.result.current.data?.systemPrompt).toBe(
-      "Full editable settings",
-    ),
-  );
-  expect(detail.result.current.data?.tools).toEqual([{ id: "tool-1" }]);
-  roster.unmount();
-  detail.unmount();
-  queryClient.clear();
-});
-
-it("uses compact organization options for the default-agent selector", async () => {
-  const requests: URL[] = [];
-  const metadata = [
-    { id: "org-agent", name: "Organization default", agentType: "agent" },
-  ];
-  server.use(
-    http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
-      requests.push(new URL(request.url));
-      return HttpResponse.json(metadata);
-    }),
-  );
+function renderWithClient<T>(hook: () => T) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
-  const hook = renderHook(() => useOrgScopedAgents(), { wrapper });
-  await waitFor(() => expect(hook.result.current.data).toEqual(metadata));
-  expect(Object.fromEntries(requests[0].searchParams)).toEqual({
-    agentType: "agent",
-    excludeBuiltIn: "true",
-    scope: "org",
-  });
-  hook.unmount();
-  queryClient.clear();
+  return renderHook(hook, { wrapper });
+}
+
+const agentId = (i: number) =>
+  `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+
+it("resolves more than 200 references in bounded ID batches with an explicit page size", async () => {
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      requests.push(query);
+      return HttpResponse.json({
+        data: (query.get("ids") ?? "")
+          .split(",")
+          .map((id) => ({ id, name: id })),
+        pagination: { limit: 1000, hasNext: false, nextCursor: null },
+      });
+    }),
+  );
+  const ids = Array.from({ length: 201 }, (_, i) => agentId(i));
+  const hook = renderWithClient(() =>
+    useAgentOptionsByIds({ ids, filters: { agentType: "agent" } }),
+  );
+  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+  expect(requests.map((query) => query.get("ids")?.split(",").length)).toEqual([
+    200, 1,
+  ]);
+  for (const query of requests) {
+    expect(query.get("agentType")).toBe("agent");
+    expect(query.get("excludeBuiltIn")).toBe("false");
+    expect(query.get("limit")).toBe("1000");
+    expect(query.has("cursor")).toBe(false);
+  }
+  expect(hook.result.current.data?.map((row) => row.id)).toEqual(ids);
 });
 
-it("treats an explicitly empty ID selection as empty without requesting the whole roster", async () => {
+it("follows the next cursor until the batch is complete", async () => {
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      requests.push(query);
+      const second = query.get("cursor") === "page-2";
+      return HttpResponse.json({
+        data: [{ id: second ? agentId(1) : agentId(0), name: "Agent" }],
+        pagination: {
+          limit: 1000,
+          hasNext: !second,
+          nextCursor: second ? null : "page-2",
+        },
+      });
+    }),
+  );
+  const hook = renderWithClient(() =>
+    useAgentOptionsByIds({ ids: [agentId(0), agentId(1)] }),
+  );
+  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+  expect(requests.map((query) => query.get("cursor"))).toEqual([
+    null,
+    "page-2",
+  ]);
+  expect(
+    requests.every((query) => query.get("ids")?.split(",").length === 2),
+  ).toBe(true);
+  expect(hook.result.current.data?.map((row) => row.id)).toEqual([
+    agentId(0),
+    agentId(1),
+  ]);
+});
+
+it("never requests the roster without IDs", async () => {
   let requests = 0;
   server.use(
     http.get(`${API_ORIGIN}/api/agents/options`, () => {
@@ -114,18 +101,10 @@ it("treats an explicitly empty ID selection as empty without requesting the whol
       return HttpResponse.json([{ id: "unrequested-agent" }]);
     }),
   );
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const wrapper = ({ children }: { children: ReactNode }) =>
-    createElement(QueryClientProvider, { client: queryClient }, children);
-  const hook = renderHook(
-    () => useAgentOptions({ filters: { ids: [] }, enabled: true }),
-    { wrapper },
-  );
-  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
-  expect(hook.result.current.data).toEqual([]);
+  const hook = renderWithClient(() => useAgentOptionsByIds({ ids: [] }));
+  // Disabled without IDs: idle and still pending, so callers must not wait on it.
+  expect(hook.result.current.fetchStatus).toBe("idle");
+  expect(hook.result.current.isPending).toBe(true);
+  await new Promise((resolve) => setTimeout(resolve, 20));
   expect(requests).toBe(0);
-  hook.unmount();
-  queryClient.clear();
 });

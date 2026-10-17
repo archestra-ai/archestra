@@ -41,7 +41,6 @@ const {
   getAgentCredentialReadiness,
   getAgentDefaultSuggestedPrompts,
   getAgents,
-  getAgentOptions,
   getChatAgentRoster,
   getDefaultMcpGateway,
   getAgent,
@@ -64,40 +63,12 @@ const chatAgentsQueryKey = [
   "v3",
 ] as const;
 
-/** Metadata-only internal agents for selectors and runtime labels. */
-export async function fetchInternalAgentOptions() {
-  const { data, error } = await getAgentOptions({
-    query: { agentType: "agent", excludeBuiltIn: true },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data ?? [];
-}
-
-export function useInternalAgentOptions(params?: { enabled?: boolean }) {
-  return useAgentOptions({
-    filters: { agentType: "agent", excludeBuiltIn: true },
-    enabled: params?.enabled,
-  });
-}
-
 async function fetchChatAgents() {
   const { data, error } = await getChatAgentRoster({
     query: { bootstrap: true },
   });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
-}
-
-const delegationTargetAgentsQuery = {
-  agentType: "agent",
-  excludeBuiltIn: true,
-} as const;
-
-export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
-  return useAgentOptions({
-    filters: delegationTargetAgentsQuery,
-    enabled: params?.enabled,
-  });
 }
 
 /**
@@ -144,34 +115,6 @@ export function useProfiles(
     queryFn: () => fetchAgentPage(filters),
     initialData: params?.initialData,
     enabled: params?.enabled,
-  });
-}
-
-/** Names and presentation data only; fetch a resource before editing it. */
-export function useAgentOptions(
-  params: {
-    filters?: archestraApiTypes.GetAgentOptionsData["query"];
-    enabled?: boolean;
-  } = {},
-) {
-  const filters = { excludeBuiltIn: true, ...params.filters };
-  if (
-    filters.agentTypes?.length === 1 &&
-    (filters.agentType === undefined ||
-      filters.agentType === filters.agentTypes[0])
-  ) {
-    filters.agentType = filters.agentTypes[0];
-    delete filters.agentTypes;
-  }
-  return useQuery({
-    queryKey: ["agents", "options", filters],
-    queryFn: async () => {
-      if (filters.ids?.length === 0) return [];
-      const { data, error } = await getAgentOptions({ query: filters });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
-    enabled: params.enabled,
   });
 }
 
@@ -1001,12 +944,6 @@ export function useChatAgents(params?: {
         memberDefault.refetch(),
       ]),
   };
-}
-
-export function useOrgScopedAgents() {
-  return useAgentOptions({
-    filters: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
-  });
 }
 
 export function useExportAgent() {

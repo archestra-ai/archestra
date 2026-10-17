@@ -1,4 +1,9 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  AGENT_OPTIONS_MAX_IDS,
+  AGENT_OPTIONS_MAX_PAGE_SIZE,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -65,24 +70,41 @@ export function useAgentOptionsByIds({
   enabled = true,
 }: {
   ids: readonly string[];
-  filters?: archestraApiTypes.GetAgentOptionsData["query"];
+  filters?: Omit<
+    NonNullable<archestraApiTypes.GetAgentOptionsData["query"]>,
+    "ids" | "limit" | "cursor"
+  >;
   enabled?: boolean;
 }) {
   const uniqueIds = [...new Set(ids)].sort();
   return useQuery({
     queryKey: ["agents", "options", "ids", uniqueIds, filters],
     queryFn: async () => {
-      const options: archestraApiTypes.GetAgentOptionsResponses["200"] = [];
-      for (let offset = 0; offset < uniqueIds.length; offset += 100) {
-        const { data, error } = await archestraApiSdk.getAgentOptions({
-          query: {
-            excludeBuiltIn: false,
-            ...filters,
-            ids: uniqueIds.slice(offset, offset + 100),
-          },
-        });
-        throwOnApiError(error, { toastOnError: false });
-        options.push(...(data ?? []));
+      const options: archestraApiTypes.GetAgentOptionsResponses["200"]["data"] =
+        [];
+      for (
+        let offset = 0;
+        offset < uniqueIds.length;
+        offset += AGENT_OPTIONS_MAX_IDS
+      ) {
+        const batch = uniqueIds.slice(offset, offset + AGENT_OPTIONS_MAX_IDS);
+        // A batch fits one page; follow the cursor anyway.
+        let cursor: string | undefined;
+        do {
+          const { data, error } = await archestraApiSdk.getAgentOptions({
+            query: {
+              excludeBuiltIn: false,
+              ...filters,
+              ids: batch,
+              limit: AGENT_OPTIONS_MAX_PAGE_SIZE,
+              cursor,
+            },
+          });
+          throwOnApiError(error, { toastOnError: false });
+          if (!data) throw new Error("Agent options are unavailable");
+          options.push(...data.data);
+          cursor = data.pagination.nextCursor ?? undefined;
+        } while (cursor);
       }
       return options;
     },

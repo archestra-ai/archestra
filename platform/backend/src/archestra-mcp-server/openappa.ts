@@ -1971,7 +1971,6 @@ async function yellIdentity(params: {
     {
       agentId: context.agentId,
       tool: "yell",
-      hasSession: Boolean(known),
       hasToolCallId: Boolean(context.currentToolCallId),
     },
     "OpenAPPA yell refused: no session or tool-call identity",

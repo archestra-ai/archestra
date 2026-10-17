@@ -9,9 +9,9 @@ import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import { McpRegistryAttentionBadge } from "./mcp-registry-attention-badge";
 
 // The shell's deferral gate is released here unless a test holds it.
-const mockShellDeferred = vi.fn(() => true);
+const mockShellReady = vi.fn(() => true);
 vi.mock("@/lib/shell-deferral", () => ({
-  useShellDeferred: () => mockShellDeferred(),
+  useShellReady: () => mockShellReady(),
 }));
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpDeploymentStatuses: () => ({ statuses: {} }),
@@ -63,7 +63,7 @@ describe("McpRegistryAttentionBadge", () => {
   });
 
   it("holds its reads until the page's first data has settled", () => {
-    mockShellDeferred.mockReturnValueOnce(false);
+    mockShellReady.mockReturnValueOnce(false);
     givenIssues({});
     render(<McpRegistryAttentionBadge />);
 

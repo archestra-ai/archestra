@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authQueryKeys,
   useDefaultCredentialsEnabled,
+  useHasPagePermissions,
   useHasPermissions,
   usePermissionMap,
   useSession,
@@ -189,6 +190,46 @@ describe("useDefaultCredentialsEnabled", () => {
     await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
     expect(result.current.data).toBeUndefined();
     expect(archestraApiSdk.getDefaultCredentialsStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("useHasPagePermissions", () => {
+  it("does not wait for object grants on a page no grant can open", async () => {
+    const userPermissions: Permissions = { auditLog: ["read"] };
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+    vi.mocked(archestraApiSdk.getScopedCapabilities).mockReturnValue(
+      new Promise(() => undefined) as never,
+    );
+
+    const { result } = renderHook(
+      () => useHasPagePermissions({ auditLog: ["read"] }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.data).toBe(true);
+    expect(archestraApiSdk.getScopedCapabilities).not.toHaveBeenCalled();
+  });
+
+  it("waits for object grants on a page a grant can open", async () => {
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: {},
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+    vi.mocked(archestraApiSdk.getScopedCapabilities).mockReturnValue(
+      new Promise(() => undefined) as never,
+    );
+
+    const { result } = renderHook(
+      () => useHasPagePermissions({ agent: ["read"] }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(archestraApiSdk.getScopedCapabilities).toHaveBeenCalled(),
+    );
+    expect(result.current.isPending).toBe(true);
   });
 });
 

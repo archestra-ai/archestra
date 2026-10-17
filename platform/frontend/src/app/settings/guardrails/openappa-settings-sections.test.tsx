@@ -14,17 +14,14 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   OpenAppaClientCoverageSetting,
   OpenAppaEnforcementSetting,
 } from "./openappa-settings-sections";
 
-vi.mock("@/lib/config/config.query", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
-  // The Guardrails status is read only while OpenAPPA is on.
-  useFeature: (feature: string) => feature === "openappaEnabled",
-}));
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
@@ -36,6 +33,10 @@ let clientAction: "bypass" | "block";
 let revision: number;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  // The Guardrails status is read only while OpenAPPA is on.
+  vi.mocked(useFeature).mockImplementation(
+    (feature) => feature === "openappaEnabled",
+  );
   Element.prototype.scrollIntoView = vi.fn();
   Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
   Element.prototype.setPointerCapture = vi.fn();

@@ -107,8 +107,8 @@ export function hasPagePermissions(params: {
 
 /**
  * Whether hasPagePermissions can use the scoped capabilities for any of
- * `required`. A page that cannot is decided by role permissions alone and
- * need not wait for them.
+ * `required`. A page that cannot is decided by role permissions alone, so it
+ * need not wait for the capabilities.
  */
 export function pageUsesCapabilities(required: Permissions): boolean {
   return Object.entries(required).some(([resource, actions]) =>

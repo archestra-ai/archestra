@@ -10,11 +10,10 @@ const queryKey = ["guardrails-deployment"];
  * `anyMember`: read it without organization settings access. Every member can
  * read the status (the Connect page shows it); other callers keep it to the
  * admins they show it to. `poll`: refresh every 10 s, for the Guardrails pages
- * that show and change it. Everywhere else (the sidebar row and warning, the
- * chat composer, Connect) it refreshes every minute, so an enforcement change
- * made elsewhere still shows up in a tab that stays open; React Query pauses
- * the interval while the tab is hidden. Nothing is fetched while OpenAPPA is
- * off.
+ * that show and change the status. Other callers (the sidebar row and warning,
+ * the chat composer, Connect) refresh every minute. A tab that stays open then
+ * still shows an enforcement change made elsewhere. React Query pauses the
+ * interval while the tab is hidden. Nothing loads while OpenAPPA is off.
  */
 export function useGuardrailsDeployment({
   anyMember = false,

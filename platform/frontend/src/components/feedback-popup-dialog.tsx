@@ -19,7 +19,7 @@ import {
   useMarkNavItemsSeen,
   useSeenNavItems,
 } from "@/lib/onboarding/onboarding.query";
-import { useShellDeferred } from "@/lib/shell-deferral";
+import { useShellReady } from "@/lib/shell-deferral";
 
 /**
  * One-time "share feedback" nudge for admins. Shows on the first session that
@@ -31,9 +31,9 @@ import { useShellDeferred } from "@/lib/shell-deferral";
 export function FeedbackPopupDialog() {
   const { data: isAdmin } = useHasPermissions(FEEDBACK_ADMIN_PERMISSION);
   const { data: session } = useSession();
-  const deferred = useShellDeferred();
+  const shellReady = useShellReady();
   const { data: seenData, isSuccess: seenLoaded } = useSeenNavItems({
-    enabled: deferred,
+    enabled: shellReady,
   });
   const alreadySeen = (seenData?.items ?? []).includes(FEEDBACK_POPUP_SEEN_KEY);
   // Asked only while the nudge could still show.

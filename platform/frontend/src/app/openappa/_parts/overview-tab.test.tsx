@@ -13,14 +13,11 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { guardrailsPolicyQueryKey } from "@/lib/openappa-policy-views";
 import { OverviewTab } from "./overview-tab";
 
-vi.mock("@/lib/config/config.query", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
-  // The Guardrails status is read only while OpenAPPA is on.
-  useFeature: (feature: string) => feature === "openappaEnabled",
-}));
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("./coverage-charts", () => ({
   RulesCard: () => <div>Coverage charts</div>,
@@ -46,6 +43,10 @@ let revision: number;
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  // The Guardrails status is read only while OpenAPPA is on.
+  vi.mocked(useFeature).mockImplementation(
+    (feature) => feature === "openappaEnabled",
+  );
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions

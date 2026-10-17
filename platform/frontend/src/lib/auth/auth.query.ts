@@ -5,7 +5,11 @@ import {
   ResourcePermissionActionSchema,
 } from "@archestra/shared";
 import { type QueryClient, useQuery } from "@tanstack/react-query";
-import { hasPagePermissions, hasPermissions } from "@/lib/auth/auth.utils";
+import {
+  hasPagePermissions,
+  hasPermissions,
+  pageUsesCapabilities,
+} from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
@@ -112,17 +116,22 @@ export function useHasPermissions(
   };
 }
 
-/** Page discovery accepts an object read grant; it does not imply global read. */
+/**
+ * Page discovery accepts an object read grant; it does not imply global read.
+ * A page that no grant can open does not wait for the scoped capabilities.
+ */
 export function useHasPagePermissions(required: Permissions) {
+  const needsCapabilities = pageUsesCapabilities(required);
   const permissions = useAllPermissions();
-  const capabilities = useScopedCapabilities();
+  const capabilities = useScopedCapabilities(needsCapabilities);
   return {
     data: hasPagePermissions({
       userPermissions: permissions.data,
       required,
       capabilities: capabilities.data ?? [],
     }),
-    isPending: permissions.isPending || capabilities.isPending,
+    isPending:
+      permissions.isPending || (needsCapabilities && capabilities.isPending),
   };
 }
 
@@ -235,8 +244,8 @@ export function usePermissionMap<Key extends string>(
 
 /**
  * Whether the default admin credentials are still active. `enabled: false`
- * skips the request, e.g. in the app shell for anyone who cannot see that
- * warning.
+ * skips the request. The sidebar warnings pass it for viewers who never see
+ * the default-credentials warning.
  */
 export function useDefaultCredentialsEnabled({
   enabled = true,

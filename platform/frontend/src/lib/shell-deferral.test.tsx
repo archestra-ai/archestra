@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useShellDeferred } from "./shell-deferral";
+import { useShellReady } from "./shell-deferral";
 
-describe("useShellDeferred", () => {
+describe("useShellReady", () => {
   let client: QueryClient;
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -20,7 +20,7 @@ describe("useShellDeferred", () => {
   });
 
   it("holds while the first requests fetch and releases once they settle", async () => {
-    const { result } = renderHook(() => useShellDeferred(), { wrapper });
+    const { result } = renderHook(() => useShellReady(), { wrapper });
     let finish = () => {};
     const pageData = client.fetchQuery({
       queryKey: ["page-data"],
@@ -39,7 +39,7 @@ describe("useShellDeferred", () => {
   });
 
   it("releases after the fallback when nothing fetches, and stays released", async () => {
-    const { result, rerender } = renderHook(() => useShellDeferred(), {
+    const { result, rerender } = renderHook(() => useShellReady(), {
       wrapper,
     });
     await act(() => vi.advanceTimersByTimeAsync(1400));
@@ -48,18 +48,17 @@ describe("useShellDeferred", () => {
     expect(result.current).toBe(true);
 
     // Later fetches (a client-side navigation) never hold the shell again.
-    const later = client.fetchQuery({
+    void client.fetchQuery({
       queryKey: ["next-page"],
       queryFn: () => new Promise<number>(() => {}),
     });
-    void later;
     await act(() => vi.advanceTimersByTimeAsync(10));
     rerender();
     expect(result.current).toBe(true);
   });
 
-  it("does not release on the fallback-free idle moment before anything fetched", async () => {
-    const { result } = renderHook(() => useShellDeferred(), { wrapper });
+  it("does not release while the cache is idle before the first fetch", async () => {
+    const { result } = renderHook(() => useShellReady(), { wrapper });
     client.setQueryData(["cached"], 1);
     await act(() => vi.advanceTimersByTimeAsync(100));
     expect(result.current).toBe(false);

@@ -12,9 +12,9 @@ import { useK8sCapabilities } from "@/lib/environment.query";
 import { SidebarWarningsAccordion } from "./sidebar-warnings-accordion";
 
 // The shell's deferral gate is released here unless a test holds it.
-const mockShellDeferred = vi.fn(() => true);
+const mockShellReady = vi.fn(() => true);
 vi.mock("@/lib/shell-deferral", () => ({
-  useShellDeferred: () => mockShellDeferred(),
+  useShellReady: () => mockShellReady(),
 }));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -167,7 +167,7 @@ describe("SidebarWarningsAccordion network policy warning", () => {
   });
 
   // Only the default admin, with password sign-in on, can see that warning.
-  it("does not ask for the default credentials status for anyone else", () => {
+  it("does not ask for the default credentials status for a user other than the default admin", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
@@ -195,7 +195,7 @@ describe("SidebarWarningsAccordion network policy warning", () => {
   });
 
   it("asks for nothing until the page's first data has settled", () => {
-    mockShellDeferred.mockReturnValueOnce(false);
+    mockShellReady.mockReturnValueOnce(false);
     setup({ canUpdateEnvironment: true });
 
     expect(vi.mocked(useK8sCapabilities)).toHaveBeenCalledWith(false);

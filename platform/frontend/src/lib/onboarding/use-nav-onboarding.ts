@@ -13,7 +13,7 @@ import {
   useMarkNavItemsSeen,
   useSeenNavItems,
 } from "@/lib/onboarding/onboarding.query";
-import { useShellDeferred } from "@/lib/shell-deferral";
+import { useShellReady } from "@/lib/shell-deferral";
 
 /**
  * Single source of truth for the onboarding red dots: which dotted nav items
@@ -27,10 +27,10 @@ import { useShellDeferred } from "@/lib/shell-deferral";
  */
 export function useNavOnboarding() {
   const pathname = usePathname();
-  // Dots are not the page's first data: they wait for it.
-  const deferred = useShellDeferred();
+  // The dots wait for the page's first data (see useShellReady).
+  const shellReady = useShellReady();
   const { data: seenData, isSuccess: seenLoaded } = useSeenNavItems({
-    enabled: deferred,
+    enabled: shellReady,
   });
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   // Connect is gated the same way as the sidebar: either half is enough.

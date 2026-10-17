@@ -22,13 +22,11 @@ export type AuditOutcome = AuditLog["outcome"];
 
 export const AUDIT_LOG_QUERY_KEY = ["audit-logs"] as const;
 
-export type AuditLogResourceOption =
-  archestraApiTypes.GetAuditLogResourcesResponses["200"]["data"][number];
-
 /**
- * Options for the log's resource filter, searched on the server. Nothing is
- * fetched until `enabled` (the picker opened); the selected resource is
- * looked up on its own so a filter restored from the URL keeps its name.
+ * Options for the audit log's resource filter, searched on the server. The
+ * option list loads only when `enabled` is true (the picker has opened). The
+ * selected resource loads on its own, so a filter restored from the URL keeps
+ * its name.
  */
 export function useAuditLogResourceSearch(params: {
   enabled: boolean;

@@ -2,9 +2,9 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The shell's deferral gate is released here unless a test holds it.
-const mockShellDeferred = vi.fn(() => true);
+const mockShellReady = vi.fn(() => true);
 vi.mock("@/lib/shell-deferral", () => ({
-  useShellDeferred: () => mockShellDeferred(),
+  useShellReady: () => mockShellReady(),
 }));
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
@@ -38,7 +38,7 @@ const allPermissions = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockShellDeferred.mockReturnValue(true);
+  mockShellReady.mockReturnValue(true);
   mockSeenQuery.data = { items: [] };
   mockSeenQuery.isSuccess = true;
   vi.mocked(usePathname).mockReturnValue("/chat");
@@ -80,10 +80,11 @@ describe("useNavOnboarding", () => {
   });
 
   it("neither reads nor marks anything seen until the page's first data has settled", () => {
-    mockShellDeferred.mockReturnValue(false);
+    mockShellReady.mockReturnValue(false);
     mockSeenQuery.isSuccess = false;
     mockSeenQuery.data = undefined;
-    // A deep link to a dotted route would mark it seen once the gate opens.
+    // /projects is a dotted route. The hook marks it seen only after the gate
+    // is released.
     vi.mocked(usePathname).mockReturnValue("/projects");
 
     const { result } = renderHook(() => useNavOnboarding());

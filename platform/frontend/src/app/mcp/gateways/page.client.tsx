@@ -221,7 +221,7 @@ function McpGateways() {
     ids: excludeIds,
     includeTools: false,
     enabled: !!excludeIds?.length,
-    // A row of pins shows no total.
+    // Pinned rows show no total.
     includeTotal: false,
   });
   const automaticPinRows = automaticPinsResponse?.data ?? [];
@@ -255,7 +255,7 @@ function McpGateways() {
     ...listFilters,
     status: undefined,
     pinned: true,
-    // The pinned group shows no total.
+    // Pinned rows show no total.
     includeTotal: false,
   });
   const pinGateway = usePinAgent();

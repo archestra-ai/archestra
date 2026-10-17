@@ -472,7 +472,7 @@ export function AuditLogTable() {
                   emptyMessage={
                     resourceSearch.isSearching
                       ? "Searching…"
-                      : "No resources with audit events."
+                      : "No matching resources found."
                   }
                   inactiveValue={ALL_VALUE}
                 />

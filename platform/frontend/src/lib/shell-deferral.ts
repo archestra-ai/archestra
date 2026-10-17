@@ -4,14 +4,14 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 
 /**
- * Whether the app shell may start its non-critical requests yet (nav dots,
- * banner, sidebar warnings, the registry badge, onboarding prompts). On a hard
- * load these would otherwise start together with the page's own first data
- * request and compete with it. True once the first wave of requests has
- * settled, or after a bounded fallback; it then stays true for the session,
- * so client-side navigations within the mounted shell never wait.
+ * Whether the app shell may start its deferred requests: the nav dots, the
+ * banner, the sidebar warnings, the registry badge, the onboarding survey and
+ * the feedback popup. On a hard load, these requests compete with the page's
+ * first data request. The hook returns true when the first wave of requests
+ * settles, or after FALLBACK_MS. It then stays true, so client-side
+ * navigations in the mounted shell do not wait.
  */
-export function useShellDeferred(): boolean {
+export function useShellReady(): boolean {
   const deferral = deferralFor(useQueryClient());
   return useSyncExternalStore(
     deferral.subscribe,
@@ -31,10 +31,10 @@ class ShellDeferral {
     let sawFetch = false;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const fallback = setTimeout(() => this.release(), FALLBACK_MS);
-    // Driven by the query cache's own events: idle means no query is
-    // fetching. A short settle window lets a request that starts right after
-    // another finishes (the page's data after the session) count as the same
-    // wave.
+    // The query cache's events drive the release. Idle means no query is
+    // fetching. The cache must stay idle for SETTLE_MS, so a request that
+    // starts just after another ends (the page's data after the session)
+    // joins the same wave.
     const unsubscribe = client.getQueryCache().subscribe(() => {
       if (this.released) return;
       if (client.isFetching() > 0) {

@@ -28,7 +28,7 @@ import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
-import { useShellDeferred } from "@/lib/shell-deferral";
+import { useShellReady } from "@/lib/shell-deferral";
 import { cn } from "@/lib/utils/tailwind";
 
 interface Warning {
@@ -45,23 +45,24 @@ export function SidebarWarningsAccordion({
 }) {
   const { data: session } = useSession();
   const userEmail = session?.user?.email;
-  // Warnings are not the page's first data: they wait for it.
-  const deferred = useShellDeferred();
+  // The default-credentials and network-policy checks wait for the page's
+  // first data (see useShellReady).
+  const shellReady = useShellReady();
   const disableBasicAuth = useDisableBasicAuth();
   const openappaEnabled = useFeature("openappaEnabled");
   const guardrailsDeployment = useGuardrailsDeployment();
   const { data: canUpdateOrg } = useHasPermissions({
     organization: ["update"],
   });
-  // Asked only of the one viewer the warning is for: the default admin, who
-  // can change the organization's sign-in, while password sign-in is on.
+  // Only the default admin with organization:update sees this warning, and
+  // only while password sign-in is on.
+  const canSeeDefaultCredsWarning =
+    canUpdateOrg === true &&
+    disableBasicAuth === false &&
+    userEmail === DEFAULT_ADMIN_EMAIL;
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled({
-      enabled:
-        deferred &&
-        canUpdateOrg === true &&
-        disableBasicAuth === false &&
-        userEmail === DEFAULT_ADMIN_EMAIL,
+      enabled: shellReady && canSeeDefaultCredsWarning,
     });
   // Reading capabilities needs environment:update, so gating the query on the
   // same permission keeps it from 403-ing for everyone else on every page.
@@ -69,17 +70,14 @@ export function SidebarWarningsAccordion({
     environment: ["update"],
   });
   const { data: capabilities } = useK8sCapabilities(
-    deferred && canUpdateEnvironment === true,
+    shellReady && canUpdateEnvironment === true,
   );
   const { state: sidebarState } = useSidebar();
 
   const showDefaultCredsWarning =
-    canUpdateOrg === true &&
-    disableBasicAuth === false &&
+    canSeeDefaultCredsWarning &&
     !isLoadingCreds &&
-    defaultCredentialsEnabled !== undefined &&
-    defaultCredentialsEnabled &&
-    userEmail === DEFAULT_ADMIN_EMAIL;
+    defaultCredentialsEnabled === true;
 
   // Only a measured verdict warns. "unknown" means nothing tested the cluster,
   // which is not evidence that egress rules are inert.

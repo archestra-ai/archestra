@@ -4,6 +4,51 @@ import { describe, expect, test } from "@/test";
 import { DbSecretsManager } from "./db";
 
 describe("DbSecretsManager", () => {
+  test("concurrent cache misses share a database read", async ({
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { token: "synthetic-token" } });
+    const manager = new DbSecretsManager();
+    const reads = vi.spyOn(SecretModel, "findById");
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () => manager.getSecret(secret.id)),
+      );
+      expect(results).toHaveLength(10);
+      expect(
+        results.every((result) => result?.secret.token === "synthetic-token"),
+      ).toBe(true);
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  test("fresh reads bypass in-flight reads and observe a later rotation", async ({
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { token: "before" } });
+    const manager = new DbSecretsManager();
+    const reads = vi.spyOn(SecretModel, "findById");
+    try {
+      await Promise.all([
+        manager.getSecret(secret.id, { skipCache: true }),
+        manager.getSecret(secret.id, { skipCache: true }),
+      ]);
+      expect(reads).toHaveBeenCalledTimes(2);
+      await SecretModel.update(secret.id, { secret: { token: "after" } });
+      expect(
+        (await manager.getSecret(secret.id, { skipCache: true }))?.secret,
+      ).toEqual({ token: "after" });
+      expect((await manager.getSecret(secret.id))?.secret).toEqual({
+        token: "after",
+      });
+      expect(reads).toHaveBeenCalledTimes(3);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
   test("connectivity check returns the stored secret count", async () => {
     const manager = new DbSecretsManager();
     expect(await manager.checkConnectivity()).toEqual({ secretCount: 0 });

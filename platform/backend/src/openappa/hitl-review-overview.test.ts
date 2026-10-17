@@ -5,9 +5,12 @@ import { describe, expect, test, vi } from "vitest";
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import db from "@/database";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { makeReturnLabelReview } from "@/test/openappa-return-label-review";
 import {
   consumeHitlRuling,
+  getHitlAskUserArguments,
   getHitlInspectableAskUserArguments,
+  getHitlReview,
   peekHitlRuling,
   resolveHitlInspectableAnswer,
   sealHitlClosure,
@@ -17,6 +20,7 @@ import {
   type HitlReviewCard,
   hitlInspectionDigest,
   hitlReviewCard,
+  hitlReviewCardAnswer,
   previousHitlCardAnswer,
   renderHitlReviewText,
 } from "./hitl-review-overview";
@@ -68,6 +72,168 @@ function smallReview(offerId: string) {
     remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
   };
 }
+
+describe("return-label reviews", () => {
+  test("a repeated return declaration cannot replace the parameters on an open review", async () => {
+    const offerId = "return-label-changed";
+    const reviewSession = session("return-label-changed");
+    const review = makeReturnLabelReview(offerId);
+    await stageHitlReview({ session: reviewSession, review });
+    const issued = await getHitlInspectableAskUserArguments({
+      session: reviewSession,
+      offerIds: [offerId],
+    });
+    if (!issued) throw new Error("expected a return-label review card");
+    await stageHitlReview({
+      session: reviewSession,
+      review: {
+        ...review,
+        remedyArguments: {
+          offer_id: offerId,
+          label: { audience: ["internal"] },
+        },
+      },
+    });
+    expect(
+      (await getHitlReview({ session: reviewSession, offerId }))
+        ?.remedyArguments,
+    ).toEqual(review.remedyArguments);
+    expect(
+      await resolveHitlInspectableAnswer({
+        session: reviewSession,
+        offerId,
+        answer: "approve",
+        carriedReviewText: false,
+        claimDigest: issued.digest,
+      }),
+    ).toEqual({ status: "recorded", ruling: "approve" });
+  });
+
+  test.each([
+    "approve",
+    "deny",
+    "inspect",
+  ] as const)("a long runtime launch supports %s without treating its arguments as policy scope", async (answer) => {
+    const offerId = `return-label-${answer}`;
+    const reviewSession = session(`return-label-${answer}`);
+    const review = makeReturnLabelReview(offerId);
+    await stageHitlReview({ session: reviewSession, review });
+    const plain = await getHitlAskUserArguments({
+      session: reviewSession,
+      offerIds: [offerId],
+    });
+    expect(plain?.options.map((option) => option.label)).toEqual([
+      "Approve",
+      "Deny",
+    ]);
+    expect(plain?.question).toContain(JSON.parse(review.arguments).message);
+    const issued = await getHitlInspectableAskUserArguments({
+      session: reviewSession,
+      offerIds: [offerId],
+    });
+    expect(issued?.card.options.map((option) => option.label)).toEqual([
+      "Allow",
+      "Deny",
+      "Inspect",
+    ]);
+    expect(issued?.card.callPreview).toContain("4,080 characters");
+    const label =
+      answer === "approve" ? "Allow" : answer === "deny" ? "Deny" : "Inspect";
+    expect(hitlReviewCardAnswer(label)).toBe(answer);
+    if (!issued) throw new Error("expected a return-label review card");
+    const result = await resolveHitlInspectableAnswer({
+      session: reviewSession,
+      offerId,
+      answer,
+      carriedReviewText: false,
+      claimDigest: issued.digest,
+    });
+    if (answer !== "inspect") {
+      expect(result).toEqual({ status: "recorded", ruling: answer });
+      expect(await consumeHitlRuling({ session: reviewSession, offerId })).toBe(
+        answer,
+      );
+      return;
+    }
+    expect(result).toEqual({ status: "inspect-pending" });
+    expect(
+      await peekHitlRuling({ session: reviewSession, offerId }),
+    ).toBeUndefined();
+    const inspected = await getHitlInspectableAskUserArguments({
+      session: reviewSession,
+      offerIds: [offerId],
+    });
+    expect(inspected?.reviewText).toContain(
+      JSON.parse(review.arguments).message,
+    );
+    expect(inspected?.reviewText).toContain("attention: human-approval");
+    expect(inspected?.digest).toBe(issued.digest);
+    expect(
+      await resolveHitlInspectableAnswer({
+        session: reviewSession,
+        offerId,
+        answer: "approve",
+        carriedReviewText: true,
+        claimDigest: issued.digest,
+      }),
+    ).toEqual({ status: "recorded", ruling: "approve" });
+  });
+
+  test("an unsupported trailing condition stays unapprovable even after Inspect", async () => {
+    const offerId = "return-label-unsupported";
+    const reviewSession = session("return-label-unsupported");
+    const review = makeReturnLabelReview(offerId);
+    review.text +=
+      "\nAdditional condition: the declared return must remain inside its audience.";
+    await stageHitlReview({ session: reviewSession, review });
+    const issued = await getHitlInspectableAskUserArguments({
+      session: reviewSession,
+      offerIds: [offerId],
+    });
+    if (!issued) throw new Error("expected a return-label review card");
+    expect(issued.card.options.map((option) => option.label)).toEqual([
+      "Deny",
+      "Inspect",
+    ]);
+    await resolveHitlInspectableAnswer({
+      session: reviewSession,
+      offerId,
+      answer: "inspect",
+      carriedReviewText: false,
+      claimDigest: issued.digest,
+    });
+    const inspected = await getHitlInspectableAskUserArguments({
+      session: reviewSession,
+      offerIds: [offerId],
+    });
+    expect(inspected?.reviewText).toContain("Additional condition:");
+    expect(inspected?.card.options.map((option) => option.label)).toEqual([
+      "Deny",
+      "Inspect",
+    ]);
+    expect(
+      await resolveHitlInspectableAnswer({
+        session: reviewSession,
+        offerId,
+        answer: "approve",
+        carriedReviewText: true,
+        claimDigest: issued.digest,
+      }),
+    ).toEqual({ status: "stale" });
+    expect(
+      await peekHitlRuling({ session: reviewSession, offerId }),
+    ).toBeUndefined();
+    expect(
+      await resolveHitlInspectableAnswer({
+        session: reviewSession,
+        offerId,
+        answer: "deny",
+        carriedReviewText: true,
+        claimDigest: issued.digest,
+      }),
+    ).toEqual({ status: "recorded", ruling: "deny" });
+  });
+});
 
 describe("hitlReviewCard", () => {
   const base: HitlReviewCard = {

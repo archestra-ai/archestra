@@ -240,6 +240,14 @@ class CacheManager {
   }
 
   /**
+   * The `keyv_cache.key` an entry is stored under, for queries that join the
+   * cache table.
+   */
+  storageKey(key: AllowedCacheKey): string {
+    return `keyv:${key}`;
+  }
+
+  /**
    * Get a value from the cache.
    * Returns undefined if the key doesn't exist or has expired.
    *

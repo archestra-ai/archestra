@@ -1361,34 +1361,82 @@ class LlmProviderApiKeyModel {
   }
 
   /**
-   * Every key whose models can be synced, across all organizations: keys with
-   * a secret, system keys, and keys of providers that need no API key. The
-   * same rule `getAvailableKeysForUser` applies, without the access check.
+   * The keys whose models are due for a scheduled sync, across all
+   * organizations, in one statement. A key is due when it can be synced (a
+   * secret, a system key, or a provider that needs no API key — the rule
+   * `getAvailableKeysForUser` applies), its oldest link is at least its
+   * provider's TTL old (or it has no links at all), and no live attempt
+   * marker for it is in the cache table. Never-synced keys come first, then
+   * the oldest syncs.
    */
-  static async findAllForModelSync(): Promise<LlmProviderApiKeyForModelSync[]> {
+  static async findDueForModelSync(params: {
+    now: Date;
+    ttlMsByProvider: Partial<Record<SupportedProvider, number>>;
+    defaultTtlMs: number;
+    /** `keyv_cache.key` of an attempt marker, minus the key id. */
+    attemptMarkerKeyPrefix: string;
+    limit: number;
+  }): Promise<LlmProviderApiKeyForModelSync[]> {
+    const {
+      now,
+      ttlMsByProvider,
+      defaultTtlMs,
+      attemptMarkerKeyPrefix,
+      limit,
+    } = params;
+    const keys = schema.llmProviderApiKeysTable;
+    const links = schema.llmProviderApiKeyModelsTable;
+    const ttlCases = Object.entries(ttlMsByProvider).map(
+      ([provider, ttlMs]) => sql`WHEN ${provider} THEN ${ttlMs}::bigint`,
+    );
+    const ttlMs =
+      ttlCases.length > 0
+        ? sql`(CASE ${keys.provider} ${sql.join(ttlCases, sql` `)} ELSE ${defaultTtlMs}::bigint END)`
+        : sql`${defaultTtlMs}::bigint`;
+    // A link without synced_at predates the column and counts as stale.
+    const oldestSyncedAt = sql<Date | null>`(
+      SELECT min(coalesce(${links.syncedAt}, to_timestamp(0) AT TIME ZONE 'UTC'))
+      FROM ${links}
+      WHERE ${links.apiKeyId} = ${keys.id}
+    )`;
+    const syncableCondition = or(
+      isNotNull(keys.secretId),
+      eq(keys.isSystem, true),
+      inArray(keys.provider, getConfiguredProvidersWithOptionalApiKey()),
+    );
+
     return db
       .select({
-        id: schema.llmProviderApiKeysTable.id,
-        organizationId: schema.llmProviderApiKeysTable.organizationId,
-        name: schema.llmProviderApiKeysTable.name,
-        provider: schema.llmProviderApiKeysTable.provider,
-        secretId: schema.llmProviderApiKeysTable.secretId,
-        baseUrl: schema.llmProviderApiKeysTable.baseUrl,
-        extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
-        isSystem: schema.llmProviderApiKeysTable.isSystem,
+        id: keys.id,
+        organizationId: keys.organizationId,
+        name: keys.name,
+        provider: keys.provider,
+        secretId: keys.secretId,
+        baseUrl: keys.baseUrl,
+        extraHeaders: keys.extraHeaders,
+        isSystem: keys.isSystem,
       })
-      .from(schema.llmProviderApiKeysTable)
+      .from(keys)
       .where(
-        or(
-          isNotNull(schema.llmProviderApiKeysTable.secretId),
-          eq(schema.llmProviderApiKeysTable.isSystem, true),
-          inArray(
-            schema.llmProviderApiKeysTable.provider,
-            getConfiguredProvidersWithOptionalApiKey(),
-          ),
+        and(
+          syncableCondition,
+          // synced_at is a UTC timestamp without time zone.
+          sql`coalesce(${oldestSyncedAt} <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') - ${ttlMs} * interval '1 millisecond', true)`,
+          // Same row format as the cache manager writes: JSON text with an
+          // epoch-millisecond `expires`. A marker without one never expires.
+          sql`NOT EXISTS (
+            SELECT 1 FROM keyv_cache
+            WHERE keyv_cache.key = ${attemptMarkerKeyPrefix} || ${keys.id}::text
+              AND coalesce((keyv_cache.value::jsonb ->> 'expires')::numeric > ${now.getTime()}, true)
+          )`,
         ),
       )
-      .orderBy(schema.llmProviderApiKeysTable.createdAt);
+      .orderBy(
+        sql`${oldestSyncedAt} ASC NULLS FIRST`,
+        asc(keys.createdAt),
+        asc(keys.id),
+      )
+      .limit(limit);
   }
 
   /**

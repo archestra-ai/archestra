@@ -3,19 +3,14 @@ import {
   type SupportedProvider,
   TimeInMs,
 } from "@archestra/shared";
-import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager } from "@/cache-manager";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import logger from "@/logging";
-import {
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
-  type ModelSyncState,
-  TeamModel,
-} from "@/models";
+import { LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
 import { systemKeyManager } from "@/services/system-key-manager";
@@ -26,66 +21,26 @@ import { mapWithConcurrency } from "@/utils/concurrency";
 
 /**
  * One tick of the `llm_model_sync` periodic task: refresh models.dev metadata
- * when it is due, then re-sync every API key, in any organization, whose
- * models are older than its provider's TTL. Each due key is marked in the
- * shared cache before its sync, so a key that fails or lists no models is
- * tried at most once per TTL across all pods.
+ * when it is due and, alongside it, re-sync the API keys (in any organization)
+ * whose models are older than their provider's TTL, at most `maxKeys` of them,
+ * never-synced keys first, then the oldest syncs. The rest wait for the next
+ * tick. Each key is marked in the shared cache right before its sync, so a key
+ * that fails or lists no models is tried at most once per TTL across all pods,
+ * and a tick that dies midway leaves the keys it never reached unmarked.
  */
-export async function syncDueModels(): Promise<void> {
-  await modelsDevClient.syncIfNeeded();
-
-  const apiKeys = await LlmProviderApiKeyModel.findAllForModelSync();
-  const dueKeys = await findDueApiKeys(apiKeys);
-  if (dueKeys.length === 0) {
-    return;
-  }
-
-  await markSyncAttempts(dueKeys);
-
-  // System keys are synced by the system key manager, which handles every
-  // keyless provider of an organization in one call.
-  const systemKeysByOrganization = new Map<
-    string,
-    LlmProviderApiKeyForModelSync[]
-  >();
-  const regularKeys: LlmProviderApiKeyForModelSync[] = [];
-  for (const apiKey of dueKeys) {
-    if (shouldHandleWithSystemKeySync(apiKey)) {
-      const keys = systemKeysByOrganization.get(apiKey.organizationId) ?? [];
-      keys.push(apiKey);
-      systemKeysByOrganization.set(apiKey.organizationId, keys);
-    } else {
-      regularKeys.push(apiKey);
-    }
-  }
-
-  const work: Array<() => Promise<SyncOutcome[]>> = [
-    ...[...systemKeysByOrganization].map(
-      ([organizationId, keys]) =>
-        () =>
-          syncSystemKeysForOrganization({ organizationId, keys }),
-    ),
-    ...regularKeys.map((apiKey) => async () => [await syncOneKey(apiKey)]),
-  ];
-  const settled = await mapWithConcurrency(
-    work,
-    MODEL_SYNC_CONCURRENCY,
-    (run) => run(),
-  );
-  const outcomes = settled.flatMap((result) =>
-    result.status === "fulfilled" ? result.value : [],
-  );
-
-  const synced = outcomes.filter((outcome) => outcome.ok);
-  const failed = outcomes.filter((outcome) => !outcome.ok);
-  if (synced.length > 0 || failed.length > 0) {
-    logger.info(
-      {
-        syncedApiKeyIds: synced.map((outcome) => outcome.apiKeyId),
-        failedApiKeyIds: failed.map((outcome) => outcome.apiKeyId),
-      },
-      "Synced LLM models for due API keys",
-    );
+export async function syncDueModels(params?: {
+  maxKeys?: number;
+}): Promise<void> {
+  // models.dev only enriches metadata: a slow or failing fetch must not hold
+  // up the key syncs, so the two run side by side.
+  const [, keySync] = await Promise.allSettled([
+    modelsDevClient.syncIfNeeded(),
+    syncDueApiKeys(params?.maxKeys ?? MAX_KEYS_PER_TICK),
+  ]);
+  // Per-key failures are handled inside; this is the key lookup itself
+  // failing, which the task queue should record.
+  if (keySync.status === "rejected") {
+    throw keySync.reason;
   }
 }
 
@@ -167,89 +122,95 @@ const MODEL_SYNC_TTL_BY_PROVIDER: Partial<Record<SupportedProvider, number>> = {
 /** Provider fetches in flight at once in one tick. */
 const MODEL_SYNC_CONCURRENCY = 4;
 
+/** Keeps one tick short; keys past the cap go next tick. */
+const MAX_KEYS_PER_TICK = 100;
+
 function modelSyncTtl(provider: SupportedProvider): number {
   return MODEL_SYNC_TTL_BY_PROVIDER[provider] ?? DEFAULT_MODEL_SYNC_TTL_MS;
 }
 
-function syncAttemptCacheKey(apiKeyId: string): AllowedCacheKey {
-  return `${CacheKey.LlmModelSyncAttempt}-${apiKeyId}`;
-}
+async function syncDueApiKeys(maxKeys: number): Promise<void> {
+  const dueKeys = await LlmProviderApiKeyModel.findDueForModelSync({
+    now: new Date(),
+    ttlMsByProvider: MODEL_SYNC_TTL_BY_PROVIDER,
+    defaultTtlMs: DEFAULT_MODEL_SYNC_TTL_MS,
+    attemptMarkerKeyPrefix: cacheManager.storageKey(
+      `${CacheKey.LlmModelSyncAttempt}-`,
+    ),
+    limit: maxKeys,
+  });
+  if (dueKeys.length === 0) {
+    return;
+  }
 
-/** Keys whose models are stale and that were not already tried within their TTL. */
-async function findDueApiKeys(
-  apiKeys: LlmProviderApiKeyForModelSync[],
-): Promise<LlmProviderApiKeyForModelSync[]> {
-  const now = new Date();
-  const syncStates =
-    await LlmProviderApiKeyModelLinkModel.getModelSyncStatesForApiKeys(
-      apiKeys.map((apiKey) => apiKey.id),
+  // System keys are synced by the system key manager, which handles every
+  // keyless provider of an organization in one call.
+  const systemKeysByOrganization = new Map<
+    string,
+    LlmProviderApiKeyForModelSync[]
+  >();
+  const regularKeys: LlmProviderApiKeyForModelSync[] = [];
+  for (const apiKey of dueKeys) {
+    if (shouldHandleWithSystemKeySync(apiKey)) {
+      const keys = systemKeysByOrganization.get(apiKey.organizationId) ?? [];
+      keys.push(apiKey);
+      systemKeysByOrganization.set(apiKey.organizationId, keys);
+    } else {
+      regularKeys.push(apiKey);
+    }
+  }
+
+  const work: Array<() => Promise<SyncOutcome[]>> = [
+    ...[...systemKeysByOrganization].map(
+      ([organizationId, keys]) =>
+        () =>
+          syncSystemKeysForOrganization({ organizationId, keys }),
+    ),
+    ...regularKeys.map((apiKey) => async () => [await syncOneKey(apiKey)]),
+  ];
+  const settled = await mapWithConcurrency(
+    work,
+    MODEL_SYNC_CONCURRENCY,
+    (run) => run(),
+  );
+  const outcomes = settled.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+
+  const synced = outcomes.filter((outcome) => outcome.ok);
+  const failed = outcomes.filter((outcome) => !outcome.ok);
+  if (synced.length > 0 || failed.length > 0) {
+    logger.info(
+      {
+        syncedApiKeyIds: synced.map((outcome) => outcome.apiKeyId),
+        failedApiKeyIds: failed.map((outcome) => outcome.apiKeyId),
+      },
+      "Synced LLM models for due API keys",
     );
-  const staleKeys = apiKeys.filter((apiKey) =>
-    isModelSyncStateStale({
-      provider: apiKey.provider,
-      syncState: syncStates.get(apiKey.id),
-      now,
-    }),
-  );
-  if (staleKeys.length === 0) {
-    return [];
   }
-
-  // An attempt within the TTL settles the key whatever its outcome: a failed
-  // sync leaves the links as they were, and a key that lists no models has
-  // none, so without the marker those keys would be fetched on every tick.
-  const attempts = await cacheManager.getMany<true>(
-    staleKeys.map((apiKey) => syncAttemptCacheKey(apiKey.id)),
-  );
-  return staleKeys.filter(
-    (apiKey) => !attempts.has(syncAttemptCacheKey(apiKey.id)),
-  );
-}
-
-function isModelSyncStateStale(params: {
-  provider: SupportedProvider;
-  syncState?: Pick<ModelSyncState, "linkedModelCount" | "oldestLastSyncedAt">;
-  now: Date;
-}): boolean {
-  const { provider, syncState, now } = params;
-
-  // no usable linked models yet (unlinked key, empty provider, or failed sync)
-  if (
-    !syncState ||
-    syncState.linkedModelCount === 0 ||
-    !syncState.oldestLastSyncedAt
-  ) {
-    return true;
-  }
-
-  return (
-    now.getTime() - syncState.oldestLastSyncedAt.getTime() >=
-    modelSyncTtl(provider)
-  );
 }
 
 /**
- * Written before the sync, so the marker never outlives the links the sync
- * writes: when both age out, the next tick sees a stale key with no marker.
+ * An attempt within the TTL settles the key whatever its outcome: a failed
+ * sync leaves the links as they were, and a key that lists no models has none,
+ * so without the marker those keys would be fetched on every tick. Written
+ * before the sync, so the marker never outlives the links the sync writes.
+ * A failed write is logged and the sync still runs: the worst case is one
+ * more attempt next tick.
  */
-async function markSyncAttempts(
-  apiKeys: LlmProviderApiKeyForModelSync[],
+async function markSyncAttempt(
+  apiKey: Pick<LlmProviderApiKeyForModelSync, "id" | "provider">,
 ): Promise<void> {
-  const results = await Promise.allSettled(
-    apiKeys.map((apiKey) =>
-      cacheManager.set(
-        syncAttemptCacheKey(apiKey.id),
-        true,
-        modelSyncTtl(apiKey.provider),
-      ),
-    ),
-  );
-  const failures = results.filter((result) => result.status === "rejected");
-  if (failures.length > 0) {
-    // The sync still runs: the worst case is one more attempt next tick.
+  try {
+    await cacheManager.set(
+      `${CacheKey.LlmModelSyncAttempt}-${apiKey.id}`,
+      true,
+      modelSyncTtl(apiKey.provider),
+    );
+  } catch {
     logger.warn(
-      { failedCount: failures.length },
-      "Could not record LLM model sync attempts",
+      { apiKeyId: apiKey.id },
+      "Could not record LLM model sync attempt",
     );
   }
 }
@@ -257,6 +218,7 @@ async function markSyncAttempts(
 async function syncOneKey(
   apiKey: LlmProviderApiKeyForModelSync,
 ): Promise<SyncOutcome> {
+  await markSyncAttempt(apiKey);
   try {
     await syncApiKeyModels(apiKey);
     return { apiKeyId: apiKey.id, ok: true };
@@ -271,6 +233,7 @@ async function syncSystemKeysForOrganization(params: {
   keys: LlmProviderApiKeyForModelSync[];
 }): Promise<SyncOutcome[]> {
   const { organizationId, keys } = params;
+  await Promise.all(keys.map(markSyncAttempt));
   let failedProviders: SupportedProvider[];
   try {
     failedProviders = await systemKeyManager.syncSystemKeys(organizationId);

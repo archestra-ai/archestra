@@ -512,14 +512,15 @@ describe("ModelsDevClient", () => {
       expect(metadata?.provider).toBe("gemini");
     });
 
-    test("returns 0 when API returns no providers", async () => {
+    test("fails when the API returns no providers", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({}),
       });
 
-      const count = await modelsDevClient.syncModelMetadata(true);
-      expect(count).toBe(0);
+      await expect(modelsDevClient.syncModelMetadata(true)).rejects.toThrow(
+        "No providers returned",
+      );
     });
 
     test("handles models with PDF input modality", async () => {

@@ -27,6 +27,14 @@ const MODELS_DEV_SYNC_CACHE_KEY =
 const SYNC_INTERVAL_MS = 24 * TimeInMs.Hour;
 
 /**
+ * Set when a sync fails after all retries, so a models.dev outage is retried
+ * every 15 minutes instead of on every scheduled tick.
+ */
+const MODELS_DEV_SYNC_FAILED_CACHE_KEY =
+  `${CacheKey.ModelsDevSync}-failed` as const;
+const SYNC_RETRY_AFTER_FAILURE_MS = 15 * TimeInMs.Minute;
+
+/**
  * models.dev API endpoint
  */
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
@@ -430,9 +438,11 @@ export class ModelsDevClient {
     const apiResponse = await this.fetchModelsFromApi();
     const providerIds = Object.keys(apiResponse);
 
+    // The fetch reports a failed request as an empty catalog, and models.dev
+    // never legitimately lists no providers, so this is an outage: throwing
+    // lets the caller retry and back off instead of calling it a sync.
     if (providerIds.length === 0) {
-      logger.warn("No providers returned from models.dev API");
-      return 0;
+      throw new Error("No providers returned from models.dev API");
     }
 
     logger.info(
@@ -561,11 +571,14 @@ export class ModelsDevClient {
 
   /**
    * Syncs when the last sync is older than the sync interval, retrying
-   * transient failures with exponential backoff. Never throws: a failed sync
-   * is logged and tried again on the next call. Run by the scheduled model
-   * sync.
+   * transient failures with exponential backoff. Never throws: a sync that
+   * still fails is logged, and no call tries again for 15 minutes (shared
+   * across pods). Run by the scheduled model sync.
    */
   async syncIfNeeded(): Promise<void> {
+    if (await cacheManager.get<true>(MODELS_DEV_SYNC_FAILED_CACHE_KEY)) {
+      return;
+    }
     try {
       await this.syncWithRetry();
     } catch (error) {
@@ -573,6 +586,15 @@ export class ModelsDevClient {
         { error: error instanceof Error ? error.message : String(error) },
         "Background models.dev sync failed after all retries",
       );
+      await cacheManager
+        .set(
+          MODELS_DEV_SYNC_FAILED_CACHE_KEY,
+          true,
+          SYNC_RETRY_AFTER_FAILURE_MS,
+        )
+        .catch(() => {
+          // Logged by the cache manager; the next call simply retries.
+        });
     }
   }
 

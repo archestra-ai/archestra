@@ -9,16 +9,6 @@ import type { LlmProviderApiKey, Model } from "@/types";
 import ModelModel from "./model";
 
 /**
- * Aggregate of an API key's linked-model count and when the key's own sync
- * last confirmed its links (a link never confirmed counts as the epoch).
- */
-export interface ModelSyncState {
-  apiKeyId: string;
-  linkedModelCount: number;
-  oldestLastSyncedAt: Date | null;
-}
-
-/**
  * Model class for the api_key_models join table.
  * Manages the many-to-many relationship between chat_api_keys and models.
  */
@@ -394,37 +384,6 @@ class LlmProviderApiKeyModelLinkModel {
     return result?.count ?? 0;
   }
 
-  static async getModelSyncStatesForApiKeys(
-    apiKeyIds: string[],
-  ): Promise<Map<string, ModelSyncState>> {
-    if (apiKeyIds.length === 0) {
-      return new Map();
-    }
-
-    const results = await db
-      .select({
-        apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
-        linkedModelCount: sql<number>`count(*)::int`.as("linked_model_count"),
-        oldestLastSyncedAt:
-          sql<Date | null>`min(coalesce(${schema.llmProviderApiKeyModelsTable.syncedAt}, to_timestamp(0)))`.as(
-            "oldest_last_synced_at",
-          ),
-      })
-      .from(schema.llmProviderApiKeyModelsTable)
-      .where(inArray(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyIds))
-      .groupBy(schema.llmProviderApiKeyModelsTable.apiKeyId);
-
-    return new Map(
-      results.map((result) => [
-        result.apiKeyId,
-        {
-          ...result,
-          oldestLastSyncedAt: toDateOrNull(result.oldestLastSyncedAt),
-        },
-      ]),
-    );
-  }
-
   static async getLinkedModelSelectionKeys(
     selections: CompleteModelSelection[],
   ): Promise<Set<string>> {
@@ -750,16 +709,6 @@ export default LlmProviderApiKeyModelLinkModel;
 
 export function selectionKey(selection: CompleteModelSelection): string {
   return `${selection.apiKeyId}:${selection.modelId}`;
-}
-
-function toDateOrNull(value: Date | string | null): Date | null {
-  if (value == null) {
-    return null;
-  }
-  if (value instanceof Date) {
-    return value;
-  }
-  return new Date(value);
 }
 
 /**

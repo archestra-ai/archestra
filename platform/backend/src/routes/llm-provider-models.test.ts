@@ -492,10 +492,7 @@ describe("chat model routes", () => {
         return HttpResponse.json({ object: "list", data: [] });
       }),
     );
-    const syncStateSpy = vi.spyOn(
-      LlmProviderApiKeyModelLinkModel,
-      "getModelSyncStatesForApiKeys",
-    );
+    const dueKeysSpy = vi.spyOn(LlmProviderApiKeyModel, "findDueForModelSync");
     const syncSpy = vi.spyOn(modelSyncService, "syncModelsForApiKey");
 
     const response = await app.inject({
@@ -509,7 +506,7 @@ describe("chat model routes", () => {
     expect(response.headers["x-archestra-lazy-model-sync"]).toBeUndefined();
     expect(providerRequests).toBe(0);
     expect(syncSpy).not.toHaveBeenCalled();
-    expect(syncStateSpy).not.toHaveBeenCalled();
+    expect(dueKeysSpy).not.toHaveBeenCalled();
     expect(modelsDevClient.syncIfNeeded).not.toHaveBeenCalled();
   });
 

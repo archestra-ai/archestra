@@ -402,6 +402,10 @@ export const handlers: HttpHandler[] = [
       hasPrev: false,
     },
   }),
+  // The Audit Logs page's resource picker searches this when it opens, and
+  // reads one entry to label a resource filter carried in the URL. No
+  // matches keeps the strict unhandled-request guard satisfied.
+  ...getJson("/api/audit-logs/resources", { data: [] }),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.
   ...getJson("/api/environments", {
@@ -570,6 +574,17 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agent-tools", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 1,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
@@ -791,6 +806,8 @@ export const handlers: HttpHandler[] = [
   // empty so the strict-mode unhandled-request guard doesn't fire on
   // background fetches we don't actually care about for these tests.
   ...getJson("/api/llm-models", []),
+  ...getJson("/api/llm-models/key-model-ids", []),
+  ...getJson("/api/llm-models/options", []),
   ...getJson("/api/llm-models/by-provider", []),
   ...getJson("/api/llm-models/with-api-keys", []),
   ...getJson("/api/knowledge-bases", []),

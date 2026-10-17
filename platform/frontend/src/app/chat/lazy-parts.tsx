@@ -1,6 +1,11 @@
 "use client";
 
-import type { ComponentProps } from "react";
+import {
+  type ComponentProps,
+  startTransition,
+  useEffect,
+  useState,
+} from "react";
 import type * as BrowserPanelModule from "@/components/chat/browser-panel";
 import type * as ChatMessagesModule from "@/components/chat/chat-messages";
 import type * as FilesPanelModule from "@/components/chat/conversation-files-panel";
@@ -15,9 +20,29 @@ import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 // composer's hydration: they mount when their chunk arrives. A conversation
 // preloads the transcript as it mounts (preloadConversationParts).
 
-export const ChatMessages = lazyComponent<
+const LazyChatMessages = lazyComponent<
   ComponentProps<typeof ChatMessagesModule.ChatMessages>
 >(() => import("@/components/chat/chat-messages").then((m) => m.ChatMessages));
+
+/**
+ * The transcript, mounted in a transition after the page's first commit. The
+ * composer must never wait on it: even when the chunk and the conversation
+ * are already in memory (a reload, a switch between chats), the composer
+ * commits and becomes typeable first, and the transcript renders behind it
+ * in an interruptible render.
+ */
+export const ChatMessages = Object.assign(
+  function DeferredChatMessages(
+    props: ComponentProps<typeof ChatMessagesModule.ChatMessages>,
+  ) {
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+      startTransition(() => setMounted(true));
+    }, []);
+    return mounted ? <LazyChatMessages {...props} /> : null;
+  },
+  { preload: LazyChatMessages.preload },
+);
 
 export const ConversationFilesPanel = lazyComponent<
   ComponentProps<typeof FilesPanelModule.ConversationFilesPanel>

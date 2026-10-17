@@ -560,17 +560,20 @@ export class ModelsDevClient {
   }
 
   /**
-   * Convenience method to sync if needed (non-blocking).
-   * Call this in the models route to trigger background sync.
-   * Uses exponential backoff retry for transient failures.
+   * Syncs when the last sync is older than the sync interval, retrying
+   * transient failures with exponential backoff. Never throws: a failed sync
+   * is logged and tried again on the next call. Run by the scheduled model
+   * sync.
    */
-  syncIfNeeded(): void {
-    this.syncWithRetry().catch((error) => {
+  async syncIfNeeded(): Promise<void> {
+    try {
+      await this.syncWithRetry();
+    } catch (error) {
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },
         "Background models.dev sync failed after all retries",
       );
-    });
+    }
   }
 
   /**

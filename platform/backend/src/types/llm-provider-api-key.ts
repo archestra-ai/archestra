@@ -66,6 +66,18 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
   });
 
 export type LlmProviderApiKey = z.infer<typeof SelectLlmProviderApiKeySchema>;
+/** What the scheduled model sync reads off a key. */
+export type LlmProviderApiKeyForModelSync = Pick<
+  LlmProviderApiKey,
+  | "id"
+  | "organizationId"
+  | "name"
+  | "provider"
+  | "secretId"
+  | "baseUrl"
+  | "extraHeaders"
+  | "isSystem"
+>;
 export type InsertLlmProviderApiKey = z.infer<
   typeof InsertLlmProviderApiKeySchema
 >;

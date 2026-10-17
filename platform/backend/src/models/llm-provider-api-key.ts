@@ -20,6 +20,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   ne,
   or,
@@ -36,6 +37,7 @@ import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
+  LlmProviderApiKeyForModelSync,
   LlmProviderApiKeyWithScopeInfo,
   SecretStorageType,
   SecretValue,
@@ -1356,6 +1358,37 @@ class LlmProviderApiKeyModel {
           eq(schema.llmProviderApiKeysTable.isSystem, true),
         ),
       );
+  }
+
+  /**
+   * Every key whose models can be synced, across all organizations: keys with
+   * a secret, system keys, and keys of providers that need no API key. The
+   * same rule `getAvailableKeysForUser` applies, without the access check.
+   */
+  static async findAllForModelSync(): Promise<LlmProviderApiKeyForModelSync[]> {
+    return db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        organizationId: schema.llmProviderApiKeysTable.organizationId,
+        name: schema.llmProviderApiKeysTable.name,
+        provider: schema.llmProviderApiKeysTable.provider,
+        secretId: schema.llmProviderApiKeysTable.secretId,
+        baseUrl: schema.llmProviderApiKeysTable.baseUrl,
+        extraHeaders: schema.llmProviderApiKeysTable.extraHeaders,
+        isSystem: schema.llmProviderApiKeysTable.isSystem,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        or(
+          isNotNull(schema.llmProviderApiKeysTable.secretId),
+          eq(schema.llmProviderApiKeysTable.isSystem, true),
+          inArray(
+            schema.llmProviderApiKeysTable.provider,
+            getConfiguredProvidersWithOptionalApiKey(),
+          ),
+        ),
+      )
+      .orderBy(schema.llmProviderApiKeysTable.createdAt);
   }
 
   /**

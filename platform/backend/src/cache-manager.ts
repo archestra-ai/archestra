@@ -21,6 +21,8 @@ export const CacheKey = {
   ClientConnectionRateLimit: "client-connection-rate-limit",
   /** models.dev sync tracking */
   ModelsDevSync: "models-dev-sync",
+  /** Recent scheduled model sync attempt for an LLM provider API key */
+  LlmModelSyncAttempt: "llm-model-sync-attempt",
   /** MCP tools for chat feature */
   ChatMcpTools: "chat-mcp-tools",
   /** Last verified provider tool-token count, bounded to one slot per gateway. */

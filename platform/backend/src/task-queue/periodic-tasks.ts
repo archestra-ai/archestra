@@ -52,6 +52,11 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   // claims is worth removing promptly, not urgently, and the work is one list
   // call plus a couple per Perforce connector.
   { taskType: "p4_shim_reconcile", intervalSeconds: 300, payload: {} },
+  // Re-syncs provider models for API keys whose TTL has passed (5 minutes for
+  // Ollama and vLLM, so a freshly pulled model shows up within about that) and
+  // refreshes models.dev metadata once a day. The model listing routes only
+  // read, so this tick is what keeps the catalog current.
+  { taskType: "llm_model_sync", intervalSeconds: 60, payload: {} },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
   // Rebuilds the portable BM25 corpus statistics (document frequency, chunk
   // count, mean chunk length) the keyword ranker scores from. A read-only

@@ -639,7 +639,7 @@ describe("ModelsDevClient", () => {
   });
 
   describe("syncIfNeeded with retry", () => {
-    test("calls syncModelMetadata in background", async () => {
+    test("syncs model metadata when no sync is recorded", async () => {
       const mockResponse = createMockApiResponse({
         openai: createMockProvider("openai", {
           "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
@@ -651,11 +651,7 @@ describe("ModelsDevClient", () => {
         json: () => Promise.resolve(mockResponse),
       });
 
-      // syncIfNeeded is non-blocking, so we need to wait a bit
-      modelsDevClient.syncIfNeeded();
-
-      // Wait for async operation to complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await modelsDevClient.syncIfNeeded();
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });

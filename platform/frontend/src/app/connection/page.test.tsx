@@ -53,6 +53,11 @@ const connectionFlowMock = vi.fn((_props: unknown) => (
 ));
 const refetchOrganizationMock = vi.fn();
 
+const { catalogHookMock, rowsByIdsCache } = vi.hoisted(() => ({
+  catalogHookMock: vi.fn(),
+  rowsByIdsCache: new WeakMap<object, Map<string, unknown>>(),
+}));
+
 vi.mock("next/navigation");
 vi.mock("@/lib/clipboard");
 vi.mock("@/lib/agent.query");
@@ -74,7 +79,28 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", async (importOriginal) => ({
     typeof import("@/lib/mcp/internal-mcp-catalog.query")
   >()),
   useAllCatalogTools: vi.fn(),
-  useInternalMcpCatalog: vi.fn(),
+  useInternalMcpCatalog: catalogHookMock,
+}));
+// A gateway's own catalogs are read by id; answer from the catalog mock.
+vi.mock("@/lib/mcp/mcp-registry.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/mcp/mcp-registry.query")>()),
+  useMcpRegistryRowsByIds: (ids: string[]) => {
+    // Stable for the same rows and ids, as the real hook's result is.
+    const rows = (catalogHookMock().data ?? []) as Array<{ id: string }>;
+    const key = ids.join(",");
+    let byIds = rowsByIdsCache.get(rows);
+    if (!byIds) rowsByIdsCache.set(rows, (byIds = new Map()));
+    let result = byIds.get(key);
+    if (!result) {
+      result = {
+        data: rows.filter((row) => ids.includes(row.id)),
+        isPending: false,
+        isError: false,
+      };
+      byIds.set(key, result);
+    }
+    return result;
+  },
 }));
 vi.mock("@/lib/organization.query");
 vi.mock("@archestra/shared", async (importOriginal) => {

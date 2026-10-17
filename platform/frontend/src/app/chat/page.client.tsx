@@ -306,6 +306,7 @@ export function ChatPageContent({
     return () => document.body.classList.remove("hide-version");
   }, []);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
+  const [hasOpenedRightPanel, setHasOpenedRightPanel] = useState(false);
   const [isApplyingAgentSelection, setIsApplyingAgentSelection] =
     useState(false);
   const pendingPromptRef = useRef<string | undefined>(undefined);
@@ -3220,6 +3221,11 @@ export function ChatPageContent({
     autoSendTriggered: autoSendTriggeredRef.current,
   });
 
+  // The side panel (files, browser, apps, artifact) is a lazy chunk of its
+  // own; mounting it closed would fetch and evaluate it while the composer
+  // hydrates. It mounts the first time it opens and stays (keeping its state).
+  if (isRightPanelOpen && !hasOpenedRightPanel) setHasOpenedRightPanel(true);
+
   const page = (
     <AppsProvider
       key={conversationId ?? "new"}
@@ -3904,7 +3910,7 @@ export function ChatPageContent({
           {/* Right-side panel - desktop only. Unmounted (not just CSS-hidden)
               on mobile so its Apps tab never hosts a second, invisible copy of
               the app iframe alongside the inline mobile panel above. */}
-          {!isMobile && (
+          {!isMobile && hasOpenedRightPanel && (
             <div className="hidden md:flex h-full min-h-0">
               <RightSidePanel
                 isOpen={isRightPanelOpen}

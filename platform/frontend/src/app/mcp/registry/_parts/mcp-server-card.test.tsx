@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { cloneElement, type ReactElement, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -1131,6 +1131,44 @@ describe("McpServerCard uninstall permission", () => {
       }),
       expect.anything(),
     );
+  });
+
+  it("narrows the rows on screen at once and asks the server once typing pauses", () => {
+    vi.useFakeTimers();
+    try {
+      const alpha = { ...item, id: "cat-alpha", name: "alpha-server" };
+      const beta = { ...item, id: "cat-beta", name: "beta-server" };
+      nav.search = new URLSearchParams();
+      registryPageMock.mockReturnValue(pageOf([alpha, beta]));
+      const view = renderCard(<InternalMCPCatalog />);
+      expect(screen.queryAllByText("beta-server").length).toBeGreaterThan(0);
+
+      // The box writes each keystroke to the URL; the server's answer for the
+      // new term has not arrived yet.
+      nav.search = new URLSearchParams("search=alp");
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <InternalMCPCatalog />
+        </QueryClientProvider>,
+      );
+
+      expect(screen.queryAllByText("beta-server")).toHaveLength(0);
+      expect(screen.queryAllByText("alpha-server").length).toBeGreaterThan(0);
+      expect(registryPageMock).toHaveBeenLastCalledWith(
+        expect.not.objectContaining({ search: expect.anything() }),
+        expect.anything(),
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(registryPageMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "alp" }),
+        expect.anything(),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("asks for exactly the request the route started before it rendered", () => {

@@ -72,6 +72,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -161,6 +162,9 @@ import {
 import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 import { useCatalogInstall } from "./use-catalog-install";
 
+/** The pause in typing after which the registry asks the server. */
+const REGISTRY_SEARCH_DEBOUNCE_MS = 300;
+
 export function InternalMCPCatalog() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -170,6 +174,22 @@ export function InternalMCPCatalog() {
 
   // Get search query from URL
   const searchQueryFromUrl = searchParams.get("search") || "";
+  // The box writes every keystroke to the URL, as it always did, so the rows
+  // on screen narrow at once (below). The server is asked once typing pauses.
+  const requestSearch = useDebouncedValue(
+    searchQueryFromUrl,
+    REGISTRY_SEARCH_DEBOUNCE_MS,
+  );
+  const listSearchParams = useMemo(() => {
+    if (requestSearch === searchQueryFromUrl) return searchParams;
+    const params = new URLSearchParams(searchParams.toString());
+    if (requestSearch.trim()) {
+      params.set("search", requestSearch);
+    } else {
+      params.delete("search");
+    }
+    return params;
+  }, [searchParams, requestSearch, searchQueryFromUrl]);
   const { pageIndex, pageSize } = registryPageFromParams(searchParams);
   const sort = sortKeyFromParams(searchParams);
 
@@ -876,7 +896,7 @@ export function InternalMCPCatalog() {
   const listQuery = useMemo(
     () =>
       buildRegistryListQuery({
-        searchParams,
+        searchParams: listSearchParams,
         access: {
           access: ownershipFilters.access,
           sharedWith: ownershipFilters.sharedWith,
@@ -888,7 +908,7 @@ export function InternalMCPCatalog() {
         attentionTiers: sendLiveAttentionTiers ? liveAttentionTiers : undefined,
       }),
     [
-      searchParams,
+      listSearchParams,
       ownershipFilters.access,
       ownershipFilters.sharedWith,
       ownershipFilters.owner,
@@ -939,6 +959,23 @@ export function InternalMCPCatalog() {
     liveAttentionTiers,
   ]);
   const pageItems = registryPage?.data ?? [];
+  // While a search settles (the pause before the request, then the request
+  // itself), the rows already on screen narrow by name at once, with the
+  // same match the server applies; the server's page replaces them when it
+  // answers. Only what is drawn narrows: installs and labels still follow
+  // the page, so a keystroke sends nothing.
+  const typedSearch = searchQueryFromUrl.trim().toLowerCase();
+  const searchSettling =
+    requestSearch !== searchQueryFromUrl || isPagePlaceholder;
+  const visibleItems = useMemo(
+    () =>
+      searchSettling && typedSearch
+        ? pageItems.filter((item) =>
+            item.name.toLowerCase().includes(typedSearch),
+          )
+        : pageItems,
+    [pageItems, searchSettling, typedSearch],
+  );
   const totalItems = registryPage?.pagination.total ?? 0;
 
   const handlePaginationChange = useCallback(
@@ -1207,7 +1244,7 @@ export function InternalMCPCatalog() {
                   value={searchQueryFromUrl}
                   onSearchChange={handleSearchChange}
                   syncQueryParams={false}
-                  debounceMs={300}
+                  debounceMs={0}
                   maxLength={MAX_REGISTRY_SEARCH_LENGTH}
                   isLoading={isPageFetching}
                   className={filterSearchClass}
@@ -1301,7 +1338,7 @@ export function InternalMCPCatalog() {
               </InlineNotice>
             ) : null
           ) : selectedFacet ? (
-            pageItems.length === 0 ? (
+            visibleItems.length === 0 ? (
               // A clean fleet is only claimable when the facet itself is empty.
               // With rows in the facet and a search or a chip that matched none of
               // them, the count on the button above is right and the list is
@@ -1346,8 +1383,8 @@ export function InternalMCPCatalog() {
                 // Match Guardrails: changing URL-owned filters clears selection.
                 // Live issue refetches keep the component mounted so failed
                 // targets survive a partial bulk action.
-                key={attentionListKey(searchParams)}
-                items={pageItems}
+                key={attentionListKey(listSearchParams)}
+                items={visibleItems}
                 issuesByCatalog={issuesByCatalog}
                 servers={installedServers ?? []}
                 facet={selectedFacet}
@@ -1367,9 +1404,9 @@ export function InternalMCPCatalog() {
             )
           ) : (
             <div className="space-y-6">
-              {pageItems.length > 0 ? (
+              {visibleItems.length > 0 ? (
                 <McpServerCatalogSection
-                  items={pageItems}
+                  items={visibleItems}
                   listQuery={listQuery}
                   selectableTotal={registryPage.selectableTotal}
                   pagination={{ pageIndex, pageSize, total: totalItems }}

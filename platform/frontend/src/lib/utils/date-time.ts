@@ -63,3 +63,12 @@ export function formatRelativeTimeFromNow(
     ? formatDistanceToNowStrict(parsedDate, { addSuffix: true })
     : formatDistanceToNow(parsedDate, { addSuffix: true });
 }
+
+/** "5m ago", "2h ago", "3mo ago": strict relative time with one-letter units. */
+export function formatCompactRelativeTime(date: Date | string): string {
+  return formatRelativeTimeFromNow(date, { strict: true }).replace(
+    /(\d+) (seconds?|minutes?|hours?|days?|weeks?|months?|years?)/g,
+    (_, count: string, unit: string) =>
+      `${count}${unit.startsWith("month") ? "mo" : unit[0]}`,
+  );
+}

@@ -1,5 +1,5 @@
 {
-  "id": "fd7a893f-92e1-4bd9-85ad-fb63931de1fa",
+  "id": "ddeb3248-aa87-4eca-9497-43d960bd882e",
   "prevId": "03dcc6c4-c4e6-41a0-b7d2-0713564d4b89",
   "version": "7",
   "dialect": "postgresql",
@@ -10706,6 +10706,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "session_preview": {
+          "name": "session_preview",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "processed_request": {
           "name": "processed_request",
           "type": "jsonb",
@@ -18595,13 +18601,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "allow_unauthenticated_llm_proxy_requests": {
-          "name": "allow_unauthenticated_llm_proxy_requests",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "allow_tool_auto_assignment": {
           "name": "allow_tool_auto_assignment",

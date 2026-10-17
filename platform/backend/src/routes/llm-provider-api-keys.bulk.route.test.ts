@@ -103,7 +103,10 @@ describe("DELETE /api/llm-provider-api-keys/bulk", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toEqual({
-      succeeded: [{ id: deleted.id, name: "bulk-delete" }],
+      succeeded: [
+        { id: deleted.id, name: "bulk-delete" },
+        { id: inUse.id, name: "bulk-in-use" },
+      ],
       failed: [
         {
           id: missing,
@@ -120,18 +123,15 @@ describe("DELETE /api/llm-provider-api-keys/bulk", () => {
           name: "bulk-system",
           error: "System API keys cannot be deleted",
         },
-        {
-          id: inUse.id,
-          name: "bulk-in-use",
-          error:
-            "This API key is used for knowledge base OCR. Remove it from Settings > Knowledge before deleting.",
-        },
       ],
     });
     expect(await LlmProviderApiKeyModel.findById(deleted.id)).toBeNull();
     expect(await LlmProviderApiKeyModel.findById(foreign.id)).not.toBeNull();
     expect(await LlmProviderApiKeyModel.findById(system.id)).not.toBeNull();
-    expect(await LlmProviderApiKeyModel.findById(inUse.id)).not.toBeNull();
+    expect(await LlmProviderApiKeyModel.findById(inUse.id)).toBeNull();
+    expect(
+      (await OrganizationModel.getById(organizationId))?.ocrChatApiKeyId,
+    ).toBeNull();
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 

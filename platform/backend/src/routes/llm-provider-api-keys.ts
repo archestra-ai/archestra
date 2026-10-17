@@ -19,7 +19,7 @@ import {
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -1461,8 +1461,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.BulkDeleteLlmProviderApiKeys,
         description:
           "Delete several LLM provider API keys in one request. Keys outside " +
-          "the caller's organization, protected system keys, and keys that are " +
-          "still in use are reported in `failed` while the remaining keys are deleted.",
+          "the caller's organization and protected system keys are reported " +
+          "in `failed` while the remaining keys are deleted. Virtual API keys " +
+          "and OAuth clients that mapped only a deleted key are deleted with " +
+          "it; those that also map other provider keys keep those. Knowledge " +
+          "base settings that used a deleted key are cleared.",
         tags: ["LLM Provider API Keys"],
         body: BulkDeleteLlmProviderApiKeysBodySchema,
         response: constructResponseSchema(BulkOutcomeSchema),
@@ -1470,18 +1473,16 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user } = request;
-      const [organization, userTeamIds, isLlmProviderApiKeyAdmin] =
-        await Promise.all([
-          OrganizationModel.getById(organizationId),
-          TeamModel.getUserTeamIds(user.id),
-          ResourcePermissions.allows({
-            userId: user.id,
-            organizationId: organizationId,
-            resource: "llmProviderApiKey",
-            scope: "*",
-            action: "update",
-          }),
-        ]);
+      const [userTeamIds, isLlmProviderApiKeyAdmin] = await Promise.all([
+        TeamModel.getUserTeamIds(user.id),
+        ResourcePermissions.allows({
+          userId: user.id,
+          organizationId: organizationId,
+          resource: "llmProviderApiKey",
+          scope: "*",
+          action: "update",
+        }),
+      ]);
 
       const outcome = await runBulk({
         ids: request.body.ids,
@@ -1511,20 +1512,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
             organizationId,
           });
-          await assertApiKeyCanBeDeleted({
-            apiKey,
-            organization,
-            organizationId,
-            userId: user.id,
-            userTeamIds,
-          });
         },
         applyEach: (apiKey) =>
           deleteProviderApiKeyAtomically({
             apiKeyId: apiKey.id,
             organizationId,
             userId: user.id,
-            userTeamIds,
             headers: request.headers,
           }),
         audit: {
@@ -1566,7 +1559,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteLlmProviderApiKey,
-        description: "Delete an LLM provider API key",
+        description:
+          "Delete an LLM provider API key. Virtual API keys and OAuth clients " +
+          "that mapped only this key are deleted with it; those that also map " +
+          "other provider keys keep those. Knowledge base settings that used " +
+          "the key are cleared.",
         tags: ["LLM Provider API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -1591,23 +1588,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      const [organization, userTeamIds] = await Promise.all([
-        OrganizationModel.getById(organizationId),
-        TeamModel.getUserTeamIds(user.id),
-      ]);
-      await assertApiKeyCanBeDeleted({
-        apiKey,
-        organization,
-        organizationId,
-        userId: user.id,
-        userTeamIds,
-      });
-
       await deleteProviderApiKeyAtomically({
         apiKeyId: apiKey.id,
         organizationId,
         userId: user.id,
-        userTeamIds,
         headers,
       });
       await cleanupOrphanedModels();
@@ -1670,75 +1654,25 @@ function assertApiKeyIsNotSystem(apiKey: { isSystem: boolean }): void {
   }
 }
 
-async function assertApiKeyCanBeDeleted(params: {
-  apiKey: Pick<LlmProviderApiKey, "id">;
-  organization: Awaited<ReturnType<typeof OrganizationModel.getById>>;
-  organizationId: string;
-  userId: string;
-  userTeamIds: string[];
-}): Promise<void> {
-  const { apiKey, organization, organizationId, userId, userTeamIds } = params;
-  if (organization) {
-    const usages: string[] = [];
-    if (organization.embeddingChatApiKeyId === apiKey.id)
-      usages.push("embedding");
-    if (organization.rerankerChatApiKeyId === apiKey.id)
-      usages.push("reranking");
-    if (organization.ocrChatApiKeyId === apiKey.id) usages.push("OCR");
-    if (usages.length > 0) {
-      throw new ApiError(
-        400,
-        `This API key is used for knowledge base ${usages.join(" and ")}. Remove it from Settings > Knowledge before deleting.`,
-      );
-    }
-  }
-
-  const virtualKeys = await VirtualApiKeyModel.findByProviderApiKeyId({
-    providerApiKeyId: apiKey.id,
-    organizationId,
-    userId,
-    userTeamIds,
-    isAdmin: true,
-  });
-  if (virtualKeys.length > 0) {
-    throw new ApiError(
-      400,
-      "This API key is mapped to one or more virtual API keys. Remove those mappings before deleting it.",
-    );
-  }
-
-  const oauthClients = await LlmOauthClientModel.findByProviderApiKeyId({
-    providerApiKeyId: apiKey.id,
-    organizationId,
-  });
-  if (oauthClients.length > 0) {
-    throw new ApiError(
-      400,
-      "This API key is mapped to one or more OAuth clients. Remove those mappings before deleting it.",
-    );
-  }
-}
-
 async function deleteProviderApiKeyAtomically(params: {
   apiKeyId: string;
   organizationId: string;
   userId: string;
-  userTeamIds: string[];
   headers: IncomingHttpHeaders;
 }): Promise<void> {
+  // Read the mapped credentials first: the virtual-key mapping rows cascade
+  // with the key, so after the delete there is nothing left to find them by.
+  const [mappedVirtualKeys, mappedOauthClients] = await Promise.all([
+    VirtualApiKeyModel.findByProviderApiKeyId(params.apiKeyId),
+    LlmOauthClientModel.findByProviderApiKeyId({
+      providerApiKeyId: params.apiKeyId,
+      organizationId: params.organizationId,
+    }),
+  ]);
   const deleted =
     process.env.NODE_ENV === "test"
       ? await deleteProviderApiKeyInPglite(params)
       : await db.transaction(async (tx) => {
-          // OAuth-client mappings are JSON rather than a foreign key, so lock their
-          // table while checking and deleting. The provider-key row lock also blocks
-          // concurrent foreign-key mappings until the delete commits.
-          // PGlite's test backend does not implement PostgreSQL table locks. The
-          // production lock closes the JSON-mapping writer race; row/FK behavior is
-          // still exercised in route tests.
-          await tx.execute(
-            sql`LOCK TABLE "oauth_client" IN SHARE ROW EXCLUSIVE MODE`,
-          );
           const [apiKey] = await tx
             .select()
             .from(schema.llmProviderApiKeysTable)
@@ -1747,25 +1681,12 @@ async function deleteProviderApiKeyAtomically(params: {
           if (!apiKey || apiKey.organizationId !== params.organizationId) {
             throw new ApiError(404, "LLM provider API key not found");
           }
-          const [organization] = await tx
-            .select()
-            .from(schema.organizationsTable)
-            .where(eq(schema.organizationsTable.id, params.organizationId))
-            .for("update");
-
           assertApiKeyIsNotSystem(apiKey);
           await authorizeApiKeyAccess({
             action: "delete",
             apiKey,
             userId: params.userId,
             organizationId: params.organizationId,
-          });
-          await assertApiKeyCanBeDeleted({
-            apiKey,
-            organization,
-            organizationId: params.organizationId,
-            userId: params.userId,
-            userTeamIds: params.userTeamIds,
           });
           const [row] = await tx
             .delete(schema.llmProviderApiKeysTable)
@@ -1774,6 +1695,38 @@ async function deleteProviderApiKeyAtomically(params: {
           if (!row) throw new ApiError(404, "LLM provider API key not found");
           return apiKey;
         });
+
+  try {
+    await deleteVirtualKeysLeftWithoutProviders(mappedVirtualKeys);
+  } catch (error) {
+    logger.error(
+      { error, apiKeyId: params.apiKeyId },
+      "Failed to delete the virtual keys left without a provider after deleting a provider API key",
+    );
+  }
+  try {
+    await unmapOauthClients({
+      clients: mappedOauthClients,
+      apiKeyId: params.apiKeyId,
+      organizationId: params.organizationId,
+    });
+  } catch (error) {
+    logger.error(
+      { error, apiKeyId: params.apiKeyId },
+      "Failed to remove a deleted provider API key from the OAuth clients that mapped it",
+    );
+  }
+  try {
+    await clearKnowledgeBaseSettings({
+      apiKeyId: params.apiKeyId,
+      organizationId: params.organizationId,
+    });
+  } catch (error) {
+    logger.error(
+      { error, apiKeyId: params.apiKeyId },
+      "Failed to clear the knowledge base settings that used a deleted provider API key",
+    );
+  }
 
   if (!deleted.secretId) return;
 
@@ -1790,11 +1743,112 @@ async function deleteProviderApiKeyAtomically(params: {
   }
 }
 
+/**
+ * A virtual key that mapped only the deleted provider key has nothing left to
+ * route to, so it goes with the key. Keys that still map another provider key,
+ * and keys that follow current and future providers, stay.
+ */
+async function deleteVirtualKeysLeftWithoutProviders(
+  mappedVirtualKeys: Awaited<
+    ReturnType<typeof VirtualApiKeyModel.findByProviderApiKeyId>
+  >,
+): Promise<void> {
+  const candidateIds = mappedVirtualKeys
+    .filter((virtualKey) => !virtualKey.includeFutureProviders)
+    .map((virtualKey) => virtualKey.id);
+  if (candidateIds.length === 0) return;
+  const remainingMappings =
+    await VirtualApiKeyModel.getProviderApiKeysForVirtualKeys(candidateIds);
+  const orphanedIds = candidateIds.filter(
+    (id) => (remainingMappings.get(id) ?? []).length === 0,
+  );
+  await Promise.all(orphanedIds.map((id) => VirtualApiKeyModel.delete(id)));
+  if (orphanedIds.length > 0) {
+    logger.info(
+      { virtualKeyIds: orphanedIds },
+      "Deleted virtual keys left without a provider after their provider key was deleted",
+    );
+  }
+}
+
+/**
+ * OAuth-client mappings are JSON rather than a foreign key, so the deleted
+ * key is removed from each client by hand. A client left with no provider
+ * key goes with it, unless it follows current and future providers.
+ */
+async function unmapOauthClients(params: {
+  clients: Awaited<
+    ReturnType<typeof LlmOauthClientModel.findByProviderApiKeyId>
+  >;
+  apiKeyId: string;
+  organizationId: string;
+}): Promise<void> {
+  await Promise.all(
+    params.clients.map(async (client) => {
+      const remaining = client.providerApiKeys
+        .filter((mapping) => mapping.providerApiKeyId !== params.apiKeyId)
+        .map(({ provider, providerApiKeyId }) => ({
+          provider,
+          providerApiKeyId,
+        }));
+      // Only clients that map the key are passed in, so something is always
+      // removed; the guard keeps a no-op write out of the path regardless.
+      if (remaining.length === client.providerApiKeys.length) return;
+      if (remaining.length === 0 && !client.includeFutureProviders) {
+        await LlmOauthClientModel.delete({
+          id: client.id,
+          organizationId: params.organizationId,
+        });
+        logger.info(
+          { oauthClientId: client.id },
+          "Deleted an OAuth client left without a provider after its provider key was deleted",
+        );
+        return;
+      }
+      await LlmOauthClientModel.update({
+        id: client.id,
+        organizationId: params.organizationId,
+        name: client.name,
+        providerApiKeys: remaining,
+      });
+    }),
+  );
+}
+
+/** Knowledge base jobs configured with the key stop until another is chosen. */
+async function clearKnowledgeBaseSettings(params: {
+  apiKeyId: string;
+  organizationId: string;
+}): Promise<void> {
+  const organization = await OrganizationModel.getById(params.organizationId);
+  if (!organization) return;
+  const cleared: Partial<
+    Pick<
+      typeof organization,
+      "embeddingChatApiKeyId" | "rerankerChatApiKeyId" | "ocrChatApiKeyId"
+    >
+  > = {};
+  if (organization.embeddingChatApiKeyId === params.apiKeyId) {
+    cleared.embeddingChatApiKeyId = null;
+  }
+  if (organization.rerankerChatApiKeyId === params.apiKeyId) {
+    cleared.rerankerChatApiKeyId = null;
+  }
+  if (organization.ocrChatApiKeyId === params.apiKeyId) {
+    cleared.ocrChatApiKeyId = null;
+  }
+  if (Object.keys(cleared).length === 0) return;
+  await OrganizationModel.patch(params.organizationId, cleared);
+  logger.info(
+    { providerApiKeyId: params.apiKeyId, cleared: Object.keys(cleared) },
+    "Cleared knowledge base settings that used a deleted provider API key",
+  );
+}
+
 async function deleteProviderApiKeyInPglite(params: {
   apiKeyId: string;
   organizationId: string;
   userId: string;
-  userTeamIds: string[];
   headers: IncomingHttpHeaders;
 }) {
   const apiKey = await LlmProviderApiKeyModel.findById(params.apiKeyId);
@@ -1807,13 +1861,6 @@ async function deleteProviderApiKeyInPglite(params: {
     apiKey,
     userId: params.userId,
     organizationId: params.organizationId,
-  });
-  await assertApiKeyCanBeDeleted({
-    apiKey,
-    organization: await OrganizationModel.getById(params.organizationId),
-    organizationId: params.organizationId,
-    userId: params.userId,
-    userTeamIds: params.userTeamIds,
   });
   if (!(await LlmProviderApiKeyModel.delete(apiKey.id))) {
     throw new ApiError(404, "LLM provider API key not found");

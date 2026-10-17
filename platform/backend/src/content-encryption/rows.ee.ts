@@ -86,6 +86,8 @@ const MCP_TOOL_CALL_COLUMN_CONTEXTS: Array<[string, ContentEncryptionContext]> =
  * interaction column, mapped to its AAD context.
  */
 const INTERACTION_COLUMN_CONTEXTS: Array<[string, ContentEncryptionContext]> = [
+  ["sessionPreview", "interactions.session_preview"],
+  ["session_preview", "interactions.session_preview"],
   ["request", "interactions.request"],
   ["processedRequest", "interactions.processed_request"],
   ["processed_request", "interactions.processed_request"],

@@ -7,7 +7,8 @@ const mockUseLlmProviderApiKeys = vi.fn();
 const mockUseLlmProviderApiKey = vi.fn();
 const mockLlmProviderApiKeyForm = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
-const mockUseLlmOauthClients = vi.fn();
+const mockUseOauthClients = vi.fn();
+const mockDeleteApiKey = vi.fn();
 const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
   () => ({
     useDataTableQueryParamsMock: vi.fn(),
@@ -50,7 +51,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     isPending: false,
   }),
   useDeleteLlmProviderApiKey: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockDeleteApiKey,
     isPending: false,
   }),
   useLlmProviderApiKey: (...args: unknown[]) =>
@@ -63,8 +64,8 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/llm-oauth-clients.query", () => ({
-  useLlmOauthClients: (...args: unknown[]) => mockUseLlmOauthClients(...args),
+vi.mock("@/lib/oauth-clients.query", () => ({
+  useOauthClients: (...args: unknown[]) => mockUseOauthClients(...args),
 }));
 
 vi.mock("@/lib/organization.query");
@@ -106,10 +107,22 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
   DeleteConfirmDialog: ({
     open,
     description,
+    onConfirm,
+    confirmDisabled,
   }: {
     open: boolean;
     description?: React.ReactNode;
-  }) => (open ? <div data-testid="delete-dialog">{description}</div> : null),
+    onConfirm: () => void;
+    confirmDisabled?: boolean;
+  }) =>
+    open ? (
+      <div data-testid="delete-dialog">
+        {description}
+        <button type="button" disabled={confirmDisabled} onClick={onConfirm}>
+          Confirm delete
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/external-docs-link", () => ({
@@ -324,7 +337,7 @@ describe("ApiKeysPage", () => {
       data: { data: [], pagination: { total: 0 } },
       isPending: false,
     });
-    mockUseLlmOauthClients.mockReturnValue({
+    mockUseOauthClients.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
       isPending: false,
     });
@@ -611,16 +624,57 @@ describe("ApiKeysPage", () => {
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: {
         data: [
-          { id: "vk-1", name: "Payments service", tokenStart: "arch_abc" },
+          {
+            id: "vk-1",
+            name: "Payments service",
+            tokenStart: "arch_abc",
+            includeFutureProviders: false,
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "provider-key-1",
+                providerApiKeyName: "Shared Anthropic credential",
+              },
+            ],
+          },
         ],
         pagination: { total: 1 },
       },
       isPending: false,
     });
-    mockUseLlmOauthClients.mockReturnValue({
+    mockUseOauthClients.mockReturnValue({
       data: {
-        data: [{ id: "oc-1", name: "Nimbus Portal", clientId: "llm_oauth_1" }],
-        pagination: { total: 1 },
+        data: [
+          {
+            id: "oc-1",
+            name: "Nimbus Portal",
+            clientId: "llm_oauth_1",
+            includeFutureProviders: false,
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "provider-key-1",
+                providerApiKeyName: "Shared Anthropic credential",
+              },
+            ],
+          },
+          {
+            // Follows current and future providers, so the backend keeps it
+            // and the dialog must not list it.
+            id: "oc-2",
+            name: "Everything Gateway",
+            clientId: "llm_oauth_2",
+            includeFutureProviders: true,
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "provider-key-1",
+                providerApiKeyName: "Shared Anthropic credential",
+              },
+            ],
+          },
+        ],
+        pagination: { total: 2 },
       },
       isPending: false,
     });
@@ -633,7 +687,7 @@ describe("ApiKeysPage", () => {
     );
 
     // The whole point of these links: land on a table already narrowed to the
-    // credentials that are blocking this delete, not on the full list.
+    // credentials that go with this delete, not on the full list.
     await waitFor(() => {
       expect(screen.getByTestId("delete-dialog")).toBeInTheDocument();
     });
@@ -642,6 +696,91 @@ describe("ApiKeysPage", () => {
       "/llm/proxy/virtual-keys?providerApiKeyId=provider-key-1",
       "/settings/oauth-clients?type=llm&providerApiKeyId=provider-key-1",
     ]);
+    const dialog = screen.getByTestId("delete-dialog");
+    expect(dialog).toHaveTextContent(
+      "The virtual key and OAuth client below will be deleted too. This cannot be undone.",
+    );
+    expect(dialog).toHaveTextContent("Payments service");
+    expect(dialog).toHaveTextContent("Nimbus Portal");
+    expect(dialog).not.toHaveTextContent("Everything Gateway");
+    expect(
+      screen.getByRole("button", { name: "Confirm delete" }),
+    ).toBeEnabled();
+  });
+
+  it("lets a key that virtual keys use be deleted after stating the consequence", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "provider-key-1",
+          name: "Shared Anthropic credential",
+          provider: "anthropic",
+          scope: "org",
+        },
+      ],
+      isPending: false,
+    });
+    mockUseAllVirtualApiKeys.mockReturnValue({
+      data: {
+        // Four keys map only this provider key; three also map an OpenAI key.
+        data: Array.from({ length: 7 }, (_, index) => ({
+          id: `vk-${index}`,
+          name: `Service ${index}`,
+          tokenStart: "arch_abc",
+          includeFutureProviders: false,
+          providerApiKeys: [
+            {
+              provider: "anthropic",
+              providerApiKeyId: "provider-key-1",
+              providerApiKeyName: "Shared Anthropic credential",
+            },
+            ...(index < 4
+              ? []
+              : [
+                  {
+                    provider: "openai",
+                    providerApiKeyId: "provider-key-2",
+                    providerApiKeyName: "Backup OpenAI key",
+                  },
+                ]),
+          ],
+        })),
+        pagination: { total: 7 },
+      },
+      isPending: false,
+    });
+    mockDeleteApiKey.mockResolvedValue({ success: true });
+
+    render(<ApiKeysPage />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete Shared Anthropic credential",
+      }),
+    );
+
+    const dialog = await screen.findByTestId("delete-dialog");
+    expect(dialog).toHaveTextContent(
+      "The 4 virtual keys below will be deleted too. This cannot be undone.",
+    );
+    expect(screen.getByText("Service 3")).toBeInTheDocument();
+    expect(screen.queryByText("Service 4")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View all" }).getAttribute("href"),
+    ).toBe("/llm/proxy/virtual-keys?providerApiKeyId=provider-key-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("delete-dialog")).not.toBeInTheDocument();
+    });
+    expect(mockDeleteApiKey).toHaveBeenCalledTimes(1);
+    expect(mockDeleteApiKey).toHaveBeenCalledWith({
+      id: "provider-key-1",
+      subscription: false,
+    });
   });
 
   it("opens Connect with provider-specific subscription defaults", () => {

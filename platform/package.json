@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.4.0-rc.49",
+  "version": "1.4.0-rc.50",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -11,6 +11,7 @@
     "ci:check": "turbo check:ci",
     "commit:check": "turbo check:commit",
     "preflight": "node scripts/preflight.mjs",
+    "enqueue": "node scripts/enqueue.mjs",
     "dev": "turbo dev",
     "build": "turbo build",
     "start": "turbo start",

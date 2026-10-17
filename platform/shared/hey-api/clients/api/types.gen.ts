@@ -114043,9 +114043,13 @@ export type GetTeamsData = {
         offset?: number;
         name?: string;
         /**
-         * Include team members, labels and descendant teams (default true). Disable for metadata-only pickers.
+         * Include team members, labels and descendant teams (default true). Set to false to get only the team fields and memberCount.
          */
         includeRelations?: boolean;
+        /**
+         * Include the members array of each team (default true). Set to false to get labels and descendant teams without members. Use memberCount for the number of members.
+         */
+        includeMembers?: boolean;
         labels?: string;
         mine?: boolean;
     };
@@ -114155,6 +114159,7 @@ export type GetTeamsResponses = {
                 id: string;
                 name: string;
             }>;
+            memberCount: number;
         }>;
         pagination: {
             currentPage: number;
@@ -114387,7 +114392,12 @@ export type GetTeamData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Include the team's members array (default true). Set to false for a large team when only its details are needed; page through members with GET /api/teams/{id}/members/page.
+         */
+        includeMembers?: boolean;
+    };
     url: '/api/teams/{id}';
 };
 
@@ -114916,6 +114926,123 @@ export type AddTeamMemberResponses = {
 };
 
 export type AddTeamMemberResponse = AddTeamMemberResponses[keyof AddTeamMemberResponses];
+
+export type GetTeamMembersPageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+        /**
+         * Search by user name or email. Every whitespace-separated word must appear in the name or the email.
+         */
+        search?: string;
+        /**
+         * Return only these users (comma-separated, at most 100), to check which of them are members. With search, a user must match both.
+         */
+        userIds?: Array<string>;
+    };
+    url: '/api/teams/{id}/members/page';
+};
+
+export type GetTeamMembersPageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTeamMembersPageError = GetTeamMembersPageErrors[keyof GetTeamMembersPageErrors];
+
+export type GetTeamMembersPageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            syncedFromSso: boolean;
+            createdAt: string;
+            name: string | null;
+            email: string;
+            image: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetTeamMembersPageResponse = GetTeamMembersPageResponses[keyof GetTeamMembersPageResponses];
 
 export type RemoveTeamMemberData = {
     body?: never;

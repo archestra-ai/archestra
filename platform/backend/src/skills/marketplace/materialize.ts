@@ -520,7 +520,8 @@ export class MarketplaceMaterializer {
     await fs.rm(marksPath, { force: true });
     const marks = new Map<number, string>();
     for (const line of exported.split("\n")) {
-      const match = /^:(\d+) ([0-9a-f]{40})$/.exec(line.trim());
+      // object ids are 40 hex digits (SHA-1) or 64 (SHA-256 repos)
+      const match = /^:(\d+) ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(line.trim());
       if (match) marks.set(Number(match[1]), match[2]);
     }
     return marks;
@@ -584,7 +585,9 @@ function formatMessage(sequence: number, contentHash: string): string {
 function parseSnapshotLine(
   line: string,
 ): { sha: string; sequence: number } | null {
-  const match = /^([0-9a-f]{40})\tSnapshot (\d+)$/.exec(line.trim());
+  const match = /^([0-9a-f]{40}|[0-9a-f]{64})\tSnapshot (\d+)$/.exec(
+    line.trim(),
+  );
   return match ? { sha: match[1], sequence: Number(match[2]) } : null;
 }
 

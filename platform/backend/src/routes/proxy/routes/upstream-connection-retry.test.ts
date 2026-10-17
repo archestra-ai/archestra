@@ -6,6 +6,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import InteractionModel from "@/models/interaction";
 import ModelModel from "@/models/model";
 import { beforeEach, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import anthropicProxyRoutes from "./anthropic";
 import geminiProxyRoutes from "./gemini";
 import openaiProxyRoutes from "./openai";
@@ -97,6 +98,7 @@ describe("upstream connection retry over HTTP", () => {
   let upstream: Server;
   let app: ReturnType<typeof createFastifyInstance>;
   let agentId: string;
+  let platformCredential: string;
   let requests: unknown[];
   let failure:
     | "headers"
@@ -107,7 +109,7 @@ describe("upstream connection retry over HTTP", () => {
   let failuresRemaining: number;
   let failedAttemptOverage: boolean;
 
-  beforeEach(async ({ makeAgent }) => {
+  beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
     requests = [];
     failure = "headers";
     failuresRemaining = 1;
@@ -189,7 +191,14 @@ describe("upstream connection retry over HTTP", () => {
     config.llm.openai.baseUrl = `${config.llm.anthropic.baseUrl}/v1`;
     config.llm.gemini.baseUrl = config.llm.anthropic.baseUrl;
     config.llm.gemini.vertexAi.enabled = false;
-    agentId = (await makeAgent({ name: "Transport retry test" })).id;
+    const agent = await makeAgent({ name: "Transport retry test" });
+    agentId = agent.id;
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     await ModelModel.create({
       externalId: `anthropic/${MODEL}`,
       provider: "anthropic",
@@ -228,7 +237,11 @@ describe("upstream connection retry over HTTP", () => {
     app.inject({
       method: "POST",
       url: `/v1/anthropic/${agentId}/v1/messages`,
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "x-archestra-virtual-key": platformCredential,
+      },
       payload: {
         model: MODEL,
         max_tokens: 256,
@@ -279,7 +292,10 @@ describe("upstream connection retry over HTTP", () => {
       const response = await app.inject({
         method: "POST",
         url: `/v1/openai/${agentId}/responses`,
-        headers: { authorization: "Bearer test-key" },
+        headers: {
+          authorization: "Bearer test-key",
+          "x-archestra-virtual-key": platformCredential,
+        },
         payload: {
           model: "gpt-5.4",
           stream,
@@ -308,7 +324,10 @@ describe("upstream connection retry over HTTP", () => {
       const response = await app.inject({
         method: "POST",
         url: `/v1/gemini/${agentId}/v1beta/models/gemini-2.5-pro:${stream ? "streamGenerateContent" : "generateContent"}`,
-        headers: { "x-goog-api-key": "test-key" },
+        headers: {
+          "x-goog-api-key": "test-key",
+          "x-archestra-virtual-key": platformCredential,
+        },
         payload: { contents: [{ role: "user", parts: [{ text: "Hello" }] }] },
       });
       // The SDK lost the original status; do not turn that loss into a replay.

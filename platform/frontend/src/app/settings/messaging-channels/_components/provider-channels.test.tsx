@@ -49,9 +49,10 @@ const optionServer = setupServer(
       ...url.searchParams.getAll("ids"),
       ...url.searchParams.getAll("ids[]"),
     ].flatMap((value) => value.split(","));
-    return HttpResponse.json(
-      optionAgents.filter((agent) => ids.includes(agent.id)),
-    );
+    return HttpResponse.json({
+      data: optionAgents.filter((agent) => ids.includes(agent.id)),
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
+    });
   }),
   http.get("http://localhost:9000/api/agents/options/page", ({ request }) => {
     const url = new URL(request.url);

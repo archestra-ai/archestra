@@ -15,16 +15,13 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { Stream } from "@anthropic-ai/sdk/streaming";
-import Fastify, { type FastifyInstance } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
+import type { FastifyInstance } from "fastify";
 import { vi } from "vitest";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import type { Agent } from "@/types";
 import { anthropicAdapterFactory, bedrockAdapterFactory } from "./adapters";
 import anthropicProxyRoutes from "./routes/anthropic";
@@ -186,15 +183,13 @@ function concatText(chunks: TimedChunk[]): string {
 }
 
 function newApp() {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  return app;
+  return createFastifyInstance();
 }
 
 describe("LLM proxy stream keep-alive", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
+  let passthroughToken: string;
   let baseUrl: string;
 
   afterEach(async () => {
@@ -205,7 +200,7 @@ describe("LLM proxy stream keep-alive", () => {
   describe("Anthropic (text/event-stream)", () => {
     let createStream: () => Promise<unknown>;
 
-    beforeEach(async ({ makeAgent }) => {
+    beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
       app = newApp();
       createStream = async () => slowAnthropicToolCall();
       vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
@@ -223,6 +218,12 @@ describe("LLM proxy stream keep-alive", () => {
       );
 
       testAgent = await makeAgent({ name: "Keep-alive Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, testAgent.organizationId);
+      passthroughToken = await makePassthroughCredential({
+        organizationId: testAgent.organizationId,
+        ownerId: owner.id,
+      });
       await ModelModel.upsert({
         externalId: "anthropic/claude-3-5-sonnet-20241022",
         provider: "anthropic",
@@ -245,6 +246,7 @@ describe("LLM proxy stream keep-alive", () => {
         headers: {
           "content-type": "application/json",
           "x-api-key": "test-key",
+          "x-archestra-virtual-key": passthroughToken,
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
@@ -367,13 +369,19 @@ describe("LLM proxy stream keep-alive", () => {
   describe("Bedrock (binary event stream)", () => {
     const BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0";
 
-    beforeEach(async ({ makeAgent }) => {
+    beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
       app = newApp();
       vi.spyOn(bedrockAdapterFactory, "createClient").mockReturnValue({
         converseStream: async () => slowBedrockToolCall(),
       } as never);
 
       testAgent = await makeAgent({ name: "Keep-alive Bedrock Agent" });
+      const owner = await makeUser();
+      await makeMember(owner.id, testAgent.organizationId);
+      passthroughToken = await makePassthroughCredential({
+        organizationId: testAgent.organizationId,
+        ownerId: owner.id,
+      });
       await ModelModel.upsert({
         externalId: `bedrock/${BEDROCK_MODEL}`,
         provider: "bedrock",
@@ -397,6 +405,7 @@ describe("LLM proxy stream keep-alive", () => {
           headers: {
             "content-type": "application/json",
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": passthroughToken,
           },
           body: JSON.stringify({
             modelId: BEDROCK_MODEL,

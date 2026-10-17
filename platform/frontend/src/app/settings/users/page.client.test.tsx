@@ -1,8 +1,13 @@
+import { E2eTestId } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ bulkDeleteMembers: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  bulkDeleteMembers: vi.fn(),
+  canImpersonate: vi.fn(() => false),
+  impersonateUser: vi.fn(),
+}));
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
@@ -28,9 +33,11 @@ vi.mock("@/lib/member.query", () => ({
 }));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/impersonation.query", () => ({
-  useCanImpersonate: () => false,
-  useImpersonationCandidates: () => ({ data: [] }),
-  useImpersonateUser: () => ({ mutate: vi.fn(), isPending: false }),
+  useCanImpersonate: mocks.canImpersonate,
+  useImpersonateUser: () => ({
+    mutate: mocks.impersonateUser,
+    isPending: false,
+  }),
 }));
 vi.mock("@/lib/role.query", () => ({ useRoles: () => ({ data: [] }) }));
 vi.mock("@/components/small-team-tier-banner", () => ({
@@ -138,6 +145,7 @@ function bodyRows() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.canImpersonate.mockReturnValue(false);
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: CURRENT_USER_ID } },
   } as ReturnType<typeof useSession>);
@@ -161,6 +169,25 @@ beforeEach(() => {
 });
 
 describe("Users settings — members table", () => {
+  it("offers view-as for every listed member except the caller", () => {
+    mocks.canImpersonate.mockReturnValue(true);
+    const self = { ...makeMember(1), userId: CURRENT_USER_ID };
+    const other = makeMember(2);
+    renderPage({ members: [self, other], total: 2 });
+
+    expect(
+      screen.queryByTestId(
+        `${E2eTestId.ImpersonationViewAsButton}-${CURRENT_USER_ID}`,
+      ),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByTestId(
+        `${E2eTestId.ImpersonationViewAsButton}-${other.userId}`,
+      ),
+    );
+    expect(mocks.impersonateUser).toHaveBeenCalledWith(other.userId);
+  });
+
   it("submits accepted and pending users in one mixed bulk request", () => {
     const accepted = makeMember(1);
     const pending = makeMember(2);

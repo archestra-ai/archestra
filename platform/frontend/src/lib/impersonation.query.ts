@@ -1,7 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDisableImpersonation } from "@/lib/config/config.query";
@@ -25,20 +24,29 @@ export const impersonationKeys = {
   candidates: () => [...impersonationKeys.all, "candidates"] as const,
 };
 
-export function useImpersonationCandidates() {
-  const isAuthenticated = useIsAuthenticated();
-  const canImpersonate = useCanImpersonate();
-
-  return useQuery({
-    queryKey: impersonationKeys.candidates(),
-    queryFn: async () => {
-      const response = await archestraApiSdk.getImpersonableUsers();
-      throwOnApiError(response.error);
-      return response.data ?? [];
+/** One server-searched page stream of users the caller can impersonate. */
+export function useImpersonationCandidatesPage({
+  search,
+  enabled,
+}: {
+  search: string;
+  enabled: boolean;
+}) {
+  return useInfiniteQuery({
+    queryKey: [...impersonationKeys.candidates(), search],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam, signal }) => {
+      const { data, error } = await archestraApiSdk.getImpersonableUsers({
+        signal,
+        query: { search: search || undefined, cursor: pageParam, limit: 20 },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      if (!data) throw new Error("Impersonation candidates are unavailable");
+      return data;
     },
-    enabled: isAuthenticated && canImpersonate,
+    getNextPageParam: (page) => page.pagination.nextCursor ?? undefined,
+    enabled,
     retry: false,
-    throwOnError: false,
   });
 }
 

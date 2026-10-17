@@ -7,6 +7,7 @@ import {
 import { vi } from "vitest";
 import { InteractionModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { ApiError } from "@/types";
 import { openAiResponsesCompactAdapterFactory } from "../adapters";
 import openAiProxyRoutes from "./openai";
@@ -47,10 +48,16 @@ describe("OpenAI Responses compact proxy", () => {
 
   test("routes an agent compact request through the governed handler", async ({
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const app = createApp();
     await app.register(openAiProxyRoutes);
     const agent = await makeAgent({ name: "Compact route agent" });
+    const passthroughToken = await makePassthroughFor(agent.organizationId, {
+      makeUser,
+      makeMember,
+    });
     const before = await InteractionModel.getAllInteractionsForProfile(
       agent.id,
     );
@@ -61,6 +68,7 @@ describe("OpenAI Responses compact proxy", () => {
       headers: {
         authorization: "Bearer test-key",
         "content-type": "application/json",
+        "x-archestra-virtual-key": passthroughToken,
       },
       payload: {
         model: "gpt-5.6-sol",
@@ -92,14 +100,20 @@ describe("OpenAI Responses compact proxy", () => {
 
   test("routes the default compact endpoint and drops create-only fields", async ({
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const app = createApp();
     await app.register(openAiProxyRoutes);
-    await makeAgent({
+    const defaultAgent = await makeAgent({
       name: "Default compact proxy",
       agentType: "llm_proxy",
       isDefault: true,
     });
+    const passthroughToken = await makePassthroughFor(
+      defaultAgent.organizationId,
+      { makeUser, makeMember },
+    );
 
     const response = await app.inject({
       method: "POST",
@@ -107,6 +121,7 @@ describe("OpenAI Responses compact proxy", () => {
       headers: {
         authorization: "Bearer test-key",
         "content-type": "application/json",
+        "x-archestra-virtual-key": passthroughToken,
       },
       payload: {
         model: "gpt-5.6-sol",
@@ -130,6 +145,19 @@ describe("OpenAI Responses compact proxy", () => {
     await app.close();
   });
 });
+
+/** A passthrough virtual key owned by a fresh member of `organizationId`. */
+async function makePassthroughFor(
+  organizationId: string,
+  fixtures: {
+    makeUser: () => Promise<{ id: string }>;
+    makeMember: (userId: string, organizationId: string) => Promise<unknown>;
+  },
+): Promise<string> {
+  const owner = await fixtures.makeUser();
+  await fixtures.makeMember(owner.id, organizationId);
+  return await makePassthroughCredential({ organizationId, ownerId: owner.id });
+}
 
 function createApp() {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();

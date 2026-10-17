@@ -16,6 +16,7 @@ import { accessGrants, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 import AgentModel from "./agent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
+import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentToolModel from "./agent-tool";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
@@ -1321,6 +1322,170 @@ describe("AgentModel", () => {
         expect.objectContaining({ id: tool.id, name: "lookup" }),
       );
       expect(names.data.every((agent) => agent.tools.length === 0)).toBe(true);
+    });
+
+    test("sorts by Tools as the column counts them, leaving out subagents and an unavailable knowledge tool", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeKnowledgeBase,
+      makeMember,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      const subagents = await Promise.all(
+        [1, 2, 3, 4].map((n) =>
+          makeAgent({
+            organizationId: org.id,
+            name: `Sorted subagent ${n}`,
+            agentType: "agent",
+          }),
+        ),
+      );
+      const gateway = (name: string) =>
+        makeAgent({ organizationId: org.id, name, agentType: "mcp_gateway" });
+      // Raw assignments / shown Tools: delegating 6 / 2, without sources
+      // 4 / 3, with sources 4 / 4, plain 5 / 5.
+      const delegating = await gateway("Sorted delegating");
+      const withoutSources = await gateway("Sorted without sources");
+      const withSources = await gateway("Sorted with sources");
+      const plain = await gateway("Sorted plain");
+      // Made after the agents: the knowledge search tool is a creation
+      // default, which an agent made later would already carry.
+      const knowledgeTool = await makeTool({
+        name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+        parameters: {},
+      });
+      const assign = async (agentId: string, toolCount: number) => {
+        for (let i = 0; i < toolCount; i++) {
+          await makeAgentTool(agentId, (await makeTool()).id);
+        }
+      };
+      await assign(delegating.id, 2);
+      for (const target of subagents) {
+        await AgentToolModel.assignDelegation({
+          agentId: delegating.id,
+          targetAgentId: target.id,
+        });
+      }
+      for (const agent of [withoutSources, withSources]) {
+        await assign(agent.id, 3);
+        await makeAgentTool(agent.id, knowledgeTool.id);
+      }
+      await AgentKnowledgeBaseModel.assign(
+        withSources.id,
+        (await makeKnowledgeBase(org.id)).id,
+      );
+      await assign(plain.id, 5);
+      const sorted = async (sortDirection: "asc" | "desc") =>
+        (
+          await AgentModel.findAllPaginated(
+            { limit: 20, offset: 0 },
+            { sortBy: "toolsCount", sortDirection },
+            {
+              name: "Sorted ",
+              agentTypes: ["mcp_gateway"],
+              includeTools: false,
+            },
+            admin.id,
+            true,
+          )
+        ).data.map(({ name, toolsCount }) => [name, toolsCount]);
+
+      const descending = [
+        ["Sorted plain", 5],
+        ["Sorted with sources", 4],
+        ["Sorted without sources", 3],
+        ["Sorted delegating", 2],
+      ];
+      expect(await sorted("desc")).toEqual(descending);
+      expect(await sorted("asc")).toEqual([...descending].reverse());
+    });
+
+    test("counts tools and subagents as the tools show them, with or without the tools", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeKnowledgeBase,
+      makeMember,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      const subagent = await makeAgent({
+        organizationId: org.id,
+        name: "Counted subagent",
+        agentType: "agent",
+      });
+      // Same tools and subagent on both; only one has knowledge sources.
+      const [withoutSources, withSources] = await Promise.all(
+        ["Counted A", "Counted B"].map((name) =>
+          makeAgent({ organizationId: org.id, name, agentType: "mcp_gateway" }),
+        ),
+      );
+      // Made after the agents: the knowledge search tool is a creation
+      // default, which an agent made later would already carry.
+      const knowledgeTool = await makeTool({
+        name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+        parameters: {},
+      });
+      const tools = [await makeTool(), await makeTool()];
+      for (const agent of [withoutSources, withSources]) {
+        for (const tool of [...tools, knowledgeTool]) {
+          await makeAgentTool(agent.id, tool.id);
+        }
+        await AgentToolModel.assignDelegation({
+          agentId: agent.id,
+          targetAgentId: subagent.id,
+        });
+      }
+      const knowledgeBase = await makeKnowledgeBase(org.id);
+      await AgentKnowledgeBaseModel.assign(withSources.id, knowledgeBase.id);
+      const page = (includeTools?: boolean) =>
+        AgentModel.findAllPaginated(
+          { limit: 20, offset: 0 },
+          { sortBy: "name", sortDirection: "asc" },
+          { name: "Counted ", agentTypes: ["mcp_gateway"], includeTools },
+          admin.id,
+          true,
+        );
+
+      const full = await page();
+      const counted = await page(false);
+
+      expect(
+        full.data.map(({ name, toolsCount, subagentsCount }) => ({
+          name,
+          toolsCount,
+          subagentsCount,
+        })),
+      ).toEqual([
+        { name: "Counted A", toolsCount: 2, subagentsCount: 1 },
+        { name: "Counted B", toolsCount: 3, subagentsCount: 1 },
+      ]);
+      for (const agent of full.data) {
+        expect(agent.toolsCount).toBe(
+          agent.tools.filter((tool) => !tool.delegateToAgentId).length,
+        );
+        expect(agent.subagentsCount).toBe(
+          agent.tools.filter((tool) => tool.delegateToAgentId).length,
+        );
+      }
+      expect(
+        counted.data.map(({ toolsCount, subagentsCount, tools }) => ({
+          toolsCount,
+          subagentsCount,
+          tools,
+        })),
+      ).toEqual([
+        { toolsCount: 2, subagentsCount: 1, tools: [] },
+        { toolsCount: 3, subagentsCount: 1, tools: [] },
+      ]);
     });
 
     test("pagination with different sort options returns correct agent count", async ({

@@ -27,7 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { describeKey } from "@/components/virtual-key-badge";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils/date-time";
@@ -68,11 +68,8 @@ function LogDetail({
     initialData: initialData?.interaction,
   });
 
-  const { data: agents } = useAgentOptions({
-    filters: {
-      ids: dynamicInteraction?.profileId ? [dynamicInteraction.profileId] : [],
-    },
-    enabled: !!dynamicInteraction?.profileId,
+  const { data: agents } = useAgentOptionsByIds({
+    ids: dynamicInteraction?.profileId ? [dynamicInteraction.profileId] : [],
   });
 
   // Header first, content second: this page owns its own chrome now, so the
@@ -437,6 +434,8 @@ function formatAuthMethod(authMethod: InteractionAuthMethod) {
       return "Provider Key";
     case "jwks":
       return "JWKS";
+    case "personal_token":
+      return "Personal Token";
     case "internal":
       return "Internal";
     default:

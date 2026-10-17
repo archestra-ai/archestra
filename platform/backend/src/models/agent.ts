@@ -7,10 +7,12 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type PaginationQuery,
   PERSONAL_MCP_GATEWAY_NAME,
+  type PermissionSubject,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   providerRequiresPerUserCredential,
+  RESOURCE_ACCESS_RELATIONS,
   type ResourcePermissionGrant,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
@@ -1748,6 +1750,26 @@ class AgentModel {
       userId: params.userId,
       isAgentAdmin: params.isAgentAdmin,
     });
+    // The Show filter's internal prefilter and external branch share one
+    // resolution of the caller's subjects.
+    const accessSubjects = params.filters?.access
+      ? (
+          await ResourcePermissionSubjectModel.resolvePrincipals({
+            userId: params.userId,
+            organizationId: params.filters.organizationId,
+          })
+        ).flatMap((principal) => principal.subjects)
+      : [];
+    const regularAccessCandidates = catalogAccessCandidateIds({
+      organizationId: params.filters?.organizationId,
+      userId: params.userId,
+      subjects: accessSubjects,
+      selection: params.filters?.access,
+      includeBuiltIn:
+        params.filters?.includeBuiltIn === true &&
+        params.isAgentAdmin &&
+        !params.filters?.scope,
+    });
     const includeExternalAgents =
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
@@ -1820,9 +1842,9 @@ class AgentModel {
       }
     }
     if (params.filters?.access) {
-      const externalAccessCondition = await externalAgentAccessCondition({
+      const externalAccessCondition = externalAgentAccessCondition({
         userId: params.userId,
-        organizationId: params.filters.organizationId,
+        subjects: accessSubjects,
         selection: params.filters.access,
       });
       if (externalAccessCondition)
@@ -1877,9 +1899,11 @@ class AgentModel {
         teamName: sql<string>`COALESCE(${agentFirstGrantedTeamName()}, '')`.as(
           "team_name",
         ),
+        // The author test is cheap and rejects nearly every row, so it runs
+        // before the policy probe.
         personalPriority: sql<number>`CASE
-          WHEN ${agentAudienceIs("personal")}
-            AND ${schema.agentsTable.authorId} = ${params.userId}
+          WHEN ${schema.agentsTable.authorId} = ${params.userId}
+            AND ${agentAudienceIs("personal")}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`(
           SELECT ${schema.agentPinsTable.pinnedAt}
@@ -1889,7 +1913,7 @@ class AgentModel {
         )`.as("pinned_at"),
       })
       .from(schema.agentsTable)
-      .where(regularWhereClause);
+      .where(and(regularWhereClause, regularAccessCandidates));
     const externalCandidates = db
       .select({
         resourceType: sql<"agent" | "external">`'external'`.as("resource_type"),
@@ -1902,8 +1926,8 @@ class AgentModel {
             "team_name",
           ),
         personalPriority: sql<number>`CASE
-          WHEN ${externalAgentAudienceIs("personal")}
-            AND ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
+          WHEN ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
+            AND ${externalAgentAudienceIs("personal")}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
       })
@@ -1940,30 +1964,37 @@ class AgentModel {
             asc(candidates.id),
           ];
 
-    const [rows, [totals]] = await Promise.all([
-      db
-        .select({
-          type: candidates.resourceType,
-          id: candidates.id,
-        })
-        .from(candidates)
-        .orderBy(...candidateOrder)
-        .limit(params.pagination.limit)
-        .offset(params.pagination.offset),
-      db
-        .select({
-          total: count(),
-          agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent')`,
-          externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external')`,
-        })
-        .from(candidates),
-    ]);
+    // The totals ride on the page as window counts, so the candidate set,
+    // with its per-row authorization, is built once per request.
+    const page = await db
+      .select({
+        type: candidates.resourceType,
+        id: candidates.id,
+        total: sql<number>`COUNT(*) OVER ()`,
+        agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent') OVER ()`,
+        externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external') OVER ()`,
+      })
+      .from(candidates)
+      .orderBy(...candidateOrder)
+      .limit(params.pagination.limit)
+      .offset(params.pagination.offset);
+    // A page past the end has no row to carry the totals.
+    const [totals] =
+      page.length > 0 || params.pagination.offset === 0
+        ? page
+        : await db
+            .select({
+              total: count(),
+              agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent')`,
+              externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external')`,
+            })
+            .from(candidates);
 
     return {
-      rows,
-      total: Number(totals.total),
-      agentTotal: Number(totals.agentTotal),
-      externalAgentTotal: Number(totals.externalAgentTotal),
+      rows: page.map(({ type, id }) => ({ type, id })),
+      total: Number(totals?.total ?? 0),
+      agentTotal: Number(totals?.agentTotal ?? 0),
+      externalAgentTotal: Number(totals?.externalAgentTotal ?? 0),
     };
   }
 
@@ -2041,24 +2072,89 @@ class AgentModel {
           direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
         );
     } else if (sorting?.sortBy === "toolsCount") {
-      const toolsCountSubquery = db
+      // Ordered by the count the Tools column shows (see getListToolCounts):
+      // all assignments, minus subagent delegations, minus the knowledge
+      // search tool when the agent has no knowledge sources. Only the few
+      // special tools are joined; the plain count needs no join.
+      const delegate = schema.toolsTable.delegateToAgentId;
+      const isSpecialTool = or(
+        isNotNull(delegate),
+        isKnowledgeSearchToolName(schema.toolsTable.name),
+      );
+      const assignmentCounts = db
         .select({
           agentId: schema.agentToolsTable.agentId,
-          toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
+          assignments: count().as("assignments"),
         })
         .from(schema.agentToolsTable)
         .groupBy(schema.agentToolsTable.agentId)
-        .as("toolsCounts");
+        .as("assignmentCounts");
+      // Assignments without an MCP server reach the special tools through the
+      // (tool_id, agent_id) index; assignments tied to a server, which that
+      // index leaves out, are read in one pass.
+      const specialRow = {
+        agentId: schema.agentToolsTable.agentId,
+        delegation: sql<boolean>`${delegate} is not null`.as("delegation"),
+      };
+      const specialAssignments = unionAll(
+        db
+          .select(specialRow)
+          .from(schema.toolsTable)
+          .innerJoin(
+            schema.agentToolsTable,
+            and(
+              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+              isNull(schema.agentToolsTable.mcpServerId),
+            ),
+          )
+          .where(isSpecialTool),
+        db
+          .select(specialRow)
+          .from(schema.agentToolsTable)
+          .innerJoin(
+            schema.toolsTable,
+            eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
+          )
+          .where(
+            and(isNotNull(schema.agentToolsTable.mcpServerId), isSpecialTool),
+          ),
+      ).as("specialAssignments");
+      const specialCounts = db
+        .select({
+          agentId: specialAssignments.agentId,
+          delegations:
+            sql<number>`count(*) filter (where ${specialAssignments.delegation})`.as(
+              "delegations",
+            ),
+          knowledgeTools:
+            sql<number>`count(*) filter (where not ${specialAssignments.delegation})`.as(
+              "knowledgeTools",
+            ),
+        })
+        .from(specialAssignments)
+        .groupBy(specialAssignments.agentId)
+        .as("specialCounts");
 
       query = query
         .leftJoin(
-          toolsCountSubquery,
-          eq(schema.agentsTable.id, toolsCountSubquery.agentId),
+          assignmentCounts,
+          eq(schema.agentsTable.id, assignmentCounts.agentId),
+        )
+        .leftJoin(
+          specialCounts,
+          eq(schema.agentsTable.id, specialCounts.agentId),
         )
         .orderBy(
           ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
-          direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`),
+          direction(sql`COALESCE(${assignmentCounts.assignments}, 0)
+            - COALESCE(${specialCounts.delegations}, 0)
+            - CASE
+              WHEN ${specialCounts.knowledgeTools} > 0
+                AND ${hasNoKnowledgeSources()}
+              THEN ${specialCounts.knowledgeTools}
+              ELSE 0
+            END`),
         );
     } else if (sorting?.sortBy === "knowledgeSourcesCount") {
       const knowledgeSourcesCountSubquery = db
@@ -2223,15 +2319,22 @@ class AgentModel {
       AgentModel.populateResolvedLlm(agents),
       AgentModel.populateLastUsedAt(agents),
     ]);
-    const pinnedAtByAgent = userId
-      ? await AgentPinModel.getPinnedAtForAgents({ userId, agentIds })
-      : new Map<string, Date>();
+    // Counted after the knowledge sources are populated: the knowledge
+    // search tool counts only for an agent that has some.
+    const [pinnedAtByAgent, toolCounts] = await Promise.all([
+      userId
+        ? AgentPinModel.getPinnedAtForAgents({ userId, agentIds })
+        : new Map<string, Date>(),
+      AgentModel.getListToolCounts(agents),
+    ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
     return createPaginatedResult(
       agents.map((agent) => ({
         ...agent,
         pinnedAt: pinnedAtByAgent.get(agent.id) ?? null,
+        toolsCount: toolCounts.get(agent.id)?.toolsCount ?? 0,
+        subagentsCount: toolCounts.get(agent.id)?.subagentsCount ?? 0,
       })),
       Number(totalResult),
       pagination,
@@ -2244,19 +2347,12 @@ class AgentModel {
    * knowledge search tool counts only for an agent with knowledge sources, as
    * in filterUnavailableKnowledgeTools.
    */
-  static async getListToolCounts(
+  private static async getListToolCounts(
     agents: Array<Pick<Agent, "id" | "knowledgeBaseIds" | "connectorIds">>,
   ): Promise<Map<string, { toolsCount: number; subagentsCount: number }>> {
     if (agents.length === 0) return new Map();
-    const name = schema.toolsTable.name;
     const delegate = schema.toolsTable.delegateToAgentId;
-    // Bare, or after a server prefix of at least one character. The leading
-    // `_%` is the only wildcard: the separator and name are escaped and match
-    // literally.
-    const prefixedKnowledgeTool = `_%${escapeLikePattern(
-      `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
-    )}`;
-    const isKnowledgeTool = sql`(${name} = ${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME} or ${name} like ${prefixedKnowledgeTool})`;
+    const isKnowledgeTool = isKnowledgeSearchToolName(schema.toolsTable.name);
     const rows = await db
       .select({
         agentId: schema.agentToolsTable.agentId,
@@ -2387,25 +2483,22 @@ class AgentModel {
         agentAudienceIs(filters.scope),
         eq(schema.agentsTable.builtIn, false),
       );
-    } else if (!includeBuiltIn) {
-      // Chat selection keeps the system assistant visible to every member; the
-      // platform's other built-in agents stay hidden.
-      if (chatAssistant) {
-        whereConditions.push(
-          or(
-            eq(schema.agentsTable.builtIn, false),
-            eq(
-              sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
-              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-            ),
-          ) as SQL,
-        );
-      } else {
-        whereConditions.push(eq(schema.agentsTable.builtIn, false));
-      }
     }
-    if (!isAgentAdmin && !chatAssistant) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    // Chat selection keeps the system assistant visible to every member; the
+    // platform's other built-in agents stay hidden. Non-admins get the same
+    // limit whatever scope they ask for.
+    if (!isAgentAdmin || (!includeBuiltIn && !filters?.scope)) {
+      whereConditions.push(
+        chatAssistant
+          ? (or(
+              eq(schema.agentsTable.builtIn, false),
+              eq(
+                sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+                BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+              ),
+            ) as SQL)
+          : eq(schema.agentsTable.builtIn, false),
+      );
     }
     if (filters?.teamIds?.length) {
       whereConditions.push(agentGrantsReadToAnyTeam(filters.teamIds));
@@ -5497,6 +5590,34 @@ function hasKnowledgeSources(
 }
 
 /**
+ * Whether a tool is the knowledge search tool: its bare name, or the name
+ * after a server prefix. Only the leading `_%` is a wildcard. Shared by the
+ * list's Tools count and its sort so the two agree.
+ */
+function isKnowledgeSearchToolName(name: AnyPgColumn | SQL): SQL {
+  const prefixed = `_%${escapeLikePattern(
+    `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
+  )}`;
+  return sql`(${name} = ${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME} or ${name} like ${prefixed})`;
+}
+
+/**
+ * Whether the agent in the enclosing `agents` row has no knowledge base and no
+ * connector. Its knowledge search tool then does not count as a tool.
+ */
+function hasNoKnowledgeSources(): SQL {
+  const agentId = qualified(schema.agentsTable.id);
+  return sql`NOT EXISTS (
+      SELECT 1 FROM ${schema.agentKnowledgeBasesTable}
+      WHERE ${qualified(schema.agentKnowledgeBasesTable.agentId)} = ${agentId}
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM ${schema.agentConnectorAssignmentsTable}
+      WHERE ${qualified(schema.agentConnectorAssignmentsTable.agentId)} = ${agentId}
+    )`;
+}
+
+/**
  * Ceiling for {@link AgentModel.purge}'s transaction, ten times the pool-wide
  * default. See that method for why the default is too low and why this is a
  * finite number rather than no limit at all.
@@ -5731,16 +5852,13 @@ function agentAccessCondition(params: {
  * The "Show" filter for external A2A agents, read from their own policies like
  * internal agents.
  */
-async function externalAgentAccessCondition(params: {
+function externalAgentAccessCondition(params: {
   userId: string;
-  organizationId?: string;
+  /** The caller's subjects, e.g. from `resolvePrincipals`. */
+  subjects: PermissionSubject[];
   selection: ResourceAccessSelection;
-}): Promise<SQL | undefined> {
+}): SQL | undefined {
   const table = schema.a2aRemoteAgentsTable;
-  const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
-    userId: params.userId,
-    organizationId: params.organizationId,
-  });
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -5750,7 +5868,7 @@ async function externalAgentAccessCondition(params: {
     scopeColumn: table.id,
     ownerColumn: table.authorId,
     userId: params.userId,
-    subjects: principals.flatMap((principal) => principal.subjects),
+    subjects: params.subjects,
     ...params.selection,
   });
   // SPDX-SnippetEnd
@@ -5833,6 +5951,95 @@ function agentGrantedTeamIds() {
     ) granted_team
   ), array[]::text[])`;
 }
+
+// ===
+// Agent catalog access prefilter
+// ===
+
+/**
+ * The agents the catalog's "Show" filter can keep, as one id set the database
+ * builds once, so the plan starts from those rows instead of testing the
+ * relation filter on every agent. An administrator reads every agent through
+ * the `*` grant, so that test otherwise ran against every other member's
+ * personal agent.
+ *
+ * The set is a superset of what the relations keep: `mine` needs the caller
+ * as author; `shared` needs a read grant to one of the caller's teams or own
+ * ids; `org` needs a read grant to the organization or a role. The set holds
+ * exactly the authored agents and the agents whose policy has such a grant,
+ * and the exact relation filter stays ANDed on top, so the prefilter can only
+ * remove rows that filter removes too. It is undefined where no such set
+ * exists: a selection with `others` (rows nobody is granted), or with no or
+ * every relation (no relation filter at all). The catalog's regular branch
+ * lists only `agent` rows, so only `agent` policies are read.
+ */
+function catalogAccessCandidateIds(params: {
+  organizationId: string | undefined;
+  userId: string;
+  /** The caller's subjects, e.g. from `resolvePrincipals`. */
+  subjects: PermissionSubject[];
+  selection: ResourceAccessSelection | undefined;
+  includeBuiltIn: boolean;
+}): SQL | undefined {
+  const selected = new Set(
+    params.selection?.relations ?? RESOURCE_ACCESS_RELATIONS,
+  );
+  if (
+    !params.organizationId ||
+    selected.size === 0 ||
+    selected.has("others") ||
+    RESOURCE_ACCESS_RELATIONS.every((relation) => selected.has(relation))
+  )
+    return undefined;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const grantedSubjects: Array<{ type: string; id?: string }> = [];
+  if (selected.has("shared")) {
+    for (const subject of params.subjects) {
+      if (subject.type === "team") grantedSubjects.push(subject);
+      // The relation matches the caller's own ids under either self type.
+      if (subject.type === "user" || subject.type === "serviceAccount")
+        grantedSubjects.push(
+          { type: "user", id: subject.id },
+          { type: "serviceAccount", id: subject.id },
+        );
+    }
+  }
+  // Any organization or role grant makes the audience `org`.
+  if (selected.has("org"))
+    grantedSubjects.push({ type: "organization" }, { type: "role" });
+
+  const table = schema.agentsTable;
+  const sources: SQL[] = [];
+  if (selected.has("mine"))
+    sources.push(
+      sql`SELECT own_agent.id FROM ${table} own_agent WHERE own_agent.author_id = ${params.userId}`,
+    );
+  if (grantedSubjects.length > 0) {
+    const patterns = grantedSubjects.map(
+      (subject) => sql`${JSON.stringify([{ subject, actions: ["read"] }])}`,
+    );
+    // Policy scopes are object ids or `*`; only object ids name an agent.
+    sources.push(sql`SELECT CASE WHEN access_policy.scope ~* ${UUID_PATTERN}
+        THEN access_policy.scope::uuid END
+      FROM resource_permission_policies access_policy
+      WHERE access_policy.organization_id = ${params.organizationId}
+        AND access_policy.resource = 'agent'
+        AND access_policy.scope <> '*'
+        AND access_policy.grants @> ANY(ARRAY[${sql.join(patterns, sql`, `)}]::jsonb[])`);
+  }
+  if (params.includeBuiltIn)
+    sources.push(
+      sql`SELECT built_in_agent.id FROM ${table} built_in_agent WHERE built_in_agent.organization_id = ${params.organizationId} AND built_in_agent.built_in`,
+    );
+  if (sources.length === 0) return sql<boolean>`false`;
+  return sql<boolean>`${table.id} IN (${sql.join(sources, sql` UNION ALL `)})`;
+  // SPDX-SnippetEnd
+}
+
+const UUID_PATTERN =
+  "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
 
 // ===
 // Agent catalog sorting

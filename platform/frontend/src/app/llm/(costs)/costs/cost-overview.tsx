@@ -115,7 +115,7 @@ export function KpiTile({
   const body = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-medium text-muted-foreground">
+        <span className="line-clamp-2 text-xs font-medium text-muted-foreground sm:line-clamp-none sm:truncate">
           {label}
         </span>
         {series && <DeltaChip delta={halfDelta(series)} />}
@@ -134,7 +134,9 @@ export function KpiTile({
           )}
         </div>
       )}
-      <div className="truncate text-xs text-muted-foreground">{caption}</div>
+      <div className="line-clamp-2 text-xs text-muted-foreground sm:line-clamp-none sm:truncate">
+        {caption}
+      </div>
       <div className={cn("mt-auto pt-1", colorClass)}>
         {series ? (
           <Sparkline values={series} dashed={estimate} />
@@ -145,7 +147,7 @@ export function KpiTile({
     </>
   );
   const cls = cn(
-    "relative flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-4 text-left transition-colors",
+    "relative flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-3 text-left transition-colors sm:p-4",
     estimate && "border-dashed bg-transparent",
     onClick && "hover:bg-muted/40",
     active && "ring-2 ring-inset ring-primary/60",

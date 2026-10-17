@@ -6,9 +6,10 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { ModelModel, VirtualApiKeyModel } from "@/models";
+import { ModelModel, OrganizationModel, VirtualApiKeyModel } from "@/models";
 import type { ModelInfo } from "@/routes/chat/model-fetchers/types";
 import { describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { ApiError } from "@/types";
 
 vi.mock("@/routes/chat/model-fetchers/anthropic", async (importOriginal) => ({
@@ -254,13 +255,61 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
     expect(fetchAnthropicModels).not.toHaveBeenCalled();
   });
 
-  test("anthropic: a raw (non-arch_) key is passed through to the upstream fetcher", async () => {
+  test("anthropic: a raw (non-arch_) key is passed through to the upstream fetcher", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const caller = await makeRawKeyCaller({ makeAgent, makeUser, makeMember });
     vi.mocked(fetchAnthropicModels).mockResolvedValue(ANTHROPIC_MODELS);
     const app = await buildApp(anthropicProxyRoutes);
 
     const response = await app.inject({
       method: "GET",
-      url: `/v1/anthropic/${randomUUID()}/v1/models`,
+      url: `/v1/anthropic/${caller.agentId}/v1/models`,
+      headers: {
+        "x-api-key": "sk-ant-raw",
+        "x-archestra-virtual-key": caller.passthroughToken,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchAnthropicModels).toHaveBeenCalledWith(
+      "sk-ant-raw",
+      undefined,
+      null,
+    );
+  });
+
+  test("anthropic: a raw key without a platform credential is rejected with 401 and never reaches the fetcher", async ({
+    makeAgent,
+  }) => {
+    const app = await buildApp(anthropicProxyRoutes);
+    const agent = await makeAgent();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/anthropic/${agent.id}/v1/models`,
+      headers: { "x-api-key": "sk-ant-raw" },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchAnthropicModels).not.toHaveBeenCalled();
+  });
+
+  test("anthropic: a raw key alone lists models once the organization allows unauthenticated requests", async ({
+    makeAgent,
+  }) => {
+    vi.mocked(fetchAnthropicModels).mockResolvedValue(ANTHROPIC_MODELS);
+    const app = await buildApp(anthropicProxyRoutes);
+    const agent = await makeAgent();
+    await OrganizationModel.patch(agent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/anthropic/${agent.id}/v1/models`,
       headers: { "x-api-key": "sk-ant-raw" },
     });
 
@@ -276,7 +325,12 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
   // returns, so without the synthesized `[1m]` siblings a client configured
   // with a long-context variant silently drops to the base id on first
   // connect.
-  test("anthropic: appends a [1m] sibling for Claude models the catalog records a 1M window for", async () => {
+  test("anthropic: appends a [1m] sibling for Claude models the catalog records a 1M window for", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const caller = await makeRawKeyCaller({ makeAgent, makeUser, makeMember });
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-5",
       provider: "anthropic",
@@ -320,8 +374,11 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: `/v1/anthropic/${randomUUID()}/v1/models`,
-      headers: { "x-api-key": "sk-ant-raw" },
+      url: `/v1/anthropic/${caller.agentId}/v1/models`,
+      headers: {
+        "x-api-key": "sk-ant-raw",
+        "x-archestra-virtual-key": caller.passthroughToken,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -341,7 +398,12 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
     ).toBe("Claude Opus 5 (1M context)");
   });
 
-  test("anthropic: an admin-set window decides the [1m] sibling", async () => {
+  test("anthropic: an admin-set window decides the [1m] sibling", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const caller = await makeRawKeyCaller({ makeAgent, makeUser, makeMember });
     // Both directions of the override: a model the catalog under-reports gains
     // the sibling, and one an admin pinned below 1M loses it.
     await ModelModel.upsert({
@@ -397,8 +459,11 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: `/v1/anthropic/${randomUUID()}/v1/models`,
-      headers: { "x-api-key": "sk-ant-raw" },
+      url: `/v1/anthropic/${caller.agentId}/v1/models`,
+      headers: {
+        "x-api-key": "sk-ant-raw",
+        "x-archestra-virtual-key": caller.passthroughToken,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -410,7 +475,12 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
     ]);
   });
 
-  test("anthropic: does not duplicate a variant id the upstream already lists", async () => {
+  test("anthropic: does not duplicate a variant id the upstream already lists", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const caller = await makeRawKeyCaller({ makeAgent, makeUser, makeMember });
     await ModelModel.upsert({
       externalId: "anthropic/claude-opus-5",
       provider: "anthropic",
@@ -438,8 +508,11 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: `/v1/anthropic/${randomUUID()}/v1/models`,
-      headers: { "x-api-key": "sk-ant-raw" },
+      url: `/v1/anthropic/${caller.agentId}/v1/models`,
+      headers: {
+        "x-api-key": "sk-ant-raw",
+        "x-archestra-virtual-key": caller.passthroughToken,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -638,3 +711,26 @@ describe("extractBearerToken", () => {
     expect(performance.now() - started).toBeLessThan(1000);
   });
 });
+
+// ===================================================================
+// Internal helpers
+// ===================================================================
+
+/**
+ * A real agent plus a passthrough key owned by a member of its organization:
+ * the platform credential a caller sends beside its own raw provider key.
+ */
+async function makeRawKeyCaller(fixtures: {
+  makeAgent: () => Promise<{ id: string; organizationId: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  makeMember: (userId: string, organizationId: string) => Promise<unknown>;
+}): Promise<{ agentId: string; passthroughToken: string }> {
+  const agent = await fixtures.makeAgent();
+  const owner = await fixtures.makeUser();
+  await fixtures.makeMember(owner.id, agent.organizationId);
+  const passthroughToken = await makePassthroughCredential({
+    organizationId: agent.organizationId,
+    ownerId: owner.id,
+  });
+  return { agentId: agent.id, passthroughToken };
+}

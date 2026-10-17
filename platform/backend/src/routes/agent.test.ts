@@ -170,6 +170,54 @@ describe("agent routes", () => {
     expect(await toolsOf("&includeTools=false")).toEqual([[]]);
   });
 
+  test("lists tool and subagent counts with or without the tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      name: "Counted Gateway",
+      agentType: "mcp_gateway",
+    });
+    const subagent = await makeAgent({
+      organizationId,
+      name: "Counted Helper",
+    });
+    for (const name of ["counted_one", "counted_two"]) {
+      const tool = await makeTool({ name, parameters: {} });
+      await makeAgentTool(gateway.id, tool.id);
+    }
+    await AgentToolModel.assignDelegation({
+      agentId: gateway.id,
+      targetAgentId: subagent.id,
+    });
+    const listed = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?name=Counted%20Gateway&agentTypes=mcp_gateway${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const [row] = response.json().data;
+      return {
+        toolsCount: row.toolsCount,
+        subagentsCount: row.subagentsCount,
+        tools: row.tools.length,
+      };
+    };
+
+    expect(await listed("")).toEqual({
+      toolsCount: 2,
+      subagentsCount: 1,
+      tools: 3,
+    });
+    expect(await listed("&includeTools=false")).toEqual({
+      toolsCount: 2,
+      subagentsCount: 1,
+      tools: 0,
+    });
+  });
+
   async function expectAgentTypeSoftDelete(
     agentType: "mcp_gateway",
     makeAgent: (overrides: {
@@ -1927,8 +1975,10 @@ describe("agent routes", () => {
       );
       expect(builtInAgents.length).toBeGreaterThan(0);
     });
+  });
 
-    test("keeps the same authorized chat IDs for personal defaults and retained selections", async ({
+  describe("GET /api/agents/chat-roster", () => {
+    test("lists and resolves another member's personal agent for an admin, never another organization's", async ({
       makeUser,
       makeOrganization,
       makeAgent,
@@ -1946,27 +1996,22 @@ describe("agent routes", () => {
         authorId: owner.id,
         agentType: "agent",
       });
-      const original = await app.inject({
-        method: "GET",
-        url: "/api/agents?agentType=agent&excludeBuiltIn=true&includeTools=false&view=chat&limit=100",
-      });
       const roster = await app.inject({
         method: "GET",
         url: "/api/agents/chat-roster",
       });
-      expect(original.statusCode).toBe(200);
+      const retained = await app.inject({
+        method: "GET",
+        url: `/api/agents/chat-roster?ids=${personal.id},${outside.id}`,
+      });
       expect(roster.statusCode).toBe(200);
-      const originalIds = original
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort();
-      const rosterIds = roster
-        .json()
-        .map((row: { id: string }) => row.id)
-        .sort();
-      expect(rosterIds).toEqual(originalIds);
+      expect(retained.statusCode).toBe(200);
+      const rosterIds = roster.json().map((row: { id: string }) => row.id);
       expect(rosterIds).toContain(personal.id);
       expect(rosterIds).not.toContain(outside.id);
+      expect(retained.json().map((row: { id: string }) => row.id)).toEqual([
+        personal.id,
+      ]);
     });
   });
 

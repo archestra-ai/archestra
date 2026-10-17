@@ -45,10 +45,10 @@ vi.mock("@/lib/agent.query", () => ({
     data: mocks.gateway ? { id: "gw-default" } : undefined,
     isLoading: false,
   }),
-  useAgentOptions: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/lib/agent-options.query", () => ({
   useAgentOptionsPage: () => ({ data: undefined, isPending: false }),
+  useAgentOptionsByIds: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),

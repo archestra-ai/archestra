@@ -8,10 +8,10 @@ import config from "@/config";
 import logger from "@/logging";
 import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
 import { claudeCodeToolTokenCountObserver } from "@/services/claude-code-tool-token-count";
-import { enforceLlmModelsListRateLimit } from "@/services/route-rate-limit";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { getExternalAgentId } from "../utils/headers/external-agent-id";
 import {
@@ -50,6 +50,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: MESSAGES_SUFFIX,
       upstream,
       providerName: "Anthropic",
+      authenticate: createPassthroughAuthenticator("anthropic"),
       rewritePrefix: "",
       beforeCleanBody: async (request, body) => {
         if (
@@ -170,6 +171,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) {
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
+      agentId,
       provider: "anthropic",
       token: extractAnthropicToken(request.headers),
       allowKeyless: isAnthropicKeylessAuthEnabled(),
@@ -192,7 +194,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: AnthropicModelsHeadersSchema,
         response: constructResponseSchema(AnthropicModelsListResponseSchema),
       },
-      onRequest: enforceLlmModelsListRateLimit,
     },
     async (request) => handleListModels(request, undefined),
   );
@@ -208,7 +209,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: AnthropicModelsHeadersSchema,
         response: constructResponseSchema(AnthropicModelsListResponseSchema),
       },
-      onRequest: enforceLlmModelsListRateLimit,
     },
     async (request) => handleListModels(request, request.params.agentId),
   );

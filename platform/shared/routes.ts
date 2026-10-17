@@ -612,7 +612,6 @@ export const RouteId = {
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
   GetOrganizationMemberOptions: "getOrganizationMemberOptions",
-  GetOrganizationMembers: "getOrganizationMembers",
   GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
   CompleteOnboarding: "completeOnboarding",

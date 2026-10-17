@@ -56,7 +56,7 @@ vi.mock("@/components/resource-scope-filter", () => ({
 
 vi.mock("@/components/resource-access-filter", () => ({
   ResourceAccessFilter: () => null,
-  RESOURCE_ACCESS_FILTER_PARAMS: ["access", "sharedWith", "owner", "builtIn"],
+  RESOURCE_ACCESS_FILTER_PARAMS: ["access", "sharedWith", "owner"],
 }));
 
 vi.mock("@/components/delete-confirm-dialog", () => ({

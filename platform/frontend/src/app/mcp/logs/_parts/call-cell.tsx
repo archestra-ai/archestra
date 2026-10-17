@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import type { McpToolCallOutcomeStatus } from "@/lib/mcp-logs/tool-call-content";
 import {
   canShowMcpToolCallStatus,
   resolveMcpToolCallStatus,
@@ -43,7 +44,10 @@ export function CallCell({
     : null;
   const serverName = server?.name ?? (row.mcpServerName || "Platform");
   const status = statusOf(row, method);
-  const errorText = status === "error" ? errorMessageOf(row.toolResult) : null;
+  const errorText =
+    status === "error" || status === "blocked"
+      ? errorMessageOf(row.toolResult)
+      : null;
   const caller = describeCaller(row);
 
   return (
@@ -102,6 +106,22 @@ export function CallCell({
                 <div className="mb-0.5 text-muted-foreground">Error</div>
                 <p className="font-mono text-[11px] leading-snug">
                   {errorText ?? "The tool returned an error."}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          ) : status === "blocked" ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <UnstyledButton className="shrink-0 cursor-default rounded-sm bg-amber-500/10 px-1 text-[10px] leading-4 font-medium tracking-wide text-amber-700 uppercase dark:text-amber-400">
+                  Blocked
+                </UnstyledButton>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs px-2 py-1.5">
+                <div className="mb-0.5 text-muted-foreground">
+                  Blocked by policy
+                </div>
+                <p className="font-mono text-[11px] leading-snug">
+                  {errorText ?? "A policy refused this call."}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -208,7 +228,7 @@ function describeCaller(row: McpToolCallRow): Caller {
 function statusOf(
   row: McpToolCallRow,
   method: string,
-): "success" | "error" | "cancelled" | "unknown" {
+): McpToolCallOutcomeStatus {
   const result = row.toolResult;
   if (
     isEncryptedChatUnavailableContent(result) &&

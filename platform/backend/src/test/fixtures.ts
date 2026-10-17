@@ -982,6 +982,7 @@ async function makeInteraction(
       | "billingTeamId"
       | "billingMode"
       | "sessionId"
+      | "runId"
       | "cacheReadTokens"
       | "cacheWriteTokens"
       | "externalAgentId"

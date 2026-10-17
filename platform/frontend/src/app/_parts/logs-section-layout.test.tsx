@@ -39,7 +39,7 @@ describe("LogsSectionLayout", () => {
     // about. Wrapping them here too gave the page two headers stacked on each
     // other, with the record's own title and back link stranded in the body
     // below the tab bar.
-    vi.mocked(usePathname).mockReturnValue("/llm/logs/session/abc");
+    vi.mocked(usePathname).mockReturnValue("/llm/logs/abc");
 
     render(
       <LogsSectionLayout listPath="/llm/logs">

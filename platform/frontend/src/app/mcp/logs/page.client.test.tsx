@@ -403,6 +403,28 @@ describe("McpGatewayLogsPage filters", () => {
       expect(screen.getByText("Support")).toBeVisible();
     });
   });
+
+  it("opens a call recorded in an LLM session in that session's trace", async () => {
+    const user = userEvent.setup();
+    mockCalls([makeCall({ id: "call-linked", sessionId: "session-1" })]);
+
+    render(<McpGatewayLogsPage />);
+    await user.click(screen.getByText("search_documents"));
+
+    expect(push).toHaveBeenCalledWith(
+      "/llm/logs/session-1?toolCall=call-linked",
+    );
+  });
+
+  it("opens a call with no session on its own page", async () => {
+    const user = userEvent.setup();
+    mockCalls([makeCall({ id: "call-bare", sessionId: null })]);
+
+    render(<McpGatewayLogsPage />);
+    await user.click(screen.getByText("search_documents"));
+
+    expect(push).toHaveBeenCalledWith("/mcp/logs/call-bare");
+  });
 });
 
 function makeCall(overrides: Record<string, unknown> = {}) {
@@ -423,6 +445,8 @@ function makeCall(overrides: Record<string, unknown> = {}) {
     userId: "user-1",
     authMethod: "session",
     source: "api",
+    sessionId: null,
+    llmToolCallId: null,
     createdAt: "2026-08-23T16:30:00.000Z",
     userName: "Demo Admin",
     appName: null,

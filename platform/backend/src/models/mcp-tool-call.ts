@@ -43,7 +43,10 @@ import { resolveLogContentMode, withholdToolCallContent } from "@/log-content";
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
-import { mcpToolCallBelongsToOrganization } from "./log-organization";
+import {
+  interactionBelongsToOrganization,
+  mcpToolCallBelongsToOrganization,
+} from "./log-organization";
 
 /**
  * Builds a search condition for MCP tool calls across server name, method,
@@ -69,6 +72,19 @@ function buildMcpToolCallSearchCondition(search: string) {
   );
 }
 
+/**
+ * MCP tool-call log rows.
+ *
+ * Session links: `session_id` / `llm_tool_call_id` are written only from an
+ * exact signal (see the schema). A `tools/call` row written without a session
+ * but with a `run_id` is linked at read time instead: when the organization's
+ * interactions for that run — the caller's own, for a caller limited to their
+ * own logs — carry exactly one session id, that is the row's `sessionId`. A
+ * run spread over several sessions links to none, since nothing says which of
+ * its turns issued the call. Reads resolve every row of a page in one query,
+ * and the `sessionId` list filter applies the same rule, so a row is listed
+ * under a session exactly when it reports that session.
+ */
 class McpToolCallModel {
   /**
    * @param auditContext when present, this tool call belongs to an encrypted-chat
@@ -122,6 +138,8 @@ class McpToolCallModel {
       search?: string;
       /** Narrow to rows attributed to this user (the own-logs log:read view). */
       ownUserId?: string;
+      /** Narrow to rows linked to this LLM session (see the class doc). */
+      sessionId?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
@@ -171,7 +189,10 @@ class McpToolCallModel {
     ]);
 
     return createPaginatedResult(
-      data.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+      await McpToolCallModel.withRunSessions(
+        data.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+        filters,
+      ),
       Number(total),
       pagination,
     );
@@ -202,6 +223,8 @@ class McpToolCallModel {
       mcpServerName?: string;
       /** Narrow to rows attributed to this user (the own-logs log:read view). */
       ownUserId?: string;
+      /** Narrow to rows linked to this LLM session (see the class doc). */
+      sessionId?: string;
     },
   ): Promise<CursorPaginatedResult<McpToolCall>> {
     const { limit, cursor } = cursorQuery;
@@ -262,7 +285,10 @@ class McpToolCallModel {
       .limit(limit + 1);
 
     return createCursorPaginatedResult(
-      rows.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+      await McpToolCallModel.withRunSessions(
+        rows.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+        filters,
+      ),
       cursorQuery,
       (row) => ({ value: row.createdAt.toISOString(), id: row.id }),
     );
@@ -308,6 +334,7 @@ class McpToolCallModel {
       search?: string;
       mcpServerName?: string;
       ownUserId?: string;
+      sessionId?: string;
     },
   ): Promise<SQL[] | null> {
     const conditions: SQL[] = [];
@@ -325,6 +352,15 @@ class McpToolCallModel {
     if (filters?.mcpServerName) {
       conditions.push(
         eq(schema.mcpToolCallsTable.mcpServerName, filters.mcpServerName),
+      );
+    }
+    if (filters?.sessionId) {
+      conditions.push(
+        await McpToolCallModel.linkedToSessionCondition({
+          sessionId: filters.sessionId,
+          organizationId: filters.organizationId,
+          ownUserId: filters.ownUserId,
+        }),
       );
     }
 
@@ -363,14 +399,22 @@ class McpToolCallModel {
     return conditions;
   }
 
+  /**
+   * @param idOrScope with a scope, `ownUserId` limits run-based session
+   * resolution to that user's interactions, as their own-logs view requires.
+   */
   static async findById(
-    idOrScope: string | { id: string; organizationId: string },
+    idOrScope:
+      | string
+      | { id: string; organizationId: string; ownUserId?: string },
     userId?: string,
     isMcpServerAdmin?: boolean,
   ): Promise<McpToolCall | null> {
     const id = typeof idOrScope === "string" ? idOrScope : idOrScope.id;
     const organizationId =
       typeof idOrScope === "string" ? undefined : idOrScope.organizationId;
+    const ownUserId =
+      typeof idOrScope === "string" ? undefined : idOrScope.ownUserId;
     const [mcpToolCall] = await db
       .select({
         ...getTableColumns(schema.mcpToolCallsTable),
@@ -421,7 +465,11 @@ class McpToolCallModel {
       }
     }
 
-    return toVisibleMcpToolCall(readMcpToolCallRow(mcpToolCall));
+    const [visible] = await McpToolCallModel.withRunSessions(
+      [toVisibleMcpToolCall(readMcpToolCallRow(mcpToolCall))],
+      { organizationId, ownUserId },
+    );
+    return visible;
   }
 
   static async getAllMcpToolCallsForAgent(
@@ -574,6 +622,111 @@ class McpToolCallModel {
   // SPDX-SnippetEnd
 
   /**
+   * Fills in `sessionId` for rows linked only by run id (see the class doc),
+   * resolving every such row of the page in one grouped query.
+   */
+  private static async withRunSessions(
+    rows: McpToolCall[],
+    scope?: { organizationId?: string; ownUserId?: string },
+  ): Promise<McpToolCall[]> {
+    const runIds = [
+      ...new Set(
+        rows.flatMap((row) =>
+          isRunLinkable(row) && row.runId ? [row.runId] : [],
+        ),
+      ),
+    ];
+    if (runIds.length === 0) return rows;
+
+    const sessionByRun = await McpToolCallModel.singleSessionByRun({
+      runCondition: inArray(schema.interactionsTable.runId, runIds),
+      ...scope,
+    });
+    return rows.map((row) => {
+      const sessionId =
+        isRunLinkable(row) && row.runId
+          ? sessionByRun.get(row.runId)
+          : undefined;
+      return sessionId ? { ...row, sessionId } : row;
+    });
+  }
+
+  /**
+   * Rows linked to `sessionId`: stored on the row, or resolved through the
+   * row's run. The session's runs are resolved first, so both branches of the
+   * predicate stay on their own index.
+   */
+  private static async linkedToSessionCondition(params: {
+    sessionId: string;
+    organizationId?: string;
+    ownUserId?: string;
+  }): Promise<SQL> {
+    const { sessionId, ...scope } = params;
+    const sessionRuns = db
+      .selectDistinct({ runId: schema.interactionsTable.runId })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.sessionId, sessionId),
+          sql`${schema.interactionsTable.runId} IS NOT NULL`,
+          ...interactionScopeConditions(scope),
+        ),
+      );
+    const sessionByRun = await McpToolCallModel.singleSessionByRun({
+      runCondition: inArray(schema.interactionsTable.runId, sessionRuns),
+      ...scope,
+    });
+    // A run that also carries other sessions resolves to none of them.
+    const runIds = [...sessionByRun].flatMap(([runId, resolved]) =>
+      resolved === sessionId ? [runId] : [],
+    );
+
+    const stored = eq(schema.mcpToolCallsTable.sessionId, sessionId);
+    if (runIds.length === 0) return stored;
+    return or(
+      stored,
+      and(
+        isNull(schema.mcpToolCallsTable.sessionId),
+        eq(schema.mcpToolCallsTable.method, "tools/call"),
+        inArray(schema.mcpToolCallsTable.runId, runIds),
+      ),
+    ) as SQL;
+  }
+
+  /**
+   * The one session id the visible interactions of each matching run carry.
+   * Runs with no session, or with more than one, are absent.
+   */
+  private static async singleSessionByRun(params: {
+    runCondition: SQL;
+    organizationId?: string;
+    ownUserId?: string;
+  }): Promise<Map<string, string>> {
+    const { runCondition, ...scope } = params;
+    const rows = await db
+      .select({
+        runId: schema.interactionsTable.runId,
+        sessionId: sql<string>`min(${schema.interactionsTable.sessionId})`,
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          runCondition,
+          sql`${schema.interactionsTable.sessionId} IS NOT NULL`,
+          ...interactionScopeConditions(scope),
+        ),
+      )
+      .groupBy(schema.interactionsTable.runId)
+      .having(sql`count(DISTINCT ${schema.interactionsTable.sessionId}) = 1`);
+
+    const sessionByRun = new Map<string, string>();
+    for (const row of rows) {
+      if (row.runId) sessionByRun.set(row.runId, row.sessionId);
+    }
+    return sessionByRun;
+  }
+
+  /**
    * App-level variant of the first-success scan for encrypted deployments:
    * keyset-walk tools/call rows oldest-first, decrypt each result, return
    * the first without `isError: true`. Cursor uses the driver's raw
@@ -718,6 +871,30 @@ function toVisibleMcpToolCall(
     appId: row.appDeletedAt ? null : toolCall.appId,
     appName: row.appDeletedAt ? null : toolCall.appName,
   };
+}
+
+/** Only a tool call is ever linked to a session through its run. */
+function isRunLinkable(row: McpToolCall): boolean {
+  return row.sessionId === null && row.method === "tools/call";
+}
+
+/**
+ * The interactions a session link may be read from: the organization's, and
+ * only the caller's own when their view is limited to their own logs, so a
+ * link never reveals a session the caller could not open.
+ */
+function interactionScopeConditions(scope: {
+  organizationId?: string;
+  ownUserId?: string;
+}): SQL[] {
+  return [
+    ...(scope.organizationId
+      ? [interactionBelongsToOrganization(scope.organizationId)]
+      : []),
+    ...(scope.ownUserId
+      ? [eq(schema.interactionsTable.userId, scope.ownUserId)]
+      : []),
+  ];
 }
 
 /**

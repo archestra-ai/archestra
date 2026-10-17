@@ -177,8 +177,8 @@ export const llmLogsSessionsSeed = [
 
 /**
  * Requests inside the seeded Claude Code session, so the session detail page
- * has a conversation to show above its table rather than the empty state. The
- * ids differ so the table's rows link to distinct interaction detail pages.
+ * has a conversation to show rather than the empty state. The ids differ so
+ * each row of its request list selects a distinct request.
  */
 export const llmLogsInteractionsSeed = [
   makeInteraction({

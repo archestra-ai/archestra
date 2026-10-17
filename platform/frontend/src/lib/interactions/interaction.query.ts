@@ -329,6 +329,7 @@ export function useInteractionSessions({
   cursor,
   initialData,
   toastOnError,
+  enabled = true,
 }: {
   profileId?: string;
   userId?: string;
@@ -341,6 +342,7 @@ export function useInteractionSessions({
   cursor?: string;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
   toastOnError?: boolean;
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -394,6 +396,7 @@ export function useInteractionSessions({
       !endDate
         ? initialData
         : undefined,
+    enabled,
   });
 }
 

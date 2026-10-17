@@ -1350,6 +1350,87 @@ describe("MCP Gateway (stateless mode)", () => {
     );
   });
 
+  test("links a tool call to the LLM session and model call the client names, and to nothing otherwise", async ({
+    makeAgent,
+    makeOrganization,
+    seedAndAssignArchestraTools,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+    const { value: token } = await makeServiceAccountToken({
+      organizationId: org.id,
+    });
+    const callWhoami = (params: {
+      headers?: Record<string, string>;
+      meta?: Record<string, string>;
+    }) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: { ...makeMcpHeaders(token), ...params.headers },
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__whoami",
+            arguments: {},
+            ...(params.meta && { _meta: params.meta }),
+          },
+          id: 2,
+        },
+      });
+    const seen = new Set<string>();
+    const newRow = async () => {
+      const page = await McpToolCallModel.findAllCursorPaginated(
+        { limit: 10 },
+        undefined,
+        undefined,
+        { agentId: agent.id },
+      );
+      const row = mustExist(page.data.find((r) => !seen.has(r.id)));
+      seen.add(row.id);
+      return row;
+    };
+
+    // The proxy files Claude Code's turns under its session header; the
+    // explicit Archestra header outranks it on both sides.
+    expect(
+      (
+        await callWhoami({
+          headers: {
+            "x-claude-code-session-id": "claude-session",
+            "x-archestra-session-id": "named-session",
+          },
+          meta: {
+            "claudecode/toolUseId": "toolu_01",
+            "com.archestra/logicalToolCallId": "logical-1",
+          },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await newRow()).toMatchObject({
+      method: "tools/call",
+      sessionId: "named-session",
+      llmToolCallId: "toolu_01",
+    });
+
+    // A generic `session-id` header is only a session for a client the proxy
+    // identified from its request body, which an MCP request does not carry.
+    expect(
+      (await callWhoami({ headers: { "session-id": "codex-thread" } }))
+        .statusCode,
+    ).toBe(200);
+    expect(await newRow()).toMatchObject({
+      sessionId: null,
+      llmToolCallId: null,
+    });
+  });
+
   test("refuses a direct call to a tool the gateway does not have, without running it", async ({
     makeAgent,
     makeAgentTool,

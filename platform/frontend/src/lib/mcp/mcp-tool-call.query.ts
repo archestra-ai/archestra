@@ -68,6 +68,7 @@ export function useMcpToolCalls({
   limit = DEFAULT_TABLE_LIMIT,
   cursor,
   initialData,
+  enabled = true,
 }: {
   agentId?: string;
   mcpServerName?: string;
@@ -77,6 +78,7 @@ export function useMcpToolCalls({
   limit?: number;
   cursor?: string;
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -125,15 +127,18 @@ export function useMcpToolCalls({
       !endDate
         ? initialData
         : undefined,
+    enabled,
   });
 }
 
 export function useMcpToolCall({
   mcpToolCallId,
   initialData,
+  enabled = true,
 }: {
   mcpToolCallId: string;
   initialData?: archestraApiTypes.GetMcpToolCallResponses["200"];
+  enabled?: boolean;
 }) {
   return useQuery({
     queryKey: ["mcpToolCalls", mcpToolCallId],
@@ -143,5 +148,53 @@ export function useMcpToolCall({
       return response.data ?? null;
     },
     initialData,
+    enabled,
   });
 }
+
+/**
+ * The MCP tool calls an LLM session issued within one time window, newest
+ * first: the session page lays them on the same axis as the requests it
+ * shows. One page of the largest size, since a window spans one page of
+ * requests; `pagination.hasNext` says when it holds more than that.
+ */
+export function useSessionMcpToolCalls({
+  sessionId,
+  startDate,
+  endDate,
+  enabled = true,
+}: {
+  sessionId: string;
+  startDate?: string;
+  endDate?: string;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["mcpToolCalls", "session", sessionId, startDate, endDate],
+    queryFn: async () => {
+      const response = await getMcpToolCalls({
+        query: {
+          sessionId,
+          ...(startDate ? { startDate } : {}),
+          ...(endDate ? { endDate } : {}),
+          limit: SESSION_TOOL_CALLS_LIMIT,
+        },
+      });
+      throwOnApiError(response.error);
+      return (
+        response.data ?? {
+          data: [],
+          pagination: {
+            limit: SESSION_TOOL_CALLS_LIMIT,
+            nextCursor: null,
+            hasNext: false,
+          },
+        }
+      );
+    },
+    enabled,
+  });
+}
+
+/** The list endpoint's largest page. */
+const SESSION_TOOL_CALLS_LIMIT = 100;

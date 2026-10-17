@@ -50089,7 +50089,7 @@ export type GetInteractionsData = {
          */
         userId?: string;
         /**
-         * Filter by session ID
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
          */
         sessionId?: string;
         /**
@@ -56518,6 +56518,9 @@ export type GetInteractionSummariesData = {
         profileId?: string;
         externalAgentId?: string;
         userId?: string;
+        /**
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         */
         sessionId?: string;
         startDate?: string;
         endDate?: string;
@@ -56657,7 +56660,7 @@ export type GetInteractionSessionsData = {
          */
         client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo';
         /**
-         * Filter by session ID
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
          */
         sessionId?: string;
         /**
@@ -82031,6 +82034,10 @@ export type GetMcpToolCallsData = {
          * Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller.
          */
         userId?: string;
+        /**
+         * Filter by the LLM proxy session that issued the call: calls recorded with that session, and tool calls whose run resolves to it.
+         */
+        sessionId?: string;
         limit?: number;
         cursor?: string;
     };
@@ -82133,6 +82140,8 @@ export type GetMcpToolCallsResponses = {
             toolResult: unknown;
             userId: string | null;
             runId: string | null;
+            sessionId: string | null;
+            llmToolCallId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
             source: 'api' | 'chat';
@@ -82255,6 +82264,8 @@ export type GetMcpToolCallResponses = {
         toolResult: unknown;
         userId: string | null;
         runId: string | null;
+        sessionId: string | null;
+        llmToolCallId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
         source: 'api' | 'chat';

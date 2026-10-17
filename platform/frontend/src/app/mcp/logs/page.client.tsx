@@ -24,9 +24,9 @@ import { resourceOwnerLabel } from "@/lib/agent-owner-label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
+import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 import { CallCell } from "./_parts/call-cell";
 import { CredentialCell } from "./_parts/credential-cell";
@@ -200,40 +200,11 @@ function McpToolCallsTable({
     initialData: initialData?.mcpToolCalls,
   });
 
-  const { data: mcpServers } = useMcpServers({ includeAssignedAgents: false });
+  const { servers: mcpServers, displayByName: serverDisplayByName } =
+    useMcpServerDisplayByName();
   // Without log:admin the server scopes every listing to the caller's own
   // rows, so a user picker would have nothing to choose between.
   const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
-  const { data: canReadMcpRegistry } = useHasPermissions({
-    mcpRegistry: ["read"],
-  });
-  const { data: catalogItems } = useInternalMcpCatalog({
-    enabled: canReadMcpRegistry === true,
-  });
-
-  // Tool-call rows store the installed server's deployment name. Join it to
-  // the catalog metadata already used by the registry so the log can show the
-  // human-readable name and its icon without changing the logs API.
-  const serverDisplayByName = useMemo(() => {
-    const catalogById = new Map(
-      catalogItems?.map((item) => [item.id, item]) ?? [],
-    );
-    const map = new Map<
-      string,
-      { name: string; icon: string | null; catalogId: string }
-    >();
-    if (mcpServers) {
-      for (const server of mcpServers) {
-        const catalog = catalogById.get(server.catalogId);
-        map.set(server.name, {
-          name: server.catalogName ?? catalog?.name ?? server.name,
-          icon: catalog?.icon ?? null,
-          catalogId: server.catalogId,
-        });
-      }
-    }
-    return map;
-  }, [catalogItems, mcpServers]);
 
   const mcpToolCalls = mcpToolCallsResponse?.data ?? [];
   const { data: agents } = useAgentOptionsByIds({
@@ -474,10 +445,18 @@ function McpToolCallsTable({
         emptyMessage="No MCP tool calls found. Tool calls will appear here when agents use MCP tools."
         filteredEmptyMessage="No MCP logs match your filters"
         onClearFilters={clearFilters}
-        onRowClick={(row) => {
-          router.push(`/mcp/logs/${row.id}`);
-        }}
+        onRowClick={(row) => router.push(mcpToolCallHref(row))}
       />
     </div>
   );
+}
+
+/**
+ * Where a row opens: the call in its LLM session's trace when the call is
+ * linked to one, otherwise its own detail page.
+ */
+function mcpToolCallHref(row: Pick<McpToolCallData, "id" | "sessionId">) {
+  return row.sessionId
+    ? llmSessionHref(row.sessionId, { toolCall: row.id })
+    : `/mcp/logs/${row.id}`;
 }

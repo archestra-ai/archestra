@@ -862,6 +862,82 @@ describe("interaction routes", () => {
     });
   });
 
+  test("addresses a sessionless interaction as a session of its own, by its id", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+    });
+    const make = (sessionId: string | null) =>
+      InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        source: "api",
+        request: {
+          model: "gpt-4",
+          messages: [],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        } as unknown as InsertInteraction["response"],
+        type: "openai:chatCompletions",
+      });
+
+    const lone = await make(null);
+    await make(null);
+    const inSession = await make("shared-session");
+    const uuidSessionId = crypto.randomUUID();
+    const inUuidSession = await make(uuidSessionId);
+
+    const idsFor = async (url: string) => {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      return response.json().data.map((row: { id: string }) => row.id);
+    };
+
+    // The session list row, the page's requests and the export all resolve
+    // the sessionless request's id to that request alone.
+    const sessions = await app.inject({
+      method: "GET",
+      url: `/api/interactions/sessions?limit=1&sessionId=${lone.id}`,
+    });
+    expect(sessions.statusCode).toBe(200);
+    expect(sessions.json().data).toEqual([
+      expect.objectContaining({
+        sessionId: null,
+        interactionId: lone.id,
+        requestCount: 1,
+      }),
+    ]);
+    expect(
+      await idsFor(
+        `/api/interactions/summaries?limit=10&offset=0&sessionId=${lone.id}`,
+      ),
+    ).toEqual([lone.id]);
+    expect(
+      await idsFor(`/api/interactions?limit=10&offset=0&sessionId=${lone.id}`),
+    ).toEqual([lone.id]);
+
+    // A request that belongs to a session is reached through its session,
+    // not by its own id.
+    expect(
+      await idsFor(
+        `/api/interactions/summaries?limit=10&offset=0&sessionId=${inSession.id}`,
+      ),
+    ).toEqual([]);
+    // A uuid-shaped session id still matches its session's rows.
+    expect(
+      await idsFor(
+        `/api/interactions/summaries?limit=10&offset=0&sessionId=${uuidSessionId}`,
+      ),
+    ).toEqual([inUuidSession.id]);
+  });
+
   test("walks tied session heads once when interactions straddle page boundaries", async ({
     makeAgent,
   }) => {

@@ -702,7 +702,7 @@ export const handlers: HttpHandler[] = [
     }),
   ),
 
-  // LLM proxy logs (/llm/logs list, session detail, interaction detail).
+  // LLM proxy logs (/llm/logs list and the session detail page).
   ...getJson("/api/interactions/sessions/:sessionId/lineage", {
     forkedFrom: null,
     forks: [],

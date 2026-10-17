@@ -7271,7 +7271,7 @@ export const hardResetMcpServer = <ThrowOnError extends boolean = false>(options
 export const reloadMcpServerTools = <ThrowOnError extends boolean = false>(options: Options<ReloadMcpServerToolsData, ThrowOnError>) => (options.client ?? client).post<ReloadMcpServerToolsResponses, ReloadMcpServerToolsErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/reload-tools', ...options });
 
 /**
- * Get MCP tool calls in the active organization with cursor pagination. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.
+ * Get MCP tool calls in the active organization with cursor pagination, newest first. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.
  *
  * Authentication:
  *

@@ -421,7 +421,10 @@ export async function handleLLMProxy<
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
-  const internalCall = takeInternalCall(request.headers);
+  const proof = takeInternalCall(request.headers);
+  // Credential paths accept either proof; only the guardrail proof reaches
+  // OpenAPPA as its bypass.
+  const internalCall = proof.inProcess || proof.guardrail;
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
@@ -1317,7 +1320,7 @@ export async function handleLLMProxy<
         },
         chatSource: isInternalChat ? source : undefined,
         externalAgentId,
-        internalCall,
+        internalCall: proof.guardrail,
         installerSetupBypass,
         ingress: appaIngress,
         toolIdentity,

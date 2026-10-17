@@ -63,7 +63,10 @@ import {
   isVertexAiEnabled,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
-import { internalCallHeader } from "@/clients/internal-call";
+import {
+  guardrailCallHeader,
+  internalCallHeader,
+} from "@/clients/internal-call";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
@@ -241,8 +244,11 @@ export function createLLMModel(params: {
   } = params;
 
   // Build headers for LLM Proxy. Every model built here dials the proxy from
-  // this process, so every call carries the in-process proof.
-  const clientHeaders: Record<string, string> = internalCallHeader();
+  // this process, so every call carries a proof. The guardrail proof also
+  // tells OpenAPPA to skip enforcement, so only its own calls send it.
+  const clientHeaders: Record<string, string> = params.internalCall
+    ? guardrailCallHeader()
+    : internalCallHeader();
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }

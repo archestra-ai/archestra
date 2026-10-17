@@ -131,7 +131,8 @@ describe("archestra annotator", () => {
           sent.push({
             body,
             source: proxied.headers.get(SOURCE_HEADER),
-            internal: takeInternalCall(Object.fromEntries(proxied.headers)),
+            internal: takeInternalCall(Object.fromEntries(proxied.headers))
+              .guardrail,
             user: proxied.headers.get(USER_ID_HEADER),
             session: proxied.headers.get(SESSION_ID_HEADER),
           });

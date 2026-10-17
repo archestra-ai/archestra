@@ -13,6 +13,7 @@ export type ExternalAgent = Extract<
 >["value"];
 
 export function makeAgent(overrides: Partial<Agent> = {}): Agent {
+  const tools = overrides.tools ?? [];
   return {
     id: "test-agent",
     organizationId: "test-org",
@@ -60,6 +61,9 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     connectorIds: [],
     suggestedPrompts: [],
     pinnedAt: null,
+    // Counted as the list routes count them, from the mock's tools.
+    toolsCount: tools.filter((tool) => !tool.delegateToAgentId).length,
+    subagentsCount: tools.filter((tool) => tool.delegateToAgentId).length,
     ...overrides,
   };
 }

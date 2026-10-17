@@ -33,7 +33,10 @@ interface PinnableGateway {
   lastUsedAt?: string | null;
   /** Exposes every tool the caller can reach, not just assigned ones. */
   accessAllTools: boolean;
-  tools: GatewayToolRow[];
+  /** On list rows, which carry no tools. */
+  toolsCount?: number;
+  /** On single-gateway reads, which carry no count. */
+  tools?: GatewayToolRow[];
 }
 
 /**
@@ -175,7 +178,8 @@ function GatewayToolsChip({ gateway }: { gateway: PinnableGateway }) {
       </Tooltip>
     );
   }
-  const count = gatewayToolNames(gateway.tools).length;
+  const count =
+    gateway.toolsCount ?? gatewayToolNames(gateway.tools ?? []).length;
   return (
     <Badge variant="outline">
       <span>{count === 1 ? "1 tool" : `${count} tools`}</span>

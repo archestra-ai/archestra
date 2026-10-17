@@ -179,6 +179,32 @@ describe("GatewayPinnedTiles", () => {
     ).toBeInTheDocument();
   });
 
+  it("counts a list row's tools from its count, which arrives without the tools", () => {
+    setUp({ personalGateway: null });
+    renderTiles({
+      pinned: [
+        {
+          ...gateway("gw-listed", "Listed gateway"),
+          accessAllTools: false,
+          tools: undefined,
+          toolsCount: 412,
+        },
+        {
+          ...gateway("gw-single", "Single read gateway"),
+          accessAllTools: false,
+          tools: [{ name: "search", delegateToAgentId: null }],
+        },
+      ],
+    });
+
+    expect(
+      within(tileFor("Listed gateway")).getByText("412 tools"),
+    ).toBeInTheDocument();
+    expect(
+      within(tileFor("Single read gateway")).getByText("1 tool"),
+    ).toBeInTheDocument();
+  });
+
   it("shows no automatic tile when the viewer has no personal gateway and no Connect default is set", () => {
     setUp({ personalGateway: null });
     renderTiles();

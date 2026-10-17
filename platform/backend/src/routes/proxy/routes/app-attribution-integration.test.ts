@@ -20,7 +20,7 @@ import {
 import type OpenAI from "openai";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
-import { ModelModel } from "@/models";
+import { ModelModel, OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { openaiAdapterFactory } from "../adapters/openai";
 import openAiProxyRoutes from "./openai";
@@ -145,6 +145,11 @@ describe("app-runtime interaction attribution (integration)", () => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const ownedApp = await makeApp({ organizationId: org.id });
+    // The provider key these headers carry is accepted only where the org opts
+    // in; the platform-credential gate is covered in llm-proxy-auth.test.ts.
+    await OrganizationModel.patch(org.id, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
 
     await setupRoute();
 

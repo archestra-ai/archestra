@@ -28,6 +28,7 @@ import {
   RESPONSES_SUFFIX,
 } from "../common";
 import {
+  createPassthroughAuthenticator,
   isJwtLike,
   resolveAgent,
   validatePassthroughVirtualKey,
@@ -71,6 +72,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: OPENAI_HANDLED_ENDPOINT_SUFFIXES,
       upstream: config.llm.openai.baseUrl,
       providerName: "OpenAI",
+      authenticate: createPassthroughAuthenticator("openai"),
     }),
   });
 

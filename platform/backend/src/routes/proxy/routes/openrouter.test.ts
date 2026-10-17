@@ -4,12 +4,22 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { describe, expect, test } from "vitest";
 import config from "@/config";
+import { OrganizationModel } from "@/models";
+import { describe, expect, test } from "@/test";
 import openrouterProxyRoutes from "./openrouter";
 
 describe("OpenRouter proxy routes", () => {
-  test("adds configured defaults without replacing caller attribution", async () => {
+  test("adds configured defaults without replacing caller attribution", async ({
+    makeAgent,
+  }) => {
+    // The catch-all resolves the deployment's LLM proxy, so an organization
+    // must exist. The raw key below is accepted only where the org opts in; the
+    // platform-credential gate is covered in llm-proxy-auth.test.ts.
+    const agent = await makeAgent();
+    await OrganizationModel.patch(agent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
     let receivedHeaders: Record<string, string | string[] | undefined> = {};
     const upstream = Fastify();
     upstream.get("/credits", (request) => {

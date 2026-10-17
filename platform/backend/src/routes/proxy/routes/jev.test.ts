@@ -12,7 +12,11 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
-import { InteractionModel, VirtualApiKeyModel } from "@/models";
+import {
+  InteractionModel,
+  OrganizationModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import authRoutes from "@/routes/auth";
 import {
   accessGrants,
@@ -73,6 +77,11 @@ describe("Jev decisions proxy route", () => {
     await app.register(jevProxyRoutes);
     // The default LLM proxy, so interactions are logged under this agent.
     agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+    // These cases forward a raw provider token to Jev and assert the decision
+    // path, not the platform-credential gate (covered in llm-proxy-auth.test.ts).
+    await OrganizationModel.patch(agent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
   });
 
   afterEach(async () => {

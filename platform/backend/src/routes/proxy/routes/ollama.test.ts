@@ -4,9 +4,11 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
+import { OrganizationModel } from "@/models";
+import { beforeEach, test } from "@/test";
 import ollamaProxyRoutes, { rewriteOllamaProxyUrl } from "./ollama";
 
 const API_PREFIX = "/v1/ollama";
@@ -178,7 +180,14 @@ describe("Ollama passthrough", () => {
   let upstream: FastifyInstance;
   let forwardedBodies: string[];
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
+    // The catch-all resolves the deployment's LLM proxy, so an organization must
+    // exist. These cases send no credential and assert marker stripping; the
+    // platform-credential gate is covered in llm-proxy-auth.test.ts.
+    const agent = await makeAgent();
+    await OrganizationModel.patch(agent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
     forwardedBodies = [];
     upstream = Fastify();
     upstream.addContentTypeParser(

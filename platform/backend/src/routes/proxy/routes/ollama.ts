@@ -17,6 +17,7 @@ import {
   ollamaAdapterFactory,
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { cleanForwardedBody } from "./proxy-prehandler";
 
@@ -76,7 +77,14 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       upstream: config.llm.ollama.baseUrl as string,
       prefix: API_PREFIX,
       rewritePrefix: "",
-      preHandler: (request, reply, next) => {
+      preHandler: async (request, reply) => {
+        // Authenticate before the rewrite: the agent UUID is read from the URL
+        // that the rewrite is about to strip.
+        await createPassthroughAuthenticator("ollama")({
+          request,
+          agentId: request.url.replace(API_PREFIX, "").match(UUID_PATTERN)?.[1],
+        });
+
         const urlPath = request.url.split("?")[0];
         if (
           request.method === "POST" &&
@@ -121,7 +129,7 @@ const ollamaProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : "Ollama proxy preHandler: proxying request",
         );
 
-        cleanForwardedBody(request).then(() => next(), next);
+        await cleanForwardedBody(request);
       },
     });
   } else {

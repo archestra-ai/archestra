@@ -40,6 +40,15 @@ export function createProxyPreHandler(params: {
   skipErrorResponse?: Record<string, unknown>;
   rejectUnhandledPaths?: boolean;
   beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>;
+  /**
+   * Platform check that runs before anything else, so a rejected request never
+   * reaches the rewrite or the upstream. Receives the agent UUID from the URL,
+   * if any, because the rewrite strips it.
+   */
+  authenticate?: (params: {
+    request: FastifyRequest;
+    agentId?: string;
+  }) => Promise<void>;
 }) {
   const { apiPrefix, endpointSuffix, upstream, providerName } = params;
   const rewritePrefix = params.rewritePrefix ?? "";
@@ -50,7 +59,7 @@ export function createProxyPreHandler(params: {
     },
   };
 
-  return (
+  const rewritePreHandler = (
     request: FastifyRequest,
     reply: FastifyReply,
     next: HookHandlerDoneFunction,
@@ -139,6 +148,20 @@ export function createProxyPreHandler(params: {
 
     cleanForwardedBody(request, params.beforeCleanBody).then(
       () => next(),
+      next,
+    );
+  };
+
+  const { authenticate } = params;
+  if (!authenticate) return rewritePreHandler;
+  return (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    next: HookHandlerDoneFunction,
+  ) => {
+    const agentId = request.url.replace(apiPrefix, "").match(UUID_REGEX)?.[1];
+    authenticate({ request, agentId }).then(
+      () => rewritePreHandler(request, reply, next),
       next,
     );
   };

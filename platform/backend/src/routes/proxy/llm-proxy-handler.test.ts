@@ -32,6 +32,7 @@ import {
   InteractionModel,
   LlmProviderApiKeyModel,
   ModelModel,
+  OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -2182,6 +2183,12 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
     makeOrganization,
   }) => {
     const org = await makeOrganization();
+    // A provider key alone is accepted only where the org opts in. This case is
+    // about extraHeaders on a non-loopback request, not the platform gate. The
+    // request resolves through the test agent, so its organization opts in.
+    await OrganizationModel.patch(testAgent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
     const apiKey = await LlmProviderApiKeyModel.create({
       organizationId: org.id,
       secretId: null,

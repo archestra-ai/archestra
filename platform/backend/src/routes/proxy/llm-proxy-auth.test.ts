@@ -19,8 +19,8 @@ import { accessGrants, afterEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
 import {
-  assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
+  assertPlatformAuthenticated,
   attemptJwksAuth,
   resolveAgent,
   VirtualKeyRateLimiter,
@@ -873,29 +873,52 @@ describe("attemptJwksAuth", () => {
 });
 
 // =========================================================================
-// assertAuthenticatedForKeylessProvider
+// assertPlatformAuthenticated
 // =========================================================================
 
-describe("assertAuthenticatedForKeylessProvider", () => {
+describe("assertPlatformAuthenticated", () => {
   const keylessArgs = {
     apiKey: undefined,
     wasVirtualKeyResolved: false,
     wasJwksAuthenticated: false,
     isLoopbackCaller: false,
+    allowUnauthenticated: false,
   };
 
-  test("allows request when apiKey is present", () => {
+  // A provider key alone proves nothing about the caller: the platform
+  // credential (X-Archestra-Virtual-Key or a virtual key) is what identifies
+  // them, so a provider key without one must not reach the upstream.
+  test("rejects a provider key alone by default", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider({
+      assertPlatformAuthenticated({
         ...keylessArgs,
         apiKey: "sk-real-key",
+      }),
+    ).toThrow("X-Archestra-Virtual-Key");
+  });
+
+  test("allows a provider key alone when the organization allows unauthenticated requests", () => {
+    expect(() =>
+      assertPlatformAuthenticated({
+        ...keylessArgs,
+        apiKey: "sk-real-key",
+        allowUnauthenticated: true,
       }),
     ).not.toThrow();
   });
 
+  test("still rejects an external request with no credential when unauthenticated requests are allowed", () => {
+    expect(() =>
+      assertPlatformAuthenticated({
+        ...keylessArgs,
+        allowUnauthenticated: true,
+      }),
+    ).toThrow("Authentication required");
+  });
+
   test("allows request when virtual key was resolved", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider({
+      assertPlatformAuthenticated({
         ...keylessArgs,
         wasVirtualKeyResolved: true,
       }),
@@ -904,7 +927,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
 
   test("allows request when JWKS authenticated", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider({
+      assertPlatformAuthenticated({
         ...keylessArgs,
         wasJwksAuthenticated: true,
       }),
@@ -915,7 +938,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
   // in utils/network.test.ts. This function only consumes the verdict.
   test("allows a loopback caller without any auth", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider({
+      assertPlatformAuthenticated({
         ...keylessArgs,
         isLoopbackCaller: true,
       }),
@@ -923,7 +946,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
   });
 
   test("rejects external request without any auth", () => {
-    expect(() => assertAuthenticatedForKeylessProvider(keylessArgs)).toThrow(
+    expect(() => assertPlatformAuthenticated(keylessArgs)).toThrow(
       "Authentication required",
     );
   });
@@ -933,7 +956,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
   // the provider. Nothing ever validates it, so it cannot authenticate anyone.
   test("rejects an arbitrary bearer value when the server supplies the credential", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider({
+      assertPlatformAuthenticated({
         ...keylessArgs,
         apiKey: "Bearer anything",
         providerSuppliesServerCredential: true,
@@ -943,7 +966,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
 
   test("still allows a resolved virtual key when the server supplies the credential", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider({
+      assertPlatformAuthenticated({
         ...keylessArgs,
         apiKey: "Bearer anything",
         wasVirtualKeyResolved: true,
@@ -954,7 +977,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
 
   test("still allows JWKS auth when the server supplies the credential", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider({
+      assertPlatformAuthenticated({
         ...keylessArgs,
         wasJwksAuthenticated: true,
         providerSuppliesServerCredential: true,
@@ -964,7 +987,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
 
   test("still allows loopback when the server supplies the credential", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider({
+      assertPlatformAuthenticated({
         ...keylessArgs,
         apiKey: "Bearer anything",
         isLoopbackCaller: true,

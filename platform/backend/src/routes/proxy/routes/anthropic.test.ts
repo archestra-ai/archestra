@@ -28,7 +28,7 @@ import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel, VirtualApiKeyModel } from "@/models";
+import { ModelModel, OrganizationModel, VirtualApiKeyModel } from "@/models";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
@@ -1003,8 +1003,17 @@ describe("Anthropic count_tokens passthrough", () => {
   const PROXY_ID = "44f56e01-7167-42c1-88ee-64b566fbc34d";
   let upstream: FastifyInstance;
   let forwardedBodies: string[];
+  let agentId: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
+    // The catch-all resolves the agent in the URL, so it must exist. The raw
+    // provider key these cases send is accepted only where the org opts in;
+    // the platform-credential gate is covered in llm-proxy-auth.test.ts.
+    const agent = await makeAgent({ name: "count_tokens passthrough" });
+    agentId = agent.id;
+    await OrganizationModel.patch(agent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
     forwardedBodies = [];
     upstream = Fastify();
     upstream.addContentTypeParser(
@@ -1035,7 +1044,7 @@ describe("Anthropic count_tokens passthrough", () => {
     try {
       return await app.inject({
         method: "POST",
-        url: `/v1/anthropic/${PROXY_ID}/v1/messages/count_tokens`,
+        url: `/v1/anthropic/${agentId}/v1/messages/count_tokens`,
         headers: {
           "content-type": "application/json",
           "anthropic-version": "2023-06-01",

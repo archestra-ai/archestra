@@ -13,6 +13,7 @@ import {
 } from "@/types";
 import { microsoft365CopilotAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import {
   extractBearerToken,
@@ -42,6 +43,7 @@ const microsoft365CopilotProxyRoutes: FastifyPluginAsyncZod = async (
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
       upstream: config.llm["microsoft-365-copilot"].baseUrl,
       providerName: "Microsoft365Copilot",
+      authenticate: createPassthroughAuthenticator("microsoft-365-copilot"),
       // Graph only accepts the redeemed short-lived access token, and the
       // upstream is not OpenAI-compatible anyway — never forward the raw Entra
       // refresh token for an unsupported path; reject instead. With this flag

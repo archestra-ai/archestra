@@ -44,6 +44,7 @@ import {
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaThreadStateModel from "@/models/openappa-thread-state";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
+import OrganizationModel from "@/models/organization";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
 import {
@@ -182,6 +183,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     await app.register(anthropicProxyRoutes);
     agent = await makeAgent({ name: "Native proxy test" });
+    // These cases send a raw provider key and assert OpenAPPA enforcement, not
+    // the platform-credential gate, which llm-proxy-auth.test.ts covers.
+    await OrganizationModel.patch(agent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
     userId = (await makeUser()).id;
     await makeMember(userId, agent.organizationId);
     sessionId = (

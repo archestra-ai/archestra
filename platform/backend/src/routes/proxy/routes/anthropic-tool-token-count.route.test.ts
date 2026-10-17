@@ -49,6 +49,11 @@ describe("observed Claude Code MCP tool counts", () => {
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
     await makeMember(user.id, organizationId);
+    // These cases forward a raw subscription credential and assert the observed
+    // count, not the platform-credential gate (covered in llm-proxy-auth.test.ts).
+    await OrganizationModel.patch(organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
+    });
     config.auth.secret = "tool-count-observation-test-secret";
     gateway = await makeAgent({
       agentType: "mcp_gateway",
@@ -97,7 +102,7 @@ describe("observed Claude Code MCP tool counts", () => {
     const request = countRequest(preview);
     const response = await app.inject({
       method: "POST",
-      url: `/v1/anthropic/${crypto.randomUUID()}/v1/messages/count_tokens`,
+      url: `/v1/anthropic/${gateway.id}/v1/messages/count_tokens`,
       headers: {
         ...claudeHeaders,
         authorization: "Bearer test-subscription-credential",

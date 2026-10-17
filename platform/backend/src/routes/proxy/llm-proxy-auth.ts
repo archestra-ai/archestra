@@ -29,6 +29,7 @@ import {
   MemberModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
+  OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
@@ -572,13 +573,15 @@ export async function attemptJwksAuth(
 // =========================================================================
 
 /**
- * For keyless providers (Ollama, vLLM, Vertex AI Gemini), ensure the request
- * was authenticated via a virtual API key or JWKS. Without this, anyone who
- * knows the proxy URL could call the endpoint without credentials.
+ * Ensure a proxy request carries a platform credential (a virtual API key, an
+ * identity provider JWT, or an LLM OAuth token) before anything reaches the
+ * upstream. A raw provider key alone is rejected unless the operator opted into
+ * `allowUnauthenticatedLlmProxyRequests`, which restores the legacy behavior where any
+ * non-empty provider key passes for providers whose upstream validates it.
  *
  * Internal requests from localhost (chat route → proxy) are allowed.
  */
-export function assertAuthenticatedForKeylessProvider(params: {
+export function assertPlatformAuthenticated(params: {
   apiKey: string | undefined;
   wasVirtualKeyResolved: boolean;
   wasJwksAuthenticated: boolean;
@@ -597,6 +600,8 @@ export function assertAuthenticatedForKeylessProvider(params: {
    * provider the caller's key is forwarded upstream, which validates it.
    */
   providerSuppliesServerCredential?: boolean;
+  /** The organization's `allowUnauthenticatedLlmProxyRequests` setting. */
+  allowUnauthenticated: boolean;
 }): void {
   const {
     apiKey,
@@ -604,17 +609,22 @@ export function assertAuthenticatedForKeylessProvider(params: {
     wasJwksAuthenticated,
     isLoopbackCaller,
     providerSuppliesServerCredential = false,
+    allowUnauthenticated,
   } = params;
 
   if (wasVirtualKeyResolved || wasJwksAuthenticated) return;
-  if (apiKey && !providerSuppliesServerCredential) return;
+  if (apiKey && !providerSuppliesServerCredential && allowUnauthenticated) {
+    return;
+  }
 
   if (!isLoopbackCaller) {
     throw new ApiError(
       401,
       providerSuppliesServerCredential
         ? "Authentication required. This provider is configured to use the server's own credentials, so requests must present a platform virtual API key or an identity provider token."
-        : "Authentication required. Use a platform virtual API key or pass a provider API key.",
+        : allowUnauthenticated
+          ? "Authentication required. Use a platform virtual API key or pass a provider API key."
+          : "Authentication required. Send your Archestra virtual API key in the X-Archestra-Virtual-Key header or the Authorization header. A provider API key alone is not accepted.",
     );
   }
 }
@@ -728,6 +738,27 @@ export async function authenticatePassthroughProxyRequest(params: {
     }
     throw error;
   }
+}
+
+/**
+ * The platform check a catch-all pass-through route runs before its upstream
+ * sees the request. Skipped only when the organization has enabled
+ * `allowUnauthenticatedLlmProxyRequests`, which restores anonymous forwarding.
+ */
+export function createPassthroughAuthenticator(
+  provider: SupportedProvider,
+): (params: { request: FastifyRequest; agentId?: string }) => Promise<void> {
+  return async ({ request, agentId }) => {
+    const agent = await resolveAgent(agentId);
+    if (
+      await OrganizationModel.allowsUnauthenticatedLlmProxyRequests(
+        agent.organizationId,
+      )
+    ) {
+      return;
+    }
+    await authenticatePassthroughProxyRequest({ request, provider, agentId });
+  };
 }
 
 // =========================================================================

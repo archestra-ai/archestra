@@ -1,5 +1,6 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { ApiError } from "@/types";
 import { OPENAI_HANDLED_ENDPOINT_SUFFIXES } from "../common";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -55,6 +56,10 @@ describe("createProxyPreHandler", () => {
     providerName: string;
     skipErrorResponse?: Record<string, unknown>;
     rejectUnhandledPaths?: boolean;
+    authenticate?: (params: {
+      request: FastifyRequest;
+      agentId?: string;
+    }) => Promise<void>;
   }) {
     const {
       apiPrefix,
@@ -63,6 +68,7 @@ describe("createProxyPreHandler", () => {
       providerName,
       skipErrorResponse,
       rejectUnhandledPaths,
+      authenticate,
     } = params;
     const upstream = `http://localhost:${upstreamPort}`;
 
@@ -82,11 +88,54 @@ describe("createProxyPreHandler", () => {
         rewritePrefix,
         skipErrorResponse,
         rejectUnhandledPaths,
+        authenticate,
       }),
     });
 
     return app;
   }
+
+  describe("authentication", () => {
+    test("a rejected request never reaches the upstream", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async () => {
+          throw new ApiError(401, "Authentication required");
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/openai/chat/completions",
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(upstreamHits).toBe(0);
+    });
+
+    test("runs before the UUID rewrite and receives the agent id from the URL", async () => {
+      const seen: Array<string | undefined> = [];
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+        authenticate: async ({ agentId }) => {
+          seen.push(agentId);
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/openai/${TEST_UUID}/chat/completions`,
+      });
+
+      expect(seen).toEqual([TEST_UUID]);
+      expect(response.statusCode).toBe(200);
+      expect(upstreamHits).toBe(1);
+    });
+  });
 
   describe("endpoint skipping", () => {
     test("returns 400 for POST to the custom-handled endpoint suffix", async () => {

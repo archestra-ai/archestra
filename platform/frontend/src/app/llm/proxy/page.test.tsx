@@ -373,17 +373,13 @@ describe("LlmProxyPage connect steps", () => {
     await selectJev(user);
     await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
 
+    expect(await screen.findByText("Passthrough key")).toBeInTheDocument();
     expect(
-      await screen.findByText("Passthrough key (optional)"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/You send your own Jev key, and this passthrough key/),
+      screen.getByText(/Send your own Jev key, and this passthrough key/),
     ).toHaveTextContent("X-Archestra-Virtual-Key header");
-    // The first passthrough key is taken, like a standard key, and shows in
-    // its own field instead of an env var to set.
-    expect(
-      await screen.findByRole("combobox", { name: "Passthrough key" }),
-    ).toHaveTextContent("Laptop");
+    // The first passthrough key is taken, like a standard key, and shows as the
+    // key card instead of an env var to set.
+    expect(await screen.findByText("Laptop")).toBeInTheDocument();
     expect(screen.getByText("arch_pt••••••••••••")).toBeInTheDocument();
     expect(
       screen.queryByText(/Set ARCHESTRA_LLM_VIRTUAL_KEY/),
@@ -393,7 +389,10 @@ describe("LlmProxyPage connect steps", () => {
     expect(request).toContain("X-Archestra-Virtual-Key:");
   });
 
-  it("sends only the caller's own key when no passthrough key is chosen", async () => {
+  it("sends only the caller's own key when the org allows requests without a passthrough key", async () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { allowUnauthenticatedLlmProxyRequests: true },
+    } as unknown as ReturnType<typeof useOrganization>);
     server.use(
       http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
         HttpResponse.json([JEV_PROVIDER_KEY]),
@@ -410,6 +409,25 @@ describe("LlmProxyPage connect steps", () => {
     const request = await findRequest();
     expect(request).toContain("Authorization: Bearer $JEV_API_KEY");
     expect(request).not.toContain("X-Archestra-Virtual-Key");
+  });
+
+  it("does not offer a request without a passthrough key when the header is required", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([JEV_PROVIDER_KEY]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await selectJev(user);
+    await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
+
+    expect(
+      await screen.findByText("No passthrough key yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Requests without a passthrough key are rejected/),
+    ).toBeInTheDocument();
   });
 
   it("shows how an OAuth client gets the token the request sends", async () => {

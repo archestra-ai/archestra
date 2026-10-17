@@ -28,6 +28,7 @@ import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
+import { useShellDeferred } from "@/lib/shell-deferral";
 import { cn } from "@/lib/utils/tailwind";
 
 interface Warning {
@@ -44,21 +45,31 @@ export function SidebarWarningsAccordion({
 }) {
   const { data: session } = useSession();
   const userEmail = session?.user?.email;
-  const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
-    useDefaultCredentialsEnabled();
+  // Warnings are not the page's first data: they wait for it.
+  const deferred = useShellDeferred();
   const disableBasicAuth = useDisableBasicAuth();
   const openappaEnabled = useFeature("openappaEnabled");
   const guardrailsDeployment = useGuardrailsDeployment();
   const { data: canUpdateOrg } = useHasPermissions({
     organization: ["update"],
   });
+  // Asked only of the one viewer the warning is for: the default admin, who
+  // can change the organization's sign-in, while password sign-in is on.
+  const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
+    useDefaultCredentialsEnabled({
+      enabled:
+        deferred &&
+        canUpdateOrg === true &&
+        disableBasicAuth === false &&
+        userEmail === DEFAULT_ADMIN_EMAIL,
+    });
   // Reading capabilities needs environment:update, so gating the query on the
   // same permission keeps it from 403-ing for everyone else on every page.
   const { data: canUpdateEnvironment } = useHasPermissions({
     environment: ["update"],
   });
   const { data: capabilities } = useK8sCapabilities(
-    canUpdateEnvironment === true,
+    deferred && canUpdateEnvironment === true,
   );
   const { state: sidebarState } = useSidebar();
 

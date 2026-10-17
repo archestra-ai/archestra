@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { hasScopedPermission } from "@archestra/shared";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { userHasPermission } from "@/auth/utils";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { LocalConfig } from "@/types";
@@ -130,45 +130,27 @@ function sameRuntimeValue(
 }
 
 /** Redact stored YAML everywhere it occurs in an authenticated API response,
- * including nested installed-server catalogs and audit snapshots. */
+ * including nested installed-server catalogs and audit snapshots. Which
+ * responses can carry a `deploymentSpecYaml` field is decided per route when
+ * it is registered, per status code: a status whose schema declares the key or
+ * leaves part of the body untyped (audit snapshots, error details) walks the
+ * payload, and so does any status without a schema, which is serialized as is.
+ * A typed schema without the key strips it in serialization, so those
+ * responses skip the walk. */
 export function registerMcpDeploymentYamlResponseFilter(
   app: FastifyInstance,
 ): void {
-  app.addHook("preSerialization", async (request, _reply, payload) => {
-    if (!containsDeploymentYaml(payload)) return payload;
-    const context =
-      request.user && request.organizationId
-        ? { userId: request.user.id, organizationId: request.organizationId }
-        : null;
-    const permissions = new Map<string, Promise<boolean>>();
-    const filter = async (value: unknown): Promise<unknown> => {
-      if (!value || typeof value !== "object") return value;
-      if (Array.isArray(value)) return Promise.all(value.map(filter));
-      if (Object.getPrototypeOf(value) !== Object.prototype) return value;
-      const object = value as Record<string, unknown>;
-      const catalogId = typeof object.id === "string" ? object.id : undefined;
-      let allowed = false;
-      if (object.deploymentSpecYaml != null && context) {
-        const scope = catalogId ?? "*";
-        if (!permissions.has(scope))
-          permissions.set(
-            scope,
-            canManageMcpDeployment({ ...context, catalogId }),
-          );
-        allowed = (await permissions.get(scope)) ?? false;
-      }
-      return Object.fromEntries(
-        await Promise.all(
-          Object.entries(object).map(async ([key, child]) => [
-            key,
-            key === "deploymentSpecYaml" && !allowed
-              ? null
-              : await filter(child),
-          ]),
-        ),
-      );
-    };
-    return filter(payload);
+  app.addHook("onRoute", (route) => {
+    const mayCarry = deploymentYamlStatusCheck(route.schema?.response);
+    const existing = route.preSerialization;
+    route.preSerialization = [
+      ...(existing ? [existing].flat() : []),
+      async function redactDeploymentYaml(request, reply, payload) {
+        return mayCarry(reply.statusCode)
+          ? redactDeploymentYamlPayload(request, payload)
+          : payload;
+      },
+    ];
   });
 }
 
@@ -204,3 +186,144 @@ function containsDeploymentYaml(value: unknown): boolean {
       containsDeploymentYaml(child),
   );
 }
+
+async function redactDeploymentYamlPayload(
+  request: FastifyRequest,
+  payload: unknown,
+): Promise<unknown> {
+  if (!containsDeploymentYaml(payload)) return payload;
+  const context =
+    request.user && request.organizationId
+      ? { userId: request.user.id, organizationId: request.organizationId }
+      : null;
+  const permissions = new Map<string, Promise<boolean>>();
+  const filter = async (value: unknown): Promise<unknown> => {
+    if (!value || typeof value !== "object") return value;
+    if (Array.isArray(value)) return Promise.all(value.map(filter));
+    if (Object.getPrototypeOf(value) !== Object.prototype) return value;
+    const object = value as Record<string, unknown>;
+    const catalogId = typeof object.id === "string" ? object.id : undefined;
+    let allowed = false;
+    if (object.deploymentSpecYaml != null && context) {
+      const scope = catalogId ?? "*";
+      if (!permissions.has(scope))
+        permissions.set(
+          scope,
+          canManageMcpDeployment({ ...context, catalogId }),
+        );
+      allowed = (await permissions.get(scope)) ?? false;
+    }
+    return Object.fromEntries(
+      await Promise.all(
+        Object.entries(object).map(async ([key, child]) => [
+          key,
+          key === "deploymentSpecYaml" && !allowed ? null : await filter(child),
+        ]),
+      ),
+    );
+  };
+  return filter(payload);
+}
+
+/**
+ * For a route's response schemas (keyed by status code, `2xx`-style range or
+ * `default`, matched the way Fastify picks one), whether the response sent
+ * with a status could let a `deploymentSpecYaml` field through: its schema
+ * has the key or an open-JSON part, or no schema applies. Anything the schema
+ * check does not recognise counts as "could".
+ */
+function deploymentYamlStatusCheck(
+  response: unknown,
+): (statusCode: number) => boolean {
+  if (!response || typeof response !== "object") return () => true;
+  const carrying = new Map(
+    Object.entries(response).map(([key, schema]) => [
+      key,
+      schemaMayCarryDeploymentYaml(schema, new Set()),
+    ]),
+  );
+  return (statusCode) => {
+    const code = String(statusCode);
+    return (
+      carrying.get(code) ??
+      carrying.get(`${code[0]}xx`) ??
+      carrying.get("default") ??
+      true
+    );
+  };
+}
+
+function schemaMayCarryDeploymentYaml(
+  schema: unknown,
+  seen: Set<unknown>,
+): boolean {
+  const def = (schema as { _zod?: { def?: ZodDefinition } } | null)?._zod?.def;
+  if (!def) return true;
+  if (seen.has(def)) return false;
+  seen.add(def);
+  const nested = (child: unknown) => schemaMayCarryDeploymentYaml(child, seen);
+  switch (def.type) {
+    case "object":
+      return (
+        Object.hasOwn(def.shape ?? {}, "deploymentSpecYaml") ||
+        (def.catchall !== undefined &&
+          def.catchall?._zod?.def?.type !== "never") ||
+        Object.values(def.shape ?? {}).some(nested)
+      );
+    case "array":
+      return nested(def.element);
+    case "union":
+      return (def.options ?? []).some(nested);
+    case "intersection":
+      return nested(def.left) || nested(def.right);
+    case "tuple":
+      return (def.items ?? []).some(nested) || (!!def.rest && nested(def.rest));
+    case "pipe":
+      return nested(def.in) || nested(def.out);
+    case "optional":
+    case "nullable":
+    case "default":
+    case "prefault":
+    case "readonly":
+    case "catch":
+    case "nonoptional":
+    case "success":
+      return nested(def.innerType);
+    default:
+      return !CLOSED_SCHEMA_TYPES.has(def.type);
+  }
+}
+
+type ZodDefinition = {
+  type: string;
+  shape?: Record<string, unknown>;
+  catchall?: { _zod?: { def?: { type?: string } } };
+  element?: unknown;
+  options?: unknown[];
+  left?: unknown;
+  right?: unknown;
+  items?: unknown[];
+  rest?: unknown;
+  in?: unknown;
+  out?: unknown;
+  innerType?: unknown;
+};
+
+/** Schema types that hold no object of their own, so never a nested field. */
+const CLOSED_SCHEMA_TYPES = new Set([
+  "string",
+  "number",
+  "int",
+  "boolean",
+  "bigint",
+  "date",
+  "literal",
+  "enum",
+  "null",
+  "undefined",
+  "void",
+  "never",
+  "nan",
+  "symbol",
+  "template_literal",
+]);

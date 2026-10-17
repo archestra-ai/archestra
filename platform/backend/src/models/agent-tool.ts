@@ -732,102 +732,70 @@ class AgentToolModel {
       return agentsMap;
     }
 
-    // Deduplicate narrow membership keys before joining agent/user metadata.
-    // Multiple assigned tools from one catalog still describe one usage row.
-    const pinnedAssignments = db
-      .selectDistinct({
-        mcpServerId: sql<string>`${schema.agentToolsTable.mcpServerId}`.as(
-          "mcp_server_id",
-        ),
-        agentId: schema.agentToolsTable.agentId,
-      })
-      .from(schema.agentToolsTable)
-      .where(inArray(schema.agentToolsTable.mcpServerId, mcpServerIds))
-      .as("pinned_assignments");
-    const dynamicAssignments = db
-      .selectDistinct({
-        mcpServerId: schema.mcpServersTable.id,
-        agentId: schema.agentToolsTable.agentId,
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+    // One statement: each rule is its own equi-join (see above), the union is
+    // deduplicated per (server, agent) with pinned winning, and every server's
+    // agents come back as one JSON array. Drizzle row mapping and a JS dedupe
+    // over every assignment row blocked the event loop on large installs.
+    const serverIds = sql`ARRAY[${sql.join(
+      mcpServerIds.map((id) => sql`${id}`),
+      sql`, `,
+    )}]::uuid[]`;
+    const result = await db.execute<{
+      mcp_server_id: string;
+      agents: Array<McpServerAssignedAgent>;
+    }>(sql`
+      WITH pinned_assignments AS (
+        SELECT DISTINCT at.mcp_server_id, at.agent_id
+        FROM agent_tools at
+        WHERE at.mcp_server_id = ANY(${serverIds})
+      ),
+      dynamic_assignments AS (
+        SELECT DISTINCT ms.id AS mcp_server_id, at.agent_id
+        FROM agent_tools at
+        INNER JOIN tools t ON t.id = at.tool_id
+        INNER JOIN mcp_server ms ON ms.catalog_id = t.catalog_id
+        WHERE at.mcp_server_id IS NULL
+          AND ms.id = ANY(${serverIds})
+      ),
+      assignments AS (
+        SELECT DISTINCT ON (mcp_server_id, agent_id)
+          mcp_server_id, agent_id, pinned
+        FROM (
+          SELECT mcp_server_id, agent_id, true AS pinned FROM pinned_assignments
+          UNION ALL
+          SELECT mcp_server_id, agent_id, false AS pinned FROM dynamic_assignments
+        ) union_assignments
+        ORDER BY mcp_server_id, agent_id, pinned DESC
       )
-      .innerJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.catalogId, schema.mcpServersTable.catalogId),
-      )
-      .where(
-        and(
-          isNull(schema.agentToolsTable.mcpServerId),
-          inArray(schema.mcpServersTable.id, mcpServerIds),
-        ),
-      )
-      .as("dynamic_assignments");
-    const selection = {
-      agentId: schema.agentsTable.id,
-      agentName: schema.agentsTable.name,
-      agentType: schema.agentsTable.agentType,
-      accessAllTools: schema.agentsTable.accessAllTools,
-      organizationId: schema.agentsTable.organizationId,
-      scope: schema.agentsTable.scope,
-      ownerId: schema.agentsTable.authorId,
-      ownerEmail: schema.usersTable.email,
-    };
-    const [pinned, dynamic] = await Promise.all([
-      db
-        .select({ ...selection, mcpServerId: pinnedAssignments.mcpServerId })
-        .from(pinnedAssignments)
-        .innerJoin(
-          schema.agentsTable,
-          eq(pinnedAssignments.agentId, schema.agentsTable.id),
-        )
-        .leftJoin(
-          schema.usersTable,
-          eq(schema.agentsTable.authorId, schema.usersTable.id),
-        )
-        .where(notDeleted(schema.agentsTable)),
-      db
-        .select({ ...selection, mcpServerId: dynamicAssignments.mcpServerId })
-        .from(dynamicAssignments)
-        .innerJoin(
-          schema.agentsTable,
-          eq(dynamicAssignments.agentId, schema.agentsTable.id),
-        )
-        .leftJoin(
-          schema.usersTable,
-          eq(schema.agentsTable.authorId, schema.usersTable.id),
-        )
-        .where(notDeleted(schema.agentsTable)),
-    ]);
+      SELECT
+        assignments.mcp_server_id,
+        json_agg(json_build_object(
+          'id', a.id,
+          'name', a.name,
+          'agentType', a.agent_type,
+          'accessAllTools', a.access_all_tools,
+          'organizationId', a.organization_id,
+          'scope', a.scope,
+          'ownerId', a.author_id,
+          'ownerEmail', u.email,
+          'pinned', assignments.pinned
+        )) AS agents
+      FROM assignments
+      INNER JOIN agents a ON a.id = assignments.agent_id
+      LEFT JOIN "user" u ON u.id = a.author_id
+      WHERE a.deleted_at IS NULL
+      GROUP BY assignments.mcp_server_id
+    `);
 
-    // One agent can match both rules for the same server, so the union is
-    // deduplicated here — the DISTINCT above only applies within each branch.
-    // Pinned rows come first, so an agent with both kinds is reported pinned.
-    const seen = new Set<string>();
-    const assignments = [
-      ...pinned.map((row) => ({ ...row, pinned: true })),
-      ...dynamic.map((row) => ({ ...row, pinned: false })),
-    ]
-      .filter((row) => {
-        const key = `${row.mcpServerId}\0${row.agentId}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .sort(
-        (a, b) =>
-          a.agentName.localeCompare(b.agentName) ||
-          a.agentId.localeCompare(b.agentId),
+    for (const row of result.rows) {
+      agentsMap.set(
+        row.mcp_server_id,
+        row.agents.sort(
+          (a, b) =>
+            AGENT_NAME_COLLATOR.compare(a.name, b.name) ||
+            AGENT_NAME_COLLATOR.compare(a.id, b.id),
+        ),
       );
-
-    for (const { mcpServerId, agentId, agentName, ...agent } of assignments) {
-      agentsMap.get(mcpServerId)?.push({
-        id: agentId,
-        name: agentName,
-        ...agent,
-      });
     }
 
     return agentsMap;
@@ -1709,3 +1677,6 @@ function normalizeCredentialResolutionMode(params: {
 
   return params.resolveAtCallTime ? "dynamic" : "static";
 }
+
+/** `localeCompare` ordering, without building a collator per comparison. */
+const AGENT_NAME_COLLATOR = new Intl.Collator();

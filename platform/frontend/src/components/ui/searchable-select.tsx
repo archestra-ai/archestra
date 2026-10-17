@@ -76,6 +76,8 @@ interface SearchableSelectProps {
   contentAlign?: PopoverContentProps["align"];
   contentAvoidCollisions?: PopoverContentProps["avoidCollisions"];
   listClassName?: string;
+  /** Called when the popover opens or closes, e.g. to load options lazily. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function SearchableSelect({
@@ -104,8 +106,16 @@ export function SearchableSelect({
   contentAlign,
   contentAvoidCollisions,
   listClassName,
+  onOpenChange,
 }: SearchableSelectProps) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpenState] = React.useState(false);
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      setOpenState(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
   const [searchQuery, setSearchQuery] = React.useState("");
 
   const filteredItems = React.useMemo(() => {

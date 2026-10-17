@@ -110,6 +110,62 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/audit-logs/resources",
+    {
+      schema: {
+        operationId: RouteId.GetAuditLogResources,
+        description:
+          "Resources that have audit events, with the name from their latest event, for the log's resource filter. Requires auditLog:read; without auditLog:admin only resources from the caller's own events are listed.",
+        tags: ["Audit Log"],
+        querystring: z.object({
+          search: z
+            .string()
+            .trim()
+            .max(200)
+            .optional()
+            .describe("Case-insensitive substring of the resource name"),
+          resourceId: z
+            .string()
+            .optional()
+            .describe("Only this resource, e.g. to label a preselected filter"),
+          limit: z.coerce.number().int().min(1).max(100).default(50),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            data: z.array(
+              z.object({
+                resourceType: z.string(),
+                resourceId: z.string(),
+                name: z.string(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (
+      { query: { search, resourceId, limit }, user, organizationId },
+      reply,
+    ) => {
+      const canSeeAllAuditLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "auditLog",
+        "admin",
+      );
+      const data = await AuditLogModel.findResourceOptions({
+        organizationId,
+        resourceTypes: RESOURCE_FILTER_TYPES,
+        actorId: canSeeAllAuditLogs ? undefined : user.id,
+        search: search || undefined,
+        resourceId,
+        limit,
+      });
+      return reply.send({ data });
+    },
+  );
+
+  fastify.get(
     "/api/audit-logs/:id",
     {
       schema: {
@@ -154,3 +210,16 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default auditLogRoutes;
+
+// === Internal helpers
+
+/** Resource types whose audit events carry a resource name worth picking. */
+const RESOURCE_FILTER_TYPES = [
+  "agent",
+  "app",
+  "environment",
+  "mcpServer",
+  "role",
+  "skill",
+  "team",
+] as const;

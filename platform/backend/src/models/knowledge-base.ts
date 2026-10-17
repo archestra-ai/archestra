@@ -1,17 +1,20 @@
-import type { ResourcePermissionGrant } from "@archestra/shared";
+import type { CreatedBy, ResourcePermissionGrant } from "@archestra/shared";
 import {
   and,
   count,
   desc,
   eq,
+  getTableName,
   ilike,
   inArray,
   isNotNull,
   not,
   notInArray,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
@@ -20,10 +23,13 @@ import type {
   KnowledgeBase,
   UpdateKnowledgeBase,
 } from "@/types";
+import type { ConnectorType } from "@/types/knowledge-connector";
+import type { LabelWithDetails } from "@/types/label";
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
   type ResourceAccessSelection,
 } from "./resource-permission-subject";
 
@@ -468,6 +474,153 @@ class KnowledgeBaseModel {
 
     return result?.count ?? 0;
   }
+
+  /**
+   * Everything the list shows beside each knowledge base's own row, in ONE
+   * statement over the page's ids: its creator, the connectors the viewer can
+   * see, its document total, the live agents in its organization assigned to
+   * it, and its labels.
+   *
+   * The document total is the sum over every assigned connector, soft-deleted
+   * and unseen ones included, of its stored total, or of a live count for a
+   * connector never counted. Those live counts come back in `firstCounts` for
+   * the caller to store, as KbConnectorDocumentCountModel.findByConnectorIds
+   * does. `identityOnly` (the trash view) reads the creator alone.
+   *
+   * Connectors come by name and agents in assignment order; the batch reads
+   * this replaced left both orders to the plan.
+   */
+  static async findListEnrichment(params: {
+    knowledgeBaseIds: string[];
+    organizationId: string;
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
+    viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
+    identityOnly?: boolean;
+    /** False lists no agents and counts them instead. Defaults to true. */
+    includeAssignedAgents?: boolean;
+  }): Promise<{
+    byId: Map<string, KnowledgeBaseListEnrichment>;
+    firstCounts: Map<string, number>;
+  }> {
+    const byId = new Map<string, KnowledgeBaseListEnrichment>();
+    const firstCounts = new Map<string, number>();
+    if (params.knowledgeBaseIds.length === 0) return { byId, firstCounts };
+
+    const kbId = qualified(schema.knowledgeBasesTable.id);
+    const assignment = schema.knowledgeBaseConnectorAssignmentsTable;
+    const connector = schema.knowledgeBaseConnectorsTable;
+    const visibleConnectors = db
+      .select({
+        id: connector.id,
+        name: connector.name,
+        connectorType: connector.connectorType,
+      })
+      .from(assignment)
+      .innerJoin(connector, eq(assignment.connectorId, connector.id))
+      .where(
+        and(
+          eq(assignment.knowledgeBaseId, kbId),
+          notDeleted(connector),
+          await KnowledgeBaseConnectorModel.visibilityCondition(params),
+        ),
+      );
+    const empty = sql`'[]'::json`;
+    // The live agents of the organization assigned to the outer row.
+    const assignedLiveAgents = sql`agent_knowledge_base akb
+      INNER JOIN agents ag ON ag.id = akb.agent_id
+      WHERE akb.knowledge_base_id = ${kbId}
+        AND ag.organization_id = ${params.organizationId}
+        AND ag.deleted_at IS NULL`;
+
+    const rows = await db
+      .select({
+        id: schema.knowledgeBasesTable.id,
+        creatorUser: sql<{ id: string; name: string; email: string } | null>`(
+          SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
+          FROM "user" u
+          WHERE u.id = ${qualified(schema.knowledgeBasesTable.createdBy)})`,
+        creatorServiceAccount: sql<{ id: string; name: string } | null>`(
+          SELECT json_build_object('id', sa.id, 'name', sa.name)
+          FROM service_accounts sa
+          WHERE sa.id = ${qualified(schema.knowledgeBasesTable.createdByServiceAccountId)})`,
+        connectors: params.identityOnly
+          ? sql<KnowledgeBaseListEnrichment["connectors"]>`${empty}`
+          : sql<KnowledgeBaseListEnrichment["connectors"]>`(
+              SELECT coalesce(json_agg(json_build_object(
+                'id', c.id, 'name', c.name, 'connectorType', c.connector_type
+              ) ORDER BY c.name, c.id), '[]'::json)
+              FROM (${visibleConnectors}) c)`,
+        documentTotals: params.identityOnly
+          ? sql<DocumentTotal[]>`${empty}`
+          : sql<DocumentTotal[]>`(
+              SELECT coalesce(json_agg(json_build_object(
+                'connectorId', a.connector_id,
+                'stored', dc.document_count,
+                'live', CASE WHEN dc.connector_id IS NULL THEN (
+                  SELECT count(*) FROM kb_documents d
+                  WHERE d.connector_id = a.connector_id) END
+              )), '[]'::json)
+              FROM knowledge_base_connector_assignment a
+                LEFT JOIN kb_connector_document_counts dc
+                  ON dc.connector_id = a.connector_id
+              WHERE a.knowledge_base_id = ${kbId})`,
+        assignedAgents:
+          params.identityOnly || params.includeAssignedAgents === false
+            ? sql<KnowledgeBaseListEnrichment["assignedAgents"]>`${empty}`
+            : sql<KnowledgeBaseListEnrichment["assignedAgents"]>`(
+              SELECT coalesce(json_agg(json_build_object(
+                'id', ag.id, 'name', ag.name, 'agentType', ag.agent_type
+              ) ORDER BY akb.created_at, akb.agent_id), '[]'::json)
+              FROM ${assignedLiveAgents})`,
+        // Counted in SQL only when the agents are not listed; otherwise the
+        // count is the listed agents', by the same rule.
+        assignedAgentCount:
+          params.identityOnly || params.includeAssignedAgents !== false
+            ? sql<number | null>`NULL::int`
+            : sql<
+                number | null
+              >`(SELECT count(*)::int FROM ${assignedLiveAgents})`,
+        labels: params.identityOnly
+          ? sql<LabelWithDetails[]>`${empty}`
+          : sql<LabelWithDetails[]>`(
+              SELECT coalesce(json_agg(json_build_object(
+                'keyId', kl.key_id, 'valueId', kl.value_id,
+                'key', coalesce(lk.key, ''), 'value', coalesce(lv.value, '')
+              ) ORDER BY lk.key), '[]'::json)
+              FROM knowledge_base_labels kl
+                LEFT JOIN label_keys lk ON lk.id = kl.key_id
+                LEFT JOIN label_values lv ON lv.id = kl.value_id
+              WHERE kl.knowledge_base_id = ${kbId})`,
+      })
+      .from(schema.knowledgeBasesTable)
+      .where(inArray(schema.knowledgeBasesTable.id, params.knowledgeBaseIds));
+
+    for (const row of rows) {
+      let totalDocsIndexed = 0;
+      for (const total of row.documentTotals) {
+        const documents = Number(total.stored ?? total.live ?? 0);
+        if (total.stored === null)
+          firstCounts.set(total.connectorId, documents);
+        totalDocsIndexed += documents;
+      }
+      byId.set(row.id, {
+        createdBy: row.creatorServiceAccount
+          ? CreatedByModel.fromServiceAccount(row.creatorServiceAccount)
+          : row.creatorUser
+            ? CreatedByModel.fromUser(row.creatorUser)
+            : null,
+        connectors: row.connectors,
+        totalDocsIndexed,
+        assignedAgents: row.assignedAgents,
+        assignedAgentCount: row.assignedAgentCount ?? row.assignedAgents.length,
+        labels: row.labels,
+      });
+    }
+    return { byId, firstCounts };
+  }
+
   static async findByName(
     name: string,
     organizationId: string,
@@ -545,3 +698,28 @@ function ownAudienceContext(organizationId: string) {
     ownerColumn: schema.knowledgeBasesTable.createdBy,
   };
 }
+
+/**
+ * A column with its table's name, for subselects correlated to the outer
+ * `knowledge_bases` row: a single-table select renders its own columns bare,
+ * which would bind to the subselect's tables instead.
+ */
+function qualified(column: AnyPgColumn): SQL {
+  return sql`${sql.identifier(getTableName(column.table))}.${sql.identifier(column.name)}`;
+}
+
+type KnowledgeBaseListEnrichment = {
+  createdBy: CreatedBy | null;
+  connectors: { id: string; name: string; connectorType: ConnectorType }[];
+  totalDocsIndexed: number;
+  assignedAgents: { id: string; name: string; agentType: string }[];
+  assignedAgentCount: number;
+  labels: LabelWithDetails[];
+};
+
+/** One assigned connector's documents: its stored total, else a live count. */
+type DocumentTotal = {
+  connectorId: string;
+  stored: number | null;
+  live: number | null;
+};

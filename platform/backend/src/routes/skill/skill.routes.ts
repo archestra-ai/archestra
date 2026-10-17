@@ -50,6 +50,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { publishesSkills } from "@/services/agent-skill-resolution";
@@ -687,6 +688,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ]);
 
       const skillIds = skills.map((skill) => skill.id);
+      // One read of these skills' policies serves both the publication
+      // check and each skill's audience; it runs alongside the reads below.
+      const skillPolicies =
+        skillIds.length > 0
+          ? ResourcePermissionPolicyModel.findApplicableBatch({
+              organizationId,
+              resource: "skill",
+              scopes: skillIds,
+            })
+          : Promise.resolve([]);
       const skillAuthorIds = [
         ...new Set(
           skills
@@ -713,16 +724,22 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         CreatedByModel.resolve(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
         SkillLabelModel.getLabelsForMany(skillIds),
-        agentSkillAssignmentService.getPublicationPermissions({
-          organizationId,
-          userId: user.id,
-          skillIds,
-        }),
+        skillPolicies.then((policies) =>
+          agentSkillAssignmentService.getPublicationPermissions({
+            organizationId,
+            userId: user.id,
+            skillIds,
+            grants: checker.grants,
+            policies,
+          }),
+        ),
       ]);
 
       return reply.send({
         // `scope` from each skill's grants, not the retired column.
-        data: (await SkillModel.withGrantedScope(skills)).map((skill) => ({
+        data: (
+          await SkillModel.withGrantedScope(skills, await skillPolicies)
+        ).map((skill) => ({
           ...skill,
           canPublish: publicationPermissions.get(skill.id),
           // skill_files holds only bundled resources; +1 for the mandatory

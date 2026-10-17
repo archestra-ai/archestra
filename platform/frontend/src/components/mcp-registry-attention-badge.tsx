@@ -13,6 +13,7 @@ import {
   type McpServerIssueKind,
 } from "@/lib/mcp/mcp-server-issues";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
+import { useShellDeferred } from "@/lib/shell-deferral";
 
 /**
  * Sidebar count of MCP servers the viewer must act on (failed to start, not
@@ -36,7 +37,11 @@ import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
  */
 export function McpRegistryAttentionBadge() {
   const { statuses } = useMcpDeploymentStatuses();
-  const { issuesByCatalog, facetCounts } = useMcpServerIssues(statuses);
+  // A count beside the nav item, not the page's first data: it waits for it.
+  const deferred = useShellDeferred();
+  const { issuesByCatalog, facetCounts } = useMcpServerIssues(statuses, {
+    enabled: deferred,
+  });
   const count = facetCounts.you;
   if (count === 0) return null;
   const summary = `${count} MCP ${count === 1 ? "server needs" : "servers need"} attention`;

@@ -16,6 +16,11 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { guardrailsPolicyQueryKey } from "@/lib/openappa-policy-views";
 import { OverviewTab } from "./overview-tab";
 
+vi.mock("@/lib/config/config.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
+  // The Guardrails status is read only while OpenAPPA is on.
+  useFeature: (feature: string) => feature === "openappaEnabled",
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("./coverage-charts", () => ({
   RulesCard: () => <div>Coverage charts</div>,

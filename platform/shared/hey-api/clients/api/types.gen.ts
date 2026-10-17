@@ -50071,7 +50071,7 @@ export type GetInteractionsData = {
          */
         userId?: string;
         /**
-         * Filter by session ID
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
          */
         sessionId?: string;
         /**
@@ -56500,6 +56500,9 @@ export type GetInteractionSummariesData = {
         profileId?: string;
         externalAgentId?: string;
         userId?: string;
+        /**
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
+         */
         sessionId?: string;
         startDate?: string;
         endDate?: string;
@@ -56639,7 +56642,7 @@ export type GetInteractionSessionsData = {
          */
         client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'kilo';
         /**
-         * Filter by session ID
+         * Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.
          */
         sessionId?: string;
         /**

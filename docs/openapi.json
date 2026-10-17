@@ -178089,7 +178089,7 @@
             "in": "query",
             "name": "sessionId",
             "required": false,
-            "description": "Filter by session ID"
+            "description": "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID."
           },
           {
             "schema": {
@@ -210393,7 +210393,8 @@
             },
             "in": "query",
             "name": "sessionId",
-            "required": false
+            "required": false,
+            "description": "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID."
           },
           {
             "schema": {
@@ -211055,7 +211056,7 @@
             "in": "query",
             "name": "sessionId",
             "required": false,
-            "description": "Filter by session ID"
+            "description": "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID."
           },
           {
             "schema": {

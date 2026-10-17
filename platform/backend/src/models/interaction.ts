@@ -22,6 +22,7 @@ import {
   gte,
   inArray,
   isNotNull,
+  isNull,
   lte,
   max,
   min,
@@ -459,6 +460,21 @@ function sessionIdMatchesConversation(): SQL {
   return sql`${schema.interactionsTable.sessionId} = ${schema.conversationsTable.id}::text`;
 }
 
+/**
+ * The rows of one session, by the key the session list gives it: a session's
+ * own `session_id`, or, for a request logged without one, that request's id —
+ * such a request is a session of its own, the same `COALESCE(session_id, id)`
+ * key the session list groups by. Only a uuid can be a request id, so any
+ * other key matches by `session_id` alone, and the two branches stay on the
+ * session and primary-key indexes.
+ */
+function matchesSessionKey(sessionKey: string): SQL {
+  const t = schema.interactionsTable;
+  const sessionRows = eq(t.sessionId, sessionKey);
+  if (!isUuid(sessionKey)) return sessionRows;
+  return or(sessionRows, and(isNull(t.sessionId), eq(t.id, sessionKey))) as SQL;
+}
+
 class InteractionModel {
   static async existsByRunId(runId: string): Promise<boolean> {
     const [result] = await db
@@ -620,9 +636,7 @@ class InteractionModel {
 
     // Session ID filter
     if (filters?.sessionId) {
-      conditions.push(
-        eq(schema.interactionsTable.sessionId, filters.sessionId),
-      );
+      conditions.push(matchesSessionKey(filters.sessionId));
     }
 
     // Date range filter
@@ -766,9 +780,7 @@ class InteractionModel {
       conditions.push(eq(schema.interactionsTable.userId, filters.userId));
     }
     if (filters?.sessionId) {
-      conditions.push(
-        eq(schema.interactionsTable.sessionId, filters.sessionId),
-      );
+      conditions.push(matchesSessionKey(filters.sessionId));
     }
     if (filters?.startDate) {
       conditions.push(
@@ -1730,9 +1742,7 @@ class InteractionModel {
 
     // Session ID filter
     if (filters?.sessionId) {
-      conditions.push(
-        eq(schema.interactionsTable.sessionId, filters.sessionId),
-      );
+      conditions.push(matchesSessionKey(filters.sessionId));
     }
 
     // Date range filter

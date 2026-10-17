@@ -1,5 +1,6 @@
 "use client";
 
+import { ManagedResourceSchema } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
@@ -10,7 +11,11 @@ import {
 } from "@/app/_parts/settings-navigation";
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { ClientRedirect } from "@/components/client-redirect";
-import { useHasPagePermissions } from "@/lib/auth/auth.query";
+import {
+  useAllPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
+import { hasPagePermissions } from "@/lib/auth/auth.utils";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
@@ -19,9 +24,23 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
-  const { data: hasRequiredPermissions, isPending } = useHasPagePermissions(
-    requiredPermissions || {},
+  // Scoped capabilities only matter for a read on a resource with object
+  // grants; any other page is decided by role permissions alone, so it does
+  // not wait for them.
+  const needsCapabilities = Object.entries(requiredPermissions ?? {}).some(
+    ([resource, actions]) =>
+      actions.includes("read") &&
+      ManagedResourceSchema.safeParse(resource).success,
   );
+  const permissions = useAllPermissions();
+  const capabilities = useScopedCapabilities(needsCapabilities);
+  const hasRequiredPermissions = hasPagePermissions({
+    userPermissions: permissions.data,
+    required: requiredPermissions ?? {},
+    capabilities: capabilities.data ?? [],
+  });
+  const isPending =
+    permissions.isPending || (needsCapabilities && capabilities.isPending);
   const canSeeSettings = useSettingsAreaAccess();
 
   // No loader while the permission check is in flight. It used to render one

@@ -3,7 +3,11 @@ import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPagePermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import {
+  useAllPermissions,
+  usePermissionMap,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { hasPagePermissions } from "@/lib/auth/auth.utils";
 import { WithPagePermissions } from "./with-page-permissions";
 
@@ -27,15 +31,18 @@ function signInAs(userPermissions: Permissions | null) {
         )
       : null,
   );
-  vi.mocked(useHasPagePermissions).mockImplementation(
-    (required) =>
-      ({
-        data: userPermissions
-          ? hasPagePermissions({ userPermissions, required, capabilities: [] })
-          : false,
-        isPending: userPermissions === null,
-      }) as ReturnType<typeof useHasPagePermissions>,
-  );
+  vi.mocked(useAllPermissions).mockReturnValue({
+    data: userPermissions ?? undefined,
+    isPending: userPermissions === null,
+  } as ReturnType<typeof useAllPermissions>);
+  capabilitiesLoaded(true);
+}
+
+function capabilitiesLoaded(loaded: boolean) {
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: loaded ? [] : undefined,
+    isPending: !loaded,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
 }
 
 function renderAt(pathname: string) {
@@ -90,6 +97,23 @@ describe("WithPagePermissions", () => {
     renderAt("/settings/credentials");
     expect(screen.queryByText("Page content")).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("does not wait for object grants on a page whose permission has none", () => {
+    signInAs(predefinedPermissionsMap.admin);
+    capabilitiesLoaded(false);
+    renderAt("/audit/logs");
+    expect(screen.getByText("Page content")).toBeVisible();
+    expect(useScopedCapabilities).toHaveBeenCalledWith(false);
+  });
+
+  it("waits for object grants on a page they can open", () => {
+    signInAs({});
+    capabilitiesLoaded(false);
+    renderAt("/agents");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+    expect(screen.queryByText(/permission/i)).not.toBeInTheDocument();
+    expect(useScopedCapabilities).toHaveBeenCalledWith(true);
   });
 
   it("leaves pages outside Settings to their own permission", () => {

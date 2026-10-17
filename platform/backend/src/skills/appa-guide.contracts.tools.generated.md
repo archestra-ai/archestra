@@ -99,7 +99,7 @@ The agent keeps using its host's tool names. A plugin implements the host lifecy
 | kagent | The entrypoint gates | `host/kagent-gate/code_execution`, `host/kagent-gate/memory_persist` |
 | kagent | The remedy tool | `appa/execute_remedy_plan` |
 
-Claude Code names such as `Bash` and `mcp__github__create_issue` identify precise tools. An unqualified kagent rule such as `read_secret` applies to that native name across MCP servers and kagent's own tools. It does not cover remote-agent delegation. A newly discovered tool can use an existing rule without restarting the trajectory or changing its opening policy.
+Claude Code names such as `Bash` and `mcp__github__create_issue` identify precise tools. An unqualified kagent rule such as `read_secret` applies to that native name across MCP servers and kagent's own tools. It does not cover remote-agent delegation. A newly discovered tool can use an existing rule without restarting the trajectory.
 
 A host that embeds the runtime brings its own tool identification. The adapter identifies every call's canonical id. The runtime spells a tool back through the same adapter. See Add to your agent.
 
@@ -114,7 +114,7 @@ delta = { trust = "suspicious" }
 
 This rule identifies `mcp/demo-tools/read_secret`. Deployment-level `[aliases]` maps a policy's namespace to a list of identities the deployment reports. `aliases.mcp` maps a server name to configured connection identities, such as `databricks = ["genie", "sql"]`; every rule under that name then covers each listed connection. `aliases.host` maps a battery's host namespace to the host that serves the same tools, such as `claude-code = ["archestra"]`; every `host/claude-code/...` rule then names `host/archestra/...`. Aliases resolve after composition, so a root rule still matches before a battery rule for the same tool. APPA does not infer a provider from a hostname or server metadata. A server qualifier cannot repair duplicate host dispatch names; the host must distinguish those tools.
 
-kagent derives a default source ID from the exact configured endpoint URL. Native rules do not require that ID. Discovery supplies evidence, not permission: known tools need policy coverage, unavailable sources remain unknown, and later calls still pass runtime enforcement. A trajectory retains its opening policy and accepted identities.
+kagent derives a default source ID from the exact configured endpoint URL. Native rules do not require that ID. Discovery supplies evidence, not permission: known tools need policy coverage, unavailable sources remain unknown, and later calls still pass runtime enforcement. A trajectory keeps the tool identities it accepted, and decides under its `deployment`'s current policy.
 
 Native names also work in `confined_results`, `assumed_tools`, and `provider_run_tools`. Coverage reports distinguish a rule spanning servers from an observed concrete tool. Overlapping declarations with incompatible provider-run execution settings are rejected.
 

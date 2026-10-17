@@ -51,13 +51,13 @@ const server = setupServer();
 /** The registry search route over `rows`, by id or by name. */
 function registrySearch(
   rows: CatalogItem[],
-  onRequest?: (body: SearchBody) => void,
+  onRequest?: (body: SearchBody) => unknown,
 ) {
   return http.post(
     `${API_ORIGIN}/api/internal_mcp_catalog/registry/search`,
     async ({ request }) => {
       const body = (await request.json()) as SearchBody;
-      onRequest?.(body);
+      await onRequest?.(body);
       const matching = rows.filter(
         (row) =>
           (!body.catalogIds || body.catalogIds.includes(row.id)) &&
@@ -221,16 +221,10 @@ describe("AgentToolExclusionsEditor — catalogs", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const search = registrySearch(many);
     server.use(
-      http.post(
-        `${API_ORIGIN}/api/internal_mcp_catalog/registry/search`,
-        async (info) => {
-          const body = (await info.request.clone().json()) as SearchBody;
-          if (body.catalogIds?.includes("catalog-65")) await gate;
-          return search.resolver(info);
-        },
-      ),
+      registrySearch(many, async (body) => {
+        if (body.catalogIds?.includes("catalog-65")) await gate;
+      }),
       http.get(`${API_ORIGIN}/api/internal_mcp_catalog/tools`, () =>
         HttpResponse.json([
           { id: TOOL_ID, name: "server_79__do_thing", catalogId: "catalog-79" },

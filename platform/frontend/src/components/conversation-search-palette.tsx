@@ -290,8 +290,10 @@ export function ConversationSearchPalette({
       toastOnError: false,
     },
   );
-  const { data: projects = [] } = useProjects({
+  const projectsPage = useProjects({
     search: entitySearch,
+    limit: ENTITY_RESULTS_LIMIT,
+    offset: 0,
     enabled: canSearchEntities && canOpenPage("/projects"),
     toastOnError: false,
   });
@@ -413,7 +415,10 @@ export function ConversationSearchPalette({
     },
     {
       heading: "Projects",
-      links: serverResults(projects).map((project) => ({
+      links: serverResults(
+        projectsPage.data?.data,
+        projectsPage.isPlaceholderData,
+      ).map((project) => ({
         key: `project-${project.id}`,
         href: `/projects/${project.id}`,
         label: project.name,

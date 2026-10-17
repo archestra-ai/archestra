@@ -258,14 +258,15 @@ const registry = defineArchestraTools([
               action: "update",
             })
           : undefined;
-        const projects = await projectService.list({
+        const { data: shown, total } = await projectService.list({
           organizationId,
           userId,
           isProjectAdmin,
           search: args.query,
           access: toolAccessSelection(args),
+          limit: MAX_LISTED_PROJECTS,
+          offset: 0,
         });
-        const shown = projects.slice(0, MAX_LISTED_PROJECTS);
         const summary =
           shown.length === 0
             ? "No projects matched."
@@ -275,8 +276,8 @@ const registry = defineArchestraTools([
                     `${p.name} (id=${p.id}, ${p.conversationCount} chat(s))`,
                 )
                 .join("\n") +
-              (projects.length > MAX_LISTED_PROJECTS
-                ? `\n(showing the first ${MAX_LISTED_PROJECTS} of ${projects.length}; narrow with query.)`
+              (total > MAX_LISTED_PROJECTS
+                ? `\n(showing the first ${MAX_LISTED_PROJECTS} of ${total}; narrow with query.)`
                 : "");
         return structuredSuccessResult(
           { projects: shown.map(toProjectSummary) },

@@ -13,6 +13,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import ProjectModel from "./project";
 import ProjectAccessModel from "./project-access";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 import TeamModel from "./team";
 
 describe("grant visibility through list queries", () => {
@@ -39,11 +40,17 @@ describe("grant visibility through list queries", () => {
       actions: ["read"],
     });
 
-    const listed = await ProjectAccessModel.listAccessibleProjects({
+    const { rows: listed } = await ProjectAccessModel.listPage({
       userId: reader.id,
       organizationId: org.id,
+      principal: await ResourcePermissionSubjectModel.resolvePrincipal({
+        userId: reader.id,
+        organizationId: org.id,
+      }),
     });
-    expect(listed.map((p) => p.id)).toContain(project.id);
+    expect(listed.filter((p) => p.accessible).map((p) => p.id)).toContain(
+      project.id,
+    );
     expect(
       await ProjectAccessModel.userCanAccessProject({
         project,

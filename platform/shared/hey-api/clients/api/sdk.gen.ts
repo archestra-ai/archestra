@@ -9748,7 +9748,7 @@ export const projectLabelKeys = <ThrowOnError extends boolean = false>(options?:
 export const projectLabelValues = <ThrowOnError extends boolean = false>(options?: Options<ProjectLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<ProjectLabelValuesResponses, ProjectLabelValuesErrors, ThrowOnError>({ url: '/api/projects/labels/values', ...options });
 
 /**
- * List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.
+ * List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice. Paginated: owner-first, then newest, then id.
  *
  * Authentication:
  *

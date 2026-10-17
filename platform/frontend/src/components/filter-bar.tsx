@@ -4,8 +4,15 @@ import { ChevronDown, Funnel, SlidersHorizontal, X } from "lucide-react";
 import {
   Children,
   type ComponentProps,
+  createContext,
   Fragment,
   type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
   useSyncExternalStore,
 } from "react";
 import {
@@ -65,6 +72,46 @@ export function CollectionFilters({
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * Hands a page-level control (the logs pages' time range) to the filter bar
+ * on compact screens, so it sits in the filter popover with the other filters
+ * instead of crowding the page header. The first bar on the page that can
+ * show it — one with a filter popover — claims it; `claimed` tells the owner
+ * to drop it from its usual spot. With no bar to claim it, it stays put.
+ */
+export function CompactFilterExtrasProvider({
+  extras,
+  children,
+}: {
+  extras: ReactNode;
+  children: (params: { claimed: boolean }) => ReactNode;
+}) {
+  const [claimants, setClaimants] = useState<string[]>([]);
+  const claim = useCallback((id: string) => {
+    setClaimants((current) => [...current, id]);
+    return () =>
+      setClaimants((current) => current.filter((entry) => entry !== id));
+  }, []);
+  const value = useMemo(
+    () => ({ extras, owner: claimants[0] ?? null, claim }),
+    [extras, claimants, claim],
+  );
+  return (
+    <CompactFilterExtrasContext.Provider value={value}>
+      {children({ claimed: claimants.length > 0 && !!extras })}
+    </CompactFilterExtrasContext.Provider>
+  );
+}
+
+/** Whether the filter bars are in their compact, popover layout. */
+export function useCompactFilters(): boolean {
+  return useSyncExternalStore(
+    subscribeToCompactFilters,
+    getCompactFiltersSnapshot,
+    () => false,
   );
 }
 
@@ -136,11 +183,7 @@ export function FilterBar({
   tuckActionsWhenCompact?: boolean;
   leading?: boolean;
 }) {
-  const compact = useSyncExternalStore(
-    subscribeToCompactFilters,
-    getCompactFiltersSnapshot,
-    () => false,
-  );
+  const compact = useCompactFilters();
   const hasFilters =
     Children.toArray(children).length > 0 || !!moreFilters?.length;
   const hasActiveFilters =
@@ -148,6 +191,18 @@ export function FilterBar({
   const bulkActionsScope = useBulkActionsScope();
   const actionsTargetId =
     contextualActionsTargetId ?? bulkActionsScope?.targetId;
+  const barId = useId();
+  const compactExtras = useContext(CompactFilterExtrasContext);
+  const canClaimExtras = compact && hasFilters && !!compactExtras;
+  const claimExtras = compactExtras?.claim;
+  useEffect(() => {
+    if (!canClaimExtras || !claimExtras) return;
+    return claimExtras(barId);
+  }, [canClaimExtras, claimExtras, barId]);
+  const extrasInPopover =
+    canClaimExtras && compactExtras?.owner === barId
+      ? compactExtras.extras
+      : null;
   const actionsInPopover =
     tuckActionsWhenCompact && compact && hasFilters && !!actions;
   const appliedOverflow = moreFilters?.filter((filter) => filter.active) ?? [];
@@ -207,6 +262,7 @@ export function FilterBar({
               className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto [&>button]:w-full [&>button]:max-w-none"
             >
               <span className="text-sm font-medium">Filters</span>
+              {extrasInPopover}
               {children}
               {moreFilters?.map((filter) => (
                 <div
@@ -417,6 +473,12 @@ export function FilterSelect({
 }
 
 // Keep this breakpoint aligned with Tailwind's lg layout.
+const CompactFilterExtrasContext = createContext<{
+  extras: ReactNode;
+  owner: string | null;
+  claim: (id: string) => () => void;
+} | null>(null);
+
 function subscribeToCompactFilters(onChange: () => void) {
   if (typeof window.matchMedia !== "function") return () => {};
   const query = window.matchMedia("(max-width: 1023px)");

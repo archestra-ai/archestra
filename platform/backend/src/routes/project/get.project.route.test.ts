@@ -57,7 +57,9 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
 
     const list = await app.inject({ method: "GET", url: "/api/projects" });
     expect(list.statusCode).toBe(200);
-    const items = list.json<Array<{ name: string; viewerRole: string }>>();
+    const items = list.json<{
+      data: Array<{ name: string; viewerRole: string }>;
+    }>().data;
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ name: "alpha", viewerRole: "shared" });
 
@@ -102,10 +104,13 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
       method: "GET",
       url: "/api/projects?scope=personal",
     });
-    const items =
-      personal.json<
-        Array<{ name: string; viewerRole: string; ownerName: string | null }>
-      >();
+    const items = personal.json<{
+      data: Array<{
+        name: string;
+        viewerRole: string;
+        ownerName: string | null;
+      }>;
+    }>().data;
     const overseen = items.find((p) => p.name === "owned-by-other");
     expect(overseen).toMatchObject({ viewerRole: "shared" });
     expect(overseen?.ownerName).toBe(otherOwner.name);
@@ -200,9 +205,9 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     // A non-admin never sees another member's private project — not in the
     // default list, nor under scope=personal.
     expect(
-      (await app.inject({ method: "GET", url: "/api/projects" })).json<
-        unknown[]
-      >(),
+      (await app.inject({ method: "GET", url: "/api/projects" })).json<{
+        data: unknown[];
+      }>().data,
     ).toEqual([]);
     expect(
       (
@@ -210,7 +215,7 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
           method: "GET",
           url: "/api/projects?scope=personal",
         })
-      ).json<unknown[]>(),
+      ).json<{ data: unknown[] }>().data,
     ).toEqual([]);
 
     // ...and they cannot edit or delete it (404, same as "not found").
@@ -247,7 +252,7 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     });
     expect(detail.statusCode).toBe(404);
     const list = await app.inject({ method: "GET", url: "/api/projects" });
-    expect(list.json<unknown[]>()).toEqual([]);
+    expect(list.json<{ data: unknown[] }>().data).toEqual([]);
   });
 });
 

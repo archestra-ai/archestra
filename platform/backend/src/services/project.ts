@@ -30,7 +30,10 @@ import {
 } from "@/models";
 import { ProjectNameExistsError } from "@/models/project";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import type { ResourceAccessSelection } from "@/models/resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+  type ResourceAccessSelection,
+} from "@/models/resource-permission-subject";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
@@ -228,176 +231,85 @@ class ProjectService {
      * `relations` the default "All" view applies before the other two narrow.
      */
     access?: ResourceAccessSelection;
-  }): Promise<ProjectListItem[]> {
+    /** `true`: only the caller's pinned projects; `false`: only the others. */
+    pinned?: boolean;
+    /** Page size; omitted returns every match. */
+    limit?: number;
+    offset?: number;
+  }): Promise<{ data: ProjectListItem[]; total: number }> {
     const { organizationId, userId, scope } = params;
+
+    // The caller's principal and pins are each read once per request: the
+    // principal backs the access check and the "Show" filter, the pins back
+    // the `pinned` filter and the page's `pinnedAt`.
+    const [principal, pins] = await Promise.all([
+      ResourcePermissionSubjectModel.resolvePrincipal({
+        userId,
+        organizationId,
+      }),
+      ProjectPinModel.getPinnedAtForUser(userId),
+    ]);
 
     // The deleted slice is a separate, oversight path for holders of a grant on every project; the
     // active browse pipeline below (scope/author/search/team filters, the
     // "All" branch that drops admin-oversight rows) does not apply to it.
     if (params.status === "deleted") {
-      return this.listDeleted({
-        organizationId,
-        userId,
-        isProjectAdmin: params.isProjectAdmin,
-      });
+      return this.listDeleted({ ...params, principal, pins });
     }
 
-    // What the caller can actually reach (owner ∪ org/team-shared-to-them): the
-    // non-admin base, and how admins tell "shared" from "oversight" access.
-    const accessible = await ProjectAccessModel.listAccessibleProjects({
+    // What the caller can reach (owner ∪ shared to them), or for a holder of
+    // `update` on every project, the whole org. The "All" view (no scope, no
+    // "Show" filter) shows only what the caller can actually access, which for
+    // an admin drops every oversight row; those stay reachable via Personal →
+    // Other users and Team → pick that team. The "Show" filter replaces that
+    // rule and reaches oversight-only rows through `others`. A pinned-only
+    // listing is cut to the pins, so it never reads the rest.
+    const { rows, total } = await ProjectAccessModel.listPage({
       userId,
       organizationId,
+      principal,
+      includeOversight: params.isProjectAdmin,
+      reachableOnly:
+        scope === undefined && params.access?.relations === undefined,
+      scope,
+      teamIds: params.teamIds,
+      // admin "My / Other users" owner sub-filter (honored upstream for admins only).
+      authorIds: params.authorIds,
+      excludeAuthorIds: params.excludeAuthorIds,
+      search: params.search,
+      ids: params.labelFilteredIds,
+      access: params.access,
+      pins:
+        params.pinned === undefined
+          ? undefined
+          : { ids: [...pins.keys()], pinned: params.pinned },
+      ownerFirst: true,
+      limit: params.limit,
+      offset: params.offset,
     });
-    const accessibleIds = new Set(accessible.map((p) => p.id));
-
-    // A holder of `update` on every project oversees them all; everyone else sees only theirs.
-    const base = params.isProjectAdmin
-      ? await ProjectAccessModel.listAllOrgProjects({ organizationId })
-      : accessible;
-
-    let candidates = base.map((project) => ({
+    const page = rows.map((project) => ({
       project,
       viewerRole: (project.userId === userId
         ? "owner"
-        : accessibleIds.has(project.id)
+        : project.accessible
           ? "shared"
           : "admin") as ProjectViewerRole,
     }));
 
-    if (params.labelFilteredIds !== undefined) {
-      const matchingIds = new Set(params.labelFilteredIds);
-      candidates = candidates.filter(({ project }) =>
-        matchingIds.has(project.id),
-      );
-    }
-
-    // scope filters on the project's share visibility.
-    if (scope === "personal") {
-      candidates = candidates.filter((c) => c.project.visibility === null);
-    } else if (scope === "team") {
-      candidates = candidates.filter((c) => c.project.visibility === "team");
-    } else if (scope === "org") {
-      candidates = candidates.filter(
-        (c) => c.project.visibility === "organization",
-      );
-    } else if (params.access?.relations === undefined) {
-      // "All": show only what the caller can actually access — own, org-shared,
-      // and team-shared to a team they belong to. For an admin that drops every
-      // oversight row (other members' private projects AND team-shared projects
-      // for teams they aren't in); those stay reachable via Personal → Other
-      // users and Team → pick that team. Non-admins have no oversight candidates
-      // to begin with, so this is a no-op for them.
-      candidates = candidates.filter((c) => c.viewerRole !== "admin");
-    }
-
-    // The "Show" filter replaces the "All" view's oversight rule above: it
-    // reaches oversight-only rows through `others`.
-    if (params.access !== undefined) {
-      const inRelations = new Set(
-        await ProjectAccessModel.getIdsInAccessRelations({
-          organizationId,
-          userId,
-          selection: params.access,
-        }),
-      );
-      candidates = candidates.filter(({ project }) =>
-        inRelations.has(project.id),
-      );
-    }
-
-    // admin "My / Other users" owner sub-filter (honored upstream for admins only).
-    if (params.authorIds?.length) {
-      const include = new Set(params.authorIds);
-      candidates = candidates.filter((c) => include.has(c.project.userId));
-    }
-    if (params.excludeAuthorIds?.length) {
-      const exclude = new Set(params.excludeAuthorIds);
-      candidates = candidates.filter((c) => !exclude.has(c.project.userId));
-    }
-
-    // Pure name/description search — applied before the share-teams fetch so
-    // the DB query below only covers the surviving candidates.
-    const query = params.search?.trim().toLowerCase();
-    if (query) {
-      candidates = candidates.filter(
-        ({ project }) =>
-          project.name.toLowerCase().includes(query) ||
-          (project.description?.toLowerCase().includes(query) ?? false),
-      );
-    }
-
-    // Who each project reaches — backs both the `teamIds` filter and the
-    // recipient names on the visibility badge.
-    const audiences = await ProjectAccessModel.getAudiences(
-      candidates.map((c) => c.project),
-    );
-
-    // teamIds narrows scope=team to projects shared with any chosen team.
-    if (params.teamIds?.length) {
-      const want = new Set(params.teamIds);
-      candidates = candidates.filter((c) =>
-        (audiences.get(c.project.id)?.teams ?? []).some((t) => want.has(t.id)),
-      );
-    }
-
-    // owner-first then newest — a stable order under the frontend's pinned grouping.
-    candidates.sort((a, b) => {
-      const aOwn = a.viewerRole === "owner" ? 0 : 1;
-      const bOwn = b.viewerRole === "owner" ? 0 : 1;
-      if (aOwn !== bOwn) return aOwn - bOwn;
-      return b.project.createdAt.getTime() - a.project.createdAt.getTime();
+    const data = await this.toListItems({
+      rows: page,
+      userId,
+      pins,
+      // Team and user recipients go on the badge for the owner and for an
+      // overseer of every project, whose grant makes the project read as
+      // "shared" to them. A plain "shared" recipient (a member of one of the
+      // teams) gets null — the full target list stays the owner's business.
+      showsRecipients: ({ viewerRole }) =>
+        viewerRole === "owner" ||
+        viewerRole === "admin" ||
+        params.isProjectAdmin === true,
     });
-
-    const projectIds = candidates.map((c) => c.project.id);
-    const ownerIds = [...new Set(candidates.map((c) => c.project.userId))];
-    const [counts, pins, ownerNames, creators, labelsByProject] =
-      await Promise.all([
-        ProjectModel.countConversations(projectIds),
-        ProjectPinModel.getPinnedAtForProjects({ userId, projectIds }),
-        UserModel.getNamesByIds(ownerIds),
-        // A project's owner is its creator: `projects.user_id` is NOT NULL and
-        // stamped from the acting user, and ownership does not transfer.
-        CreatedByModel.resolve(ownerIds),
-        ProjectLabelModel.getLabelsForMany(projectIds),
-      ]);
-    return candidates.map(({ project, viewerRole }) => ({
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      icon: project.icon,
-      viewerRole,
-      ownerName: ownerNames.get(project.userId) ?? null,
-      createdBy: lookupCreator(creators, project.userId),
-      labels: labelsByProject.get(project.id) ?? [],
-      conversationCount: counts.get(project.id) ?? 0,
-      visibility: project.visibility,
-      // Team-shared projects expose their team names for the badge to the
-      // owner and to an overseer of every project, whose grant makes the
-      // project read as "shared" to them. A plain "shared"
-      // recipient (a member of one of the teams) gets null — the full target
-      // list stays the owner's business. Non-team projects: null.
-      shareTeamNames:
-        (viewerRole === "owner" ||
-          viewerRole === "admin" ||
-          params.isProjectAdmin === true) &&
-        project.visibility === "team"
-          ? (audiences.get(project.id)?.teams ?? []).map((t) => t.name)
-          : null,
-      // Same gate as shareTeamNames: without these a project shared with named
-      // people renders as private, which is the opposite of what happened.
-      shareUserNames:
-        (viewerRole === "owner" ||
-          viewerRole === "admin" ||
-          params.isProjectAdmin === true) &&
-        project.visibility === "user"
-          ? (audiences.get(project.id)?.users ?? []).map((u) => u.name)
-          : null,
-      pinnedAt: pins.get(project.id) ?? null,
-      createdAt: project.createdAt,
-      // Active slice: soft-deleted rows are filtered out upstream, so this is
-      // always null here. Non-null rows only surface via listDeleted.
-      deletedAt: project.deletedAt,
-    }));
+    return { data, total };
   }
 
   /**
@@ -411,49 +323,32 @@ class ProjectService {
     organizationId: string;
     userId: string;
     isProjectAdmin?: boolean;
-  }): Promise<ProjectListItem[]> {
-    if (!params.isProjectAdmin) return [];
-    const deleted = await ProjectAccessModel.listAllOrgProjects({
+    principal: GrantPrincipal;
+    pins: Map<string, Date>;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ data: ProjectListItem[]; total: number }> {
+    if (!params.isProjectAdmin) return { data: [], total: 0 };
+    const { rows, total } = await ProjectAccessModel.listPage({
+      userId: params.userId,
       organizationId: params.organizationId,
+      principal: params.principal,
+      includeOversight: true,
       lifecycle: "deleted",
+      limit: params.limit,
+      offset: params.offset,
     });
-    const projectIds = deleted.map((p) => p.id);
-    const ownerIds = [...new Set(deleted.map((p) => p.userId))];
-    const [counts, pins, ownerNames, creators, audiences, labelsByProject] =
-      await Promise.all([
-        ProjectModel.countConversations(projectIds),
-        ProjectPinModel.getPinnedAtForProjects({
-          userId: params.userId,
-          projectIds,
-        }),
-        UserModel.getNamesByIds(ownerIds),
-        CreatedByModel.resolve(ownerIds),
-        ProjectAccessModel.getAudiences(deleted),
-        ProjectLabelModel.getLabelsForMany(projectIds),
-      ]);
-    return deleted.map((project) => ({
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      icon: project.icon,
+    const page = rows.map((project) => ({
+      project,
       viewerRole: "admin" as ProjectViewerRole,
-      ownerName: ownerNames.get(project.userId) ?? null,
-      createdBy: lookupCreator(creators, project.userId),
-      labels: labelsByProject.get(project.id) ?? [],
-      conversationCount: counts.get(project.id) ?? 0,
-      visibility: project.visibility,
-      shareTeamNames:
-        project.visibility === "team"
-          ? (audiences.get(project.id)?.teams ?? []).map((t) => t.name)
-          : null,
-      shareUserNames:
-        project.visibility === "user"
-          ? (audiences.get(project.id)?.users ?? []).map((u) => u.name)
-          : null,
-      pinnedAt: pins.get(project.id) ?? null,
-      createdAt: project.createdAt,
-      deletedAt: project.deletedAt,
     }));
+    const data = await this.toListItems({
+      rows: page,
+      userId: params.userId,
+      pins: params.pins,
+      showsRecipients: () => true,
+    });
+    return { data, total };
   }
 
   async get(params: {
@@ -1124,6 +1019,74 @@ class ProjectService {
    * actually use, however widely the project is shared. Org scope is what
    * guarantees that, so it is enforced here rather than left to the picker.
    */
+  /** The response rows for one page: everything the cards show, read for the page alone. */
+  private async toListItems(params: {
+    rows: {
+      project: Awaited<
+        ReturnType<typeof ProjectAccessModel.listPage>
+      >["rows"][number];
+      viewerRole: ProjectViewerRole;
+    }[];
+    userId: string;
+    pins: Map<string, Date>;
+    showsRecipients: (row: { viewerRole: ProjectViewerRole }) => boolean;
+  }): Promise<ProjectListItem[]> {
+    const { rows } = params;
+    if (rows.length === 0) return [];
+    const projectIds = rows.map((r) => r.project.id);
+    const ownerIds = [...new Set(rows.map((r) => r.project.userId))];
+    // Recipient names only matter for team- and user-shared rows the viewer
+    // may see the targets of.
+    const needsAudience = rows
+      .filter(
+        (r) =>
+          (r.project.visibility === "team" ||
+            r.project.visibility === "user") &&
+          params.showsRecipients(r),
+      )
+      .map((r) => r.project);
+    const [counts, ownerNames, creators, labelsByProject, icons, audiences] =
+      await Promise.all([
+        ProjectModel.countConversations(projectIds),
+        UserModel.getNamesByIds(ownerIds),
+        // A project's owner is its creator: `projects.user_id` is NOT NULL and
+        // stamped from the acting user, and ownership does not transfer.
+        CreatedByModel.resolve(ownerIds),
+        ProjectLabelModel.getLabelsForMany(projectIds),
+        ProjectModel.getIcons(projectIds),
+        ProjectAccessModel.getAudiences(needsAudience),
+      ]);
+    return rows.map(({ project, viewerRole }) => {
+      const showsRecipients = params.showsRecipients({ viewerRole });
+      return {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        icon: icons.get(project.id) ?? null,
+        viewerRole,
+        ownerName: ownerNames.get(project.userId) ?? null,
+        createdBy: lookupCreator(creators, project.userId),
+        labels: labelsByProject.get(project.id) ?? [],
+        conversationCount: counts.get(project.id) ?? 0,
+        visibility: project.visibility,
+        shareTeamNames:
+          showsRecipients && project.visibility === "team"
+            ? (audiences.get(project.id)?.teams ?? []).map((t) => t.name)
+            : null,
+        // Same gate as shareTeamNames: without these a project shared with named
+        // people renders as private, which is the opposite of what happened.
+        shareUserNames:
+          showsRecipients && project.visibility === "user"
+            ? (audiences.get(project.id)?.users ?? []).map((u) => u.name)
+            : null,
+        pinnedAt: params.pins.get(project.id) ?? null,
+        createdAt: project.createdAt,
+        // Null on the active slice; set for rows from listDeleted.
+        deletedAt: project.deletedAt,
+      };
+    });
+  }
+
   private async requirePinnableDefaultAgent(params: {
     agentId: string;
     organizationId: string;

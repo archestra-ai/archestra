@@ -1,12 +1,29 @@
 import type { ResourcePermissionGrant } from "@archestra/shared";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import type { Project, ProjectLifecycle, ProjectVisibility } from "@/types";
+import type {
+  Project,
+  ProjectLifecycle,
+  ProjectListScope,
+  ProjectVisibility,
+} from "@/types";
+import { chunkForBulkStatement } from "@/utils/db";
 import ResourcePermissionAccessModel from "./resource-permission-access";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel, {
-  type ResourceAccessSelection,
+import type {
+  GrantPrincipal,
+  ResourceAccessSelection,
 } from "./resource-permission-subject";
 
 /** Who a project reaches besides its owner, read from its permission policy. */
@@ -16,8 +33,23 @@ type ProjectAudience = {
   users: { id: string; name: string }[];
 };
 
-type ProjectWithVisibility = Project & {
+/**
+ * A project row for the list's filter/sort pass: no `icon` (a data URL can be
+ * ~1 MB) and no recipient names, only what the filters and ordering read.
+ */
+type ProjectListCandidate = Pick<
+  Project,
+  | "id"
+  | "organizationId"
+  | "userId"
+  | "name"
+  | "description"
+  | "createdAt"
+  | "deletedAt"
+> & {
   visibility: ProjectVisibility | null;
+  /** Whether the caller's own grants reach the project (vs. oversight only). */
+  accessible: boolean;
 };
 
 /**
@@ -51,109 +83,151 @@ class ProjectAccessModel {
     // SPDX-SnippetEnd
   }
 
-  /** Every active project the user's grants reach, own-first then newest. */
-  static async listAccessibleProjects(params: {
-    userId: string;
-    organizationId: string;
-  }): Promise<ProjectWithVisibility[]> {
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    const principal =
-      await ResourcePermissionSubjectModel.resolvePrincipal(params);
-    const projects = await db
-      .select()
-      .from(schema.projectsTable)
-      .where(
-        and(
-          eq(schema.projectsTable.organizationId, params.organizationId),
-          notDeleted(schema.projectsTable),
-          ResourcePermissionPolicyModel.grantCondition({
-            ...principal,
-            resource: "project",
-            scopeColumn: schema.projectsTable.id,
-            action: "read",
-          }),
-        ),
-      );
-    // SPDX-SnippetEnd
-    return (await ProjectAccessModel.attachVisibility(projects)).sort(
-      (a, b) => {
-        const aOwn = a.userId === params.userId ? 0 : 1;
-        const bOwn = b.userId === params.userId ? 0 : 1;
-        if (aOwn !== bOwn) return aOwn - bOwn;
-        return b.createdAt.getTime() - a.createdAt.getTime();
-      },
-    );
-  }
-
   /**
-   * Ids of the org's active projects the caller's "Show", "Shared with", and
-   * "Owner" filters keep; see
-   * {@link ResourcePermissionPolicyModel.accessRelationCondition}.
+   * One page of the projects list, filtered, ordered and counted in SQL.
+   *
+   * Without `includeOversight` only projects the caller's grants reach come
+   * back. With it every project in the slice does, flagged by `accessible`,
+   * unless `reachableOnly` drops the unreachable ones again (the "All" view).
+   * Order is owner-first (when `ownerFirst`), then newest, then id, so pages
+   * never overlap. Visibility is derived per returned row; only a `scope`
+   * filter evaluates it for every candidate.
    */
-  static async getIdsInAccessRelations(params: {
+  static async listPage(params: {
     userId: string;
     organizationId: string;
-    selection: ResourceAccessSelection;
-  }): Promise<string[]> {
+    principal: GrantPrincipal;
+    includeOversight?: boolean;
+    reachableOnly?: boolean;
+    lifecycle?: ProjectLifecycle;
+    scope?: ProjectListScope;
+    /** Projects shared with any of these teams. */
+    teamIds?: string[];
+    authorIds?: string[];
+    excludeAuthorIds?: string[];
+    search?: string;
+    /** Keep only these ids (e.g. a label match). */
+    ids?: string[];
+    /** Keep only the caller's pinned (`pinned: true`) or unpinned projects. */
+    pins?: { ids: string[]; pinned: boolean };
+    access?: ResourceAccessSelection;
+    ownerFirst?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ rows: ProjectListCandidate[]; total: number }> {
+    const table = schema.projectsTable;
+    const visibility = ResourcePermissionPolicyModel.sharedAudience({
+      organizationId: table.organizationId,
+      resource: "project",
+      scopeColumn: table.id,
+      ownerColumn: table.userId,
+    });
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
-      userId: params.userId,
-      organizationId: params.organizationId,
+    const accessible = ResourcePermissionPolicyModel.grantCondition({
+      ...params.principal,
+      resource: "project",
+      scopeColumn: table.id,
+      action: "read",
     });
-    const rows = await db
-      .select({ id: schema.projectsTable.id })
-      .from(schema.projectsTable)
-      .where(
-        and(
-          eq(schema.projectsTable.organizationId, params.organizationId),
-          notDeleted(schema.projectsTable),
-          ResourcePermissionPolicyModel.accessRelationCondition({
+    const accessRelations = params.access
+      ? ResourcePermissionPolicyModel.accessRelationCondition({
+          organizationId: params.organizationId,
+          resource: "project",
+          scopeColumn: table.id,
+          ownerColumn: table.userId,
+          userId: params.userId,
+          subjects: params.principal.subjects,
+          ...params.access,
+        })
+      : undefined;
+    // SPDX-SnippetEnd
+    const search = params.search?.trim().toLowerCase();
+    const where = and(
+      eq(table.organizationId, params.organizationId),
+      params.lifecycle === "deleted"
+        ? isNotNull(table.deletedAt)
+        : notDeleted(table),
+      // An overseer's "All" view keeps what their grants reach plus their own
+      // projects, which read as theirs even without an owner grant.
+      !params.includeOversight
+        ? accessible
+        : params.reachableOnly
+          ? or(accessible, eq(table.userId, params.userId))
+          : undefined,
+      params.scope === "personal"
+        ? sql`${visibility} IS NULL`
+        : params.scope === "team"
+          ? sql`${visibility} = 'team'`
+          : params.scope === "org"
+            ? sql`${visibility} = 'organization'`
+            : undefined,
+      accessRelations,
+      params.teamIds?.length
+        ? ResourcePermissionPolicyModel.grantsReadToAnyTeam({
             organizationId: params.organizationId,
             resource: "project",
-            scopeColumn: schema.projectsTable.id,
-            ownerColumn: schema.projectsTable.userId,
-            userId: params.userId,
-            subjects: principal.subjects,
-            ...params.selection,
-          }),
-        ),
-      );
-    // SPDX-SnippetEnd
-    return rows.map((row) => row.id);
-  }
-
-  /**
-   * Every project in the org, with visibility attached — newest first. Backs
-   * the admin filter base set (a `project:admin` can see/oversee any project);
-   * the service derives each project's viewerRole from the caller's real
-   * access path.
-   */
-  static async listAllOrgProjects(params: {
-    organizationId: string;
-    // `active` (default) hides soft-deleted rows; `deleted` returns ONLY them
-    // for the project:admin oversight view. There is no "both" slice.
-    lifecycle?: ProjectLifecycle;
-  }): Promise<ProjectWithVisibility[]> {
-    const lifecycleFilter =
-      params.lifecycle === "deleted"
-        ? isNotNull(schema.projectsTable.deletedAt)
-        : notDeleted(schema.projectsTable);
-    const projects = await db
-      .select()
-      .from(schema.projectsTable)
-      .where(
-        and(
-          eq(schema.projectsTable.organizationId, params.organizationId),
-          lifecycleFilter,
-        ),
-      );
-    return (await ProjectAccessModel.attachVisibility(projects)).sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+            scopeColumn: table.id,
+            teamIds: params.teamIds,
+          })
+        : undefined,
+      params.authorIds?.length
+        ? inArray(table.userId, params.authorIds)
+        : undefined,
+      params.excludeAuthorIds?.length
+        ? notInArray(table.userId, params.excludeAuthorIds)
+        : undefined,
+      search
+        ? or(
+            sql`position(${search} in lower(${table.name})) > 0`,
+            sql`position(${search} in lower(coalesce(${table.description}, ''))) > 0`,
+          )
+        : undefined,
+      params.ids ? idIn(params.ids) : undefined,
+      params.pins
+        ? params.pins.pinned
+          ? idIn(params.pins.ids)
+          : sql`NOT ${idIn(params.pins.ids)}`
+        : undefined,
     );
+    const page = db
+      .select({
+        id: table.id,
+        organizationId: table.organizationId,
+        userId: table.userId,
+        name: table.name,
+        description: table.description,
+        createdAt: table.createdAt,
+        deletedAt: table.deletedAt,
+        visibility,
+        accessible: params.includeOversight
+          ? sql<boolean>`${accessible}`
+          : sql<boolean>`true`,
+      })
+      .from(table)
+      .where(where)
+      .orderBy(
+        ...(params.ownerFirst
+          ? [sql`(${table.userId} = ${params.userId}) DESC`]
+          : []),
+        desc(table.createdAt),
+        asc(table.id),
+      )
+      .offset(params.offset ?? 0)
+      .$dynamic();
+    const [rows, [{ total }]] = await Promise.all([
+      params.limit === undefined ? page : page.limit(params.limit),
+      db.select({ total: sql<number>`count(*)::int` }).from(table).where(where),
+    ]);
+    return {
+      rows: rows.map((row) => ({
+        ...row,
+        visibility: row.visibility ?? null,
+        accessible: row.accessible === true,
+      })),
+      total,
+    };
   }
 
   // SPDX-SnippetBegin
@@ -165,28 +239,39 @@ class ProjectAccessModel {
   ): Promise<Map<string, ProjectAudience>> {
     const result = new Map<string, ProjectAudience>();
     if (projects.length === 0) return result;
-    const policies = await db
-      .select({
-        organizationId: schema.resourcePermissionPoliciesTable.organizationId,
-        scope: schema.resourcePermissionPoliciesTable.scope,
-        grants: schema.resourcePermissionPoliciesTable.grants,
-      })
-      .from(schema.resourcePermissionPoliciesTable)
-      .where(
-        and(
-          eq(schema.resourcePermissionPoliciesTable.resource, "project"),
-          inArray(
-            schema.resourcePermissionPoliciesTable.scope,
-            projects.map((project) => project.id),
-          ),
+    const policyTable = schema.resourcePermissionPoliciesTable;
+    const policies = (
+      await Promise.all(
+        chunkForBulkStatement(projects.map((project) => project.id)).map(
+          (scopes) =>
+            db
+              .select({
+                organizationId: policyTable.organizationId,
+                scope: policyTable.scope,
+                grants: policyTable.grants,
+              })
+              .from(policyTable)
+              .where(
+                and(
+                  eq(policyTable.resource, "project"),
+                  inArray(policyTable.scope, scopes),
+                ),
+              ),
         ),
-      );
+      )
+    ).flat();
+    const policyKey = (organizationId: string, scope: string) =>
+      `${organizationId}:${scope}`;
+    const policyByKey = new Map(
+      policies.map((policy) => [
+        policyKey(policy.organizationId, policy.scope),
+        policy,
+      ]),
+    );
     const grantsByProject = new Map<string, ResourcePermissionGrant[]>();
     for (const project of projects) {
-      const policy = policies.find(
-        (candidate) =>
-          candidate.scope === project.id &&
-          candidate.organizationId === project.organizationId,
+      const policy = policyByKey.get(
+        policyKey(project.organizationId, project.id),
       );
       grantsByProject.set(
         project.id,
@@ -211,19 +296,25 @@ class ProjectAccessModel {
     ];
     const [teamIds, userIds] = [idsOf("team"), idsOf("user")];
     const [teams, users] = await Promise.all([
-      teamIds.length === 0
-        ? []
-        : db
+      Promise.all(
+        chunkForBulkStatement(teamIds).map((ids) =>
+          db
             .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
             .from(schema.teamsTable)
-            .where(inArray(schema.teamsTable.id, teamIds)),
-      userIds.length === 0
-        ? []
-        : db
+            .where(inArray(schema.teamsTable.id, ids)),
+        ),
+      ).then((chunks) => chunks.flat()),
+      Promise.all(
+        chunkForBulkStatement(userIds).map((ids) =>
+          db
             .select({ id: schema.usersTable.id, name: schema.usersTable.name })
             .from(schema.usersTable)
-            .where(inArray(schema.usersTable.id, userIds)),
+            .where(inArray(schema.usersTable.id, ids)),
+        ),
+      ).then((chunks) => chunks.flat()),
     ]);
+    const teamById = new Map(teams.map((team) => [team.id, team]));
+    const userById = new Map(users.map((user) => [user.id, user]));
     const byName = (a: { name: string }, b: { name: string }) =>
       a.name.localeCompare(b.name);
     for (const [projectId, grants] of grantsByProject) {
@@ -251,8 +342,12 @@ class ProjectAccessModel {
             : named
               ? "user"
               : null,
-        teams: teams.filter((team) => teamSet.has(team.id)).sort(byName),
-        users: users.filter((user) => userSet.has(user.id)).sort(byName),
+        teams: [...teamSet]
+          .flatMap((id) => teamById.get(id) ?? [])
+          .sort(byName),
+        users: [...userSet]
+          .flatMap((id) => userById.get(id) ?? [])
+          .sort(byName),
       });
     }
     return result;
@@ -268,16 +363,13 @@ class ProjectAccessModel {
       audiences.get(project.id) ?? { visibility: null, teams: [], users: [] }
     );
   }
-
-  private static async attachVisibility(
-    projects: Project[],
-  ): Promise<ProjectWithVisibility[]> {
-    const audiences = await ProjectAccessModel.getAudiences(projects);
-    return projects.map((project) => ({
-      ...project,
-      visibility: audiences.get(project.id)?.visibility ?? null,
-    }));
-  }
 }
 
 export default ProjectAccessModel;
+
+// ===== Internal =====
+
+/** `projects.id` among `ids`, as one array parameter whatever its length (empty matches none). */
+function idIn(ids: string[]) {
+  return sql`${schema.projectsTable.id} = ANY(${sql.param(ids)}::uuid[])`;
+}

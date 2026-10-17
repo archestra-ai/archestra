@@ -2041,24 +2041,89 @@ class AgentModel {
           direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
         );
     } else if (sorting?.sortBy === "toolsCount") {
-      const toolsCountSubquery = db
+      // Ordered by the count the Tools column shows (see getListToolCounts):
+      // all assignments, minus subagent delegations, minus the knowledge
+      // search tool when the agent has no knowledge sources. Only the few
+      // special tools are joined; the plain count needs no join.
+      const delegate = schema.toolsTable.delegateToAgentId;
+      const isSpecialTool = or(
+        isNotNull(delegate),
+        isKnowledgeSearchToolName(schema.toolsTable.name),
+      );
+      const assignmentCounts = db
         .select({
           agentId: schema.agentToolsTable.agentId,
-          toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
+          assignments: count().as("assignments"),
         })
         .from(schema.agentToolsTable)
         .groupBy(schema.agentToolsTable.agentId)
-        .as("toolsCounts");
+        .as("assignmentCounts");
+      // Assignments without an MCP server reach the special tools through the
+      // (tool_id, agent_id) index; assignments tied to a server, which that
+      // index leaves out, are read in one pass.
+      const specialRow = {
+        agentId: schema.agentToolsTable.agentId,
+        delegation: sql<boolean>`${delegate} is not null`.as("delegation"),
+      };
+      const specialAssignments = unionAll(
+        db
+          .select(specialRow)
+          .from(schema.toolsTable)
+          .innerJoin(
+            schema.agentToolsTable,
+            and(
+              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+              isNull(schema.agentToolsTable.mcpServerId),
+            ),
+          )
+          .where(isSpecialTool),
+        db
+          .select(specialRow)
+          .from(schema.agentToolsTable)
+          .innerJoin(
+            schema.toolsTable,
+            eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
+          )
+          .where(
+            and(isNotNull(schema.agentToolsTable.mcpServerId), isSpecialTool),
+          ),
+      ).as("specialAssignments");
+      const specialCounts = db
+        .select({
+          agentId: specialAssignments.agentId,
+          delegations:
+            sql<number>`count(*) filter (where ${specialAssignments.delegation})`.as(
+              "delegations",
+            ),
+          knowledgeTools:
+            sql<number>`count(*) filter (where not ${specialAssignments.delegation})`.as(
+              "knowledgeTools",
+            ),
+        })
+        .from(specialAssignments)
+        .groupBy(specialAssignments.agentId)
+        .as("specialCounts");
 
       query = query
         .leftJoin(
-          toolsCountSubquery,
-          eq(schema.agentsTable.id, toolsCountSubquery.agentId),
+          assignmentCounts,
+          eq(schema.agentsTable.id, assignmentCounts.agentId),
+        )
+        .leftJoin(
+          specialCounts,
+          eq(schema.agentsTable.id, specialCounts.agentId),
         )
         .orderBy(
           ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
-          direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`),
+          direction(sql`COALESCE(${assignmentCounts.assignments}, 0)
+            - COALESCE(${specialCounts.delegations}, 0)
+            - CASE
+              WHEN ${specialCounts.knowledgeTools} > 0
+                AND ${hasNoKnowledgeSources()}
+              THEN ${specialCounts.knowledgeTools}
+              ELSE 0
+            END`),
         );
     } else if (sorting?.sortBy === "knowledgeSourcesCount") {
       const knowledgeSourcesCountSubquery = db
@@ -2223,15 +2288,22 @@ class AgentModel {
       AgentModel.populateResolvedLlm(agents),
       AgentModel.populateLastUsedAt(agents),
     ]);
-    const pinnedAtByAgent = userId
-      ? await AgentPinModel.getPinnedAtForAgents({ userId, agentIds })
-      : new Map<string, Date>();
+    // Counted after the knowledge sources are populated: the knowledge
+    // search tool counts only for an agent that has some.
+    const [pinnedAtByAgent, toolCounts] = await Promise.all([
+      userId
+        ? AgentPinModel.getPinnedAtForAgents({ userId, agentIds })
+        : new Map<string, Date>(),
+      AgentModel.getListToolCounts(agents),
+    ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
     return createPaginatedResult(
       agents.map((agent) => ({
         ...agent,
         pinnedAt: pinnedAtByAgent.get(agent.id) ?? null,
+        toolsCount: toolCounts.get(agent.id)?.toolsCount ?? 0,
+        subagentsCount: toolCounts.get(agent.id)?.subagentsCount ?? 0,
       })),
       Number(totalResult),
       pagination,
@@ -2244,19 +2316,12 @@ class AgentModel {
    * knowledge search tool counts only for an agent with knowledge sources, as
    * in filterUnavailableKnowledgeTools.
    */
-  static async getListToolCounts(
+  private static async getListToolCounts(
     agents: Array<Pick<Agent, "id" | "knowledgeBaseIds" | "connectorIds">>,
   ): Promise<Map<string, { toolsCount: number; subagentsCount: number }>> {
     if (agents.length === 0) return new Map();
-    const name = schema.toolsTable.name;
     const delegate = schema.toolsTable.delegateToAgentId;
-    // Bare, or after a server prefix of at least one character. The leading
-    // `_%` is the only wildcard: the separator and name are escaped and match
-    // literally.
-    const prefixedKnowledgeTool = `_%${escapeLikePattern(
-      `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
-    )}`;
-    const isKnowledgeTool = sql`(${name} = ${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME} or ${name} like ${prefixedKnowledgeTool})`;
+    const isKnowledgeTool = isKnowledgeSearchToolName(schema.toolsTable.name);
     const rows = await db
       .select({
         agentId: schema.agentToolsTable.agentId,
@@ -5491,6 +5556,34 @@ function hasKnowledgeSources(
   agent: Pick<Agent, "knowledgeBaseIds" | "connectorIds">,
 ): boolean {
   return agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
+}
+
+/**
+ * Whether a tool is the knowledge search tool: its bare name, or the name
+ * after a server prefix. Only the leading `_%` is a wildcard. Shared by the
+ * list's Tools count and its sort so the two agree.
+ */
+function isKnowledgeSearchToolName(name: AnyPgColumn | SQL): SQL {
+  const prefixed = `_%${escapeLikePattern(
+    `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
+  )}`;
+  return sql`(${name} = ${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME} or ${name} like ${prefixed})`;
+}
+
+/**
+ * Whether the agent in the enclosing `agents` row has no knowledge base and no
+ * connector. Its knowledge search tool then does not count as a tool.
+ */
+function hasNoKnowledgeSources(): SQL {
+  const agentId = qualified(schema.agentsTable.id);
+  return sql`NOT EXISTS (
+      SELECT 1 FROM ${schema.agentKnowledgeBasesTable}
+      WHERE ${qualified(schema.agentKnowledgeBasesTable.agentId)} = ${agentId}
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM ${schema.agentConnectorAssignmentsTable}
+      WHERE ${qualified(schema.agentConnectorAssignmentsTable.agentId)} = ${agentId}
+    )`;
 }
 
 /**

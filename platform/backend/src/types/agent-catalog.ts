@@ -6,18 +6,7 @@ import { AgentListItemSchema } from "./agent";
 export const AgentCatalogRowSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("agent"),
-    value: AgentListItemSchema.extend({
-      toolsCount: z
-        .number()
-        .int()
-        .describe(
-          "Assigned tools other than subagent delegations, as the Agents page shows them. Present whether or not `tools` was requested.",
-        ),
-      subagentsCount: z
-        .number()
-        .int()
-        .describe("Agents this agent delegates to."),
-    }),
+    value: AgentListItemSchema,
   }),
   z.object({
     type: z.literal("external"),

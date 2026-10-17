@@ -249,6 +249,8 @@ describe("member options with real role authorization", () => {
     expect(invalidLimit.statusCode).toBe(400);
   });
 
+  // Behind the full server the auth middleware answers any unregistered
+  // /api route with 403 before routing can reply 404.
   test("the full member list route no longer exists", async ({
     makeMember,
   }) => {

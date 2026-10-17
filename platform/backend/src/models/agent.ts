@@ -1926,8 +1926,8 @@ class AgentModel {
             "team_name",
           ),
         personalPriority: sql<number>`CASE
-          WHEN ${externalAgentAudienceIs("personal")}
-            AND ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
+          WHEN ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
+            AND ${externalAgentAudienceIs("personal")}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
       })

@@ -198,7 +198,7 @@ describe("member subscription disconnect", () => {
     const dialog = within(dialogElement);
     expect(await dialog.findByText("Team proxy key")).toBeVisible();
     expect(dialogElement).toHaveTextContent(
-      'Disconnect "Copilot subscription"? 1 virtual API key uses only this subscription and is deleted when you disconnect.',
+      'Disconnect "Copilot subscription"? The virtual key below will be deleted too.',
     );
     const confirm = dialog.getByRole("button", { name: "Disconnect" });
     await waitFor(() => expect(confirm).toBeEnabled());
@@ -210,24 +210,42 @@ describe("member subscription disconnect", () => {
     expect(toast.success).toHaveBeenCalledWith("Subscription disconnected");
   });
 
-  it("refuses disconnect while an OAuth client still uses the credential", async () => {
+  it("disconnects and deletes an OAuth client that uses only the credential", async () => {
     const user = userEvent.setup();
     const key = makeLlmProviderApiKey({
+      name: "Copilot subscription",
       provider: "github-copilot",
       userId: memberId,
     });
-    const onDelete = vi.fn();
+    let connected = true;
+    const deletes: string[] = [];
     server.use(
-      http.get("/api/llm-provider-api-keys", () => HttpResponse.json([key])),
+      http.get("/api/llm-provider-api-keys", () =>
+        HttpResponse.json(connected ? [key] : []),
+      ),
       http.get("/api/llm-oauth-clients", () =>
         HttpResponse.json({
           ...emptyPage,
-          data: [{ id: "dependent-credential", name: "Subscription client" }],
+          data: [
+            {
+              id: "dependent-credential",
+              name: "Subscription client",
+              clientId: "llm_oauth_sub",
+              providerApiKeys: [
+                {
+                  provider: "github-copilot",
+                  providerApiKeyId: key.id,
+                  providerApiKeyName: key.name,
+                },
+              ],
+            },
+          ],
           pagination: { ...emptyPage.pagination, total: 1 },
         }),
       ),
-      http.delete("/api/llm-provider-api-keys/:id", () => {
-        onDelete();
+      http.delete("/api/llm-provider-api-keys/:id", ({ params }) => {
+        deletes.push(String(params.id));
+        connected = false;
         return HttpResponse.json({ success: true });
       }),
     );
@@ -236,12 +254,19 @@ describe("member subscription disconnect", () => {
       await screen.findByTestId("subscription-provider-card-github-copilot"),
     );
     await user.click(await card.findByRole("button", { name: "Disconnect" }));
-    const dialog = within(screen.getByRole("dialog"));
+    const dialogElement = screen.getByRole("dialog");
+    const dialog = within(dialogElement);
     expect(await dialog.findByText("Subscription client")).toBeVisible();
-    expect(dialog.getByRole("button", { name: "Disconnect" })).toBeDisabled();
-    await user.keyboard("{Enter}");
-    expect(onDelete).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(dialogElement).toHaveTextContent(
+      'Disconnect "Copilot subscription"? The OAuth client below will be deleted too.',
+    );
+    const confirm = dialog.getByRole("button", { name: "Disconnect" });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(deletes).toEqual([key.id]);
   });
 
   it("disconnects an owned subscription for a hidden provider without granting shared-key deletion", async () => {

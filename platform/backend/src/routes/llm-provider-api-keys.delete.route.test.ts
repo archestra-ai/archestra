@@ -4,6 +4,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import {
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
+  OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -125,23 +126,33 @@ describe("deleting an LLM provider API key that virtual keys map to", () => {
     ).toEqual([openAiKey.id]);
   });
 
-  test("an OAuth-client mapping still blocks deletion and leaves the virtual key alone", async ({
+  test("single delete removes OAuth clients left without a provider and unmaps the rest", async ({
     makeSecret,
     makeLlmProviderApiKey,
-    makeVirtualApiKey,
   }) => {
     const apiKey = await makeLlmProviderApiKey(
       organizationId,
       (await makeSecret()).id,
     );
-    const virtualKey = await makeVirtualApiKey(organizationId, {
-      providerApiKeys: [{ provider: "anthropic", providerApiKeyId: apiKey.id }],
-    });
-    await LlmOauthClientModel.create({
+    const openAiKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "openai" },
+    );
+    const { oauthClient: onlyThisKey } = await LlmOauthClientModel.create({
       organizationId,
       authorId: user.id,
-      name: "Backend Service",
+      name: "Only this key",
       providerApiKeys: [{ provider: "anthropic", providerApiKeyId: apiKey.id }],
+    });
+    const { oauthClient: alsoOpenAi } = await LlmOauthClientModel.create({
+      organizationId,
+      authorId: user.id,
+      name: "Also OpenAI",
+      providerApiKeys: [
+        { provider: "anthropic", providerApiKeyId: apiKey.id },
+        { provider: "openai", providerApiKeyId: openAiKey.id },
+      ],
     });
 
     const response = await app.inject({
@@ -149,14 +160,49 @@ describe("deleting an LLM provider API key that virtual keys map to", () => {
       url: `/api/llm-provider-api-keys/${apiKey.id}`,
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toBe(
-      "This API key is mapped to one or more OAuth clients. Remove those mappings before deleting it.",
-    );
-    expect(await LlmProviderApiKeyModel.findById(apiKey.id)).not.toBeNull();
-    expect(await VirtualApiKeyModel.findById(virtualKey.id)).not.toBeNull();
+    expect(response.statusCode, response.body).toBe(200);
     expect(
-      await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id),
-    ).toHaveLength(1);
+      await LlmOauthClientModel.findById({
+        id: onlyThisKey.id,
+        organizationId,
+      }),
+    ).toBeNull();
+    const kept = await LlmOauthClientModel.findById({
+      id: alsoOpenAi.id,
+      organizationId,
+    });
+    expect(kept?.providerApiKeys.map((m) => m.providerApiKeyId)).toEqual([
+      openAiKey.id,
+    ]);
+  });
+
+  test("single delete clears the knowledge base settings that used the key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const apiKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+    );
+    const otherKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+    );
+    await OrganizationModel.patch(organizationId, {
+      embeddingChatApiKeyId: apiKey.id,
+      rerankerChatApiKeyId: otherKey.id,
+      ocrChatApiKeyId: apiKey.id,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${apiKey.id}`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const organization = await OrganizationModel.getById(organizationId);
+    expect(organization?.embeddingChatApiKeyId).toBeNull();
+    expect(organization?.ocrChatApiKeyId).toBeNull();
+    expect(organization?.rerankerChatApiKeyId).toBe(otherKey.id);
   });
 });

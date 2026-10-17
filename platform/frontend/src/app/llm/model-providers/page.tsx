@@ -237,12 +237,7 @@ export default function ApiKeysPage() {
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
-      if (!organization) return null;
-      const usages: string[] = [];
-      if (organization.embeddingChatApiKeyId === keyId)
-        usages.push("embedding");
-      if (organization.rerankerChatApiKeyId === keyId) usages.push("reranking");
-      if (organization.ocrChatApiKeyId === keyId) usages.push("OCR");
+      const usages = knowledgeBaseUsagesOf(organization, keyId);
       return usages.length > 0
         ? `Used for knowledge base ${usages.join(" and ")}`
         : null;
@@ -356,12 +351,9 @@ export default function ApiKeysPage() {
     }
   });
 
-  // Virtual keys that map the key do not block deletion: their mappings are
-  // removed with it, and the dialog states that consequence instead.
-  const deleteBlocked =
-    isLoadingVirtualKeys ||
-    isLoadingOauthClients ||
-    (blockingOauthClientsData?.pagination.total ?? 0) > 0;
+  // Nothing that maps the key blocks deletion: the dialog lists what goes with
+  // it, and the confirm waits only for those lists to load.
+  const deleteBlocked = isLoadingVirtualKeys || isLoadingOauthClients;
 
   const handleDelete = useCallback(async () => {
     if (!selectedApiKey || deleteBlocked) return;
@@ -937,10 +929,10 @@ export default function ApiKeysPage() {
             <DeleteApiKeyDescription
               apiKey={selectedApiKey}
               isSubscription={deletingSubscription}
-              providerLabel={
+              knowledgeBaseUsages={
                 selectedApiKey
-                  ? providerCatalog.label(selectedApiKey.provider)
-                  : ""
+                  ? knowledgeBaseUsagesOf(organization, selectedApiKey.id)
+                  : []
               }
               virtualKeys={blockingVirtualKeys?.data ?? []}
               totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
@@ -965,7 +957,7 @@ export default function ApiKeysPage() {
           title="Delete API keys"
           description={`Delete ${selectedApiKeys.length} ${
             selectedApiKeys.length === 1 ? "API key" : "API keys"
-          }? This cannot be undone. Virtual API keys that use only these keys are deleted with them; keys with other providers keep those.`}
+          }? This cannot be undone. Virtual keys and OAuth clients that use only these keys will be deleted too.`}
           isPending={bulkDeleteMutation.isPending}
           onConfirm={() => {
             bulkDeleteMutation.mutate(selectedApiKeys, {
@@ -992,7 +984,7 @@ export default function ApiKeysPage() {
 function DeleteApiKeyDescription({
   apiKey,
   isSubscription,
-  providerLabel,
+  knowledgeBaseUsages,
   virtualKeys,
   totalVirtualKeys,
   oauthClients,
@@ -1001,10 +993,11 @@ function DeleteApiKeyDescription({
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
   isSubscription: boolean;
-  providerLabel: string;
-  virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
+  /** Knowledge base jobs ("embedding", "OCR") configured with this key. */
+  knowledgeBaseUsages: string[];
+  virtualKeys: MappedVirtualKey[];
   totalVirtualKeys: number;
-  oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"];
+  oauthClients: MappedOauthClient[];
   totalOauthClients: number;
   isLoading: boolean;
 }) {
@@ -1012,7 +1005,11 @@ function DeleteApiKeyDescription({
     return null;
   }
 
-  if (totalVirtualKeys === 0 && totalOauthClients === 0) {
+  if (
+    totalVirtualKeys === 0 &&
+    totalOauthClients === 0 &&
+    knowledgeBaseUsages.length === 0
+  ) {
     // Distinct keys: the two branches share a tag, so without them React would
     // reconcile the element in place and remove its bare text nodes, which
     // crashes a machine-translated page.
@@ -1029,51 +1026,47 @@ function DeleteApiKeyDescription({
     );
   }
 
-  // OAuth-client mappings are JSON without a foreign key, so they still block
-  // removal. Virtual keys that mapped only this key are deleted with it; keys
-  // with other providers keep those and lose only this route. The counts come
-  // from the keys the dialog fetched, which covers what a key maps in practice.
-  const blockedByOauthClients = totalOauthClients > 0;
-  const deletedVirtualKeys = virtualKeys.filter(
-    virtualKeyGoesWithProviderKey,
-  ).length;
-  const outcome = virtualKeyOutcome({
-    deleted: deletedVirtualKeys,
-    kept: virtualKeys.length - deletedVirtualKeys,
-    isSubscription,
-    providerLabel,
-  });
-  const shownVirtualKeys = virtualKeys.slice(0, 5);
-  const moreVirtualKeys = totalVirtualKeys - shownVirtualKeys.length;
+  // Credentials that mapped only this key are deleted with it; the rest keep
+  // their other providers and lose only this route. The lists come from what
+  // the dialog fetched, which covers what a key maps in practice.
+  const deletedVirtualKeys = virtualKeys.filter(virtualKeyGoesWithProviderKey);
+  const deletedOauthClients = oauthClients.filter(
+    oauthClientGoesWithProviderKey,
+  );
+  const keptCredentials =
+    virtualKeys.length -
+    deletedVirtualKeys.length +
+    (oauthClients.length - deletedOauthClients.length);
+  const sentences = [
+    deletionSentence({
+      virtualKeys: deletedVirtualKeys.length,
+      oauthClients: deletedOauthClients.length,
+    }),
+    keptSentence({
+      kept: keptCredentials,
+      anyDeleted: deletedVirtualKeys.length + deletedOauthClients.length > 0,
+    }),
+    knowledgeBaseSentence(knowledgeBaseUsages),
+    isSubscription ? "" : "This cannot be undone.",
+  ].filter((sentence) => sentence !== "");
+  const lead = `${isSubscription ? "Disconnect" : "Delete"} "${apiKey.name}"? ${sentences.join(" ")}`;
+  const shownVirtualKeys = deletedVirtualKeys.slice(0, 5);
+  const moreVirtualKeys = deletedVirtualKeys.length - shownVirtualKeys.length;
+  const shownOauthClients = deletedOauthClients.slice(0, 5);
+  const moreOauthClients =
+    deletedOauthClients.length - shownOauthClients.length;
 
   return (
-    <div
-      key={blockedByOauthClients ? "blocked" : "confirm"}
-      className="space-y-4 text-sm"
-    >
-      {blockedByOauthClients ? (
-        <p key="blocked-reason">
-          <span>
-            {`"${apiKey.name}" cannot be ${
-              isSubscription ? "disconnected" : "deleted"
-            } while OAuth clients use it. Remove it from the OAuth clients below first.`}
-          </span>
-        </p>
-      ) : (
-        <p key="confirm-lead">
-          <span>
-            {isSubscription
-              ? `Disconnect "${apiKey.name}"? ${outcome}`
-              : `Delete "${apiKey.name}"? ${outcome} This cannot be undone.`}
-          </span>
-        </p>
-      )}
+    <div className="space-y-4 text-sm">
+      <p>
+        <span>{lead}</span>
+      </p>
 
       {isLoading && (
         <p className="text-muted-foreground">Checking credential mappings...</p>
       )}
 
-      {totalVirtualKeys > 0 && (
+      {shownVirtualKeys.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <p className="font-medium">Virtual API keys</p>
@@ -1084,11 +1077,6 @@ function DeleteApiKeyDescription({
               View all
             </Link>
           </div>
-          {blockedByOauthClients && (
-            <p className="text-muted-foreground">
-              <span>{outcome}</span>
-            </p>
-          )}
           <ul className="space-y-2">
             {shownVirtualKeys.map((key) => (
               <li
@@ -1099,22 +1087,17 @@ function DeleteApiKeyDescription({
                 <div className="text-muted-foreground">
                   Token starts with {key.tokenStart}...
                 </div>
-                <div className="text-muted-foreground">
-                  <span>{virtualKeyOutcomeLabel(key, isSubscription)}</span>
-                </div>
               </li>
             ))}
           </ul>
           {moreVirtualKeys > 0 && (
             <p className="text-muted-foreground">
-              <span>{moreVirtualKeys} more virtual API key</span>
-              {moreVirtualKeys === 1 ? null : <span>s</span>}
-              <span> matched.</span>
+              <span>{`${moreVirtualKeys} more will be deleted.`}</span>
             </p>
           )}
         </div>
       )}
-      {oauthClients.length > 0 && (
+      {shownOauthClients.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <p className="font-medium">OAuth clients</p>
@@ -1127,7 +1110,7 @@ function DeleteApiKeyDescription({
             </SettingsLink>
           </div>
           <ul className="space-y-2">
-            {oauthClients.slice(0, 5).map((client) => (
+            {shownOauthClients.map((client) => (
               <li
                 key={client.id}
                 className="rounded-md border bg-muted/30 px-3 py-2"
@@ -1139,11 +1122,9 @@ function DeleteApiKeyDescription({
               </li>
             ))}
           </ul>
-          {totalOauthClients > 5 && (
+          {moreOauthClients > 0 && (
             <p className="text-muted-foreground">
-              <span>{totalOauthClients - 5} more OAuth client</span>
-              {totalOauthClients - 5 === 1 ? null : <span>s</span>}
-              <span> matched.</span>
+              <span>{`${moreOauthClients} more will be deleted.`}</span>
             </p>
           )}
         </div>
@@ -1154,59 +1135,68 @@ function DeleteApiKeyDescription({
 
 type MappedVirtualKey =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
+type MappedOauthClient =
+  archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"][number];
 
 /** True when nothing is left to route to once this provider key is gone. */
 function virtualKeyGoesWithProviderKey(key: MappedVirtualKey): boolean {
   return !key.includeFutureProviders && key.providerApiKeys.length <= 1;
 }
 
-function virtualKeyOutcome(params: {
-  deleted: number;
-  kept: number;
-  isSubscription: boolean;
-  providerLabel: string;
-}): string {
-  const { deleted, kept, isSubscription, providerLabel } = params;
-  const total = deleted + kept;
-  const thisKey = isSubscription ? "this subscription" : "this key";
-  const removal = isSubscription ? "when you disconnect" : "with it";
-  if (kept === 0) {
-    return total === 1
-      ? `1 virtual API key uses only ${thisKey} and is deleted ${removal}.`
-      : `${total} virtual API keys use only ${thisKey} and are deleted ${removal}.`;
-  }
-  const uses =
-    total === 1
-      ? "1 virtual API key uses it"
-      : `${total} virtual API keys use it`;
-  if (deleted === 0) {
-    const pronoun = total === 1 ? "it" : "them";
-    const keeps =
-      total === 1
-        ? "It keeps its other providers"
-        : "They keep their other providers";
-    const remedy = isSubscription
-      ? "connect again and map the new connection"
-      : `map another ${providerLabel} key`;
-    return `${uses}. ${keeps}, but requests through ${pronoun} to ${providerLabel} fail until you ${remedy} to ${pronoun}.`;
-  }
-  const deletedPart = deleted === 1 ? "1 is" : `${deleted} are`;
-  const keptPart = kept === 1 ? "1 keeps its" : `${kept} keep their`;
-  return `${uses}: ${deletedPart} deleted ${removal}, ${keptPart} other providers.`;
+function oauthClientGoesWithProviderKey(client: MappedOauthClient): boolean {
+  return client.providerApiKeys.length <= 1;
 }
 
-function virtualKeyOutcomeLabel(
-  key: MappedVirtualKey,
-  isSubscription: boolean,
-): string {
-  if (virtualKeyGoesWithProviderKey(key)) {
-    return isSubscription
-      ? "Deleted when you disconnect"
-      : "Deleted with this key";
+function deletionSentence(params: {
+  virtualKeys: number;
+  oauthClients: number;
+}): string {
+  const parts: string[] = [];
+  if (params.virtualKeys === 1) parts.push("virtual key");
+  if (params.virtualKeys > 1) parts.push(`${params.virtualKeys} virtual keys`);
+  if (params.oauthClients === 1) parts.push("OAuth client");
+  if (params.oauthClients > 1) {
+    parts.push(`${params.oauthClients} OAuth clients`);
   }
-  if (key.includeFutureProviders) {
-    return "Keeps current and future providers";
+  if (parts.length === 0) return "";
+  return `The ${parts.join(" and ")} below will be deleted too.`;
+}
+
+function keptSentence(params: { kept: number; anyDeleted: boolean }): string {
+  const { kept, anyDeleted } = params;
+  if (kept === 0) return "";
+  if (anyDeleted) {
+    return kept === 1
+      ? "1 other credential keeps its other providers."
+      : `${kept} other credentials keep their other providers.`;
   }
-  const others = key.providerApiKeys.length - 1;
-  return `Keeps ${others} other provider${others === 1 ? "" : "s"}`;
+  return kept === 1
+    ? "1 credential uses it and keeps its other providers."
+    : `${kept} credentials use it and keep their other providers.`;
+}
+
+function knowledgeBaseSentence(usages: string[]): string {
+  if (usages.length === 0) return "";
+  const jobs = usages.join(" and ");
+  const label = jobs.charAt(0).toUpperCase() + jobs.slice(1);
+  return `${label} for knowledge bases ${usages.length === 1 ? "stops" : "stop"} until you choose another key in Settings → Knowledge.`;
+}
+
+function knowledgeBaseUsagesOf(
+  organization:
+    | {
+        embeddingChatApiKeyId?: string | null;
+        rerankerChatApiKeyId?: string | null;
+        ocrChatApiKeyId?: string | null;
+      }
+    | null
+    | undefined,
+  keyId: string,
+): string[] {
+  if (!organization) return [];
+  const usages: string[] = [];
+  if (organization.embeddingChatApiKeyId === keyId) usages.push("embedding");
+  if (organization.rerankerChatApiKeyId === keyId) usages.push("reranking");
+  if (organization.ocrChatApiKeyId === keyId) usages.push("OCR");
+  return usages;
 }

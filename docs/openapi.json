@@ -302046,7 +302046,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Delete an LLM provider API key. Virtual API keys that mapped only this key are deleted with it; keys that also map other provider keys keep those.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Delete an LLM provider API key. Virtual API keys and OAuth clients that mapped only this key are deleted with it; those that also map other provider keys keep those. Knowledge base settings that used the key are cleared.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -302839,7 +302839,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Delete several LLM provider API keys in one request. Keys outside the caller's organization, protected system keys, and keys that are still used by OAuth clients or knowledge base settings are reported in `failed` while the remaining keys are deleted. Virtual API keys that mapped only a deleted key are deleted with it; keys that also map other provider keys keep those.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Delete several LLM provider API keys in one request. Keys outside the caller's organization and protected system keys are reported in `failed` while the remaining keys are deleted. Virtual API keys and OAuth clients that mapped only a deleted key are deleted with it; those that also map other provider keys keep those. Knowledge base settings that used a deleted key are cleared.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {

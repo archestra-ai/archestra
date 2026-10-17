@@ -644,7 +644,20 @@ describe("ApiKeysPage", () => {
     });
     mockUseLlmOauthClients.mockReturnValue({
       data: {
-        data: [{ id: "oc-1", name: "Nimbus Portal", clientId: "llm_oauth_1" }],
+        data: [
+          {
+            id: "oc-1",
+            name: "Nimbus Portal",
+            clientId: "llm_oauth_1",
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "provider-key-1",
+                providerApiKeyName: "Shared Anthropic credential",
+              },
+            ],
+          },
+        ],
         pagination: { total: 1 },
       },
       isPending: false,
@@ -658,7 +671,7 @@ describe("ApiKeysPage", () => {
     );
 
     // The whole point of these links: land on a table already narrowed to the
-    // credentials that are blocking this delete, not on the full list.
+    // credentials that go with this delete, not on the full list.
     await waitFor(() => {
       expect(screen.getByTestId("delete-dialog")).toBeInTheDocument();
     });
@@ -667,18 +680,15 @@ describe("ApiKeysPage", () => {
       "/llm/proxy/virtual-keys?providerApiKeyId=provider-key-1",
       "/settings/oauth-clients?type=llm&providerApiKeyId=provider-key-1",
     ]);
-    // OAuth clients still block the delete; the virtual key is a consequence.
     const dialog = screen.getByTestId("delete-dialog");
     expect(dialog).toHaveTextContent(
-      '"Shared Anthropic credential" cannot be deleted while OAuth clients use it.',
+      'Delete "Shared Anthropic credential"? The virtual key and OAuth client below will be deleted too. This cannot be undone.',
     );
-    expect(dialog).toHaveTextContent(
-      "1 virtual API key uses only this key and is deleted with it.",
-    );
-    const confirm = screen.getByRole("button", { name: "Confirm delete" });
-    expect(confirm).toBeDisabled();
-    fireEvent.click(confirm);
-    expect(mockDeleteApiKey).not.toHaveBeenCalled();
+    expect(dialog).toHaveTextContent("Payments service");
+    expect(dialog).toHaveTextContent("Nimbus Portal");
+    expect(
+      screen.getByRole("button", { name: "Confirm delete" }),
+    ).toBeEnabled();
   });
 
   it("lets a key that virtual keys use be deleted after stating the consequence", async () => {
@@ -737,13 +747,10 @@ describe("ApiKeysPage", () => {
 
     const dialog = await screen.findByTestId("delete-dialog");
     expect(dialog).toHaveTextContent(
-      'Delete "Shared Anthropic credential"? 7 virtual API keys use it: 4 are deleted with it, 3 keep their other providers. This cannot be undone.',
+      'Delete "Shared Anthropic credential"? The 4 virtual keys below will be deleted too. 3 other credentials keep their other providers. This cannot be undone.',
     );
-    expect(dialog).toHaveTextContent("Deleted with this key");
-    expect(dialog).toHaveTextContent("Keeps 1 other provider");
-    expect(screen.getByText("Service 4")).toBeInTheDocument();
-    expect(screen.queryByText("Service 5")).not.toBeInTheDocument();
-    expect(dialog).toHaveTextContent("2 more virtual API keys matched.");
+    expect(screen.getByText("Service 3")).toBeInTheDocument();
+    expect(screen.queryByText("Service 4")).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View all" }).getAttribute("href"),
     ).toBe("/llm/proxy/virtual-keys?providerApiKeyId=provider-key-1");

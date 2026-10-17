@@ -1291,7 +1291,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             )
             .optional()
             .describe(
-              "Only an item the registry lists: 404 for hidden runtime variants (default false).",
+              "Answer 404 for hidden runtime variants (Playwright per-environment rows); app backings are still returned. Default false.",
             ),
         }),
         response: constructResponseSchema(

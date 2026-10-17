@@ -1178,6 +1178,34 @@ describe("MCP registry list routes", () => {
     expect(found.map((server) => server.id)).toEqual([serverA.id]);
   });
 
+  test("McpServerModel.findAll narrows to the catalog a tool prefix names", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const cloud = await makeItem(makeInternalMcpCatalog, "GitHub Cloud");
+    const other = await makeItem(makeInternalMcpCatalog, "github");
+    const cloudServer = await makeMcpServer({
+      catalogId: cloud.id,
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: other.id, scope: "org" });
+    const find = async (catalogSlug: string) =>
+      (
+        await McpServerModel.findAll(
+          ctx.user.id,
+          true,
+          ctx.organizationId,
+          undefined,
+          true,
+          { catalogSlug },
+        )
+      ).map((server) => server.id);
+
+    // A tool name carries "GitHub Cloud" as "github_cloud".
+    expect(await find("github_cloud")).toEqual([cloudServer.id]);
+    expect(await find("agent")).toEqual([]);
+  });
+
   test("McpServerModel.findAll shows a plain member the same installs with or without catalogIds", async ({
     makeInternalMcpCatalog,
     makeMcpServer,

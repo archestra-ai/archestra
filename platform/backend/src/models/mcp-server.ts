@@ -552,6 +552,12 @@ class McpServerModel {
       /** Installs of any of these catalog items (the registry's visible page). */
       catalogIds?: string[];
       /**
+       * Installs of catalog items whose name, slugified the way tool names
+       * carry it ({@link slugifyMcpServerName}), is this: a tool's server
+       * prefix, resolved without the caller seeing the catalog item.
+       */
+      catalogSlug?: string;
+      /**
        * Attach per-install agent usage (`assignedAgents`). Off unless asked:
        * it looks up the agents of every listed install, and only the server
        * list API returns it. Without it `assignedAgents` is empty.
@@ -606,6 +612,13 @@ class McpServerModel {
       if (filters.catalogIds.length === 0) return [];
       conditions.push(
         inArray(schema.mcpServersTable.catalogId, filters.catalogIds),
+      );
+    }
+    if (filters?.catalogSlug !== undefined) {
+      // slugifyMcpServerName in SQL: lowercase, whitespace runs to "_",
+      // anything but [a-z0-9_-] removed.
+      conditions.push(
+        sql`regexp_replace(regexp_replace(lower(${schema.internalMcpCatalogTable.name}), '[[:space:]]+', '_', 'g'), '[^a-z0-9_-]', '', 'g') = ${filters.catalogSlug}`,
       );
     }
 

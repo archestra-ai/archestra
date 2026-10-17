@@ -251058,7 +251058,7 @@
             "in": "query",
             "name": "listedOnly",
             "required": false,
-            "description": "Only an item the registry lists: 404 for hidden runtime variants (default false)."
+            "description": "Answer 404 for hidden runtime variants (Playwright per-environment rows); app backings are still returned. Default false."
           },
           {
             "schema": {
@@ -311342,6 +311342,17 @@
             "name": "catalogIds",
             "required": false,
             "description": "Only installs of these catalog items (comma-separated, at most 100)."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "catalogSlug",
+            "required": false,
+            "description": "Only installs of catalog items whose name, slugified as in tool names (lowercase, spaces as _, other characters dropped), is this."
           },
           {
             "schema": {

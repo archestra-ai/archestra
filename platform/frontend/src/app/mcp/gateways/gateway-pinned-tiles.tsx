@@ -22,8 +22,12 @@ import { useOrganization } from "@/lib/organization.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { type GatewayToolRow, gatewayToolNames } from "./gateway-tools";
 
-/** What a tile needs of a gateway, whichever read it came from. */
-interface PinnableGateway {
+/**
+ * What a tile needs of a gateway, whichever read it came from. List rows carry
+ * a tool count and no tools; single-gateway reads carry the tools and no
+ * count. Each read has one or the other.
+ */
+type PinnableGateway = {
   id: string;
   name: string;
   icon?: string | null;
@@ -33,11 +37,10 @@ interface PinnableGateway {
   lastUsedAt?: string | null;
   /** Exposes every tool the caller can reach, not just assigned ones. */
   accessAllTools: boolean;
-  /** On list rows, which carry no tools. */
-  toolsCount?: number;
-  /** On single-gateway reads, which carry no count. */
-  tools?: GatewayToolRow[];
-}
+} & (
+  | { toolsCount: number; tools?: GatewayToolRow[] }
+  | { toolsCount?: undefined; tools: GatewayToolRow[] }
+);
 
 /**
  * Gateways pinned for the viewer without their pinning them, with why: their
@@ -179,7 +182,9 @@ function GatewayToolsChip({ gateway }: { gateway: PinnableGateway }) {
     );
   }
   const count =
-    gateway.toolsCount ?? gatewayToolNames(gateway.tools ?? []).length;
+    gateway.toolsCount !== undefined
+      ? gateway.toolsCount
+      : gatewayToolNames(gateway.tools).length;
   return (
     <Badge variant="outline">
       <span>{count === 1 ? "1 tool" : `${count} tools`}</span>

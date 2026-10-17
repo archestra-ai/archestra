@@ -24,7 +24,10 @@ type Gateway = Parameters<typeof GatewayPinnedTiles>[0]["pinned"][number];
 const gateway = (
   id: string,
   name: string,
-  tools: Pick<Gateway, "accessAllTools" | "tools"> = {
+  tools: {
+    accessAllTools: boolean;
+    tools: NonNullable<Gateway["tools"]>;
+  } = {
     accessAllTools: true,
     tools: [],
   },

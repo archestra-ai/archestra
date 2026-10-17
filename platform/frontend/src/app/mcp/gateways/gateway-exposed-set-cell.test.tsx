@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExposedSetCell, ExposedSetNames } from "./gateway-exposed-set-cell";
@@ -136,6 +136,40 @@ describe("ExposedSetCell", () => {
         name: "Couldn't load tool names. Hover again to retry.",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("reads the names again on the next hover after a failure", async () => {
+    getAgents
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: {
+          error: { message: "boom", type: "api_internal_server_error" },
+        },
+      } as never)
+      .mockResolvedValueOnce(
+        listed([{ name: "search", delegateToAgentId: null }]),
+      );
+    renderRow();
+
+    await userEvent.hover(screen.getByText("2 selected"));
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Couldn't load tool names. Hover again to retry.",
+      }),
+    ).toBeInTheDocument();
+    // The retry relies on the tooltip unmounting its content when it closes.
+    // Escape closes it here: jsdom has no geometry for the hover grace area.
+    await userEvent.unhover(screen.getByText("2 selected"));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+    );
+    await userEvent.hover(screen.getByText("2 selected"));
+
+    expect(
+      await screen.findByRole("tooltip", { name: "search" }),
+    ).toBeInTheDocument();
+    expect(getAgents).toHaveBeenCalledTimes(2);
   });
 
   it("reads a trashed gateway's names from the deleted list", async () => {

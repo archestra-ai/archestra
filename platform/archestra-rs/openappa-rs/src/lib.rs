@@ -365,9 +365,10 @@ fn held_elsewhere() -> napi::Error {
     error("OpenAPPA is processing this operation in another request; retry the request")
 }
 
-/// Another process published a newer policy revision for this organization while
-/// this dispatch was decided, and this process could not pin it in time. Nothing
-/// was appended; the host retries and the retry decides at the new head.
+/// The organization's policy moved past the one this dispatch carries: another
+/// process published a newer revision while it was decided, or the policy it read
+/// was recomposed before it was published. Nothing was appended; the host's retry
+/// reads the policy again and decides at the new head.
 fn policy_moved() -> napi::Error {
     error("OpenAPPA published a newer policy revision for this organization; retry the request")
 }
@@ -402,12 +403,16 @@ where
         .deployments
         .deployment(
             &state.runtime,
+            &state.store,
             organization_id,
             policy,
             state.reporting.is_some(),
         )
         .await
-        .map_err(error)?;
+        .map_err(|refusal| match refusal {
+            deployments::DeploymentError::Superseded => policy_moved(),
+            deployments::DeploymentError::Failed(reason) => error(reason),
+        })?;
     match work(state.pinned(&deployment)).await {
         Err(moved) if is_policy_moved(&moved) => {
             let Some(head) = state
@@ -650,6 +655,10 @@ pub struct DispatchPolicy {
     pub content: String,
     /// Variable → value, for the document's `runtimeCredentials`. Secrets.
     pub credentials: HashMap<String, String>,
+    /// The content hash of the stored composition `content` was read from. A
+    /// dispatch whose composition is no longer the stored one publishes nothing
+    /// and is refused as retryable; absent, nothing is checked.
+    pub composition_hash: Option<String>,
 }
 
 #[napi(object)]
@@ -663,6 +672,7 @@ impl From<DispatchPolicy> for deployments::HostedPolicy {
         deployments::HostedPolicy {
             content: policy.content,
             credentials: deployments::HostCredentials::new(policy.credentials),
+            composition: policy.composition_hash,
         }
     }
 }
@@ -1190,10 +1200,13 @@ fn opening_policy_file_key(payload: &[u8]) -> Option<String> {
 }
 
 /// Read the current label of a started session without mutating its trajectory.
+/// The read runs through a view pinned to the organization's deployment line, as
+/// a dispatch does: a family is read on the line it follows.
 #[napi(js_name = "getOpenappaStatus")]
 pub async fn get_openappa_status(
     organization_id: String,
     session_id: String,
+    policy: DispatchPolicy,
     encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OpenappaStatus>> {
     if organization_id.is_empty()
@@ -1206,34 +1219,14 @@ pub async fn get_openappa_status(
     {
         return Err(error("invalid session identity"));
     }
+    let policy: deployments::HostedPolicy = policy.into();
     let result = AssertUnwindSafe(async move {
         let state = initialized().await?.encrypted(encryption)?;
-        let leased = state.lease().await?;
-        tokio::task::spawn_blocking(move || {
+        on_deployment(&state, &organization_id, &policy, |pinned| {
             let key = SessionKey::new(&organization_id, &session_id);
-            let root = Sql(&leased.state.store)
-                .with_client(move |client| {
-                    Ok(client
-                        .query_opt(
-                            "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                            &[&key.organization_id, &key.actor],
-                        )?
-                        .map(|row| row.get::<_, String>(0)))
-                })
-                .map_err(error)?;
-            let Some(root) = root else { return Ok(None) };
-            let status = leased
-                .state
-                .runtime
-                .try_status(&TrajectoryId(root))
-                .map_err(error)?;
-            Ok(Some(OpenappaStatus {
-                trust: status.trust,
-                audience: status.audience,
-            }))
+            async move { session_status(pinned, key).await }
         })
         .await
-        .map_err(error)?
     })
     .catch_unwind()
     .await;
@@ -1241,6 +1234,35 @@ pub async fn get_openappa_status(
         Ok(result) => result,
         Err(_) => Err(error("OpenAPPA panicked while reading status")),
     }
+}
+
+/// The label of the session `key` names, read through `state`'s pinned view.
+async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<OpenappaStatus>> {
+    let leased = state.lease().await?;
+    tokio::task::spawn_blocking(move || {
+        let root = Sql(&leased.state.store)
+            .with_client(move |client| {
+                Ok(client
+                    .query_opt(
+                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                        &[&key.organization_id, &key.actor],
+                    )?
+                    .map(|row| row.get::<_, String>(0)))
+            })
+            .map_err(error)?;
+        let Some(root) = root else { return Ok(None) };
+        let status = leased
+            .state
+            .runtime
+            .try_status(&TrajectoryId(root))
+            .map_err(error)?;
+        Ok(Some(OpenappaStatus {
+            trust: status.trust,
+            audience: status.audience,
+        }))
+    })
+    .await
+    .map_err(error)?
 }
 
 /// Validates input fields and event requirements before processing.

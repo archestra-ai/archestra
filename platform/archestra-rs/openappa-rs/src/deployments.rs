@@ -49,6 +49,23 @@ impl HostCredentials {
 pub(crate) struct HostedPolicy {
     pub content: String,
     pub credentials: HostCredentials,
+    /// The content hash of the stored composition `content` was read from, when the
+    /// host read it from one.
+    pub composition: Option<String>,
+}
+
+/// Why no deployment serves a dispatch.
+pub(crate) enum DeploymentError {
+    /// The dispatch carries a policy the organization has since recomposed, and the
+    /// line's head names another one: publishing it would roll the line back.
+    Superseded,
+    Failed(String),
+}
+
+impl From<String> for DeploymentError {
+    fn from(reason: String) -> Self {
+        DeploymentError::Failed(reason)
+    }
 }
 
 /// The deployment an organization's dispatches are pinned to, and what it was
@@ -95,15 +112,21 @@ impl Deployments {
     /// The deployment `runtime` serves `policy` from for this organization, prepared
     /// and published now when the one held for it no longer compiles from the same
     /// inputs.
+    ///
+    /// A policy the head does not name is published only while it is still the
+    /// organization's stored composition: a dispatch that read the policy before a
+    /// save and reaches here after another dispatch published the saved one must not
+    /// publish the text from before the save over it.
     pub(crate) async fn deployment(
         &self,
         runtime: &Runtime,
+        store: &LogStore,
         organization_id: &str,
         policy: &HostedPolicy,
         agent_yell: bool,
-    ) -> Result<PublishedDeployment, String> {
+    ) -> Result<PublishedDeployment, DeploymentError> {
         Ok(self
-            .pinned(runtime, organization_id, policy, agent_yell)
+            .pinned(runtime, store, organization_id, policy, agent_yell)
             .await?
             .published)
     }
@@ -155,10 +178,11 @@ impl Deployments {
     async fn pinned(
         &self,
         runtime: &Runtime,
+        store: &LogStore,
         organization_id: &str,
         policy: &HostedPolicy,
         agent_yell: bool,
-    ) -> Result<Pinned, String> {
+    ) -> Result<Pinned, DeploymentError> {
         if let Some(pinned) = self.serving(organization_id, policy) {
             return Ok(pinned);
         }
@@ -184,8 +208,16 @@ impl Deployments {
         let prepared = runtime
             .prepare_deployment(config)
             .map_err(|error| error.to_string())?;
+        let line = DeploymentName::new(organization_id);
+        if let Some(composition) = &policy.composition {
+            let head = store.head(&line).map_err(|error| error.to_string())?;
+            let publishes = head.is_none_or(|head| head.key.as_str() != key);
+            if publishes && !stored_composition(store, organization_id, composition)? {
+                return Err(DeploymentError::Superseded);
+            }
+        }
         let published = runtime
-            .publish(&DeploymentName::new(organization_id), &prepared)
+            .publish(&line, &prepared)
             .map_err(|error| error.to_string())?;
         let asked = asked.into_inner();
         let pinned = Pinned {
@@ -235,6 +267,27 @@ impl Deployments {
             .get(organization_id)
             .cloned()
     }
+}
+
+/// Whether `composition` is the content hash of the organization's stored
+/// composition. An organization with none stored has nothing newer to protect.
+fn stored_composition(
+    store: &LogStore,
+    organization_id: &str,
+    composition: &str,
+) -> Result<bool, String> {
+    let organization_id = organization_id.to_owned();
+    let stored = crate::Sql(store)
+        .with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT content_hash FROM openappa_effective_policies WHERE organization_id = $1",
+                    &[&organization_id],
+                )?
+                .map(|row| row.get::<_, String>(0)))
+        })
+        .map_err(|error| error.to_string())?;
+    Ok(stored.is_none_or(|stored| stored == composition))
 }
 
 /// The key the event log stores a policy file under: the SHA-256 of its exact bytes,
@@ -288,6 +341,7 @@ mod tests {
         HostedPolicy {
             content: content.to_owned(),
             credentials: HostCredentials::new(key.map(|key| (KEY.to_owned(), key.to_owned()))),
+            composition: None,
         }
     }
 
@@ -313,10 +367,16 @@ mod tests {
         organization: &str,
         policy: &HostedPolicy,
     ) -> Result<PublishedDeployment, String> {
+        // No test policy names a stored composition, so this store is never read.
+        let store = LogStore::open(Backend::Memory).unwrap();
         tokio::runtime::Builder::new_current_thread()
             .build()
             .unwrap()
-            .block_on(deployments.deployment(runtime, organization, policy, false))
+            .block_on(deployments.deployment(runtime, &store, organization, policy, false))
+            .map_err(|error| match error {
+                DeploymentError::Superseded => "superseded".to_owned(),
+                DeploymentError::Failed(reason) => reason,
+            })
     }
 
     #[test]
@@ -362,8 +422,15 @@ mod tests {
                         tokio::spawn(async move {
                             barrier.wait().await;
                             deployments
-                                .pinned(&runtime, "org-a", &policy(JEV, Some("one")), false)
+                                .pinned(
+                                    &runtime,
+                                    &LogStore::open(Backend::Memory).unwrap(),
+                                    "org-a",
+                                    &policy(JEV, Some("one")),
+                                    false,
+                                )
                                 .await
+                                .ok()
                                 .expect("the policy compiles")
                         })
                     })

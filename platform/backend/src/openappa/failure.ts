@@ -1,5 +1,6 @@
 import { trace } from "@opentelemetry/api";
 import { ApiError } from "@/types/api";
+import { isPolicyMoved } from "./policy-moved";
 
 /**
  * The error every OpenAPPA operation throws when it cannot decide safely.
@@ -164,6 +165,15 @@ function classify(error: unknown): {
       statusCode: 503,
       detail:
         "another request of this session took over this operation. Retry the request.",
+    };
+  // The organization's policy changed while this request was decided, and the
+  // backend's own retries did not catch up with it. Nothing was recorded; the
+  // retry decides under the current policy.
+  if (isPolicyMoved(error))
+    return {
+      statusCode: 503,
+      detail:
+        "the organization's guardrails policy changed while this request was checked. Retry the request.",
     };
   // Another request still works on the same operation, such as a retry sent
   // while the first attempt runs. The retry gets its answer.

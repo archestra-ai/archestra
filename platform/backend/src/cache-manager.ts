@@ -1,6 +1,6 @@
 import { TimeInMs } from "@archestra/shared";
 import KeyvPostgres from "@keyv/postgres";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
@@ -240,11 +240,18 @@ class CacheManager {
   }
 
   /**
-   * The `keyv_cache.key` an entry is stored under, for queries that join the
-   * cache table.
+   * SQL that is true while a live entry is stored under `${prefix}-${id}`,
+   * for queries that must skip rows whose entry has not expired. `id` is a
+   * text SQL expression, usually a column. Entries are JSON text with an
+   * epoch-millisecond `expires`; one without it never expires.
    */
-  storageKey(key: AllowedCacheKey): string {
-    return `keyv:${key}`;
+  liveEntryExists(params: { prefix: CacheKeyPrefix; id: SQL; now: Date }): SQL {
+    const { prefix, id, now } = params;
+    return sql`EXISTS (
+      SELECT 1 FROM keyv_cache
+      WHERE keyv_cache.key = ${`keyv:${prefix}-`} || ${id}
+        AND coalesce((keyv_cache.value::jsonb ->> 'expires')::numeric > ${now.getTime()}, true)
+    )`;
   }
 
   /**

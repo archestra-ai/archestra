@@ -134,9 +134,7 @@ async function syncDueApiKeys(maxKeys: number): Promise<void> {
     now: new Date(),
     ttlMsByProvider: MODEL_SYNC_TTL_BY_PROVIDER,
     defaultTtlMs: DEFAULT_MODEL_SYNC_TTL_MS,
-    attemptMarkerKeyPrefix: cacheManager.storageKey(
-      `${CacheKey.LlmModelSyncAttempt}-`,
-    ),
+    attemptMarkerPrefix: CacheKey.LlmModelSyncAttempt,
     limit: maxKeys,
   });
   if (dueKeys.length === 0) {

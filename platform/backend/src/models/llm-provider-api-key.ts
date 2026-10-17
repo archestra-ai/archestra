@@ -27,6 +27,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { type CacheKeyPrefix, cacheManager } from "@/cache-manager";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
@@ -1373,17 +1374,12 @@ class LlmProviderApiKeyModel {
     now: Date;
     ttlMsByProvider: Partial<Record<SupportedProvider, number>>;
     defaultTtlMs: number;
-    /** `keyv_cache.key` of an attempt marker, minus the key id. */
-    attemptMarkerKeyPrefix: string;
+    /** Cache key prefix of the attempt markers; each marker ends in the key id. */
+    attemptMarkerPrefix: CacheKeyPrefix;
     limit: number;
   }): Promise<LlmProviderApiKeyForModelSync[]> {
-    const {
-      now,
-      ttlMsByProvider,
-      defaultTtlMs,
-      attemptMarkerKeyPrefix,
-      limit,
-    } = params;
+    const { now, ttlMsByProvider, defaultTtlMs, attemptMarkerPrefix, limit } =
+      params;
     const keys = schema.llmProviderApiKeysTable;
     const links = schema.llmProviderApiKeyModelsTable;
     const ttlCases = Object.entries(ttlMsByProvider).map(
@@ -1422,13 +1418,11 @@ class LlmProviderApiKeyModel {
           syncableCondition,
           // synced_at is a UTC timestamp without time zone.
           sql`coalesce(${oldestSyncedAt} <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') - ${ttlMs} * interval '1 millisecond', true)`,
-          // Same row format as the cache manager writes: JSON text with an
-          // epoch-millisecond `expires`. A marker without one never expires.
-          sql`NOT EXISTS (
-            SELECT 1 FROM keyv_cache
-            WHERE keyv_cache.key = ${attemptMarkerKeyPrefix} || ${keys.id}::text
-              AND coalesce((keyv_cache.value::jsonb ->> 'expires')::numeric > ${now.getTime()}, true)
-          )`,
+          sql`NOT ${cacheManager.liveEntryExists({
+            prefix: attemptMarkerPrefix,
+            id: sql`${keys.id}::text`,
+            now,
+          })}`,
         ),
       )
       .orderBy(

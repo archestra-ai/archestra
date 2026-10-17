@@ -393,6 +393,66 @@ describe("chat conversation and message routes", () => {
     expect(unpinResponse.json().pinnedAt).toBeNull();
   });
 
+  test("lists conversations without their artifacts when asked", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      access: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "Budget review",
+    });
+    const todoList = [
+      { id: 1, content: "Check the totals", status: "pending" as const },
+    ];
+    await db
+      .update(schema.conversationsTable)
+      .set({ artifact: "# Budget\n\nNumbers.", todoList })
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        role: "user",
+        parts: [{ type: "text", text: "Summarize the budget" }],
+      },
+    });
+
+    const list = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json()
+        .find((c: { id: string }) => c.id === conversation.id);
+    };
+
+    // API clients keep the full rows by default.
+    expect(await list("")).toMatchObject({
+      artifact: "# Budget\n\nNumbers.",
+      todoList,
+    });
+    expect(await list("?includeArtifacts=false")).toMatchObject({
+      title: "Budget review",
+      artifact: null,
+      todoList: null,
+    });
+    const searchRow = await list("?search=budget&includeArtifacts=false");
+    expect(searchRow).toMatchObject({
+      title: "Budget review",
+      artifact: null,
+      todoList: null,
+    });
+    expect(searchRow.messages).toHaveLength(1);
+  });
+
   test("moves a conversation into a project and removes it again", async ({
     makeAgent,
   }) => {

@@ -955,7 +955,7 @@ export default function ApiKeysPage() {
           title="Delete API keys"
           description={`Delete ${selectedApiKeys.length} ${
             selectedApiKeys.length === 1 ? "API key" : "API keys"
-          }? This cannot be undone. Virtual keys and OAuth clients that use only these keys will be deleted too.`}
+          }? This cannot be undone. Virtual keys and OAuth clients that use only these keys will be deleted too. Knowledge base jobs that use them stop until you choose another key.`}
           isPending={bulkDeleteMutation.isPending}
           confirmDelayMs={CONFIRM_DELAY_MS}
           onConfirm={() => {

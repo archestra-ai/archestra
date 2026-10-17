@@ -3,7 +3,6 @@ import { ClipboardCopy, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { cn } from "@/lib/utils/tailwind";
 import type { ChartKind } from "../(costs)/costs/cost-explorer-data";
 import {
   ApiLine,
@@ -14,6 +13,7 @@ import {
   QueryChip,
   Segmented,
   SummaryTable,
+  ViewPills,
 } from "../(costs)/costs/cost-explorer-parts";
 import { fmtMetric, KpiTile } from "../(costs)/costs/cost-overview";
 import type { UsageViewProps } from "./usage-data";
@@ -114,7 +114,7 @@ export function UsageContent(props: UsageViewProps) {
     <div className="min-w-0 space-y-4">
       <section
         aria-label="Your usage"
-        className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5"
+        className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1"
       >
         {tiles.map((t) => (
           <KpiTile
@@ -149,22 +149,15 @@ export function UsageContent(props: UsageViewProps) {
           }
         />
       </section>
-      <nav aria-label="Usage views" className="flex flex-wrap gap-1.5">
-        {VIEWS.map((v) => (
-          <UnstyledButton
-            key={v.label}
-            onClick={() => select(v.group, v.metric)}
-            className={cn(
-              "h-7 rounded-full border px-3 text-xs transition-colors",
-              group === v.group && metric === v.metric
-                ? "border-foreground bg-foreground text-background"
-                : "bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground dark:bg-input/30",
-            )}
-          >
-            <span>{v.label}</span>
-          </UnstyledButton>
-        ))}
-      </nav>
+      <ViewPills
+        label="Usage views"
+        items={VIEWS.map((v) => ({
+          id: v.label,
+          label: v.label,
+          active: group === v.group && metric === v.metric,
+          onSelect: () => select(v.group, v.metric),
+        }))}
+      />
       <section
         aria-label="Usage explorer"
         className="min-w-0 overflow-hidden rounded-xl border bg-card"
@@ -172,6 +165,7 @@ export function UsageContent(props: UsageViewProps) {
         <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
           <QueryChip
             label="Show"
+            className="max-sm:grow"
             value={metric}
             options={USAGE_METRICS.map((m) => ({
               ...m,
@@ -182,12 +176,14 @@ export function UsageContent(props: UsageViewProps) {
           />
           <QueryChip
             label="by"
+            className="max-sm:grow"
             value={group}
             options={USAGE_GROUPS}
             onChange={(g) => select(g, metric)}
           />
           <QueryChip
             label="split by"
+            className="max-sm:grow"
             value={split && canSplit ? "token" : "none"}
             options={[
               { id: "none", label: "None" },

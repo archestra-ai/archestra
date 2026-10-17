@@ -66,6 +66,20 @@ import {
   skillCatalogSearchSeed,
   skillsListSeed,
 } from "./data/skills";
+import {
+  agentStatisticsFor,
+  appStatisticsFor,
+  appUsageFor,
+  costStatisticsFor,
+  myStatisticsFor,
+  myUsageBreakdownFor,
+  proxyCostStatisticsFor,
+  skillStatisticsFor,
+  skillUsageFor,
+  teamStatisticsFor,
+  toolCallUsageFor,
+  userStatisticsFor,
+} from "./data/statistics";
 
 // Every endpoint is registered once, under its backend-relative path, which
 // MSW matches against any origin. Both consumers arrive that way: the browser
@@ -79,6 +93,17 @@ function paths(path: string): [string] {
 
 function getJson(path: string, body: JsonBodyType): HttpHandler[] {
   return paths(path).map((url) => http.get(url, () => HttpResponse.json(body)));
+}
+
+function statisticsJson(
+  path: string,
+  build: (query: URLSearchParams) => JsonBodyType,
+): HttpHandler[] {
+  return paths(path).map((url) =>
+    http.get(url, ({ request }) =>
+      HttpResponse.json(build(new URL(request.url).searchParams)),
+    ),
+  );
 }
 
 function postJson(path: string, body: JsonBodyType): HttpHandler[] {
@@ -788,6 +813,20 @@ export const handlers: HttpHandler[] = [
     ),
   ),
   ...getJson("/api/identity-providers", []),
+  // Costs and My Usage: generated from one seeded activity curve so the
+  // endpoints reconcile and honour timeframe, groupBy, filters and paging.
+  ...statisticsJson("/api/statistics/costs", costStatisticsFor),
+  ...statisticsJson("/api/statistics/llm-proxy", proxyCostStatisticsFor),
+  ...statisticsJson("/api/statistics/users", userStatisticsFor),
+  ...statisticsJson("/api/statistics/teams", teamStatisticsFor),
+  ...statisticsJson("/api/statistics/agents", agentStatisticsFor),
+  ...statisticsJson("/api/statistics/app-usage", appUsageFor),
+  ...statisticsJson("/api/statistics/skill-usage", skillUsageFor),
+  ...statisticsJson("/api/statistics/mcp-tool-calls", toolCallUsageFor),
+  ...statisticsJson("/api/statistics/apps", appStatisticsFor),
+  ...statisticsJson("/api/statistics/skills", skillStatisticsFor),
+  ...statisticsJson("/api/statistics/me", myStatisticsFor),
+  ...statisticsJson("/api/statistics/me/breakdown", myUsageBreakdownFor),
 ];
 
 const USAGE_STATISTICS_BY_SKILL: Record<

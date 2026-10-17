@@ -70,10 +70,11 @@ class SkillShareLinkRevisionModel {
       );
   }
 
-  /** Revisions strictly after `sequence`, oldest first. */
+  /** Up to `limit` revisions strictly after `sequence`, oldest first. */
   static async listAfter(
     ref: MarketplaceRepoRef,
     sequence: number,
+    limit: number,
   ): Promise<ReplayRevision[]> {
     return db
       .select({
@@ -90,12 +91,13 @@ class SkillShareLinkRevisionModel {
           gt(schema.skillShareLinkRevisionsTable.sequence, sequence),
         ),
       )
-      .orderBy(asc(schema.skillShareLinkRevisionsTable.sequence));
+      .orderBy(asc(schema.skillShareLinkRevisionsTable.sequence))
+      .limit(limit);
   }
 
   /**
    * Appends a new revision. Caller owns deriving `sequence`/`parentSha`
-   * from `getLatest`; the in-memory per-repo mutex in the materializer
+   * from `getLatestHead`; the in-memory per-repo mutex in the materializer
    * keeps concurrent appends serialized within a single process. The unique
    * index on (owner, sequence) is the backstop.
    */

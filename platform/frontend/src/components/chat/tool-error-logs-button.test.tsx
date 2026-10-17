@@ -50,14 +50,45 @@ describe("ToolErrorLogsButton", () => {
     );
   });
 
-  it("shows nothing when no catalog item has the tool's server prefix", () => {
-    useMcpServersMock.mockReturnValue({ data: undefined });
+  it("finds the installs of a catalog item the viewer cannot see by their catalog name", () => {
+    // A team install of an item outside the viewer's registry: not in the
+    // directory, but its install is readable.
+    useMcpServersMock.mockImplementation(
+      (params: { catalogId?: string; enabled?: boolean }) => ({
+        data:
+          params.enabled === false || params.catalogId
+            ? undefined
+            : [
+                {
+                  id: "srv-team",
+                  name: "team-jira",
+                  catalogName: "team-jira",
+                  serverType: "local",
+                  canUseCredential: false,
+                },
+                {
+                  id: "srv-x",
+                  name: "x",
+                  catalogName: "x",
+                  serverType: "local",
+                  canUseCredential: true,
+                },
+              ],
+      }),
+    );
+
+    render(<ToolErrorLogsButton toolName="team-jira__search" />);
+
+    expect(
+      screen.getByRole("button", { name: "View Server Logs" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows nothing when no install has the tool's server prefix", () => {
+    useMcpServersMock.mockReturnValue({ data: [] });
 
     render(<ToolErrorLogsButton toolName="unknown__tool" />);
 
     expect(screen.queryByRole("button")).toBeNull();
-    expect(useMcpServersMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    );
   });
 });

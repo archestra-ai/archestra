@@ -38,17 +38,28 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
     catalogId,
     enabled: !!catalogId,
   });
+  // A viewer can read an install (a team's, say) of an item their registry
+  // does not show: match the installs they can read by catalog name then.
+  const { data: readableServers } = useMcpServers({
+    includeAssignedAgents: false,
+    enabled: !!mcpServerName && !!catalogDirectory && !catalogId,
+  });
 
   const serverInstalls = useMemo(
     () =>
-      (catalogServers ?? [])
+      (
+        catalogServers ??
+        (readableServers ?? []).filter(
+          (server) => server.catalogName === mcpServerName,
+        )
+      )
         .filter((server) => server.serverType === "local")
         .map((server) => ({
           id: server.id,
           name: server.name,
           canUseCredential: server.canUseCredential,
         })),
-    [catalogServers],
+    [catalogServers, readableServers, mcpServerName],
   );
 
   // Don't show button if no server found or no local installations

@@ -301,6 +301,101 @@ describe("chat conversation and message routes", () => {
     }
   });
 
+  test("lists conversations without their artifact or todo list", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const conversation = await ConversationModel.create({
+      organizationId,
+      userId: currentUser.id,
+      agentId: agent.id,
+      title: "Has an artifact",
+    });
+    await ConversationModel.update(
+      conversation.id,
+      currentUser.id,
+      organizationId,
+      {
+        artifact: "# A long artifact".repeat(100),
+      },
+    );
+    await db
+      .update(schema.conversationsTable)
+      .set({ todoList: [{ id: 1, content: "step", status: "pending" }] })
+      .where(eq(schema.conversationsTable.id, conversation.id));
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [row] = response.json();
+    expect(row).toMatchObject({
+      id: conversation.id,
+      title: "Has an artifact",
+    });
+    expect(row).not.toHaveProperty("artifact");
+    expect(row).not.toHaveProperty("todoList");
+
+    // The single-conversation read still carries both.
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(detail.json().artifact).toContain("# A long artifact");
+    expect(detail.json().todoList).toHaveLength(1);
+  });
+
+  test("limits the list to the newest conversations but always keeps pinned ones", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const ids: string[] = [];
+    for (let index = 0; index < 4; index++) {
+      const conversation = await ConversationModel.create({
+        organizationId,
+        userId: currentUser.id,
+        agentId: agent.id,
+        title: `Chat ${index}`,
+      });
+      ids.push(conversation.id);
+      // Spread recency explicitly; creation order alone can tie.
+      await db
+        .update(schema.conversationsTable)
+        .set({ lastMessageAt: new Date(Date.UTC(2026, 0, 1 + index)) })
+        .where(eq(schema.conversationsTable.id, conversation.id));
+    }
+    // The oldest chat is pinned.
+    await db
+      .update(schema.conversationsTable)
+      .set({ pinnedAt: new Date() })
+      .where(eq(schema.conversationsTable.id, ids[0]));
+
+    const limited = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations?limit=2",
+    });
+    expect(limited.statusCode).toBe(200);
+    expect(limited.json().map((c: { id: string }) => c.id)).toEqual([
+      ids[3],
+      ids[2],
+      ids[0],
+    ]);
+
+    const tooMany = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations?limit=251",
+    });
+    expect(tooMany.statusCode).toBe(400);
+
+    const byDefault = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(byDefault.json()).toHaveLength(4);
+  });
+
   test("hides an app-opened chat from the list until the user writes into it", async ({
     makeAgent,
   }) => {

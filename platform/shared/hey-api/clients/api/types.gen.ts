@@ -35166,6 +35166,7 @@ export type GetChatConversationsData = {
     path?: never;
     query?: {
         search?: string;
+        limit?: number;
     };
     url: '/api/chat/conversations';
 };
@@ -35255,10 +35256,6 @@ export type GetChatConversationsResponses = {
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
-        todoList: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;

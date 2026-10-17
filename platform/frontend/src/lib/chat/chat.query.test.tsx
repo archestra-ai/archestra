@@ -93,7 +93,7 @@ describe("useConversations", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const conversations = [makeConversation()];
-    queryClient.setQueryData(["conversations", undefined], conversations);
+    queryClient.setQueryData(["conversations", undefined, 50], conversations);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -127,6 +127,22 @@ describe("useConversations", () => {
       data: [makeConversation()],
       error: undefined,
     } as Awaited<ReturnType<typeof archestraApiSdk.getChatConversations>>);
+  });
+
+  it("asks for the sidebar's recent page, and searches without a limit", async () => {
+    const wrapper = createWrapper();
+    renderHook(() => useConversations({}), { wrapper });
+    await waitFor(() =>
+      expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
+        query: { limit: 50 },
+      }),
+    );
+    renderHook(() => useConversations({ search: " report " }), { wrapper });
+    await waitFor(() =>
+      expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
+        query: { search: "report" },
+      }),
+    );
   });
 
   it("does not fetch while disabled", () => {
@@ -625,6 +641,31 @@ describe("conversation read-state hooks", () => {
 
     await Promise.resolve();
     expect(archestraApiSdk.markChatConversationRead).not.toHaveBeenCalled();
+  });
+
+  it("useKeepViewedConversationRead follows a list refresh without fetching the list itself", async () => {
+    vi.mocked(usePathname).mockReturnValue("/chat/c1");
+    const { queryClient } = renderWithSeed(
+      () => useKeepViewedConversationRead(),
+      seededList({ id: "c1", unread: false }),
+    );
+    await Promise.resolve();
+    expect(archestraApiSdk.markChatConversationRead).not.toHaveBeenCalled();
+
+    // A conversation_updated refresh lands while the chat is open.
+    act(() => {
+      queryClient.setQueryData(
+        ["conversations", undefined],
+        seededList({ id: "c1", unread: true }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(archestraApiSdk.markChatConversationRead).toHaveBeenCalledWith({
+        path: { id: "c1" },
+      }),
+    );
+    expect(archestraApiSdk.getChatConversations).not.toHaveBeenCalled();
   });
 
   it("useKeepViewedConversationRead does not mark read off a conversation route", async () => {

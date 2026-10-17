@@ -21,6 +21,7 @@ import { notDeletedConversation } from "@/database/schemas/conversation";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import type {
   Conversation,
+  ConversationListItem,
   ConversationOrigin,
   InsertConversation,
   MessageFeedback,
@@ -115,7 +116,11 @@ class ConversationModel {
     userId: string,
     organizationId: string,
     searchQuery?: string,
-  ): Promise<Conversation[]> {
+    options: {
+      /** Non-search rows to return, newest first; pinned chats are always added. */
+      limit?: number;
+    } = {},
+  ): Promise<ConversationListItem[]> {
     const trimmedSearch = searchQuery?.trim();
 
     // Build WHERE conditions
@@ -213,7 +218,7 @@ class ConversationModel {
 
       const rows = await db
         .select({
-          conversation: getTableColumns(schema.conversationsTable),
+          conversation: LIST_CONVERSATION_COLUMNS,
           message: getTableColumns(schema.messagesTable),
           shareVisibility: conversationShareVisibility(),
           projectName: schema.projectsTable.name,
@@ -256,7 +261,7 @@ class ConversationModel {
         );
 
       // Group messages by conversation
-      const conversationMap = new Map<string, Conversation>();
+      const conversationMap = new Map<string, ConversationListItem>();
 
       for (const row of rows) {
         const conversationId = row.conversation.id;
@@ -311,36 +316,59 @@ class ConversationModel {
       return Array.from(conversationMap.values());
     } else {
       // Non-search case: exclude messages for performance
-      const rows = await db
-        .select({
-          conversation: getTableColumns(schema.conversationsTable),
-          shareVisibility: conversationShareVisibility(),
-          projectName: schema.projectsTable.name,
-          projectIcon: schema.projectsTable.icon,
-          // No systemPrompt here: list rows only need identity/config refs,
-          // and a roster of custom agents can carry very large prompts.
-          // findById selects it for the flows that need it (e.g. compaction).
-          agent: {
-            id: schema.agentsTable.id,
-            name: schema.agentsTable.name,
-            agentType: schema.agentsTable.agentType,
-            toolExposureMode: schema.agentsTable.toolExposureMode,
-            llmApiKeyId: schema.agentsTable.llmApiKeyId,
-            deletedAt: schema.agentsTable.deletedAt,
-          },
-        })
-        .from(schema.conversationsTable)
-        .leftJoin(
-          schema.agentsTable,
-          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
-        )
-        .leftJoin(
-          schema.projectsTable,
-          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
-        )
-        .where(and(...conditions))
-        .orderBy(desc(schema.conversationsTable.lastMessageAt))
-        .limit(ConversationModel.LIST_RESULT_LIMIT);
+      const limit = Math.min(
+        options.limit ?? ConversationModel.LIST_RESULT_LIMIT,
+        ConversationModel.LIST_RESULT_LIMIT,
+      );
+      const listQuery = (where: SQL | undefined, rowLimit?: number) => {
+        const query = db
+          .select({
+            conversation: LIST_CONVERSATION_COLUMNS,
+            shareVisibility: conversationShareVisibility(),
+            projectName: schema.projectsTable.name,
+            projectIcon: schema.projectsTable.icon,
+            // No systemPrompt here: list rows only need identity/config refs,
+            // and a roster of custom agents can carry very large prompts.
+            // findById selects it for the flows that need it (e.g. compaction).
+            agent: {
+              id: schema.agentsTable.id,
+              name: schema.agentsTable.name,
+              agentType: schema.agentsTable.agentType,
+              toolExposureMode: schema.agentsTable.toolExposureMode,
+              llmApiKeyId: schema.agentsTable.llmApiKeyId,
+              deletedAt: schema.agentsTable.deletedAt,
+            },
+          })
+          .from(schema.conversationsTable)
+          .leftJoin(
+            schema.agentsTable,
+            eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+          )
+          .leftJoin(
+            schema.projectsTable,
+            eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+          )
+          .where(where)
+          .orderBy(desc(schema.conversationsTable.lastMessageAt));
+        return rowLimit === undefined ? query : query.limit(rowLimit);
+      };
+      // Pinned chats show in the sidebar however old they are, so they are
+      // read on their own rather than cut off by the recent-chats limit.
+      const [recentRows, pinnedRows] = await Promise.all([
+        listQuery(and(...conditions), limit),
+        listQuery(
+          and(...conditions, isNotNull(schema.conversationsTable.pinnedAt)),
+        ),
+      ]);
+      const recentIds = new Set(recentRows.map((row) => row.conversation.id));
+      const rows = [
+        ...recentRows,
+        ...pinnedRows.filter((row) => !recentIds.has(row.conversation.id)),
+      ].sort(
+        (a, b) =>
+          b.conversation.lastMessageAt.getTime() -
+          a.conversation.lastMessageAt.getTime(),
+      );
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
@@ -1354,10 +1382,25 @@ function listProjectIcon(icon: string | null | undefined): string | null {
   return icon;
 }
 
-function withVisibleAgent(
-  conversation: typeof schema.conversationsTable.$inferSelect,
+/**
+ * The conversation columns list reads select: everything except the
+ * message-sized ones (the artifact, the todo list) and the encrypted-chat
+ * escrow bookkeeping, which no list response carries.
+ */
+const {
+  artifact: _artifact,
+  todoList: _todoList,
+  encryptedChatEscrow: _encryptedChatEscrow,
+  encryptedChatDekFingerprint: _encryptedChatDekFingerprint,
+  ...LIST_CONVERSATION_COLUMNS
+} = getTableColumns(schema.conversationsTable);
+
+function withVisibleAgent<
+  T extends Pick<typeof schema.conversationsTable.$inferSelect, "agentId">,
+>(
+  conversation: T,
   agent: JoinedConversationAgent,
-): typeof schema.conversationsTable.$inferSelect & {
+): T & {
   agent: Conversation["agent"];
 } {
   if (!agent?.id || agent.deletedAt !== null) {

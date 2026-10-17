@@ -143,6 +143,7 @@ import {
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationCompactionSchema,
+  SelectConversationListItemSchema,
   SelectConversationSchema,
   ThinkingEffortSchema,
   type UpdateConversation,
@@ -2381,14 +2382,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversations,
         description:
-          "List all conversations for current user with agent details. Optionally filter by search query.",
+          "List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50. List rows omit the artifact and todo list, which the single-conversation read carries.",
         tags: ["Chat"],
         querystring: z.object({
           search: z.string().optional(),
+          limit: z.coerce.number().int().min(1).max(250).default(50),
         }),
         response: constructResponseSchema(
           z.array(
-            SelectConversationSchema.extend({
+            SelectConversationListItemSchema.extend({
               scheduledRun: SelectScheduleTriggerRunSchema.pick({
                 id: true,
                 triggerId: true,
@@ -2404,11 +2406,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { search } = request.query;
+      const { search, limit } = request.query;
       const conversations = await ConversationModel.findAll(
         request.user.id,
         request.organizationId,
         search,
+        { limit },
       );
       const runs = await ScheduleTriggerRunModel.findByChatConversationIds({
         organizationId: request.organizationId,

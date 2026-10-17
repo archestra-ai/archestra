@@ -13,7 +13,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { callApi } from "@/lib/chat/api-call";
@@ -137,6 +137,12 @@ export function mergeUpdatedConversationIntoCache(
  * conversation_updated push for turns elsewhere, and every mutation.
  */
 const CONVERSATION_STALE_TIME_MS = 30_000;
+
+/**
+ * Recent conversations the sidebar loads: it shows up to 15 and the rest go
+ * through search, so this leaves a margin without paying for 250 rows.
+ */
+const SIDEBAR_CONVERSATION_LIMIT = 50;
 
 export function useConversation(
   conversationId?: string,
@@ -344,22 +350,28 @@ export function useBulkDeleteConversationFiles(conversationId?: string) {
 export function useConversations({
   enabled = true,
   search,
+  limit = SIDEBAR_CONVERSATION_LIMIT,
 }: {
   enabled?: boolean;
   search?: string;
+  /** Recent conversations to load when not searching; pinned ones always come. */
+  limit?: number;
 }) {
   return useQuery({
-    queryKey: ["conversations", search],
+    queryKey: ["conversations", search, limit],
     queryFn: async () => {
       const trimmedSearch = search?.trim();
       const { data, error } = await getChatConversations({
-        query: trimmedSearch ? { search: trimmedSearch } : undefined,
+        query: trimmedSearch ? { search: trimmedSearch } : { limit },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
     enabled,
-    staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
+    // Searches always go to the server. The plain list is kept current by the
+    // conversation_updated push and by every mutation, so it stays fresh across
+    // conversation switches instead of being re-read on each one.
+    staleTime: search ? 0 : 30_000,
     gcTime: 10 * 60 * 1000,
     // Backstop for the conversation_updated websocket push (see
     // useConversationUpdatedCacheSync): if the socket was down when a message
@@ -405,15 +417,27 @@ export function useMarkConversationRead() {
  */
 export function useKeepViewedConversationRead() {
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const { mutate: markRead } = useMarkConversationRead();
-  const { data: conversations } = useConversations({});
 
   const viewedConversationId = pathname.startsWith("/chat/")
     ? (pathname.split("/").at(-1) ?? undefined)
     : undefined;
-  const isViewedUnread = viewedConversationId
-    ? !!conversations?.find((c) => c.id === viewedConversationId)?.unread
-    : false;
+  // Read the lists the sidebar and palette already hold rather than observing
+  // one: an observer here started a list fetch on every conversation switch.
+  const isViewedUnread = useSyncExternalStore(
+    (onChange) => queryClient.getQueryCache().subscribe(onChange),
+    () =>
+      !!viewedConversationId &&
+      queryClient
+        .getQueriesData<archestraApiTypes.GetChatConversationsResponses["200"]>(
+          { queryKey: ["conversations"] },
+        )
+        .some(([, list]) =>
+          list?.some((c) => c.id === viewedConversationId && c.unread),
+        ),
+    () => false,
+  );
 
   useEffect(() => {
     if (viewedConversationId && isViewedUnread) {

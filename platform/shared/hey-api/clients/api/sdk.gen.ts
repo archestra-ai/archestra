@@ -2635,7 +2635,7 @@ export const stopChatStream = <ThrowOnError extends boolean = false>(options: Op
 export const getActiveChatRun = <ThrowOnError extends boolean = false>(options: Options<GetActiveChatRunData, ThrowOnError>) => (options.client ?? client).get<GetActiveChatRunResponses, GetActiveChatRunErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}/active-run', ...options });
 
 /**
- * List all conversations for current user with agent details. Optionally filter by search query.
+ * List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50. List rows omit the artifact and todo list, which the single-conversation read carries.
  *
  * Authentication:
  *

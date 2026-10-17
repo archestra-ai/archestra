@@ -126047,7 +126047,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "List all conversations for current user with agent details. Optionally filter by search query.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "description": "List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50. List rows omit the artifact and todo list, which the single-conversation read carries.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -126055,6 +126055,17 @@
             },
             "in": "query",
             "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 250
+            },
+            "in": "query",
+            "name": "limit",
             "required": false
           }
         ],
@@ -126148,43 +126159,6 @@
                       },
                       "hooksDebugEnabled": {
                         "type": "boolean"
-                      },
-                      "todoList": {
-                        "nullable": true,
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "string",
-                                "nullable": true,
-                                "enum": [
-                                  null
-                                ]
-                              }
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "additionalProperties": {}
-                          },
-                          {
-                            "type": "array",
-                            "items": {}
-                          }
-                        ]
-                      },
-                      "artifact": {
-                        "nullable": true,
-                        "type": "string"
                       },
                       "projectId": {
                         "nullable": true,
@@ -126606,8 +126580,6 @@
                       "thinkingEffort",
                       "hasCustomToolSelection",
                       "hooksDebugEnabled",
-                      "todoList",
-                      "artifact",
                       "projectId",
                       "origin",
                       "titleIsPlaceholder",

@@ -46,16 +46,22 @@ it("keeps compact issue data separate from the full server roster", async () => 
   const { result } = renderHook(
     () => ({
       compact: useMcpServers({ includeAssignedAgents: false }),
-      full: useMcpServers(),
+      unspecified: useMcpServers(),
+      full: useMcpServers({ includeAssignedAgents: true }),
     }),
     { wrapper },
   );
   await waitFor(() => {
     expect(result.current.compact.isSuccess).toBe(true);
+    expect(result.current.unspecified.isSuccess).toBe(true);
     expect(result.current.full.isSuccess).toBe(true);
   });
   expect(result.current.compact.data).toEqual([
     { ...server, assignedAgents: [] },
   ]);
   expect(result.current.full.data).toEqual([server]);
+  // Agent usage is opt-in: a caller that does not ask shares the compact
+  // request instead of making one of its own.
+  expect(result.current.unspecified.data).toEqual(result.current.compact.data);
+  expect(archestraApiSdk.getMcpServers).toHaveBeenCalledTimes(2);
 });

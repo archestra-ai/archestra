@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { AgentPinModel } from "@/models";
+import { AgentPinModel, AgentToolModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test } from "@/test";
@@ -452,6 +452,62 @@ describe("GET /api/agent-catalog", () => {
       external.id,
       two.id,
     ]);
+  });
+
+  test("counts tools and subagents as the rows show them, with or without the tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeMember,
+    makeTool,
+    seedAndAssignArchestraTools,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const target = await makeAgent({ organizationId: ctx.organizationId });
+    // Seeded first, so the agent below gets the creation defaults, among
+    // them the knowledge search tool that its tools leave out without
+    // knowledge sources.
+    await seedAndAssignArchestraTools(target.id);
+    const agent = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Counted agent",
+    });
+    for (const tool of [await makeTool(), await makeTool()]) {
+      await makeAgentTool(agent.id, tool.id);
+    }
+    await AgentToolModel.assignDelegation({
+      agentId: agent.id,
+      targetAgentId: target.id,
+    });
+    const listed = async (extra: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?name=Counted%20agent&limit=20&offset=0${extra}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const [row] = response.json().data;
+      return row.value as {
+        tools: Array<{ delegateToAgentId: string | null }>;
+        toolsCount: number;
+        subagentsCount: number;
+      };
+    };
+
+    const withTools = await listed("");
+    const withoutTools = await listed("&includeTools=false");
+
+    expect(withTools.subagentsCount).toBe(1);
+    expect(withTools.toolsCount).toBe(
+      withTools.tools.filter((tool) => !tool.delegateToAgentId).length,
+    );
+    expect(withTools.subagentsCount).toBe(
+      withTools.tools.filter((tool) => tool.delegateToAgentId).length,
+    );
+    expect(withoutTools.tools).toEqual([]);
+    expect(withoutTools.toolsCount).toBe(withTools.toolsCount);
+    expect(withoutTools.subagentsCount).toBe(withTools.subagentsCount);
   });
 
   test("returns only rows the caller can bulk-select when requested", async ({

@@ -146,7 +146,7 @@ UPDATE interactions SET baseline_model = model, baseline_cost = cost WHERE sessi
  * The embedding model, connectors, and indexed documents behind the Knowledge
  * pages. The connectors point at fictional hosts, so their rows carry a
  * finished sync and documents instead of a sync that would fail. A rerun
- * replaces the documents.
+ * replaces the documents and their stored count.
  */
 function seedKnowledge(state: SeedState): void {
   const organizationId = sql(state.organization.id);
@@ -181,7 +181,10 @@ DELETE FROM kb_documents WHERE connector_id = ${id};
 INSERT INTO kb_documents (organization_id, connector_id, source_id, title, content, content_hash, embedding_status, chunk_count, created_at, updated_at)
 SELECT ${organizationId}, ${id}, 'docs-' || n, ${sql(connector.name)} || ' document ' || n, 'Seeded document', encode(sha256(convert_to(${id} || n, 'UTF8')), 'hex'), 'completed', 4,
   now() - make_interval(days => n % 300), ${syncedAt}
-FROM generate_series(1, ${connector.documents}) AS n;`;
+FROM generate_series(1, ${connector.documents}) AS n;
+INSERT INTO kb_connector_document_counts (connector_id, document_count)
+SELECT ${id}, count(*) FROM kb_documents WHERE connector_id = ${id}
+ON CONFLICT (connector_id) DO UPDATE SET document_count = EXCLUDED.document_count;`;
   });
   const agents = KNOWLEDGE_BASE_AGENTS.map(
     (link) =>

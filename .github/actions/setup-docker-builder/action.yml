@@ -5,6 +5,10 @@ inputs:
     description: Blacksmith sticky-disk key; empty selects the standard builder
     required: false
     default: ""
+outputs:
+  persistent:
+    description: Whether the build runs on the persistent Blacksmith builder
+    value: ${{ steps.builder.outputs.persistent == 'true' }}
 runs:
   using: composite
   steps:

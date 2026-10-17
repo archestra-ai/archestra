@@ -246,6 +246,7 @@ export function useProfilesPaginated(
     pinned,
     ids,
     excludeIds,
+    includeTools,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -297,6 +298,7 @@ export function useProfilesPaginated(
         pinned,
         ids,
         excludeIds,
+        includeTools,
       },
     ],
     queryFn: async () => {
@@ -323,6 +325,7 @@ export function useProfilesPaginated(
           pinned,
           ids,
           excludeIds,
+          includeTools,
         },
       });
       throwOnApiError(error, { toastOnError: false });

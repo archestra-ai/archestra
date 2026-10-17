@@ -44,8 +44,11 @@ export function useAgentCatalog(
     initialDataAccess,
     initialDataLimit,
     enabled,
-    ...query
+    ...rest
   } = params ?? {};
+  // Rows carry their tool and subagent counts; the tools themselves are most
+  // of a row's bytes and the Agents page shows none of them.
+  const query = { includeTools: false, ...rest };
   const useInitialData =
     query.offset === 0 &&
     (query.sortBy === undefined || query.sortBy === DEFAULT_SORT_BY) &&
@@ -101,7 +104,13 @@ export function useAllMatchingAgentCatalog(
     max: MAX_BULK_IDS + 1,
     fetchPage: async ({ limit, offset }) => {
       const { data, error } = await getAgentCatalog({
-        query: { ...query, selectableOnly: true, limit, offset },
+        query: {
+          ...query,
+          includeTools: false,
+          selectableOnly: true,
+          limit,
+          offset,
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return data?.data ?? [];

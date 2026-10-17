@@ -76,6 +76,48 @@ class CachePolicyTests(unittest.TestCase):
                     "steps": {"builder": {"outputs": {"persistent": persistent}}},
                 }), driver != "remote")
 
+    def test_persistent_builder_skips_the_registry_cache_export(self):
+        setup = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
+        reported = re.search(r"^    value: \$\{\{ (.*) \}\}$", setup, re.M).group(1)
+        action = (ROOT / ".github/actions/build-docker-image/action.yml").read_text()
+        step = action.split("    - name: Build Docker image\n", 1)[1]
+        env_block, run_block = step.split("      run: |\n", 1)
+        names = re.findall(r"^        ([A-Z_]+): ", env_block, re.M)
+        script = "\n".join(line[8:] for line in run_block.splitlines())
+        # "" is the build that reuses the job's builder and skips the setup step.
+        for persistent in ("true", "false", ""):
+            for cache_to in ("type=registry,ref=registry.test/platform:buildcache,mode=min", ""):
+                with self.subTest(persistent=persistent, cache_to=cache_to), \
+                        tempfile.TemporaryDirectory() as directory:
+                    if persistent:
+                        self.assertEqual(evaluate(reported, {
+                            "steps": {"builder": {"outputs": {
+                                "persistent": "true" if persistent == "true" else "",
+                            }}},
+                        }), persistent == "true")
+                    directory = Path(directory)
+                    calls = directory / "calls"
+                    docker = directory / "docker"
+                    docker.write_text('#!/bin/bash\nprintf "%s\\n" "$@" >> "$ARCHESTRA_TEST_DOCKER_CALLS"\n')
+                    docker.chmod(0o755)
+                    result = subprocess.run(
+                        ["bash", "-e", "-c", script], text=True, capture_output=True,
+                        env=os.environ | dict.fromkeys(names, "") | {
+                            "PATH": f"{directory}:{os.environ['PATH']}",
+                            "RUNNER_TEMP": str(directory), "GITHUB_OUTPUT": str(directory / "output"),
+                            "ARCHESTRA_TEST_DOCKER_CALLS": str(calls),
+                            "INPUT_CONTEXT": "platform", "INPUT_PUSH": "true",
+                            "INPUT_CACHE_TO": cache_to, "PERSISTENT_BUILDER": persistent,
+                        },
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    arguments = calls.read_text().splitlines()
+                    self.assertEqual(arguments[:2], ["buildx", "build"])
+                    exported = bool(cache_to) and persistent != "true"
+                    self.assertEqual("--cache-to" in arguments, exported)
+                    if exported:
+                        self.assertEqual(arguments[arguments.index("--cache-to") + 1], cache_to)
+
     def test_only_trusted_default_branch_publishers_can_save_rust_caches(self):
         action = (ROOT / ".github/actions/setup-rust-build/action.yml").read_text()
         expression = re.search(r"^        save-if: \$\{\{ (.*) \}\}$", action, re.M).group(1)

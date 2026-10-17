@@ -22,6 +22,7 @@ import {
   ConversationAttachmentModel,
   ConversationModel,
   CreatedByModel,
+  KbConnectorDocumentCountModel,
   KbDirectoryModel,
   KbFileLabelModel,
   KbFileModel,
@@ -739,6 +740,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }),
         },
       });
+      await refreshUploadDocumentCounts(organizationId);
 
       return reply.send(outcome);
     },
@@ -762,6 +764,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!deleted) throw new ApiError(404, "File not found");
+      await refreshUploadDocumentCounts(organizationId);
       return { success: true };
     },
   );
@@ -1077,6 +1080,18 @@ async function assertKnowledgeBaseInOrg(params: {
   return (
     await findAccessibleKnowledgeBase({ ...params, id: params.knowledgeBaseId })
   ).id;
+}
+
+/**
+ * A file's documents live in the upload connector of every knowledge base it
+ * was indexed into, so deleting files recounts the organization's upload
+ * connectors.
+ */
+async function refreshUploadDocumentCounts(organizationId: string) {
+  await KbConnectorDocumentCountModel.refreshForOrganization({
+    organizationId,
+    connectorType: "file_upload",
+  });
 }
 
 /** A file's `visibility` and `teamIds` response fields, from its grants. */

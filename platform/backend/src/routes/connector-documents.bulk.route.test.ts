@@ -2,7 +2,11 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { buildGroupToken } from "@/knowledge-base/acl-tokens";
-import { KbDocumentModel, KnowledgeBaseConnectorModel } from "@/models";
+import {
+  KbConnectorDocumentCountModel,
+  KbDocumentModel,
+  KnowledgeBaseConnectorModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -84,6 +88,7 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
     const first = await makeDocument("doc-a");
     const second = await makeDocument("doc-b");
     const kept = await makeDocument("doc-kept");
+    await KbConnectorDocumentCountModel.findByConnectorIds([connectorId]);
 
     const response = await bulkDelete([first.id, second.id]);
 
@@ -97,6 +102,9 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
     });
     expect(await stillExists(first.id)).toBe(false);
     expect(await stillExists(kept.id)).toBe(true);
+    expect(
+      await KbConnectorDocumentCountModel.findByConnectorIds([connectorId]),
+    ).toEqual(new Map([[connectorId, 1]]));
   });
 
   /**
@@ -200,6 +208,7 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
       await makeDocument("alpha");
       await makeDocument("beta");
       await makeDocument("gamma");
+      await KbConnectorDocumentCountModel.findByConnectorIds([connectorId]);
 
       const response = await bulkDeleteAll({});
 
@@ -215,6 +224,9 @@ describe("DELETE /api/connectors/:id/documents/bulk", () => {
           organizationId,
         }),
       ).toBe(0);
+      expect(
+        await KbConnectorDocumentCountModel.findByConnectorIds([connectorId]),
+      ).toEqual(new Map([[connectorId, 0]]));
     });
 
     /**

@@ -2,8 +2,9 @@ import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, renderHook, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse, http } from "msw";
+import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { useState } from "react";
 import {
   afterAll,
   afterEach,
@@ -192,5 +193,94 @@ it("chunks only explicit identity references and does nothing for empty referenc
   await waitFor(() => expect(result.current.isSuccess).toBe(true));
   expect(result.current.data).toHaveLength(205);
   expect(batches.map((batch) => batch.length)).toEqual([100, 100, 5]);
+  client.clear();
+});
+
+it("logs source: labels a saved user outside the capped list and searches on the server", async () => {
+  const logUsers = [
+    { id: "busy-1", name: "Busy Builder" },
+    { id: "busy-2", name: "" },
+    { id: "rare-90", name: "Rare Reviewer" },
+  ];
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/interactions/user-ids`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      requests.push(params);
+      const ids = params.get("ids")?.split(",");
+      if (ids)
+        return HttpResponse.json(logUsers.filter((u) => ids.includes(u.id)));
+      const search = params.get("search")?.toLowerCase();
+      // The capped default list leaves out the rarely active user.
+      return HttpResponse.json(
+        search
+          ? logUsers.filter((u) => u.name.toLowerCase().includes(search))
+          : logUsers.slice(0, 2),
+      );
+    }),
+  );
+  const onChange = vi.fn();
+  const { wrapper, client } = setup();
+  render(
+    <RemoteUserSelect
+      value="rare-90"
+      onValueChange={onChange}
+      source="logs"
+      searchMode="name"
+      pinnedOption={{ value: "all", label: "All Users" }}
+    />,
+    { wrapper },
+  );
+  const trigger = screen.getByRole("combobox");
+  await waitFor(() => expect(trigger).toHaveTextContent("Rare Reviewer"));
+  expect(requests.map((params) => params.get("ids"))).toEqual(["rare-90"]);
+
+  await userEvent.click(trigger);
+  await screen.findByRole("option", { name: /Busy Builder/ });
+  expect(screen.getAllByRole("option")).toHaveLength(3);
+  // A user without a name is shown by id.
+  expect(screen.getByRole("option", { name: /busy-2/ })).toBeVisible();
+  expect(requests[1]?.get("limit")).toBe("50");
+  expect(screen.queryByRole("button", { name: "Next users" })).toBeNull();
+
+  await userEvent.type(screen.getByPlaceholderText("Search users"), "nobody");
+  await screen.findByText("No matching users");
+  await userEvent.clear(screen.getByPlaceholderText("Search users"));
+  await userEvent.type(screen.getByPlaceholderText("Search users"), "rare");
+  await userEvent.click(
+    await screen.findByRole("option", { name: /Rare Reviewer/ }),
+  );
+  expect(onChange).toHaveBeenCalledWith("rare-90");
+  expect(requests.map((params) => params.get("search"))).toContain("rare");
+  client.clear();
+});
+
+it("labels a newly picked user right away, before the lookup by id returns", async () => {
+  server.use(
+    http.get(`${origin}/api/interactions/user-ids`, async ({ request }) => {
+      if (new URL(request.url).searchParams.has("ids")) await delay("infinite");
+      return HttpResponse.json([{ id: "rare-90", name: "Rare Reviewer" }]);
+    }),
+  );
+  function Picker() {
+    const [value, setValue] = useState("all");
+    return (
+      <RemoteUserSelect
+        value={value}
+        onValueChange={setValue}
+        source="logs"
+        searchMode="name"
+        pinnedOption={{ value: "all", label: "All Users" }}
+      />
+    );
+  }
+  const { wrapper, client } = setup();
+  render(<Picker />, { wrapper });
+  const trigger = screen.getByRole("combobox");
+  await userEvent.click(trigger);
+  await userEvent.click(
+    await screen.findByRole("option", { name: /Rare Reviewer/ }),
+  );
+  expect(trigger).toHaveTextContent("Rare Reviewer");
   client.clear();
 });

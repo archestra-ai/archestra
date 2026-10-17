@@ -70,6 +70,11 @@ export function useMcpServers(params?: McpServersParams) {
   const { data: canReadInstallations } = useHasPermissions({
     mcpServerInstallation: ["read"],
   });
+  // Per-install agent usage is opt-in, unlike the API's default: building it
+  // looks up the agents of every listed install, and only a server's own page
+  // shows it. Every other list reads status and names, and with a boolean key
+  // those callers share one cached request.
+  const includeAssignedAgents = params?.includeAssignedAgents ?? false;
 
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
@@ -77,31 +82,23 @@ export function useMcpServers(params?: McpServersParams) {
       "mcp-servers",
       {
         catalogId: params?.catalogId,
-        includeAssignedAgents: params?.includeAssignedAgents,
+        includeAssignedAgents,
         assignmentScope: params?.assignmentScope,
         assignmentTeamIds: params?.assignmentTeamIds,
       },
     ],
     queryFn: async () => {
       const { data, error } = await getMcpServers({
-        query:
-          params?.includeAssignedAgents !== undefined ||
-          params?.catalogId ||
-          params?.assignmentScope ||
-          params?.assignmentTeamIds
-            ? {
-                ...(params?.includeAssignedAgents !== undefined && {
-                  includeAssignedAgents: params.includeAssignedAgents,
-                }),
-                ...(params?.catalogId && { catalogId: params.catalogId }),
-                ...(params?.assignmentScope && {
-                  assignmentScope: params.assignmentScope,
-                }),
-                ...(params?.assignmentTeamIds && {
-                  assignmentTeamIds: params.assignmentTeamIds,
-                }),
-              }
-            : undefined,
+        query: {
+          includeAssignedAgents,
+          ...(params?.catalogId && { catalogId: params.catalogId }),
+          ...(params?.assignmentScope && {
+            assignmentScope: params.assignmentScope,
+          }),
+          ...(params?.assignmentTeamIds && {
+            assignmentTeamIds: params.assignmentTeamIds,
+          }),
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];

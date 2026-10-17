@@ -6,7 +6,13 @@ import {
   type ConnectorType,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
+import {
+  ArchiveRestore,
+  Database,
+  FileText,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -349,6 +355,15 @@ function ConnectorsList() {
         />
       ),
     },
+    {
+      id: "documents",
+      header: "Documents",
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          {row.original.totalDocsIngested.toLocaleString()}
+        </span>
+      ),
+    },
 
     {
       id: "schedule",
@@ -601,7 +616,9 @@ function ConnectorsList() {
                             />
                           </div>
                         }
-                      ></TableCard>
+                      >
+                        <DocumentCount total={connector.totalDocsIngested} />
+                      </TableCard>
                     ))}
                   </TableCardList>
                 }
@@ -761,5 +778,20 @@ function DeleteConnectorDialog({
       confirmLabel="Delete Connector"
       pendingLabel="Deleting..."
     />
+  );
+}
+
+// ===== Internal pieces =====
+
+/** Same shape as the document stat on knowledge base cards. */
+function DocumentCount({ total }: { total: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <FileText className="h-3.5 w-3.5" />
+      <span className="font-medium text-foreground tabular-nums">
+        {total.toLocaleString()}
+      </span>
+      <span>{total === 1 ? "document" : "documents"}</span>
+    </span>
   );
 }

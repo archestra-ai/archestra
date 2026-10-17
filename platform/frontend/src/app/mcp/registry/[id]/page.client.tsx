@@ -295,7 +295,13 @@ function CatalogItemDetails({
     enabled: showSavedLogins,
   });
 
-  const { data: allMcpServers, isPending: isServersPending } = useMcpServers();
+  // This catalog's installs only, with their agents (the usage count and
+  // tab). Narrowed in SQL: the agent lookup covers these installs alone.
+  const { data: catalogMcpServers, isPending: isServersPending } =
+    useMcpServers({
+      catalogId: item.id,
+      includeAssignedAgents: true,
+    });
   const { statuses: deploymentStatuses, state: deploymentFeedState } =
     useMcpDeploymentStatuses();
   const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
@@ -320,8 +326,8 @@ function CatalogItemDetails({
         });
 
   const allServersForCatalog = useMemo(
-    () => (allMcpServers ?? []).filter((s) => s.catalogId === item.id),
-    [allMcpServers, item.id],
+    () => (catalogMcpServers ?? []).filter((s) => s.catalogId === item.id),
+    [catalogMcpServers, item.id],
   );
 
   // Aggregate installations for the logs/inspector dropdown — local installs

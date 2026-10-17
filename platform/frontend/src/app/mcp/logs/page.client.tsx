@@ -534,7 +534,7 @@ function McpToolCallsTable({
             <UserFilterSelect
               value={userIdFromUrl}
               onValueChange={handleUserFilterChange}
-              remote
+              source="members"
             />
           ) : null}
         </FilterBar>

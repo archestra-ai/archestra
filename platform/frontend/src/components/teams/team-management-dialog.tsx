@@ -738,7 +738,9 @@ function MembersSection({
         },
       });
       throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
+      // Tagged with its search so the header describes the rows on screen
+      // while a newer search is still loading.
+      return data ? { ...data, search: debouncedMemberSearch } : null;
     },
     enabled: open,
     placeholderData: keepPreviousData,
@@ -864,7 +866,7 @@ function MembersSection({
     (user) => !disabledUserIds.has(user.userId),
   );
   const hasStagedChanges = changes.size > 0;
-  const isSearchingMembers = debouncedMemberSearch !== "";
+  const isSearchingMembers = !!memberPage?.search;
   const showMemberSearch = memberSearch !== "" || pageTotal > MEMBERS_PAGE_SIZE;
 
   return (
@@ -892,7 +894,9 @@ function MembersSection({
       </div>
 
       <div className="space-y-2">
-        <Label>
+        <Label
+          className={cn(isMemberPageStale && "opacity-60 transition-opacity")}
+        >
           {isSearchingMembers
             ? `Current Members (${pageTotal} matching)`
             : `Current Members (${Math.max(0, pageTotal - stagedRemovalCount) + stagedAdds.length})`}

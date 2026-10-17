@@ -130,7 +130,11 @@ type RosterMember = {
 
 // Serves the paged member endpoint from an in-memory roster the way the
 // server does: optional name search, optional user-id filter, then a page.
-function serveMembers(roster: RosterMember[]) {
+// `holdSearch` delays answers to searches until it resolves.
+function serveMembers(
+  roster: RosterMember[],
+  { holdSearch }: { holdSearch?: Promise<void> } = {},
+) {
   vi.mocked(archestraApiSdk.getTeamMembersPage).mockImplementation((async ({
     query,
   }: {
@@ -141,6 +145,7 @@ function serveMembers(roster: RosterMember[]) {
       userIds?: string[];
     };
   }) => {
+    if (query?.search && holdSearch) await holdSearch;
     const limit = query?.limit ?? 20;
     const offset = query?.offset ?? 0;
     const matches = roster.filter(
@@ -310,6 +315,37 @@ describe("TeamManagementDialog members of a large team", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Member 45")).toBeInTheDocument();
     expect(archestraApiSdk.getTeamMembers).not.toHaveBeenCalled();
+  });
+
+  it("keeps the header on the shown members while a search loads", async () => {
+    let releaseSearch = () => {};
+    serveMembers(largeRoster(45), {
+      holdSearch: new Promise<void>((resolve) => {
+        releaseSearch = resolve;
+      }),
+    });
+    const user = await setupUserEvent();
+    renderDialog();
+    await user.click(screen.getByRole("button", { name: "Members" }));
+    expect(await screen.findByText("Current Members (45)")).not.toHaveClass(
+      "opacity-60",
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Search members" }),
+      "member 4",
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Current Members (45)")).toHaveClass(
+        "opacity-60",
+      ),
+    );
+    expect(screen.queryByText(/matching/)).not.toBeInTheDocument();
+
+    releaseSearch();
+    expect(
+      await screen.findByText("Current Members (6 matching)"),
+    ).not.toHaveClass("opacity-60");
   });
 
   it("keeps member changes staged on other pages and saves them all", async () => {

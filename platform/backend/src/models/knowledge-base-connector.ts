@@ -124,6 +124,8 @@ class KnowledgeBaseConnectorModel {
     status?: "active" | "deleted";
     /** The list's `access`, `sharedWith`, and `owner` filters. */
     access?: ResourceAccessFilter;
+    /** Restrict to these connector ids; omit when not filtering. */
+    ids?: string[];
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const {
       organizationId,
@@ -157,6 +159,9 @@ class KnowledgeBaseConnectorModel {
         teamIds: viewerTeamIds,
         scope: visibilityScope,
       }),
+      ...(params.ids
+        ? [inArray(schema.knowledgeBaseConnectorsTable.id, params.ids)]
+        : []),
       ...(connectorType
         ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
         : []),

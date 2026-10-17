@@ -26,7 +26,7 @@ export function TeamSelect({
   /** The team id, or null for the none option. */
   value: string | null;
   onValueChange: (teamId: string | null) => void;
-  teams: Pick<Team, "id" | "name" | "description" | "members">[];
+  teams: TeamOption[];
   /** A standing "no team" choice, pinned above the search results. */
   noneOption?: { label: string; description?: string };
   placeholder?: string;
@@ -93,10 +93,16 @@ export function TeamSelect({
 
 const NONE = "__none__";
 
+// `memberCount` is optional: team lists restored from a session snapshot
+// written before the field existed lack it until they refetch.
+type TeamOption = Pick<Team, "id" | "name" | "description"> & {
+  memberCount?: number;
+};
+
 function describeTeam(
-  team: Pick<Team, "description" | "members">,
+  team: Pick<TeamOption, "description" | "memberCount">,
 ): string | undefined {
-  const count = team.members?.length;
+  const count = team.memberCount;
   const members =
     count === undefined
       ? null

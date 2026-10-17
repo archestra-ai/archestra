@@ -40,6 +40,7 @@ import {
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
+import { EmptyTableSection } from "@/components/table-section-heading";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { Button } from "@/components/ui/button";
@@ -396,17 +397,28 @@ function ProjectsList() {
                   onEdit={openEditDialog}
                   onDelete={setDeletingProject}
                 />
-                <ProjectSection
-                  title="All projects"
-                  projects={tableProjects}
-                  filters={filters}
-                  pagination={tablePagination}
-                  onPaginationChange={setPagination}
-                  isLoading={isFetching}
-                  onTogglePin={togglePin}
-                  onEdit={openEditDialog}
-                  onDelete={setDeletingProject}
-                />
+                {tableTotal > 0 ? (
+                  <ProjectSection
+                    title="All projects"
+                    projects={tableProjects}
+                    filters={filters}
+                    pagination={tablePagination}
+                    onPaginationChange={setPagination}
+                    isLoading={isFetching}
+                    onTogglePin={togglePin}
+                    onEdit={openEditDialog}
+                    onDelete={setDeletingProject}
+                  />
+                ) : (
+                  <EmptyTableSection
+                    title="All projects"
+                    message={
+                      hasActiveFilter
+                        ? "No other projects match your filters"
+                        : "No other projects yet"
+                    }
+                  />
+                )}
               </div>
             )}
           </div>
@@ -546,8 +558,6 @@ function ProjectSection({
   };
   const selectedForSharing = selectedProjects.filter(canShareProjectItem);
   const selectedForDelete = selectedProjects.filter(canDeleteProjectItem);
-
-  if (pagination.total === 0) return null;
 
   return (
     <section className="space-y-3">

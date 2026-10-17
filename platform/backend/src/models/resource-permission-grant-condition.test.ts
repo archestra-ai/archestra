@@ -331,7 +331,7 @@ async function addGrant(params: {
   });
 }
 
-/** The `/api/agents` read for a caller without base agent read. */
+/** The agent roster read (as behind `/api/agents/options`) for a caller without base agent read. */
 async function listAgentIds(userId: string, organizationId: string) {
   const agents = await AgentModel.findAll(userId, false, {
     authorization: { organizationId, baseReadTypes: [] },

@@ -880,7 +880,7 @@ describe("ProjectsPageClient", () => {
     expect(screen.queryByText("Project 10")).not.toBeInTheDocument();
   });
 
-  it("keeps the pinned tiles, without the empty prompt, when every project is pinned", () => {
+  it("keeps the pinned tiles and notes there are no other projects when every project is pinned", () => {
     mockProjects = [
       makeProject({
         id: "pinned",
@@ -893,7 +893,8 @@ describe("ProjectsPageClient", () => {
 
     expect(screen.getByText("Pinned project")).toBeInTheDocument();
     expect(screen.queryByText("No projects yet")).not.toBeInTheDocument();
-    expect(screen.queryByText("All projects")).not.toBeInTheDocument();
+    expect(screen.getByText("All projects")).toBeInTheDocument();
+    expect(screen.getByText("No other projects yet")).toBeInTheDocument();
   });
 
   it("selects every matching project across pages, not only the page in view", () => {

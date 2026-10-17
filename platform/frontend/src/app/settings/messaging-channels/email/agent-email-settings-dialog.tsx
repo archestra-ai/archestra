@@ -51,10 +51,7 @@ import {
   describeIncomingEmailSecurityMode,
 } from "./email-trigger.utils";
 
-type AgentRecord = Omit<
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
-  "pinnedAt"
->;
+type AgentRecord = archestraApiTypes.GetAgentResponses["200"];
 
 interface AgentEmailSettingsDialogProps {
   agent: AgentRecord | null;

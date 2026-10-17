@@ -9862,12 +9862,19 @@ describe("pickInstallForCaller (caller-scoped install selection)", () => {
       scope: "team",
     });
 
+    // Only the caller's team ids matter; a large team's member rows must not
+    // be loaded on this path.
+    const { TeamModel } = await import("@/models");
+    const loadMembers = vi.spyOn(TeamModel, "getTeamMembersBatch");
+
     const picked = await pickInstallForCaller(
       [otherInstall, teamInstall],
       userToken(caller.id, org.id),
     );
 
     expect(picked?.id).toBe(teamInstall.id);
+    expect(loadMembers).not.toHaveBeenCalled();
+    loadMembers.mockRestore();
   });
 
   test("falls back to an org-scoped install when the caller has no personal or team install", async ({

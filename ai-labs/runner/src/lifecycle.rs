@@ -274,14 +274,14 @@ impl Instance {
 
     pub async fn start(&mut self) -> Result<(), LifecycleError> {
         self.env = load_platform_env(&self.platform)?;
-        // The bench DB is fresh per run, so credentials the platform `.env` does not pin are
-        // generated here, once, and shared by the backend env and the admin sign-in below.
-        self.env
-            .entry("ARCHESTRA_AUTH_SECRET".to_string())
-            .or_insert_with(random_credential);
-        self.env
-            .entry("ARCHESTRA_AUTH_ADMIN_PASSWORD".to_string())
-            .or_insert_with(random_credential);
+        // The bench DB is fresh per run, so credentials that neither the platform `.env` nor the
+        // process env pin are generated here, once, and shared by the backend env and the admin
+        // sign-in below.
+        for key in ["ARCHESTRA_AUTH_SECRET", "ARCHESTRA_AUTH_ADMIN_PASSWORD"] {
+            self.env
+                .entry(key.to_string())
+                .or_insert_with(|| env_override(key).unwrap_or_else(random_credential));
+        }
         let (bench_db_url, managed) = resolve_bench_db_url(&self.env);
         self.db_managed = managed;
         info!(

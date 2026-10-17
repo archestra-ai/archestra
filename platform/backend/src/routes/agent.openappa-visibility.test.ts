@@ -69,12 +69,7 @@ describe("system chat agent visibility", () => {
         .json()
         .map((row: { id: string }) => row.id)
         .sort(),
-    ).toEqual(
-      roster
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort(),
-    );
+    ).toEqual([policy.id, ordinary.id].sort());
     expect(roster.statusCode).toBe(200);
     expect(
       roster
@@ -110,12 +105,7 @@ describe("system chat agent visibility", () => {
         .json()
         .map((row: { id: string }) => row.id)
         .sort(),
-    ).toEqual(
-      roster
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort(),
-    );
+    ).toEqual([policy.id]);
     expect(roster.statusCode).toBe(200);
     expect(roster.json().data).toEqual([
       expect.objectContaining({
@@ -146,6 +136,33 @@ describe("system chat agent visibility", () => {
       title: "Policy review",
     });
   });
+  test("a member's built-in scope in chat view lists only the system assistant", async ({
+    makeMember,
+    makeAgent,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    const policy = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+    });
+
+    const builtIns = await ctx.app.inject({
+      method: "GET",
+      url: `${chatRosterUrl}&scope=built_in`,
+    });
+
+    expect(builtIns.statusCode).toBe(200);
+    expect(
+      builtIns.json().data.map((agent: { id: string }) => agent.id),
+    ).toEqual([policy.id]);
+  });
+
   test("disabling OpenAPPA hides an existing assistant without discarding its saved preference", async ({
     makeMember,
     makeAgent,
@@ -177,12 +194,7 @@ describe("system chat agent visibility", () => {
         .json()
         .map((row: { id: string }) => row.id)
         .sort(),
-    ).toEqual(
-      roster
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort(),
-    );
+    ).toEqual([]);
     expect(roster.statusCode).toBe(200);
     expect(roster.json().data).toEqual([]);
     expect(
@@ -235,12 +247,7 @@ describe("system chat agent visibility", () => {
         .json()
         .map((row: { id: string }) => row.id)
         .sort(),
-    ).toEqual(
-      roster
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort(),
-    );
+    ).toEqual([]);
     expect(roster.statusCode).toBe(200);
     expect(roster.json().data).toEqual([]);
     const denied = await ctx.app.inject({

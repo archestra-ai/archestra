@@ -2705,8 +2705,9 @@ class McpClient {
       );
       if (userServer) return userServer;
 
-      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
-      const userTeamIds = new Set(userTeams.map((t) => t.id));
+      const userTeamIds = new Set(
+        await TeamModel.getUserTeamIds(tokenAuth.userId),
+      );
       const teamServer = allServers.find(
         (s) => s.teamId && userTeamIds.has(s.teamId),
       );

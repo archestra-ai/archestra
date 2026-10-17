@@ -6,7 +6,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { UserTokenModel } from "@/models";
+import { UserTokenModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createOpenAiTestClient,
@@ -129,6 +129,83 @@ describe("LLM proxy with a personal platform token", () => {
     });
 
     expect(response.statusCode, response.body).toBe(403);
+  });
+
+  test("requires the named provider key to match the route provider", async ({
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    await makeMember(user.id, testAgent.organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const anthropicKey = await makeLlmProviderApiKey(
+      testAgent.organizationId,
+      secret.id,
+      { provider: "anthropic" },
+    );
+    const userToken = await UserTokenModel.ensureUserToken(
+      user.id,
+      testAgent.organizationId,
+    );
+    const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: completionUrl(),
+      headers: {
+        authorization: `Bearer ${tokenValue}`,
+        [CHAT_API_KEY_ID_HEADER]: anthropicKey.id,
+      },
+      payload: chatPayload,
+    });
+
+    expect(response.statusCode, response.body).toBe(400);
+    expect(openaiAdapterFactory.createClient).not.toHaveBeenCalled();
+  });
+
+  test("rejects the token when another credential identifies a different user", async ({
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const other = await makeUser();
+    await makeMember(user.id, testAgent.organizationId);
+    await makeMember(other.id, testAgent.organizationId);
+    const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+    const providerKey = await makeLlmProviderApiKey(
+      testAgent.organizationId,
+      secret.id,
+      { provider: "openai" },
+    );
+    const userToken = await UserTokenModel.ensureUserToken(
+      user.id,
+      testAgent.organizationId,
+    );
+    const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
+    const { value: othersPassthroughKey } = await VirtualApiKeyModel.create({
+      organizationId: testAgent.organizationId,
+      name: "other-user-passthrough",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: other.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: completionUrl(),
+      headers: {
+        authorization: `Bearer ${tokenValue}`,
+        [CHAT_API_KEY_ID_HEADER]: providerKey.id,
+        "x-archestra-virtual-key": othersPassthroughKey,
+      },
+      payload: chatPayload,
+    });
+
+    expect(response.statusCode, response.body).toBe(401);
   });
 
   test("rejects the token when no provider key is named", async ({

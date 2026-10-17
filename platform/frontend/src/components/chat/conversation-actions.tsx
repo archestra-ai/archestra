@@ -12,10 +12,8 @@ import {
   Users,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ComponentProps, type ReactNode, useState } from "react";
 import { toast } from "sonner";
-import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
-import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -24,6 +22,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { appInteractive } from "@/lib/app-interactive";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   fetchConversation,
@@ -41,6 +40,40 @@ import {
   useCreateProjectFromConversation,
   useProjects,
 } from "@/lib/projects/projects.query";
+import { lazyComponent } from "@/lib/utils/preloadable-lazy";
+
+// The project picker (a command list) and the share dialog (resource
+// permissions) open from the actions menu; their code loads on idle and when
+// they open, not with the conversation page.
+const ConversationProjectActions = lazyComponent<
+  ComponentProps<
+    typeof import("@/app/_parts/conversation-project-actions").ConversationProjectActions
+  >
+>(() =>
+  import("@/app/_parts/conversation-project-actions").then(
+    (m) => m.ConversationProjectActions,
+  ),
+);
+const ShareConversationDialog = lazyComponent<
+  ComponentProps<
+    typeof import("@/components/chat/share-conversation-dialog").ShareConversationDialog
+  >
+>(() =>
+  import("@/components/chat/share-conversation-dialog").then(
+    (m) => m.ShareConversationDialog,
+  ),
+);
+/** Fetch the menu's lazy parts ahead of need (done on idle). */
+export async function preloadConversationActionParts(): Promise<void> {
+  await Promise.all([
+    ConversationProjectActions.preload(),
+    ShareConversationDialog.preload(),
+  ]);
+}
+
+if (typeof window !== "undefined") {
+  void appInteractive.whenIdle().then(preloadConversationActionParts);
+}
 
 /**
  * The actions for one chat: the same list in the sidebar row menu and in the
@@ -86,6 +119,9 @@ export function useConversationActions({
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+  // Mounted from its first open on, so closing still animates.
+  const [shareOpened, setShareOpened] = useState(false);
+  if (shareOpen && !shareOpened) setShareOpened(true);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (!conversation) {
@@ -265,7 +301,7 @@ export function useConversationActions({
 
   const dialogs = (
     <>
-      {mayShare && (
+      {mayShare && shareOpened && (
         <ShareConversationDialog
           conversationId={id}
           appIds={appIds}

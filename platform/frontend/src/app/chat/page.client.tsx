@@ -64,7 +64,7 @@ import type { RightPanelTab } from "@/components/chat/right-side-panel";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingState } from "@/components/loading";
-import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
+import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-run-state";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";

@@ -2,12 +2,23 @@
 
 import { AlertTriangle, InfoIcon, KeyRound, Lock } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
-import { AgentRuntimeCredentialsDialog } from "@/components/agent-runtime-credentials-dialog";
+import { type ComponentProps, useState } from "react";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { getApiRefusal } from "@/lib/utils/api";
+import { lazyComponent } from "@/lib/utils/preloadable-lazy";
+
+// The credentials form loads when someone starts connecting.
+const AgentRuntimeCredentialsDialog = lazyComponent<
+  ComponentProps<
+    typeof import("@/components/agent-runtime-credentials-dialog").AgentRuntimeCredentialsDialog
+  >
+>(() =>
+  import("@/components/agent-runtime-credentials-dialog").then(
+    (m) => m.AgentRuntimeCredentialsDialog,
+  ),
+);
 
 type MissingCredential = {
   key: string;

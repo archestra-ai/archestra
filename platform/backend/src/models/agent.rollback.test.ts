@@ -14,10 +14,12 @@ import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { accessGrants, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import AgentModel from "./agent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentToolModel from "./agent-tool";
+import AgentUsageModel from "./agent-usage";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import ModelModel from "./model";
@@ -1593,7 +1595,7 @@ describe("AgentModel", () => {
       expect(resultByTeam.data).toHaveLength(4);
     });
 
-    test("populates lastUsedAt from the MCP tool-call log and sorts by it", async ({
+    test("stamps lastUsedAt from McpToolCallModel.create and sorts by it", async ({
       makeAdmin,
       makeAgent,
       makeOrganization,
@@ -1643,6 +1645,8 @@ describe("AgentModel", () => {
         toolResult: null,
         createdAt: newer,
       });
+      // The stamp runs as background work after each insert.
+      await drainBackgroundWork();
 
       const result = await AgentModel.findAllPaginated(
         { limit: 10, offset: 0 },
@@ -3994,16 +3998,19 @@ describe("AgentModel", () => {
   describe("lastUsedAt", () => {
     const at = (isoDay: string) => new Date(`2026-08-${isoDay}T00:00:00.000Z`);
 
-    const seedMcpCall = (agentId: string, createdAt: Date) =>
-      db.insert(schema.mcpToolCallsTable).values({
+    // Rows inserted directly, then stamped the way the log writers do.
+    const seedMcpCall = async (agentId: string, createdAt: Date) => {
+      await db.insert(schema.mcpToolCallsTable).values({
         agentId,
         mcpServerName: "test-server",
         method: "tools/call",
         createdAt,
       });
+      await AgentUsageModel.recordUse({ agentId, usedAt: createdAt });
+    };
 
-    const seedInteraction = (profileId: string, createdAt: Date) =>
-      db.insert(schema.interactionsTable).values({
+    const seedInteraction = async (profileId: string, createdAt: Date) => {
+      await db.insert(schema.interactionsTable).values({
         profileId,
         request: {
           model: "claude-sonnet-5",
@@ -4016,6 +4023,11 @@ describe("AgentModel", () => {
         type: "anthropic:messages",
         createdAt,
       });
+      await AgentUsageModel.recordUse({
+        agentId: profileId,
+        usedAt: createdAt,
+      });
+    };
 
     const lastUsedOf = async (name: string) => {
       const result = await AgentModel.findAllPaginated({
@@ -4102,6 +4114,31 @@ describe("AgentModel", () => {
       expect(await lastUsedOf("Second")).toEqual(at("21"));
       expect(await lastUsedOf("Tied")).toEqual(at("07"));
       expect(await lastUsedOf("Idle")).toBeNull();
+    });
+
+    test("reads the stored value, not the logs", async ({ makeAgent }) => {
+      const stamped = await makeAgent({ name: "Stamped, no logs" });
+      const logged = await makeAgent({ name: "Logs, no stamp" });
+      await AgentUsageModel.recordUse({
+        agentId: stamped.id,
+        usedAt: at("09"),
+      });
+      // Log rows alone, as after a retention purge or before a stamp lands,
+      // no longer drive the reported value.
+      await db.insert(schema.mcpToolCallsTable).values({
+        agentId: logged.id,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        createdAt: at("10"),
+      });
+
+      expect(await lastUsedOf("Stamped, no logs")).toEqual(at("09"));
+      expect(await lastUsedOf("Logs, no stamp")).toBeNull();
+      const sorted = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        { sortBy: "lastUsedAt", sortDirection: "desc" },
+      );
+      expect(sorted.data[0]?.name).toBe("Stamped, no logs");
     });
 
     test("sorts by the same value the rows report", async ({ makeAgent }) => {

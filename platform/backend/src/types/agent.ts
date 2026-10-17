@@ -191,6 +191,13 @@ const selectExtendedFields = {
   passthroughHeaders: z.array(z.string()).nullable(),
   runtime: AgentRuntimeSchema.nullable(),
   activationSkillMode: AgentActivationSkillModeSchema,
+  /**
+   * When anything last ran through this agent: the later of its newest MCP
+   * request (any JSON-RPC method) and its newest LLM call. Null when neither
+   * ever happened. Optional, as it was before the column existed, so agent
+   * objects built in code without it still fit.
+   */
+  lastUsedAt: z.date().nullable().optional(),
 };
 
 const insertExtendedFields = {
@@ -355,13 +362,6 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * rows.
    */
   activationSkillsCount: z.number().int().nonnegative().optional(),
-  /**
-   * Timestamp of the most recent MCP request (any JSON-RPC method) routed
-   * through this agent, from the mcp_tool_calls log. Null when nothing was
-   * ever routed through it. Populated on paginated list reads; absent on
-   * other responses.
-   */
-  lastUsedAt: z.date().nullable().optional(),
 });
 
 /** Bootstrap identity and model references; selected-agent details load separately. */
@@ -508,6 +508,8 @@ export const InsertAgentSchemaBase = createInsertSchema(
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).
     latestVersion: true,
+    // Stamped by AgentUsageModel when the agent is used; never client-settable.
+    lastUsedAt: true,
   });
 
 // Full schema with validation refinement
@@ -572,6 +574,8 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).
     latestVersion: true,
+    // Stamped by AgentUsageModel when the agent is used; never client-settable.
+    lastUsedAt: true,
   });
 
 // Full schema with validation refinement

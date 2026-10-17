@@ -291,22 +291,6 @@ jobs:
       - name: Verify no immature dependencies
         run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
-      # Cold Rust NAPI builds invoke cargo. Sync the
-      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
-      # turbo's parallel crate builds each trigger a concurrent rustup
-      # download of the same components, which races and fails with
-      # "could not rename downloaded file".
-      # Reuse the warm release target restored by backend test shards. The
-      # native addons are intentionally uncached in Turbo because its remote
-      # cache is shared across architectures, but Cargo artifacts here are
-      # scoped to this CI runner and Rust toolchain.
-      - name: Restore Rust build cache
-        uses: ./.github/actions/setup-rust-build
-        with:
-          workspaces: platform/archestra-rs
-          shared-key: backend-unit-tests
-          save-if: "false"
-
       # check:commit runs the Drizzle migration linter, which diffs migrations
       # against origin/<default branch>. The checkout above is depth-1 with
       # persist-credentials: false, so that ref is absent AND git holds no
@@ -365,10 +349,29 @@ jobs:
       # Backend unit tests run in the parallel sharded "Backend Unit Tests"
       # jobs below; here the backend runs check:commit (same checks minus
       # vitest) so this job stops being serialized behind the largest suite.
-      - name: Type checking, linting, formatting, unit tests
+      - name: Fast static and copy checks
         run: |
-          pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
+          pnpm check:white-label
+
+      # Cold Rust NAPI builds invoke cargo. Sync the
+      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
+      # turbo's parallel crate builds each trigger a concurrent rustup
+      # download of the same components, which races and fails with
+      # "could not rename downloaded file".
+      # Reuse the warm release target restored by backend test shards. The
+      # native addons are intentionally uncached in Turbo because its remote
+      # cache is shared across architectures, but Cargo artifacts here are
+      # scoped to this CI runner and Rust toolchain.
+      - name: Restore Rust build cache
+        uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: "false"
+
+      - name: Type checking, linting, formatting, unit tests
+        run: pnpm exec turbo check:ci --filter=!@backend
 
       - name: Test migration upgrades across release tracks
         run: pnpm --dir backend test:migration-upgrades
@@ -378,12 +381,6 @@ jobs:
 
       - name: Test backport automation
         run: python3 ../.github/scripts/test_backport.py
-
-      # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
-      # brand instead of resolving the deployment's app name. Occurrences that
-      # legitimately name the vendor carry an inline `white-label-ok:` reason.
-      - name: White-label copy check
-        run: pnpm check:white-label
 
       # Validates the production build (Next, backend, and Rust NAPI) on the
       # merge queue's combined SHA and on release-please PRs before codegen.
@@ -532,6 +529,19 @@ jobs:
           cache: ${{ runner.os == 'Linux' }}
           toolchain-before-cache: "true"
 
+      # Prebuilt binary instead of `cargo install` — the source compile was
+      # ~2-4 min of pure waste on ephemeral runners. The action verifies the
+      # download against its pinned manifest and picks the right platform
+      # (Linux runners and the mac mini).
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: Rust dependency policy
+        working-directory: ./platform/archestra-rs
+        run: cargo deny --config deny.toml check advisories bans licenses sources
+
       - name: Install Rust musl toolchain dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
@@ -550,19 +560,6 @@ jobs:
           cargo check --workspace --locked
           cargo test --workspace --locked
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
-
-      # Prebuilt binary instead of `cargo install` — the source compile was
-      # ~2-4 min of pure waste on ephemeral runners. The action verifies the
-      # download against its pinned manifest and picks the right platform
-      # (Linux runners and the mac mini).
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
-        with:
-          tool: cargo-deny@0.20.2
-
-      - name: Rust dependency policy
-        working-directory: ./platform/archestra-rs
-        run: cargo deny --config deny.toml check advisories bans licenses sources
 
   # The only job that exercises the REAL OpenAPPA runtime: the NAPI bridge, its
   # decisions, and the PostgreSQL ledger they are recorded in. Every suite above

@@ -56,39 +56,29 @@ class OpenAppaHelperBridge {
       installId: params.installId,
       externalName: params.externalName,
     };
+    const work = this.run(params);
     let outcome: HelperConsultOutcome;
-    // Helpers share the sandbox pool with every other consumer; they may take
-    // at most half of it, and a raced-out run holds its share until it settles.
-    if (this.inFlight >= helperConsultCap()) outcome = { kind: "busy" };
-    else {
-      this.inFlight++;
-      const work = this.run(params);
-      const release = () => {
-        this.inFlight--;
-      };
-      work.then(release, release);
-      try {
-        outcome = await withDeadline(
-          work,
-          HELPER_DEADLINE_MS,
-          () => new HelperDeadlineError(),
-        );
-      } catch (error) {
-        if (!(error instanceof HelperDeadlineError)) throw error;
-        work.then(
-          (late) =>
-            logger.info(
-              { ...context, outcome: late.kind },
-              "OpenAPPA battery helper settled after its deadline",
-            ),
-          (late) =>
-            logger.warn(
-              { ...context, error: late },
-              "OpenAPPA battery helper failed after its deadline",
-            ),
-        );
-        outcome = { kind: "timed_out" };
-      }
+    try {
+      outcome = await withDeadline(
+        work,
+        HELPER_DEADLINE_MS,
+        () => new HelperDeadlineError(),
+      );
+    } catch (error) {
+      if (!(error instanceof HelperDeadlineError)) throw error;
+      work.then(
+        (late) =>
+          logger.info(
+            { ...context, outcome: late.kind },
+            "OpenAPPA battery helper settled after its deadline",
+          ),
+        (late) =>
+          logger.warn(
+            { ...context, error: late },
+            "OpenAPPA battery helper failed after its deadline",
+          ),
+      );
+      outcome = { kind: "timed_out" };
     }
     logger.info(
       { ...context, outcome: outcome.kind, durationMs: Date.now() - startedAt },
@@ -150,58 +140,69 @@ class OpenAppaHelperBridge {
 
     const environment = await this.organizationEngine(install.organizationId);
     const cwd = skillRootPath(battery.name);
-    let executed: Awaited<ReturnType<typeof sandboxRuntimeService.runCommand>>;
+    // Only sandbox execution consumes this share. In-process audience reads,
+    // missing helpers and credential validation do not occupy sandbox workers.
+    if (this.inFlight >= helperConsultCap()) return { kind: "busy" };
+    this.inFlight++;
     try {
-      await sandboxRuntimeService.attach(CONSUMER_ID);
-      executed = await sandboxRuntimeService.runCommand({
-        command: external.command.map(shellQuote).join(" "),
-        cwd,
-        timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
-        replayEntries: [
-          {
-            kind: "skill_mount",
-            skillMount: {
-              skillName: battery.name,
-              files: battery.files.map((file) => ({
+      let executed: Awaited<
+        ReturnType<typeof sandboxRuntimeService.runCommand>
+      >;
+      try {
+        await sandboxRuntimeService.attach(CONSUMER_ID);
+        executed = await sandboxRuntimeService.runCommand({
+          command: external.command.map(shellQuote).join(" "),
+          cwd,
+          timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
+          replayEntries: [
+            {
+              kind: "skill_mount",
+              skillMount: {
                 skillName: battery.name,
-                path: file.path,
-                encoding: "utf8",
-                content: file.text,
-              })),
+                files: battery.files.map((file) => ({
+                  skillName: battery.name,
+                  path: file.path,
+                  encoding: "utf8",
+                  content: file.text,
+                })),
+              },
             },
-          },
-        ],
-        secretEnv,
-        environment,
-        stdin: params.request,
-        outputBytesLimit: config.skillsSandbox.outputBytesLimit,
-        fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
-        cpuSeconds: config.skillsSandbox.cpuLimit,
-        memoryBytes: config.skillsSandbox.memoryLimit,
-      });
-    } catch (error) {
-      logger.warn(
-        { installId: install.id, externalName: external.name, error },
-        "OpenAPPA battery helper could not run",
-      );
-      return { kind: "failed", reason: "the helper sandbox is unavailable" };
-    }
-    const diagnostics = helperDiagnostics(executed.stderr);
-    if (executed.timedOut) return { kind: "timed_out", diagnostics };
-    if (executed.exitCode !== 0)
-      return {
-        kind: "failed",
-        reason: `the helper exited with status ${executed.exitCode}`,
-        diagnostics,
-      };
-    const answer = parseJsonObject(executed.stdout);
-    return answer
-      ? { kind: "answered", answer, diagnostics }
-      : {
+          ],
+          secretEnv,
+          environment,
+          stdin: params.request,
+          outputBytesLimit: config.skillsSandbox.outputBytesLimit,
+          fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          cpuSeconds: config.skillsSandbox.cpuLimit,
+          memoryBytes: config.skillsSandbox.memoryLimit,
+        });
+      } catch (error) {
+        logger.warn(
+          { installId: install.id, externalName: external.name, error },
+          "OpenAPPA battery helper could not run",
+        );
+        return { kind: "failed", reason: "the helper sandbox is unavailable" };
+      }
+      const diagnostics = helperDiagnostics(executed.stderr);
+      if (executed.timedOut) return { kind: "timed_out", diagnostics };
+      if (executed.exitCode !== 0)
+        return {
           kind: "failed",
-          reason: "the helper did not print a JSON object",
+          reason: `the helper exited with status ${executed.exitCode}`,
           diagnostics,
         };
+      const answer = parseJsonObject(executed.stdout);
+      return answer
+        ? { kind: "answered", answer, diagnostics }
+        : {
+            kind: "failed",
+            reason: "the helper did not print a JSON object",
+            diagnostics,
+          };
+    } finally {
+      // A timed-out consult still holds its share until the underlying run ends.
+      this.inFlight--;
+    }
   }
 
   /**

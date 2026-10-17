@@ -24,6 +24,7 @@ import {
   UserModel,
 } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -252,6 +253,7 @@ describe("MCP registry list routes", () => {
       makeMcpServer,
       makeUser,
       makeMember,
+      makeTeam,
     }) => {
       const other = await makeUser();
       await makeMember(other.id, ctx.organizationId, { role: "member" });
@@ -292,7 +294,21 @@ describe("MCP registry list routes", () => {
         "dev-mine-bare",
         "dev-mine-installed",
       ]);
-      expect(items.size).toBe(4);
+      const team = await makeTeam(ctx.organizationId, ctx.user.id);
+      const shared = {
+        organizationId: ctx.organizationId,
+        resource: "mcpRegistry",
+        scope: items.get("ops-mine-installed")?.id ?? "",
+      } as const;
+      const policy = await ResourcePermissionPolicyModel.find(shared);
+      await ResourcePermissionPolicyModel.replace({
+        ...shared,
+        revision: policy?.revision ?? 0,
+        grants: [{ subject: { type: "team", id: team.id }, actions: ["read"] }],
+      });
+      expect(names(await search({ sharedWith: [`team:${team.id}`] }))).toEqual([
+        "ops-mine-installed",
+      ]);
     });
 
     test("an author filter matches items a service account created", async ({

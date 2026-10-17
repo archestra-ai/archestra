@@ -252,8 +252,17 @@ describe("ModelsPage", () => {
     await user.click(screen.getByRole("button", { name: "Pricing" }));
     expect(screen.getByLabelText("Cache read")).toHaveValue("");
     expect(screen.getByLabelText("Cache write")).toHaveValue("");
-    await user.type(screen.getByLabelText("Cache read"), "0.25");
+    await user.type(screen.getByLabelText("Cache read"), "0,25");
     await user.type(screen.getByLabelText("Cache write"), "0");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(
+      await screen.findByTestId("edit-model-form-errors"),
+    ).toHaveTextContent(
+      "Enter a decimal number between 0 and 99999999.99 (use a dot)",
+    );
+    expect(updates).toHaveLength(0);
+    await user.clear(screen.getByLabelText("Cache read"));
+    await user.type(screen.getByLabelText("Cache read"), "0.25");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() =>
       expect(updates).toEqual([

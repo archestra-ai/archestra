@@ -190,7 +190,9 @@ async function isExternalSkillInstallationInOrganization(params: {
   organizationId: string;
 }): Promise<boolean> {
   if (params.server.teamId !== null) {
-    const team = await TeamModel.findById(params.server.teamId);
+    const team = await TeamModel.findById(params.server.teamId, {
+      includeMembers: false,
+    });
     return team?.organizationId === params.organizationId;
   }
   if (params.server.ownerId === null) return false;

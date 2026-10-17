@@ -58,7 +58,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(teamId);
+      const team = await TeamModel.findById(teamId, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -102,7 +102,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(teamId);
+      const team = await TeamModel.findById(teamId, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -156,7 +156,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(teamId);
+      const team = await TeamModel.findById(teamId, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -211,7 +211,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(teamId);
+      const team = await TeamModel.findById(teamId, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -281,7 +281,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(teamId);
+      const team = await TeamModel.findById(teamId, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
@@ -339,7 +339,7 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const manager = assertByosEnabled();
 
       // Verify the team exists and belongs to the user's organization
-      const team = await TeamModel.findById(teamId);
+      const team = await TeamModel.findById(teamId, { includeMembers: false });
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }

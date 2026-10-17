@@ -4043,7 +4043,7 @@ async function validateScopeAndAuthorization(params: {
   }
 
   if (scope === "team" && teamId) {
-    const team = await TeamModel.findById(teamId);
+    const team = await TeamModel.findById(teamId, { includeMembers: false });
     if (!team) {
       throw new ApiError(404, "Team not found");
     }

@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 
 export function LogTime({
   timestamp,
@@ -22,11 +22,7 @@ export function LogTime({
 }) {
   const date =
     typeof timestamp === "string" ? timestamp : timestamp.toISOString();
-  const age = formatRelativeTimeFromNow(timestamp, { strict: true }).replace(
-    /(\d+) (seconds?|minutes?|hours?|days?|weeks?|months?|years?)/g,
-    (_, count: string, unit: string) =>
-      `${count}${unit.startsWith("month") ? "mo" : unit[0]}`,
-  );
+  const age = formatCompactRelativeTime(timestamp);
   const duration =
     durationMs == null
       ? (span ?? null)

@@ -17,9 +17,9 @@ use serde::Deserialize;
 use serde_json::{Value, json, value::RawValue};
 
 use super::{
-    DispatchPolicy, SessionKey, Sql, State, canonical_tool, completion_error, error,
-    held_elsewhere, initialized, lease, lease_lost, read_completed_operation, recorded_call,
-    required, session_actor,
+    DispatchPolicy, Failure, SessionKey, Sql, State, canonical_tool, completion_error, error,
+    failure, held_elsewhere, initialized, lease, lease_lost, read_completed_operation,
+    recorded_call, required, session_actor,
 };
 
 const BODY_LIMIT: usize = 64 * 1024;
@@ -553,9 +553,10 @@ async fn read(
         HookDecision::Ack => Err(error(
             "OpenAPPA acknowledged a peer read without binding its stored label",
         )),
-        HookDecision::Refuse { detail } => {
-            Err(error(format!("OpenAPPA refused the peer read: {detail}")))
-        }
+        HookDecision::Refuse { class, detail } => Err(failure(
+            Failure::Refused(*class),
+            format!("OpenAPPA refused the peer read: {detail}"),
+        )),
         _ => Err(error("unexpected peer read decision")),
     }
 }

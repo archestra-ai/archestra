@@ -855,6 +855,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetTeamMembers]: {
     team: ["read"],
   },
+  [RouteId.GetTeamMembersPage]: {
+    team: ["read"],
+  },
   [RouteId.AddTeamMember]: {
     team: ["read"],
   },

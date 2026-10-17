@@ -49,7 +49,6 @@ describe("AgentsPageServer", () => {
     getServerApiHeadersMock.mockResolvedValue({});
     serverCanAccessPageMock.mockResolvedValue(true);
     serverHasPermissionsMock.mockResolvedValue(true);
-    getTeamsMock.mockResolvedValue({ data: { data: [] } });
   });
 
   it("keeps rendering the page when the catalog seed fails", async () => {
@@ -58,8 +57,17 @@ describe("AgentsPageServer", () => {
     render(await AgentsPageServer());
 
     expect(screen.getByTestId("agents-page")).toHaveTextContent(
-      JSON.stringify({ agents: null, pinnedAgents: null, teams: [] }),
+      JSON.stringify({ agents: null, pinnedAgents: null }),
     );
+  });
+
+  it("does not prefetch teams, which the client page never reads", async () => {
+    getAgentCatalogMock.mockResolvedValue({ data: { data: [] } });
+
+    render(await AgentsPageServer());
+
+    expect(screen.getByTestId("agents-page")).toBeInTheDocument();
+    expect(getTeamsMock).not.toHaveBeenCalled();
   });
 
   it("still blocks the page before fetching when access is denied", async () => {

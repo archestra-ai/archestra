@@ -38,6 +38,7 @@ import {
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
+import { EmptyTableSection } from "@/components/table-section-heading";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { Button } from "@/components/ui/button";
@@ -354,13 +355,24 @@ function ProjectsList() {
                   onEdit={openEditDialog}
                   onDelete={setDeletingProject}
                 />
-                <ProjectSection
-                  title="All projects"
-                  projects={unpinnedProjects}
-                  onTogglePin={togglePin}
-                  onEdit={openEditDialog}
-                  onDelete={setDeletingProject}
-                />
+                {unpinnedProjects.length > 0 ? (
+                  <ProjectSection
+                    title="All projects"
+                    projects={unpinnedProjects}
+                    onTogglePin={togglePin}
+                    onEdit={openEditDialog}
+                    onDelete={setDeletingProject}
+                  />
+                ) : (
+                  <EmptyTableSection
+                    title="All projects"
+                    message={
+                      hasActiveFilter
+                        ? "No other projects match your filters"
+                        : "No other projects yet"
+                    }
+                  />
+                )}
               </div>
             )}
           </div>

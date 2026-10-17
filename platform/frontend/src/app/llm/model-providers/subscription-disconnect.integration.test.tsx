@@ -85,7 +85,7 @@ beforeEach(() => {
   server.use(
     http.get("/api/user/permissions", () => HttpResponse.json(permissions)),
     http.get("/api/llm-virtual-keys", () => HttpResponse.json(emptyPage)),
-    http.get("/api/llm-oauth-clients", () => HttpResponse.json(emptyPage)),
+    http.get("/api/oauth-clients", () => HttpResponse.json(emptyPage)),
   );
 });
 afterEach(() => {
@@ -142,34 +142,50 @@ describe("member subscription disconnect", () => {
     const confirm = within(screen.getByRole("dialog")).getByRole("button", {
       name: "Disconnect",
     });
-    await waitFor(() => expect(confirm).toBeEnabled());
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
     await user.click(confirm);
     expect(await card.findByRole("button", { name: "Connect" })).toBeEnabled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(deletes).toEqual([key.id]);
   });
 
-  it.each([
-    "llm-virtual-keys",
-    "llm-oauth-clients",
-  ])("refuses disconnect when %s still uses the credential", async (resource) => {
+  it("disconnects after confirming the consequence for virtual keys that use it", async () => {
     const user = userEvent.setup();
     const key = makeLlmProviderApiKey({
+      name: "Copilot subscription",
       provider: "github-copilot",
       userId: memberId,
     });
-    const onDelete = vi.fn();
+    let connected = true;
+    const deletes: string[] = [];
     server.use(
-      http.get("/api/llm-provider-api-keys", () => HttpResponse.json([key])),
-      http.get(`/api/${resource}`, () =>
+      http.get("/api/llm-provider-api-keys", () =>
+        HttpResponse.json(connected ? [key] : []),
+      ),
+      http.get("/api/llm-virtual-keys", () =>
         HttpResponse.json({
           ...emptyPage,
-          data: [{ id: "dependent-credential", name: "Subscription client" }],
+          data: [
+            {
+              id: "dependent-virtual-key",
+              name: "Team proxy key",
+              tokenStart: "arch_abc",
+              includeFutureProviders: false,
+              providerApiKeys: [
+                {
+                  provider: "github-copilot",
+                  providerApiKeyId: key.id,
+                  providerApiKeyName: key.name,
+                },
+              ],
+            },
+          ],
           pagination: { ...emptyPage.pagination, total: 1 },
         }),
       ),
-      http.delete("/api/llm-provider-api-keys/:id", () => {
-        onDelete();
+      http.delete("/api/llm-provider-api-keys/:id", ({ params }) => {
+        deletes.push(String(params.id));
+        connected = false;
         return HttpResponse.json({ success: true });
       }),
     );
@@ -178,12 +194,80 @@ describe("member subscription disconnect", () => {
       await screen.findByTestId("subscription-provider-card-github-copilot"),
     );
     await user.click(await card.findByRole("button", { name: "Disconnect" }));
-    const dialog = within(screen.getByRole("dialog"));
+    const dialogElement = screen.getByRole("dialog");
+    const dialog = within(dialogElement);
+    expect(await dialog.findByText("Team proxy key")).toBeVisible();
+    expect(dialogElement).toHaveTextContent(
+      "The virtual key below will be deleted too.",
+    );
+    const confirm = dialog.getByRole("button", { name: "Disconnect" });
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
+    await user.click(confirm);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(deletes).toEqual([key.id]);
+    expect(toast.success).toHaveBeenCalledWith("Subscription disconnected");
+  });
+
+  it("disconnects and deletes an OAuth client that uses only the credential", async () => {
+    const user = userEvent.setup();
+    const key = makeLlmProviderApiKey({
+      name: "Copilot subscription",
+      provider: "github-copilot",
+      userId: memberId,
+    });
+    let connected = true;
+    const deletes: string[] = [];
+    server.use(
+      http.get("/api/llm-provider-api-keys", () =>
+        HttpResponse.json(connected ? [key] : []),
+      ),
+      http.get("/api/oauth-clients", () =>
+        HttpResponse.json({
+          ...emptyPage,
+          data: [
+            {
+              id: "dependent-credential",
+              name: "Subscription client",
+              clientId: "llm_oauth_sub",
+              includeFutureProviders: false,
+              providerApiKeys: [
+                {
+                  provider: "github-copilot",
+                  providerApiKeyId: key.id,
+                  providerApiKeyName: key.name,
+                },
+              ],
+            },
+          ],
+          pagination: { ...emptyPage.pagination, total: 1 },
+        }),
+      ),
+      http.delete("/api/llm-provider-api-keys/:id", ({ params }) => {
+        deletes.push(String(params.id));
+        connected = false;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    renderPage();
+    const card = within(
+      await screen.findByTestId("subscription-provider-card-github-copilot"),
+    );
+    await user.click(await card.findByRole("button", { name: "Disconnect" }));
+    const dialogElement = screen.getByRole("dialog");
+    const dialog = within(dialogElement);
     expect(await dialog.findByText("Subscription client")).toBeVisible();
-    expect(dialog.getByRole("button", { name: "Disconnect" })).toBeDisabled();
-    await user.keyboard("{Enter}");
-    expect(onDelete).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(dialogElement).toHaveTextContent(
+      "The OAuth client below will be deleted too.",
+    );
+    const confirm = dialog.getByRole("button", { name: "Disconnect" });
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
+    await user.click(confirm);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(deletes).toEqual([key.id]);
   });
 
   it("disconnects an owned subscription for a hidden provider without granting shared-key deletion", async () => {
@@ -232,7 +316,7 @@ describe("member subscription disconnect", () => {
     const confirm = within(
       screen.getByRole("dialog", { name: "Disconnect subscription" }),
     ).getByRole("button", { name: "Disconnect" });
-    await waitFor(() => expect(confirm).toBeEnabled());
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
     await user.click(confirm);
     await waitFor(() =>
       expect(
@@ -281,7 +365,7 @@ describe("member subscription disconnect", () => {
     const confirm = within(screen.getByRole("dialog")).getByRole("button", {
       name: "Disconnect",
     });
-    await waitFor(() => expect(confirm).toBeEnabled());
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
     await user.click(confirm);
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(screen.getByRole("dialog")).toBeInTheDocument();

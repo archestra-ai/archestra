@@ -19,6 +19,7 @@
     "dev": "tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",
+    "benchmark:queries": "vitest run --config vitest.queries.config.ts",
     "test:migration-upgrades": "node --test scripts/migration-upgrades.test.mjs scripts/migration-tag-upgrades.test.mjs scripts/create-statistics-index.test.mjs",
     "test:permission-upgrade": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx --test scripts/resource-permissions-upgrade.test.mjs",
     "lint": "biome check",

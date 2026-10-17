@@ -49,6 +49,7 @@ export function isContentDecryptionAvailable(): boolean {
  * encrypted column.
  */
 export type ContentEncryptionContext =
+  | "interactions.session_preview"
   | "interactions.request"
   | "interactions.processed_request"
   | "interactions.response"

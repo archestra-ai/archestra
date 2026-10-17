@@ -719,6 +719,61 @@ describe("Auto-mode subagent delegation", () => {
     );
   });
 
+  test("advertisement and dispatch choose the same target when names share a slug", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const first = await makeAgent({
+      name: "Collision Target",
+      agentType: "agent",
+      organizationId: organization.id,
+      description: "First target",
+    });
+    await makeAgent({
+      name: "Collision--Target",
+      agentType: "agent",
+      organizationId: organization.id,
+      description: "Second target",
+    });
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+    const named = tools.filter(
+      (tool) => tool.name === `${AGENT_TOOL_PREFIX}collision_target`,
+    );
+    expect(named).toHaveLength(1);
+    expect(named[0].description).toContain("First target");
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "collision",
+      text: "done",
+      finishReason: "stop",
+    });
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}collision_target`,
+      { message: "Do this task" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: first.id }),
+    );
+  });
+
   test("refuses to dispatch to an excluded target", async ({
     makeOrganization,
     makeUser,

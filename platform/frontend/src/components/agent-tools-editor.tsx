@@ -55,6 +55,7 @@ import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpRegistryRow,
+  REGISTRY_PICKER_PAGE_SIZE,
   useMcpRegistryPage,
 } from "@/lib/mcp/mcp-registry.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
@@ -309,7 +310,7 @@ const AgentToolsEditorContent = forwardRef<
         : {}),
       sortBy: "name",
       sortDirection: "asc",
-      limit: CATALOG_PAGE_SIZE,
+      limit: REGISTRY_PICKER_PAGE_SIZE,
       offset: 0,
     },
     { placeholderScope: "agent-tools-editor" },
@@ -1875,6 +1876,3 @@ export function ToolChecklist({
     </div>
   );
 }
-
-/** Registry rows the Add list shows at a time; a search narrows on the server. */
-const CATALOG_PAGE_SIZE = 50;

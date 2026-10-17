@@ -93,6 +93,7 @@ vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   }),
 }));
 vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  REGISTRY_PICKER_PAGE_SIZE: 50,
   // Like the server: the search narrows by name, the page is sorted by name
   // and cut to the limit.
   useMcpRegistryPage: (params: { search?: string; limit?: number }) => {

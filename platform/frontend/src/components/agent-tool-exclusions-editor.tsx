@@ -42,6 +42,7 @@ import {
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpRegistryRow,
+  REGISTRY_PICKER_PAGE_SIZE,
   useMcpRegistryPage,
 } from "@/lib/mcp/mcp-registry.query";
 import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
@@ -234,7 +235,7 @@ export const AgentToolExclusionsEditor = forwardRef<
         : {}),
       sortBy: "name",
       sortDirection: "asc",
-      limit: CATALOG_PAGE_SIZE,
+      limit: REGISTRY_PICKER_PAGE_SIZE,
       offset: 0,
     },
     { enabled: active, placeholderScope: "agent-tool-exclusions-editor" },
@@ -659,6 +660,3 @@ function ExclusionPill({
     </Popover>
   );
 }
-
-/** Registry rows the Add list shows at a time; a search narrows on the server. */
-const CATALOG_PAGE_SIZE = 50;

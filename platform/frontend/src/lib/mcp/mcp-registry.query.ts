@@ -71,6 +71,12 @@ export type McpRegistryIssueIndex = {
  * are patched as arrays by the install-status cache sync.
  */
 export const mcpRegistryQueryKey = ["mcp-registry"] as const;
+
+/**
+ * Registry rows a picker's Add list shows at a time (agent tools, tool
+ * exclusions, app tools); a search narrows the rest on the server.
+ */
+export const REGISTRY_PICKER_PAGE_SIZE = 50;
 export const mcpRegistryIssueIndexQueryKey = [
   ...mcpRegistryQueryKey,
   "issue-index",

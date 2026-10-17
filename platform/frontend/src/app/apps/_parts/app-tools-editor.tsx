@@ -34,6 +34,7 @@ import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpRegistryRow,
+  REGISTRY_PICKER_PAGE_SIZE,
   useMcpRegistryPage,
 } from "@/lib/mcp/mcp-registry.query";
 import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
@@ -199,7 +200,7 @@ export function AppToolsEditor({
         : {}),
       sortBy: "name",
       sortDirection: "asc",
-      limit: CATALOG_PAGE_SIZE,
+      limit: REGISTRY_PICKER_PAGE_SIZE,
       offset: 0,
     },
     { enabled: canEdit, placeholderScope: "app-tools-editor" },
@@ -648,9 +649,6 @@ function AssignedToolsReadOnly({
     </div>
   );
 }
-
-/** Registry rows the Add list shows at a time; a search narrows on the server. */
-const CATALOG_PAGE_SIZE = 50;
 
 function catalogToolsQuery(catalogId: string, enabled: boolean) {
   return {

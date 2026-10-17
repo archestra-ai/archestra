@@ -472,9 +472,24 @@ const PromptInputContent = ({
   }, []);
 
   // Restore draft on mount or conversation change
+  const typedBeforeHydration = useRef<
+    { storageKey: string; text: string } | null | undefined
+  >(undefined);
   useEffect(() => {
     isRestored.current = false;
-    const savedDraft = getRestorableDraft(localStorage, storageKey);
+    // The composer is server-rendered, so a fast typist can get text into the
+    // textarea before React hydrates it. The controlled value starts empty
+    // and would overwrite that text on the next render; adopt it instead (it
+    // is newer than any saved draft). Read once, on the first run: a re-run
+    // (Strict Mode, or the same key again) must not lose it either.
+    if (typedBeforeHydration.current === undefined) {
+      const text = textareaRef.current?.value;
+      typedBeforeHydration.current = text ? { storageKey, text } : null;
+    }
+    const savedDraft =
+      typedBeforeHydration.current?.storageKey === storageKey
+        ? typedBeforeHydration.current.text
+        : getRestorableDraft(localStorage, storageKey);
     if (savedDraft) {
       controller.textInput.setInput(savedDraft);
     } else {
@@ -486,7 +501,7 @@ const PromptInputContent = ({
       isRestored.current = true;
     }, 0);
     return () => clearTimeout(timeout);
-  }, [storageKey, controller.textInput.setInput]);
+  }, [storageKey, controller.textInput.setInput, textareaRef]);
 
   // Save draft on change
   useEffect(() => {

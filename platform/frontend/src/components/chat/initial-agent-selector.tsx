@@ -149,9 +149,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
       void page.fetchNextPage({ cancelRefetch: false });
     }
   };
-  const { data: bootstrapAgents = [] } = useChatAgents({
-    ids: [currentAgentId],
-  });
+  const { data: bootstrapAgents = [], isPending: isRosterPending } =
+    useChatAgents({
+      ids: [currentAgentId],
+    });
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [cloningAgentId, setCloningAgentId] = useState<string | null>(null);
   const afterFirstPaint = useAfterFirstPaint();
@@ -260,6 +261,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const currentAgent = currentAgentDetail;
   const displayAgent = currentAgentDetail ?? currentAgentSummary;
   const displayAgentName = displayAgent?.name ?? "Select agent";
+  // The composer renders before the chat knows its agent; until the roster
+  // answers, the chip holds a placeholder rather than asking for a choice.
+  const isAgentResolving = !displayAgent && isRosterPending;
   const effectiveAgentId = displayAgent?.id ?? currentAgentId;
   const shouldLoadAgentManagementDetails =
     open || !!editingAgentId || afterFirstPaint;
@@ -535,16 +539,25 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             <PromptInputButton
               role="combobox"
               aria-expanded={open}
-              aria-label={displayAgentName}
+              aria-label={isAgentResolving ? "Loading agent" : displayAgentName}
+              aria-busy={isAgentResolving || undefined}
               aria-describedby={toolSummaryId}
               data-agent-selector
               onKeyDown={navigation.onTriggerKeyDown}
               className="min-w-0 hover:bg-transparent dark:hover:bg-transparent"
             >
               <AgentIcon icon={displayAgent?.icon} size={16} />
-              <span className="truncate flex-1 text-left">
-                {displayAgentName}
-              </span>
+              {isAgentResolving ? (
+                <span
+                  className="h-3 w-20 flex-1 animate-pulse rounded bg-muted motion-reduce:animate-none"
+                  aria-hidden="true"
+                  data-testid="agent-name-placeholder"
+                />
+              ) : (
+                <span className="truncate flex-1 text-left">
+                  {displayAgentName}
+                </span>
+              )}
               {/* In Auto mode the agent reaches everything dynamically, so
                   per-server icons would mean nothing. Either way the chip or
                   the icons are part of the agent's own button rather than a

@@ -341,9 +341,14 @@ export function ChatPageContent({
   const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
-  const { data: canReadAgent } = useHasPermissions({
-    agent: ["read"],
-  });
+  const { data: canReadAgentGrant, isPending: isPermissionsPending } =
+    useHasPermissions({
+      agent: ["read"],
+    });
+  // Unknown while the session and its permissions load: the page renders
+  // optimistically (on a session cookie) before either answers, and assumes
+  // the common case until told otherwise rather than flashing a refusal.
+  const canReadAgent = isPermissionsPending ? undefined : canReadAgentGrant;
   const { data: canReadLlmProvider } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
@@ -410,7 +415,8 @@ export function ChatPageContent({
 
   const hasChatAccess = canReadAgent !== false;
   const canUseProviderSettings =
-    canReadLlmProvider === true && canReadLlmModels === true;
+    isPermissionsPending ||
+    (canReadLlmProvider === true && canReadLlmModels === true);
 
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
@@ -557,9 +563,10 @@ export function ChatPageContent({
     [],
   );
 
-  const { isLoading: isLoadingFeatures } = useConfig();
+  // Config decides whether a runtime agent can chat without a provider key,
+  // so only the no-key screen waits for it (see below).
+  const { data: config } = useConfig();
   const { data: chatModels = [] } = useLlmModels();
-  const isLoadingApiKeyCheck = isLoadingFeatures;
 
   useEffect(() => {
     setConversationId(routeConversationId);
@@ -3041,9 +3048,8 @@ export function ChatPageContent({
   //   the one gate a reload could not skip. Until it lands the agent chip reads
   //   "Select agent" and submit is disabled — a toolbar that fills in, rather
   //   than a spinner where the page should be.
-  if (isLoadingApiKeyCheck) {
-    return <LoadingState variant="fill" />;
-  }
+  // - The session, its permissions and the config. The page renders before
+  //   any of them answer (see WithAuthCheck), so none of them may hold it.
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).
   // Show a retry state rather than the setup prompt, which would wrongly imply
@@ -3064,6 +3070,9 @@ export function ChatPageContent({
 
   // If API key is not configured, show setup prompt with inline creation dialog.
   if (!hasAnyApiKey && !isInitialRuntimeMode) {
+    // A runtime agent chats without a key, and the config says whether the
+    // runtime is on: until it does, an empty key list is not yet the answer.
+    if (!config) return <LoadingState variant="fill" />;
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 

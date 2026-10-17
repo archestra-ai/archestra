@@ -23,6 +23,7 @@ vi.mock("@archestra/shared", async () => {
       getDefaultCredentialsStatus: vi.fn(),
       getUserPermissions: vi.fn(),
       getScopedCapabilities: vi.fn(),
+      getBootstrap: vi.fn(),
     },
   };
 });
@@ -42,6 +43,10 @@ const createWrapper = () => {
 // Clear mocks before each test
 beforeEach(() => {
   vi.clearAllMocks();
+  // No seed unless a test answers bootstrap itself.
+  vi.mocked(archestraApiSdk.getBootstrap).mockResolvedValue({
+    data: undefined,
+  } as Awaited<ReturnType<typeof archestraApiSdk.getBootstrap>>);
   vi.mocked(archestraApiSdk.getScopedCapabilities).mockResolvedValue({
     data: [],
     error: undefined,
@@ -58,6 +63,40 @@ beforeEach(() => {
 });
 
 describe("useSession", () => {
+  it("resolves without waiting for bootstrap, whose seed the permission query then awaits", async () => {
+    let answerBootstrap: (value: unknown) => void = () => undefined;
+    vi.mocked(archestraApiSdk.getBootstrap).mockReturnValue(
+      new Promise<unknown>((resolve) => {
+        answerBootstrap = resolve;
+      }) as ReturnType<typeof archestraApiSdk.getBootstrap>,
+    );
+    const { result } = renderHook(
+      () => ({
+        session: useSession(),
+        permissions: useHasPermissions({ agent: ["read"] }),
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.session.data?.user).toBeTruthy());
+    expect(result.current.permissions.isPending).toBe(true);
+
+    await act(async () => {
+      answerBootstrap({
+        data: {
+          permissions: { agent: ["read"] },
+          scopedCapabilities: [],
+          config: {},
+          organization: null,
+        },
+      });
+    });
+
+    await waitFor(() => expect(result.current.permissions.data).toBe(true));
+    // One wave: the seed answered the permission query.
+    expect(archestraApiSdk.getUserPermissions).not.toHaveBeenCalled();
+  });
+
   it("keeps authenticated navigation visible when a session refresh fails", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

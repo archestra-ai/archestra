@@ -347,6 +347,48 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
     });
 
+    it("renders the app at once when the request carried a session cookie", () => {
+      vi.mocked(usePathname).mockReturnValue("/chat");
+
+      render(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    it("swaps the optimistic app for the sign-in redirect when the cookie was stale", async () => {
+      vi.mocked(usePathname).mockReturnValue("/chat");
+      setWindowLocation("/chat");
+      const { rerender } = render(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+      rerender(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(screen.queryByTestId("protected-content")).toBeNull();
+      await waitFor(() =>
+        expect(mockRouterPush).toHaveBeenCalledWith(
+          "/auth/sign-in?redirectTo=%2Fchat",
+        ),
+      );
+    });
+
     it("shows the auth page immediately instead of waiting for the session", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
 

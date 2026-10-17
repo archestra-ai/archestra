@@ -10,7 +10,7 @@ import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { useSession } from "@/lib/auth/auth.query";
+import { awaitBootstrapSeed, useSession } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
@@ -326,7 +326,9 @@ export function useOrganization(
 
   return useQuery({
     queryKey: organizationKeys.details(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.organization) return seed.organization;
       const { data, error } = await archestraApiSdk.getOrganization();
       throwOnApiError(error, { toastOnError: false });
       return data;

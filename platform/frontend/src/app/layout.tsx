@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { cookies } from "next/headers";
 import { PublicEnvScript } from "next-runtime-env";
 import { AppShell } from "./_parts/app-shell";
 import { MswInit } from "./_parts/msw-init";
@@ -13,6 +14,7 @@ import "./globals.css";
 import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
+import { hasSessionCookie } from "@/lib/auth/session-cookie.server";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
 import { getDeploymentFavicon } from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
@@ -230,7 +232,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const favicon = await getDeploymentFavicon();
+  const [favicon, cookieStore] = await Promise.all([
+    getDeploymentFavicon(),
+    cookies(),
+  ]);
+  // Presence only; nothing is fetched for it. See WithAuthCheck.
+  const sessionCookie = hasSessionCookie(cookieStore);
 
   return (
     <html
@@ -272,7 +279,7 @@ export default async function RootLayout({
                   <PageTitleProvider>
                     <OrgThemeLoader />
                     <DynamicHead />
-                    <WithAuthCheck>
+                    <WithAuthCheck hasSessionCookie={sessionCookie}>
                       <WebsocketInitializer />
                       <RumTracker />
                       <ListReturnUrlTracker />

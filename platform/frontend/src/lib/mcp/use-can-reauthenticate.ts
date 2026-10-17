@@ -68,7 +68,8 @@ export function useCanReauthenticate() {
  * Whether everything {@link useCanReauthenticate} decides from has loaded:
  * the session, the viewer's own teams and the three permission checks. Before
  * that, its answers are guesses (no teams reads as "not a member"), so a rule
- * built on them must not be compared with anything yet.
+ * built on them must not be compared with anything yet. A failed teams read
+ * is a guess too: it stays not ready until a retry loads the teams.
  */
 export function useCanReauthenticateInputsReady(): boolean {
   const { isPending: sessionPending } = useSession();
@@ -85,7 +86,8 @@ export function useCanReauthenticateInputsReady(): boolean {
   );
   return (
     !sessionPending &&
-    (!teamsPending || teamsFailed) &&
+    !teamsPending &&
+    !teamsFailed &&
     !createPending &&
     !updatePending &&
     !adminPending

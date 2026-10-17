@@ -64,6 +64,15 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .merge(PaginationQuerySchema)
           .extend({
             skipPagination: z.coerce.boolean().optional(),
+            includeToolDetails: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Include each tool's description and parameter schema (default true). False returns null and {} for lightweight lists.",
+              ),
           }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectAgentToolSchema),
@@ -83,6 +92,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerOwnerId,
           excludeArchestraTools,
           skipPagination,
+          includeToolDetails,
         },
         organizationId,
         user,
@@ -108,6 +118,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         isAgentAdmin,
         skipPagination,
+        includeToolDetails,
       });
 
       return reply.send(result);

@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useMemo, useState } from "react";
+import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -143,14 +144,7 @@ export default function SessionDetailPage({
 
   const profileName = sessionData?.profileName ?? null;
 
-  // Session title: prefer a generated title, then the bounded session preview.
-  const getSessionTitle = () => {
-    if (sessionData?.claudeCodeTitle) return sessionData.claudeCodeTitle;
-    if (sessionData?.conversationTitle) return sessionData.conversationTitle;
-    return sessionData?.lastUserMessagePreview ?? null;
-  };
-
-  const sessionTitle = getSessionTitle();
+  const sessionTitle = sessionData ? sessionTitleOf(sessionData) : null;
 
   const exportSession = useExportSessionInteractions();
 

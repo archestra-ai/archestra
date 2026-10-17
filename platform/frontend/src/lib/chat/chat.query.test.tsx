@@ -153,6 +153,30 @@ describe("useConversations", () => {
     });
     expect(archestraApiSdk.getChatConversations).toHaveBeenCalledTimes(1);
   });
+
+  it("asks for list rows without artifacts, with and without a search", async () => {
+    // The sidebar and the search palette never show a chat's document or
+    // todo list, which can be hundreds of kilobytes per row.
+    const { rerender } = renderHook(
+      ({ search }) => useConversations({ search }),
+      {
+        wrapper: createWrapper(),
+        initialProps: { search: undefined as string | undefined },
+      },
+    );
+    await waitFor(() =>
+      expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
+        query: { includeArtifacts: false },
+      }),
+    );
+
+    rerender({ search: " budget " });
+    await waitFor(() =>
+      expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
+        query: { includeArtifacts: false, search: "budget" },
+      }),
+    );
+  });
 });
 
 test("polls a scheduled chat until its replay seed arrives, then stops polling", async () => {

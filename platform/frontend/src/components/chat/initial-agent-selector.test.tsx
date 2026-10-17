@@ -414,6 +414,7 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     description: null,
     serverType: "local",
     icon: null,
+    toolCount: 2,
   };
   const personalInstall = {
     "catalog-1": [{ id: "personal-install", scope: "personal" }],
@@ -532,9 +533,11 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     await user.hover(screen.getByRole("button", { name: "Edit Alpha Agent" }));
 
     expect(mockUseProfile).toHaveBeenCalledWith("agent-1", undefined);
+    // Same options as the dialog's own read, so the prefetch fills its cache.
     expect(mockUseAllProfileTools).toHaveBeenCalledWith({
       filters: { agentId: "agent-1" },
       skipPagination: true,
+      includeToolDetails: false,
       enabled: true,
     });
     expect(mockUseAgentDelegations).toHaveBeenCalledWith("agent-1", undefined);

@@ -115,8 +115,15 @@ class ConversationModel {
     userId: string,
     organizationId: string,
     searchQuery?: string,
+    options?: {
+      /** False returns null `artifact` and `todoList` without reading them. */
+      includeArtifacts?: boolean;
+    },
   ): Promise<Conversation[]> {
     const trimmedSearch = searchQuery?.trim();
+    const conversationColumns = listConversationColumns(
+      options?.includeArtifacts ?? true,
+    );
 
     // Build WHERE conditions
     const conditions = [
@@ -213,7 +220,7 @@ class ConversationModel {
 
       const rows = await db
         .select({
-          conversation: getTableColumns(schema.conversationsTable),
+          conversation: conversationColumns,
           message: getTableColumns(schema.messagesTable),
           shareVisibility: conversationShareVisibility(),
           projectName: schema.projectsTable.name,
@@ -313,7 +320,7 @@ class ConversationModel {
       // Non-search case: exclude messages for performance
       const rows = await db
         .select({
-          conversation: getTableColumns(schema.conversationsTable),
+          conversation: conversationColumns,
           shareVisibility: conversationShareVisibility(),
           projectName: schema.projectsTable.name,
           projectIcon: schema.projectsTable.icon,
@@ -1353,6 +1360,22 @@ function listProjectIcon(icon: string | null | undefined): string | null {
   if (!icon || icon.startsWith("data:")) return null;
   return icon;
 }
+
+/**
+ * Conversation columns for a list read. Without artifacts, the document and
+ * todo list come back as null and are not read; each can be hundreds of KB.
+ */
+function listConversationColumns(includeArtifacts: boolean) {
+  const columns = getTableColumns(schema.conversationsTable);
+  if (includeArtifacts) return columns;
+  return {
+    ...columns,
+    artifact: sql<ConversationRow["artifact"]>`null`,
+    todoList: sql<ConversationRow["todoList"]>`null`,
+  };
+}
+
+type ConversationRow = typeof schema.conversationsTable.$inferSelect;
 
 function withVisibleAgent(
   conversation: typeof schema.conversationsTable.$inferSelect,

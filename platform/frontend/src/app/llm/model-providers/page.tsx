@@ -1049,7 +1049,7 @@ function DeleteApiKeyDescription({
     knowledgeBaseSentence(knowledgeBaseUsages),
     isSubscription ? "" : "This cannot be undone.",
   ].filter((sentence) => sentence !== "");
-  const lead = `${isSubscription ? "Disconnect" : "Delete"} "${apiKey.name}"? ${sentences.join(" ")}`;
+  const lead = sentences.join(" ");
   const shownVirtualKeys = deletedVirtualKeys.slice(0, 5);
   const moreVirtualKeys = deletedVirtualKeys.length - shownVirtualKeys.length;
   const shownOauthClients = deletedOauthClients.slice(0, 5);

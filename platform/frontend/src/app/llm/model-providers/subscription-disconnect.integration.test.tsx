@@ -198,7 +198,7 @@ describe("member subscription disconnect", () => {
     const dialog = within(dialogElement);
     expect(await dialog.findByText("Team proxy key")).toBeVisible();
     expect(dialogElement).toHaveTextContent(
-      'Disconnect "Copilot subscription"? The virtual key below will be deleted too.',
+      "The virtual key below will be deleted too.",
     );
     const confirm = dialog.getByRole("button", { name: "Disconnect" });
     await waitFor(() => expect(confirm).toBeEnabled());
@@ -258,7 +258,7 @@ describe("member subscription disconnect", () => {
     const dialog = within(dialogElement);
     expect(await dialog.findByText("Subscription client")).toBeVisible();
     expect(dialogElement).toHaveTextContent(
-      'Disconnect "Copilot subscription"? The OAuth client below will be deleted too.',
+      "The OAuth client below will be deleted too.",
     );
     const confirm = dialog.getByRole("button", { name: "Disconnect" });
     await waitFor(() => expect(confirm).toBeEnabled());

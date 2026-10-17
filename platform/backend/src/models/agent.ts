@@ -2235,25 +2235,29 @@ class AgentModel {
       );
     }
 
-    const sortedAgents = await query
-      .limit(pagination.limit)
-      .offset(pagination.offset);
+    // The count does not depend on the page, so it runs alongside it on
+    // another connection instead of after it.
+    const totalQuery = db
+      .select({ total: count() })
+      .from(schema.agentsTable)
+      .where(whereClause)
+      .then(([row]) => Number(row?.total ?? 0));
+    const [sortedAgents, total] = await Promise.all([
+      query.limit(pagination.limit).offset(pagination.offset),
+      totalQuery,
+    ]);
 
     const sortedAgentIds = sortedAgents.map((a) => a.id);
 
     // If no agents match, return early
     if (sortedAgentIds.length === 0) {
-      const [{ total }] = await db
-        .select({ total: count() })
-        .from(schema.agentsTable)
-        .where(whereClause);
-      return createPaginatedResult([], Number(total), pagination);
+      return createPaginatedResult([], total, pagination);
     }
 
     // Step 2: Get full agent data for the paginated agent IDs. Tool refs are
     // a query of their own: joined, every agent row came back once per
     // assigned tool, system prompt and icon included.
-    const [agentRows, toolRows, [{ total: totalResult }]] = await Promise.all([
+    const [agentRows, toolRows] = await Promise.all([
       db
         .select()
         .from(schema.agentsTable)
@@ -2271,7 +2275,6 @@ class AgentModel {
             )
             .where(inArray(schema.agentToolsTable.agentId, sortedAgentIds))
         : Promise.resolve([]),
-      db.select({ total: count() }).from(schema.agentsTable).where(whereClause),
     ]);
 
     // Sort in memory to maintain the order from the sorted query
@@ -2336,7 +2339,7 @@ class AgentModel {
         toolsCount: toolCounts.get(agent.id)?.toolsCount ?? 0,
         subagentsCount: toolCounts.get(agent.id)?.subagentsCount ?? 0,
       })),
-      Number(totalResult),
+      total,
       pagination,
     );
   }
@@ -2644,8 +2647,8 @@ class AgentModel {
     return [
       asc(sql`
         CASE
-          WHEN ${agentAudienceIs("personal")}
-            AND ${schema.agentsTable.authorId} = ${userId}
+          WHEN ${schema.agentsTable.authorId} = ${userId}
+            AND ${agentAudienceIs("personal")}
           THEN 0
           ELSE 1
         END

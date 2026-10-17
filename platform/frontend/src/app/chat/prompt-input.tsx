@@ -48,7 +48,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
-import { appInteractive } from "@/lib/app-interactive";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import {
@@ -470,12 +469,6 @@ const PromptInputContent = ({
   const storageKey = chatDraftStorageKey(conversationId);
 
   const isRestored = useRef(false);
-
-  // The composer is what the first screen exists for: once it has hydrated,
-  // deferred startup work (error reporting, analytics) may begin.
-  useEffect(() => {
-    appInteractive.mark();
-  }, []);
 
   // One-time migration of pre-upgrade per-agent new-chat drafts to the shared
   // key, so an unsent draft written before this change is not dropped. Runs

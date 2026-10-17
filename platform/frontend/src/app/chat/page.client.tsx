@@ -98,6 +98,7 @@ import {
 } from "@/lib/agent-runtime.query";
 import { trackEvent } from "@/lib/analytics";
 import { useApp } from "@/lib/app.query";
+import { afterNextPaint } from "@/lib/app-interactive";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -293,8 +294,10 @@ export function ChatPageContent({
   // now, behind the composer, rather than on the next idle callback.
   useEffect(() => {
     if (!routeConversationId) return;
-    preloadConversationParts();
-    void preloadResponseMarkdown();
+    afterNextPaint(() => {
+      preloadConversationParts();
+      void preloadResponseMarkdown();
+    });
   }, [routeConversationId]);
 
   // Hide version display from layout - chat page has its own version display

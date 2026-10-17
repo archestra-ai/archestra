@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { cookies } from "next/headers";
 import { PublicEnvScript } from "next-runtime-env";
+import { AppInteractiveMarker } from "./_parts/app-interactive-marker";
 import { AppShell } from "./_parts/app-shell";
 import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
@@ -293,6 +294,7 @@ export default async function RootLayout({
             </ChatProvider>
           </ArchestraQueryClientProvider>
         </MswInit>
+        <AppInteractiveMarker />
       </body>
     </html>
   );

@@ -106,6 +106,8 @@ export function decryptMcpToolCallContent<T extends object>(
 const INTERACTION_COLUMN_CONTEXTS: Array<
   [string, EncryptedChatContentContext]
 > = [
+  ["sessionPreview", "interactions.session_preview"],
+  ["session_preview", "interactions.session_preview"],
   ["request", "interactions.request"],
   ["processedRequest", "interactions.processed_request"],
   ["processed_request", "interactions.processed_request"],

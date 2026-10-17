@@ -22,6 +22,7 @@ import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool
 import { buildClaudeMcpToolDefinitions } from "@/services/mcp-tool-token-estimate";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import type { User } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import anthropicProxyRoutes from "./anthropic";
@@ -43,12 +44,23 @@ describe("observed Claude Code MCP tool counts", () => {
   let organizationId: string;
   let gateway: Awaited<ReturnType<typeof AgentModel.create>>;
   let preview: ReturnType<typeof makePreview>;
-  const claudeHeaders = { "x-archestra-agent-id": CLAUDE_CODE_CLIENT_ID };
+  let credentialHeaders: Record<string, string>;
+  let claudeHeaders: Record<string, string>;
 
   beforeEach(async ({ makeUser, makeOrganization, makeMember, makeAgent }) => {
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
     await makeMember(user.id, organizationId);
+    credentialHeaders = {
+      "x-archestra-virtual-key": await makePassthroughCredential({
+        organizationId,
+        ownerId: user.id,
+      }),
+    };
+    claudeHeaders = {
+      ...credentialHeaders,
+      "x-archestra-agent-id": CLAUDE_CODE_CLIENT_ID,
+    };
     config.auth.secret = "tool-count-observation-test-secret";
     gateway = await makeAgent({
       agentType: "mcp_gateway",
@@ -97,7 +109,7 @@ describe("observed Claude Code MCP tool counts", () => {
     const request = countRequest(preview);
     const response = await app.inject({
       method: "POST",
-      url: `/v1/anthropic/${crypto.randomUUID()}/v1/messages/count_tokens`,
+      url: `/v1/anthropic/${gateway.id}/v1/messages/count_tokens`,
       headers: {
         ...claudeHeaders,
         authorization: "Bearer test-subscription-credential",
@@ -208,7 +220,10 @@ describe("observed Claude Code MCP tool counts", () => {
   });
 
   test("requires an explicit Claude Code identity without affecting other clients' requests", async () => {
-    for (const headers of [{}, { "x-archestra-agent-id": "openai_codex" }]) {
+    for (const headers of [
+      credentialHeaders,
+      { ...credentialHeaders, "x-archestra-agent-id": "openai_codex" },
+    ]) {
       const response = await app.inject({
         method: "POST",
         url: "/v1/anthropic/v1/messages/count_tokens",

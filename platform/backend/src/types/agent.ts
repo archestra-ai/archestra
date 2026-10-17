@@ -452,6 +452,18 @@ export type AgentOptionFilters = z.infer<typeof AgentOptionFiltersSchema>;
 /** Paginated Agents-surface row with the current user's pin marker. */
 export const AgentListItemSchema = SelectAgentSchema.extend({
   pinnedAt: z.date().nullable(),
+  toolsCount: z
+    .number()
+    .int()
+    .describe(
+      "Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.",
+    ),
+  subagentsCount: z
+    .number()
+    .int()
+    .describe(
+      "Agents this agent delegates to. Always present, even when `tools` is not requested.",
+    ),
 });
 
 // Base schema without refinement - can be used with .partial()

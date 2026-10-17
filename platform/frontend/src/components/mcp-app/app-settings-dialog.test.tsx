@@ -84,9 +84,6 @@ const server = setupServer(
   http.get(`${API_ORIGIN}/api/organization`, () =>
     HttpResponse.json(organizationSeed),
   ),
-  http.get(`${API_ORIGIN}/api/organization/members`, () =>
-    HttpResponse.json([]),
-  ),
   http.get(`${API_ORIGIN}/api/internal_mcp_catalog`, () =>
     HttpResponse.json([]),
   ),

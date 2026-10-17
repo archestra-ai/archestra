@@ -150,6 +150,13 @@ export class VaultClient {
 
       return secretData;
     } catch (error) {
+      const vaultError = error as { response?: { statusCode?: number } };
+      if (vaultError.response?.statusCode === 404) {
+        throw new ApiError(
+          404,
+          "Vault secret not found. Check the selected secret path.",
+        );
+      }
       this.handleVaultError(error, "getSecretFromPath", { vaultPath });
     }
   }
@@ -382,17 +389,17 @@ export class VaultClient {
   // ============================================================
 
   /**
-   * Check if an error is a 4xx HTTP error from Vault
+   * Check whether refreshing a login-issued token could recover the request.
    */
-  private isVault4xxError(error: unknown): boolean {
+  private isVaultAuthenticationError(error: unknown): boolean {
     const vaultError = error as { response?: { statusCode?: number } };
     const statusCode = vaultError.response?.statusCode;
-    return statusCode !== undefined && statusCode >= 400 && statusCode < 500;
+    return statusCode === 401 || statusCode === 403;
   }
 
   /**
    * Execute a Vault operation with automatic token refresh.
-   * If a 4xx error occurs under an auth method that can mint a fresh client
+   * If a 401/403 error occurs under an auth method that can mint a fresh client
    * token (Kubernetes or AWS IAM login), re-authenticate and retry once.
    * Static token auth has nothing to refresh, so its errors propagate as-is.
    */
@@ -406,13 +413,13 @@ export class VaultClient {
       const canReauthenticate =
         this.config.authMethod === "kubernetes" ||
         this.config.authMethod === "aws";
-      if (!canReauthenticate || !this.isVault4xxError(error)) {
+      if (!canReauthenticate || !this.isVaultAuthenticationError(error)) {
         throw error;
       }
 
       logger.info(
         { operationName, authMethod: this.config.authMethod },
-        "VaultClient: received 4xx error, re-authenticating",
+        "VaultClient: authentication rejected, re-authenticating",
       );
 
       // Reset initialization state and re-authenticate
@@ -422,7 +429,7 @@ export class VaultClient {
       } catch (authError) {
         logger.error(
           { authError, operationName },
-          "VaultClient: re-authentication failed after 4xx error",
+          "VaultClient: re-authentication failed",
         );
         throw authError;
       }

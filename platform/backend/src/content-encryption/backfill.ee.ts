@@ -142,6 +142,7 @@ const INTERACTION_COLUMNS: Array<{
   column: string;
   context: ContentEncryptionContext;
 }> = [
+  { column: "session_preview", context: "interactions.session_preview" },
   { column: "request", context: "interactions.request" },
   { column: "processed_request", context: "interactions.processed_request" },
   { column: "response", context: "interactions.response" },
@@ -190,7 +191,7 @@ async function sweepInteractionsBatch(
   let rewritten = 0;
   for (const { id } of page.rows) {
     const payload = await db.execute<Record<string, unknown>>(sql`
-      SELECT request, processed_request, response
+      SELECT request, processed_request, response, session_preview
       FROM ${schema.interactionsTable}
       WHERE id = ${id}::uuid
     `);

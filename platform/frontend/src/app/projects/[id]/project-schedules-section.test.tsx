@@ -546,14 +546,15 @@ const roster = [
 ];
 const agentServer = setupServer(
   http.get("http://localhost:9000/api/agents/options", ({ request }) =>
-    HttpResponse.json(
-      roster.filter((agent) =>
+    HttpResponse.json({
+      data: roster.filter((agent) =>
         new URL(request.url).searchParams
           .get("ids")
           ?.split(",")
           .includes(agent.id),
       ),
-    ),
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
+    }),
   ),
   http.get("http://localhost:9000/api/agents/options/page", () =>
     HttpResponse.json({

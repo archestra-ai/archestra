@@ -75,7 +75,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -243,13 +243,11 @@ export default function LimitsPage() {
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
   const oauthClients = oauthClientsData?.data ?? [];
-  const { data: agents = [] } = useAgentOptions({
-    filters: {
-      agentTypes: ["agent"],
-      ids: limits
-        .filter((limit) => limit.entityType === "agent")
-        .map((limit) => limit.entityId),
-    },
+  const { data: agents = [] } = useAgentOptionsByIds({
+    ids: limits
+      .filter((limit) => limit.entityType === "agent")
+      .map((limit) => limit.entityId),
+    filters: { agentType: "agent" },
   });
   const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];

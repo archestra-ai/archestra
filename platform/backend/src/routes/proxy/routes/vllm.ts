@@ -17,6 +17,7 @@ import {
   vllmAdapterFactory,
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -45,6 +46,7 @@ const vllmProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, EMBEDDINGS_SUFFIX],
         upstream: config.llm.vllm.baseUrl as string,
         providerName: "vLLM",
+        authenticate: createPassthroughAuthenticator("vllm"),
       }),
     });
   } else {

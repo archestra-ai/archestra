@@ -108,6 +108,21 @@ describe("McpGatewaysPageServer", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("prefetches both gateway lists without their tools", async () => {
+    getAgentsMock.mockResolvedValue({ data: { data: [] } });
+
+    render(await McpGatewaysPageServer());
+
+    expect(getAgentsMock).toHaveBeenCalledTimes(2);
+    for (const pinned of [false, true]) {
+      expect(getAgentsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: expect.objectContaining({ pinned, includeTools: false }),
+        }),
+      );
+    }
+  });
+
   it("does not prefetch teams, which the client page never reads", async () => {
     getAgentsMock.mockResolvedValue({
       data: { data: [{ id: "agent-1" }] },

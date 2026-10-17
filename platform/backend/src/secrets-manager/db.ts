@@ -18,6 +18,12 @@ export class DbSecretsManager implements ISecretManager {
     maxSize: 2_000,
     defaultTtl: 5 * TimeInMs.Minute,
   });
+  private readonly pendingReads = new LRUCacheManager<
+    Promise<SelectSecret | null>
+  >({
+    maxSize: 2_000,
+    defaultTtl: 0,
+  });
 
   async createSecret(
     secretValue: SecretValue,
@@ -35,7 +41,11 @@ export class DbSecretsManager implements ISecretManager {
 
   async deleteSecret(secid: string): Promise<boolean> {
     this.secretsCache.delete(secid);
-    return await SecretModel.delete(secid);
+    this.pendingReads.delete(secid);
+    const deleted = await SecretModel.delete(secid);
+    this.pendingReads.delete(secid);
+    this.secretsCache.delete(secid);
+    return deleted;
   }
 
   async removeSecret(secid: string): Promise<boolean> {
@@ -57,13 +67,25 @@ export class DbSecretsManager implements ISecretManager {
       if (cachedSecret) {
         return cachedSecret;
       }
+      const pending = this.pendingReads.get(secid);
+      if (pending) return pending;
     }
 
-    const secret = await SecretModel.findById(secid);
-    if (secret) {
-      this.secretsCache.set(secid, secret);
+    // Fresh reads always start a new query. Only the newest read may populate
+    // the cache, so an older miss cannot overwrite a rotation or deletion.
+    const read = SecretModel.findById(secid);
+    this.pendingReads.set(secid, read);
+    try {
+      const secret = await read;
+      if (this.pendingReads.get(secid) === read) {
+        if (secret) this.secretsCache.set(secid, secret);
+        else this.secretsCache.delete(secid);
+      }
+      return secret;
+    } finally {
+      if (this.pendingReads.get(secid) === read)
+        this.pendingReads.delete(secid);
     }
-    return secret;
   }
 
   async updateSecret(
@@ -71,6 +93,7 @@ export class DbSecretsManager implements ISecretManager {
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
     const secret = await SecretModel.update(secid, { secret: secretValue });
+    this.pendingReads.delete(secid);
     if (secret) {
       this.secretsCache.set(secid, secret);
     } else {

@@ -282,6 +282,7 @@ export const METHOD_NAMES: Record<string, string> = {
   oauth_user: "OAuth sign-in",
   jwks: "JWT / JWKS",
   provider_key: "Provider key",
+  personal_token: "Personal token",
   internal: "Internal",
   unknown: "Unknown",
 };

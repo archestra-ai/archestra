@@ -1,5 +1,6 @@
 "use client";
 
+import { getRoleDisplayName } from "@archestra/shared";
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/popover";
 import { buildUserSelectItem } from "@/components/user-select-option";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useImpersonationCandidatesPage } from "@/lib/impersonation.query";
 import {
   useInteractionUserOptions,
   useInteractionUserReferences,
@@ -30,8 +32,9 @@ import { cn } from "@/lib/utils/tailwind";
 
 /**
  * A lazy user picker whose search and navigation retain every candidate.
- * `source` picks the users offered: organization members (paged), or users
- * with LLM logs (most active first, capped; search finds the rest).
+ * `source` picks the users offered: organization members (paged), users
+ * with LLM logs (most active first, capped; search finds the rest), or
+ * users the caller can impersonate (paged, labelled "Name · Role").
  */
 export function RemoteUserSelect({
   value,
@@ -225,7 +228,7 @@ export function RemoteUserSelect({
 // Internal helpers
 // =============================================================================
 
-type UserOptionSource = "members" | "logs";
+type UserOptionSource = "members" | "logs" | "impersonable";
 type UserOption = { id: string; name: string; email?: string };
 
 /** One shape for both sources, so the picker renders them the same way. */
@@ -249,6 +252,29 @@ function useUserOptionPages({
     search,
     enabled: enabled && source === "logs",
   });
+  const impersonable = useImpersonationCandidatesPage({
+    search,
+    enabled: enabled && source === "impersonable",
+  });
+  if (source === "impersonable") {
+    return {
+      pages: impersonable.data?.pages.map((row): UserOption[] =>
+        row.data.map((candidate) => ({
+          id: candidate.id,
+          name: candidate.role
+            ? `${candidate.name} · ${getRoleDisplayName(candidate.role)}`
+            : candidate.name,
+          email: candidate.email,
+        })),
+      ),
+      hasNextPage: impersonable.hasNextPage,
+      isFetchingNextPage: impersonable.isFetchingNextPage,
+      fetchNextPage: impersonable.fetchNextPage,
+      isPending: impersonable.isPending,
+      isError: impersonable.isError,
+      refetch: impersonable.refetch,
+    };
+  }
   if (source === "logs") {
     const rows: UserOption[] | undefined = logUsers.data;
     return {
@@ -289,5 +315,13 @@ function useUserOptionReferences({
   const logUsers = useInteractionUserReferences({
     ids: source === "logs" ? ids : [],
   });
+  // Impersonation has no lookup by id; the picked row labels the trigger.
+  if (source === "impersonable") return NO_REFERENCES;
   return source === "logs" ? logUsers : members;
 }
+
+const NO_REFERENCES = {
+  data: undefined,
+  isError: false,
+  refetch: () => undefined,
+};

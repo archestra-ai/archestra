@@ -211,25 +211,12 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ids: externalAgentIds,
         }),
       ]);
-      const [toolCounts] = await Promise.all([
-        AgentModel.getListToolCounts(agents),
-        populateAgentListActivationSkillCounts({
-          agents,
-          organizationId,
-          userId: user.id,
-        }),
-      ]);
-      const agentsById = new Map(
-        agents.map((agent) => [
-          agent.id,
-          {
-            ...agent,
-            toolsCount: 0,
-            subagentsCount: 0,
-            ...toolCounts.get(agent.id),
-          },
-        ]),
-      );
+      await populateAgentListActivationSkillCounts({
+        agents,
+        organizationId,
+        userId: user.id,
+      });
+      const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
       const externalAgentsById = new Map(
         externalAgents.map((agent) => [agent.id, agent]),
       );

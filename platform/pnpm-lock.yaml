@@ -82,7 +82,7 @@ overrides:
   find-my-way: '>=9.7.0'
   postcss: '>=8.5.23'
   proxy-addr: '>=2.0.8 <3'
-  katex: '>=0.18.2 <0.19'
+  katex: 0.18.10
   mammoth>argparse: 2.0.1
   source-map-js: '>=1.2.2'
   nanoid@<4: '>=3.3.18 <4'
@@ -8390,9 +8390,8 @@ packages:
     resolution: {integrity: sha512-+KJGIyHgkGuIq3IEBNftfhW/LfWhXUIY6OmyVWjliu5KH1y0fw7VQ8YndE2O4qZdMSd9SqbnC8GOcZEy0Om7sA==}
     engines: {node: '>=18'}
 
-  katex@0.18.11:
-    resolution: {integrity: sha512-yvyz/2VMKqoho/35Hat5w37wIEdWJ5ElVMidTAlWrxr5uW4aBGsEpveTmKh18/zw08v/7lGswCPon4OhqmqrTA==}
-    deprecated: Accidentally published with breaking changes. Use 0.19.0 instead.
+  katex@0.18.10:
+    resolution: {integrity: sha512-/B6p9eY9DX7aHBfpkHdpirDTZ5QH9xTwL9y837PWuzuv41O5jFdqNQwVQEQsimY0/iVNkwBY4+4hMfhQ7d4Dbw==}
     hasBin: true
 
   keyv@5.6.0:
@@ -19129,7 +19128,7 @@ snapshots:
 
   jwt-decode@4.0.0: {}
 
-  katex@0.18.11:
+  katex@0.18.10:
     dependencies:
       commander: 15.0.0
 
@@ -19523,7 +19522,7 @@ snapshots:
       dayjs: 1.11.21
       dompurify: 3.4.16
       es-toolkit: 1.45.1
-      katex: 0.18.11
+      katex: 0.18.10
       khroma: 2.1.0
       marked: 16.4.2
       roughjs: 4.6.6

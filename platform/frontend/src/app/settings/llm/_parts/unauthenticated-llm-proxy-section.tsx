@@ -45,7 +45,7 @@ export function UnauthenticatedLlmProxySection() {
   return (
     <>
       <SettingsBlock
-        title="Allow requests without an Archestra key"
+        title="Allow requests without a virtual key"
         description="Accept LLM proxy requests that carry only a provider key, or none."
         control={
           <WithPermissions
@@ -61,7 +61,7 @@ export function UnauthenticatedLlmProxySection() {
                   checked={allowed}
                   onCheckedChange={setAllowed}
                   disabled={updateMutation.isPending || !hasPermission}
-                  aria-label="Allow requests without an Archestra key"
+                  aria-label="Allow requests without a virtual key"
                 />
               </div>
             )}

@@ -620,7 +620,7 @@ export function assertPlatformAuthenticated(params: {
         ? "Authentication required. This provider is configured to use the server's own credentials, so requests must present a platform virtual API key or an identity provider token."
         : allowUnauthenticated
           ? "Authentication required. Use a platform virtual API key or pass a provider API key."
-          : "Authentication required. Send your Archestra virtual API key in the X-Archestra-Virtual-Key header or the Authorization header. A provider API key alone is not accepted.",
+          : "Authentication required. Send a virtual API key in the X-Archestra-Virtual-Key header or the Authorization header. A provider API key alone is not accepted.",
     );
   }
 }

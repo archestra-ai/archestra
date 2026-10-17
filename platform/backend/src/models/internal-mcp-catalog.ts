@@ -87,6 +87,8 @@ export type RegistryListOptions = CatalogListOptions & {
 export type RegistryListFilters = {
   /** Name substring, case-insensitive. */
   search?: string;
+  /** Match `search` against descriptions too (the pickers); names only otherwise. */
+  searchDescriptions?: boolean;
   /** Label key → accepted values; every key must match one of its values. */
   labels?: Record<string, string[]>;
   environmentIds?: string[];
@@ -2241,7 +2243,13 @@ class InternalMcpCatalogModel {
     ];
     const search = filters.search?.trim();
     if (search) {
-      conditions.push(ilike(catalog.name, `%${escapeLikePattern(search)}%`));
+      const pattern = `%${escapeLikePattern(search)}%`;
+      const byName = ilike(catalog.name, pattern);
+      conditions.push(
+        filters.searchDescriptions
+          ? (or(byName, ilike(catalog.description, pattern)) ?? byName)
+          : byName,
+      );
     }
     // AND across keys, any of the selected values within one key.
     for (const [key, values] of Object.entries(filters.labels ?? {})) {

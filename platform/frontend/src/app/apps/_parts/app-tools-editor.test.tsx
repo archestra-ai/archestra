@@ -428,6 +428,22 @@ describe("AppToolsEditor", () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
 
+    it("searches descriptions as well as names", async () => {
+      const user = userEvent.setup();
+      renderTab();
+
+      await screen.findByRole("button", { name: /JIRA/ });
+      await user.click(screen.getByRole("button", { name: /add/i }));
+      await user.type(screen.getByRole("textbox"), "zulip");
+
+      await waitFor(() =>
+        expect(registryPageCalls.at(-1)).toMatchObject({
+          search: "zulip",
+          searchDescriptions: true,
+        }),
+      );
+    });
+
     it("keeps its pill in the live editor", async () => {
       const user = userEvent.setup();
       renderTab();

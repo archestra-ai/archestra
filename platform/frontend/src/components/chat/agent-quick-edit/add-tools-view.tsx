@@ -95,7 +95,9 @@ export function AddToolsView({
   const debouncedSearch = useDebouncedValue(search.trim(), 250);
   const baseQuery = {
     includeBuiltIn: true,
-    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(debouncedSearch
+      ? { search: debouncedSearch, searchDescriptions: true }
+      : {}),
     sortBy: "name" as const,
     sortDirection: "asc" as const,
   };

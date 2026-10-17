@@ -190,6 +190,10 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
   MCP_REGISTRY_SORT_KEYS,
 ).extend({
   search: z.string().trim().max(256).optional(),
+  searchDescriptions: z
+    .boolean()
+    .optional()
+    .describe("Match the search against descriptions too, not only names."),
   // Each key is one more EXISTS in the query.
   labels: z
     .record(z.string().max(256), z.array(z.string().max(256)).max(100))
@@ -3511,6 +3515,7 @@ async function resolveRegistryQuery(
     },
     filters: {
       search: body.search,
+      searchDescriptions: body.searchDescriptions,
       includeBuiltIn: body.includeBuiltIn,
       includeDefaultEnvironment: body.includeDefaultEnvironment,
       // App backings are gated by `app:read`, as on the full list.

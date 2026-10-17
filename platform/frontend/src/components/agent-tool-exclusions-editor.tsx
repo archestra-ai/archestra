@@ -229,7 +229,9 @@ export const AgentToolExclusionsEditor = forwardRef<
   const catalogPage = useMcpRegistryPage(
     {
       includeBuiltIn: true,
-      ...(debouncedCatalogSearch ? { search: debouncedCatalogSearch } : {}),
+      ...(debouncedCatalogSearch
+        ? { search: debouncedCatalogSearch, searchDescriptions: true }
+        : {}),
       sortBy: "name",
       sortDirection: "asc",
       limit: CATALOG_PAGE_SIZE,

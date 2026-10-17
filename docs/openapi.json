@@ -248359,6 +248359,10 @@
                     "type": "string",
                     "maxLength": 256
                   },
+                  "searchDescriptions": {
+                    "description": "Match the search against descriptions too, not only names.",
+                    "type": "boolean"
+                  },
                   "labels": {
                     "type": "object",
                     "additionalProperties": {
@@ -249461,6 +249465,10 @@
                   "search": {
                     "type": "string",
                     "maxLength": 256
+                  },
+                  "searchDescriptions": {
+                    "description": "Match the search against descriptions too, not only names.",
+                    "type": "boolean"
                   },
                   "labels": {
                     "type": "object",

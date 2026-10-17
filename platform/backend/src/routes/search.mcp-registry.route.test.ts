@@ -185,6 +185,32 @@ describe("MCP registry list routes", () => {
       expect(names(await search({ search: "%_" }))).toEqual(["100%_done"]);
     });
 
+    test("matches descriptions too when a picker asks, with wildcards literal", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      await makeItem(makeInternalMcpCatalog, "jira", {
+        description: "Track issues in Atlassian",
+      });
+      await makeItem(makeInternalMcpCatalog, "atlassian-wiki");
+      await makeItem(makeInternalMcpCatalog, "notion", {
+        description: "100%_done pages",
+      });
+      await makeItem(makeInternalMcpCatalog, "slack", {
+        description: "100 percent chat",
+      });
+
+      // The registry page searches names only.
+      expect(names(await search({ search: "atlassian" }))).toEqual([
+        "atlassian-wiki",
+      ]);
+      expect(
+        names(await search({ search: "atlassian", searchDescriptions: true })),
+      ).toEqual(["atlassian-wiki", "jira"]);
+      expect(
+        names(await search({ search: "%_", searchDescriptions: true })),
+      ).toEqual(["notion"]);
+    });
+
     test("labels match every key and any value within a key", async ({
       makeInternalMcpCatalog,
     }) => {

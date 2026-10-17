@@ -64322,6 +64322,10 @@ export type SearchMcpRegistryData = {
         sortBy?: 'name' | 'createdAt' | 'toolCount' | 'attention' | 'issueAge';
         sortDirection?: 'asc' | 'desc';
         search?: string;
+        /**
+         * Match the search against descriptions too, not only names.
+         */
+        searchDescriptions?: boolean;
         labels?: {
             [key: string]: Array<string>;
         };
@@ -64567,6 +64571,10 @@ export type SearchMcpRegistryIdsData = {
         sortBy?: 'name' | 'createdAt' | 'toolCount' | 'attention' | 'issueAge';
         sortDirection?: 'asc' | 'desc';
         search?: string;
+        /**
+         * Match the search against descriptions too, not only names.
+         */
+        searchDescriptions?: boolean;
         labels?: {
             [key: string]: Array<string>;
         };

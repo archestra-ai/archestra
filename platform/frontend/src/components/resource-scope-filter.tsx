@@ -41,6 +41,15 @@ export function ResourceScopeFilter({
   return <AgentLabelFilter queryParamsAdapter={queryParamsAdapter} />;
 }
 
+interface ScopeFilterOptions {
+  queryParamsAdapter?: QueryParamsAdapter;
+  /**
+   * Pass the same value as the page's `ResourceAccessFilter`, so a bookmarked
+   * "Admin access" selection the filter hides does not still filter the list.
+   */
+  offerAdminAccess?: boolean;
+}
+
 interface ScopeFilterParams<Scope extends string> {
   scope: Scope | undefined;
   teamIds: undefined;
@@ -60,18 +69,15 @@ interface ScopeFilterParams<Scope extends string> {
  * Ignore retired visibility parameters in bookmarked links. The access
  * selection replaces them; a non-default one counts as an active filter.
  */
-export function useScopeFilterParams(options: {
-  includeBuiltIn: true;
-  queryParamsAdapter?: QueryParamsAdapter;
-}): ScopeFilterParams<ScopeValue>;
-export function useScopeFilterParams(options?: {
-  includeBuiltIn?: false;
-  queryParamsAdapter?: QueryParamsAdapter;
-}): ScopeFilterParams<SharedScopeValue>;
-export function useScopeFilterParams(options?: {
-  includeBuiltIn?: boolean;
-  queryParamsAdapter?: QueryParamsAdapter;
-}): ScopeFilterParams<ScopeValue> {
+export function useScopeFilterParams(
+  options: ScopeFilterOptions & { includeBuiltIn: true },
+): ScopeFilterParams<ScopeValue>;
+export function useScopeFilterParams(
+  options?: ScopeFilterOptions & { includeBuiltIn?: false },
+): ScopeFilterParams<SharedScopeValue>;
+export function useScopeFilterParams(
+  options?: ScopeFilterOptions & { includeBuiltIn?: boolean },
+): ScopeFilterParams<ScopeValue> {
   const searchParams = useSearchParams();
   const activeSearchParams =
     options?.queryParamsAdapter?.searchParams ?? searchParams;
@@ -82,6 +88,7 @@ export function useScopeFilterParams(options?: {
     isDefault: isDefaultAccess,
   } = useResourceAccessParam({
     queryParamsAdapter: options?.queryParamsAdapter,
+    offerAdminAccess: options?.offerAdminAccess,
   });
   const scope =
     options?.includeBuiltIn && activeSearchParams.get("scope") === "built_in"

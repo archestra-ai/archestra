@@ -147,6 +147,8 @@ type AgentRosterOptions = {
 
 type AgentListFilters = {
   organizationId?: string;
+  /** The request's caller lookups, so the list resolves the caller once. */
+  lookups?: PrincipalSource;
   authorization?: { organizationId: string; baseReadTypes: AgentType[] };
   ids?: string[];
   /** Rows the list shows elsewhere, such as the viewer's automatic pins. */
@@ -2432,6 +2434,7 @@ class AgentModel {
           userId,
           organizationId:
             filters?.authorization?.organizationId ?? filters?.organizationId,
+          lookups: filters?.lookups,
         })
       : [];
     const whereConditions: SQL[] = [

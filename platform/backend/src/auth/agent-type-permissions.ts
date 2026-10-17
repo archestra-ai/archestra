@@ -11,6 +11,7 @@ import {
   allAvailableActions,
   buildForbiddenErrorMessage,
 } from "@archestra/shared/access-control";
+import type { RequestLookups } from "@/auth/request-lookups";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type AgentType, ApiError } from "@/types";
 import { getPermissionsForUserContext, userHasPermission } from "./utils";
@@ -90,11 +91,20 @@ export async function hasAnyAgentTypeAdminPermission(params: {
 export async function getAgentTypePermissionChecker(params: {
   userId: string;
   organizationId: string;
+  /** The request's lookups, so the caller is resolved once per request. */
+  lookups?: RequestLookups;
 }): Promise<AgentTypePermissionChecker> {
+  const caller = {
+    userId: params.userId,
+    organizationId: params.organizationId,
+  };
   const [permissions, grants] = await Promise.all([
-    getPermissionsForUserContext(params),
+    params.lookups
+      ? params.lookups.permissions(caller)
+      : getPermissionsForUserContext(caller),
     ResourcePermissions.resolveAll({
-      ...params,
+      ...caller,
+      lookups: params.lookups,
       resources: ["agent", "mcpGateway"],
     }),
   ]);

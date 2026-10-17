@@ -34,6 +34,7 @@ import {
 // validation rules (team existence, org ownership, the ≥1-team invariant) that
 // must keep running in those tests rather than silently becoming no-ops.
 import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import { RequestLookups } from "@/auth/request-lookups";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -331,10 +332,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const effectiveTypes =
         agentTypes || (agentType ? [agentType] : undefined);
 
-      // Single DB query for all permission checks
+      // The caller's roles, teams and grants are resolved once and shared by
+      // the permission checks and the list's visibility filter.
+      const lookups = new RequestLookups();
       const checker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
+        lookups,
       });
 
       const permittedTypes = getPermittedAgentTypesForList({
@@ -380,6 +384,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           providerApiKeyId,
           pinned,
           includeTools,
+          lookups,
         },
         user.id,
         isAdmin,

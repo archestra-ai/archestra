@@ -14,7 +14,7 @@ import { AgentIdenticon } from "./hue-avatar";
 import { isKnowledgeSource, type LogSession } from "./logs-table-format";
 
 type AgentOption = Pick<
-  archestraApiTypes.GetAgentOptionsResponses["200"][number],
+  archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number],
   "id" | "name" | "agentType"
 >;
 

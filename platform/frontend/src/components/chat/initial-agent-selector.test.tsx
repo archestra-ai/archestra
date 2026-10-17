@@ -126,7 +126,6 @@ vi.mock("@/lib/agent.query", () => ({
     data: agents.filter((agent) => ids.includes(agent.id)),
   }),
   useCreateProfile: () => ({ mutate: vi.fn() }),
-  useInternalAgentOptions: () => ({ data: agents }),
   usePinnedAgentIds: () => ({ data: mockPinnedIds }),
   useProfile: (id: string | undefined, options?: unknown) =>
     mockUseProfile(id, options),

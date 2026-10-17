@@ -321,7 +321,7 @@ export const getChatAgentRoster = <ThrowOnError extends boolean = false>(options
 export const getChatAgentRosterPage = <ThrowOnError extends boolean = false>(options?: Options<GetChatAgentRosterPageData, ThrowOnError>) => (options?.client ?? client).get<GetChatAgentRosterPageResponses, GetChatAgentRosterPageErrors, ThrowOnError>({ url: '/api/agents/chat-roster/page', ...options });
 
 /**
- * Get authorized agent names and presentation fields for selectors
+ * List authorized agent options one page at a time. Filter by up to 200 IDs; pages hold up to 1,000 items.
  *
  * Authentication:
  *

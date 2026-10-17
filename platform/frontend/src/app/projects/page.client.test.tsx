@@ -372,7 +372,10 @@ const agentServer = setupServer(
     const state = agentReferenceState;
     if (state.isPending)
       await new Promise<void>((resolve) => pendingReads.push(resolve));
-    return HttpResponse.json(state.data ?? []);
+    return HttpResponse.json({
+      data: state.data ?? [],
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
+    });
   }),
   http.get("http://localhost:9000/api/agents/options/page", ({ request }) => {
     agentRequests.push(new URL(request.url));

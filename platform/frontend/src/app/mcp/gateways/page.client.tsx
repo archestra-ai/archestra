@@ -88,11 +88,12 @@ import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { ExposedSetCell, ExposedSetNames } from "./gateway-exposed-set-cell";
 import {
   GatewayPinnedTiles,
   useGatewaysPinnedForViewer,
 } from "./gateway-pinned-tiles";
-import { gatewayToolNames } from "./gateway-tools";
+import { gatewaySubagentNames, gatewayToolNames } from "./gateway-tools";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -134,59 +135,6 @@ function SortIcon({
       {upArrow}
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
-  );
-}
-
-/**
- * What a gateway exposes, in the one column the list has for it.
- *
- * The column used to render `tools.length`, which is a lie for the default
- * configuration: an Auto-mode gateway has no per-tool rows at all, so it
- * showed "0" while exposing the whole catalogue. It is also a counter with no
- * denominator, which the detail-page rules forbid — and the denominator cannot
- * honestly be named here, because the catalogue a gateway reaches depends on
- * its environment's installs and on its own exclusions, and `GET /api/tools`
- * would pull every tool's JSON schema onto a list page to find out. So the set
- * is named instead of counted, and the list itself is one hover away, which is
- * what the rules say to do when the denominator is unavailable.
- */
-function ExposedSetCell({
-  exposesEverything,
-  everythingLabel,
-  names,
-  noun,
-}: {
-  exposesEverything: boolean;
-  /** What "everything" is called here — "All tools", "All subagents". */
-  everythingLabel: string;
-  names: string[];
-  noun: string;
-}) {
-  if (exposesEverything) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="text-sm">{everythingLabel}</span>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs">
-          Every {noun} this gateway's environment offers, minus its exclusions.
-          The set grows as servers are installed.
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  if (names.length === 0) {
-    return <span className="text-sm text-muted-foreground">None</span>;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="text-sm">{names.length} selected</span>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-xs">{names.join(", ")}</TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -262,6 +210,8 @@ function McpGateways({
     owner: scopeFilter.owner,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+    // The rows show counts; a cell's tooltip reads the names on its own.
+    includeTools: false,
   } satisfies Omit<
     NonNullable<archestraApiTypes.GetAgentsData["query"]>,
     "limit" | "offset"
@@ -286,6 +236,7 @@ function McpGateways({
     offset: 0,
     agentTypes: gatewayAgentTypes,
     ids: excludeIds,
+    includeTools: false,
     enabled: !!excludeIds?.length,
   });
   const automaticPinRows = automaticPinsResponse?.data ?? [];
@@ -589,8 +540,17 @@ function McpGateways({
         <ExposedSetCell
           exposesEverything={row.original.accessAllTools}
           everythingLabel="All tools"
-          names={gatewayToolNames(row.original.tools)}
+          count={row.original.toolsCount}
           noun="tool"
+          names={
+            <ExposedSetNames
+              gatewayId={row.original.id}
+              agentTypes={gatewayAgentTypes}
+              status={statusFromUrl ?? undefined}
+              noun="tool"
+              pick={gatewayToolNames}
+            />
+          }
         />
       ),
     },
@@ -612,10 +572,17 @@ function McpGateways({
         <ExposedSetCell
           exposesEverything={row.original.accessAllSubagents}
           everythingLabel="All subagents"
-          names={row.original.tools
-            .filter((tool) => tool.delegateToAgentId)
-            .map((tool) => tool.name)}
+          count={row.original.subagentsCount}
           noun="subagent"
+          names={
+            <ExposedSetNames
+              gatewayId={row.original.id}
+              agentTypes={gatewayAgentTypes}
+              status={statusFromUrl ?? undefined}
+              noun="subagent"
+              pick={gatewaySubagentNames}
+            />
+          }
         />
       ),
     },

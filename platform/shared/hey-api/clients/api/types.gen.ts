@@ -14592,11 +14592,11 @@ export type GetAgentCatalogResponses = {
                 lastUsedAt?: string | null;
                 pinnedAt: string | null;
                 /**
-                 * Assigned tools other than subagent delegations, as the Agents page shows them. Present whether or not `tools` was requested.
+                 * Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.
                  */
                 toolsCount: number;
                 /**
-                 * Agents this agent delegates to.
+                 * Agents this agent delegates to. Always present, even when `tools` is not requested.
                  */
                 subagentsCount: number;
             };
@@ -14754,7 +14754,7 @@ export type GetAgentsData = {
          */
         pinned?: boolean;
         /**
-         * Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the agents themselves, such as name pickers: the tool refs carry every assigned tool's name and description, which on an organization of any size is most of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
+         * Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'.
          */
         includeTools?: boolean;
         limit?: number;
@@ -14966,6 +14966,14 @@ export type GetAgentsResponses = {
             activationSkillsCount?: number;
             lastUsedAt?: string | null;
             pinnedAt: string | null;
+            /**
+             * Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.
+             */
+            toolsCount: number;
+            /**
+             * Agents this agent delegates to. Always present, even when `tools` is not requested.
+             */
+            subagentsCount: number;
         }>;
         pagination: {
             currentPage: number;
@@ -15873,6 +15881,8 @@ export type GetAgentOptionsData = {
          */
         status?: 'active' | 'deleted';
         ids?: Array<string>;
+        limit?: number;
+        cursor?: string;
     };
     url: '/api/agents/options';
 };
@@ -15949,61 +15959,68 @@ export type GetAgentOptionsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        slug: string | null;
-        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-        icon: string | null;
-        scope: 'personal' | 'team' | 'org';
-        authorId: string | null;
-        authorName?: string | null;
-        authorEmail?: string | null;
-        isPersonalGateway: boolean;
-        runtime: {
-            image: string;
-            command: Array<string> | null;
-            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
-            backend: 'kubernetes';
-            steerMode: 'pipe' | 'tmux_keys';
-            privileged: boolean;
-            resources: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            } | null;
-            ports?: Array<number>;
-            environment: Array<{
-                key: string;
-                value: string;
-            }> | null;
-            credentials: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                credentialId?: string;
-                label: string;
-                description?: string;
-                required: boolean;
-            }> | null;
-            allowAgentSuppliedCredentialValues?: boolean;
-            claudeCode?: {
-                authentication: 'provider' | 'subscription';
-                model?: string;
-            };
-            ttlHours: number | null;
-            maxCostUsd?: number | null;
-            idleTimeoutMinutes: number | null;
-        } | null;
-        description: string | null;
-        teams: Array<{
+    200: {
+        data: Array<{
             id: string;
             name: string;
+            slug: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            icon: string | null;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
+            authorName?: string | null;
+            authorEmail?: string | null;
+            isPersonalGateway: boolean;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: boolean;
+                resources: {
+                    cpuRequest?: string;
+                    memoryRequest?: string;
+                    cpuLimit?: string;
+                    memoryLimit?: string;
+                } | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd?: number | null;
+                idleTimeoutMinutes: number | null;
+            } | null;
+            description: string | null;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            users: Array<{
+                id: string;
+            }>;
         }>;
-        users: Array<{
-            id: string;
-        }>;
-    }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
 };
 
 export type GetAgentOptionsResponse = GetAgentOptionsResponses[keyof GetAgentOptionsResponses];

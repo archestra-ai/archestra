@@ -8,6 +8,7 @@ import {
   useChatAgentBootstrap,
   useCreateProfile,
   usePinAgent,
+  usePinnedAgentIds,
   useProfile,
   useProfilesPaginated,
   useUpdateProfile,
@@ -34,6 +35,8 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       getChatAgentRoster: vi.fn(),
       getAgent: vi.fn(),
       getChatAgentMcpTools: vi.fn(),
+      getMemberDefaultAgent: vi.fn(),
+      getOrganization: vi.fn(),
       pinAgent: vi.fn(),
       unpinAgent: vi.fn(),
       updateAgent: vi.fn(),
@@ -319,6 +322,18 @@ describe("agent detail", () => {
       queryKey: ["agents", "catalog", { includeTools: false }],
       data: { data: partialRows },
     },
+    {
+      // Tool rows, not agents: one carries the agent's id, so the scan must
+      // skip this cache rather than just miss it.
+      kind: "gateway's tool rows",
+      queryKey: [
+        "agents",
+        "gateway-tool-rows",
+        "agent-1",
+        { agentTypes: ["mcp_gateway"] },
+      ],
+      data: [{ id: "agent-1", name: "lookup", delegateToAgentId: null }],
+    },
   ])("never seeds an editing form from a $kind", async ({ queryKey, data }) => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -363,6 +378,34 @@ describe("agent detail", () => {
     const { result } = setup(() => useProfile("agent-1"), queryClient);
     expect(result.current.data).toEqual(agent);
     expect(sdk.getAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe("pinned agent ids", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reads the pinned agents without their tools, since it keeps only their ids", async () => {
+    sdk.getAgents.mockResolvedValue({
+      data: { data: [{ id: "pinned-1" }] },
+      error: undefined,
+    } as never);
+    sdk.getMemberDefaultAgent.mockResolvedValue({
+      data: { defaultAgentId: null, personalChatAgentId: null },
+      error: undefined,
+    } as never);
+    sdk.getOrganization.mockResolvedValue({
+      data: { defaultAgentId: null },
+      error: undefined,
+    } as never);
+
+    const { result } = setup(() => usePinnedAgentIds());
+
+    await waitFor(() => expect(result.current.data).toEqual(["pinned-1"]));
+    expect(sdk.getAgents).toHaveBeenCalledWith({
+      query: expect.objectContaining({ pinned: true, includeTools: false }),
+    });
   });
 });
 

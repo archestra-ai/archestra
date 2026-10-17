@@ -50,6 +50,7 @@ export default async function McpGatewaysPageServer() {
           agentTypes: gatewayAgentTypes,
           pinned: false,
           access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+          includeTools: false,
         },
       }),
       archestraApiSdk.getAgents({
@@ -62,6 +63,7 @@ export default async function McpGatewaysPageServer() {
           agentTypes: gatewayAgentTypes,
           pinned: true,
           access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+          includeTools: false,
         },
       }),
     ]);

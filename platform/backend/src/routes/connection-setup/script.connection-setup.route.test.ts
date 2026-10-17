@@ -15,6 +15,7 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { resolveMarketplaceViewer } from "@/skills/marketplace/static-marketplace";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -194,6 +195,44 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(
       await SkillShareLinkModel.listByOrganization({ organizationId }),
     ).toHaveLength(0);
+  });
+
+  test("the shared marketplace URL carries the token as its password", async ({
+    makeAgent,
+  }) => {
+    // Some git versions lose a token sent as a username with no password.
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+    const skill = await seedSkill({ organizationId, name: "alpha" });
+    const { rawToken } = await createSetup({
+      clientId: "codex",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+      skills: { skillIds: [skill.id], ttlDays: null },
+    });
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    const [cloneUrl] =
+      response.body.match(/https?:\/\/[^\s'"]+\/skills\/marketplace\.git/) ??
+      [];
+    expect(cloneUrl).toBeDefined();
+    const url = new URL(cloneUrl as string);
+    expect(url.username).toBe("token");
+    const marketplaceToken = decodeURIComponent(url.password);
+    expect(marketplaceToken).toMatch(/^archestra_mkt_/);
+
+    // What git sends from that URL resolves to the user who ran the setup.
+    const result = await resolveMarketplaceViewer({
+      authorization: `Basic ${Buffer.from(`${url.username}:${marketplaceToken}`).toString("base64")}`,
+    });
+    expect(result).toMatchObject({
+      status: "ok",
+      viewer: { organizationId, userId: user.id },
+    });
   });
 
   test("a caller who cannot read skills at all is refused up front", async ({

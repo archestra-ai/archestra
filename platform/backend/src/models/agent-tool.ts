@@ -740,20 +740,22 @@ class AgentToolModel {
       mcpServerIds.map((id) => sql`${id}`),
       sql`, `,
     )}]::uuid[]`;
+    // The McpServerAssignedAgent fields are listed by hand in
+    // json_build_object below; a new field must be added there too.
     const result = await db.execute<{
       mcp_server_id: string;
       agents: Array<McpServerAssignedAgent>;
     }>(sql`
       WITH pinned_assignments AS (
         SELECT DISTINCT at.mcp_server_id, at.agent_id
-        FROM agent_tools at
+        FROM ${schema.agentToolsTable} at
         WHERE at.mcp_server_id = ANY(${serverIds})
       ),
       dynamic_assignments AS (
         SELECT DISTINCT ms.id AS mcp_server_id, at.agent_id
-        FROM agent_tools at
-        INNER JOIN tools t ON t.id = at.tool_id
-        INNER JOIN mcp_server ms ON ms.catalog_id = t.catalog_id
+        FROM ${schema.agentToolsTable} at
+        INNER JOIN ${schema.toolsTable} t ON t.id = at.tool_id
+        INNER JOIN ${schema.mcpServersTable} ms ON ms.catalog_id = t.catalog_id
         WHERE at.mcp_server_id IS NULL
           AND ms.id = ANY(${serverIds})
       ),
@@ -781,8 +783,8 @@ class AgentToolModel {
           'pinned', assignments.pinned
         )) AS agents
       FROM assignments
-      INNER JOIN agents a ON a.id = assignments.agent_id
-      LEFT JOIN "user" u ON u.id = a.author_id
+      INNER JOIN ${schema.agentsTable} a ON a.id = assignments.agent_id
+      LEFT JOIN ${schema.usersTable} u ON u.id = a.author_id
       WHERE a.deleted_at IS NULL
       GROUP BY assignments.mcp_server_id
     `);

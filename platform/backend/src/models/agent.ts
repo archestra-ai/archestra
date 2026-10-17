@@ -2612,6 +2612,8 @@ class AgentModel {
     includeTools: boolean;
   }): Promise<Map<string, ToolRef[]>> {
     if (params.agentIds.length === 0 || !params.includeTools) return new Map();
+    // The ToolRef fields are listed by hand in json_build_object below; a
+    // field added to ToolRef must be added there too.
     const result = await db.execute<{ agent_id: string; tools: ToolRef[] }>(sql`
       SELECT at.agent_id, json_agg(json_build_object(
         'id', t.id, 'agentId', t.agent_id, 'catalogId', t.catalog_id,
@@ -2619,7 +2621,7 @@ class AgentModel {
         'delegateToA2aConnectionId', t.delegate_to_a2a_connection_id,
         'name', t.name, 'rawName', t.raw_name, 'description', t.description
       )) AS tools
-      FROM agent_tools at INNER JOIN tools t ON t.id = at.tool_id
+      FROM ${schema.agentToolsTable} at INNER JOIN ${schema.toolsTable} t ON t.id = at.tool_id
       WHERE at.agent_id = ANY(ARRAY[${sql.join(
         params.agentIds.map((id) => sql`${id}`),
         sql`, `,
@@ -2635,6 +2637,9 @@ class AgentModel {
    * names it grants to, labels, knowledge bases, connectors, suggested
    * prompts, the caller's pin, creator, resolved model, and tool counts for a
    * list without tools). Timestamps come back as epoch milliseconds.
+   *
+   * Every subselect runs once per row, which suits a list page: callers pass
+   * at most 100 ids (PaginationQuerySchema caps `limit`).
    */
   private static async findListEnrichment(params: {
     agentIds: string[];
@@ -2666,13 +2671,13 @@ class AgentModel {
               SELECT coalesce(json_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name)), '[]'::json)
               FROM jsonb_array_elements(pol.grant_sets) gs,
                 jsonb_array_elements(gs) g
-                INNER JOIN team t ON t.id = g->'subject'->>'id'
+                INNER JOIN ${schema.teamsTable} t ON t.id = g->'subject'->>'id'
               WHERE g->'subject'->>'type' = 'team'),
             'users', (
               SELECT coalesce(json_agg(DISTINCT jsonb_build_object('id', u.id, 'name', u.name, 'email', u.email)), '[]'::json)
               FROM jsonb_array_elements(pol.grant_sets) gs,
                 jsonb_array_elements(gs) g
-                INNER JOIN "user" u ON u.id = g->'subject'->>'id'
+                INNER JOIN ${schema.usersTable} u ON u.id = g->'subject'->>'id'
               WHERE g->'subject'->>'type' = 'user'))
           FROM (
             SELECT
@@ -2681,46 +2686,46 @@ class AgentModel {
                 'scope', p.scope, 'grants', p.grants
               )), '[]'::json) AS policies,
               coalesce(jsonb_agg(p.grants), '[]'::jsonb) AS grant_sets
-            FROM resource_permission_policies p WHERE ${policyOfAgent}) pol)`,
+            FROM ${schema.resourcePermissionPoliciesTable} p WHERE ${policyOfAgent}) pol)`,
         labels: sql<LabelWithDetails[]>`(
           SELECT coalesce(json_agg(json_build_object(
             'keyId', al.key_id, 'valueId', al.value_id,
             'key', coalesce(lk.key, ''), 'value', coalesce(lv.value, '')
           ) ORDER BY lk.key), '[]'::json)
-          FROM agent_labels al
-            LEFT JOIN label_keys lk ON lk.id = al.key_id
-            LEFT JOIN label_values lv ON lv.id = al.value_id
+          FROM ${schema.agentLabelsTable} al
+            LEFT JOIN ${schema.labelKeysTable} lk ON lk.id = al.key_id
+            LEFT JOIN ${schema.labelValuesTable} lv ON lv.id = al.value_id
           WHERE al.agent_id = ${agentId})`,
         // Assignment order. The ids are a set; the batch reads this replaced
         // left their order to the plan.
         knowledgeBaseIds: sql<string[]>`(
           SELECT coalesce(json_agg(akb.knowledge_base_id
             ORDER BY akb.created_at, akb.knowledge_base_id), '[]'::json)
-          FROM agent_knowledge_base akb
-            INNER JOIN knowledge_bases kb ON kb.id = akb.knowledge_base_id
+          FROM ${schema.agentKnowledgeBasesTable} akb
+            INNER JOIN ${schema.knowledgeBasesTable} kb ON kb.id = akb.knowledge_base_id
           WHERE akb.agent_id = ${agentId} AND kb.deleted_at IS NULL)`,
         connectorIds: sql<string[]>`(
           SELECT coalesce(json_agg(aca.connector_id
             ORDER BY aca.created_at, aca.connector_id), '[]'::json)
-          FROM agent_connector_assignment aca
-            INNER JOIN knowledge_base_connectors kc ON kc.id = aca.connector_id
+          FROM ${schema.agentConnectorAssignmentsTable} aca
+            INNER JOIN ${schema.knowledgeBaseConnectorsTable} kc ON kc.id = aca.connector_id
           WHERE aca.agent_id = ${agentId} AND kc.deleted_at IS NULL)`,
         suggestedPrompts: sql<SuggestedPromptInput[]>`(
           SELECT coalesce(json_agg(json_build_object(
             'summaryTitle', sp.summary_title, 'prompt', sp.prompt
           ) ORDER BY sp.sort_order), '[]'::json)
-          FROM agent_suggested_prompts sp WHERE sp.agent_id = ${agentId})`,
+          FROM ${schema.agentSuggestedPromptsTable} sp WHERE sp.agent_id = ${agentId})`,
         pinnedAtMs: params.userId
           ? sql<number | null>`(
-              SELECT ${epochMs(sql`ap.pinned_at`)} FROM agent_pins ap
+              SELECT ${epochMs(sql`ap.pinned_at`)} FROM ${schema.agentPinsTable} ap
               WHERE ap.user_id = ${params.userId} AND ap.agent_id = ${agentId})`
           : sql<number | null>`NULL::float8`,
         creatorUser: sql<{ id: string; name: string; email: string } | null>`(
           SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
-          FROM "user" u WHERE u.id = ${qualified(schema.agentsTable.authorId)})`,
+          FROM ${schema.usersTable} u WHERE u.id = ${qualified(schema.agentsTable.authorId)})`,
         creatorServiceAccount: sql<{ id: string; name: string } | null>`(
           SELECT json_build_object('id', sa.id, 'name', sa.name)
-          FROM service_accounts sa
+          FROM ${schema.serviceAccountsTable} sa
           WHERE sa.id = ${qualified(schema.agentsTable.createdByServiceAccountId)})`,
         llmKey: sql<{ name: string; provider: SupportedProvider } | null>`(
           SELECT json_build_object('name', k.name, 'provider', k.provider)
@@ -2738,11 +2743,11 @@ class AgentModel {
                 and ${isKnowledgeSearchToolName(sql.raw("tc.name"))}
             )
           )
-          FROM agent_tools atc INNER JOIN tools tc ON tc.id = atc.tool_id
+          FROM ${schema.agentToolsTable} atc INNER JOIN ${schema.toolsTable} tc ON tc.id = atc.tool_id
           WHERE atc.agent_id = ${agentId})`,
         model: sql<{ provider: SupportedProvider; modelName: string } | null>`(
           SELECT json_build_object('provider', m.provider, 'modelName', m.model_id)
-          FROM models m WHERE m.id = ${qualified(schema.agentsTable.modelId)})`,
+          FROM ${schema.modelsTable} m WHERE m.id = ${qualified(schema.agentsTable.modelId)})`,
       })
       .from(schema.agentsTable)
       .where(inArray(schema.agentsTable.id, params.agentIds));

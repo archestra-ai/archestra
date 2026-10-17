@@ -253,6 +253,10 @@ function deploymentYamlStatusCheck(
   };
 }
 
+// Reads Zod 4's schema definitions (`_zod.def`), which are not a stable API.
+// An unknown or changed shape counts as "could carry", so a Zod change can
+// only cost the skip, never a redaction; the typed-list case in
+// internal-mcp-catalog.advanced-settings.test.ts fails if the skip is lost.
 function schemaMayCarryDeploymentYaml(
   schema: unknown,
   seen: Set<unknown>,

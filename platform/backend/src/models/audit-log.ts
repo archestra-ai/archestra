@@ -245,7 +245,7 @@ class AuditLogModel {
       WITH latest AS (
         SELECT DISTINCT ON (resource_type, resource_id)
           resource_type, resource_id, resource_name
-        FROM audit_logs
+        FROM ${schema.auditLogsTable}
         WHERE organization_id = ${opts.organizationId}
           AND resource_type IN (${sql.join(
             opts.resourceTypes.map((type) => sql`${type}`),

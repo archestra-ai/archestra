@@ -528,8 +528,8 @@ class KnowledgeBaseModel {
       );
     const empty = sql`'[]'::json`;
     // The live agents of the organization assigned to the outer row.
-    const assignedLiveAgents = sql`agent_knowledge_base akb
-      INNER JOIN agents ag ON ag.id = akb.agent_id
+    const assignedLiveAgents = sql`${schema.agentKnowledgeBasesTable} akb
+      INNER JOIN ${schema.agentsTable} ag ON ag.id = akb.agent_id
       WHERE akb.knowledge_base_id = ${kbId}
         AND ag.organization_id = ${params.organizationId}
         AND ag.deleted_at IS NULL`;
@@ -539,11 +539,11 @@ class KnowledgeBaseModel {
         id: schema.knowledgeBasesTable.id,
         creatorUser: sql<{ id: string; name: string; email: string } | null>`(
           SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
-          FROM "user" u
+          FROM ${schema.usersTable} u
           WHERE u.id = ${qualified(schema.knowledgeBasesTable.createdBy)})`,
         creatorServiceAccount: sql<{ id: string; name: string } | null>`(
           SELECT json_build_object('id', sa.id, 'name', sa.name)
-          FROM service_accounts sa
+          FROM ${schema.serviceAccountsTable} sa
           WHERE sa.id = ${qualified(schema.knowledgeBasesTable.createdByServiceAccountId)})`,
         connectors: params.identityOnly
           ? sql<KnowledgeBaseListEnrichment["connectors"]>`${empty}`
@@ -559,11 +559,11 @@ class KnowledgeBaseModel {
                 'connectorId', a.connector_id,
                 'stored', dc.document_count,
                 'live', CASE WHEN dc.connector_id IS NULL THEN (
-                  SELECT count(*) FROM kb_documents d
+                  SELECT count(*) FROM ${schema.kbDocumentsTable} d
                   WHERE d.connector_id = a.connector_id) END
               )), '[]'::json)
-              FROM knowledge_base_connector_assignment a
-                LEFT JOIN kb_connector_document_counts dc
+              FROM ${schema.knowledgeBaseConnectorAssignmentsTable} a
+                LEFT JOIN ${schema.kbConnectorDocumentCountsTable} dc
                   ON dc.connector_id = a.connector_id
               WHERE a.knowledge_base_id = ${kbId})`,
         assignedAgents:
@@ -589,9 +589,9 @@ class KnowledgeBaseModel {
                 'keyId', kl.key_id, 'valueId', kl.value_id,
                 'key', coalesce(lk.key, ''), 'value', coalesce(lv.value, '')
               ) ORDER BY lk.key), '[]'::json)
-              FROM knowledge_base_labels kl
-                LEFT JOIN label_keys lk ON lk.id = kl.key_id
-                LEFT JOIN label_values lv ON lv.id = kl.value_id
+              FROM ${schema.knowledgeBaseLabelsTable} kl
+                LEFT JOIN ${schema.labelKeysTable} lk ON lk.id = kl.key_id
+                LEFT JOIN ${schema.labelValuesTable} lv ON lv.id = kl.value_id
               WHERE kl.knowledge_base_id = ${kbId})`,
       })
       .from(schema.knowledgeBasesTable)

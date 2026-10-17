@@ -53,6 +53,7 @@ import {
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
+import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
@@ -331,6 +332,8 @@ export async function executeYell(params: {
   args: { message: string; with_trajectory: boolean };
   /** Break the glass is on, so this yell also turns OpenAPPA off for the session. */
   brokeTheGlass?: boolean;
+  /** The authenticated host saw this call without a proxy reporting receipt. */
+  needsAdmission?: boolean;
 }): Promise<CallToolResult> {
   if (!openappaYellEnabled()) {
     return {
@@ -359,6 +362,53 @@ export async function executeYell(params: {
     superyell: params.brokeTheGlass ?? false,
   });
   try {
+    // Opening a native session just to report would enroll a session that
+    // started outside enforcement. Keep its feedback locally without doing so.
+    // No archive is sent, so there is no delivery attempt to record.
+    if (await startedUnenforced(params.session)) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Report recorded for review in Guardrails → Yells. No diagnostic archive was captured because Guardrails was not enforcing this session.",
+          },
+        ],
+      };
+    }
+    if (params.needsAdmission) {
+      // The native reporter requires a released yell, even when the host can
+      // authenticate its session. Admit this report under its own operation id.
+      const [decision] = await evaluateToolCalls(
+        params.session,
+        [
+          {
+            id: params.toolCallId,
+            name: archestraMcpBranding.getToolName("yell"),
+            arguments: params.args,
+          },
+        ],
+        { canonicalize: (name) => name },
+      );
+      if (decision.kind !== "allow") {
+        await OpenAppaYellModel.recordDelivery({
+          id: record.id,
+          organizationId: record.organizationId,
+          failed: true,
+        });
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                decision.kind === "deny"
+                  ? decision.feedback
+                  : "OpenAPPA did not release the reporting call",
+            },
+          ],
+        };
+      }
+    }
     const result = await captureYellReport({
       id: record.id,
       organizationId: record.organizationId,

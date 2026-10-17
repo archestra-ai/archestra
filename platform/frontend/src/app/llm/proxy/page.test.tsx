@@ -428,6 +428,13 @@ describe("LlmProxyPage connect steps", () => {
     expect(
       await screen.findByText(/requests aren't linked to a user/),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Requests without a passthrough key are accepted/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "LLM settings" })).toHaveAttribute(
+      "href",
+      "/settings/llm",
+    );
     const request = await findRequest();
     expect(request).toContain("Authorization: Bearer $JEV_API_KEY");
     expect(request).not.toContain("X-Archestra-Virtual-Key");

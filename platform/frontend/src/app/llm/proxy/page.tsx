@@ -974,31 +974,31 @@ function PassthroughKeyStep({
           </div>
         )}
 
-        {required && (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs leading-[18px] text-muted-foreground">
-              Requests without a passthrough key are rejected.
-              {canManageLlmSettings && (
-                <>
-                  {" "}
-                  Admins can change this in{" "}
-                  <Link
-                    href="/settings/llm"
-                    className="underline hover:text-foreground"
-                  >
-                    LLM settings
-                  </Link>
-                  .
-                </>
-              )}
-            </p>
-            {picked && canCreate && (
-              <Button type="button" size="sm" onClick={onCreate}>
-                + Create new key
-              </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs leading-[18px] text-muted-foreground">
+            {required
+              ? "Requests without a passthrough key are rejected."
+              : "Requests without a passthrough key are accepted, but not linked to a user."}
+            {canManageLlmSettings && (
+              <>
+                {" "}
+                Admins can change this in{" "}
+                <Link
+                  href="/settings/llm"
+                  className="underline hover:text-foreground"
+                >
+                  LLM settings
+                </Link>
+                .
+              </>
             )}
-          </div>
-        )}
+          </p>
+          {picked && canCreate && (
+            <Button type="button" size="sm" onClick={onCreate}>
+              + Create new key
+            </Button>
+          )}
+        </div>
       </section>
     </li>
   );

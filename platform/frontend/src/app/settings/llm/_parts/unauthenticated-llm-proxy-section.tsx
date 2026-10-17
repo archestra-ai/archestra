@@ -67,31 +67,28 @@ export function UnauthenticatedLlmProxySection() {
             )}
           </WithPermissions>
         }
-        notice={
-          <div className="space-y-3">
-            <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40">
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-                Dangerous
-              </p>
-              <p className="text-sm leading-5 text-amber-900/80 dark:text-amber-200/80">
-                These requests are not tied to a user, so per-user limits and
-                attribution don't apply. Keyless self-hosted upstreams such as
-                Ollama or vLLM become reachable by anyone who can reach the
-                proxy.
-              </p>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Next step:{" "}
-              <Link
-                href="/llm/proxy"
-                className="font-medium text-foreground underline"
-              >
-                Set up the LLM proxy
-              </Link>
-            </p>
-          </div>
-        }
-      />
+        contentClassName="flex flex-col gap-[18px]"
+      >
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 dark:border-amber-900 dark:bg-amber-950/40">
+          <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+            Dangerous
+          </span>
+          <p className="text-[13px] leading-5 text-amber-950/80 dark:text-amber-200/80">
+            These requests are not tied to a user, so per-user limits and
+            attribution don't apply. Keyless self-hosted upstreams such as
+            Ollama or vLLM become reachable by anyone who can reach the proxy.
+          </p>
+        </div>
+        <p className="text-[13px] text-muted-foreground">
+          Next step:{" "}
+          <Link
+            href="/llm/proxy"
+            className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+          >
+            Set up the LLM proxy
+          </Link>
+        </p>
+      </SettingsBlock>
       <SettingsSaveBar
         hasChanges={allowed !== saved}
         isSaving={updateMutation.isPending}

@@ -131,6 +131,7 @@ describe("return-label reviews", () => {
       session: reviewSession,
       offerIds: [offerId],
     });
+    if (!issued) throw new Error("expected a return-label review card");
     expect(issued?.card.options.map((option) => option.label)).toEqual([
       "Allow",
       "Deny",
@@ -140,7 +141,6 @@ describe("return-label reviews", () => {
     const label =
       answer === "approve" ? "Allow" : answer === "deny" ? "Deny" : "Inspect";
     expect(hitlReviewCardAnswer(label)).toBe(answer);
-    if (!issued) throw new Error("expected a return-label review card");
     const result = await resolveHitlInspectableAnswer({
       session: reviewSession,
       offerId,

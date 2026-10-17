@@ -40,6 +40,10 @@ export default defineConfig({
         __dirname,
         "../shared/interactions/client.ts",
       ),
+      "@archestra/shared/model-price": path.resolve(
+        __dirname,
+        "../shared/model-price.ts",
+      ),
       "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },

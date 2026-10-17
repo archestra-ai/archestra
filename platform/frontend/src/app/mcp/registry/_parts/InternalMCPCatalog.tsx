@@ -1558,6 +1558,12 @@ function attentionListKey(
 /** The page's own selection state already knows which rows are on screen. */
 function noopPageRowIds(_ids: string[]) {}
 
+/**
+ * Writes the list's URL state with the browser's own history call. Next keeps
+ * `useSearchParams` in step with it, so the list re-reads the URL at once.
+ * `router.replace` would also ask the server for the route's payload on every
+ * filter, sort or page change.
+ */
 function replaceRegistryListUrl(url: string) {
   window.history.replaceState(null, "", url);
 }

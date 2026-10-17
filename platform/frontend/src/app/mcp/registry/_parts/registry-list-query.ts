@@ -113,11 +113,13 @@ export function sameRankTiers(
 export function registryPageFromParams(params: {
   get(name: string): string | null;
 }): { pageIndex: number; pageSize: number } {
-  // Hand-edited or stale links must not produce a request the API refuses.
-  const pageIndex = Math.max(
-    0,
-    Math.floor(Number(params.get("page") || "1") || 1) - 1,
-  );
+  // Hand-edited or stale links must not produce a request the API refuses:
+  // anything but a whole page number (`Infinity`, `1e400`, text) is page 1.
+  const requestedPage = Math.floor(Number(params.get("page")));
+  const pageIndex =
+    Number.isSafeInteger(requestedPage) && requestedPage > 1
+      ? requestedPage - 1
+      : 0;
   const requestedPageSize = Number(params.get("pageSize"));
   const pageSize = PAGE_SIZE_OPTIONS.includes(requestedPageSize)
     ? requestedPageSize

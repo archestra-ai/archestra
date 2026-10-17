@@ -5,6 +5,7 @@ import {
 } from "@/lib/mcp/mcp-server-issues";
 import {
   buildRegistryListQuery,
+  registryPageFromParams,
   registryPageRequestFromUrl,
   registryQueryInputs,
   sameRankTiers,
@@ -212,6 +213,17 @@ describe("buildRegistryListQuery", () => {
     expect(sortKeyFromParams(new URLSearchParams("sortBy=bogus"))).toBe(
       "attention",
     );
+  });
+
+  it("reads anything but a whole page number as the first page", () => {
+    const pageOf = (page: string) =>
+      registryPageFromParams(new URLSearchParams({ page })).pageIndex;
+
+    expect(pageOf("3")).toBe(2);
+    expect(pageOf("2.7")).toBe(1);
+    for (const page of ["Infinity", "1e400", "-4", "0", "abc", ""]) {
+      expect(pageOf(page)).toBe(0);
+    }
   });
 
   it("builds the page request from the URL alone when nothing maps through loaded data", () => {

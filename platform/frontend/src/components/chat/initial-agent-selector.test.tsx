@@ -443,6 +443,30 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows no Add tools button beside an editable agent without tools", async () => {
+    const loaded = { data: [], isSuccess: true } as never;
+    mockUseInternalMcpCatalog.mockReturnValue({
+      data: [catalog],
+      isSuccess: true,
+    } as never);
+    mockUseKnowledgeBases.mockReturnValue(loaded);
+    mockUseConnectors.mockReturnValue(loaded);
+    renderSelector();
+
+    const trigger = screen.getByRole("combobox", { name: "Alpha Agent" });
+    await waitFor(() =>
+      expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
+        enabled: true,
+      }),
+    );
+    // Adding tools goes through the agent's settings; nothing sits next to
+    // the agent button in the composer.
+    expect(trigger).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add tools" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("starts loading the dialog's data when the edit button is hovered", async () => {
     const user = userEvent.setup();
     renderSelector();

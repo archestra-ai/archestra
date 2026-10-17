@@ -650,7 +650,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             dynamicConnectionMcpServerId: item.dynamicConnectionMcpServerId,
             icon: imageIcon ? null : (item.icon ?? null),
             iconUrl:
-              imageIcon && item.icon
+              imageIcon && item.icon && isServableIconDataUrl(item.icon)
                 ? registryIconUrl(item.id, item.icon)
                 : null,
             alertMutes: (alertMutes.get(item.id) ?? []).filter(
@@ -3530,12 +3530,37 @@ function iconVersion(icon: string): string {
 }
 
 /** The bytes of an image `data:` URL, or null for anything else. */
+/**
+ * Image types a browser shows in an `<img>`. The icon route serves only these,
+ * so an upload of any other type never reaches a browser under its own
+ * content type. SVG stays: many server icons are SVG, and the route's CSP
+ * (`default-src 'none'; sandbox`) blocks its scripts and every fetch.
+ */
+const SERVABLE_ICON_TYPES = new Set([
+  "image/apng",
+  "image/avif",
+  "image/bmp",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/svg+xml",
+  "image/vnd.microsoft.icon",
+  "image/webp",
+  "image/x-icon",
+]);
+
+function isServableIconDataUrl(value: string): boolean {
+  const mimeType = /^data:(image\/[a-z0-9.+-]+)[;,]/i.exec(value)?.[1];
+  return !!mimeType && SERVABLE_ICON_TYPES.has(mimeType.toLowerCase());
+}
+
 function decodeImageDataUrl(
   value: string,
 ): { mimeType: string; bytes: Buffer } | null {
   const match = /^data:(image\/[a-z0-9.+-]+)(;base64)?,(.*)$/is.exec(value);
   if (!match) return null;
   const [, mimeType, base64, payload] = match;
+  if (!SERVABLE_ICON_TYPES.has(mimeType.toLowerCase())) return null;
   try {
     return {
       mimeType: mimeType.toLowerCase(),

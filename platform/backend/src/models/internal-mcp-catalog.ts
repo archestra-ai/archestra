@@ -2310,10 +2310,10 @@ class InternalMcpCatalogModel {
           sql`case ${sql.join(
             tiers.map(
               (tier, index) =>
-                sql`when ${inArray(catalog.id, tier)} then ${sql.raw(String(index))}`,
+                sql`when ${inArray(catalog.id, tier)} then ${index}::int`,
             ),
             sql` `,
-          )} else ${sql.raw(String(tiers.length))} end`,
+          )} else ${tiers.length}::int end`,
         ),
       ];
     };

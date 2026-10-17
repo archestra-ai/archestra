@@ -98,6 +98,9 @@ describe("MCP registry list routes", () => {
       ...overrides,
     });
 
+  // A new filter or sort key also belongs in the frontend's registry mocks
+  // (frontend/src/mocks/registry.ts); a spec that uses it there otherwise
+  // passes without any filtering.
   describe("POST /api/internal_mcp_catalog/registry/search", () => {
     test("resolves the caller's membership, teams and grants once per request", async ({
       makeInternalMcpCatalog,
@@ -559,6 +562,23 @@ describe("MCP registry list routes", () => {
       expect(rows.get("image")?.iconUrl).toMatch(
         /^\/api\/internal_mcp_catalog\/[0-9a-f-]+\/icon\?v=/,
       );
+    });
+
+    test("links and serves only image types a browser shows", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const tiff = await makeItem(makeInternalMcpCatalog, "tiff", {
+        icon: "data:image/tiff;base64,SUkqAA==",
+      });
+
+      const row = (await search()).data.find((item) => item.name === "tiff");
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${tiff.id}/icon`,
+      });
+
+      expect(row).toMatchObject({ icon: null, iconUrl: null });
+      expect(response.statusCode).toBe(404);
     });
 
     test("a plain member lists only what they may read, and sees only their installs", async ({
@@ -1203,6 +1223,24 @@ describe("MCP registry list routes", () => {
 
       expect(names(page)).toEqual(["second", "first"]);
       expect(page.attentionTiers).toBeUndefined();
+    });
+
+    test("orders tiers by number, past ten tiers too", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const items = [];
+      for (let i = 0; i < 12; i++) {
+        items.push(await makeItem(makeInternalMcpCatalog, `tier-${i}`));
+      }
+      // Reverse name order, so only the tier number can produce it.
+      const ranked = [...items].reverse();
+
+      const page = await search({
+        sortBy: "attention",
+        rankTiers: ranked.map((item) => [item.id]),
+      });
+
+      expect(names(page)).toEqual(ranked.map((item) => item.name));
     });
   });
 

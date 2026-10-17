@@ -1,11 +1,13 @@
 "use client";
 
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { throwOnApiError } from "@/lib/utils/api";
 
-const { getAuditLogs, getAuditLog } = archestraApiSdk;
+const { getAuditLogs, getAuditLog, getAuditLogResources } = archestraApiSdk;
 
 type AuditLogsQuery = NonNullable<archestraApiTypes.GetAuditLogsData["query"]>;
 type AuditLogsResponse = archestraApiTypes.GetAuditLogsResponses["200"];
@@ -19,6 +21,56 @@ export type AuditActorType = AuditLog["actorType"];
 export type AuditOutcome = AuditLog["outcome"];
 
 export const AUDIT_LOG_QUERY_KEY = ["audit-logs"] as const;
+
+export type AuditLogResourceOption =
+  archestraApiTypes.GetAuditLogResourcesResponses["200"]["data"][number];
+
+/**
+ * Options for the log's resource filter, searched on the server. Nothing is
+ * fetched until `enabled` (the picker opened); the selected resource is
+ * looked up on its own so a filter restored from the URL keeps its name.
+ */
+export function useAuditLogResourceSearch(params: {
+  enabled: boolean;
+  selectedResourceId?: string;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const search = useDebouncedValue(searchQuery.trim(), 250);
+  const options = useQuery({
+    queryKey: [...AUDIT_LOG_QUERY_KEY, "resources", { search }],
+    queryFn: async () => {
+      const { data, error } = await getAuditLogResources({
+        query: { search: search || undefined, limit: RESOURCE_OPTION_LIMIT },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
+    },
+    enabled: params.enabled,
+    placeholderData: keepPreviousData,
+  });
+  const selectedId = params.selectedResourceId;
+  const selected = useQuery({
+    queryKey: [...AUDIT_LOG_QUERY_KEY, "resources", { resourceId: selectedId }],
+    queryFn: async () => {
+      const { data, error } = await getAuditLogResources({
+        query: { resourceId: selectedId, limit: 1 },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
+    },
+    enabled:
+      !!selectedId &&
+      !options.data?.some((option) => option.resourceId === selectedId),
+  });
+  return {
+    options: options.data ?? [],
+    selected:
+      options.data?.find((option) => option.resourceId === selectedId) ??
+      selected.data?.[0],
+    onSearchQueryChange: setSearchQuery,
+    isSearching: searchQuery.trim() !== search || options.isFetching,
+  };
+}
 
 const EMPTY_RESPONSE = (limit: number): AuditLogsResponse => ({
   data: [],
@@ -105,3 +157,5 @@ export function useAuditLog(id: string | undefined) {
     enabled: !!id,
   });
 }
+
+const RESOURCE_OPTION_LIMIT = 50;

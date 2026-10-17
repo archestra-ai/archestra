@@ -438,7 +438,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatAgentRoster,
         description:
-          "Get authorized chat agent identities and model references",
+          "Get authorized chat agent identities and model references. With `bootstrap`, the starting roster plus the caller's and the organization's default agents the caller can use.",
         tags: ["Agents"],
         querystring: z.object({
           bootstrap: z
@@ -461,22 +461,51 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, user, organizationId }, reply) => {
-      const params = await getPermittedAgentRosterOptions({
-        query: {
-          agentType: "agent",
-          excludeBuiltIn: true,
-          includeTools: false,
-          view: "chat",
-        },
-        userId: user.id,
-        organizationId,
-        ids: query.ids,
-      });
-      return reply.send(
-        query.bootstrap && query.ids === undefined
-          ? await AgentModel.findChatRosterBootstrap(params)
-          : await AgentModel.findChatRoster(params),
-      );
+      if (!query.bootstrap || query.ids !== undefined) {
+        return reply.send(
+          await AgentModel.findChatRoster(
+            await getPermittedAgentRosterOptions({
+              query: CHAT_ROSTER_QUERY,
+              userId: user.id,
+              organizationId,
+              ids: query.ids,
+            }),
+          ),
+        );
+      }
+      // The bootstrap also carries the caller's and the organization's
+      // default agents, so a chat page can pick its agent without a second,
+      // dependent roster request for them.
+      const [params, defaultAgentId, organization] = await Promise.all([
+        getPermittedAgentRosterOptions({
+          query: CHAT_ROSTER_QUERY,
+          userId: user.id,
+          organizationId,
+        }),
+        MemberModel.getDefaultAgentId(user.id, organizationId),
+        OrganizationModel.getById(organizationId),
+      ]);
+      const defaultIds = [
+        ...new Set(
+          [defaultAgentId, organization?.defaultAgentId].filter(
+            (id): id is string => !!id,
+          ),
+        ),
+      ];
+      const [starting, defaults] = await Promise.all([
+        AgentModel.findChatRosterBootstrap(params),
+        defaultIds.length > 0
+          ? AgentModel.findChatRoster({
+              ...params,
+              options: { ...params.options, ids: defaultIds },
+            })
+          : Promise.resolve([]),
+      ]);
+      return reply.send([
+        ...new Map(
+          [...starting, ...defaults].map((agent) => [agent.id, agent]),
+        ).values(),
+      ]);
     },
   );
 
@@ -3174,6 +3203,14 @@ async function findPermittedAgentOptions(
     view: "options",
   });
 }
+
+/** The chat roster's filter: internal, non-built-in agents, no tools. */
+const CHAT_ROSTER_QUERY = {
+  agentType: "agent",
+  excludeBuiltIn: true,
+  includeTools: false,
+  view: "chat",
+} as const;
 
 async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
   const { userId, organizationId } = params;

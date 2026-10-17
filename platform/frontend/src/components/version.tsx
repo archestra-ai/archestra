@@ -4,7 +4,9 @@
 import Link from "next/link";
 import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import config from "@/lib/config/config";
+import { useConfig } from "@/lib/config/config.query";
 import { useHealth } from "@/lib/config/health.query";
 import { useLatestGitHubRelease } from "@/lib/github/github-release.query";
 import {
@@ -28,7 +30,11 @@ export const VERSION_SLOT_ATTRIBUTE = "data-version-slot";
 export const VERSION_SLOT_GENERATION_ATTRIBUTE = "data-version-slot-generation";
 
 export const Version = memo(function Version({ inline = false }: VersionProps) {
-  const { data } = useHealth();
+  // Signed in, the version comes with the config the shell already loads;
+  // `/health` is only asked on signed-out pages (e.g. sign-in).
+  const isAuthenticated = useIsAuthenticated();
+  const { data: appConfig } = useConfig();
+  const { data: health } = useHealth({ enabled: !isAuthenticated });
   const { data: organization } = useOrganization();
   const { data: appearance } = useAppearanceSettings();
   // SPDX-SnippetBegin
@@ -38,7 +44,7 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   // SPDX-SnippetEnd
   // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
   const footerText = organization?.footerText ?? appearance?.footerText;
-  const version = data?.version;
+  const version = isAuthenticated ? appConfig?.version : health?.version;
   // Dev and staging builds report a full 40-char commit SHA; seven is enough
   // to identify it, and the full value stays in the hover title.
   const displayVersion =

@@ -53655,7 +53655,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get authorized chat agent identities and model references\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `agent:read`; only internal agents visible to the caller are returned.",
+        "description": "Get authorized chat agent identities and model references. With `bootstrap`, the starting roster plus the caller's and the organization's default agents the caller can use.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `agent:read`; only internal agents visible to the caller are returned.",
         "parameters": [
           {
             "schema": {
@@ -122786,6 +122786,9 @@
                     "config": {
                       "type": "object",
                       "properties": {
+                        "version": {
+                          "type": "string"
+                        },
                         "enterpriseFeatures": {
                           "type": "object",
                           "properties": {
@@ -123133,6 +123136,7 @@
                         }
                       },
                       "required": [
+                        "version",
                         "enterpriseFeatures",
                         "smallTeamTier",
                         "features",
@@ -150303,6 +150307,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "version": {
+                      "type": "string"
+                    },
                     "enterpriseFeatures": {
                       "type": "object",
                       "properties": {
@@ -150650,6 +150657,7 @@
                     }
                   },
                   "required": [
+                    "version",
                     "enterpriseFeatures",
                     "smallTeamTier",
                     "features",

@@ -910,14 +910,25 @@ export function useChatAgents(params?: {
   const savedId = getSavedAgent();
   const enabled = params?.enabled ?? true;
   const bootstrap = useChatAgentBootstrap(enabled);
-  const references = useChatAgentReferences(
-    [
-      ...(params?.ids ?? []),
-      organization.data?.defaultAgentId,
-      memberDefault.data,
-      savedId,
-    ],
-    enabled && !organization.isPending && !memberDefault.isPending,
+  // The ids known at mount (the caller's, the saved one) are looked up
+  // alongside the bootstrap, not after the defaults resolve.
+  const referenceIds = [...(params?.ids ?? []), savedId];
+  const references = useChatAgentReferences(referenceIds, enabled);
+  // The bootstrap includes the caller's and the organization's default agents,
+  // so this second lookup only runs for a default it left out: one the caller
+  // cannot use, or a server from before it included them.
+  const knownIds = new Set([
+    ...(bootstrap.data ?? []).map((agent) => agent.id),
+    ...referenceIds,
+  ]);
+  const missingDefaults = bootstrap.data
+    ? [organization.data?.defaultAgentId, memberDefault.data].filter(
+        (id): id is string => !!id && !knownIds.has(id),
+      )
+    : [];
+  const defaultReferences = useChatAgentReferences(
+    missingDefaults,
+    enabled && missingDefaults.length > 0,
   );
   const defaultsFailed =
     (organization.isError && !organization.data) ||
@@ -927,13 +938,24 @@ export function useChatAgents(params?: {
     (bootstrap.isPending ||
       references.isPending ||
       organization.isPending ||
-      memberDefault.isPending);
+      memberDefault.isPending ||
+      defaultReferences.isPending);
   const data = useMemo(() => {
     if (isPending || defaultsFailed || !references.data || !bootstrap.data)
       return undefined;
-    const rows = [...(bootstrap.data ?? []), ...(references.data ?? [])];
+    const rows = [
+      ...(bootstrap.data ?? []),
+      ...(references.data ?? []),
+      ...(defaultReferences.data ?? []),
+    ];
     return [...new Map(rows.map((row) => [row.id, row])).values()];
-  }, [bootstrap.data, references.data, isPending, defaultsFailed]);
+  }, [
+    bootstrap.data,
+    references.data,
+    defaultReferences.data,
+    isPending,
+    defaultsFailed,
+  ]);
   return {
     ...bootstrap,
     data,
@@ -942,14 +964,20 @@ export function useChatAgents(params?: {
     isError:
       bootstrap.isError ||
       references.isError ||
+      defaultReferences.isError ||
       organization.isError ||
       memberDefault.isError,
-    isSuccess: !defaultsFailed && bootstrap.isSuccess && references.isSuccess,
+    isSuccess:
+      !defaultsFailed &&
+      bootstrap.isSuccess &&
+      references.isSuccess &&
+      !defaultReferences.isPending,
     resolveAgent: (id: string) => findCachedChatAgent(client, id),
     refetch: async () =>
       Promise.all([
         bootstrap.refetch(),
         references.refetch(),
+        ...(missingDefaults.length > 0 ? [defaultReferences.refetch()] : []),
         organization.refetch(),
         memberDefault.refetch(),
       ]),

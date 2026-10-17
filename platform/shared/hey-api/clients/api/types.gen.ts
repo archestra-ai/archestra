@@ -34258,6 +34258,7 @@ export type GetBootstrapResponses = {
             newAppsLockedByDefault: boolean;
         } | null;
         config: {
+            version: string;
             enterpriseFeatures: {
                 core: boolean;
                 knowledgeBase: boolean;
@@ -41749,6 +41750,7 @@ export type GetConfigResponses = {
      * Default Response
      */
     200: {
+        version: string;
         enterpriseFeatures: {
             core: boolean;
             knowledgeBase: boolean;

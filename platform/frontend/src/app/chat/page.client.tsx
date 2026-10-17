@@ -559,7 +559,7 @@ export function ChatPageContent({
 
   const { isLoading: isLoadingFeatures } = useConfig();
   const { data: chatModels = [] } = useLlmModels();
-  const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
+  const isLoadingApiKeyCheck = isLoadingFeatures;
 
   useEffect(() => {
     setConversationId(routeConversationId);
@@ -999,7 +999,9 @@ export function ChatPageContent({
   // Unknown while the usable list loads, so the visible list (restored on
   // refresh) still decides the first paint.
   const hasAnyApiKey =
-    chatApiKeys.length > 0 &&
+    // Until the keys arrive, keep the composer: the no-provider screen shows
+    // only once the list has said there are none.
+    (isLoadingApiKeys || chatApiKeys.length > 0) &&
     // The usable list has not settled yet: keep the composer.
     (isLoadingUsableApiKeys ||
       // A key the viewer may use.
@@ -3026,14 +3028,13 @@ export function ChatPageContent({
     );
   }
 
-  // Hold the screen for one thing only: whether a provider key exists at all.
-  // That decides between two entirely different screens — the composer and the
-  // connect-a-provider prompt — so guessing it and correcting shows the user a
-  // screen that was never true. It is also cheap to wait for: a handful of rows
-  // that the refresh snapshot restores, so on a reload this is already resolved.
+  // Nothing the composer shows holds the screen. The provider keys decide
+  // between the composer and the connect-a-provider prompt, but nearly every
+  // load has keys: the composer renders while they load, with the model
+  // button and send waiting on them, and switches to the prompt only once the
+  // list says there are none.
   //
-  // Everything else the composer needs now fills in around it rather than in
-  // front of it:
+  // The rest of what the composer needs fills in around it as well:
   //
   // - The agent roster. It is the largest thing the page fetches, and on a big
   //   organization it is over the refresh snapshot's per-query budget, so it is
@@ -3486,7 +3487,9 @@ export function ChatPageContent({
                               allowFileUploads={
                                 organization?.allowChatFileUploads ?? false
                               }
-                              isModelsLoading={isModelsLoading}
+                              isModelsLoading={
+                                isModelsLoading || isLoadingApiKeys
+                              }
                               tokensUsed={tokensUsed}
                               cachedTokens={tokenUsage?.cacheReadTokens}
                               maxContextLength={selectedModelContextLength}
@@ -3500,7 +3503,8 @@ export function ChatPageContent({
                                 isWaitingForScheduledPrompt ||
                                 isAwaitingScheduledStream ||
                                 isApplyingAgentSelection ||
-                                isAgentSubscriptionMetadataPending
+                                isAgentSubscriptionMetadataPending ||
+                                isLoadingApiKeys
                               }
                               disabledReason={
                                 isWaitingForScheduledPrompt ||
@@ -3510,7 +3514,9 @@ export function ChatPageContent({
                                     ? "Switching agent…"
                                     : isAgentSubscriptionMetadataPending
                                       ? "Checking the agent's credentials…"
-                                      : undefined
+                                      : isLoadingApiKeys
+                                        ? "Loading model providers…"
+                                        : undefined
                               }
                               subscriptionConnectRequired={
                                 conversationPerUserConnect.needsConnect
@@ -3734,7 +3740,9 @@ export function ChatPageContent({
                               allowFileUploads={
                                 organization?.allowChatFileUploads ?? false
                               }
-                              isModelsLoading={isModelsLoading}
+                              isModelsLoading={
+                                isModelsLoading || isLoadingApiKeys
+                              }
                               inputModalities={selectedModelInputModalities}
                               agentLlmApiKeyId={
                                 (
@@ -3753,6 +3761,7 @@ export function ChatPageContent({
                               // nothing.
                               sendDisabled={
                                 isLoadingAgents ||
+                                isLoadingApiKeys ||
                                 !initialAgentId ||
                                 (!isInitialRuntimeMode &&
                                   isAgentSubscriptionMetadataPending) ||
@@ -3763,15 +3772,17 @@ export function ChatPageContent({
                               disabledReason={
                                 isLoadingAgents
                                   ? "Loading agents…"
-                                  : !initialAgentId
-                                    ? "No agent is available to you"
-                                    : isInitialRuntimeMode
-                                      ? runtimePreflightDisabledReason(
-                                          runtimePreflight,
-                                        )
-                                      : isAgentSubscriptionMetadataPending
-                                        ? "Checking the agent's credentials…"
-                                        : undefined
+                                  : isLoadingApiKeys
+                                    ? "Loading model providers…"
+                                    : !initialAgentId
+                                      ? "No agent is available to you"
+                                      : isInitialRuntimeMode
+                                        ? runtimePreflightDisabledReason(
+                                            runtimePreflight,
+                                          )
+                                        : isAgentSubscriptionMetadataPending
+                                          ? "Checking the agent's credentials…"
+                                          : undefined
                               }
                               subscriptionConnectRequired={
                                 initialPerUserConnect.needsConnect

@@ -295,7 +295,7 @@ export const unpinAgent = <ThrowOnError extends boolean = false>(options: Option
 export const pinAgent = <ThrowOnError extends boolean = false>(options: Options<PinAgentData, ThrowOnError>) => (options.client ?? client).put<PinAgentResponses, PinAgentErrors, ThrowOnError>({ url: '/api/agents/{id}/pin', ...options });
 
 /**
- * Get authorized chat agent identities and model references
+ * Get authorized chat agent identities and model references. With `bootstrap`, the starting roster plus the caller's and the organization's default agents the caller can use.
  *
  * Authentication:
  *

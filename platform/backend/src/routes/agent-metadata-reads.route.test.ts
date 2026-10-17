@@ -3,6 +3,7 @@ import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
+import OrganizationModel from "@/models/organization";
 import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
 import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -188,5 +189,68 @@ describe("agent metadata reads", () => {
     });
     expect(allowed.statusCode).toBe(200);
     expect(allowed.json()).toEqual([]);
+  });
+  test("the chat bootstrap includes the default agents the caller can use", async ({
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "member" });
+    // Older than the agent the bootstrap would pick on its own.
+    const pinned = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      name: "Pinned",
+    });
+    await db
+      .update(schema.agentsTable)
+      .set({ createdAt: new Date("2025-01-01T00:00:00Z") })
+      .where(eq(schema.agentsTable.id, pinned.id));
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      name: "Newest",
+    });
+    // The organization default lives in a team the caller is not in.
+    const owner = await makeUser();
+    const team = await makeTeam(ctx.organizationId, owner.id, {
+      name: "Other",
+    });
+    const organizationDefault = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      agentType: "agent",
+      name: "Org default",
+      access: { teams: [team.id] },
+    });
+    await OrganizationModel.patch(ctx.organizationId, {
+      defaultAgentId: organizationDefault.id,
+    });
+    const before = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/chat-roster?bootstrap=true",
+    });
+    expect(
+      before.json().map((agent: { id: string }) => agent.id),
+    ).not.toContain(pinned.id);
+    const pin = await ctx.app.inject({
+      method: "PUT",
+      url: "/api/members/default-agent",
+      payload: { defaultAgentId: pinned.id },
+    });
+    expect(pin.statusCode).toBe(200);
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agents/chat-roster?bootstrap=true",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const ids = response.json().map((agent: { id: string }) => agent.id);
+    expect(ids).toContain(pinned.id);
+    expect(ids).not.toContain(organizationDefault.id);
   });
 });

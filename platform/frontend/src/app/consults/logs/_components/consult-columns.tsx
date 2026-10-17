@@ -12,6 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { formatCompactRelativeTime, formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import type { ConsultView } from "./consult-details";
@@ -69,7 +70,12 @@ function ServiceCell({ view }: { view: ConsultView }) {
   const { consult } = view;
   const tone = toneOf(consult.outcome);
   const role = consult.role.replaceAll("_", " ");
-  const backend = BACKEND_LABEL[consult.backend] ?? consult.backend;
+  const appName = useAppName();
+  // The `archestra` backend is this deployment, so it carries its own name.
+  const backend =
+    consult.backend === "archestra"
+      ? appName
+      : (BACKEND_LABEL[consult.backend] ?? consult.backend);
   return (
     <div className="relative flex min-w-0 items-center gap-3">
       {tone === "fail" ? (
@@ -416,7 +422,6 @@ const BACKEND_LABEL: Record<string, string> = {
   jev: "Jev",
   claude_code: "Claude Code",
   hitl: "Human review",
-  archestra: "Archestra",
 };
 
 const HTTP_TEXT: Record<number, string> = {

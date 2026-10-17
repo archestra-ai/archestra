@@ -257,12 +257,6 @@ const AgentToolsEditorContent = forwardRef<
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const bulkUpdateTools = useBulkUpdateAgentTools();
 
-  // Fetch all credentials grouped by catalog (for default credential on toggle)
-  const allCredentials = useMcpServersGroupedByCatalog({
-    assignmentScope,
-    assignmentTeamIds,
-  });
-
   // Fetch assigned tools for this resource (only when editing an existing one).
   // Use the resource-scoped endpoint so MCP gateway members do not need the
   // broader tool-policy table permission just to edit their gateway tools.
@@ -357,6 +351,16 @@ const AgentToolsEditorContent = forwardRef<
     !debouncedCatalogSearch &&
     catalogPage.data?.pagination.total === 0 &&
     catalogItems.length === 0;
+
+  // The installs this record could use, for the "Not connected" gate — only
+  // for the catalogs on screen, and only those that need an install at all.
+  const allCredentials = useMcpServersGroupedByCatalog({
+    assignmentScope,
+    assignmentTeamIds,
+    catalogIdsIn: catalogItems
+      .filter((catalog) => !isCredentialLessCatalogType(catalog.serverType))
+      .map((catalog) => catalog.id),
+  });
 
   // Tool counts come from the registry rows themselves (`toolCount`, one
   // grouped COUNT server-side). This used to be a per-catalog `useQueries`

@@ -18,6 +18,7 @@ import {
   expect,
   it,
 } from "vitest";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import { AgentToolsEditor } from "./agent-tools-editor";
 
 // The combobox positions itself with floating-ui, which constructs a
@@ -132,10 +133,11 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-function renderEditor() {
+function renderEditor(seed?: (client: QueryClient) => void) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  seed?.(queryClient);
   return render(
     <QueryClientProvider client={queryClient}>
       <AgentToolsEditor agentId={AGENT_ID} />
@@ -371,5 +373,67 @@ describe("AgentToolsEditor", () => {
           body.catalogIds?.length === 1 && body.catalogIds[0] === "catalog-79",
       ),
     ).toBe(true);
+  });
+
+  it("checks connections only for the servers on screen", async () => {
+    // Remote servers need an install the record can use; the gate asks for
+    // those installs by catalog, not for every install in the organization.
+    const remote = (id: string, name: string): CatalogItem => ({
+      ...catalogItem,
+      id,
+      name,
+      serverType: "remote",
+    });
+    const installRequests: URLSearchParams[] = [];
+    server.use(
+      registrySearch([
+        remote("catalog-connected", "connected-server"),
+        remote("catalog-unconnected", "unconnected-server"),
+      ]),
+      http.get(`${API_ORIGIN}/api/mcp_server`, ({ request }) => {
+        installRequests.push(new URL(request.url).searchParams);
+        return HttpResponse.json([
+          {
+            id: "install-1",
+            name: "connected-server",
+            catalogId: "catalog-connected",
+            ownerId: "user-1",
+            scope: "org",
+          },
+        ]);
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderEditor((client) => {
+      // A signed-in reader who may read installs.
+      client.setQueryData(authQueryKeys.session(), {
+        user: { id: "user-1" },
+        session: {},
+      });
+      client.setQueryData(authQueryKeys.userPermissions(), {
+        mcpServerInstallation: ["read"],
+      });
+      client.setQueryData(["config"], { features: {} });
+    });
+    await user.click(await screen.findByRole("button", { name: /add/i }));
+
+    expect(
+      await screen.findByRole("menuitemcheckbox", {
+        name: /unconnected-server/,
+      }),
+    ).toHaveTextContent("Not connected");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("menuitemcheckbox", { name: /^connected-server/ }),
+      ).toHaveTextContent("150 tools"),
+    );
+    expect(installRequests.length).toBeGreaterThan(0);
+    for (const params of installRequests) {
+      expect(params.get("catalogIds")?.split(",").sort()).toEqual([
+        "catalog-connected",
+        "catalog-unconnected",
+      ]);
+    }
   });
 });

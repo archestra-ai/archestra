@@ -241,13 +241,30 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
  *
  * @param catalogId - Optional catalog ID to filter. If provided, only returns servers for that catalog.
  */
-export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
-  const { data: servers } = useMcpServers({
+export function useMcpServersGroupedByCatalog(
+  params?: McpServersQuery & {
+    /**
+     * Only the installs of these catalog items, for a list that shows a few
+     * of them: asked in requests of a hundred ids, the endpoint's limit.
+     * Omitted, every install the caller can see is read.
+     */
+    catalogIdsIn?: string[];
+  },
+) {
+  const scoped = params?.catalogIdsIn !== undefined;
+  const { data: allServers } = useMcpServers({
     includeAssignedAgents: false,
     catalogId: params?.catalogId,
     assignmentScope: params?.assignmentScope,
     assignmentTeamIds: params?.assignmentTeamIds,
+    enabled: !scoped,
   });
+  const scopedServers = useMcpServersForCatalogIds({
+    catalogIds: params?.catalogIdsIn ?? [],
+    assignmentScope: params?.assignmentScope,
+    assignmentTeamIds: params?.assignmentTeamIds,
+  });
+  const servers = scoped ? scopedServers : allServers;
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -1310,3 +1327,63 @@ function patchIssueIndexServer(params: {
     },
   );
 }
+
+/**
+ * The installs of the given catalog items, assignable to a target when a scope
+ * is given; `undefined` until every chunk has answered. Each chunk is cached
+ * under `["mcp-servers", …]` like any server list, so status pushes and server
+ * changes reach it.
+ */
+function useMcpServersForCatalogIds(params: {
+  catalogIds: string[];
+  assignmentScope?: McpServersQuery["assignmentScope"];
+  assignmentTeamIds?: string[];
+}) {
+  const { data: canReadInstallations } = useHasPermissions({
+    mcpServerInstallation: ["read"],
+  });
+  const sortedIds = [...new Set(params.catalogIds)].sort();
+  const chunks: string[][] = [];
+  for (let i = 0; i < sortedIds.length; i += MAX_CATALOG_IDS_PER_REQUEST) {
+    chunks.push(sortedIds.slice(i, i + MAX_CATALOG_IDS_PER_REQUEST));
+  }
+  return useQueries({
+    queries: chunks.map((catalogIds) => ({
+      queryKey: [
+        "mcp-servers",
+        {
+          catalogIds,
+          includeAssignedAgents: false,
+          assignmentScope: params.assignmentScope,
+          assignmentTeamIds: params.assignmentTeamIds,
+        },
+      ],
+      enabled: !!canReadInstallations,
+      queryFn: async () => {
+        const { data, error } = await getMcpServers({
+          query: {
+            catalogIds,
+            includeAssignedAgents: false,
+            ...(params.assignmentScope && {
+              assignmentScope: params.assignmentScope,
+            }),
+            ...(params.assignmentTeamIds && {
+              assignmentTeamIds: params.assignmentTeamIds,
+            }),
+          },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        return data ?? [];
+      },
+    })),
+    combine: combineServerChunks,
+  });
+}
+
+function combineServerChunks<T>(results: Array<{ data: T[] | undefined }>) {
+  return results.every((result) => result.data)
+    ? results.flatMap((result) => result.data ?? [])
+    : undefined;
+}
+
+const MAX_CATALOG_IDS_PER_REQUEST = 100;

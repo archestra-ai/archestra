@@ -309,12 +309,7 @@ export function useMcpRegistryRowsByIds(
         return data?.data ?? [];
       },
     })),
-    combine: (results) => ({
-      data: results.flatMap((result) => result.data ?? []),
-      isPending: results.some((result) => result.isPending),
-      isError: results.some((result) => result.isError),
-      refetch: () => Promise.all(results.map((result) => result.refetch())),
-    }),
+    combine: combineRowChunks,
   });
 }
 
@@ -450,6 +445,23 @@ async function takeEarlyRequest(
   } catch {
     return undefined;
   }
+}
+
+/** Module-level, so `useQueries` can keep its combined result between renders. */
+function combineRowChunks(
+  results: Array<{
+    data: McpRegistryRow[] | undefined;
+    isPending: boolean;
+    isError: boolean;
+    refetch: () => Promise<unknown>;
+  }>,
+) {
+  return {
+    data: results.flatMap((result) => result.data ?? []),
+    isPending: results.some((result) => result.isPending),
+    isError: results.some((result) => result.isError),
+    refetch: () => Promise.all(results.map((result) => result.refetch())),
+  };
 }
 
 function normalizeIssueIndex(

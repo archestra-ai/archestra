@@ -59,6 +59,8 @@ class LimitReadCleanup {
   }
 }
 
+// Limit pages poll every 5 s, so one cleanup per 30 s still shows an elapsed
+// window as reset within half a minute. Enforcement does not wait for it.
 const READ_CLEANUP_INTERVAL_MS = 30 * TimeInMs.Second;
 
 export const limitReadCleanup = new LimitReadCleanup();

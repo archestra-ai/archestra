@@ -114,4 +114,7 @@ test("applicableTo keeps clients that can reach the target over its protocol", a
     "Users over A2A",
   ]);
   expect(await names(gateway.id)).toEqual(["Lists both", "Users over MCP"]);
+  // An id that is no agent or gateway of this organization reaches nothing,
+  // not even the sign-in clients.
+  expect(await names(crypto.randomUUID())).toEqual([]);
 });

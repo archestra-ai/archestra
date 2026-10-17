@@ -566,6 +566,8 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user }, reply) => {
+      // No visible keys: a picker needs each model and its `isBest` flag
+      // (still taken across every link), not the keys that serve it.
       const linked = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
         visibleKeyIds: [],
       });

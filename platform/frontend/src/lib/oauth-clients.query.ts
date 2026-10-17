@@ -232,8 +232,10 @@ export function useOauthClientsForResource({
           query: { applicableTo: resourceId, limit: 100, offset },
         });
         throwOnApiError(error, { toastOnError: false });
-        clients.push(...(data?.data ?? []));
-        if (!data?.pagination.hasNext) return clients;
+        const page = data?.data ?? [];
+        clients.push(...page);
+        // An empty page also ends the walk, so a wrong hasNext cannot spin.
+        if (!data?.pagination.hasNext || page.length === 0) return clients;
       }
     },
   });

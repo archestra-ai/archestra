@@ -977,7 +977,7 @@ describe("LimitModel", () => {
     });
   });
 
-  describe("getModelUsageBreakdown", () => {
+  describe("getModelUsageBreakdowns", () => {
     test("should return empty array for limit with no usage", async ({
       makeAgent,
     }) => {
@@ -1090,11 +1090,67 @@ describe("LimitModel", () => {
       const findByModelIdsOnlySpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
       const findByModelIdOnlySpy = vi.spyOn(ModelModel, "findByModelIdOnly");
 
-      (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
-        [];
+      await LimitModel.getModelUsageBreakdowns([limit.id]);
 
       expect(findByModelIdsOnlySpy).toHaveBeenCalledTimes(1);
       expect(findByModelIdOnlySpy).not.toHaveBeenCalled();
+    });
+
+    test("keys each limit's usage by its id, with one pricing lookup for all", async ({
+      makeAgent,
+    }) => {
+      const first = await makeAgent({ name: "First" });
+      const second = await makeAgent({ name: "Second" });
+      const tokenCostLimit = (entityId: string, model: string) =>
+        LimitModel.create({
+          entityType: "agent",
+          entityId,
+          limitType: "token_cost",
+          limitValue: 1000000,
+          model: [model],
+        });
+      const firstLimit = await tokenCostLimit(first.id, "gpt-4o");
+      const secondLimit = await tokenCostLimit(
+        second.id,
+        "claude-3-5-sonnet-20241022",
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        first.id,
+        "gpt-4o",
+        100,
+        50,
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        second.id,
+        "claude-3-5-sonnet-20241022",
+        300,
+        150,
+      );
+      const unknownLimitId = crypto.randomUUID();
+      const pricingSpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
+
+      const breakdowns = await LimitModel.getModelUsageBreakdowns([
+        firstLimit.id,
+        secondLimit.id,
+        unknownLimitId,
+      ]);
+
+      expect(pricingSpy).toHaveBeenCalledTimes(1);
+      const tokens = (limitId: string) =>
+        breakdowns.get(limitId)?.map(({ model, tokensIn, tokensOut }) => ({
+          model,
+          tokensIn,
+          tokensOut,
+        }));
+      expect(tokens(firstLimit.id)).toEqual([
+        { model: "gpt-4o", tokensIn: 100, tokensOut: 50 },
+      ]);
+      expect(tokens(secondLimit.id)).toEqual([
+        { model: "claude-3-5-sonnet-20241022", tokensIn: 300, tokensOut: 150 },
+      ]);
+      expect(breakdowns.get(unknownLimitId)).toEqual([]);
     });
   });
 

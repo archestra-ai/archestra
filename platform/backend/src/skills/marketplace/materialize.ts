@@ -718,7 +718,16 @@ class FastImportWriter {
       throw new Error(`git fast-import exited early: ${this.stderr.trim()}`);
     }
     if (stdin.write(chunk)) return;
-    await Promise.race([once(stdin, "drain"), this.exited]);
+    try {
+      await Promise.race([once(stdin, "drain"), this.exited]);
+    } catch (error) {
+      // once(stream, "drain") rejects on a pipe error before the child's
+      // close event. Preserve the subprocess diagnostic in that ordering too.
+      await this.exited;
+      throw new Error(`git fast-import exited early: ${this.stderr.trim()}`, {
+        cause: error,
+      });
+    }
     // `exited` wins the race when git stops reading and exits 0; the rest of
     // the stream would go nowhere
     if (this.proc.exitCode !== null || this.proc.signalCode) {

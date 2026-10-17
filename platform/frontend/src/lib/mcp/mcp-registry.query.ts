@@ -294,6 +294,9 @@ export function useMcpRegistryRowsByIds(
   return useQueries({
     queries: chunks.map((catalogIds) => ({
       queryKey: [...mcpRegistryQueryKey, "rows-by-id", catalogIds, options],
+      // Adding or removing one id changes the request; keep the rows already
+      // known on screen until it answers.
+      placeholderData: (previous: McpRegistryRow[] | undefined) => previous,
       queryFn: async () => {
         const { data, error } = await searchMcpRegistry({
           body: {

@@ -320,12 +320,10 @@ export default function CostExplorer() {
                   className="text-left text-foreground underline-offset-2 hover:underline"
                 >
                   Subscription usage at API rates:{" "}
-                  <span className="whitespace-nowrap font-medium">
+                  <span className="whitespace-nowrap">
                     {formatCost(
                       statistics.data.costSavings.totalSubscriptionCost,
-                    )}
-                  </span>{" "}
-                  <span className="whitespace-nowrap">
+                    )}{" "}
                     (estimate, not a bill)
                     <ArrowRight className="ml-1 inline size-3 align-[-2px]" />
                   </span>

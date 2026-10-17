@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Infinity as InfinityIcon,
   Plus,
+  RotateCw,
   Search,
   SlidersHorizontal,
   Wrench,
@@ -606,9 +607,49 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                     setSearch(e.target.value);
                     if (listRef.current) listRef.current.scrollTop = 0;
                   }}
-                  className="h-8 rounded-lg border-transparent bg-muted/50 pl-8 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                  className={cn(
+                    "h-8 rounded-lg border-transparent bg-muted/50 pl-8 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0",
+                    page.isError && "pr-9",
+                  )}
                   autoFocus
                 />
+                {page.isError && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="Retry loading agents"
+                        className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        disabled={page.isFetching || search !== debouncedSearch}
+                        onClick={() => {
+                          if (!page.isFetchNextPageError) {
+                            void page.refetch();
+                          } else {
+                            loadMore();
+                          }
+                        }}
+                      >
+                        <RotateCw
+                          aria-hidden
+                          className={cn(
+                            "size-3.5",
+                            page.isFetching &&
+                              "animate-spin motion-reduce:animate-none",
+                          )}
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <span>
+                        {page.isFetching
+                          ? "Loading agents…"
+                          : "Retry loading agents"}
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
               </div>
             </div>
             <div
@@ -698,24 +739,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 ))
               )}
             </div>
-            {page.isError && (
-              <div className="flex justify-center border-t px-2 py-1.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={page.isFetching || search !== debouncedSearch}
-                  onClick={() => {
-                    if (page.isError && !page.isFetchNextPageError) {
-                      void page.refetch();
-                    } else {
-                      loadMore();
-                    }
-                  }}
-                >
-                  {page.isFetching ? "Loading agents…" : "Retry loading agents"}
-                </Button>
-              </div>
-            )}
             <div className="flex items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
                 <Link href={agentNewHref("agent")}>

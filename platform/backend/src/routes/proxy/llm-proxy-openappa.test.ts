@@ -47,6 +47,7 @@ import {
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaThreadStateModel from "@/models/openappa-thread-state";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
+import OrganizationModel from "@/models/organization";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
 import {
@@ -84,6 +85,7 @@ import {
   createAnthropicTestClient,
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { type Agent, ApiError } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { anthropicAdapterFactory, openaiAdapterFactory } from "./adapters";
@@ -137,6 +139,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let app: FastifyInstance;
   let agent: Agent;
   let userId: string;
+  /** The passthrough virtual key the client sends beside its provider key. */
+  let platformKey: string;
   let sessionId: string;
   let options: AnthropicStubOptions;
   let providerRequests: unknown[];
@@ -187,6 +191,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     agent = await makeAgent({ name: "Native proxy test" });
     userId = (await makeUser()).id;
     await makeMember(userId, agent.organizationId);
+    platformKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: userId,
+    });
     sessionId = (
       await makeConversation(agent.id, {
         userId,
@@ -333,6 +341,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
   const headers = () => ({
     "x-api-key": "test-key",
+    "x-archestra-virtual-key": platformKey,
     "anthropic-version": "2023-06-01",
     "x-archestra-source": "chat",
     "x-archestra-user-id": userId,
@@ -350,6 +359,22 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       remoteAddress: "127.0.0.1",
       headers: { ...headers(), ...extraHeaders },
       payload: payloadBody as Record<string, unknown>,
+    });
+
+  /**
+   * `headers()` without the platform credential: a caller holding only a
+   * provider key, whose user and session headers are claims nobody verified.
+   * Such a caller reaches OpenAPPA only where the organization allows
+   * unauthenticated proxy requests, so the cases about it turn that on with
+   * `allowUnauthenticatedCallers`.
+   */
+  const unauthenticatedHeaders = () => {
+    const { "x-archestra-virtual-key": _platformKey, ...rest } = headers();
+    return rest;
+  };
+  const allowUnauthenticatedCallers = () =>
+    OrganizationModel.patch(agent.organizationId, {
+      allowUnauthenticatedLlmProxyRequests: true,
     });
 
   test.for([
@@ -436,6 +461,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     };
     const requestHeaders = {
       authorization: "Bearer test-key",
+      "x-archestra-virtual-key": platformKey,
       "x-archestra-user-id": userId,
       "x-appa-session-id": sessionId,
       "x-archestra-source": "chat",
@@ -622,6 +648,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const requestsBeforeForeignOwner = sent.length;
     const foreignOwner = await submit(nextBody, {
       "x-archestra-user-id": otherUser.id,
+      "x-archestra-virtual-key": await makePassthroughCredential({
+        organizationId: agent.organizationId,
+        ownerId: otherUser.id,
+      }),
     });
     expect(foreignOwner.statusCode).toBe(403);
     expect(sent).toHaveLength(requestsBeforeForeignOwner);
@@ -1669,12 +1699,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   test("does not trust a remote caller's delegation chain", async () => {
+    await allowUnauthenticatedCallers();
     const response = await app.inject({
       method: "POST",
       url: url(),
       remoteAddress: "203.0.113.20",
       headers: {
-        ...headers(),
+        ...unauthenticatedHeaders(),
         "x-archestra-source": "a2a",
         "x-archestra-agent-id": `a637fb55-989b-4f01-a251-e7e277c65f05:${agent.id}`,
       },
@@ -2063,6 +2094,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       remoteAddress: "127.0.0.1",
       headers: {
         "x-api-key": "test-key",
+        "x-archestra-virtual-key": platformKey,
         "anthropic-version": "2023-06-01",
         "x-archestra-source": source,
         ...proof,
@@ -2208,6 +2240,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test("block mode still governs a known client and an explicit APPA session", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    // The roots below are those of a loopback caller the platform did not
+    // authenticate.
+    await allowUnauthenticatedCallers();
+    const { "x-archestra-virtual-key": _platformKey, ...clientHeaders } =
+      externalClientHeaders();
     for (const extraHeaders of [
       { "x-claude-code-session-id": "known-session" },
       { "x-appa-session-id": "explicit-session" },
@@ -2216,7 +2253,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         method: "POST",
         url: url(),
         remoteAddress: "127.0.0.1",
-        headers: { ...externalClientHeaders(), ...extraHeaders },
+        headers: { ...clientHeaders, ...extraHeaders },
         payload: payload(false) as Record<string, unknown>,
       });
       expect(response.statusCode, response.body).toBe(200);
@@ -4574,9 +4611,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const stranger = (await makeUser()).id;
     await makeMember(stranger, agent.organizationId);
 
-    for (const [caller, id] of [
-      [stranger, stamped],
-      [userId, forged],
+    const strangerKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: stranger,
+    });
+
+    for (const [caller, key, id] of [
+      [stranger, strangerKey, stamped],
+      [userId, platformKey, forged],
     ]) {
       events.length = 0;
       providerRequests.length = 0;
@@ -4586,6 +4628,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         remoteAddress: "127.0.0.1",
         headers: {
           ...externalClientHeaders(),
+          "x-archestra-virtual-key": key,
           "x-archestra-user-id": caller,
           "x-claude-code-session-id": replaying,
         },
@@ -5085,7 +5128,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   }
 
   test("refuses a Chat request that names no user, instead of binding it unchecked", async () => {
-    const { "x-archestra-user-id": _user, ...noUser } = headers();
+    await allowUnauthenticatedCallers();
+    const { "x-archestra-user-id": _user, ...noUser } =
+      unauthenticatedHeaders();
     const response = await app.inject({
       method: "POST",
       url: url(),
@@ -5472,12 +5517,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     "chat:compaction",
     "chatops:slack",
   ])("does not authenticate a remote caller claiming %s", async (source) => {
-    // A session id and a user-attribution header are claims, not credentials.
+    // A session id and a user-attribution header are claims, not credentials,
+    // even where the organization admits callers it did not authenticate.
+    await allowUnauthenticatedCallers();
     const response = await app.inject({
       method: "POST",
       url: url(),
       remoteAddress: "203.0.113.20",
-      headers: { ...headers(), "x-archestra-source": source },
+      headers: { ...unauthenticatedHeaders(), "x-archestra-source": source },
       payload: payload(false) as Record<string, unknown>,
     });
 
@@ -5495,7 +5542,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     stream,
     withUser,
   }) => {
-    const { "x-archestra-user-id": _user, ...requestHeaders } = headers();
+    // No platform credential, so the session and caller come from these
+    // headers alone.
+    await allowUnauthenticatedCallers();
+    const { "x-archestra-user-id": _user, ...requestHeaders } =
+      unauthenticatedHeaders();
     const slackSessionId = "chatops:slack:shared-thread";
 
     const response = await app.inject({
@@ -8378,6 +8429,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             remoteAddress: "127.0.0.1",
             headers: {
               authorization: "Bearer test-key",
+              "x-archestra-virtual-key": platformKey,
               "content-type": "application/json",
               "user-agent": "codex_cli_rs/0.154.0",
               "x-archestra-user-id": userId,
@@ -8719,6 +8771,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           remoteAddress: "127.0.0.1",
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
             "user-agent": "opencode/1.18.31",
             "x-archestra-user-id": userId,
             [sessionHeader]: id,
@@ -8958,6 +9011,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           remoteAddress: "127.0.0.1",
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
             "user-agent": "opencode/1.18.31",
             "x-archestra-user-id": userId,
             "x-session-id": params.id,
@@ -10348,6 +10402,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           remoteAddress: "127.0.0.1",
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
             "content-type": "application/json",
             "user-agent": "codex_cli_rs/0.154.0",
             "x-archestra-user-id": userId,
@@ -10581,6 +10636,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           remoteAddress: "127.0.0.1",
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
             "content-type": "application/json",
             "user-agent": "codex_cli_rs/0.159.2",
             "x-archestra-user-id": userId,
@@ -10836,6 +10892,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           remoteAddress: "127.0.0.1",
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
             "content-type": "application/json",
             "user-agent": mailbox
               ? "codex_cli_rs/0.159.2"
@@ -11335,6 +11392,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           remoteAddress: "127.0.0.1",
           headers: {
             authorization: "Bearer test-key",
+            "x-archestra-virtual-key": platformKey,
             "content-type": "application/json",
             "user-agent": mailbox
               ? "codex_cli_rs/0.159.2"
@@ -13097,6 +13155,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
 
     test("a raw provider key does not bypass APPA through the setup URL", async () => {
+      // Even where the organization admits a bare provider key, OpenAPPA
+      // refuses a governed request that carries no platform credential.
+      await allowUnauthenticatedCallers();
       for (const token of [
         issueFor(passthroughKeyId),
         issueFor(virtualKeyId),
@@ -13235,6 +13296,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   let app: FastifyInstance;
   let agent: Agent;
   let userId: string;
+  let platformCredential: string;
   let events: Array<Record<string, unknown>>;
   let providerCalls: number;
   let providerBodies: unknown[];
@@ -13268,6 +13330,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     agent = await makeAgent({ name: "Native proxy OpenAI test" });
     userId = (await makeUser()).id;
     await makeMember(userId, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: userId,
+    });
     events = [];
     providerCalls = 0;
     providerBodies = [];
@@ -13391,6 +13457,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
 
   const codexHeaders = () => ({
     authorization: "Bearer test-key",
+    "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "codex_cli_rs/0.153.0 (Linux 6.6; x86_64)",
     originator: "codex_cli_rs",
@@ -13432,6 +13499,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
 
   const openCodeHeaders = () => ({
     authorization: "Bearer test-key",
+    "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
   });
@@ -15686,6 +15754,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       remoteAddress: "127.0.0.1",
       headers: {
         authorization: "Bearer test-key",
+        "x-archestra-virtual-key": platformCredential,
         "x-archestra-user-id": userId,
         "x-session-affinity": OPENCODE_SESSION,
       },
@@ -15875,6 +15944,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
   let app: FastifyInstance;
   let agent: Agent;
   let userId: string;
+  let platformCredential: string;
   let events: Array<Record<string, unknown>>;
   let providerBodies: unknown[];
   let denyTools: Set<string>;
@@ -15908,6 +15978,10 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     agent = await makeAgent({ name: "Native proxy batch matrix" });
     userId = (await makeUser()).id;
     await makeMember(userId, agent.organizationId);
+    platformCredential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: userId,
+    });
     events = [];
     providerBodies = [];
     denyTools = new Set();
@@ -16174,6 +16248,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
 
   const chatHeaders = () => ({
     authorization: "Bearer test-key",
+    "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "opencode/1.18.29",
     "x-session-id": CHAT_SESSION,
@@ -16199,6 +16274,7 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
 
   const responsesHeaders = () => ({
     authorization: "Bearer test-key",
+    "x-archestra-virtual-key": platformCredential,
     "x-archestra-user-id": userId,
     "user-agent": "codex_cli_rs/0.153.0 (Linux 6.6; x86_64)",
     originator: "codex_cli_rs",

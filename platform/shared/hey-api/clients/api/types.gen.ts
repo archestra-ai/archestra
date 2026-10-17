@@ -34148,6 +34148,7 @@ export type GetBootstrapResponses = {
             onlineSkillCatalogEnabled: boolean;
             skillMarketplaceAnonymousAccess: boolean;
             allowChatFileUploads: boolean;
+            allowUnauthenticatedLlmProxyRequests: boolean;
             allowToolAutoAssignment: boolean;
             embeddingModel: string | null;
             embeddingDimensions: EmbeddingDimensions | null;
@@ -94786,6 +94787,7 @@ export type GetOrganizationResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -95122,6 +95124,7 @@ export type UpdateAppearanceSettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -95237,6 +95240,7 @@ export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses
 export type UpdateSecuritySettingsData = {
     body: {
         allowChatFileUploads?: boolean;
+        allowUnauthenticatedLlmProxyRequests?: boolean;
         newAppsDisabledByDefault?: boolean;
         newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
@@ -95335,6 +95339,7 @@ export type UpdateSecuritySettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -95546,6 +95551,7 @@ export type UpdateMcpSettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -95757,6 +95763,7 @@ export type UpdateSkillsSettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -95969,6 +95976,7 @@ export type UpdateAgentSettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -96203,6 +96211,7 @@ export type UpdateConnectionSettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -96450,6 +96459,7 @@ export type UpdateIntegrationSettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -96671,6 +96681,7 @@ export type UpdateDefaultEnvironmentResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -96887,6 +96898,7 @@ export type UpdateAuthSettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -97105,6 +97117,7 @@ export type UpdateKnowledgeSettingsResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -97313,6 +97326,7 @@ export type DropEmbeddingConfigResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
@@ -97883,6 +97897,7 @@ export type CompleteOnboardingResponses = {
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
+        allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;

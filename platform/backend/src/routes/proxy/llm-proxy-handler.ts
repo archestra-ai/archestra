@@ -53,6 +53,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  OrganizationModel,
   TeamModel,
   UserModel,
   UserTokenModel,
@@ -130,8 +131,8 @@ import {
   withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
 import {
-  assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
+  assertPlatformAuthenticated,
   attemptJwksAuth,
   isJwtLike,
   resolveAgent,
@@ -964,19 +965,24 @@ export async function handleLLMProxy<
     });
   }
 
-  // 5. Enforce authentication for keyless providers on external requests.
-  // A passthrough key authenticates the user but carries no provider credential,
-  // so it intentionally does not satisfy the keyless-provider requirement.
-  assertAuthenticatedForKeylessProvider({
+  // 5. Enforce a platform credential on external requests (rules in
+  // assertPlatformAuthenticated). The organization setting is read only when
+  // nothing else authenticates the request.
+  await assertPlatformAuthenticated({
     apiKey,
-    wasVirtualKeyResolved:
+    hasPlatformCredential:
       wasVirtualKeyResolved ||
       wasOAuthAuthenticated ||
       personalTokenUserId !== undefined,
+    wasPassthroughKeyValidated: passthroughVirtualKeyId !== undefined,
     wasJwksAuthenticated,
     isInternalCall: internalCall,
     providerSuppliesServerCredential:
       providerSuppliesServerCredential(providerName),
+    allowsUnauthenticated: () =>
+      OrganizationModel.allowsUnauthenticatedLlmProxyRequests(
+        resolvedAgent.organizationId,
+      ),
   });
 
   // All authenticated user-scoped credentials must resolve to the same user.

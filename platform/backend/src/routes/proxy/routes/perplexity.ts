@@ -26,6 +26,7 @@ import {
   perplexityResponsesAdapterFactory,
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -49,6 +50,7 @@ const perplexityProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, RESPONSES_SUFFIX],
       upstream: config.llm.perplexity.baseUrl,
       providerName: "Perplexity",
+      authenticate: createPassthroughAuthenticator("perplexity"),
     }),
   });
 

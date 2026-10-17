@@ -15,21 +15,17 @@
  */
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
-import Fastify from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
+import { createFastifyInstance } from "@/fastify-instance";
 import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { useMswServer } from "@/test/msw";
-import { ApiError, GithubCopilot } from "@/types";
+import { GithubCopilot } from "@/types";
 import githubCopilotProxyRoutes from "./github-copilot";
 import modelRouterProxyRoutes from "./model-router";
 
@@ -65,21 +61,7 @@ function uniqueGithubToken(): string {
 }
 
 function createTestApp() {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof ApiError) {
-      return reply.status(error.statusCode).send({
-        error: { message: error.message, type: error.type },
-      });
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    return reply.status(500).send({
-      error: { message, type: "api_internal_server_error" },
-    });
-  });
-  return app;
+  return createFastifyInstance();
 }
 
 // biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper (per-test MSW server), not a React hook
@@ -99,10 +81,18 @@ function stubTokenExchange() {
 describe("GitHub Copilot proxy — upstream model rejection (T-959)", () => {
   test("non-streaming: sends the catalogued model name with the exchanged bearer, surfaces Copilot's 400", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createTestApp();
     await app.register(githubCopilotProxyRoutes);
     const agent = await makeAgent({ name: "Copilot Proxy Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     stubTokenExchange();
     let upstreamModel: unknown;
@@ -124,6 +114,7 @@ describe("GitHub Copilot proxy — upstream model rejection (T-959)", () => {
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${uniqueGithubToken()}`,
+        "x-archestra-virtual-key": passthroughKey,
         "user-agent": "test-client",
       },
       payload: {
@@ -146,10 +137,18 @@ describe("GitHub Copilot proxy — upstream model rejection (T-959)", () => {
 
   test("streaming: the same 400 surfaces instead of a stream", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createTestApp();
     await app.register(githubCopilotProxyRoutes);
     const agent = await makeAgent({ name: "Copilot Proxy Streaming Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
 
     stubTokenExchange();
     server.use(
@@ -164,6 +163,7 @@ describe("GitHub Copilot proxy — upstream model rejection (T-959)", () => {
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${uniqueGithubToken()}`,
+        "x-archestra-virtual-key": passthroughKey,
         "user-agent": "test-client",
       },
       payload: {
@@ -184,10 +184,18 @@ describe("GitHub Copilot Responses account routing", () => {
     true,
   ])("completes a Responses request at the exchanged API endpoint (stream=%s)", async (stream, {
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createTestApp();
     await app.register(githubCopilotProxyRoutes);
     const agent = await makeAgent({ name: "Copilot Responses Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     const model = "gpt-5.3-codex";
     const text = "Hello from Copilot";
     const result = {
@@ -284,7 +292,10 @@ describe("GitHub Copilot Responses account routing", () => {
       const response = await app.inject({
         method: "POST",
         url: `/v1/github-copilot/${agent.id}/responses`,
-        headers: { authorization: `Bearer ${uniqueGithubToken()}` },
+        headers: {
+          authorization: `Bearer ${uniqueGithubToken()}`,
+          "x-archestra-virtual-key": passthroughKey,
+        },
         payload: { model, input: "Hello", stream },
       });
       expect(response.statusCode, response.body).toBe(200);
@@ -353,6 +364,10 @@ describe("GitHub Copilot chat completion compatibility", () => {
         { provider: "github-copilot", providerApiKeyId: providerKey.id },
       ],
     });
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: organization.id,
+      ownerId: user.id,
+    });
     stubTokenExchange();
     const toolCall = {
       id: "call_lookup",
@@ -399,6 +414,7 @@ describe("GitHub Copilot chat completion compatibility", () => {
           url: `${path}/chat/completions`,
           headers: {
             authorization: `Bearer ${direct ? githubToken : value}`,
+            ...(direct ? { "x-archestra-virtual-key": passthroughKey } : {}),
           },
           payload: {
             model: direct ? "gpt-4" : "github-copilot:gpt-4",
@@ -428,10 +444,18 @@ describe("GitHub Copilot chat completion compatibility", () => {
 
   test("the chat client accepts a completion whose upstream choices omit their indices", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createTestApp();
     await app.register(githubCopilotProxyRoutes);
     const agent = await makeAgent({ name: "Copilot Compatibility Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     stubTokenExchange();
     server.use(
       http.post(COPILOT_CHAT_COMPLETIONS_URL, () =>
@@ -456,7 +480,10 @@ describe("GitHub Copilot chat completion compatibility", () => {
         const response = await app.inject({
           method: "POST",
           url: new URL(request.url).pathname,
-          headers: Object.fromEntries(request.headers),
+          headers: {
+            ...Object.fromEntries(request.headers),
+            "x-archestra-virtual-key": passthroughKey,
+          },
           payload: await request.text(),
         });
         return new Response(response.body, {
@@ -480,10 +507,18 @@ describe("GitHub Copilot chat completion compatibility", () => {
 
   test("fills missing choice indices while preserving upstream indices and tool calls", async ({
     makeAgent,
+    makeMember,
+    makeUser,
   }) => {
     const app = createTestApp();
     await app.register(githubCopilotProxyRoutes);
     const agent = await makeAgent({ name: "Copilot Tool Compatibility Agent" });
+    const owner = await makeUser();
+    await makeMember(owner.id, agent.organizationId);
+    const passthroughKey = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: owner.id,
+    });
     const toolCall = {
       id: "call_test",
       type: "function",
@@ -518,7 +553,10 @@ describe("GitHub Copilot chat completion compatibility", () => {
       const response = await app.inject({
         method: "POST",
         url: `/v1/github-copilot/${agent.id}/chat/completions`,
-        headers: { authorization: `Bearer ${uniqueGithubToken()}` },
+        headers: {
+          authorization: `Bearer ${uniqueGithubToken()}`,
+          "x-archestra-virtual-key": passthroughKey,
+        },
         payload: {
           model: "claude-sonnet-5",
           messages: [{ role: "user", content: "Hello" }],

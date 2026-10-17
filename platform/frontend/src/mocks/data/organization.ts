@@ -26,6 +26,7 @@ export function makeOrganization(
     newAppsDisabledByDefault: false,
     newAppsLockedByDefault: false,
     allowChatFileUploads: false,
+    allowUnauthenticatedLlmProxyRequests: false,
     allowToolAutoAssignment: true,
     // Configured, so the knowledge section renders its pages rather than the
     // "Configuration is needed" placeholder every route below /knowledge is

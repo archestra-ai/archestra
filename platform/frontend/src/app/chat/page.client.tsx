@@ -36,6 +36,7 @@ import {
   AgentRuntimePreflightError,
 } from "@/components/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
@@ -286,6 +287,12 @@ export function ChatPageContent({
     clearSsoSignInRedirectPath();
     router.replace(redirectPath);
   }, [routeConversationId, router]);
+
+  // A conversation has a transcript to render: fetch the markdown renderer
+  // now, behind the composer, rather than on the next idle callback.
+  useEffect(() => {
+    if (routeConversationId) void preloadResponseMarkdown();
+  }, [routeConversationId]);
 
   // Hide version display from layout - chat page has its own version display
   useEffect(() => {
@@ -2299,6 +2306,7 @@ export function ChatPageContent({
       queueEnabled,
       directSendPending: directSendPendingRef.current,
       isCompacting: isContextCompacting,
+      sessionPending: !sendMessage,
     });
 
     if (submitAction === "stop") {

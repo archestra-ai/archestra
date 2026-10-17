@@ -142,7 +142,7 @@ describe("member subscription disconnect", () => {
     const confirm = within(screen.getByRole("dialog")).getByRole("button", {
       name: "Disconnect",
     });
-    await waitFor(() => expect(confirm).toBeEnabled());
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
     await user.click(confirm);
     expect(await card.findByRole("button", { name: "Connect" })).toBeEnabled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -201,7 +201,7 @@ describe("member subscription disconnect", () => {
       "The virtual key below will be deleted too.",
     );
     const confirm = dialog.getByRole("button", { name: "Disconnect" });
-    await waitFor(() => expect(confirm).toBeEnabled());
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
     await user.click(confirm);
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -261,7 +261,7 @@ describe("member subscription disconnect", () => {
       "The OAuth client below will be deleted too.",
     );
     const confirm = dialog.getByRole("button", { name: "Disconnect" });
-    await waitFor(() => expect(confirm).toBeEnabled());
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
     await user.click(confirm);
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -315,7 +315,7 @@ describe("member subscription disconnect", () => {
     const confirm = within(
       screen.getByRole("dialog", { name: "Disconnect subscription" }),
     ).getByRole("button", { name: "Disconnect" });
-    await waitFor(() => expect(confirm).toBeEnabled());
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
     await user.click(confirm);
     await waitFor(() =>
       expect(
@@ -364,7 +364,7 @@ describe("member subscription disconnect", () => {
     const confirm = within(screen.getByRole("dialog")).getByRole("button", {
       name: "Disconnect",
     });
-    await waitFor(() => expect(confirm).toBeEnabled());
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
     await user.click(confirm);
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(screen.getByRole("dialog")).toBeInTheDocument();

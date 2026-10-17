@@ -946,6 +946,7 @@ export default function ApiKeysPage() {
           isPending={deleteMutation.isPending}
           onConfirm={handleDelete}
           confirmDisabled={deleteBlocked}
+          confirmDelayMs={CONFIRM_DELAY_MS}
           confirmLabel={deletingSubscription ? "Disconnect" : "Delete API Key"}
           pendingLabel={
             deletingSubscription ? "Disconnecting..." : "Deleting..."
@@ -959,6 +960,7 @@ export default function ApiKeysPage() {
             selectedApiKeys.length === 1 ? "API key" : "API keys"
           }? This cannot be undone. Virtual keys and OAuth clients that use only these keys will be deleted too.`}
           isPending={bulkDeleteMutation.isPending}
+          confirmDelayMs={CONFIRM_DELAY_MS}
           onConfirm={() => {
             bulkDeleteMutation.mutate(selectedApiKeys, {
               onSuccess: (outcome) => {
@@ -1005,11 +1007,22 @@ function DeleteApiKeyDescription({
     return null;
   }
 
-  if (
-    totalVirtualKeys === 0 &&
-    totalOauthClients === 0 &&
-    knowledgeBaseUsages.length === 0
-  ) {
+  // Credentials that mapped only this key are deleted with it; the rest keep
+  // their other providers and need no notice. The lists come from what the
+  // dialog fetched, which covers what a key maps in practice.
+  const deletedVirtualKeys = virtualKeys.filter(virtualKeyGoesWithProviderKey);
+  const deletedOauthClients = oauthClients.filter(
+    oauthClientGoesWithProviderKey,
+  );
+  const sentences = [
+    deletionSentence({
+      virtualKeys: deletedVirtualKeys.length,
+      oauthClients: deletedOauthClients.length,
+    }),
+    knowledgeBaseSentence(knowledgeBaseUsages),
+  ].filter((sentence) => sentence !== "");
+
+  if (sentences.length === 0 && !isLoading) {
     // Distinct keys: the two branches share a tag, so without them React would
     // reconcile the element in place and remove its bare text nodes, which
     // crashes a machine-translated page.
@@ -1026,30 +1039,9 @@ function DeleteApiKeyDescription({
     );
   }
 
-  // Credentials that mapped only this key are deleted with it; the rest keep
-  // their other providers and lose only this route. The lists come from what
-  // the dialog fetched, which covers what a key maps in practice.
-  const deletedVirtualKeys = virtualKeys.filter(virtualKeyGoesWithProviderKey);
-  const deletedOauthClients = oauthClients.filter(
-    oauthClientGoesWithProviderKey,
-  );
-  const keptCredentials =
-    virtualKeys.length -
-    deletedVirtualKeys.length +
-    (oauthClients.length - deletedOauthClients.length);
-  const sentences = [
-    deletionSentence({
-      virtualKeys: deletedVirtualKeys.length,
-      oauthClients: deletedOauthClients.length,
-    }),
-    keptSentence({
-      kept: keptCredentials,
-      anyDeleted: deletedVirtualKeys.length + deletedOauthClients.length > 0,
-    }),
-    knowledgeBaseSentence(knowledgeBaseUsages),
-    isSubscription ? "" : "This cannot be undone.",
-  ].filter((sentence) => sentence !== "");
-  const lead = sentences.join(" ");
+  const lead = [...sentences, isSubscription ? "" : "This cannot be undone."]
+    .filter((sentence) => sentence !== "")
+    .join(" ");
   const shownVirtualKeys = deletedVirtualKeys.slice(0, 5);
   const moreVirtualKeys = deletedVirtualKeys.length - shownVirtualKeys.length;
   const shownOauthClients = deletedOauthClients.slice(0, 5);
@@ -1133,6 +1125,9 @@ function DeleteApiKeyDescription({
   );
 }
 
+/** Time a delete or disconnect dialog stays unconfirmable, so its notice gets read. */
+const CONFIRM_DELAY_MS = 3000;
+
 type MappedVirtualKey =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 type MappedOauthClient =
@@ -1160,19 +1155,6 @@ function deletionSentence(params: {
   }
   if (parts.length === 0) return "";
   return `The ${parts.join(" and ")} below will be deleted too.`;
-}
-
-function keptSentence(params: { kept: number; anyDeleted: boolean }): string {
-  const { kept, anyDeleted } = params;
-  if (kept === 0) return "";
-  if (anyDeleted) {
-    return kept === 1
-      ? "1 other credential keeps its other providers."
-      : `${kept} other credentials keep their other providers.`;
-  }
-  return kept === 1
-    ? "1 credential uses it and keeps its other providers."
-    : `${kept} credentials use it and keep their other providers.`;
 }
 
 function knowledgeBaseSentence(usages: string[]): string {

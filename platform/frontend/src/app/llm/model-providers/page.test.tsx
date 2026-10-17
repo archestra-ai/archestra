@@ -747,7 +747,7 @@ describe("ApiKeysPage", () => {
 
     const dialog = await screen.findByTestId("delete-dialog");
     expect(dialog).toHaveTextContent(
-      "The 4 virtual keys below will be deleted too. 3 other credentials keep their other providers. This cannot be undone.",
+      "The 4 virtual keys below will be deleted too. This cannot be undone.",
     );
     expect(screen.getByText("Service 3")).toBeInTheDocument();
     expect(screen.queryByText("Service 4")).not.toBeInTheDocument();

@@ -9,8 +9,6 @@ set -eu
 # - --report-on-fatalerror writes a Node diagnostic report on fatal runtime errors
 # - --report-uncaught-exception writes a report for uncaught exceptions
 # - --diagnostic-dir keeps those artifacts in a predictable persisted location
-# - --import ./dist/preload/source-maps.mjs parses source maps before the server listens
-#   instead of on the first stack trace while serving (src/preload/source-maps.ts)
 # - --heapsnapshot-near-heap-limit is opt-in because snapshots are expensive and
 #   intended for targeted near-OOM investigations
 #
@@ -34,7 +32,6 @@ node_max_old_space_size_mib=$(
 
 set -- \
   --enable-source-maps \
-  --import ./dist/preload/source-maps.mjs \
   --report-on-fatalerror \
   --report-uncaught-exception \
   --diagnostic-dir="$ARCHESTRA_NODE_DIAGNOSTIC_DIR"

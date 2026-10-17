@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.75](https://github.com/archestra-ai/archestra/compare/platform-v1.3.74...platform-v1.3.75) (2026-10-17)
+
+
+### Bug Fixes
+
+* **chat:** let members use the keys shared with them (backport [#8944](https://github.com/archestra-ai/archestra/issues/8944) to release/1.3) ([#8951](https://github.com/archestra-ai/archestra/issues/8951)) ([9e75e2d](https://github.com/archestra-ai/archestra/commit/9e75e2de794e2c69c7ae721a17ed4638c7faa94e))
+* **chat:** recover stalled streams (backport [#8967](https://github.com/archestra-ai/archestra/issues/8967) to release/1.3) ([#9105](https://github.com/archestra-ai/archestra/issues/9105)) ([bffca2d](https://github.com/archestra-ai/archestra/commit/bffca2dd24c3c303378003171e4343d35375fd75))
+* **docker:** patch containerd CVE on release/1.3 (backport [#9016](https://github.com/archestra-ai/archestra/issues/9016)) ([#9108](https://github.com/archestra-ai/archestra/issues/9108)) ([ad74290](https://github.com/archestra-ai/archestra/commit/ad74290346e38866fea19a89a3d732cdadb25098))
+
 ## [1.3.74](https://github.com/archestra-ai/archestra/compare/platform-v1.3.73...platform-v1.3.74) (2026-10-15)
 
 

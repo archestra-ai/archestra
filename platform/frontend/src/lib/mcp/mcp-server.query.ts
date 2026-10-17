@@ -17,6 +17,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -1337,7 +1338,7 @@ function useMcpServersForCatalogIds(params: {
   for (let i = 0; i < sortedIds.length; i += MAX_CATALOG_IDS_PER_REQUEST) {
     chunks.push(sortedIds.slice(i, i + MAX_CATALOG_IDS_PER_REQUEST));
   }
-  return useQueries({
+  const servers = useQueries({
     queries: chunks.map((catalogIds) => ({
       queryKey: [
         "mcp-servers",
@@ -1368,6 +1369,22 @@ function useMcpServersForCatalogIds(params: {
     })),
     combine: combineServerChunks,
   });
+
+  // A changed set of catalogs (the list's search, say) is a new request:
+  // keep the installs already known for the catalogs still asked for until
+  // it answers, so those rows do not read "Not connected" meanwhile.
+  const lastAnswer = useRef<typeof servers>(undefined);
+  if (servers) lastAnswer.current = servers;
+  const requestedKey = sortedIds.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: requestedKey stands for sortedIds
+  return useMemo(() => {
+    if (servers) return servers;
+    if (!lastAnswer.current) return undefined;
+    const requested = new Set(sortedIds);
+    return lastAnswer.current.filter(
+      (server) => server.catalogId && requested.has(server.catalogId),
+    );
+  }, [servers, requestedKey]);
 }
 
 function combineServerChunks<T>(results: Array<{ data: T[] | undefined }>) {

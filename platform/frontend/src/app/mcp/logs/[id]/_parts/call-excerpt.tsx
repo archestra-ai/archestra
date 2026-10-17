@@ -5,6 +5,7 @@ import { ArrowUpRight, TriangleAlert, Waypoints } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
+import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { RequestDetails } from "@/app/llm/logs/[id]/_parts/request-details";
 import { RequestWaterfall } from "@/app/llm/logs/[id]/_parts/request-waterfall";
 import {
@@ -138,11 +139,7 @@ function SessionExcerpt({
   const requestsShown =
     excerpt?.timeline?.spans.filter((span) => span.type === "request").length ??
     0;
-  const sessionTitle =
-    session?.claudeCodeTitle ??
-    session?.conversationTitle ??
-    session?.lastUserMessagePreview ??
-    null;
+  const sessionTitle = session ? sessionTitleOf(session) : null;
 
   return (
     <ExcerptCard

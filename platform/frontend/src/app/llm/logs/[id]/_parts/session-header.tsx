@@ -46,7 +46,10 @@ export function SessionHeaderTitle({
           )}
         </span>
       </span>
-      <span className="line-clamp-3 min-w-0 text-xl leading-7 lg:line-clamp-2 lg:text-2xl lg:leading-8">
+      <span
+        title={title}
+        className="line-clamp-2 min-w-0 text-[17px] leading-6 [overflow-wrap:anywhere] lg:text-xl lg:leading-7"
+      >
         {title}
       </span>
     </span>

@@ -14,6 +14,7 @@ import {
   isKnowledgeSource,
   knowledgeTaskTitle,
   type LogSession,
+  sessionTitleOf,
   sourceLabel,
 } from "./logs-table-format";
 import {
@@ -38,14 +39,16 @@ export function SessionCell({ session }: { session: LogSession }) {
     : "No message";
   // Server-computed preview: the sessions API never returns raw request
   // bodies (shipping them OOM-killed the platform container, T-1015).
-  const preview =
-    session.claudeCodeTitle || session.lastUserMessagePreview || "";
+  const preview = sessionTitleOf({
+    claudeCodeTitle: session.claudeCodeTitle,
+    lastUserMessagePreview: session.lastUserMessagePreview,
+  });
   const title = isAppChat
     ? (session.conversationTitle ?? "")
-    : preview ||
+    : (preview ??
       (isKnowledgeSource(primarySource)
         ? knowledgeTaskTitle(primarySource)
-        : placeholder);
+        : placeholder));
   const isPlaceholder = title === placeholder;
 
   const actor = describeActor(session, appName);

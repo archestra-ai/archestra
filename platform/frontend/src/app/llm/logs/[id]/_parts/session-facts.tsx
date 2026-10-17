@@ -267,8 +267,9 @@ export function SessionFacts({
             />
           }
         >
+          {/* The figure is what was billed; subscription traffic is list
+            price only, so it never shares the headline with real spend. */}
           <FactValue muted={onPlanOnly}>
-            {subscription > 0 ? <PlanTag /> : null}
             <span>
               {totals.cost == null
                 ? "—"
@@ -277,9 +278,9 @@ export function SessionFacts({
           </FactValue>
           <FactSub>
             {onPlanOnly
-              ? "list price · not billed"
+              ? "on plan · not billed"
               : subscription > 0
-                ? `+ ${formatUsageCost(subscription)} on plan`
+                ? `billed · ${formatUsageCost(subscription)} on plan`
                 : saved > 0
                   ? `saved ${formatUsageCost(saved)}`
                   : "metered"}
@@ -653,14 +654,6 @@ function CacheMeter({ read, write }: { read: number; write: number }) {
       </span>
       {/* Phones show the figure on the line below. */}
       <span className="max-lg:hidden">{formatCompactNumber(total)} cached</span>
-    </span>
-  );
-}
-
-function PlanTag() {
-  return (
-    <span className="rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium tracking-wide text-muted-foreground uppercase">
-      Plan
     </span>
   );
 }

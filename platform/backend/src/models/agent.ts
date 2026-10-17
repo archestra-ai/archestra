@@ -11,6 +11,7 @@ import {
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   providerRequiresPerUserCredential,
+  RESOURCE_ACCESS_RELATIONS,
   type ResourcePermissionGrant,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
@@ -1748,6 +1749,15 @@ class AgentModel {
       userId: params.userId,
       isAgentAdmin: params.isAgentAdmin,
     });
+    const regularAccessCandidates = await catalogAccessCandidateIds({
+      organizationId: params.filters?.organizationId,
+      userId: params.userId,
+      selection: params.filters?.access,
+      includeBuiltIn:
+        params.filters?.includeBuiltIn === true &&
+        params.isAgentAdmin &&
+        !params.filters?.scope,
+    });
     const includeExternalAgents =
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
@@ -1891,7 +1901,7 @@ class AgentModel {
         )`.as("pinned_at"),
       })
       .from(schema.agentsTable)
-      .where(regularWhereClause);
+      .where(and(regularWhereClause, regularAccessCandidates));
     const externalCandidates = db
       .select({
         resourceType: sql<"agent" | "external">`'external'`.as("resource_type"),
@@ -5814,6 +5824,96 @@ function agentGrantedTeamIds() {
     ) granted_team
   ), array[]::text[])`;
 }
+
+// ===
+// Agent catalog access prefilter
+// ===
+
+/**
+ * The agents the catalog's "Show" filter can keep, as one id set the database
+ * builds once, so the plan starts from those rows instead of testing the
+ * relation filter on every agent. An administrator reads every agent through
+ * the `*` grant, so that test otherwise ran against every other member's
+ * personal agent.
+ *
+ * The set is a superset of what the relations keep: `mine` needs the caller
+ * as author; `shared` needs a read grant to one of the caller's teams or own
+ * ids; `org` needs a read grant to the organization or a role. The set holds
+ * exactly the authored agents and the agents whose policy has such a grant,
+ * and the exact relation filter stays ANDed on top, so the prefilter can only
+ * remove rows that filter removes too. It is undefined where no such set
+ * exists: a selection with `others` (rows nobody is granted), or with no or
+ * every relation (no relation filter at all). The catalog's regular branch
+ * lists only `agent` rows, so only `agent` policies are read.
+ */
+async function catalogAccessCandidateIds(params: {
+  organizationId: string | undefined;
+  userId: string;
+  selection: ResourceAccessSelection | undefined;
+  includeBuiltIn: boolean;
+}): Promise<SQL | undefined> {
+  const selected = new Set(
+    params.selection?.relations ?? RESOURCE_ACCESS_RELATIONS,
+  );
+  if (
+    !params.organizationId ||
+    selected.size === 0 ||
+    selected.has("others") ||
+    RESOURCE_ACCESS_RELATIONS.every((relation) => selected.has(relation))
+  )
+    return undefined;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const grantedSubjects: Array<{ type: string; id?: string }> = [];
+  if (selected.has("shared")) {
+    const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    for (const subject of principals.flatMap(({ subjects }) => subjects)) {
+      if (subject.type === "team") grantedSubjects.push(subject);
+      // The relation matches the caller's own ids under either self type.
+      if (subject.type === "user" || subject.type === "serviceAccount")
+        grantedSubjects.push(
+          { type: "user", id: subject.id },
+          { type: "serviceAccount", id: subject.id },
+        );
+    }
+  }
+  // Any organization or role grant makes the audience `org`.
+  if (selected.has("org"))
+    grantedSubjects.push({ type: "organization" }, { type: "role" });
+
+  const table = schema.agentsTable;
+  const sources: SQL[] = [];
+  if (selected.has("mine"))
+    sources.push(
+      sql`SELECT own_agent.id FROM ${table} own_agent WHERE own_agent.author_id = ${params.userId}`,
+    );
+  if (grantedSubjects.length > 0) {
+    const patterns = grantedSubjects.map(
+      (subject) => sql`${JSON.stringify([{ subject, actions: ["read"] }])}`,
+    );
+    // Policy scopes are object ids or `*`; only object ids name an agent.
+    sources.push(sql`SELECT CASE WHEN access_policy.scope ~* ${UUID_PATTERN}
+        THEN access_policy.scope::uuid END
+      FROM resource_permission_policies access_policy
+      WHERE access_policy.organization_id = ${params.organizationId}
+        AND access_policy.resource = 'agent'
+        AND access_policy.grants @> ANY(ARRAY[${sql.join(patterns, sql`, `)}]::jsonb[])`);
+  }
+  if (params.includeBuiltIn)
+    sources.push(
+      sql`SELECT built_in_agent.id FROM ${table} built_in_agent WHERE built_in_agent.organization_id = ${params.organizationId} AND built_in_agent.built_in`,
+    );
+  if (sources.length === 0) return sql<boolean>`false`;
+  return sql<boolean>`${table.id} IN (${sql.join(sources, sql` UNION ALL `)})`;
+  // SPDX-SnippetEnd
+}
+
+const UUID_PATTERN =
+  "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
 
 // ===
 // Agent catalog sorting

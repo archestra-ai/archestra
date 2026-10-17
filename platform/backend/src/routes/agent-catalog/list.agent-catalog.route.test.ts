@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  BUILT_IN_AGENT_IDS,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { AgentPinModel, AgentToolModel } from "@/models";
@@ -628,5 +632,76 @@ describe("GET /api/agent-catalog", () => {
       pagination: { total: 2 },
       totals: { agents: 1, externalAgents: 1 },
     });
+  });
+
+  test.for([
+    ADMIN_ROLE_NAME,
+    MEMBER_ROLE_NAME,
+  ])("keeps every agent the Show filter reaches by each kind of grant (%s)", async (role, {
+    makeAgent,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const callerTeam = await makeTeam(ctx.organizationId, otherUser.id);
+    await makeTeamMember(callerTeam.id, ctx.user.id);
+    const otherTeam = await makeTeam(ctx.organizationId, otherUser.id);
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const agent = (
+      name: string,
+      access: NonNullable<Parameters<typeof makeAgent>[0]>["access"],
+      authorId = otherUser.id,
+    ) =>
+      makeAgent({
+        organizationId: ctx.organizationId,
+        agentType: "agent",
+        name: `${name} ${suffix}`,
+        authorId,
+        access,
+      });
+
+    await agent("Team", { teams: [callerTeam.id], level: "use" });
+    await agent("Direct", { users: [ctx.user.id], preset: "use" });
+    await agent("Org", "org");
+    await agent("Own", "personal", ctx.user.id);
+    await agent("Other team", { teams: [otherTeam.id], level: "use" });
+    await agent("Theirs", "personal");
+    // A grant to a role, and nothing else, puts an agent in "org".
+    const roleOnly = await agent("Role", "personal");
+    const policyKey = {
+      organizationId: ctx.organizationId,
+      resource: "agent" as const,
+      scope: roleOnly.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(policyKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...policyKey,
+      revision: policy?.revision ?? 0,
+      grants: [
+        ...(policy?.grants ?? []),
+        { subject: { type: "role", id: role }, actions: ["read", "use"] },
+      ],
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agent-catalog?limit=50&offset=0&name=${suffix}&access=mine,shared,org`,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      response
+        .json()
+        .data.map((row: { value: { name: string } }) =>
+          row.value.name.replace(` ${suffix}`, ""),
+        )
+        .sort(),
+    ).toEqual(["Direct", "Org", "Own", "Role", "Team"]);
+    expect(response.json().pagination.total).toBe(5);
   });
 });

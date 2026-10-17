@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub or GitLab
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -53,7 +53,7 @@ requires = { trust = "trusted", audience = { contains = ["public"] } }
 
 What to know:
 
-- Changes apply to new conversations. Running ones keep the policy they started with. A renamed or removed annotator stays available to them while one of them was active in the last 30 days ([`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS)). **Effective** lists what it keeps.
+- A change reaches every conversation at its next tool call, including running ones. A review still waiting for an answer is withdrawn, and the agent asks again. **Effective** shows the runtime revision in force.
 - A change that fails keeps the last valid policy running. **Effective** shows the error.
 - Changing the policy needs [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). Turning enforcement on or off needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 

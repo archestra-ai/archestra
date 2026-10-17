@@ -148,6 +148,12 @@ export interface DispatchPolicy {
   content: string
   /** Variable → value, for the document's `runtimeCredentials`. Secrets. */
   credentials: Record<string, string>
+  /**
+   * The content hash of the stored composition `content` was read from. A
+   * dispatch whose composition is no longer the stored one publishes nothing
+   * and is refused as retryable; absent, nothing is checked.
+   */
+  compositionHash?: string
 }
 
 export interface EditedPolicy {
@@ -173,8 +179,12 @@ export declare function executeRemedyByOffer(input: string, policy: DispatchPoli
 /** The upstream pin and host replay boundary version stored with each run. */
 export declare function getOpenappaReplayEngineVersion(): string
 
-/** Read the current label of a started session without mutating its trajectory. */
-export declare function getOpenappaStatus(organizationId: string, sessionId: string, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
+/**
+ * Read the current label of a started session without mutating its trajectory.
+ * The read runs through a view pinned to the organization's deployment line, as
+ * a dispatch does: a family is read on the line it follows.
+ */
+export declare function getOpenappaStatus(organizationId: string, sessionId: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
 
 export interface HelperBindingInput {
   /**
@@ -259,6 +269,8 @@ export declare function openappaOpeningKeys(batches: Array<Buffer>): Array<strin
 export interface OpenappaStatus {
   trust: string
   audience: string
+  /** The organization's policy revision the session's next event is decided under. */
+  policyRevision?: number
 }
 
 /**

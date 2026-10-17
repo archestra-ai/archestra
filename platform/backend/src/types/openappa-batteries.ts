@@ -271,6 +271,14 @@ export const EffectivePolicyViewSchema = EffectivePolicySchema.omit({
 }).extend({
   composition: CompositionViewSchema,
   retained: RetainedAnnotatorsViewSchema.nullable(),
+  /**
+   * The policy revision the runtime decides every conversation under now, and
+   * when it was published. A saved change publishes at the next protected
+   * call; null before the first one.
+   */
+  servedRevision: z
+    .object({ revision: z.number().int(), publishedAt: z.date() })
+    .nullable(),
 });
 export type EffectivePolicyView = z.infer<typeof EffectivePolicyViewSchema>;
 

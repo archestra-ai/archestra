@@ -14,6 +14,7 @@ import config from "@/config";
 import logger from "@/logging";
 import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
@@ -1173,6 +1174,11 @@ const registry = defineArchestraTools([
         sessionId: stamp.session_id,
         offerId: remedy.offer_id,
       });
+      // A publish while the reviewer decides retires the offer: the answer then
+      // applies to nothing, and the result says why.
+      const headBeforeReview = review
+        ? await OpenAppaDeploymentModel.head(context.organizationId)
+        : null;
 
       let ruling: "approve" | "deny" | undefined;
       let reviewOutcome:
@@ -1348,6 +1354,11 @@ const registry = defineArchestraTools([
         ...(precheckRefusal ? { precheckRefusal } : {}),
       });
       if (!ruling || !byOffer.known) return byOffer.result;
+      if (
+        retiredOffer(byOffer.result) &&
+        (await policyPublishedSince(context.organizationId, headBeforeReview))
+      )
+        return supersededReview(byOffer.result);
       // Display-only: the chat card displays the human ruling.
       // `_meta` does not reach the model; the model reads the ruling from result text.
       const content =
@@ -1973,3 +1984,48 @@ async function yellIdentity(params: {
   }
   return identity;
 }
+
+/** Whether the runtime answered an offer that no longer stands. */
+function retiredOffer(result: CallToolResult): boolean {
+  return result.content.some(
+    (block) =>
+      block.type === "text" &&
+      RETIRED_OFFER_TEXTS.some((text) => block.text.includes(text)),
+  );
+}
+
+/** Whether the organization published a policy revision after `before`. */
+async function policyPublishedSince(
+  organizationId: string,
+  before: { revision: number } | null,
+): Promise<boolean> {
+  const after = await OpenAppaDeploymentModel.head(organizationId);
+  return after !== null && after.revision > (before?.revision ?? 0);
+}
+
+/**
+ * A reviewed remedy whose offer a policy publish retired: nothing ran, and
+ * the reviewer's answer was not applied. The model proposes the call again
+ * and the current policy decides it; Chat shows that the policy changed.
+ */
+function supersededReview(result: CallToolResult): CallToolResult {
+  return {
+    ...result,
+    isError: false,
+    content: [
+      ...result.content,
+      {
+        type: "text",
+        text: "[appa] The organization's guardrails policy changed before this review was answered, so the answer was not applied and nothing ran. Propose the call again: the current policy decides it, and asks for a new review if it still needs one.",
+      },
+    ],
+    _meta: { ...result._meta, [MCP_HUMAN_RULING_META_KEY]: "superseded" },
+  };
+}
+
+/** The runtime's words for an offer that no longer stands. */
+const RETIRED_OFFER_TEXTS = [
+  "this offer no longer stands; re-propose the call",
+  "this offer no longer applies; re-propose the call",
+  "no live offer with this id exists",
+];

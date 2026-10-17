@@ -130424,11 +130424,18 @@
                     },
                     "audience": {
                       "type": "string"
+                    },
+                    "policyRevision": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
                     "trust",
-                    "audience"
+                    "audience",
+                    "policyRevision"
                   ],
                   "additionalProperties": false
                 }
@@ -341460,6 +341467,26 @@
                         "dropped"
                       ],
                       "additionalProperties": false
+                    },
+                    "servedRevision": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "revision": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "publishedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "revision",
+                        "publishedAt"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -341472,7 +341499,8 @@
                     "lastError",
                     "lastErrorAt",
                     "composition",
-                    "retained"
+                    "retained",
+                    "servedRevision"
                   ],
                   "additionalProperties": false
                 }

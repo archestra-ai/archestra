@@ -998,6 +998,15 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "OpenAPPA owns content-addressed policy history",
   },
+  openappaDeploymentsTable: {
+    audited: false,
+    reason:
+      "OpenAPPA moves each organization's policy head when it publishes; derived from the audited policy",
+  },
+  openappaPolicyRevisionsTable: {
+    audited: false,
+    reason: "OpenAPPA owns each organization's published policy revisions",
+  },
   openappaOperationsTable: {
     audited: false,
     reason: "native hook idempotency ledger",

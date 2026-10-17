@@ -52,6 +52,7 @@ import {
   openappaFailure,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
+import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
@@ -263,15 +264,25 @@ export async function getOpenappaStatus(params: {
   if (!openappaEnabled()) return null;
   try {
     const module = await binding();
-    return await withOpenappaContentEncryption(
-      params.organizationId,
-      params.sessionId,
-      (encryption) =>
-        module.getOpenappaStatus(
+    // Read on the organization's policy line, as a dispatch would decide.
+    const status = await retryWhilePolicyMoved({
+      run: async () => {
+        const policy = await effectivePolicy(params.organizationId);
+        return withOpenappaContentEncryption(
           params.organizationId,
           params.sessionId,
-          encryption,
-        ),
+          (encryption) =>
+            module.getOpenappaStatus(
+              params.organizationId,
+              params.sessionId,
+              policy,
+              encryption,
+            ),
+        );
+      },
+    });
+    return (
+      status && { ...status, policyRevision: status.policyRevision ?? null }
     );
   } catch (error) {
     throw openappaFailure(error);
@@ -575,10 +586,15 @@ async function withRuntime(
   batchPolicy?: DispatchPolicy,
   session?: OpenAppaSession,
 ) {
-  const policy = batchPolicy ?? (await effectivePolicy(organizationId));
+  let policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
     const module = await binding();
-    const rawResult = await call(module, policy);
+    const rawResult = await retryWhilePolicyMoved({
+      run: async (attempt) => {
+        if (attempt > 0) policy = await effectivePolicy(organizationId);
+        return call(module, policy);
+      },
+    });
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
     throw await dispatchFailure({
@@ -682,7 +698,8 @@ async function effectivePolicy(
     } catch (error) {
       if (!retainedKeyLost({ unreadable, readable })) throw error;
     }
-    if (dispatch && !retainedKeyLost({ unreadable, readable })) return dispatch;
+    if (dispatch && !retainedKeyLost({ unreadable, readable }))
+      return { ...dispatch, compositionHash: policy.contentHash };
     // A credential the policy was composed to read is unreadable now. Compose
     // again first, as a fresh read would have: a kept annotator that needed it
     // is dropped, so its sessions are told to start a new conversation instead
@@ -692,10 +709,13 @@ async function effectivePolicy(
       "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
     );
     const recompiled = await openappaBatteriesService.recompile(organizationId);
-    return await openappaDeclarations.dispatchPolicy({
-      organizationId,
-      content: expandCommandExecutionPolicyRules(recompiled.content),
-    });
+    return {
+      ...(await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: expandCommandExecutionPolicyRules(recompiled.content),
+      })),
+      compositionHash: recompiled.contentHash,
+    };
   } catch (error) {
     throw openappaFailure(error);
   }
@@ -2385,9 +2405,12 @@ async function peerResponse<T>(
   schema: z.ZodType<T>,
 ): Promise<T> {
   try {
-    const policy = await effectivePolicy(session.organization_id);
     const module = await binding();
-    return schema.parse(JSON.parse(await call(module, policy)));
+    const raw = await retryWhilePolicyMoved({
+      run: async () =>
+        call(module, await effectivePolicy(session.organization_id)),
+    });
+    return schema.parse(JSON.parse(raw));
   } catch (error) {
     throw openappaFailure(error);
   }

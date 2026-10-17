@@ -745,10 +745,12 @@ delta = {}
         ));
     }
 
-    /// The document a trajectory opened under keeps judging it after the serving
-    /// policy changes: a recompile never rewrites an open conversation's rules.
+    /// An open trajectory decides its next call under its line's head: a policy
+    /// published after it opened changes what it may do, as it does for a
+    /// conversation started afterwards. A view pinned behind a head another runtime
+    /// published refuses retryably, committing nothing, until it pins that head.
     #[tokio::test]
-    async fn an_open_trajectory_is_judged_by_the_document_it_opened_under() {
+    async fn an_open_trajectory_decides_under_its_lines_head() {
         let root = format!("include = [\"{GITHUB_ENTRY}\"]\n[policy]\nversion = 2\n");
         let aliased = compose(
             &format!("{root}[aliases.mcp]\ngithub = [\"github_prod\"]\n"),
@@ -757,27 +759,82 @@ delta = {}
         .unwrap()
         .content;
         let unaliased = compose(&root, &[github_battery()]).unwrap().content;
-        let runtime = memory_runtime(&aliased);
-        let old = started(&runtime, "opened-under-aliases").await;
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        let process = || open(compile("[policy]\nversion = 2\n").unwrap(), store.clone()).unwrap();
+        let (this, other) = (process(), process());
+        let line = appa_eventlog::DeploymentName::new("org-a");
+        let pin = |runtime: &Runtime, content: &str| {
+            let prepared = runtime
+                .prepare_deployment(compile(content).unwrap())
+                .unwrap();
+            let published = runtime.publish(&line, &prepared).unwrap();
+            (published.revision(), runtime.pinned(&published))
+        };
+        let prod = "github_prod__get_file_contents";
+
+        let (revision, view) = pin(&this, &aliased);
+        assert_eq!(revision, 1);
+        let open = started(&view, "opened-under-aliases").await;
         assert!(matches!(
-            hooks::handle(&runtime, call(&old, "github_prod__get_file_contents")).await,
+            hooks::handle(&view, call(&open, prod)).await,
             HookDecision::AllowCall { .. }
         ));
-        runtime.reload(compile(&unaliased).unwrap()).unwrap();
-        let pinned = hooks::handle(&runtime, call(&old, "github_prod__get_file_contents")).await;
+
+        assert_eq!(pin(&other, &unaliased).0, 2, "another process publishes");
+        let stale = hooks::handle(&view, call(&open, prod)).await;
         assert!(
-            matches!(pinned, HookDecision::AllowCall { .. }),
-            "the open trajectory keeps its document: {pinned:?}"
+            matches!(&stale, HookDecision::Refuse { detail } if detail.contains("moved to policy revision 2")),
+            "a view pinned behind the head refuses retryably: {stale:?}"
         );
-        let fresh = started(&runtime, "opened-after-reload").await;
+
+        let (revision, head) = pin(&this, &unaliased);
+        assert_eq!(revision, 2, "the head's own bytes publish nothing");
+        let decided = hooks::handle(&head, call(&open, prod)).await;
+        assert!(
+            matches!(&decided, HookDecision::Refuse { detail } if !detail.contains("moved to policy revision")),
+            "the open trajectory follows the head, which drops the alias: {decided:?}"
+        );
+
+        let (revision, restored) = pin(&this, &aliased);
+        assert_eq!(
+            revision, 3,
+            "publishing earlier bytes again is a new revision"
+        );
         assert!(matches!(
-            hooks::handle(&runtime, call(&fresh, "github_prod__get_file_contents")).await,
+            hooks::handle(&restored, call(&open, prod)).await,
+            HookDecision::AllowCall { .. }
+        ));
+    }
+
+    /// A family belongs to the line it opened on: another organization's view
+    /// refuses it, whatever the two lines serve.
+    #[tokio::test]
+    async fn a_family_of_one_line_is_refused_by_anothers_view() {
+        let plain = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/archestra/read_file\"\ndelta = {}\n";
+        let runtime = memory_runtime("[policy]\nversion = 2\n");
+        let view = |organization: &str| {
+            let prepared = runtime.prepare_deployment(compile(plain).unwrap()).unwrap();
+            runtime.pinned(
+                &runtime
+                    .publish(&appa_eventlog::DeploymentName::new(organization), &prepared)
+                    .unwrap(),
+            )
+        };
+        let (a, b) = (view("org-a"), view("org-b"));
+        let family = started(&a, "org-a-conversation").await;
+        assert!(matches!(
+            hooks::handle(&a, call(&family, "read_file")).await,
+            HookDecision::AllowCall { .. }
+        ));
+        assert!(matches!(
+            hooks::handle(&b, call(&family, "read_file")).await,
             HookDecision::Refuse { .. }
         ));
     }
 
     /// A stored policy that already names one helper under two kinds restores
-    /// without rewriting those bytes. The open trajectory keeps that document.
+    /// without rewriting those bytes, and serving the same bytes again publishes no
+    /// new revision.
     #[tokio::test]
     async fn a_stored_cross_kind_helper_policy_restores_without_rewriting_it() {
         let stored = "\
@@ -803,7 +860,9 @@ token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
             hooks::handle(&runtime, call(&opened, "github__get_file_contents")).await,
             HookDecision::AllowCall { .. }
         ));
-        runtime.reload(compile(stored).unwrap()).unwrap();
+        let reloaded = runtime.reload(compile(stored).unwrap()).unwrap();
+        assert!(!reloaded.changed);
+        assert_eq!(reloaded.policy_revision, 1);
         assert!(
             matches!(
                 hooks::handle(&runtime, call(&opened, "github__get_file_contents")).await,

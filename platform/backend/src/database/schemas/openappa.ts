@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -67,6 +68,58 @@ export const openappaPolicyFilesTable = pgTable("openappa_policy_files", {
   hash: text().primaryKey(),
   bytes: bytea("bytes").notNull(),
 });
+
+// One row per deployment line; Archestra names each organization's line by its
+// id. The head is the policy revision every decided append is fenced at: an
+// append share-locks the row, and a publish moves the head by updating it.
+export const openappaDeploymentsTable = pgTable(
+  "openappa_deployments",
+  {
+    name: text().primaryKey(),
+    head: bigint({ mode: "number" }).notNull(),
+  },
+  (table) => [
+    check("openappa_deployments_head_positive", sql`${table.head} > 0`),
+  ],
+);
+
+// Every revision a deployment published, and the policy file it names.
+export const openappaPolicyRevisionsTable = pgTable(
+  "openappa_policy_revisions",
+  {
+    deployment: text().notNull(),
+    revision: bigint({ mode: "number" }).notNull(),
+    hash: text().notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "openappa_policy_revisions_pk",
+      columns: [table.deployment, table.revision],
+    }),
+    foreignKey({
+      name: "openappa_policy_revisions_deployment_fk",
+      columns: [table.deployment],
+      foreignColumns: [openappaDeploymentsTable.name],
+    }),
+    foreignKey({
+      name: "openappa_policy_revisions_hash_fk",
+      columns: [table.hash],
+      foreignColumns: [openappaPolicyFilesTable.hash],
+    }),
+    check(
+      "openappa_policy_revisions_revision_positive",
+      sql`${table.revision} > 0`,
+    ),
+    index("openappa_policy_revisions_key_idx").on(
+      table.deployment,
+      table.hash,
+      table.revision,
+    ),
+  ],
+);
 
 /** Required by the shared runtime's PostgreSQL store, including embedded hosts. */
 export const openappaHeldPeerMessagesTable = pgTable(

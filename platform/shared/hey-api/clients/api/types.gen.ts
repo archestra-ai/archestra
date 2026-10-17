@@ -36187,6 +36187,7 @@ export type GetChatOpenappaStatusResponses = {
     200: {
         trust: string;
         audience: string;
+        policyRevision: number | null;
     } | null;
 };
 
@@ -89897,6 +89898,10 @@ export type GetOpenappaEffectivePolicyResponses = {
                 name: string;
                 reason: string;
             }>;
+        } | null;
+        servedRevision: {
+            revision: number;
+            publishedAt: string;
         } | null;
     };
 };

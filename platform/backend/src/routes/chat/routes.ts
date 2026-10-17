@@ -2541,7 +2541,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(
-          z.object({ trust: z.string(), audience: z.string() }).nullable(),
+          z
+            .object({
+              trust: z.string(),
+              audience: z.string(),
+              policyRevision: z.number().int().nullable(),
+            })
+            .nullable(),
         ),
       },
     },

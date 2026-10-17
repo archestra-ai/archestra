@@ -5,7 +5,9 @@
  * Turns the deployment switch off and deletes, for every organization, the
  * policy revisions (the policy reads as the built-in default again), the
  * battery rows and uploaded packages, the composed policy and the GitHub sync
- * source. The runtime ledger (sessions, events, decisions) is left alone.
+ * source. The runtime ledger (sessions, events, decisions, and each
+ * organization's published policy revisions) is left alone: the next dispatch
+ * publishes the default policy as the organization's next revision.
  * With no saved revision, the next policy saved turns enforcement on again,
  * as an organization's first policy does.
  *

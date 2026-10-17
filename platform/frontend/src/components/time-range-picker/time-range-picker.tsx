@@ -159,8 +159,10 @@ export function TimeRangePicker({
               <Button
                 type="button"
                 variant="ghost"
+                // Grows to fill the group when it is laid out full width (the
+                // compact filter popover), so it reads like the selects there.
                 className={cn(
-                  "h-full gap-1.5 rounded-none px-2.5 text-sm font-normal has-[>svg]:px-2.5 hover:bg-black/5",
+                  "h-full min-w-0 flex-1 justify-start gap-1.5 rounded-none px-2.5 text-sm font-normal has-[>svg]:px-2.5 hover:bg-black/5",
                   value !== null && "font-medium",
                 )}
               >
@@ -168,7 +170,7 @@ export function TimeRangePicker({
                 {/* Fit preset labels closely; cap long custom ranges and show
                     their exact times in the tooltip. */}
                 <span className="max-w-52 truncate text-left">{label}</span>
-                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
               </Button>
             </PopoverTrigger>
           </TooltipTrigger>
@@ -178,7 +180,9 @@ export function TimeRangePicker({
           align="end"
           sideOffset={8}
           collisionPadding={24}
-          className="w-[min(32rem,calc(100vw-3rem))] p-0"
+          // Capped to the space Radix finds on screen and scrollable, so on a
+          // phone the presets stay reachable instead of running off the page.
+          className="max-h-[var(--radix-popover-content-available-height)] w-[min(32rem,calc(100vw-3rem))] overflow-y-auto p-0"
         >
           <div className="grid sm:grid-cols-[minmax(0,1fr)_12rem]">
             <form

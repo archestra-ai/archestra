@@ -111,6 +111,42 @@ describe("GET /api/openappa/external-consults", () => {
     expect((await list("?outcome=timeout")).json().data).toHaveLength(1);
   });
 
+  test("search matches part of the external's name or the session ID", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const byName = await seedConsult({
+      organizationId,
+      externalName: "PII-Annotator",
+      sessionId: "sess-one",
+    });
+    const bySession = await seedConsult({
+      organizationId,
+      externalName: "egress-policy",
+      sessionId: "sess-annotate-7",
+    });
+    await seedConsult({
+      organizationId,
+      externalName: "secrets-scanner",
+      sessionId: "sess-two",
+    });
+
+    const ids = async (query: string) =>
+      (await list(query))
+        .json()
+        .data.map((row: { id: string }) => row.id)
+        .sort();
+
+    expect(await ids("?search=annotat")).toEqual([byName, bySession].sort());
+    expect(await ids("?search=sess-one")).toEqual([byName]);
+    // The search combines with the other filters rather than replacing them.
+    expect(await ids("?search=annotat&externalName=egress-policy")).toEqual([
+      bySession,
+    ]);
+  });
+
   test("a openappaDiagnostics:read caller sees only their own consults, in json and jsonl", async ({
     makeUser,
     makeMember,
@@ -303,6 +339,7 @@ async function seedConsult(params: {
   organizationId: string;
   secondsAgo?: number;
   externalName?: string;
+  sessionId?: string;
   outcome?: "answered" | "timeout";
   rawResponse?: Buffer;
   diagnostics?: Buffer;
@@ -314,7 +351,7 @@ async function seedConsult(params: {
   await db.insert(schema.openappaExternalConsultsTable).values({
     id,
     organizationId: params.organizationId,
-    sessionId: "session",
+    sessionId: params.sessionId ?? "session",
     callerId: params.callerId ?? "user:caller",
     createdAt,
     startedAt: createdAt,

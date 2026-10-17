@@ -35,6 +35,7 @@ const mockPinMutate = vi.fn();
 const mockRestoreMutate = vi.fn();
 const mockPermanentlyDeleteMutateAsync = vi.fn();
 const mockUseProjects = vi.fn();
+const mockUseAllMatchingProjects = vi.fn();
 
 let mockProjects: ProjectFixture[] = [];
 
@@ -288,9 +289,49 @@ vi.mock("@/lib/projects/projects.query", () => ({
   // between the trash and the active list, so a mock that dropped them would
   // stay green if the page stopped passing `status: "deleted"` and listed live
   // projects with Restore and Delete permanently on them.
-  useProjects: (filters?: { status?: string }) => {
+  // Serves pages the way the endpoint does: split by `pinned`, cut by
+  // limit/offset, with the total of the whole match.
+  useProjects: (filters?: {
+    status?: string;
+    pinned?: boolean;
+    limit?: number;
+    offset?: number;
+    enabled?: boolean;
+  }) => {
     mockUseProjects(filters);
-    return { data: mockProjects, isPending: false };
+    const rows =
+      filters?.pinned === undefined
+        ? mockProjects
+        : mockProjects.filter((p) => Boolean(p.pinnedAt) === filters.pinned);
+    const offset = filters?.offset ?? 0;
+    const limit = filters?.limit ?? rows.length;
+    return {
+      data: {
+        data: rows.slice(offset, offset + limit),
+        pagination: {
+          currentPage: Math.floor(offset / Math.max(limit, 1)) + 1,
+          limit,
+          total: rows.length,
+          totalPages: Math.ceil(rows.length / Math.max(limit, 1)),
+          hasNext: offset + limit < rows.length,
+          hasPrev: offset > 0,
+        },
+      },
+      isPending: false,
+    };
+  },
+  useAllMatchingProjects: (
+    filters: { pinned?: boolean },
+    options?: { enabled?: boolean },
+  ) => {
+    mockUseAllMatchingProjects(filters, options);
+    return {
+      data: options?.enabled
+        ? mockProjects.filter((p) => Boolean(p.pinnedAt) === filters.pinned)
+        : undefined,
+      isFetching: false,
+      isError: false,
+    };
   },
   useCreateProject: () => ({
     mutateAsync: mockCreateMutateAsync,
@@ -805,6 +846,135 @@ describe("ProjectsPageClient", () => {
       expect.objectContaining({ status: undefined }),
     );
     expect(screen.getByText("Plain project")).toBeInTheDocument();
+  });
+
+  it("asks for the pinned tiles and the table's page separately, the page from the URL", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("page=2&pageSize=10") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockProjects = [
+      makeProject({
+        id: "pinned",
+        name: "Pinned project",
+        pinnedAt: "2026-02-01T00:00:00.000Z",
+      }),
+      ...Array.from({ length: 15 }, (_, i) =>
+        makeProject({ id: `p${i + 1}`, name: `Project ${i + 1}` }),
+      ),
+    ];
+
+    render(<ProjectsPageClient />);
+
+    expect(mockUseProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ pinned: true, limit: 100, offset: 0 }),
+    );
+    expect(mockUseProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ pinned: false, limit: 10, offset: 10 }),
+    );
+    // The tile is shown on every page; the table holds page 2 alone.
+    expect(screen.getByText("Pinned project")).toBeInTheDocument();
+    expect(screen.getByText("Project 11")).toBeInTheDocument();
+    expect(screen.getByText("Project 15")).toBeInTheDocument();
+    expect(screen.queryByText("Project 10")).not.toBeInTheDocument();
+  });
+
+  it("keeps the pinned tiles, without the empty prompt, when every project is pinned", () => {
+    mockProjects = [
+      makeProject({
+        id: "pinned",
+        name: "Pinned project",
+        pinnedAt: "2026-02-01T00:00:00.000Z",
+      }),
+    ];
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.getByText("Pinned project")).toBeInTheDocument();
+    expect(screen.queryByText("No projects yet")).not.toBeInTheDocument();
+    expect(screen.queryByText("All projects")).not.toBeInTheDocument();
+  });
+
+  it("selects every matching project across pages, not only the page in view", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data:
+            permissions.project?.includes("update") === true ||
+            permissions.project?.includes("delete") === true,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    mockProjects = Array.from({ length: 25 }, (_, i) =>
+      makeProject({ id: `p${i + 1}`, name: `Project ${i + 1}` }),
+    );
+
+    render(<ProjectsPageClient />);
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select all projects on this page",
+      }),
+    );
+    expect(mockUseAllMatchingProjects).not.toHaveBeenCalledWith(
+      expect.anything(),
+      { enabled: true },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Select all 25/ }));
+
+    // The table's rows are the unpinned ones, so that is what "all" walks.
+    expect(mockUseAllMatchingProjects).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pinned: false }),
+      { enabled: true },
+    );
+    expect(
+      screen.getAllByText("All 25 projects selected").length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(mockBulkDeleteMutate.mock.calls.at(-1)?.[0]).toHaveLength(25);
+  });
+
+  it("counts only the projects the bulk actions can change once every match is selected", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("pageSize=1") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    // A member: may update and delete their own projects, but holds no
+    // grant on every project (the "*" scope), so a shared row is not theirs
+    // to change.
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions, scope) =>
+        ({
+          data:
+            scope !== "*" &&
+            (permissions.project?.includes("update") === true ||
+              permissions.project?.includes("delete") === true),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    mockProjects = [
+      makeProject({ id: "own-1", name: "Own one" }),
+      makeProject({ id: "own-2", name: "Own two" }),
+      makeProject({ id: "shared", name: "Shared one", viewerRole: "shared" }),
+    ];
+
+    render(<ProjectsPageClient />);
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select all projects on this page",
+      }),
+    );
+    // The offer counts every match the server reports...
+    fireEvent.click(screen.getByRole("button", { name: /Select all 3/ }));
+    // ...the selection counts what Delete and Edit sharing will act on.
+    expect(
+      screen.getAllByText("All 2 projects selected").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText("All 3 projects selected"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows bulk actions and targets the selected project", async () => {

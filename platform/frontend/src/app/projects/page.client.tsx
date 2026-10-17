@@ -5,10 +5,12 @@ import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
+import type { RowSelectionState } from "@tanstack/react-table";
 import { FolderKanban, Plus, Trash2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -54,7 +56,8 @@ import {
   useProjectLabelKeys,
   useProjectLabelValues,
 } from "@/lib/entity-labels.query";
-import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -63,6 +66,7 @@ import {
 } from "@/lib/projects/project-permissions";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
+  useAllMatchingProjects,
   useBulkDeleteProjects,
   useCreateProject,
   useDeleteProject,
@@ -106,13 +110,9 @@ function ProjectsList() {
   // The trash. The backend serves this slice to project admins only (empty for
   // everyone else), and the status filter that reaches it is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
-  const {
-    data,
-    isPending,
-    isFetching,
-    isLoadingError: isProjectsLoadError,
-    refetch: refetchProjects,
-  } = useProjects({
+  const { pageIndex, pageSize, offset, setPagination } =
+    useDataTableQueryParams();
+  const filters = {
     scope,
     search,
     teamIds,
@@ -121,10 +121,46 @@ function ProjectsList() {
     access,
     sharedWith,
     owner,
-    status: isDeletedView ? "deleted" : undefined,
     labels: labelsFilter,
+  };
+  // Pinned projects are tiles above the table, from their own request under
+  // the same filters; the table pages through the rest. Not in the trash: a
+  // deleted project keeps its `pinnedAt`, and the trash table has no tiles
+  // and no pin indicator, so splitting there would hide a row with nothing
+  // on screen explaining why.
+  const {
+    data: pinnedData,
+    isPending: isPinnedPending,
+    isLoadingError: isPinnedLoadError,
+    refetch: refetchPinned,
+  } = useProjects({
+    ...filters,
+    pinned: true,
+    limit: PINNED_PROJECTS_LIMIT,
+    offset: 0,
+    enabled: !isDeletedView,
     toastOnError: false,
   });
+  const {
+    data,
+    isPending,
+    isFetching,
+    isLoadingError: isTableLoadError,
+    refetch: refetchTable,
+  } = useProjects({
+    ...(isDeletedView ? {} : filters),
+    pinned: isDeletedView ? undefined : false,
+    status: isDeletedView ? "deleted" : undefined,
+    limit: pageSize,
+    offset,
+    toastOnError: false,
+  });
+  const isProjectsLoadError =
+    isTableLoadError || (!isDeletedView && isPinnedLoadError);
+  const refetchProjects = () => {
+    void refetchTable();
+    if (!isDeletedView) void refetchPinned();
+  };
   const {
     hasAnyApiKey,
     isLoading: isApiKeyLoading,
@@ -146,17 +182,20 @@ function ProjectsList() {
     useState<ProjectListItem | null>(null);
   const [permanentlyDeletingProject, setPermanentlyDeletingProject] =
     useState<ProjectListItem | null>(null);
-  // Pinned projects become tiles above the table in every scope: oversight
-  // projects simply aren't pinnable, so they stay in the table on their own.
-  // Not in the trash, though — a deleted project keeps its `pinnedAt`, and the
-  // trash table has no tiles and no pin indicator, so splitting there would
-  // hide a row with nothing on screen explaining why.
-  const projects = useMemo(
-    () => (isDeletedView ? (data ?? []) : sortProjectsPinnedFirst(data ?? [])),
-    [data, isDeletedView],
+  const pinnedProjects = useMemo(
+    () =>
+      isDeletedView ? [] : sortProjectsPinnedFirst(pinnedData?.data ?? []),
+    [pinnedData, isDeletedView],
   );
-  const pinnedProjects = projects.filter((project) => project.pinnedAt);
-  const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
+  const tableProjects = data?.data ?? [];
+  const tableTotal = data?.pagination.total ?? 0;
+  const tablePagination = { pageIndex, pageSize, total: tableTotal };
+  // A filter that shrinks the list can leave the URL past its last page.
+  useEffect(() => {
+    if (data && tableTotal > 0 && offset >= tableTotal) {
+      setPagination({ pageIndex: 0, pageSize });
+    }
+  }, [data, tableTotal, offset, pageSize, setPagination]);
   const deleteProject = useDeleteProject();
   const restoreProject = useRestoreProject();
   const permanentlyDeleteProject = usePermanentlyDeleteProject();
@@ -319,20 +358,23 @@ function ProjectsList() {
                 />
               </FilterBar>
             </CollectionFilters>
-            {(isPending || isFetching) &&
-            projects.length === 0 ? null : isDeletedView ? (
-              projects.length === 0 ? (
+            {isPending ||
+            (!isDeletedView && isPinnedPending) ? null : isDeletedView ? (
+              tableTotal === 0 ? (
                 <EmptyState icon={FolderKanban} title="No deleted projects" />
               ) : (
                 <DeletedProjectsTable
-                  projects={projects}
+                  projects={tableProjects}
+                  pagination={tablePagination}
+                  onPaginationChange={setPagination}
+                  isLoading={isFetching}
                   onRestore={(project) =>
                     restoreProject.mutate({ id: project.id })
                   }
                   onPermanentlyDelete={setPermanentlyDeletingProject}
                 />
               )
-            ) : projects.length === 0 ? (
+            ) : pinnedProjects.length === 0 && tableTotal === 0 ? (
               <EmptyState
                 icon={FolderKanban}
                 title={
@@ -356,7 +398,11 @@ function ProjectsList() {
                 />
                 <ProjectSection
                   title="All projects"
-                  projects={unpinnedProjects}
+                  projects={tableProjects}
+                  filters={filters}
+                  pagination={tablePagination}
+                  onPaginationChange={setPagination}
+                  isLoading={isFetching}
                   onTogglePin={togglePin}
                   onEdit={openEditDialog}
                   onDelete={setDeletingProject}
@@ -372,17 +418,38 @@ function ProjectsList() {
 
 // === internal components ===
 
-type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
+type ProjectListItem =
+  archestraApiTypes.GetProjectsResponses["200"]["data"][number];
+type ProjectListFilters = Omit<
+  NonNullable<archestraApiTypes.GetProjectsData["query"]>,
+  "limit" | "offset" | "pinned" | "status"
+>;
+
+/** Pinned tiles are one request; more pins than this are unusual. */
+const PINNED_PROJECTS_LIMIT = 100;
 
 function ProjectSection({
   title,
   projects,
+  filters,
+  pagination,
+  onPaginationChange,
+  isLoading,
   onTogglePin,
   onEdit,
   onDelete,
 }: {
   title: string;
+  /** The page in view. */
   projects: ProjectListItem[];
+  /** The filters the page was fetched with, for "select all matching". */
+  filters: ProjectListFilters;
+  pagination: { pageIndex: number; pageSize: number; total: number };
+  onPaginationChange: (pagination: {
+    pageIndex: number;
+    pageSize: number;
+  }) => void;
+  isLoading: boolean;
   onTogglePin: (project: ProjectListItem) => void;
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
@@ -416,25 +483,71 @@ function ProjectSection({
   };
   const canSelectProject = (project: ProjectListItem) =>
     canShareProjectItem(project) || canDeleteProjectItem(project);
+  // The table is server-paginated: selection covers the page in view, and
+  // "select all N" walks every matching page. Changing a filter drops an
+  // escalation rather than re-pointing "all N" at a different N.
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const filterSignature = JSON.stringify(filters);
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === filterSignature;
+  const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: projects,
+      getRowId: (project) => project.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+      canSelect: canSelectProject,
+    });
   const {
-    rowSelection,
-    setRowSelection,
-    onPageRowIdsChange,
-    clearSelection,
-    selected: selectedProjects,
-    selectAllMatching,
-    rangeSelection,
-  } = useBulkSelection({
-    rows: projects,
-    getId: (project) => project.id,
-    canSelect: canSelectProject,
-    filterSignature: `projects:${projects.map((project) => project.id).join(",")}`,
-    matchDescription: "are listed here",
-  });
+    data: allMatching,
+    isFetching: isFetchingAllMatching,
+    isError: isAllMatchingError,
+  } = useAllMatchingProjects(
+    { ...filters, pinned: false },
+    { enabled: allMatchingSelected },
+  );
+  useEffect(() => {
+    if (allMatchingSelected && isAllMatchingError) {
+      toast.error("Couldn't select all matching projects", {
+        id: "projects-all-matching-error",
+      });
+    }
+  }, [allMatchingSelected, isAllMatchingError]);
+  const clearSelection = () => {
+    setRowSelection({});
+    setEscalatedFor(null);
+  };
+  const pageSelection = projects.filter(
+    (project) =>
+      canSelectProject(project) && effectiveRowSelection[project.id] === true,
+  );
+  const selectedProjects =
+    allMatchingSelected && allMatching
+      ? allMatching.filter(canSelectProject)
+      : pageSelection;
+  const selectablePage = projects.filter(canSelectProject);
+  const selectAllMatching = {
+    // The offer counts every match; once escalated, the bar counts what the
+    // bulk actions will act on, which leaves out rows the caller cannot change.
+    total:
+      allMatchingSelected && allMatching
+        ? selectedProjects.length
+        : pagination.total,
+    pageFullySelected:
+      selectablePage.length > 0 &&
+      selectablePage.every((project) => effectiveRowSelection[project.id]),
+    active: allMatchingSelected,
+    onSelectAll: () => setEscalatedFor(filterSignature),
+    matchDescription: filters.search
+      ? "match this search query"
+      : "match the current filters",
+  };
   const selectedForSharing = selectedProjects.filter(canShareProjectItem);
   const selectedForDelete = selectedProjects.filter(canDeleteProjectItem);
 
-  if (projects.length === 0) return null;
+  if (pagination.total === 0) return null;
 
   return (
     <section className="space-y-3">
@@ -445,7 +558,9 @@ function ProjectSection({
         count={selectedProjects.length}
         noun="project"
         onClear={clearSelection}
-        busy={bulkDelete.isPending}
+        busy={
+          bulkDelete.isPending || (allMatchingSelected && isFetchingAllMatching)
+        }
         selectAllMatching={selectAllMatching}
       >
         <PermissionButton
@@ -480,12 +595,14 @@ function ProjectSection({
       </BulkActions>
       <ProjectsTable
         projects={projects}
+        pagination={pagination}
+        onPaginationChange={onPaginationChange}
+        isLoading={isLoading}
         onTogglePin={onTogglePin}
         onEdit={onEdit}
         onDelete={onDelete}
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        onPageRowIdsChange={onPageRowIdsChange}
+        rowSelection={effectiveRowSelection}
+        onRowSelectionChange={onRowSelectionChange}
         canSelect={canSelectProject}
         rangeSelection={rangeSelection}
       />

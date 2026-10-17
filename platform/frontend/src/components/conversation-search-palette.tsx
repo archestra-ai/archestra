@@ -299,6 +299,8 @@ export function ConversationSearchPalette({
   // and environments are small lists, fetched once and matched here.
   const { data: projectsPage } = useProjects({
     search: debouncedSearch,
+    limit: PALETTE_PROJECT_LIMIT,
+    offset: 0,
     enabled: open && isAuthenticated && isSearchingEntities,
   });
   const { data: knowledgeBases = [] } = useKnowledgeBases({
@@ -387,7 +389,9 @@ export function ConversationSearchPalette({
   // Skills are already filtered by the server's search, so no local pass.
   const matchingSkills = isSearchingEntities ? skills : [];
   const matchingApps = isSearchingEntities ? (appsPage?.data ?? []) : [];
-  const matchingProjects = isSearchingEntities ? (projectsPage ?? []) : [];
+  const matchingProjects = isSearchingEntities
+    ? (projectsPage?.data ?? [])
+    : [];
   const matchingKnowledgeBases = isSearchingEntities ? knowledgeBases : [];
   const matchingTeams = isSearchingEntities ? teams : [];
 
@@ -1246,6 +1250,8 @@ function FooterShortcut({ keys, label }: { keys: string[]; label: string }) {
 
 /** Recent chats shown before a search; older ones are found by typing. */
 const RECENT_CHATS_LIMIT = 5;
+/** Server-searched projects per query; the palette shows the best matches. */
+const PALETTE_PROJECT_LIMIT = 20;
 
 // cmdk moves the selection in DOM order, so a grid of items keeps arrow-key
 // navigation reaching every option while using the dialog's width.

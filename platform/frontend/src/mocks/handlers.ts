@@ -374,7 +374,7 @@ export const handlers: HttpHandler[] = [
     tools: [],
     tokenCount: { total: 0, source: "estimate", model: null, observedAt: null },
   }),
-  ...getJson("/api/projects", []),
+  ...getJson("/api/projects", paginated([], { limit: 20 })),
   ...getJson("/api/apps", {
     data: [],
     pagination: {

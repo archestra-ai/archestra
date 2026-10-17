@@ -117,6 +117,10 @@ export const RouteId = {
 
   // MCP Catalog Routes
   GetInternalMcpCatalog: "getInternalMcpCatalog",
+  SearchMcpRegistry: "searchMcpRegistry",
+  SearchMcpRegistryIds: "searchMcpRegistryIds",
+  GetMcpRegistryIssueIndex: "getMcpRegistryIssueIndex",
+  GetInternalMcpCatalogIcon: "getInternalMcpCatalogIcon",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
   GetInternalMcpCatalogCredentialPreflight:

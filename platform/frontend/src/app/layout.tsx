@@ -13,6 +13,7 @@ import "./globals.css";
 import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
+import { prefetchShellSeed } from "@/lib/auth/shell-seed.server";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
 import { getDeploymentFavicon } from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
@@ -230,7 +231,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const favicon = await getDeploymentFavicon();
+  const [favicon, shellSeed] = await Promise.all([
+    getDeploymentFavicon(),
+    prefetchShellSeed(),
+  ]);
 
   return (
     <html
@@ -260,7 +264,7 @@ export default async function RootLayout({
       <body className="font-sans antialiased">
         <VisualViewportHeight />
         <MswInit>
-          <ArchestraQueryClientProvider>
+          <ArchestraQueryClientProvider shellSeed={shellSeed}>
             <ChatProvider>
               <ThemeProvider
                 attribute="class"

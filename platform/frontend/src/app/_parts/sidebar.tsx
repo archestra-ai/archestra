@@ -33,6 +33,7 @@ import {
   type NavGroup,
   type NavItem,
 } from "@/app/_parts/studio-nav";
+import { prefetchMcpRegistry } from "@/app/mcp/registry/_parts/prefetch-registry";
 import { AppLogo } from "@/components/app-logo";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { OnboardingDot } from "@/components/onboarding-dot";
@@ -759,12 +760,26 @@ function SidebarPrefetchLink(
   return (
     <IntentPrefetchLink
       {...props}
+      // The registry is a dynamic page without a loading boundary: only a
+      // full prefetch fetches its own payload and JavaScript before the click.
+      fullPrefetch={isRegistryHref(props.href)}
       onPrefetch={(href) => {
         // Route prefetch doesn't mount client query hooks. Start the matching
         // first page alongside it, not after the destination's JavaScript loads.
         if (href === "/apps") void prefetchApps(queryClient);
+        // The registry's payload carries no data on a client navigation (the
+        // server renders its first page only into full page loads), so its
+        // first page is fetched here, once.
+        if (isRegistryHref(href)) void prefetchMcpRegistry(queryClient, href);
       }}
     />
+  );
+}
+
+function isRegistryHref(href: unknown): href is string {
+  return (
+    typeof href === "string" &&
+    (href === "/mcp/registry" || href.startsWith("/mcp/registry?"))
   );
 }
 

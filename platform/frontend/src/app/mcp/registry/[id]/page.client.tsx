@@ -1099,7 +1099,10 @@ function ServerStatus({
   }
   return (
     <span className={typeRole({ role: "body" })}>
-      {deploymentFeedState === "loading" ? "Checking…" : "Status unavailable"}
+      {deploymentFeedState === "loading" ||
+      deploymentFeedState === "reconnecting"
+        ? "Checking…"
+        : "Status unavailable"}
     </span>
   );
 }

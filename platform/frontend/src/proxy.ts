@@ -1,6 +1,7 @@
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { isShellSeedRoute, SHELL_SEED_HEADER } from "@/lib/auth/shell-seed";
 
 export function proxy(req: NextRequest) {
   // Redirect root to /chat before any client components render
@@ -58,7 +59,25 @@ export function proxy(req: NextRequest) {
     });
   }
 
-  return NextResponse.next();
+  // Tell the root layout which documents render their first page on the
+  // server, so it resolves the signed-in shell there too. Never trusted from
+  // the client: the header is always set or removed here.
+  const headers = new Headers(req.headers);
+  if (rendersFirstPageOnServer(req)) {
+    headers.set(SHELL_SEED_HEADER, req.nextUrl.pathname);
+  } else {
+    headers.delete(SHELL_SEED_HEADER);
+  }
+  return NextResponse.next({ request: { headers } });
+}
+
+/** A full document load of a page whose rows are server-rendered. */
+function rendersFirstPageOnServer(req: NextRequest) {
+  return (
+    req.method === "GET" &&
+    isShellSeedRoute(req.nextUrl.pathname) &&
+    req.headers.get("rsc") !== "1"
+  );
 }
 
 /**

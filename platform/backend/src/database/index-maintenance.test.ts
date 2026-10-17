@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import db from "@/database";
 import {
   createAgentToolsIndexes,
+  createMcpServerIndexes,
   dropLegacyPayloadTrgmIndexes,
 } from "./index-maintenance";
 
@@ -137,6 +138,47 @@ describe("createAgentToolsIndexes", () => {
     });
     expect(await indexDefinition(takenName)).toBe(before);
     expect(await advisoryLockCount()).toBe(0);
+  });
+});
+
+describe("createMcpServerIndexes", () => {
+  const name = "mcp_server_catalog_id_live_idx";
+  const options = {
+    concurrently: false,
+    client: {
+      query: (text: string, values?: unknown[]) =>
+        db.$client.query(text, values),
+    },
+  };
+
+  beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
+  });
+
+  test("creates the live-install catalog index, then leaves it alone", async () => {
+    expect(await createMcpServerIndexes(options)).toEqual({
+      [name]: "created",
+    });
+    expect(await indexDefinition(name)).toBe(
+      `CREATE INDEX ${name} ON public.mcp_server USING btree (catalog_id) WHERE (deleted_at IS NULL)`,
+    );
+    const oid = await indexOid(name);
+
+    expect(await createMcpServerIndexes(options)).toEqual({
+      [name]: "already_valid",
+    });
+    expect(await indexOid(name)).toBe(oid);
+    expect(await advisoryLockCount()).toBe(0);
+  });
+
+  test("leaves an index of that name on another table alone", async () => {
+    await db.execute(
+      sql.raw(`CREATE INDEX "${name}" ON agent_tools (agent_id)`),
+    );
+
+    expect(await createMcpServerIndexes(options)).toEqual({
+      [name]: "unexpected_definition",
+    });
   });
 });
 

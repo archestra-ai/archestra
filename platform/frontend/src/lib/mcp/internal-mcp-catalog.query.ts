@@ -1,8 +1,4 @@
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type ResourceAccessRelation,
-} from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
   type QueryClient,
   useMutation,
@@ -11,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { environmentKeys } from "@/lib/environment.query";
+import { mcpRegistryQueryKey } from "@/lib/mcp/mcp-registry.query";
 import { externalMcpSkillsQueryKey } from "@/lib/skills/skill.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -103,39 +100,6 @@ export function useInternalMcpCatalog(
 }
 
 /**
- * Ids of the catalog items the registry's access filters keep. The registry
- * filters its rows in the browser over the shared catalog list; only the
- * access relation, recipient, and owner filters need the server, which reads
- * the grants. Disabled when no filter is given, meaning every row is kept.
- */
-export function useInternalMcpCatalogAccessIds(filters: {
-  access?: ResourceAccessRelation[];
-  sharedWith?: string[];
-  owner?: string[];
-}) {
-  const { access, sharedWith, owner } = filters;
-  return useQuery({
-    queryKey: [
-      "mcp-catalog",
-      "access-ids",
-      {
-        access: access ?? null,
-        sharedWith: sharedWith ?? null,
-        owner: owner ?? null,
-      },
-    ],
-    enabled: !!access || !!sharedWith || !!owner,
-    queryFn: async () => {
-      const { data, error } = await getInternalMcpCatalog({
-        query: { access, sharedWith, owner },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return new Set((data ?? []).map((item) => item.id));
-    },
-  });
-}
-
-/**
  * The saved credentials that would stop the caller installing a catalog item
  * at this scope, so the install dialog can explain before they press Install.
  */
@@ -202,6 +166,7 @@ export function useCreateInternalMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       toast.success("Catalog item created successfully");
     },
     onError: (error) => {
@@ -232,6 +197,7 @@ export function useApproveCatalogItemImage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       toast.success("Image approved");
     },
@@ -256,6 +222,7 @@ export function useUpdateInternalMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       queryClient.invalidateQueries({ queryKey: externalMcpSkillsQueryKey });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
@@ -303,6 +270,7 @@ export function useReinstallInternalMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       queryClient.invalidateQueries({ queryKey: externalMcpSkillsQueryKey });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
@@ -329,6 +297,7 @@ export function useRefreshInternalMcpCatalogImage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
     },
@@ -350,6 +319,7 @@ export function useDeleteInternalMcpCatalogItem() {
     onSuccess: (_data, catalogId) => {
       removeExternalMcpSkillsForCatalog(queryClient, catalogId);
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       queryClient.invalidateQueries({ queryKey: externalMcpSkillsQueryKey });
       toast.success("Catalog item deleted successfully");
     },
@@ -496,6 +466,7 @@ export function useResetDeploymentYaml() {
     onSuccess: (_data, catalogId) => {
       // Invalidate the main catalog query to refresh the form data
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       // Invalidate the preview query
       queryClient.invalidateQueries({
         queryKey: ["mcp-catalog", catalogId, "deployment-yaml-preview"],

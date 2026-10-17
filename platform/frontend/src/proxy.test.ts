@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { NextRequest } from "next/server";
+import { SHELL_SEED_ROUTES } from "./lib/auth/shell-seed";
 import { proxy } from "./proxy";
 
 /**
@@ -60,6 +61,58 @@ describe("proxy", () => {
 
       expect(response.status).toBe(307);
       expect(response.headers.get("location")).toContain("/chat");
+    });
+  });
+
+  describe("server-rendered first page marker", () => {
+    const forwarded = (response: Response) =>
+      response.headers.get("x-middleware-request-x-archestra-shell-seed");
+
+    it("marks a document load of the registry list", () => {
+      expect(
+        forwarded(proxy(createMockRequest({ url: "/mcp/registry?page=2" }))),
+      ).toBe("/mcp/registry");
+    });
+
+    it("marks the documents of any page added to the seeded routes, and only those", () => {
+      const routes = SHELL_SEED_ROUTES as string[];
+      routes.push("/mcp/gateways");
+      try {
+        expect(
+          forwarded(proxy(createMockRequest({ url: "/mcp/gateways" }))),
+        ).toBe("/mcp/gateways");
+        expect(
+          forwarded(proxy(createMockRequest({ url: "/agents" }))),
+        ).toBeNull();
+      } finally {
+        routes.pop();
+      }
+      expect(
+        forwarded(proxy(createMockRequest({ url: "/mcp/gateways" }))),
+      ).toBeNull();
+    });
+
+    it("does not mark client navigations, other pages, or trust a client's header", () => {
+      expect(
+        forwarded(
+          proxy(
+            createMockRequest({
+              url: "/mcp/registry",
+              headers: { rsc: "1" },
+            }),
+          ),
+        ),
+      ).toBeNull();
+      expect(
+        forwarded(
+          proxy(
+            createMockRequest({
+              url: "/agents",
+              headers: { "x-archestra-shell-seed": "1" },
+            }),
+          ),
+        ),
+      ).toBeNull();
     });
   });
 

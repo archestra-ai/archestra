@@ -64,7 +64,10 @@ function reauthMute({
 }: {
   catalogId: string;
   serverId: string;
-}): InstalledServerForIssues["alertMutes"][number] {
+}): NonNullable<InstalledServerForIssues["alertMutes"]>[number] & {
+  catalogId: string;
+  mutedAt: string;
+} {
   return {
     catalogId,
     mcpServerId: serverId,

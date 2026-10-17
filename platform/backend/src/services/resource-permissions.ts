@@ -24,6 +24,7 @@ import {
   topResourcePermissionPreset,
 } from "@archestra/shared";
 import { roleActionResourceFor } from "@archestra/shared/access-control";
+import type { RequestLookups } from "@/auth/request-lookups";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -314,13 +315,21 @@ export class ResourcePermissions {
     organizationId: string;
     userId: string;
     targets: ListInternalMcpCatalog[];
+    /** A request's memoized lookups, so the caller is resolved once. */
+    lookups?: Pick<RequestLookups, "principal" | "permissions">;
   }): Promise<Map<string, ResourcePermissionAction[]>> {
     const result = new Map<string, ResourcePermissionAction[]>();
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return result;
     const subjectKeys = new Set(subjects.map(subjectKey));
+    const caller = {
+      userId: params.userId,
+      organizationId: params.organizationId,
+    };
     const [permissions, policies] = await Promise.all([
-      getPermissionsForUserContext(params),
+      params.lookups
+        ? params.lookups.permissions(caller)
+        : getPermissionsForUserContext(caller),
       ResourcePermissionPolicyModel.findApplicableBatch({
         ...params,
         resource: "mcpRegistry",

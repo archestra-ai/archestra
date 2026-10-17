@@ -46,6 +46,20 @@ describe("IntentPrefetchLink", () => {
     expect(prefetch).toHaveBeenLastCalledWith("/agents/a1");
   });
 
+  it("prefetches the whole page when asked", () => {
+    render(
+      <IntentPrefetchLink href="/mcp/registry" fullPrefetch>
+        Registry
+      </IntentPrefetchLink>,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("link", { name: "Registry" }));
+
+    expect(prefetch).toHaveBeenLastCalledWith("/mcp/registry", {
+      kind: "full",
+    });
+  });
+
   it("prefetches a UrlObject href with its query and hash", () => {
     render(
       <IntentPrefetchLink

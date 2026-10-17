@@ -9,43 +9,41 @@ vi.mock("@/lib/auth/auth.query", () => ({
 vi.mock("@/lib/mcp/use-can-reauthenticate", () => ({
   useCanReauthenticate: () => () => true,
 }));
-vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: () => ({
-    data: [
-      {
-        id: "catalog-1",
-        serverType: "remote",
-        multitenant: false,
-        catalogReinstallRequired: false,
-        imageApprovalRequired: false,
-        updatedAt: "2026-08-01T00:00:00.000Z",
-        alertMutes: [],
-      },
-    ],
-  }),
-}));
-vi.mock("@/lib/mcp/mcp-server.query", () => ({
-  useMcpServers: () => ({
-    data: [
-      {
-        id: "server-1",
-        catalogId: "catalog-1",
-        ownerId: "user-1",
-        teamId: null,
-        scope: "personal",
-        localInstallationStatus: "success",
-        localInstallationError: null,
-        oauthRefreshError: "refresh_failed",
-        oauthRefreshErrorMessage: null,
-        oauthRefreshErrorDescription: null,
-        oauthRefreshFailedAt: "2026-08-01T00:00:00.000Z",
-        reinstallRequired: false,
-        reinstallReason: null,
-        updatedAt: "2026-08-01T00:00:00.000Z",
-        alertMutes: [],
-      },
-    ],
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpRegistryIssueIndex: () => ({
+    data: {
+      catalogItems: [
+        {
+          id: "catalog-1",
+          name: "catalog",
+          serverType: "remote",
+          multitenant: false,
+          dynamicConnectionMcpServerId: null,
+          environmentId: null,
+          authorId: null,
+          authorName: null,
+          alertMutes: [],
+        },
+      ],
+      servers: [
+        {
+          id: "server-1",
+          catalogId: "catalog-1",
+          ownerId: "user-1",
+          teamId: null,
+          scope: "personal",
+          canUseCredential: true,
+          localInstallationStatus: "success",
+          localInstallationError: null,
+          oauthRefreshError: "refresh_failed",
+          oauthRefreshErrorMessage: null,
+          oauthRefreshErrorDescription: null,
+          oauthRefreshFailedAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-01T00:00:00.000Z",
+          alertMutes: [],
+        },
+      ],
+    },
   }),
 }));
 

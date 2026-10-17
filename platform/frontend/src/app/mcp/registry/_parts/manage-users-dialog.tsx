@@ -72,10 +72,8 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import {
-  useInternalMcpCatalog,
-  useUpdateInternalMcpCatalogItem,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useMyTeams } from "@/lib/teams/team.query";
@@ -184,11 +182,11 @@ export function ManageUsersContent({
   personalOnly = false,
 }: ManageUsersContentProps) {
   const router = useRouter();
-  // Subscribe to live mcp-servers query to get fresh data. We fetch all
-  // servers (no catalogId filter) and keep those installed from this catalog.
+  // This catalog item's installs, narrowed on the server, and the item itself
+  // by id: neither needs the organization's full lists.
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
-    useMcpServers({ includeAssignedAgents: false });
-  const { data: catalogItems } = useInternalMcpCatalog({});
+    useMcpServers({ includeAssignedAgents: false, catalogId });
+  const { data: catalogItemById } = useInternalMcpCatalogItem(catalogId);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -215,8 +213,8 @@ export function ManageUsersContent({
   // Use the first server for display purposes
   const firstServer = allServers?.[0];
 
-  // Find the catalog item for connection labels and add-connection behavior.
-  const catalogItem = catalogItems?.find((item) => item.id === catalogId);
+  // The catalog item for connection labels and add-connection behavior.
+  const catalogItem = catalogItemById ?? undefined;
 
   const canReauthenticate = useCanReauthenticate();
 
@@ -1247,7 +1245,10 @@ function AgentConnectionsSection({
   item,
   connections,
 }: {
-  item: NonNullable<Parameters<typeof useCanModifyCatalogItem>[0]>;
+  item: Pick<
+    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+    "id" | "effectiveActions" | "dynamicConnectionMcpServerId"
+  >;
   connections: NonNullable<ReturnType<typeof useMcpServers>["data"]>;
 }) {
   const { canModify } = useCanModifyCatalogItem(item);

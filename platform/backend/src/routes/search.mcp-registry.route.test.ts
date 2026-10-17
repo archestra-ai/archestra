@@ -939,6 +939,30 @@ describe("MCP registry list routes", () => {
   });
 
   describe("GET /api/internal_mcp_catalog/registry/issue-index", () => {
+    test("names each install, for pickers that list installs by name", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const item = await makeItem(makeInternalMcpCatalog, "named");
+      const install = await makeMcpServer({
+        catalogId: item.id,
+        scope: "org",
+        name: "named-install",
+      });
+
+      const index = (
+        await ctx.app.inject({
+          method: "GET",
+          url: "/api/internal_mcp_catalog/registry/issue-index",
+        })
+      ).json();
+
+      expect(
+        index.servers.find((server: { id: string }) => server.id === install.id)
+          ?.name,
+      ).toBe("named-install");
+    });
+
     test("carries every visible item and install without icons or configuration", async ({
       makeInternalMcpCatalog,
       makeMcpServer,

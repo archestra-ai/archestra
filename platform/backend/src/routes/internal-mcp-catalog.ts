@@ -334,6 +334,7 @@ const McpRegistryIssueIndexSchema = z.object({
   servers: z.array(
     SelectMcpServerSchema.pick({
       id: true,
+      name: true,
       catalogId: true,
       scope: true,
       localInstallationStatus: true,

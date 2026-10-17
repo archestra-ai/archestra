@@ -911,6 +911,8 @@ class McpServerModel {
     return db
       .select({
         id: server.id,
+        // The install's own name, for pickers that list installs by name.
+        name: server.name,
         catalogId: server.catalogId,
         ownerId: server.ownerId,
         scope: server.scope,

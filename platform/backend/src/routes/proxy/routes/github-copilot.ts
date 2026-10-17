@@ -188,6 +188,7 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) {
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
+      agentId,
       provider: "github-copilot",
       token: extractBearerToken(request.headers.authorization),
     });

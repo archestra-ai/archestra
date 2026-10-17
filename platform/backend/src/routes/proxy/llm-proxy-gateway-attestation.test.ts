@@ -40,6 +40,7 @@ import {
   createOpenAiTestClient,
   type OpenAiStubOptions,
 } from "@/test/llm-provider-stubs";
+import { makePassthroughCredential } from "@/test/llm-proxy-credentials";
 import { type Agent, ApiError } from "@/types";
 import {
   anthropicAdapterFactory,
@@ -1460,6 +1461,8 @@ describe("Gateway tool attestation on the LLM proxy", () => {
   test("without OpenAPPA, discovers an unattested lookalike and never the gateway's own tools", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     await GuardrailsDeploymentModel.setEnabled(false);
     const organization = await makeOrganization();
@@ -1473,12 +1476,19 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       agentType: "mcp_gateway",
       name: "Prod Gateway",
     });
+    const owner = await makeUser();
+    await makeMember(owner.id, organization.id);
+    const platformCredential = await makePassthroughCredential({
+      organizationId: organization.id,
+      ownerId: owner.id,
+    });
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/anthropic/${proxy.id}/v1/messages`,
       headers: {
         "x-api-key": "test-key",
+        "x-archestra-virtual-key": platformCredential,
         "anthropic-version": "2023-06-01",
       },
       payload: {

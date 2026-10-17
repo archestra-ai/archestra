@@ -7,6 +7,7 @@ import logger from "@/logging";
 import { constructResponseSchema, Minimax, UuidIdSchema } from "@/types";
 import { minimaxAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -25,6 +26,7 @@ const minimaxProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
       upstream: config.llm.minimax.baseUrl as string,
       providerName: "MiniMax",
+      authenticate: createPassthroughAuthenticator("minimax"),
     }),
   });
 

@@ -3,6 +3,7 @@ import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
+import { hasInternalCall } from "@/clients/internal-call";
 import logger from "@/logging";
 import {
   fetchBedrockModels,
@@ -20,13 +21,14 @@ import { openaiToConverse } from "../adapters/bedrock-openai-translator";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import {
   attemptJwksAuth,
+  createPassthroughAuthenticator,
   resolveAgent,
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 
-type FastifyRequestLike = Pick<FastifyRequest, "ip" | "raw">;
+type FastifyRequestLike = FastifyRequest;
 
 /**
  * OpenAI ↔ Bedrock Converse compatibility routes.
@@ -219,9 +221,21 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else {
         logger.info("[BedrockOpenai] auth: raw-bearer");
+        // The caller's own Bedrock key still needs a platform credential
+        // beside it, the same check as the catch-all routes.
+        await createPassthroughAuthenticator("bedrock")({ request, agentId });
         apiKey = bearerToken;
       }
     } else if (isBedrockIamAuthEnabled()) {
+      // IAM uses the server's own AWS credentials, so it is never open to an
+      // anonymous caller, whatever the organization setting: only JWKS (above)
+      // or an in-process call may use it.
+      if (!hasInternalCall(request.headers)) {
+        throw new ApiError(
+          401,
+          "Authentication required. Provide a virtual API key or an identity provider token to list Bedrock models.",
+        );
+      }
       logger.info("[BedrockOpenai] auth: iam");
     }
 

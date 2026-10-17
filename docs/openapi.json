@@ -122148,6 +122148,9 @@
                         "allowChatFileUploads": {
                           "type": "boolean"
                         },
+                        "allowUnauthenticatedLlmProxyRequests": {
+                          "type": "boolean"
+                        },
                         "allowToolAutoAssignment": {
                           "type": "boolean"
                         },
@@ -122713,6 +122716,7 @@
                         "onlineSkillCatalogEnabled",
                         "skillMarketplaceAnonymousAccess",
                         "allowChatFileUploads",
+                        "allowUnauthenticatedLlmProxyRequests",
                         "allowToolAutoAssignment",
                         "embeddingModel",
                         "embeddingDimensions",
@@ -359335,6 +359339,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -359900,6 +359907,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -360481,6 +360489,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -361046,6 +361057,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -361753,6 +361765,9 @@
                   "allowChatFileUploads": {
                     "type": "boolean"
                   },
+                  "allowUnauthenticatedLlmProxyRequests": {
+                    "type": "boolean"
+                  },
                   "newAppsDisabledByDefault": {
                     "type": "boolean"
                   },
@@ -361863,6 +361878,9 @@
                       "type": "boolean"
                     },
                     "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
                     "allowToolAutoAssignment": {
@@ -362430,6 +362448,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -362863,6 +362882,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -363428,6 +363450,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -363861,6 +363884,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -364426,6 +364452,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -364871,6 +364898,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -365436,6 +365466,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -366000,6 +366031,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -366565,6 +366599,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -367113,6 +367148,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -367678,6 +367716,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -368181,6 +368220,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -368746,6 +368788,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -369193,6 +369236,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -369758,6 +369804,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -370236,6 +370283,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -370801,6 +370851,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -371216,6 +371267,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -371781,6 +371835,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -373400,6 +373455,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -373965,6 +374023,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",

@@ -19,8 +19,8 @@ import { accessGrants, afterEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types";
 import {
-  assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
+  assertPlatformAuthenticated,
   attemptJwksAuth,
   resolveAgent,
   VirtualKeyRateLimiter,
@@ -873,104 +873,155 @@ describe("attemptJwksAuth", () => {
 });
 
 // =========================================================================
-// assertAuthenticatedForKeylessProvider
+// assertPlatformAuthenticated
 // =========================================================================
 
-describe("assertAuthenticatedForKeylessProvider", () => {
-  const keylessArgs = {
+describe("assertPlatformAuthenticated", () => {
+  const noCredential = {
     apiKey: undefined,
-    wasVirtualKeyResolved: false,
+    hasPlatformCredential: false,
+    wasPassthroughKeyValidated: false,
     wasJwksAuthenticated: false,
     isInternalCall: false,
   };
+  const orgAllows = (allowed: boolean) => vi.fn(async () => allowed);
 
-  test("allows request when apiKey is present", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
+  // A provider key alone proves nothing about the caller: the platform
+  // credential (X-Archestra-Virtual-Key or a virtual key) is what identifies
+  // them, so a provider key without one must not reach the upstream.
+  test("rejects a provider key alone by default", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
         apiKey: "sk-real-key",
+        allowsUnauthenticated: orgAllows(false),
       }),
-    ).not.toThrow();
+    ).rejects.toThrow("X-Archestra-Virtual-Key");
   });
 
-  test("allows request when virtual key was resolved", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        wasVirtualKeyResolved: true,
+  test("allows a provider key alone when the organization allows unauthenticated requests", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
+        apiKey: "sk-real-key",
+        allowsUnauthenticated: orgAllows(true),
       }),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
-  test("allows request when JWKS authenticated", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
+  test("still rejects a request with no credential at all when the organization allows unauthenticated requests", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
+        allowsUnauthenticated: orgAllows(true),
+      }),
+    ).rejects.toThrow("Authentication required");
+  });
+
+  test("accepts a passthrough key together with the caller's provider key", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
+        apiKey: "sk-real-key",
+        wasPassthroughKeyValidated: true,
+        allowsUnauthenticated: orgAllows(false),
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  // A passthrough key carries no provider credential. Without the caller's own
+  // key the upstream call would run on whatever the server supplies (IAM,
+  // workload identity), which a passthrough key must never unlock.
+  test("rejects a passthrough key without a provider key", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
+        wasPassthroughKeyValidated: true,
+        allowsUnauthenticated: orgAllows(true),
+      }),
+    ).rejects.toThrow("together with your provider API key");
+  });
+
+  test("rejects a passthrough key when the server supplies the credential", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
+        apiKey: "sk-ignored",
+        wasPassthroughKeyValidated: true,
+        providerSuppliesServerCredential: true,
+        allowsUnauthenticated: orgAllows(true),
+      }),
+    ).rejects.toThrow("server's own credentials");
+  });
+
+  test("accepts a platform credential without reading the organization setting", async () => {
+    const allowsUnauthenticated = orgAllows(false);
+    await assertPlatformAuthenticated({
+      ...noCredential,
+      apiKey: "sk-real-key",
+      hasPlatformCredential: true,
+      allowsUnauthenticated,
+    });
+    await assertPlatformAuthenticated({
+      ...noCredential,
+      apiKey: "sk-real-key",
+      wasPassthroughKeyValidated: true,
+      allowsUnauthenticated,
+    });
+    expect(allowsUnauthenticated).not.toHaveBeenCalled();
+  });
+
+  test("allows request when JWKS authenticated", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
         wasJwksAuthenticated: true,
+        allowsUnauthenticated: orgAllows(false),
       }),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
-  // Which addresses count as loopback is isLoopbackRequest's contract, covered
-  // in utils/network.test.ts. This function only consumes the verdict.
-  test("allows an internal-proof caller without any auth", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
+  test("allows an internal-proof caller without any auth", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
         isInternalCall: true,
+        allowsUnauthenticated: orgAllows(false),
       }),
-    ).not.toThrow();
-  });
-
-  test("rejects external request without any auth", () => {
-    expect(() => assertAuthenticatedForKeylessProvider(keylessArgs)).toThrow(
-      "Authentication required",
-    );
+    ).resolves.toBeUndefined();
   });
 
   // When the backend authenticates upstream with its own credentials (Gemini on
   // Vertex AI), the caller's Authorization value is discarded before it reaches
-  // the provider. Nothing ever validates it, so it cannot authenticate anyone.
-  test("rejects an arbitrary bearer value when the server supplies the credential", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
+  // the provider. Nothing ever validates it, so it cannot authenticate anyone,
+  // and the organization opt-in does not open the server's credentials either.
+  test("rejects an arbitrary bearer value when the server supplies the credential, even when the organization allows unauthenticated requests", async () => {
+    await expect(
+      assertPlatformAuthenticated({
+        ...noCredential,
         apiKey: "Bearer anything",
         providerSuppliesServerCredential: true,
+        allowsUnauthenticated: orgAllows(true),
       }),
-    ).toThrow("Authentication required");
+    ).rejects.toThrow("server's own credentials");
   });
 
-  test("still allows a resolved virtual key when the server supplies the credential", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        apiKey: "Bearer anything",
-        wasVirtualKeyResolved: true,
-        providerSuppliesServerCredential: true,
-      }),
-    ).not.toThrow();
-  });
-
-  test("still allows JWKS auth when the server supplies the credential", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        wasJwksAuthenticated: true,
-        providerSuppliesServerCredential: true,
-      }),
-    ).not.toThrow();
-  });
-
-  test("still allows an internal-proof caller when the server supplies the credential", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        apiKey: "Bearer anything",
-        isInternalCall: true,
-        providerSuppliesServerCredential: true,
-      }),
-    ).not.toThrow();
+  test("still allows a platform credential, JWKS or an internal call when the server supplies the credential", async () => {
+    for (const credential of [
+      { hasPlatformCredential: true },
+      { wasJwksAuthenticated: true },
+      { isInternalCall: true },
+    ]) {
+      await expect(
+        assertPlatformAuthenticated({
+          ...noCredential,
+          ...credential,
+          apiKey: "Bearer anything",
+          providerSuppliesServerCredential: true,
+          allowsUnauthenticated: orgAllows(false),
+        }),
+      ).resolves.toBeUndefined();
+    }
   });
 });
 

@@ -167,9 +167,9 @@ describe("schedule trigger MCP tools", () => {
       project_id: first.structuredContent?.project_id,
       created: false,
     });
-    expect(await projectService.list({ organizationId, userId })).toHaveLength(
-      1,
-    );
+    expect(
+      (await projectService.list({ organizationId, userId })).data,
+    ).toHaveLength(1);
     expect(
       await ScheduleTriggerModel.listByOrganization({ organizationId }),
     ).toHaveLength(1);
@@ -209,9 +209,9 @@ describe("schedule trigger MCP tools", () => {
     );
     expect(retry.isError, textOf(retry)).toBe(false);
     expect(retry.structuredContent).toMatchObject({ created: false });
-    expect(await projectService.list({ organizationId, userId })).toHaveLength(
-      1,
-    );
+    expect(
+      (await projectService.list({ organizationId, userId })).data,
+    ).toHaveLength(1);
     expect(
       await ScheduleTriggerModel.listByOrganization({ organizationId }),
     ).toHaveLength(1);
@@ -326,9 +326,9 @@ describe("schedule trigger MCP tools", () => {
         userId,
       }),
     ).toEqual({ content: "Keep existing instructions." });
-    expect(await projectService.list({ organizationId, userId })).toHaveLength(
-      2,
-    );
+    expect(
+      (await projectService.list({ organizationId, userId })).data,
+    ).toHaveLength(2);
   });
 
   test("validates a new scheduled project before persisting it", async () => {
@@ -351,7 +351,9 @@ describe("schedule trigger MCP tools", () => {
         context,
       );
       expect(result.isError).toBe(true);
-      expect(await projectService.list({ organizationId, userId })).toEqual([]);
+      expect(
+        (await projectService.list({ organizationId, userId })).data,
+      ).toEqual([]);
       expect(
         await ScheduleTriggerModel.listByOrganization({ organizationId }),
       ).toEqual([]);
@@ -374,7 +376,9 @@ describe("schedule trigger MCP tools", () => {
         context,
       );
       expect(result.isError).toBe(true);
-      expect(await projectService.list({ organizationId, userId })).toEqual([]);
+      expect(
+        (await projectService.list({ organizationId, userId })).data,
+      ).toEqual([]);
       expect(
         await ScheduleTriggerModel.listByOrganization({ organizationId }),
       ).toEqual([]);

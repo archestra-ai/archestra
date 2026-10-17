@@ -4190,7 +4190,9 @@ describe("remedy by offer", () => {
 
   test("a runtime refusal is not rewritten as an unavailable peer response", async () => {
     native.sendPeerMessage.mockRejectedValueOnce(
-      new Error("no prepared fork to open this child"),
+      Object.assign(new Error("no prepared fork to open this child"), {
+        code: "spawn_not_taken",
+      }),
     );
     await expect(
       sendPeerMessage({

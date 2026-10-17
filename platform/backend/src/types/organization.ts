@@ -451,6 +451,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
 
 export const UpdateSecuritySettingsSchema = z.object({
   allowChatFileUploads: z.boolean().optional(),
+  allowUnauthenticatedLlmProxyRequests: z.boolean().optional(),
   newAppsDisabledByDefault: z.boolean().optional(),
   newAppsLockedByDefault: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */

@@ -336,15 +336,6 @@ export const handlers: HttpHandler[] = [
     sandbox: "disabled",
   }),
   ...getJson("/api/organization", organizationSeed),
-  // The roster behind owner pickers and the scope filter's "member" facet —
-  // the seeded admin, mirroring the session identity.
-  ...getJson("/api/organization/members", [
-    {
-      id: sessionSeed.user.id,
-      name: sessionSeed.user.name,
-      email: sessionSeed.user.email,
-    },
-  ]),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.
@@ -374,7 +365,7 @@ export const handlers: HttpHandler[] = [
     tools: [],
     tokenCount: { total: 0, source: "estimate", model: null, observedAt: null },
   }),
-  ...getJson("/api/projects", []),
+  ...getJson("/api/projects", paginated([], { limit: 20 })),
   ...getJson("/api/apps", {
     data: [],
     pagination: {
@@ -533,7 +524,10 @@ export const handlers: HttpHandler[] = [
     pagination: { limit: 20, nextCursor: null, hasNext: false },
   }),
   ...getJson("/api/agents/options/ids", []),
-  ...getJson("/api/agents/options", []),
+  ...getJson("/api/agents/options", {
+    data: [],
+    pagination: { limit: 100, nextCursor: null, hasNext: false },
+  }),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
   ...getJson("/api/agents/activation-skills", {

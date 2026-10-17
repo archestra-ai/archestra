@@ -153,9 +153,9 @@ const AssignedAgentSummarySchema = z.object({
 /**
  * The stored row with its raw `created_by` user id swapped for the resolved
  * identity every "Created by" column renders. The id alone is useless to a
- * client that cannot see the full member roster — which is most of them, since
- * `GET /organization/members` narrows to the caller's teammates without
- * `member:read`.
+ * client that cannot see the full member directory — which is most of them,
+ * since `GET /organization/member-options` narrows to the caller's teammates
+ * without `member:read`.
  */
 const KnowledgeBaseResponseSchema = SelectKnowledgeBaseSchema.omit({
   createdBy: true,

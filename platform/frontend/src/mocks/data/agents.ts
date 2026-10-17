@@ -13,6 +13,7 @@ export type ExternalAgent = Extract<
 >["value"];
 
 export function makeAgent(overrides: Partial<Agent> = {}): Agent {
+  const tools = overrides.tools ?? [];
   return {
     id: "test-agent",
     organizationId: "test-org",
@@ -60,6 +61,11 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     connectorIds: [],
     suggestedPrompts: [],
     pinnedAt: null,
+    // From the mock's tools: delegations are subagents, the rest are tools.
+    // The list routes also leave out the knowledge search tool for an agent
+    // without knowledge sources; pass `toolsCount` to test that case.
+    toolsCount: tools.filter((tool) => !tool.delegateToAgentId).length,
+    subagentsCount: tools.filter((tool) => tool.delegateToAgentId).length,
     ...overrides,
   };
 }

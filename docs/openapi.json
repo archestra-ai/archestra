@@ -49303,13 +49303,13 @@
                                     "type": "integer",
                                     "minimum": -9007199254740991,
                                     "maximum": 9007199254740991,
-                                    "description": "Assigned tools other than subagent delegations, as the Agents page shows them. Present whether or not `tools` was requested."
+                                    "description": "Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested."
                                   },
                                   "subagentsCount": {
                                     "type": "integer",
                                     "minimum": -9007199254740991,
                                     "maximum": 9007199254740991,
-                                    "description": "Agents this agent delegates to."
+                                    "description": "Agents this agent delegates to. Always present, even when `tools` is not requested."
                                   }
                                 },
                                 "required": [
@@ -50210,7 +50210,7 @@
             "in": "query",
             "name": "includeTools",
             "required": false,
-            "description": "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the agents themselves, such as name pickers: the tool refs carry every assigned tool's name and description, which on an organization of any size is most of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'."
+            "description": "Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'."
           },
           {
             "schema": {
@@ -50977,6 +50977,18 @@
                             "nullable": true,
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "toolsCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "description": "Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested."
+                          },
+                          "subagentsCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "description": "Agents this agent delegates to. Always present, even when `tools` is not requested."
                           }
                         },
                         "required": [
@@ -51024,7 +51036,9 @@
                           "knowledgeBaseIds",
                           "connectorIds",
                           "suggestedPrompts",
-                          "pinnedAt"
+                          "pinnedAt",
+                          "toolsCount",
+                          "subagentsCount"
                         ],
                         "additionalProperties": false
                       }
@@ -54943,7 +54957,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get authorized agent names and presentation fields for selectors\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+        "description": "List authorized agent options one page at a time. Filter by up to 200 IDs; pages hold up to 1,000 items.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
         "parameters": [
           {
             "schema": {
@@ -55024,6 +55038,7 @@
           },
           {
             "schema": {
+              "maxItems": 200,
               "type": "array",
               "items": {
                 "type": "string",
@@ -55034,6 +55049,25 @@
             "in": "query",
             "name": "ids",
             "required": false
+          },
+          {
+            "schema": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
           }
         ],
         "responses": {
@@ -55042,307 +55076,340 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "slug": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "agentType": {
-                        "type": "string",
-                        "enum": [
-                          "profile",
-                          "mcp_gateway",
-                          "llm_proxy",
-                          "agent"
-                        ]
-                      },
-                      "icon": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "scope": {
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
-                      },
-                      "authorId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "authorName": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "authorEmail": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "isPersonalGateway": {
-                        "type": "boolean"
-                      },
-                      "runtime": {
-                        "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
-                          "image": {
+                          "id": {
                             "type": "string",
-                            "minLength": 1,
-                            "maxLength": 2000
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
-                          "command": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
                             "nullable": true,
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
+                            "type": "string"
                           },
-                          "inferenceProtocol": {
+                          "agentType": {
                             "type": "string",
                             "enum": [
-                              "openai_responses",
-                              "openai_chat",
-                              "anthropic"
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
                             ]
                           },
-                          "backend": {
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "scope": {
                             "type": "string",
                             "enum": [
-                              "kubernetes"
+                              "personal",
+                              "team",
+                              "org"
                             ]
                           },
-                          "steerMode": {
-                            "type": "string",
-                            "enum": [
-                              "pipe",
-                              "tmux_keys"
-                            ]
+                          "authorId": {
+                            "nullable": true,
+                            "type": "string"
                           },
-                          "privileged": {
+                          "authorName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "authorEmail": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "isPersonalGateway": {
                             "type": "boolean"
                           },
-                          "resources": {
+                          "runtime": {
                             "nullable": true,
                             "type": "object",
                             "properties": {
-                              "cpuRequest": {
-                                "type": "string"
+                              "image": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
                               },
-                              "memoryRequest": {
-                                "type": "string"
+                              "command": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
-                              "cpuLimit": {
-                                "type": "string"
+                              "inferenceProtocol": {
+                                "type": "string",
+                                "enum": [
+                                  "openai_responses",
+                                  "openai_chat",
+                                  "anthropic"
+                                ]
                               },
-                              "memoryLimit": {
-                                "type": "string"
+                              "backend": {
+                                "type": "string",
+                                "enum": [
+                                  "kubernetes"
+                                ]
+                              },
+                              "steerMode": {
+                                "type": "string",
+                                "enum": [
+                                  "pipe",
+                                  "tmux_keys"
+                                ]
+                              },
+                              "privileged": {
+                                "type": "boolean"
+                              },
+                              "resources": {
+                                "nullable": true,
+                                "type": "object",
+                                "properties": {
+                                  "cpuRequest": {
+                                    "type": "string"
+                                  },
+                                  "memoryRequest": {
+                                    "type": "string"
+                                  },
+                                  "cpuLimit": {
+                                    "type": "string"
+                                  },
+                                  "memoryLimit": {
+                                    "type": "string"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "ports": {
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 65535
+                                }
+                              },
+                              "environment": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "key": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "credentials": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "key": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[A-Z_][A-Z0-9_]*$"
+                                    },
+                                    "scope": {
+                                      "type": "string",
+                                      "enum": [
+                                        "shared",
+                                        "per_user"
+                                      ]
+                                    },
+                                    "credentialId": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128,
+                                      "pattern": "^[a-z][a-z0-9._-]*$"
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "description": {
+                                      "type": "string",
+                                      "maxLength": 1000
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "scope",
+                                    "label",
+                                    "required"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "allowAgentSuppliedCredentialValues": {
+                                "type": "boolean"
+                              },
+                              "claudeCode": {
+                                "type": "object",
+                                "properties": {
+                                  "authentication": {
+                                    "type": "string",
+                                    "enum": [
+                                      "provider",
+                                      "subscription"
+                                    ]
+                                  },
+                                  "model": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 256
+                                  }
+                                },
+                                "required": [
+                                  "authentication"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "ttlHours": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 720
+                              },
+                              "maxCostUsd": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100000
+                              },
+                              "idleTimeoutMinutes": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1440
                               }
                             },
+                            "required": [
+                              "image",
+                              "command",
+                              "inferenceProtocol",
+                              "backend",
+                              "steerMode",
+                              "privileged",
+                              "resources",
+                              "environment",
+                              "credentials",
+                              "ttlHours",
+                              "idleTimeoutMinutes"
+                            ],
                             "additionalProperties": false
                           },
-                          "ports": {
-                            "maxItems": 20,
-                            "type": "array",
-                            "items": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 65535
-                            }
-                          },
-                          "environment": {
+                          "description": {
                             "nullable": true,
+                            "type": "string"
+                          },
+                          "teams": {
                             "type": "array",
                             "items": {
                               "type": "object",
                               "properties": {
-                                "key": {
-                                  "type": "string",
-                                  "minLength": 1
+                                "id": {
+                                  "type": "string"
                                 },
-                                "value": {
+                                "name": {
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "key",
-                                "value"
+                                "id",
+                                "name"
                               ],
                               "additionalProperties": false
                             }
                           },
-                          "credentials": {
-                            "nullable": true,
+                          "users": {
                             "type": "array",
                             "items": {
                               "type": "object",
                               "properties": {
-                                "key": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 128,
-                                  "pattern": "^[A-Z_][A-Z0-9_]*$"
-                                },
-                                "scope": {
-                                  "type": "string",
-                                  "enum": [
-                                    "shared",
-                                    "per_user"
-                                  ]
-                                },
-                                "credentialId": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 128,
-                                  "pattern": "^[a-z][a-z0-9._-]*$"
-                                },
-                                "label": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 200
-                                },
-                                "description": {
-                                  "type": "string",
-                                  "maxLength": 1000
-                                },
-                                "required": {
-                                  "type": "boolean"
+                                "id": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
-                                "key",
-                                "scope",
-                                "label",
-                                "required"
+                                "id"
                               ],
                               "additionalProperties": false
                             }
-                          },
-                          "allowAgentSuppliedCredentialValues": {
-                            "type": "boolean"
-                          },
-                          "claudeCode": {
-                            "type": "object",
-                            "properties": {
-                              "authentication": {
-                                "type": "string",
-                                "enum": [
-                                  "provider",
-                                  "subscription"
-                                ]
-                              },
-                              "model": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 256
-                              }
-                            },
-                            "required": [
-                              "authentication"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "ttlHours": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 720
-                          },
-                          "maxCostUsd": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 100000
-                          },
-                          "idleTimeoutMinutes": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 1440
                           }
                         },
                         "required": [
-                          "image",
-                          "command",
-                          "inferenceProtocol",
-                          "backend",
-                          "steerMode",
-                          "privileged",
-                          "resources",
-                          "environment",
-                          "credentials",
-                          "ttlHours",
-                          "idleTimeoutMinutes"
+                          "id",
+                          "name",
+                          "slug",
+                          "agentType",
+                          "icon",
+                          "scope",
+                          "authorId",
+                          "isPersonalGateway",
+                          "runtime",
+                          "description",
+                          "teams",
+                          "users"
                         ],
                         "additionalProperties": false
-                      },
-                      "description": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "teams": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "users": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id"
-                          ],
-                          "additionalProperties": false
-                        }
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "slug",
-                      "agentType",
-                      "icon",
-                      "scope",
-                      "authorId",
-                      "isPersonalGateway",
-                      "runtime",
-                      "description",
-                      "teams",
-                      "users"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "limit",
+                        "nextCursor",
+                        "hasNext"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -55674,6 +55741,7 @@
           },
           {
             "schema": {
+              "maxItems": 200,
               "type": "array",
               "items": {
                 "type": "string",
@@ -56507,6 +56575,7 @@
           },
           {
             "schema": {
+              "maxItems": 200,
               "type": "array",
               "items": {
                 "type": "string",
@@ -122148,6 +122217,9 @@
                         "allowChatFileUploads": {
                           "type": "boolean"
                         },
+                        "allowUnauthenticatedLlmProxyRequests": {
+                          "type": "boolean"
+                        },
                         "allowToolAutoAssignment": {
                           "type": "boolean"
                         },
@@ -122713,6 +122785,7 @@
                         "onlineSkillCatalogEnabled",
                         "skillMarketplaceAnonymousAccess",
                         "allowChatFileUploads",
+                        "allowUnauthenticatedLlmProxyRequests",
                         "allowToolAutoAssignment",
                         "embeddingModel",
                         "embeddingDimensions",
@@ -178294,6 +178367,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -178851,6 +178925,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -180012,6 +180087,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -180689,6 +180765,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -181366,6 +181443,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -182043,6 +182121,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -182720,6 +182799,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -183277,6 +183357,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -183834,6 +183915,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -186445,6 +186527,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -189792,6 +189875,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -190349,6 +190433,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -190906,6 +190991,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -191463,6 +191549,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -192020,6 +192107,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -192577,6 +192665,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -193134,6 +193223,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -193691,6 +193781,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -194248,6 +194339,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -194805,6 +194897,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -195362,6 +195455,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -195919,6 +196013,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -196476,6 +196571,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -199435,6 +199531,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -202389,6 +202486,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -205348,6 +205446,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -205905,6 +206004,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -206698,6 +206798,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -207677,6 +207778,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -208656,6 +208758,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -209626,6 +209729,7 @@
                                   "jwks",
                                   "oauth_client_credentials",
                                   "oauth_user",
+                                  "personal_token",
                                   "internal",
                                   "unknown"
                                 ]
@@ -211283,6 +211387,7 @@
                                 "jwks",
                                 "oauth_client_credentials",
                                 "oauth_user",
+                                "personal_token",
                                 "internal",
                                 "unknown"
                               ]
@@ -212699,6 +212804,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -213256,6 +213362,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -214417,6 +214524,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -215094,6 +215202,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -215771,6 +215880,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -216448,6 +216558,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -217125,6 +217236,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -217682,6 +217794,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -218239,6 +218352,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -220850,6 +220964,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -224197,6 +224312,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -224754,6 +224870,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -225311,6 +225428,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -225868,6 +225986,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -226425,6 +226544,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -226982,6 +227102,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -227539,6 +227660,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -228096,6 +228218,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -228653,6 +228776,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -229210,6 +229334,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -229767,6 +229892,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -230324,6 +230450,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -230881,6 +231008,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -233840,6 +233968,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -236794,6 +236923,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -239753,6 +239883,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -240310,6 +240441,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -241103,6 +241235,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -242082,6 +242215,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -243061,6 +243195,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -244031,6 +244166,7 @@
                             "jwks",
                             "oauth_client_credentials",
                             "oauth_user",
+                            "personal_token",
                             "internal",
                             "unknown"
                           ]
@@ -359346,6 +359482,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -359911,6 +360050,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -360492,6 +360632,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -361057,6 +361200,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -361764,6 +361908,9 @@
                   "allowChatFileUploads": {
                     "type": "boolean"
                   },
+                  "allowUnauthenticatedLlmProxyRequests": {
+                    "type": "boolean"
+                  },
                   "newAppsDisabledByDefault": {
                     "type": "boolean"
                   },
@@ -361874,6 +362021,9 @@
                       "type": "boolean"
                     },
                     "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "allowUnauthenticatedLlmProxyRequests": {
                       "type": "boolean"
                     },
                     "allowToolAutoAssignment": {
@@ -362441,6 +362591,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -362874,6 +363025,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -363439,6 +363593,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -363872,6 +364027,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -364437,6 +364595,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -364882,6 +365041,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -365447,6 +365609,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -366011,6 +366174,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -366576,6 +366742,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -367124,6 +367291,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -367689,6 +367859,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -368192,6 +368363,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -368757,6 +368931,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -369204,6 +369379,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -369769,6 +369947,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -370247,6 +370426,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -370812,6 +370994,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -371227,6 +371410,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -371792,6 +371978,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -373411,6 +373598,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowUnauthenticatedLlmProxyRequests": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -373976,6 +374166,7 @@
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
+                    "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -375517,284 +375708,6 @@
         "x-required-permissions": {
           "kind": "dynamic",
           "note": "All authenticated callers may search visible member identities. member:read returns the organization roster; other callers receive only teammates in the active organization.",
-          "permissions": []
-        }
-      }
-    },
-    "/api/organization/members": {
-      "get": {
-        "operationId": "getOrganizationMembers",
-        "tags": [
-          "Organization"
-        ],
-        "description": "List organization members visible to the caller. Callers with the member:read permission (admins and equivalent custom roles) receive the full organization roster; other authenticated users receive only the members they share a team with.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "email": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "name",
-                      "email"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
           "permissions": []
         }
       }
@@ -389706,8 +389619,30 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice. Paginated: owner-first, then newest, then id.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
           {
             "schema": {
               "type": "string",
@@ -389832,6 +389767,15 @@
             "name": "owner",
             "required": false,
             "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "pinned",
+            "required": false,
+            "description": "Only return projects the current user has pinned (true) or has not pinned (false). Omit for both."
           }
         ],
         "responses": {
@@ -389840,161 +389784,211 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "description": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "icon": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "viewerRole": {
-                        "type": "string",
-                        "enum": [
-                          "owner",
-                          "shared",
-                          "admin"
-                        ]
-                      },
-                      "ownerName": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "createdBy": {
-                        "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
                           "id": {
-                            "type": "string"
-                          },
-                          "type": {
                             "type": "string",
-                            "enum": [
-                              "user",
-                              "service_account"
-                            ]
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "name": {
+                            "type": "string"
+                          },
+                          "description": {
                             "nullable": true,
                             "type": "string"
                           },
-                          "email": {
+                          "icon": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "viewerRole": {
+                            "type": "string",
+                            "enum": [
+                              "owner",
+                              "shared",
+                              "admin"
+                            ]
+                          },
+                          "ownerName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "createdBy": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
+                              },
+                              "name": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "email": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "labels": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "keyId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "valueId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "conversationCount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "visibility": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "organization",
+                              "team",
+                              "user"
+                            ]
+                          },
+                          "shareTeamNames": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "shareUserNames": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pinnedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
                           "id",
                           "name",
-                          "email"
+                          "description",
+                          "icon",
+                          "viewerRole",
+                          "ownerName",
+                          "createdBy",
+                          "labels",
+                          "conversationCount",
+                          "visibility",
+                          "shareTeamNames",
+                          "shareUserNames",
+                          "pinnedAt",
+                          "createdAt",
+                          "deletedAt"
                         ],
                         "additionalProperties": false
-                      },
-                      "labels": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "key": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "value": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "keyId": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                            },
-                            "valueId": {
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                            }
-                          },
-                          "required": [
-                            "key",
-                            "value"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "conversationCount": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 9007199254740991
-                      },
-                      "visibility": {
-                        "nullable": true,
-                        "type": "string",
-                        "enum": [
-                          "organization",
-                          "team",
-                          "user"
-                        ]
-                      },
-                      "shareTeamNames": {
-                        "nullable": true,
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "shareUserNames": {
-                        "nullable": true,
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "pinnedAt": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "deletedAt": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "date-time"
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "description",
-                      "icon",
-                      "viewerRole",
-                      "ownerName",
-                      "createdBy",
-                      "labels",
-                      "conversationCount",
-                      "visibility",
-                      "shareTeamNames",
-                      "shareUserNames",
-                      "pinnedAt",
-                      "createdAt",
-                      "deletedAt"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -426113,6 +426107,7 @@
                 "jwks",
                 "oauth_client_credentials",
                 "oauth_user",
+                "personal_token",
                 "internal",
                 "unknown"
               ]
@@ -426265,6 +426260,7 @@
                               "jwks",
                               "oauth_client_credentials",
                               "oauth_user",
+                              "personal_token",
                               "internal",
                               "unknown"
                             ]
@@ -426314,6 +426310,7 @@
                               "jwks",
                               "oauth_client_credentials",
                               "oauth_user",
+                              "personal_token",
                               "internal",
                               "unknown"
                             ]
@@ -440045,39 +440042,102 @@
         "tags": [
           "User"
         ],
-        "description": "List users in the caller's organization that admins can impersonate (role debugger)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:impersonate`: Temporarily sign in as another member to see the app with their access (role debugging)",
+        "description": "Search users in the caller's organization that admins can impersonate (role debugger) in bounded pages. The caller is excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:impersonate`: Temporarily sign in as another member to see the app with their access (role debugging)",
+        "parameters": [
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Matches name or email"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "email": {
-                        "type": "string"
-                      },
-                      "role": {
-                        "nullable": true,
-                        "type": "string"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email",
+                          "role"
+                        ],
+                        "additionalProperties": false
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "email",
-                      "role"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "limit",
+                        "nextCursor",
+                        "hasNext"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

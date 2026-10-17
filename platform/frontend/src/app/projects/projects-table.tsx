@@ -28,28 +28,38 @@ import {
 } from "@/lib/projects/project-permissions";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
-type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
+type ProjectListItem =
+  archestraApiTypes.GetProjectsResponses["200"]["data"][number];
+type TablePagination = { pageIndex: number; pageSize: number; total: number };
 
 // The projects table under the pinned tiles. Row actions: pin/unpin, edit
 // details, delete.
 export function ProjectsTable({
   projects,
+  pagination,
+  onPaginationChange,
+  isLoading,
   onTogglePin,
   onEdit,
   onDelete,
   rowSelection,
   onRowSelectionChange,
-  onPageRowIdsChange,
   canSelect,
   rangeSelection,
 }: {
+  /** One server page. */
   projects: ProjectListItem[];
+  pagination: TablePagination;
+  onPaginationChange: (pagination: {
+    pageIndex: number;
+    pageSize: number;
+  }) => void;
+  isLoading: boolean;
   onTogglePin: (project: ProjectListItem) => void;
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
   rowSelection: RowSelectionState;
   onRowSelectionChange: OnChangeFn<RowSelectionState>;
-  onPageRowIdsChange: (ids: string[]) => void;
   canSelect: (project: ProjectListItem) => boolean;
   rangeSelection: BulkRangeSelectionController;
 }) {
@@ -155,9 +165,12 @@ export function ProjectsTable({
       getRowId={(row) => row.id}
       rowSelection={rowSelection}
       onRowSelectionChange={onRowSelectionChange}
-      onPageRowIdsChange={onPageRowIdsChange}
       rangeSelection={rangeSelection}
       hideSelectedCount
+      manualPagination
+      pagination={pagination}
+      onPaginationChange={onPaginationChange}
+      isLoading={isLoading}
       onRowClick={(row) => router.push(`/projects/${row.id}`)}
       emptyIcon={FolderKanban}
       emptyMessage="No projects yet"
@@ -175,10 +188,20 @@ export function ProjectsTable({
 // permanently, matching the agents and skills trash views.
 export function DeletedProjectsTable({
   projects,
+  pagination,
+  onPaginationChange,
+  isLoading,
   onRestore,
   onPermanentlyDelete,
 }: {
+  /** One server page of the trash. */
   projects: ProjectListItem[];
+  pagination: TablePagination;
+  onPaginationChange: (pagination: {
+    pageIndex: number;
+    pageSize: number;
+  }) => void;
+  isLoading: boolean;
   onRestore: (project: ProjectListItem) => void;
   onPermanentlyDelete: (project: ProjectListItem) => void;
 }) {
@@ -260,6 +283,10 @@ export function DeletedProjectsTable({
       columns={columns}
       data={projects}
       getRowId={(row) => row.id}
+      manualPagination
+      pagination={pagination}
+      onPaginationChange={onPaginationChange}
+      isLoading={isLoading}
       hidePaginationWhenSinglePage
     />
   );

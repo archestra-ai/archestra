@@ -14,6 +14,7 @@ import logger from "@/logging";
 import { constructResponseSchema, Openrouter, UuidIdSchema } from "@/types";
 import { openrouterAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
@@ -36,6 +37,7 @@ const openrouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
       upstream: config.llm.openrouter.baseUrl,
       providerName: "OpenRouter",
+      authenticate: createPassthroughAuthenticator("openrouter"),
     }),
   });
 

@@ -12,14 +12,6 @@ let mockApiKeys: Array<{
   provider: string;
   scope: string;
 }> = [];
-let mockAgents: Array<{
-  id: string;
-  name: string;
-  icon?: string | null;
-  agentType: "agent";
-  scope: "personal" | "team" | "org";
-  authorEmail?: string | null;
-}> = [];
 let mockRuntimeBackend: {
   name: "kubernetes";
   available: boolean;
@@ -126,12 +118,6 @@ vi.mock("@/components/ui/select", () => ({
   ),
 }));
 
-vi.mock("@/lib/agent.query", () => ({
-  useOrgScopedAgents: () => ({
-    data: mockAgents,
-  }),
-}));
-
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (feature: string) =>
     feature === "agentRuntimeBackend" ? mockRuntimeBackend : undefined,
@@ -204,7 +190,6 @@ beforeEach(() => {
       scope: "org",
     },
   ];
-  mockAgents = [];
   mockRuntimeBackend = null;
 
   vi.mocked(useOrganization).mockReturnValue({

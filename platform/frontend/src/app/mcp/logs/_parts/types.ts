@@ -11,6 +11,6 @@ export type McpServerDisplay = {
 };
 
 export type GatewayOption = Pick<
-  archestraApiTypes.GetAgentOptionsResponses["200"][number],
+  archestraApiTypes.GetAgentOptionsResponses["200"]["data"][number],
   "id" | "name" | "agentType"
 >;

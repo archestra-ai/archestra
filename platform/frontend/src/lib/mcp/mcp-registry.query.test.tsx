@@ -253,7 +253,53 @@ describe("registry early requests", () => {
 });
 
 describe("registry rows by id", () => {
-  beforeEach(() => searchMcpRegistryMock.mockReset());
+  beforeEach(() => {
+    searchMcpRegistryMock.mockReset();
+  });
+
+  it("has not loaded while the first real id set is still loading", async () => {
+    const pending: Array<() => void> = [];
+    const release = () => {
+      for (const resolve of pending.splice(0)) resolve();
+    };
+    searchMcpRegistryMock.mockImplementation(
+      (request?: { body?: { catalogIds?: string[] } }) =>
+        new Promise((resolve) => {
+          pending.push(() =>
+            resolve({
+              data: {
+                data: (request?.body?.catalogIds ?? []).map((id) => ({
+                  id,
+                  name: id,
+                })),
+                pagination: { total: 1 },
+                selectableTotal: 0,
+                installs: [],
+              },
+            }),
+          );
+        }),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    // A caller's ids are empty until their own source loads.
+    const { result, rerender } = renderHook(
+      ({ ids }: { ids: string[] }) => useMcpRegistryRowsByIds(ids),
+      { wrapper, initialProps: { ids: [] as string[] } },
+    );
+    expect(result.current.hasLoaded).toBe(false);
+
+    rerender({ ids: ["cat-a"] });
+    expect(result.current.hasLoaded).toBe(false);
+
+    release();
+    await waitFor(() => expect(result.current.hasLoaded).toBe(true));
+  });
 
   it("keeps the rows already known while a changed id set loads", async () => {
     // Each request answers with one row per id; the second one waits.

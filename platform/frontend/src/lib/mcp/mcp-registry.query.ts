@@ -340,15 +340,20 @@ export function useMcpRegistryRowsByIds(
     knownRows.current = next;
     return rows;
   }, [results.chunks, idsKey]);
-  if (!results.isPending) everyChunkAnswered.current = true;
+  // An empty id set has nothing to answer: a caller's ids are often empty
+  // until its own source loads, so only a real set that answered counts.
+  if (sortedIds.length > 0 && !results.isPending) {
+    everyChunkAnswered.current = true;
+  }
 
   return {
     data,
     /** Some requested chunk has not answered yet. */
     isPending: results.isPending,
     /**
-     * Every chunk has answered once: later id changes keep the known rows,
-     * so a loading state should wait only for this.
+     * A non-empty id set has answered once: later id changes keep the known
+     * rows, so a loading state should wait only for this. False while there
+     * are no ids; a caller with none decides from the source of its ids.
      */
     hasLoaded: everyChunkAnswered.current,
     isError: results.isError,

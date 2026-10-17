@@ -68,13 +68,13 @@ const server = setupServer();
  */
 function registrySearch(
   rows: CatalogItem[],
-  onRequest?: (body: SearchBody) => void,
+  onRequest?: (body: SearchBody) => unknown,
 ) {
   return http.post(
     `${API_ORIGIN}/api/internal_mcp_catalog/registry/search`,
     async ({ request }) => {
       const body = (await request.json()) as SearchBody;
-      onRequest?.(body);
+      await onRequest?.(body);
       // As the server answers: the built-in entry and app backings only for a
       // caller that opts in, descriptions only when asked.
       const query = body.search?.toLowerCase();
@@ -380,6 +380,50 @@ describe("AgentToolsEditor", () => {
           body.catalogIds?.length === 1 && body.catalogIds[0] === "catalog-79",
       ),
     ).toBe(true);
+  });
+
+  it("waits for the rows of the record's servers before saying it has none", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    // The by-id read of the record's server waits until the test lets it go.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      registrySearch(many, async (body) => {
+        if (body.catalogIds?.includes("catalog-79")) await gate;
+      }),
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/tools`, () =>
+        HttpResponse.json([
+          {
+            id: "tool-1",
+            name: "server_79__one",
+            catalogId: "catalog-79",
+            mcpServerId: null,
+            credentialResolutionMode: "dynamic",
+          },
+        ]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/internal_mcp_catalog/:id/tools`,
+        () => new Promise<never>(() => {}),
+      ),
+    );
+
+    renderEditor();
+
+    // The first page and the record's tools answer; its server's row does not.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(screen.getByText(/Loading tools/i)).toBeInTheDocument();
+    expect(screen.queryByText("No tools assigned yet")).toBeNull();
+
+    release();
+    expect(await screen.findByText("server-79")).toBeTruthy();
+    expect(screen.queryByText("No tools assigned yet")).toBeNull();
   });
 
   it("checks connections only for the servers on screen", async () => {

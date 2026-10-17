@@ -210,6 +210,38 @@ describe("AgentToolExclusionsEditor — catalogs", () => {
     expect(requests.some((body) => body.search === "65")).toBe(true);
   });
 
+  it("waits for the rows of its disabled servers on first load", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      registrySearch(many, async (body) => {
+        if (body.catalogIds?.includes("catalog-79")) await gate;
+      }),
+      http.get(`${API_ORIGIN}/api/internal_mcp_catalog/tools`, () =>
+        HttpResponse.json([
+          { id: TOOL_ID, name: "server_79__do_thing", catalogId: "catalog-79" },
+        ]),
+      ),
+    );
+
+    renderEditor();
+
+    // Everything but the disabled server's row has answered.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(screen.getByText(/Loading exclusions/i)).toBeInTheDocument();
+
+    release();
+    expect(await screen.findByText("server-79")).toBeInTheDocument();
+    expect(screen.queryByText(/Loading exclusions/i)).toBeNull();
+  });
+
   it("keeps the editor on screen while a newly disabled server's row loads", async () => {
     const many = Array.from({ length: 80 }, (_, i) => ({
       ...catalogItem,

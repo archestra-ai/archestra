@@ -342,7 +342,7 @@ const AgentToolsEditorContent = forwardRef<
   // rows already known on screen while it loads.
   const isPending =
     (!!agentId && isAssignedToolsLoading) ||
-    !assignedCatalogs.hasLoaded ||
+    (assignedCatalogIds.length > 0 && !assignedCatalogs.hasLoaded) ||
     catalogPage.isPending;
   const catalogFailed = assignedCatalogs.isError || catalogPage.isLoadingError;
   const refetchCatalog = () => {

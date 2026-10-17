@@ -982,9 +982,15 @@ describe("MarketplaceMaterializer", () => {
           gitBinaryPath: wrapper,
         });
 
-        await expect(broken.materialize(makeRequest(linkId))).rejects.toThrow(
-          /fast-import/,
-        );
+        // Exceed the pipe buffer so an early exit also interrupts a write
+        // waiting for backpressure, rather than only a subsequent write.
+        await expect(
+          broken.materialize(
+            makeRequest(linkId, {
+              skills: [makeSkill({ content: "x".repeat(1024 * 1024) })],
+            }),
+          ),
+        ).rejects.toThrow(/fast-import/);
         expect(
           await SkillShareLinkRevisionModel.list({ kind: "link", id: linkId }),
         ).toEqual([]);

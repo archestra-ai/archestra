@@ -83578,6 +83578,15 @@
             "in": "query",
             "name": "skipPagination",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeToolDetails",
+            "required": false,
+            "description": "Include each tool's description and parameter schema (default true). False returns null and {} for lightweight lists."
           }
         ],
         "responses": {
@@ -126125,6 +126134,15 @@
             "in": "query",
             "name": "search",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeArtifacts",
+            "required": false,
+            "description": "Include each chat's artifact and todo list (default true). False returns them as null for lightweight lists."
           }
         ],
         "responses": {

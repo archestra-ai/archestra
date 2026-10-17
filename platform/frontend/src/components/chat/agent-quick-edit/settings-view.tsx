@@ -6,7 +6,6 @@ import {
   isBuiltInCatalogId,
   isPlaywrightCatalogItem,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Check,
@@ -63,7 +62,6 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
-  fetchCatalogTools,
   useAllCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -457,6 +455,7 @@ function ToolsSection({
   const { data: assignedToolsData, isPending } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
+    includeToolDetails: false,
     enabled: !!agentId,
   });
   const { catalogName: builtInCatalogName } = useArchestraMcpIdentity();
@@ -496,14 +495,6 @@ function ToolsSection({
         ),
     [catalogItems, assignedByCatalog, highlightCatalogId],
   );
-
-  const totalToolQueries = useQueries({
-    queries: assignedCatalogs.map((catalog) => ({
-      queryKey: ["mcp-catalog", catalog.id, "tools", "picker"],
-      queryFn: () => fetchCatalogTools(catalog.id),
-      staleTime: 60_000,
-    })),
-  });
 
   const removeServer = (catalogId: string) => {
     const entry = assignedByCatalog.get(catalogId);
@@ -559,10 +550,11 @@ function ToolsSection({
         />
       ) : (
         <ul className="space-y-1.5">
-          {assignedCatalogs.map((catalog, index) => {
+          {assignedCatalogs.map((catalog) => {
             const entry = assignedByCatalog.get(catalog.id);
             const assignedCount = entry?.toolIds.length ?? 0;
-            const total = totalToolQueries[index]?.data?.length;
+            // The catalog row counts the tools its picker lists.
+            const total = catalog.toolCount;
             const builtIn = isBuiltInCatalogId(catalog.id);
             const displayName =
               catalog.id === ARCHESTRA_MCP_CATALOG_ID

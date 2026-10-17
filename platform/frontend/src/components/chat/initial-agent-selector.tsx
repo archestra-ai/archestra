@@ -417,6 +417,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   useAllProfileTools({
     filters: { agentId: quickEditAgentId },
     skipPagination: true,
+    includeToolDetails: false,
     enabled: !!quickEditAgentId,
   });
   useAgentDelegations(quickEditAgentId);

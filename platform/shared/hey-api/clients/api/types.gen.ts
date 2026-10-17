@@ -23582,6 +23582,10 @@ export type GetAllAgentToolsData = {
         limit?: number;
         offset?: number;
         skipPagination?: boolean;
+        /**
+         * Include each tool's description and parameter schema (default true). False returns null and {} for lightweight lists.
+         */
+        includeToolDetails?: boolean;
     };
     url: '/api/agent-tools';
 };
@@ -35183,6 +35187,10 @@ export type GetChatConversationsData = {
     path?: never;
     query?: {
         search?: string;
+        /**
+         * Include each chat's artifact and todo list (default true). False returns them as null for lightweight lists.
+         */
+        includeArtifacts?: boolean;
     };
     url: '/api/chat/conversations';
 };

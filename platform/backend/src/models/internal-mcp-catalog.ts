@@ -347,7 +347,11 @@ class InternalMcpCatalogModel {
   }): Promise<{
     items: ListInternalMcpCatalog[];
     total: number;
-    /** Matches that have an install the viewer can see (selectable rows). */
+    /**
+     * Matches that have an install the viewer can see (selectable rows). Any
+     * visible install, usable or not, can stand in for its item, so this is
+     * the number of rows `registry/search/ids` returns before its cap.
+     */
     selectableTotal: number;
   }> {
     const catalog = schema.internalMcpCatalogTable;

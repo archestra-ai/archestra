@@ -5,6 +5,7 @@ import {
   computeMcpServerIssues,
   createMcpServerAlertFingerprint,
   isPermissionActionGranted,
+  MAX_BULK_IDS,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
@@ -14,6 +15,8 @@ import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import db, { schema } from "@/database";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import {
+  EnvironmentModel,
+  InternalMcpCatalogModel,
   McpCatalogLabelModel,
   McpServerAlertMuteModel,
   McpServerModel,
@@ -140,6 +143,9 @@ describe("MCP registry list routes", () => {
       });
       expect(names(third)).toEqual(["echo"]);
       expect(third.pagination.hasNext).toBe(false);
+      const pastTheEnd = await search({ limit: 2, offset: 10 });
+      expect(pastTheEnd.data).toEqual([]);
+      expect(pastTheEnd.pagination.total).toBe(5);
     });
 
     test("never lists the built-in Archestra entry", async ({
@@ -227,6 +233,66 @@ describe("MCP registry list routes", () => {
         names(await search({ environmentIds: [crypto.randomUUID()] })),
       ).toEqual([]);
       expect(theirs.id).toBeTruthy();
+      // Items in the Default environment have no environment id, and the
+      // registry's environment filter lists named environments only.
+      const production = await EnvironmentModel.create({
+        organizationId: ctx.organizationId,
+        name: "Production",
+      });
+      await makeItem(makeInternalMcpCatalog, "in-production", {
+        environmentId: production.id,
+      });
+      expect(names(await search({ environmentIds: [production.id] }))).toEqual([
+        "in-production",
+      ]);
+    });
+
+    test("combines search, labels, install state and access in one query", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeUser,
+      makeMember,
+    }) => {
+      const other = await makeUser();
+      await makeMember(other.id, ctx.organizationId, { role: "member" });
+      const items = new Map<string, { id: string }>();
+      for (const [name, authorId, installed] of [
+        ["dev-mine-installed", ctx.user.id, true],
+        ["dev-mine-bare", ctx.user.id, false],
+        ["dev-theirs-installed", other.id, true],
+        ["ops-mine-installed", ctx.user.id, true],
+      ] as const) {
+        const item = await makeItem(makeInternalMcpCatalog, name, { authorId });
+        await McpCatalogLabelModel.syncCatalogLabels(item.id, [
+          { key: "category", value: name.split("-")[0] },
+        ]);
+        if (installed) {
+          await makeMcpServer({
+            catalogId: item.id,
+            ownerId: ctx.user.id,
+            scope: "org",
+          });
+        }
+        items.set(name, item);
+      }
+
+      const page = await search({
+        search: "mine",
+        labels: { category: ["dev"] },
+        installState: "installed",
+        access: ["mine"],
+      });
+
+      expect(names(page)).toEqual(["dev-mine-installed"]);
+      expect(page.pagination.total).toBe(1);
+      expect(names(await search({ owner: [other.id] }))).toEqual([
+        "dev-theirs-installed",
+      ]);
+      expect(names(await search({ access: ["mine"], search: "dev" }))).toEqual([
+        "dev-mine-bare",
+        "dev-mine-installed",
+      ]);
+      expect(items.size).toBe(4);
     });
 
     test("an author filter matches items a service account created", async ({
@@ -343,6 +409,18 @@ describe("MCP registry list routes", () => {
         ].sort(),
       );
       expect((await search()).selectableTotal).toBe(2);
+      // Select all picks the same rows the count promises, a visible install
+      // the viewer cannot use included.
+      const ids = await ctx.app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog/registry/search/ids",
+        payload: { sortBy: "name", sortDirection: "asc" },
+      });
+      expect(
+        (ids.json() as { data: Array<{ name: string }> }).data.map(
+          (row) => row.name,
+        ),
+      ).toEqual(["others-only", "own"]);
     });
 
     test("orders by name, creation time and tool count", async ({
@@ -624,6 +702,42 @@ describe("MCP registry list routes", () => {
         ],
         truncated: false,
       });
+    });
+
+    test("caps the answer at the bulk limit and says so", async () => {
+      const matching = Array.from({ length: MAX_BULK_IDS + 1 }, (_, i) => ({
+        id: crypto.randomUUID(),
+        name: `item-${String(i).padStart(4, "0")}`,
+      }));
+      vi.spyOn(
+        InternalMcpCatalogModel,
+        "findRegistryMatchingIds",
+      ).mockResolvedValue(matching);
+      vi.spyOn(McpServerModel, "findRegistryInstallRows").mockResolvedValue(
+        matching.map((item) => ({
+          id: crypto.randomUUID(),
+          catalogId: item.id,
+          scope: "org",
+          ownerId: ctx.user.id,
+          usable: true,
+        })) as never,
+      );
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog/registry/search/ids",
+        payload: { sortBy: "name", sortDirection: "asc" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ id: string }>;
+        truncated: boolean;
+      };
+      expect(body.truncated).toBe(true);
+      expect(body.data.map((row) => row.id)).toEqual(
+        matching.slice(0, MAX_BULK_IDS).map((item) => item.id),
+      );
     });
   });
 

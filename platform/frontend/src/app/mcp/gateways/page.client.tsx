@@ -841,7 +841,10 @@ function McpGateways() {
                     />
                     {renderGatewayTable()}
                   </section>
-                ) : isAutoPinnedLoading ? null : unpinnedAgents.length > 0 ||
+                ) : isAutoPinnedLoading ||
+                  unpinnedAgents.length > 0 ||
+                  // While the list loads, often after its pins, the table
+                  // holds its place rather than appearing a moment later.
                   isPending ||
                   (pinnedAgents.length === 0 &&
                     pageAgents.length === 0 &&

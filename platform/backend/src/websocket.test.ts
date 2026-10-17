@@ -1723,6 +1723,7 @@ describe("websocket MCP deployment statuses", () => {
         { type: "subscribe_mcp_deployment_statuses", payload: {} },
         ws,
       );
+      await flushDeferredRefresh();
 
       // A "not created" for every install would flag every healthy one.
       const sent = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(

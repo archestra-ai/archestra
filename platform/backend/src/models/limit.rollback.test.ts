@@ -991,7 +991,9 @@ describe("LimitModel", () => {
         model: ["gpt-4o"],
       });
 
-      const breakdown = await LimitModel.getModelUsageBreakdown(limit.id);
+      const breakdown =
+        (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+        [];
 
       expect(breakdown).toHaveLength(1);
       expect(breakdown[0].model).toBe("gpt-4o");
@@ -1029,7 +1031,9 @@ describe("LimitModel", () => {
         100000,
       );
 
-      const breakdown = await LimitModel.getModelUsageBreakdown(limit.id);
+      const breakdown =
+        (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+        [];
 
       expect(breakdown).toHaveLength(2);
 
@@ -1086,7 +1090,8 @@ describe("LimitModel", () => {
       const findByModelIdsOnlySpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
       const findByModelIdOnlySpy = vi.spyOn(ModelModel, "findByModelIdOnly");
 
-      await LimitModel.getModelUsageBreakdown(limit.id);
+      (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+        [];
 
       expect(findByModelIdsOnlySpy).toHaveBeenCalledTimes(1);
       expect(findByModelIdOnlySpy).not.toHaveBeenCalled();

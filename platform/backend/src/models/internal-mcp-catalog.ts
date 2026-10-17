@@ -43,6 +43,7 @@ import {
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
+import { SERVABLE_ICON_TYPES } from "@/utils/servable-icon";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import LimitModel from "./limit";
@@ -495,11 +496,15 @@ class InternalMcpCatalogModel {
         environmentId: catalog.environmentId,
         authorId: catalog.authorId,
         createdByServiceAccountId: catalog.createdByServiceAccountId,
-        // The image bytes stay in the database: callers link the icon route.
+        // The image bytes stay in the database: callers link the icon route,
+        // which serves only the image types a browser shows.
         emojiIcon: sql<
           string | null
         >`case when ${catalog.icon} like 'data:%' then null else ${catalog.icon} end`,
-        hasImageIcon: sql<boolean>`coalesce(${catalog.icon} like 'data:%', false)`,
+        hasImageIcon: sql<boolean>`coalesce(${inArray(
+          sql`substring(lower(left(${catalog.icon}, 64)) from '^data:(image/[a-z0-9.+-]+)[;,]')`,
+          [...SERVABLE_ICON_TYPES],
+        )}, false)`,
         updatedAt: catalog.updatedAt,
       })
       .from(catalog)

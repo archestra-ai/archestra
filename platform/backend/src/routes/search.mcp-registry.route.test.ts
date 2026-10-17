@@ -700,6 +700,18 @@ describe("MCP registry list routes", () => {
 
       expect(row).toMatchObject({ icon: null, iconUrl: null });
       expect(response.statusCode).toBe(404);
+      const index = await ctx.app.inject({
+        method: "GET",
+        url: "/api/internal_mcp_catalog/registry/issue-index",
+      });
+      const indexed = (
+        index.json() as {
+          catalogItems: Array<{ id: string; icon?: string; iconUrl?: string }>;
+        }
+      ).catalogItems.find((item) => item.id === tiff.id);
+      expect(indexed).toBeDefined();
+      expect(indexed?.icon).toBeUndefined();
+      expect(indexed?.iconUrl).toBeUndefined();
     });
 
     test("a plain member lists only what they may read, and sees only their installs", async ({

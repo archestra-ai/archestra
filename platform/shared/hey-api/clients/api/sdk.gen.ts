@@ -6687,7 +6687,7 @@ export const createLlmProviderApiKey = <ThrowOnError extends boolean = false>(op
 export const getAvailableLlmProviderApiKeys = <ThrowOnError extends boolean = false>(options?: Options<GetAvailableLlmProviderApiKeysData, ThrowOnError>) => (options?.client ?? client).get<GetAvailableLlmProviderApiKeysResponses, GetAvailableLlmProviderApiKeysErrors, ThrowOnError>({ url: '/api/llm-provider-api-keys/available', ...options });
 
 /**
- * Delete an LLM provider API key
+ * Delete an LLM provider API key. Virtual API keys that mapped only this key are deleted with it; keys that also map other provider keys keep those.
  *
  * Authentication:
  *
@@ -6753,7 +6753,7 @@ export const reconnectLlmProviderApiKey = <ThrowOnError extends boolean = false>
 });
 
 /**
- * Delete several LLM provider API keys in one request. Keys outside the caller's organization, protected system keys, and keys that are still used by OAuth clients or knowledge base settings are reported in `failed` while the remaining keys are deleted. Virtual API key mappings to a deleted key are removed; the virtual keys remain.
+ * Delete several LLM provider API keys in one request. Keys outside the caller's organization, protected system keys, and keys that are still used by OAuth clients or knowledge base settings are reported in `failed` while the remaining keys are deleted. Virtual API keys that mapped only a deleted key are deleted with it; keys that also map other provider keys keep those.
  *
  * Authentication:
  *

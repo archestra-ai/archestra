@@ -624,7 +624,19 @@ describe("ApiKeysPage", () => {
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: {
         data: [
-          { id: "vk-1", name: "Payments service", tokenStart: "arch_abc" },
+          {
+            id: "vk-1",
+            name: "Payments service",
+            tokenStart: "arch_abc",
+            includeFutureProviders: false,
+            providerApiKeys: [
+              {
+                provider: "anthropic",
+                providerApiKeyId: "provider-key-1",
+                providerApiKeyName: "Shared Anthropic credential",
+              },
+            ],
+          },
         ],
         pagination: { total: 1 },
       },
@@ -661,7 +673,7 @@ describe("ApiKeysPage", () => {
       '"Shared Anthropic credential" cannot be deleted while OAuth clients use it.',
     );
     expect(dialog).toHaveTextContent(
-      "1 virtual API key uses it. Requests through it to Anthropic fail until you map another Anthropic key to it.",
+      "1 virtual API key uses only this key and is deleted with it.",
     );
     const confirm = screen.getByRole("button", { name: "Confirm delete" });
     expect(confirm).toBeDisabled();
@@ -687,10 +699,28 @@ describe("ApiKeysPage", () => {
     });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: {
+        // Four keys map only this provider key; three also map an OpenAI key.
         data: Array.from({ length: 7 }, (_, index) => ({
           id: `vk-${index}`,
           name: `Service ${index}`,
           tokenStart: "arch_abc",
+          includeFutureProviders: false,
+          providerApiKeys: [
+            {
+              provider: "anthropic",
+              providerApiKeyId: "provider-key-1",
+              providerApiKeyName: "Shared Anthropic credential",
+            },
+            ...(index < 4
+              ? []
+              : [
+                  {
+                    provider: "openai",
+                    providerApiKeyId: "provider-key-2",
+                    providerApiKeyName: "Backup OpenAI key",
+                  },
+                ]),
+          ],
         })),
         pagination: { total: 7 },
       },
@@ -707,8 +737,10 @@ describe("ApiKeysPage", () => {
 
     const dialog = await screen.findByTestId("delete-dialog");
     expect(dialog).toHaveTextContent(
-      'Delete "Shared Anthropic credential"? 7 virtual API keys use it. Requests through them to Anthropic fail until you map another Anthropic key to them. This cannot be undone.',
+      'Delete "Shared Anthropic credential"? 7 virtual API keys use it: 4 are deleted with it, 3 keep their other providers. This cannot be undone.',
     );
+    expect(dialog).toHaveTextContent("Deleted with this key");
+    expect(dialog).toHaveTextContent("Keeps 1 other provider");
     expect(screen.getByText("Service 4")).toBeInTheDocument();
     expect(screen.queryByText("Service 5")).not.toBeInTheDocument();
     expect(dialog).toHaveTextContent("2 more virtual API keys matched.");

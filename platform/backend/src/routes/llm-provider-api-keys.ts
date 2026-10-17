@@ -43,6 +43,7 @@ import {
   ModelModel,
   OrganizationModel,
   TeamModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import SecretModel from "@/models/secret";
@@ -1462,8 +1463,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Delete several LLM provider API keys in one request. Keys outside " +
           "the caller's organization, protected system keys, and keys that are " +
           "still used by OAuth clients or knowledge base settings are reported " +
-          "in `failed` while the remaining keys are deleted. Virtual API key " +
-          "mappings to a deleted key are removed; the virtual keys remain.",
+          "in `failed` while the remaining keys are deleted. Virtual API keys " +
+          "that mapped only a deleted key are deleted with it; keys that also " +
+          "map other provider keys keep those.",
         tags: ["LLM Provider API Keys"],
         body: BulkDeleteLlmProviderApiKeysBodySchema,
         response: constructResponseSchema(BulkOutcomeSchema),
@@ -1564,7 +1566,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteLlmProviderApiKey,
-        description: "Delete an LLM provider API key",
+        description:
+          "Delete an LLM provider API key. Virtual API keys that mapped only " +
+          "this key are deleted with it; keys that also map other provider " +
+          "keys keep those.",
         tags: ["LLM Provider API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -1684,7 +1689,8 @@ async function assertApiKeyCanBeDeleted(params: {
   }
 
   // Virtual-key mappings do not block deletion: their rows cascade with the
-  // key, and the virtual keys stay in place for the caller to remap.
+  // key, and deleteProviderApiKeyAtomically removes the virtual keys left
+  // with no provider at all.
   const oauthClients = await LlmOauthClientModel.findByProviderApiKeyId({
     providerApiKeyId: apiKey.id,
     organizationId,
@@ -1703,6 +1709,11 @@ async function deleteProviderApiKeyAtomically(params: {
   userId: string;
   headers: IncomingHttpHeaders;
 }): Promise<void> {
+  // Read the mapped virtual keys first: the mapping rows cascade with the key,
+  // so after the delete there is nothing left to find them by.
+  const mappedVirtualKeys = await VirtualApiKeyModel.findByProviderApiKeyId(
+    params.apiKeyId,
+  );
   const deleted =
     process.env.NODE_ENV === "test"
       ? await deleteProviderApiKeyInPglite(params)
@@ -1750,6 +1761,8 @@ async function deleteProviderApiKeyAtomically(params: {
           return apiKey;
         });
 
+  await deleteVirtualKeysLeftWithoutProviders(mappedVirtualKeys);
+
   if (!deleted.secretId) return;
 
   try {
@@ -1761,6 +1774,36 @@ async function deleteProviderApiKeyAtomically(params: {
     logger.error(
       { error, providerApiKeyId: deleted.id },
       "Failed to delete secret after LLM provider API key deletion",
+    );
+  }
+}
+
+/**
+ * A virtual key that mapped only the deleted provider key has nothing left to
+ * route to, so it goes with the key. Keys that still map another provider key,
+ * and keys that follow current and future providers, stay.
+ */
+async function deleteVirtualKeysLeftWithoutProviders(
+  mappedVirtualKeys: Awaited<
+    ReturnType<typeof VirtualApiKeyModel.findByProviderApiKeyId>
+  >,
+): Promise<void> {
+  const candidateIds = mappedVirtualKeys
+    .filter((virtualKey) => !virtualKey.includeFutureProviders)
+    .map((virtualKey) => virtualKey.id);
+  if (candidateIds.length === 0) return;
+  const remainingMappings =
+    await VirtualApiKeyModel.getProviderApiKeysForVirtualKeys(candidateIds);
+  const orphanedIds = candidateIds.filter(
+    (id) => (remainingMappings.get(id) ?? []).length === 0,
+  );
+  for (const id of orphanedIds) {
+    await VirtualApiKeyModel.delete(id);
+  }
+  if (orphanedIds.length > 0) {
+    logger.info(
+      { virtualKeyIds: orphanedIds },
+      "Deleted virtual keys left without a provider after their provider key was deleted",
     );
   }
 }

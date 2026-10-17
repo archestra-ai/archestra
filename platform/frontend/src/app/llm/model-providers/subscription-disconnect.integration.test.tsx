@@ -170,6 +170,14 @@ describe("member subscription disconnect", () => {
               id: "dependent-virtual-key",
               name: "Team proxy key",
               tokenStart: "arch_abc",
+              includeFutureProviders: false,
+              providerApiKeys: [
+                {
+                  provider: "github-copilot",
+                  providerApiKeyId: key.id,
+                  providerApiKeyName: key.name,
+                },
+              ],
             },
           ],
           pagination: { ...emptyPage.pagination, total: 1 },
@@ -190,7 +198,7 @@ describe("member subscription disconnect", () => {
     const dialog = within(dialogElement);
     expect(await dialog.findByText("Team proxy key")).toBeVisible();
     expect(dialogElement).toHaveTextContent(
-      'Disconnect "Copilot subscription"? 1 virtual API key uses it. Requests through it to GitHub Copilot fail until you connect again and map the new connection to it.',
+      'Disconnect "Copilot subscription"? 1 virtual API key uses only this subscription and is deleted when you disconnect.',
     );
     const confirm = dialog.getByRole("button", { name: "Disconnect" });
     await waitFor(() => expect(confirm).toBeEnabled());

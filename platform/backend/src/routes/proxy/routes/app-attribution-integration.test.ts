@@ -19,6 +19,7 @@ import {
 } from "fastify-type-provider-zod";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -129,7 +130,11 @@ describe("app-runtime interaction attribution (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: ownedApp.id },
+      headers: {
+        ...internalCallHeader(),
+        ...OPENAI_HEADERS,
+        [APP_ID_HEADER]: ownedApp.id,
+      },
       payload: PAYLOAD,
     });
 

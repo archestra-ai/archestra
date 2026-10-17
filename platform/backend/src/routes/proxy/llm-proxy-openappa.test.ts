@@ -138,6 +138,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let agent: Agent;
   let userId: string;
   let sessionId: string;
+  /** The external client's personal platform virtual key. */
+  let externalCredential: string;
   let options: AnthropicStubOptions;
   let providerRequests: unknown[];
   let providerResponses: unknown[];
@@ -149,149 +151,183 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let unruled: string | undefined;
   let unregisterAppaPlugin: () => void;
 
-  beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
-    // These provider stubs exercise direct Anthropic credentials, independent
-    // of a developer's configured Vertex project.
-    config.llm.anthropic.vertexAi.enabled = false;
-    config.openappa = parseOpenAppaConfig();
-    // The server flag alone no longer enforces: the deployment-wide switch has
-    // to be on too, and every case here is about APPA actually enforcing.
-    await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
-    unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
-    vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
-      "postgresql://test:test@localhost/test?schema=public",
-    );
-    app = Fastify({
-      rewriteUrl: rewriteConnectionProxySetupUrl,
-    }).withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-    app.setErrorHandler((error, _request, reply) => {
-      // Relays retry guidance as the central handler does (server.test.ts).
-      if (error instanceof ApiError && typeof error.shouldRetry === "boolean")
-        reply.header("x-should-retry", String(error.shouldRetry));
-      return reply
-        .status(error instanceof ApiError ? error.statusCode : 500)
-        .send({
-          error: {
-            message: error instanceof Error ? error.message : String(error),
-            type:
-              error instanceof ApiError
-                ? error.type
-                : "api_internal_server_error",
-          },
-        });
-    });
-    await app.register(anthropicProxyRoutes);
-    agent = await makeAgent({ name: "Native proxy test" });
-    userId = (await makeUser()).id;
-    await makeMember(userId, agent.organizationId);
-    sessionId = (
-      await makeConversation(agent.id, {
-        userId,
-        organizationId: agent.organizationId,
-      })
-    ).id;
-    options = {
-      includeToolUse: true,
-      streamStopReason: "tool_use",
-      nonStreamingToolUse: { name: "get_weather", input: { location: "SF" } },
-    };
-    providerRequests = [];
-    providerResponses = [];
-    events = [];
-    block = false;
-    fail = false;
-    failure = "private native database error";
-    unruled = undefined;
-    native.initializeOpenappa.mockResolvedValue(undefined);
-    // Mirrors the real binding closely enough to be regression coverage: the
-    // runtime remembers which call it denied, and answers that call's result
-    // with its own ruling rather than with anything the client reported.
-    const denied = new Set<string>();
-    native.dispatchHook.mockImplementation(async (raw: string) => {
-      const event = JSON.parse(raw);
-      events.push(event);
-      if (event.event === "session_start") {
-        const runtimeSessionId = String(event.session_id);
-        await db
-          .insert(database.schema.openappaSessionsTable)
-          .values({
-            actor: openappaActor(runtimeSessionId),
-            root: openappaActor(runtimeSessionId),
-            organizationId: String(event.organization_id),
-            callerId:
-              typeof event.caller_id === "string" ? event.caller_id : null,
-            sessionId: runtimeSessionId,
-            parentId:
-              typeof event.parent_id === "string" ? event.parent_id : null,
-            forkedFrom:
-              typeof event.fork_of === "string" ? event.fork_of : null,
-            startDecision: { decision: "ack" },
-          })
-          .onConflictDoNothing();
-      }
-      if (event.event === "tool_call") {
-        if (fail) throw new Error(failure);
-        if (event.tool === unruled)
-          throw new Error(
-            "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
-          );
-        if (!block || event.tool === "allowed_first")
-          return JSON.stringify({
-            decision: "allow_call",
-            ...(event.spawn
-              ? { spawn_binding: `fork:${event.operation_id}` }
-              : {}),
+  beforeEach(
+    async ({
+      makeAgent,
+      makeConversation,
+      makeLlmProviderApiKey,
+      makeMember,
+      makeSecret,
+      makeUser,
+    }) => {
+      // These provider stubs exercise direct Anthropic credentials, independent
+      // of a developer's configured Vertex project.
+      config.llm.anthropic.vertexAi.enabled = false;
+      config.openappa = parseOpenAppaConfig();
+      // The server flag alone no longer enforces: the deployment-wide switch has
+      // to be on too, and every case here is about APPA actually enforcing.
+      await GuardrailsDeploymentModel.setEnabled(true);
+      config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
+      unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
+      vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
+        "postgresql://test:test@localhost/test?schema=public",
+      );
+      app = Fastify({
+        rewriteUrl: rewriteConnectionProxySetupUrl,
+      }).withTypeProvider<ZodTypeProvider>();
+      app.setValidatorCompiler(validatorCompiler);
+      app.setSerializerCompiler(serializerCompiler);
+      app.setErrorHandler((error, _request, reply) => {
+        // Relays retry guidance as the central handler does (server.test.ts).
+        if (error instanceof ApiError && typeof error.shouldRetry === "boolean")
+          reply.header("x-should-retry", String(error.shouldRetry));
+        return reply
+          .status(error instanceof ApiError ? error.statusCode : 500)
+          .send({
+            error: {
+              message: error instanceof Error ? error.message : String(error),
+              type:
+                error instanceof ApiError
+                  ? error.type
+                  : "api_internal_server_error",
+            },
           });
-        denied.add(String(event.operation_id).replace(/^call:/, ""));
-        return JSON.stringify({
-          decision: "deny_call",
-          feedback:
-            "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
-        });
-      }
-      if (event.event === "tool_result") {
-        return JSON.stringify(
-          denied.has(String(event.tool_call_id))
-            ? {
-                decision: "deny_call",
-                feedback:
-                  "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
-                approved_output:
-                  "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
-                output_source: "runtime",
-              }
-            : {
-                decision: "replace_output",
-                approved_output: "APPROVED REPLACEMENT",
-                output_source: "tool",
-              },
-        );
-      }
-      return JSON.stringify({ decision: "ack" });
-    });
-    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(() => {
-      const client = createAnthropicTestClient(options);
-      const create = client.messages.create;
-      client.messages.create = async (params) => {
-        providerRequests.push(structuredClone(params));
-        const response = await create(params);
-        providerResponses.push(response);
-        return response;
+      });
+      await app.register(anthropicProxyRoutes);
+      agent = await makeAgent({ name: "Native proxy test" });
+      userId = (await makeUser()).id;
+      await makeMember(userId, agent.organizationId);
+      // External clients present a platform credential, as any non-internal
+      // caller must; a bare provider key does not identify the caller to APPA.
+      const externalSecret = await makeSecret({
+        secret: { apiKey: "sk-external" },
+      });
+      const externalProviderKey = await makeLlmProviderApiKey(
+        agent.organizationId,
+        externalSecret.id,
+        { provider: "anthropic" },
+      );
+      externalCredential = (
+        await VirtualApiKeyModel.create({
+          name: "external-client",
+          authorId: userId,
+          scope: "personal",
+          providerApiKeys: [
+            {
+              provider: externalProviderKey.provider,
+              providerApiKeyId: externalProviderKey.id,
+            },
+          ],
+        })
+      ).value;
+      sessionId = (
+        await makeConversation(agent.id, {
+          userId,
+          organizationId: agent.organizationId,
+        })
+      ).id;
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: { name: "get_weather", input: { location: "SF" } },
       };
-      return client as never;
-    });
-    await ModelModel.upsert({
-      externalId: "anthropic/claude-3-5-sonnet-20241022",
-      provider: "anthropic",
-      modelId: "claude-3-5-sonnet-20241022",
-      inputModalities: null,
-      outputModalities: null,
-      lastSyncedAt: new Date(),
-    });
-  });
+      providerRequests = [];
+      providerResponses = [];
+      events = [];
+      block = false;
+      fail = false;
+      failure = "private native database error";
+      unruled = undefined;
+      native.initializeOpenappa.mockResolvedValue(undefined);
+      // Mirrors the real binding closely enough to be regression coverage: the
+      // runtime remembers which call it denied, and answers that call's result
+      // with its own ruling rather than with anything the client reported.
+      const denied = new Set<string>();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        events.push(event);
+        if (event.event === "session_start") {
+          const runtimeSessionId = String(event.session_id);
+          await db
+            .insert(database.schema.openappaSessionsTable)
+            .values({
+              actor: openappaActor(runtimeSessionId),
+              root: openappaActor(runtimeSessionId),
+              organizationId: String(event.organization_id),
+              callerId:
+                typeof event.caller_id === "string" ? event.caller_id : null,
+              sessionId: runtimeSessionId,
+              parentId:
+                typeof event.parent_id === "string" ? event.parent_id : null,
+              forkedFrom:
+                typeof event.fork_of === "string" ? event.fork_of : null,
+              startDecision: { decision: "ack" },
+            })
+            .onConflictDoNothing();
+        }
+        if (event.event === "tool_call") {
+          if (fail) throw new Error(failure);
+          if (event.tool === unruled)
+            throw new Error(
+              "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
+            );
+          if (!block || event.tool === "allowed_first")
+            return JSON.stringify({
+              decision: "allow_call",
+              ...(event.spawn
+                ? { spawn_binding: `fork:${event.operation_id}` }
+                : {}),
+            });
+          denied.add(String(event.operation_id).replace(/^call:/, ""));
+          return JSON.stringify({
+            decision: "deny_call",
+            feedback:
+              "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+          });
+        }
+        if (event.event === "tool_result") {
+          return JSON.stringify(
+            denied.has(String(event.tool_call_id))
+              ? {
+                  decision: "deny_call",
+                  feedback:
+                    "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+                  approved_output:
+                    "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+                  output_source: "runtime",
+                }
+              : {
+                  decision: "replace_output",
+                  approved_output: "APPROVED REPLACEMENT",
+                  output_source: "tool",
+                },
+          );
+        }
+        return JSON.stringify({ decision: "ack" });
+      });
+      vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+        () => {
+          const client = createAnthropicTestClient(options);
+          const create = client.messages.create;
+          client.messages.create = async (params) => {
+            providerRequests.push(structuredClone(params));
+            const response = await create(params);
+            providerResponses.push(response);
+            return response;
+          };
+          return client as never;
+        },
+      );
+      await ModelModel.upsert({
+        externalId: "anthropic/claude-3-5-sonnet-20241022",
+        provider: "anthropic",
+        modelId: "claude-3-5-sonnet-20241022",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+    },
+  );
 
   afterEach(async () => {
     unregisterAppaPlugin();
@@ -1599,7 +1635,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       `${baseUrl}/v1/anthropic/${agent.id}/v1/messages`,
       {
         method: "POST",
-        headers: { ...headers(), "content-type": "application/json" },
+        headers: {
+          ...internalCallHeader(),
+          ...headers(),
+          "content-type": "application/json",
+        },
         body: JSON.stringify(payload(true)),
       },
     );
@@ -1689,13 +1729,17 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   /** An external client: no APPA header, and not Chat's internal source. */
-  const externalClientHeaders = () =>
-    Object.fromEntries(
+  const externalClientHeaders = () => ({
+    ...Object.fromEntries(
       Object.entries(headers()).filter(
         ([name]) =>
-          name !== "x-appa-session-id" && name !== "x-archestra-source",
+          name !== "x-appa-session-id" &&
+          name !== "x-archestra-source" &&
+          name !== "x-api-key",
       ),
-    );
+    ),
+    authorization: `Bearer ${externalCredential}`,
+  });
 
   test.for([
     { command: "yell", stream: false },
@@ -2222,12 +2266,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.statusCode, response.body).toBe(200);
     }
     expect(providerRequests).toHaveLength(2);
-    // Two roots, each ruled once. The known client's native id is scoped to
-    // the loopback user. An explicit header on that unauthenticated loopback
-    // is the named root, not a second evaluation of the first call.
+    // Two roots, each ruled once. Both native ids are scoped to the caller's
+    // user, since the external client authenticates with its own credential.
     const callerId = `user:${userId}`;
     const knownRoot = `${callerId}|known-session`;
-    const explicitRoot = "explicit-session";
+    const explicitRoot = `${callerId}|explicit-session`;
     const starts = events.filter((event) => event.event === "session_start");
     const toolCalls = events.filter((event) => event.event === "tool_call");
     expect(starts).toEqual([
@@ -4545,8 +4588,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   test("a history stamped for another member, or with a forged stamp, opens the replaying session's own root", async ({
-    makeUser,
+    makeLlmProviderApiKey,
     makeMember,
+    makeSecret,
+    makeUser,
   }) => {
     config.openappa = {
       ...config.openappa,
@@ -4559,7 +4604,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       url: url(),
       remoteAddress: "127.0.0.1",
       headers: {
-        ...internalCallHeader(),
         ...externalClientHeaders(),
         "x-claude-code-session-id": parent,
       },
@@ -4590,6 +4634,25 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ];
     const stranger = (await makeUser()).id;
     await makeMember(stranger, agent.organizationId);
+    // Each caller authenticates with its own key; the user header is only a hint.
+    const credentialFor = async (owner: string) => {
+      const secret = await makeSecret({ secret: { apiKey: "sk-caller" } });
+      const providerKey = await makeLlmProviderApiKey(
+        agent.organizationId,
+        secret.id,
+        { provider: "anthropic" },
+      );
+      return (
+        await VirtualApiKeyModel.create({
+          name: "replay-caller",
+          authorId: owner,
+          scope: "personal",
+          providerApiKeys: [
+            { provider: "anthropic", providerApiKeyId: providerKey.id },
+          ],
+        })
+      ).value;
+    };
 
     for (const [caller, id] of [
       [stranger, stamped],
@@ -4602,8 +4665,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         url: url(),
         remoteAddress: "127.0.0.1",
         headers: {
-          ...internalCallHeader(),
           ...externalClientHeaders(),
+          authorization: `Bearer ${await credentialFor(caller)}`,
           "x-archestra-user-id": caller,
           "x-claude-code-session-id": replaying,
         },

@@ -1369,5 +1369,11 @@ const AgentRowActionsContext = createContext<
 function AgentRowActionsCell({ row }: CellContext<AgentListRow, unknown>) {
   const renderActions = useContext(AgentRowActionsContext);
   // Shield the whole cell, including disabled actions' tooltip wrappers.
-  return <RowClickShield>{renderActions?.(row.original)}</RowClickShield>;
+  // Right-aligned so rows with fewer actions (external A2A agents, which have
+  // no pin or chat) still end flush with the others.
+  return (
+    <RowClickShield className="flex justify-end">
+      {renderActions?.(row.original)}
+    </RowClickShield>
+  );
 }

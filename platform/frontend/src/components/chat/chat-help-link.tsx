@@ -13,6 +13,9 @@ import { cn } from "@/lib/utils/tailwind";
 // The app shell's mobile-only header exposes this container so pages can
 // portal actions into the header bar next to the sidebar trigger.
 export const MOBILE_HEADER_ACTIONS_CONTAINER_ID = "mobile-header-actions";
+// Between the trigger and the actions: a page's own title row (the chat title
+// and its menu) so phones get one bar rather than two.
+export const MOBILE_HEADER_TITLE_CONTAINER_ID = "mobile-header-title";
 
 interface ChatLinkButtonProps {
   label?: string | null | undefined;

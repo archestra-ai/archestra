@@ -346679,6 +346679,17 @@
           },
           {
             "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Case-insensitive substring of the external's name or the session ID"
+          },
+          {
+            "schema": {
               "default": "json",
               "type": "string",
               "enum": [

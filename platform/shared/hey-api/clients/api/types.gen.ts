@@ -91168,6 +91168,10 @@ export type GetOpenappaExternalConsultsData = {
         root?: string;
         sessionId?: string;
         /**
+         * Case-insensitive substring of the external's name or the session ID
+         */
+        search?: string;
+        /**
          * `jsonl` streams up to 10000 rows as application/x-ndjson, one consult per line, ignoring `limit`
          */
         format?: 'json' | 'jsonl';

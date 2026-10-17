@@ -17,20 +17,22 @@ type ChatSessionSnapshot = ReturnType<
   ReturnType<typeof useGlobalChat>["getSession"]
 >;
 
+// Stable across renders, like the real mutation hooks: a fresh function per
+// render would change the session's callbacks and re-sync it endlessly.
 const mocks = vi.hoisted(() => ({
   fetchConversation: vi.fn(),
+  generateTitle: { isPending: false, mutate: () => {} },
+  resolveMcpElicitation: { isPending: false, mutateAsync: async () => {} },
+  clearChatErrors: { mutateAsync: async () => ({}) },
 }));
 
 vi.mock("sonner");
 
 vi.mock("@/lib/chat/chat.query", () => ({
   fetchConversation: mocks.fetchConversation,
-  useGenerateConversationTitle: () => ({ isPending: false, mutate: vi.fn() }),
-  useResolveChatMcpElicitation: () => ({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  }),
-  useClearChatErrors: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
+  useGenerateConversationTitle: () => mocks.generateTitle,
+  useResolveChatMcpElicitation: () => mocks.resolveMcpElicitation,
+  useClearChatErrors: () => mocks.clearChatErrors,
   useConversation: () => ({ data: null }),
   useConversationUpdatedCacheSync: () => {},
 }));

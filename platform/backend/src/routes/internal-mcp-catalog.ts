@@ -289,6 +289,15 @@ const McpRegistryRowSchema = ListInternalMcpCatalogSchema.pick({
   /** An environment variable is bound to a stored credential. */
   bindsCredential: z.boolean(),
   enterpriseManaged: z.boolean(),
+  /**
+   * What connecting this item asks of the person: an account sign-in, or a
+   * number of settings to fill in. Lets a picker say so without loading the
+   * item's full configuration.
+   */
+  setupNeeds: z.object({
+    signIn: z.boolean(),
+    settings: z.number().int(),
+  }),
   install: z.object({
     /** Installs of this item the caller can see. */
     visibleCount: z.number().int(),
@@ -702,6 +711,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               (env) => env.credentialId,
             ),
             enterpriseManaged: !!item.enterpriseManagedConfig,
+            setupNeeds: {
+              signIn: !!item.oauthConfig,
+              settings:
+                (item.localConfig?.environment?.filter(
+                  (env) => env.promptOnInstallation,
+                ).length ?? 0) + Object.keys(item.userConfig ?? {}).length,
+            },
             install: installs.get(item.id) ?? {
               visibleCount: 0,
               installedForViewer: false,

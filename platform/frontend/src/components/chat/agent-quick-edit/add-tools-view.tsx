@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
 } from "@archestra/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Check,
@@ -32,13 +33,16 @@ import {
   useAllProfileTools,
   useUpdateAgentServerTools,
 } from "@/lib/agent-tools.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { isInstallInProgress } from "@/lib/mcp/install-status";
-import {
-  fetchCatalogTools,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import type { McpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import {
+  fetchInternalMcpCatalogItem,
+  type McpRegistryRow,
+  useMcpRegistryPage,
+} from "@/lib/mcp/mcp-registry.query";
 import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
@@ -70,8 +74,7 @@ export function AddToolsView({
   onAdded: (catalogId: string) => void;
   onFailed: (notice: QuickEditNotice) => void;
 }) {
-  const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
-  const allCredentials = useMcpServersGroupedByCatalog();
+  const queryClient = useQueryClient();
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
@@ -85,17 +88,49 @@ export function AddToolsView({
   );
   const addAll = useAddAllServerTools({ agentId, agentName });
 
-  const hasInstallingServers = useMemo(
-    () =>
-      Object.values(allCredentials ?? {}).some((servers) =>
-        servers.some((server) =>
-          isInstallInProgress(server.localInstallationStatus),
-        ),
-      ),
-    [allCredentials],
+  // One page of the registry, searched and filtered on the server, with the
+  // built-in entry; the counts on the filter come from the same query's
+  // totals. Rows carry what this view shows (description, tool count, what
+  // connecting asks for); an action loads the full item by id.
+  const debouncedSearch = useDebouncedValue(search.trim(), 250);
+  const baseQuery = {
+    includeBuiltIn: true,
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    sortBy: "name" as const,
+    sortDirection: "asc" as const,
+  };
+  const [pollWhileInstalling, setPollWhileInstalling] = useState(false);
+  const page = useMcpRegistryPage(
+    {
+      ...baseQuery,
+      ...(filter === "all"
+        ? {}
+        : {
+            installState:
+              filter === "connected"
+                ? ("installed" as const)
+                : ("not-installed" as const),
+          }),
+      limit: ADD_TOOLS_PAGE_SIZE,
+      offset: 0,
+    },
+    {
+      placeholderScope: `add-tools:${filter}`,
+      // Until an install finishes deploying, so its row turns ready.
+      refetchInterval: pollWhileInstalling ? 2_000 : false,
+    },
   );
-  // Polls while any install is still deploying, so its row turns ready.
-  useMcpServers({ hasInstallingServers });
+  const allTotal = useMcpRegistryPage(
+    { ...baseQuery, limit: 1, offset: 0 },
+    { placeholderScope: "add-tools:total" },
+  ).data?.pagination.total;
+  const connectedTotal = useMcpRegistryPage(
+    { ...baseQuery, installState: "installed", limit: 1, offset: 0 },
+    { placeholderScope: "add-tools:connected" },
+  ).data?.pagination.total;
+  const isPending = page.isPending;
+  const pageRows = page.data?.data ?? [];
+  const pageInstalls = page.data?.installs ?? [];
 
   const assignedCatalogIds = useMemo(() => {
     const ids = new Set<string>();
@@ -107,14 +142,15 @@ export function AddToolsView({
 
   const rows = useMemo(
     () =>
-      catalogItems.map((catalog) => {
-        const servers = allCredentials?.[catalog.id] ?? [];
-        const installing = servers.some((server) =>
-          isInstallInProgress(server.localInstallationStatus),
+      pageRows.map((catalog) => {
+        const installing = pageInstalls.some(
+          (server) =>
+            server.catalogId === catalog.id &&
+            isInstallInProgress(server.localInstallationStatus),
         );
         const connected =
           catalog.serverType === "builtin" ||
-          (servers.length > 0 && !installing);
+          (catalog.install.visibleCount > 0 && !installing);
         return {
           catalog,
           name:
@@ -126,45 +162,53 @@ export function AddToolsView({
           assigned: assignedCatalogIds.has(catalog.id),
         };
       }),
-    [catalogItems, allCredentials, assignedCatalogIds, builtInCatalogName],
+    [pageRows, pageInstalls, assignedCatalogIds, builtInCatalogName],
   );
+  const anyInstalling = rows.some((row) => row.installing);
+  useEffect(() => {
+    setPollWhileInstalling(anyInstalling);
+  }, [anyInstalling]);
 
-  // The catalog row counts the tools its picker lists.
-  const toolCountByCatalog = new Map<string, number>(
-    rows
-      .filter((row) => row.connected)
-      .map((row) => [row.catalog.id, row.catalog.toolCount]),
+  // The built-in entry has no install, so the server counts it as not
+  // installed; it is ready to add all the same.
+  const builtInListed = rows.some(
+    (row) => row.catalog.id === ARCHESTRA_MCP_CATALOG_ID,
   );
-
-  const matches = rows.filter((row) => {
-    if (!search) return true;
-    const lower = search.toLowerCase();
-    return (
-      row.name.toLowerCase().includes(lower) ||
-      row.catalog.description?.toLowerCase().includes(lower)
-    );
-  });
-  const connectedCount = matches.filter((row) => row.connected).length;
-  const readyRows = matches
+  const totalCount = allTotal ?? rows.length;
+  const connectedCount =
+    (connectedTotal ?? rows.filter((row) => row.connected).length) +
+    (builtInListed && connectedTotal !== undefined ? 1 : 0);
+  const readyRows = rows
     .filter((row) => row.connected && filter !== "not-connected")
     .sort(
-      (a, b) =>
-        readyRank(a, toolCountByCatalog) - readyRank(b, toolCountByCatalog) ||
-        a.name.localeCompare(b.name),
+      (a, b) => readyRank(a) - readyRank(b) || a.name.localeCompare(b.name),
     );
-  const connectRows = matches
+  const connectRows = rows
     .filter((row) => !row.connected && filter !== "connected")
     .sort(
       (a, b) =>
         Number(b.installing) - Number(a.installing) ||
         a.name.localeCompare(b.name),
     );
+  const unlisted = Math.max(
+    0,
+    (page.data?.pagination.total ?? 0) - rows.length,
+  );
 
-  const handleConnect = (catalog: CatalogItem) => {
-    if (catalog.oauthConfig) {
-      installer.triggerInstallByCatalogId(catalog.id);
+  /** The full item an action works on, loaded when the action starts. */
+  const withFullItem = async (
+    row: { id: string },
+    act: (catalog: CatalogItem) => void,
+  ) => {
+    const catalog = await fetchInternalMcpCatalogItem(queryClient, row.id);
+    if (catalog) act(catalog);
+  };
+
+  const handleConnect = (row: McpRegistryRow) => {
+    if (row.setupNeeds.signIn) {
+      installer.triggerInstallByCatalogId(row.id);
     } else {
-      onConnect(catalog);
+      void withFullItem(row, onConnect);
     }
   };
 
@@ -193,11 +237,11 @@ export function AddToolsView({
         >
           {(
             [
-              ["all", `All ${matches.length}`],
+              ["all", `All ${totalCount}`],
               ["connected", `Connected ${connectedCount}`],
               [
                 "not-connected",
-                `Not connected ${matches.length - connectedCount}`,
+                `Not connected ${Math.max(0, totalCount - connectedCount)}`,
               ],
             ] as const
           ).map(([value, label]) => (
@@ -234,7 +278,7 @@ export function AddToolsView({
             {readyRows.length > 0 && (
               <ServerGroup title="Ready to add">
                 {readyRows.map((row) => {
-                  const count = toolCountByCatalog.get(row.catalog.id);
+                  const count = row.catalog.toolCount;
                   const noTools = count === 0;
                   const adding = addAll.addingCatalogId === row.catalog.id;
                   return (
@@ -247,9 +291,7 @@ export function AddToolsView({
                         noTools
                           ? "Connected, but the server reports no tools"
                           : joinMeta(
-                              count === undefined
-                                ? undefined
-                                : `${count} ${count === 1 ? "tool" : "tools"}`,
+                              `${count} ${count === 1 ? "tool" : "tools"}`,
                               row.catalog.description,
                             )
                       }
@@ -269,21 +311,25 @@ export function AddToolsView({
                               variant="ghost"
                               size="xs"
                               disabled={adding}
-                              onClick={() => onChooseTools(row.catalog)}
+                              onClick={() =>
+                                void withFullItem(row.catalog, onChooseTools)
+                              }
                             >
                               Choose tools
                             </Button>
                             <Button
                               variant="outline"
                               size="xs"
-                              disabled={adding || count === undefined}
+                              disabled={adding}
                               onClick={() =>
-                                addAll.run({
-                                  catalog: row.catalog,
-                                  name: row.name,
-                                  onAdded,
-                                  onFailed,
-                                })
+                                void withFullItem(row.catalog, (catalog) =>
+                                  addAll.run({
+                                    catalog,
+                                    name: row.name,
+                                    onAdded,
+                                    onFailed,
+                                  }),
+                                )
                               }
                             >
                               {adding && <Loader2 className="animate-spin" />}
@@ -327,6 +373,12 @@ export function AddToolsView({
                   />
                 ))}
               </ServerGroup>
+            )}
+            {unlisted > 0 && (
+              <p className="text-center text-xs text-muted-foreground">
+                {unlisted} more {unlisted === 1 ? "server" : "servers"} — search
+                to find {unlisted === 1 ? "it" : "them"}.
+              </p>
             )}
           </>
         )}
@@ -373,7 +425,9 @@ export function ConnectView({
   onCancel: () => void;
   onConnected: () => void;
 }) {
-  const allCredentials = useMcpServersGroupedByCatalog();
+  const allCredentials = useMcpServersGroupedByCatalog({
+    catalogId: catalog.id,
+  });
   const serverCount = allCredentials?.[catalog.id]?.length ?? 0;
   const [attempt, setAttempt] = useState<"idle" | "submitted" | "settled">(
     "idle",
@@ -502,12 +556,14 @@ export function InstallingView({
   onAdded: (catalogId: string) => void;
   onFailed: (notice: QuickEditNotice) => void;
 }) {
-  const allCredentials = useMcpServersGroupedByCatalog();
+  const allCredentials = useMcpServersGroupedByCatalog({
+    catalogId: catalog.id,
+  });
   const servers = allCredentials?.[catalog.id] ?? [];
   const installing = servers.some((server) =>
     isInstallInProgress(server.localInstallationStatus),
   );
-  useMcpServers({ hasInstallingServers: installing });
+  useMcpServers({ catalogId: catalog.id, hasInstallingServers: installing });
   const failedServer = servers.find(
     (server) => server.localInstallationStatus === "error",
   );
@@ -754,22 +810,15 @@ async function runAdd({
   }
 }
 
-function readyRank(
-  row: { assigned: boolean; catalog: CatalogItem },
-  toolCounts: Map<string, number>,
-) {
+function readyRank(row: { assigned: boolean; catalog: McpRegistryRow }) {
   if (row.assigned) return 1;
-  if (toolCounts.get(row.catalog.id) === 0) return 2;
+  if (row.catalog.toolCount === 0) return 2;
   return 0;
 }
 
-function connectHint(catalog: CatalogItem) {
-  if (catalog.oauthConfig) return "Sign in with your account";
-  const prompted =
-    catalog.localConfig?.environment?.filter((env) => env.promptOnInstallation)
-      .length ?? 0;
-  const userConfig = Object.keys(catalog.userConfig ?? {}).length;
-  const settings = prompted + userConfig;
+function connectHint(catalog: McpRegistryRow) {
+  if (catalog.setupNeeds.signIn) return "Sign in with your account";
+  const settings = catalog.setupNeeds.settings;
   if (settings > 0) {
     return `Needs ${settings} ${settings === 1 ? "setting" : "settings"} to connect`;
   }
@@ -804,7 +853,7 @@ function ServerRow({
   action,
   muted = false,
 }: {
-  catalog: CatalogItem;
+  catalog: Pick<McpRegistryRow, "id" | "icon" | "iconUrl">;
   name: string;
   meta: string;
   action: ReactNode;
@@ -818,7 +867,11 @@ function ServerRow({
       )}
     >
       <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
-        <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={20} />
+        <McpCatalogIcon
+          icon={catalog.iconUrl ?? catalog.icon}
+          catalogId={catalog.id}
+          size={20}
+        />
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{name}</div>
@@ -920,3 +973,6 @@ function ProgressStep({
     </li>
   );
 }
+
+/** Rows the list shows at a time; a search narrows on the server. */
+const ADD_TOOLS_PAGE_SIZE = 100;

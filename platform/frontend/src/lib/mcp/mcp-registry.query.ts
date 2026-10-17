@@ -151,6 +151,8 @@ export function useMcpRegistryPage(
      * rows under it.
      */
     placeholderScope?: string;
+    /** Refetch on an interval, e.g. while an install on the page deploys. */
+    refetchInterval?: number | false;
   },
 ) {
   const scope = options?.placeholderScope ?? "";
@@ -158,6 +160,7 @@ export function useMcpRegistryPage(
   return useQuery({
     ...registryPageQueryOptions(queryClient, params, scope),
     enabled: options?.enabled ?? true,
+    refetchInterval: options?.refetchInterval,
     placeholderData: (previousData, previousQuery) =>
       previousQuery?.queryKey.at(-1) === scope ? previousData : undefined,
   });

@@ -373,6 +373,29 @@ describe("MCP registry list routes", () => {
       ).toEqual(["default-env"]);
     });
 
+    test("says what connecting each row asks for", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      await makeItem(makeInternalMcpCatalog, "plain");
+      await makeItem(makeInternalMcpCatalog, "configured", {
+        userConfig: {
+          token: { type: "string", title: "Token", description: "" },
+          region: { type: "string", title: "Region", description: "" },
+        },
+      });
+
+      const page = (await search()) as unknown as {
+        data: Array<{ name: string; setupNeeds: unknown }>;
+      };
+
+      expect(
+        Object.fromEntries(page.data.map((row) => [row.name, row.setupNeeds])),
+      ).toEqual({
+        plain: { signIn: false, settings: 0 },
+        configured: { signIn: false, settings: 2 },
+      });
+    });
+
     test("an author filter matches items a service account created", async ({
       makeInternalMcpCatalog,
       makeServiceAccount,

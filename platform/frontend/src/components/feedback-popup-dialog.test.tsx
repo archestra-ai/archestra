@@ -32,8 +32,8 @@ vi.mock("@/lib/onboarding/onboarding.query", () => ({
 }));
 
 const capture = vi.fn();
-vi.mock("posthog-js", () => ({
-  default: { capture: (...args: unknown[]) => capture(...args) },
+vi.mock("@/lib/posthog-client", () => ({
+  posthogClient: { capture: (...args: unknown[]) => capture(...args) },
 }));
 
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";

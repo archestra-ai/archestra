@@ -7,20 +7,9 @@ import { useEffect, useRef, useState } from "react";
 import { LoadingState } from "@/components/loading";
 import { authQueryKeys, useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { errorReporting } from "@/lib/error-reporting";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
-
-type ErrorReportingUser = Parameters<
-  typeof import("@sentry/nextjs").setUser
->[0];
-
-const safeSetErrorReportingUser = (user: ErrorReportingUser) => {
-  void import("@sentry/nextjs")
-    .then(({ setUser }) => {
-      setUser(user);
-    })
-    .catch(() => undefined);
-};
 
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
   return (
@@ -105,14 +94,14 @@ export const WithAuthCheck: React.FC<
   // Set Sentry user context when user is authenticated
   useEffect(() => {
     if (session?.user) {
-      safeSetErrorReportingUser({
+      errorReporting.setUser({
         id: session.user.id,
         email: session.user.email,
         username: session.user.name || session.user.email,
       });
     } else {
       // Clear user context when not authenticated
-      safeSetErrorReportingUser(null);
+      errorReporting.setUser(null);
     }
   }, [session?.user]);
 

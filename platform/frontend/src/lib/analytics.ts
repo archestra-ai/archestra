@@ -1,7 +1,7 @@
 import type { RUM_EVENT_ALLOWED_ATTRIBUTES } from "@archestra/shared";
-import posthog from "posthog-js";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; the client no-ops unless RUM is enabled
 import { rumClient } from "@/lib/rum.ee";
+import { posthogClient } from "./posthog-client";
 
 /**
  * Product analytics events captured in PostHog.
@@ -80,8 +80,8 @@ type RumAllowlistParityViolations = {
 const _rumAllowlistParity: RumAllowlistParityViolations = {};
 
 /**
- * Capture a product event. No-ops when analytics is disabled for the
- * instance (PostHog is then never initialized — see PostHogProviderWrapper).
+ * Capture a product event. Queued until PostHog has initialized, and dropped
+ * when analytics is disabled for the instance (see PostHogProviderWrapper).
  */
 export function trackEvent<TName extends keyof ProductEvents>(
   event: TName,
@@ -97,10 +97,7 @@ export function trackEvent<TName extends keyof ProductEvents>(
     rumClient.trackProductEvent(`archestra.${event}`, properties);
   }
 
-  if (!posthog.__loaded) {
-    return;
-  }
-  posthog.capture(event, properties);
+  posthogClient.capture(event, properties);
 }
 
 /**

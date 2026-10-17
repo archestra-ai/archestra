@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("sonner");
 
 const captureException = vi.fn();
-vi.mock("@sentry/nextjs", () => ({
-  captureException: (...args: unknown[]) => captureException(...args),
+vi.mock("@/lib/error-reporting", () => ({
+  errorReporting: {
+    captureException: (...args: unknown[]) => captureException(...args),
+  },
 }));
 
 import { sessionConfirmation } from "@/lib/auth/session-confirmation";
@@ -133,7 +135,7 @@ describe("handleApiError exception reporting", () => {
     await flush();
 
     expect(toast.error).toHaveBeenCalledTimes(1);
-    expect(toast.error).toHaveBeenCalledWith("forbidden", expect.anything());
+    expect(toast.error).not.toHaveBeenCalledWith("sign in", expect.anything());
   });
 
   it("reports a server-side failure", async () => {

@@ -35,8 +35,8 @@ import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpRegistryRow,
   useMcpRegistryPage,
-  useMcpRegistryRowsByIds,
 } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 
 /** A catalog item as the editor reads it: its registry row. */
 type CatalogItem = McpRegistryRow;

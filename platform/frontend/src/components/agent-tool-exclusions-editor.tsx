@@ -43,8 +43,8 @@ import {
 import {
   type McpRegistryRow,
   useMcpRegistryPage,
-  useMcpRegistryRowsByIds,
 } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 import { useOrganization } from "@/lib/organization.query";
 import {
   buildExclusionPayload,

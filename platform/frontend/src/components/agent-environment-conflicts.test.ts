@@ -15,7 +15,7 @@ vi.mock("@/lib/agent-tools.query", () => ({
   useBulkUpdateAgentTools: useBulkUpdateAgentToolsMock,
 }));
 
-vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   useMcpRegistryRowsByIds: useRowsByIdsMock,
 }));
 

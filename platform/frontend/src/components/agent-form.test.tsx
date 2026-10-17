@@ -416,8 +416,7 @@ vi.mock("@/lib/a2a-remote-agents.query", () => ({
 }));
 
 // The environment-conflict check reads the agent's catalogs by id.
-vi.mock("@/lib/mcp/mcp-registry.query", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/mcp/mcp-registry.query")>()),
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   // Answers from the catalog rows each test sets, for the ids asked.
   useMcpRegistryRowsByIds: (ids: string[]) => {
     const catalog = useInternalMcpCatalogMock() ?? {};

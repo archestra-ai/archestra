@@ -82,7 +82,7 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 
 // The registry reads, answered from the catalog rows each test sets: the
 // app's servers by id, and the Add list's page.
-vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   useMcpRegistryRowsByIds: (ids: string[]) => ({
     data: (useInternalMcpCatalogMock().data as Array<{ id: string }>).filter(
       (row) => ids.includes(row.id),
@@ -91,6 +91,8 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
     hasLoaded: true,
     isError: false,
   }),
+}));
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
   // Like the server: the search narrows by name, the page is sorted by name
   // and cut to the limit.
   useMcpRegistryPage: (params: { search?: string; limit?: number }) => {

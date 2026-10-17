@@ -82,8 +82,7 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", async (importOriginal) => ({
   useInternalMcpCatalog: catalogHookMock,
 }));
 // A gateway's own catalogs are read by id; answer from the catalog mock.
-vi.mock("@/lib/mcp/mcp-registry.query", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/mcp/mcp-registry.query")>()),
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
   useMcpRegistryRowsByIds: (ids: string[]) => {
     // Stable for the same rows and ids, as the real hook's result is.
     const rows = (catalogHookMock().data ?? []) as Array<{ id: string }>;

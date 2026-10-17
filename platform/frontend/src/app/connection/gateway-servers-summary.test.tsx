@@ -14,7 +14,7 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   groupCatalogTools: () => new Map(),
 }));
 // A gateway's own catalogs are read by id; answer from the catalog mock.
-vi.mock("@/lib/mcp/mcp-registry.query", async () => {
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", async () => {
   const { useInternalMcpCatalog } = await import(
     "@/lib/mcp/internal-mcp-catalog.query"
   );

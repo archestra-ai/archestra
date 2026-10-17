@@ -11,7 +11,7 @@ import {
   useAgentTools,
   useBulkUpdateAgentTools,
 } from "@/lib/agent-tools.query";
-import { useMcpRegistryRowsByIds } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 import { shouldOfferAppCatalogs } from "./agent-form.utils";
 
 /** One MCP catalog the agent uses that does not belong to the new environment. */

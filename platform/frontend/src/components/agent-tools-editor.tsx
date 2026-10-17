@@ -56,9 +56,9 @@ import { useCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpRegistryRow,
   useMcpRegistryPage,
-  useMcpRegistryRowsByIds,
 } from "@/lib/mcp/mcp-registry.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {

@@ -38,9 +38,9 @@ import {
   startMcpRegistryEarlyRequests,
   useMcpRegistryIssueIndex,
   useMcpRegistryPage,
-  useMcpRegistryRowsByIds,
   useMcpServersForCatalogs,
 } from "./mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "./use-mcp-registry-rows-by-ids";
 
 describe("registry page installs", () => {
   it("come with the page, so the page's installs need no request of their own", async () => {

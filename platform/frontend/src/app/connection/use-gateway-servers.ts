@@ -7,7 +7,7 @@ import {
   useAllCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpRegistryRowsByIds } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 
 /** One MCP server a gateway exposes, most tools first. */
 export interface GatewayServer {

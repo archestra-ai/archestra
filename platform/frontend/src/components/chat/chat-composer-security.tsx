@@ -47,7 +47,11 @@ export const ChatComposerSecurity = memo(function ChatComposerSecurity({
       >
         {status && (
           <output
-            aria-label={`Trust: ${status.trust}; audience: ${status.audience}`}
+            aria-label={`Trust: ${status.trust}; audience: ${status.audience}${
+              typeof status.policyRevision === "number"
+                ? `; policy revision: ${status.policyRevision}`
+                : ""
+            }`}
             className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] leading-4 text-muted-foreground"
           >
             <OpenAppaSolidIcon
@@ -66,6 +70,14 @@ export const ChatComposerSecurity = memo(function ChatComposerSecurity({
                 {status.audience}
               </span>
             </span>
+            {typeof status.policyRevision === "number" && (
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                <span>revision:</span>
+                <span className="font-medium text-foreground">
+                  {status.policyRevision}
+                </span>
+              </span>
+            )}
           </output>
         )}
         {encrypted && (

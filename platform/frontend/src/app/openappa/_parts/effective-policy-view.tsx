@@ -150,6 +150,16 @@ export function EffectivePolicyView() {
                 ? `Revision ${rootRevision} refused · enforcing an earlier composition · ${hash}`
                 : `Revision ${rootRevision} refused · enforcing revision ${served.rootRevision} · ${hash}`}
         </span>
+        {effective.data.servedRevision && (
+          <span className="block">
+            {`Runtime revision ${effective.data.servedRevision.revision} · published ${formatDate(
+              {
+                date: effective.data.servedRevision.publishedAt,
+                dateFormat: "MM/dd HH:mm",
+              },
+            )} · open conversations follow it`}
+          </span>
+        )}
       </div>
     </div>
   );

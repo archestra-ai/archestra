@@ -265,7 +265,7 @@ export async function getOpenappaStatus(params: {
   try {
     const module = await binding();
     // Read on the organization's policy line, as a dispatch would decide.
-    return await retryWhilePolicyMoved({
+    const status = await retryWhilePolicyMoved({
       run: async () => {
         const policy = await effectivePolicy(params.organizationId);
         return withOpenappaContentEncryption(
@@ -281,6 +281,9 @@ export async function getOpenappaStatus(params: {
         );
       },
     });
+    return (
+      status && { ...status, policyRevision: status.policyRevision ?? null }
+    );
   } catch (error) {
     throw openappaFailure(error);
   }

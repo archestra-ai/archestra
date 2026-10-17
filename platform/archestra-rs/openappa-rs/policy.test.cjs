@@ -114,6 +114,8 @@ test('a saved policy decides the next call of an open session and of a new one',
   assert.equal((await hook(open, callRead(1), before)).decision, 'allow_call');
 
   await assert.rejects(() => hook(open, callRead(2), after), /not declared in this policy/, 'the open session follows the saved policy');
+  const status = await native.getOpenappaStatus(organization, open.session_id, hosted(after));
+  assert.equal(status.policyRevision, 2, 'the session reports the revision its next call is decided under');
   const fresh = scope();
   assert.equal((await hook(fresh, { event: 'session_start' }, after)).decision, 'ack');
   await assert.rejects(() => hook(fresh, callRead(1), after), /not declared in this policy/);

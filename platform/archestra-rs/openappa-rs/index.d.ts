@@ -269,6 +269,8 @@ export declare function openappaOpeningKeys(batches: Array<Buffer>): Array<strin
 export interface OpenappaStatus {
   trust: string
   audience: string
+  /** The organization's policy revision the session's next event is decided under. */
+  policyRevision?: number
 }
 
 /**

@@ -81,6 +81,8 @@ struct State {
     store: Arc<LogStore>,
     deployments: Arc<deployments::Deployments>,
     reporting: Option<ReportingOptions>,
+    /// The policy revision this state's runtime is pinned to; `None` before a pin.
+    served: Option<u64>,
 }
 
 /// A state whose store is one pooled connection of its own, for a short read.
@@ -665,6 +667,8 @@ pub struct DispatchPolicy {
 pub struct OpenappaStatus {
     pub trust: String,
     pub audience: String,
+    /// The organization's policy revision the session's next event is decided under.
+    pub policy_revision: Option<i64>,
 }
 
 impl From<DispatchPolicy> for deployments::HostedPolicy {
@@ -712,6 +716,7 @@ pub async fn initialize_openappa(
             store,
             deployments: Arc::default(),
             reporting,
+            served: None,
         })
     })
     .await
@@ -1238,6 +1243,9 @@ pub async fn get_openappa_status(
 
 /// The label of the session `key` names, read through `state`'s pinned view.
 async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<OpenappaStatus>> {
+    let policy_revision = state
+        .served
+        .and_then(|revision| i64::try_from(revision).ok());
     let leased = state.lease().await?;
     tokio::task::spawn_blocking(move || {
         let root = Sql(&leased.state.store)
@@ -1259,6 +1267,7 @@ async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<Op
         Ok(Some(OpenappaStatus {
             trust: status.trust,
             audience: status.audience,
+            policy_revision,
         }))
     })
     .await
@@ -2087,6 +2096,7 @@ impl State {
     fn pinned(&self, deployment: &PublishedDeployment) -> State {
         State {
             runtime: Arc::new(self.runtime.pinned(deployment)),
+            served: Some(deployment.revision()),
             ..self.clone()
         }
     }

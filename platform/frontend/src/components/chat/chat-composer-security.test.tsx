@@ -32,6 +32,7 @@ const server = setupServer(
     HttpResponse.json({
       trust: params.id === "second" ? "reviewed" : "trusted",
       audience: params.id === "second" ? "internal" : "public",
+      policyRevision: null,
     }),
   ),
 );
@@ -99,6 +100,32 @@ it("reads the newly selected session as a noninteractive status", async () => {
   ).toBeNull();
   expect(screen.queryByRole("button")).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
+  view.unmount();
+  client.clear();
+});
+
+it("names the policy revision the session's next call is decided under", async () => {
+  server.use(
+    http.get("/api/chat/conversations/:id/openappa-status", () =>
+      HttpResponse.json({
+        trust: "trusted",
+        audience: "public",
+        policyRevision: 7,
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <ChatComposerSecurity conversationId="revised" />
+    </QueryClientProvider>,
+  );
+  const status = await screen.findByRole("status", {
+    name: "Trust: trusted; audience: public; policy revision: 7",
+  });
+  expect(status).toHaveTextContent("revision:7");
   view.unmount();
   client.clear();
 });

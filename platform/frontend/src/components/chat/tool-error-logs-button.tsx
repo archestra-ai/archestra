@@ -1,6 +1,10 @@
 "use client";
 
-import { parseFullToolName, slugifyMcpServerName } from "@archestra/shared";
+import {
+  isAgentTool,
+  parseFullToolName,
+  slugifyMcpServerName,
+} from "@archestra/shared";
 import { FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { McpLogsDialog } from "@/app/mcp/registry/_parts/mcp-logs-dialog";
@@ -40,29 +44,28 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
     enabled: !!catalogId,
   });
   // A viewer can read an install (a team's, say) of an item their registry
-  // does not show: match the installs they can read by catalog name then.
-  const { data: readableServers } = useMcpServers({
+  // does not show: ask for the installs of the catalog the prefix names,
+  // never the whole list. A delegation to another agent names no catalog.
+  const { data: slugServers } = useMcpServers({
     includeAssignedAgents: false,
-    enabled: !!mcpServerName && !!catalogDirectory && !catalogId,
+    catalogSlug: mcpServerName ?? undefined,
+    enabled:
+      !!mcpServerName &&
+      !isAgentTool(toolName) &&
+      !!catalogDirectory &&
+      !catalogId,
   });
 
   const serverInstalls = useMemo(
     () =>
-      (
-        catalogServers ??
-        (readableServers ?? []).filter(
-          (server) =>
-            !!server.catalogName &&
-            slugifyMcpServerName(server.catalogName) === mcpServerName,
-        )
-      )
+      (catalogServers ?? slugServers ?? [])
         .filter((server) => server.serverType === "local")
         .map((server) => ({
           id: server.id,
           name: server.name,
           canUseCredential: server.canUseCredential,
         })),
-    [catalogServers, readableServers, mcpServerName],
+    [catalogServers, slugServers],
   );
 
   // Don't show button if no server found or no local installations

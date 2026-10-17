@@ -24,6 +24,14 @@ vi.mock("@/app/mcp/registry/_parts/mcp-logs-dialog", () => ({
 
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 
+/** Every enabled install request names a catalog: never the whole list. */
+function expectNoFullInstallList() {
+  for (const [params] of useMcpServersMock.mock.calls) {
+    if (params.enabled === false) continue;
+    expect(params.catalogId ?? params.catalogSlug).toBeTruthy();
+  }
+}
+
 describe("ToolErrorLogsButton", () => {
   beforeEach(() => {
     useMcpServersMock.mockReset();
@@ -51,15 +59,14 @@ describe("ToolErrorLogsButton", () => {
     );
   });
 
-  it("finds the installs of a catalog item the viewer cannot see by their catalog name", () => {
+  it("finds the installs of a catalog item the viewer cannot see by its slug", () => {
     // A team install of an item outside the viewer's registry: not in the
-    // directory, but its install is readable.
+    // directory, but its install is readable, and asked for by name only.
     useMcpServersMock.mockImplementation(
-      (params: { catalogId?: string; enabled?: boolean }) => ({
+      (params: { catalogSlug?: string; enabled?: boolean }) => ({
         data:
-          params.enabled === false || params.catalogId
-            ? undefined
-            : [
+          params.enabled !== false && params.catalogSlug === "team-jira"
+            ? [
                 {
                   id: "srv-team",
                   name: "team-jira",
@@ -67,14 +74,8 @@ describe("ToolErrorLogsButton", () => {
                   serverType: "local",
                   canUseCredential: false,
                 },
-                {
-                  id: "srv-x",
-                  name: "x",
-                  catalogName: "x",
-                  serverType: "local",
-                  canUseCredential: true,
-                },
-              ],
+              ]
+            : undefined,
       }),
     );
 
@@ -83,6 +84,18 @@ describe("ToolErrorLogsButton", () => {
     expect(
       screen.getByRole("button", { name: "View Server Logs" }),
     ).toBeInTheDocument();
+    expectNoFullInstallList();
+  });
+
+  it("asks for no installs for a delegation to another agent", () => {
+    useMcpServersMock.mockReturnValue({ data: undefined });
+
+    render(<ToolErrorLogsButton toolName="agent__delegate_to_researcher" />);
+
+    expect(screen.queryByRole("button")).toBeNull();
+    for (const [params] of useMcpServersMock.mock.calls) {
+      expect(params.enabled).toBe(false);
+    }
   });
 
   it("shows nothing when no install has the tool's server prefix", () => {
@@ -116,9 +129,6 @@ describe("ToolErrorLogsButton", () => {
     expect(
       screen.getByRole("button", { name: "View Server Logs" }),
     ).toBeInTheDocument();
-    // No full install list for a name the directory resolves.
-    expect(useMcpServersMock).not.toHaveBeenCalledWith(
-      expect.objectContaining({ catalogId: undefined, enabled: true }),
-    );
+    expectNoFullInstallList();
   });
 });

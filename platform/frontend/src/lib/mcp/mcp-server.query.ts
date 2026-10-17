@@ -87,6 +87,7 @@ export function useMcpServers(params?: McpServersParams) {
       "mcp-servers",
       {
         catalogId: params?.catalogId,
+        catalogSlug: params?.catalogSlug,
         includeAssignedAgents,
         assignmentScope: params?.assignmentScope,
         assignmentTeamIds: params?.assignmentTeamIds,
@@ -97,6 +98,7 @@ export function useMcpServers(params?: McpServersParams) {
         query: {
           includeAssignedAgents,
           ...(params?.catalogId && { catalogId: params.catalogId }),
+          ...(params?.catalogSlug && { catalogSlug: params.catalogSlug }),
           ...(params?.assignmentScope && {
             assignmentScope: params.assignmentScope,
           }),

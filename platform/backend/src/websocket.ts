@@ -1396,36 +1396,21 @@ export class WebSocketService {
       return result;
     };
 
-    // A full refresh can take many seconds on a large cluster, and clients
-    // re-subscribe on every page navigation. When an earlier refresh already
-    // filled the summary, answer with it right away so the page does not sit
-    // on "Checking…"; the fresh statuses follow below only if they differ.
-    let cachedStatusesJson: string | null = null;
-    if (this.lastMcpDeploymentRefreshAt > 0 && ws.readyState === WS.OPEN) {
-      const cachedStatuses = buildStatuses(
-        McpServerRuntimeManager.statusSummary,
-      );
-      cachedStatusesJson = JSON.stringify(cachedStatuses);
-      this.sendToClient(ws, {
-        type: "mcp_deployment_statuses",
-        payload: { statuses: cachedStatuses },
-      });
-    }
-
-    // Refresh (through the shared in-flight guard) and build initial statuses
-    await this.refreshMcpDeploymentStates();
-
-    // The awaits above (DB + refresh) may outlive the socket: revalidate
-    // before registering, or we would start polling for a dead client
+    // Clients subscribe on every full page load and navigation, at the same
+    // moment as the page's own API requests, and a full refresh is heavy work
+    // on this event loop. Answer from the summary an earlier refresh filled,
+    // and refresh only when it may be out of date — after this handler, never
+    // inside it. Before any refresh there is nothing true to answer with, so
+    // the first statuses follow that refresh.
+    // The awaits above may outlive the socket: revalidate before registering,
+    // or we would start polling for a dead client.
     if (ws.readyState !== WS.OPEN) {
       return;
     }
-
-    const statuses = buildStatuses(McpServerRuntimeManager.statusSummary);
-    const statusesJson = JSON.stringify(statuses);
-
-    // Send initial statuses, unless the cached answer above already said so
-    if (statusesJson !== cachedStatusesJson) {
+    let sentStatusesJson: string | null = null;
+    if (this.lastMcpDeploymentRefreshAt > 0) {
+      const statuses = buildStatuses(McpServerRuntimeManager.statusSummary);
+      sentStatusesJson = JSON.stringify(statuses);
       this.sendToClient(ws, {
         type: "mcp_deployment_statuses",
         payload: { statuses },
@@ -1434,9 +1419,23 @@ export class WebSocketService {
 
     this.mcpDeploymentStatusSubscriptions.set(ws, {
       buildStatuses,
-      lastStatusesJson: statusesJson,
+      // Unsent: the push after the refresh below sends whatever it finds.
+      lastStatusesJson: sentStatusesJson ?? "",
     });
     this.startMcpDeploymentStatusPollingIfNeeded();
+
+    if (!this.mcpDeploymentSummaryIsCurrent()) {
+      setImmediate(() => {
+        void this.refreshMcpDeploymentStates()
+          .then(() => this.pushMcpDeploymentStatusesToSubscribers())
+          .catch((error) => {
+            logger.error(
+              { error },
+              "Failed to refresh MCP deployment statuses for a new subscriber",
+            );
+          });
+      });
+    }
 
     logger.info("MCP deployment status client subscribed");
   }
@@ -1489,11 +1488,7 @@ export class WebSocketService {
     // cluster events and notifies us to push — the poll is only a slow
     // resync safety net against missed events. Without watchers (missing
     // `watch` RBAC, streams down) it stays the primary refresh path.
-    if (
-      McpServerRuntimeManager.deploymentStateWatchersActive &&
-      Date.now() - this.lastMcpDeploymentRefreshAt <
-        MCP_DEPLOYMENT_STATUS_WATCH_RESYNC_MS
-    ) {
+    if (this.mcpDeploymentSummaryIsCurrent()) {
       return;
     }
 
@@ -1577,6 +1572,20 @@ export class WebSocketService {
       clearTimeout(timeoutTimer);
       this.mcpDeploymentStatusRefreshInFlight = false;
     }
+  }
+
+  /**
+   * Whether the runtime summary can be trusted without a refresh: the K8s
+   * watch streams keep it current on cluster events, and the last full
+   * refresh is inside the resync window that guards against missed events.
+   */
+  private mcpDeploymentSummaryIsCurrent(): boolean {
+    return (
+      McpServerRuntimeManager.deploymentStateWatchersActive &&
+      this.lastMcpDeploymentRefreshAt > 0 &&
+      Date.now() - this.lastMcpDeploymentRefreshAt <
+        MCP_DEPLOYMENT_STATUS_WATCH_RESYNC_MS
+    );
   }
 
   private sendToClient(ws: WebSocket, message: ServerWebSocketMessage): void {

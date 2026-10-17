@@ -1146,6 +1146,15 @@ describe("knowledge base routes", () => {
         url: `/api/knowledge-bases?limit=1&offset=1&ids=${alpha.id},${beta.id}`,
       });
       expect(onePage.json().data).toHaveLength(2);
+
+      // An empty list asks for no rows, not for every row.
+      const none = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-bases?limit=50&offset=0&ids=",
+      });
+      expect(none.statusCode).toBe(200);
+      expect(none.json().data).toEqual([]);
+      expect(none.json().pagination.total).toBe(0);
     });
   });
 
@@ -1997,6 +2006,15 @@ describe("knowledge base routes", () => {
         response.json().data.map((connector: { id: string }) => connector.id),
       ).toEqual([wanted.id]);
       expect(response.json().pagination.total).toBe(1);
+
+      // An empty list asks for no rows, not for every row.
+      const none = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=50&offset=0&ids=",
+      });
+      expect(none.statusCode).toBe(200);
+      expect(none.json().data).toEqual([]);
+      expect(none.json().pagination.total).toBe(0);
     });
 
     test("shows permission-sync connectors to members with connector grants", async ({

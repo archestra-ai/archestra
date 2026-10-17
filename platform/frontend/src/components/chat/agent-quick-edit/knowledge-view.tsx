@@ -213,11 +213,18 @@ export function KnowledgeView({
                 ))}
               </KnowledgeGroup>
             )}
-            {knowledgeBases.length === 0 && connectors.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No knowledge sources match "{search}"
-              </p>
-            )}
+            {knowledgeBases.length === 0 &&
+              connectors.length === 0 &&
+              (isLoading ? (
+                <p className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading knowledge sources
+                </p>
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No knowledge sources match "{search}"
+                </p>
+              ))}
           </div>
         </>
       )}

@@ -61,12 +61,17 @@ const statusUrl = () =>
   `/api/chat/conversations/${conversationId}/openappa-status`;
 
 test("reads the current status of an accessible protected conversation", async () => {
-  statusRead.mockResolvedValue({ trust: "suspicious", audience: "internal" });
+  statusRead.mockResolvedValue({
+    trust: "suspicious",
+    audience: "internal",
+    policyRevision: 3,
+  });
   const response = await app.inject({ method: "GET", url: statusUrl() });
   expect(response.statusCode).toBe(200);
   expect(response.json()).toEqual({
     trust: "suspicious",
     audience: "internal",
+    policyRevision: 3,
   });
   expect(statusRead).toHaveBeenCalledWith({
     organizationId,
@@ -128,7 +133,7 @@ test.each([
     expect(
       openappaEncryptedChat(organizationId, conversationId)?.audit.dek,
     ).toEqual(dek);
-    return { trust: "suspicious", audience: "internal" };
+    return { trust: "suspicious", audience: "internal", policyRevision: null };
   });
   const response = await app.inject({
     method: "GET",
@@ -148,6 +153,7 @@ test.each([
     expect(response.json()).toEqual({
       trust: "suspicious",
       audience: "internal",
+      policyRevision: null,
     });
     expect(statusRead).toHaveBeenCalledOnce();
   } else {

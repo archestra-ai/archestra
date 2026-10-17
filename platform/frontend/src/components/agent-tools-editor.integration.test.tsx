@@ -75,11 +75,18 @@ function registrySearch(
     async ({ request }) => {
       const body = (await request.json()) as SearchBody;
       onRequest?.(body);
+      // As the server answers: the built-in entry and app backings only for a
+      // caller that opts in, descriptions only when asked.
+      const query = body.search?.toLowerCase();
       const matching = rows.filter(
         (row) =>
+          (body.includeBuiltIn || row.id !== ARCHESTRA_MCP_CATALOG_ID) &&
+          (body.includeApps || !(row as { appId?: string | null }).appId) &&
           (!body.catalogIds || body.catalogIds.includes(row.id)) &&
-          (!body.search ||
-            row.name.toLowerCase().includes(body.search.toLowerCase())),
+          (!query ||
+            row.name.toLowerCase().includes(query) ||
+            (!!body.searchDescriptions &&
+              !!row.description?.toLowerCase().includes(query))),
       );
       const offset = body.offset ?? 0;
       const limit = body.limit ?? 20;

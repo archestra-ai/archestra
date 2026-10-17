@@ -62,11 +62,9 @@ import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import {
-  useRefreshInternalMcpCatalogImage,
-} from "@/lib/mcp/internal-mcp-catalog.query";
-import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
+import { useRefreshInternalMcpCatalogImage } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpUsageSummary } from "@/lib/mcp/mcp-agent-usage.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import {
   type McpDeploymentFeedState,
   useMcpDeploymentStatuses,

@@ -89,7 +89,10 @@ vi.mock("@/lib/mcp/mcp-registry.query", async (importOriginal) => ({
     const rows = (catalogHookMock().data ?? []) as Array<{ id: string }>;
     const key = ids.join(",");
     let byIds = rowsByIdsCache.get(rows);
-    if (!byIds) rowsByIdsCache.set(rows, (byIds = new Map()));
+    if (!byIds) {
+      byIds = new Map();
+      rowsByIdsCache.set(rows, byIds);
+    }
     let result = byIds.get(key);
     if (!result) {
       result = {

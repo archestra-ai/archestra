@@ -384,7 +384,7 @@ export function AppToolsEditor({
           disabledReason: disabled ? "No tools" : undefined,
         };
       }),
-    [candidates, toolsByCatalog, selectedByCatalog],
+    [candidates, selectedByCatalog],
   );
 
   if (!canEdit) {

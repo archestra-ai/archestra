@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
 } from "@archestra/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   Copy,
@@ -99,13 +100,12 @@ import {
   useKnowledgeBasesByIds,
 } from "@/lib/knowledge/knowledge-base.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import {
   fetchInternalMcpCatalogItem,
   type McpCatalogDirectoryItem,
   useMcpCatalogDirectory,
 } from "@/lib/mcp/mcp-registry.query";
-import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
 import {

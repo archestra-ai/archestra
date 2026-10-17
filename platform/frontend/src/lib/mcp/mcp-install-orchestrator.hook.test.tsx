@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
@@ -94,7 +94,9 @@ vi.mock("@/lib/auth/oauth-session", () => ({
 }));
 
 const wrapper = ({ children }: { children: ReactNode }) => (
-  <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+  <QueryClientProvider client={new QueryClient()}>
+    {children}
+  </QueryClientProvider>
 );
 
 describe("useMcpInstallOrchestrator", () => {
@@ -110,7 +112,9 @@ describe("useMcpInstallOrchestrator", () => {
   });
 
   it("starts OAuth immediately for pure OAuth re-authentication", async () => {
-    const { result } = renderHook(() => useMcpInstallOrchestrator(), { wrapper });
+    const { result } = renderHook(() => useMcpInstallOrchestrator(), {
+      wrapper,
+    });
 
     act(() => {
       result.current.triggerReauthByCatalogIdAndServerId(
@@ -137,7 +141,9 @@ describe("useMcpInstallOrchestrator", () => {
   });
 
   it("captures the return URL when starting OAuth for a first-time install", async () => {
-    const { result } = renderHook(() => useMcpInstallOrchestrator(), { wrapper });
+    const { result } = renderHook(() => useMcpInstallOrchestrator(), {
+      wrapper,
+    });
 
     // Opening the OAuth confirmation dialog should not start OAuth yet.
     await act(async () => {
@@ -174,7 +180,9 @@ describe("useMcpInstallOrchestrator", () => {
   it("surfaces the backend error message when initiating OAuth fails", async () => {
     mutateAsyncMock.mockRejectedValue(new Error("No client ID available"));
 
-    const { result } = renderHook(() => useMcpInstallOrchestrator(), { wrapper });
+    const { result } = renderHook(() => useMcpInstallOrchestrator(), {
+      wrapper,
+    });
 
     act(() => {
       result.current.triggerReauthByCatalogIdAndServerId(

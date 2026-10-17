@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import { ExternalLink, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
@@ -22,9 +21,6 @@ import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import { cn } from "@/lib/utils/tailwind";
 import { QuickEditFooter, QuickEditViewHeader } from "./view-header";
-
-type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
 export function SubagentsView({
   agentId,

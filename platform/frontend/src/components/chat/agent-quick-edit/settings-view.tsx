@@ -72,8 +72,6 @@ import { connectorLabel as connectorTypeLabel } from "./connector-label";
 import { QuickEditFooter } from "./view-header";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
-type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 type KnowledgeBase =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
 type Connector =

@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { LocalServerInstallResult } from "@/app/mcp/registry/_parts/local-server-install-dialog";
@@ -24,7 +25,6 @@ import {
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
-import { useQueryClient } from "@tanstack/react-query";
 import { getUsableConnectedCatalogIds } from "@/lib/mcp/connected-catalogs";
 import {
   fetchInternalMcpCatalogItem,

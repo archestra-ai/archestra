@@ -242,7 +242,10 @@ beforeEach(() => {
         servers: [
           { id: freshServerId, catalogId: freshCatalogId },
           { id: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d", catalogId },
-          { id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", catalogId: otherCatalogId },
+          {
+            id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a",
+            catalogId: otherCatalogId,
+          },
         ].map((install) => ({
           ...install,
           scope: "org",

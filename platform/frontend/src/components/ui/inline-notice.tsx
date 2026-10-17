@@ -31,7 +31,12 @@ const inlineNoticeVariants = cva(
   // With an `<InlineNoticeDetails>` inside, the strip becomes a three-column
   // grid (icon, text, action) so the action can centre on the message and its
   // toggle while the opened details take a row of their own.
-  "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5 text-xs [&>svg]:size-3.5 [&>svg]:shrink-0 has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
+  //
+  // Below `sm` the icon is hidden: on a phone it takes a column the message
+  // needs, and the variant's colour already says what kind of notice it is.
+  // The grid drops the icon column with it, so the text, toggle, details and
+  // action each move one column left.
+  "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5 text-xs [&>svg]:size-3.5 [&>svg]:shrink-0 max-sm:[&>svg]:hidden has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[minmax(0,1fr)_auto] sm:has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-2 sm:has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
   {
     variants: {
       variant: {

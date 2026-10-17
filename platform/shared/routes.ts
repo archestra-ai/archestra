@@ -182,6 +182,7 @@ export const RouteId = {
   DeleteTeam: "deleteTeam",
   BulkDeleteTeams: "bulkDeleteTeams",
   GetTeamMembers: "getTeamMembers",
+  GetTeamMembersPage: "getTeamMembersPage",
   AddTeamMember: "addTeamMember",
   UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",

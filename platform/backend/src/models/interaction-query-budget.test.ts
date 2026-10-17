@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { drainBackgroundWork } from "@/utils/background-work";
 import InteractionModel from "./interaction";
+import InteractionDeltaManager from "./interaction-delta-manager";
 
 describe("session query budgets", () => {
   let profileId: string;
@@ -53,6 +54,83 @@ describe("session query budgets", () => {
       false,
     );
   });
+  test("cold delta previews avoid history reconstruction and legacy rows keep their preview", async ({
+    makeAdmin,
+  }) => {
+    const admin = await makeAdmin();
+    const messages = [
+      {
+        role: "user" as const,
+        content: "Keep this human question as the preview",
+      },
+    ];
+    const create = (requestMessages: unknown[]) =>
+      InteractionModel.create({
+        profileId,
+        sessionId: "compact-delta-preview",
+        sessionSource: "claude_metadata",
+        type: "anthropic:messages",
+        request: {
+          model: "claude-test",
+          max_tokens: 100,
+          messages: requestMessages,
+        } as never,
+        response: {
+          id: "synthetic",
+          type: "message",
+          role: "assistant",
+          model: "claude-test",
+          content: [{ type: "text", text: "answer" }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      });
+    await create(messages);
+    const tip = await create([
+      ...messages,
+      { role: "assistant", content: "answer" },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "tool", content: "tool result" },
+        ],
+      },
+    ]);
+    await drainBackgroundWork();
+    InteractionDeltaManager.reset();
+    const list = () =>
+      InteractionModel.getSessions({ limit: 10, offset: 0 }, admin.id, true, {
+        sessionId: "compact-delta-preview",
+      });
+    const compact = await recordQueries(list);
+    expect(compact.result.data[0].lastUserMessagePreview).toBe(
+      messages[0].content,
+    );
+    expect(
+      compact.statements.some((statement) =>
+        /WITH RECURSIVE chain/.test(statement),
+      ),
+    ).toBe(false);
+
+    // Old rows keep the historical reader, including a human message inherited
+    // from the parent of a tool-result-only delta.
+    await db
+      .update(schema.interactionsTable)
+      .set({ sessionPreview: null })
+      .where(eq(schema.interactionsTable.id, tip.id));
+    InteractionDeltaManager.reset();
+    const legacy = await recordQueries(list);
+    expect(legacy.result.data[0].lastUserMessagePreview).toBe(
+      messages[0].content,
+    );
+    expect(
+      legacy.statements.some((statement) =>
+        /WITH RECURSIVE chain/.test(statement),
+      ),
+    ).toBe(true);
+  });
+
   test("deep pages skip the scan that cannot reach them", async () => {
     for (let index = 0; index < 501; index++) {
       await InteractionModel.create({

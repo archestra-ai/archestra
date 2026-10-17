@@ -1927,8 +1927,10 @@ describe("agent routes", () => {
       );
       expect(builtInAgents.length).toBeGreaterThan(0);
     });
+  });
 
-    test("keeps the same authorized chat IDs for personal defaults and retained selections", async ({
+  describe("GET /api/agents/chat-roster", () => {
+    test("lists and resolves another member's personal agent for an admin, never another organization's", async ({
       makeUser,
       makeOrganization,
       makeAgent,
@@ -1946,27 +1948,22 @@ describe("agent routes", () => {
         authorId: owner.id,
         agentType: "agent",
       });
-      const original = await app.inject({
-        method: "GET",
-        url: "/api/agents?agentType=agent&excludeBuiltIn=true&includeTools=false&view=chat&limit=100",
-      });
       const roster = await app.inject({
         method: "GET",
         url: "/api/agents/chat-roster",
       });
-      expect(original.statusCode).toBe(200);
+      const retained = await app.inject({
+        method: "GET",
+        url: `/api/agents/chat-roster?ids=${personal.id},${outside.id}`,
+      });
       expect(roster.statusCode).toBe(200);
-      const originalIds = original
-        .json()
-        .data.map((row: { id: string }) => row.id)
-        .sort();
-      const rosterIds = roster
-        .json()
-        .map((row: { id: string }) => row.id)
-        .sort();
-      expect(rosterIds).toEqual(originalIds);
+      expect(retained.statusCode).toBe(200);
+      const rosterIds = roster.json().map((row: { id: string }) => row.id);
       expect(rosterIds).toContain(personal.id);
       expect(rosterIds).not.toContain(outside.id);
+      expect(retained.json().map((row: { id: string }) => row.id)).toEqual([
+        personal.id,
+      ]);
     });
   });
 

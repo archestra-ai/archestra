@@ -110,20 +110,6 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/agent.query", () => ({
   useAgentCredentialReadinessPages: (options?: unknown) =>
     mockUseAgentCredentialReadiness(options),
-  useAgentSearch: ({
-    name,
-    enabled,
-  }: {
-    name?: string;
-    enabled?: boolean;
-  }) => ({
-    // Mirrors the server-side name search: only typed text narrows the page.
-    data: enabled
-      ? agents.filter((agent) =>
-          agent.name.toLowerCase().includes((name ?? "").toLowerCase()),
-        )
-      : undefined,
-  }),
   useChatAgents: () => ({ data: agents }),
   useChatAgentPages: () => ({
     data: {
@@ -440,6 +426,30 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     expect(screen.getByRole("listbox", { name: "Agents" })).toBeVisible();
     expect(
       screen.queryByRole("dialog", { name: "Alpha Agent settings" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no Add tools button beside an editable agent without tools", async () => {
+    const loaded = { data: [], isSuccess: true } as never;
+    mockUseInternalMcpCatalog.mockReturnValue({
+      data: [catalog],
+      isSuccess: true,
+    } as never);
+    mockUseKnowledgeBases.mockReturnValue(loaded);
+    mockUseConnectors.mockReturnValue(loaded);
+    renderSelector();
+
+    const trigger = screen.getByRole("combobox", { name: "Alpha Agent" });
+    await waitFor(() =>
+      expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
+        enabled: true,
+      }),
+    );
+    // Adding tools goes through the agent's settings; nothing sits next to
+    // the agent button in the composer.
+    expect(trigger).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add tools" }),
     ).not.toBeInTheDocument();
   });
 

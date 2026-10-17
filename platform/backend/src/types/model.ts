@@ -9,6 +9,7 @@ import {
   SupportedEmbeddingDimensionsSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
+import { isValidModelPrice } from "@archestra/shared/model-price";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -332,13 +333,12 @@ export const PatchModelBodySchema = createUpdateSchema(
         data.customPricePerMillionCacheWrite,
       ]) {
         if (value != null) {
-          const price = parseFloat(value);
-          if (Number.isNaN(price) || price < 0) return false;
+          if (!isValidModelPrice(value)) return false;
         }
       }
       return true;
     },
-    { message: "Prices must be non-negative numbers" },
+    { message: "Prices must be decimal numbers between 0 and 99999999.99" },
   );
 export type PatchModelBody = z.infer<typeof PatchModelBodySchema>;
 

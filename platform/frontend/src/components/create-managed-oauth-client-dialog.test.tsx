@@ -97,7 +97,8 @@ beforeEach(() => {
   const team = {
     id: "team-platform",
     name: "Platform",
-    members: [{ userId: "u-self", role: "admin" }],
+    memberCount: 1,
+    myRole: "admin",
   };
   vi.mocked(useMyTeams).mockReturnValue({
     data: [team],

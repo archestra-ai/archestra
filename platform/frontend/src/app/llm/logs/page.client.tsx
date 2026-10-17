@@ -1,20 +1,16 @@
 "use client";
 
 import {
-  type archestraApiTypes,
   type ClientFilter,
-  clientForExternalAgentIds,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Database, Layers, MessageSquare, MessagesSquare } from "lucide-react";
-import Link from "next/link";
+import { MessagesSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { AgentSelector } from "@/components/agent-selector";
-import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
   CollectionFilters,
   FilterBar,
@@ -23,94 +19,31 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { SourceFilterOption } from "@/components/log-filter-option";
-import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { SessionUsage } from "@/components/session-usage";
-import { SourceBadge } from "@/components/source-badge";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import {
   ClientFilterSelect,
   UserFilterSelect,
 } from "@/components/user-client-filter-selects";
-import { VirtualKeyBadge } from "@/components/virtual-key-badge";
 import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
   isSessionId,
   useInteractionSessions,
 } from "@/lib/interactions/interaction.query";
 import { ErrorBoundary } from "../../_parts/error-boundary";
-
-function formatDuration(start: Date | string, end: Date | string): string {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const diffMs = endDate.getTime() - startDate.getTime();
-
-  if (diffMs < 1000) {
-    return `${diffMs}ms`;
-  }
-
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  if (minutes < 60) {
-    return remainingSeconds > 0
-      ? `${minutes}m ${remainingSeconds}s`
-      : `${minutes}m`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  if (hours < 24) {
-    return remainingMinutes > 0
-      ? `${hours}h ${remainingMinutes}m`
-      : `${hours}h`;
-  }
-
-  const days = Math.floor(hours / 24);
-  const remainingHours = hours % 24;
-  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
-}
-
-type SessionData =
-  archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
-
-function getSessionDisplayData(session: SessionData) {
-  const isSingleInteraction =
-    session.sessionId === null && session.interactionId;
-  const conversationTitle = session.conversationTitle;
-  const isArchestraChat = conversationTitle && session.sessionId;
-  const claudeCodeTitle = session.claudeCodeTitle;
-  // Known clients (Claude, Codex) get a source badge next to the session's last
-  // user message. Derived from the client-attribution column (external_agent_id),
-  // not the session-id provenance.
-  const clientSource = clientForExternalAgentIds(session.externalAgentIds);
-
-  // Server-computed preview — the sessions API never returns raw request
-  // bodies (shipping them OOM-killed the platform container, T-1015).
-  const lastUserMessage = session.lastUserMessagePreview ?? "";
-
-  const displayText = claudeCodeTitle || lastUserMessage;
-
-  return {
-    isSingleInteraction,
-    conversationTitle,
-    isArchestraChat,
-    clientSource,
-    displayText,
-  };
-}
+import { AgentCell } from "./_parts/agent-cell";
+import type { LogSession } from "./_parts/logs-table-format";
+import { ModelCell } from "./_parts/model-cell";
+import { SessionCell } from "./_parts/session-cell";
+import { TimeCell } from "./_parts/time-cell";
+import { UsageCell } from "./_parts/usage-cell";
 
 export default function LlmProxyLogsPage() {
   return (
@@ -267,6 +200,8 @@ function SessionsTable() {
   });
 
   const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
+  // Read once here: the catalog re-reads the organization on every mount.
+  const { label: providerLabel } = useModelProviderCatalog();
 
   const sessions = sessionsResponse?.data ?? [];
   const { data: agents } = useAgentOptionsByIds({
@@ -299,165 +234,52 @@ function SessionsTable() {
     });
   }, [cursorPagination.goNewest, dateTimePicker, updateQueryParams]);
 
-  const columns: ColumnDef<SessionData>[] = useMemo(
+  const columns: ColumnDef<LogSession>[] = useMemo(
     () => [
       {
         id: "session",
         header: "Session",
-        size: 285,
-        minSize: 230,
-        cell: ({ row }) => {
-          const session = row.original;
-          const {
-            conversationTitle,
-            displayText,
-            isArchestraChat,
-            clientSource,
-          } = getSessionDisplayData(session);
-
-          const placeholder = session.contentNotStored
-            ? "Content not stored"
-            : "No message";
-          const primaryText = isArchestraChat
-            ? conversationTitle
-            : displayText ||
-              (session.source?.startsWith("knowledge:")
-                ? (INTERACTION_SOURCE_DISPLAY[
-                    session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
-                  ]?.label ?? session.source)
-                : placeholder);
-
-          return (
-            <div className="flex min-w-0 flex-col gap-1.5 py-0.5">
-              <div
-                className={`truncate text-sm font-medium ${primaryText === placeholder ? "text-muted-foreground" : ""}`}
-              >
-                {primaryText}
-              </div>
-              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                {isArchestraChat ? (
-                  <Link
-                    href={`/chat/${session.sessionId}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="shrink-0"
-                  >
-                    <Badge
-                      variant="outline"
-                      className="cursor-pointer px-1.5 py-0 text-[10px] hover:bg-accent"
-                    >
-                      <MessageSquare className="size-3" />
-                      Chat
-                    </Badge>
-                  </Link>
-                ) : null}
-                {clientSource ? (
-                  <ClientSourceBadge
-                    client={clientSource}
-                    className="shrink-0 px-1.5 py-0 text-[10px]"
-                  />
-                ) : null}
-                {isArchestraChat ? null : (
-                  <SessionSourceBadge session={session} compact />
-                )}
-              </div>
-            </div>
-          );
-        },
+        size: 340,
+        minSize: 280,
+        cell: ({ row }) => <SessionCell session={row.original} />,
       },
       {
         id: "agent",
-        // Wider than the other identity columns: this cell stacks the agent,
-        // the acting user (or why there is none), and the virtual key's name,
-        // and the first two truncate to noise below about this width.
         header: "Agent",
-        size: 200,
-        minSize: 175,
-        cell: ({ row }) => {
-          const session = row.original;
-          const agent = agents?.find((a) => a.id === session.profileId);
-          const isKnowledge = session.source?.startsWith("knowledge:");
-          const agentName =
-            agent?.name ??
-            session.profileName ??
-            (isKnowledge
-              ? "Knowledge Base"
-              : session.profileId === null
-                ? "Deleted LLM Proxy"
-                : "Unknown");
-          return (
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                {isKnowledge ? (
-                  <Database className="size-3.5" />
-                ) : (
-                  <Layers className="size-3.5" />
-                )}
-              </span>
-              <div className="min-w-0 space-y-0.5">
-                <div className="truncate text-sm font-medium">{agentName}</div>
-                {session.userNames.length > 0 ? (
-                  <div className="truncate text-xs text-muted-foreground">
-                    {session.userNames.join(", ")}
-                  </div>
-                ) : (
-                  <UnattributedUserBadge reason={session.unattributedReason} />
-                )}
-                <VirtualKeyBadge virtualKeys={session.virtualKeys} />
-              </div>
-            </div>
-          );
-        },
+        size: 228,
+        minSize: 200,
+        cell: ({ row }) => (
+          <AgentCell
+            session={row.original}
+            agent={agents?.find((a) => a.id === row.original.profileId)}
+          />
+        ),
       },
       {
         id: "models",
         header: "Model",
-        size: 120,
-        minSize: 100,
-        cell: ({ row }) => {
-          const [model, ...additionalModels] = row.original.models;
-          return model ? (
-            <div className="min-w-0">
-              <div className="truncate font-mono text-xs" title={model}>
-                {model}
-              </div>
-              {additionalModels.length > 0 ? (
-                <div className="text-xs text-muted-foreground">
-                  +{additionalModels.length} more
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          );
-        },
+        size: 184,
+        minSize: 164,
+        cell: ({ row }) => (
+          <ModelCell session={row.original} providerLabel={providerLabel} />
+        ),
       },
       {
         id: "usage",
-        header: "Usage",
-        size: 178,
-        minSize: 178,
-        cell: ({ row }) => <SessionUsage session={row.original} />,
+        header: () => <div className="text-right">Usage</div>,
+        size: 124,
+        minSize: 116,
+        cell: ({ row }) => <UsageCell session={row.original} />,
       },
       {
         id: "time",
-        header: "Last request",
-        size: 154,
-        minSize: 145,
-        cell: ({ row }) => {
-          const { firstRequestTime, lastRequestTime, requestCount } =
-            row.original;
-          if (!lastRequestTime) {
-            return <span className="text-xs text-muted-foreground">—</span>;
-          }
-          const duration =
-            requestCount > 1 && firstRequestTime
-              ? formatDuration(firstRequestTime, lastRequestTime)
-              : null;
-          return <LogTime timestamp={lastRequestTime} span={duration} />;
-        },
+        header: () => <div className="text-right">Last request</div>,
+        size: 128,
+        minSize: 120,
+        cell: ({ row }) => <TimeCell session={row.original} />,
       },
     ],
-    [agents],
+    [agents, providerLabel],
   );
 
   // A failed fetch leaves no rows; show a retry state instead of the table's
@@ -588,8 +410,7 @@ function SessionsTable() {
         filteredEmptyMessage="No LLM logs match your filters"
         onClearFilters={clearFilters}
         onRowClick={(session) => {
-          const { isSingleInteraction } = getSessionDisplayData(session);
-          if (isSingleInteraction) {
+          if (session.sessionId === null && session.interactionId) {
             router.push(`/llm/logs/${session.interactionId}`);
           } else if (session.sessionId) {
             router.push(
@@ -599,51 +420,5 @@ function SessionsTable() {
         }}
       />
     </div>
-  );
-}
-
-function SessionSourceBadge({
-  session,
-  compact = false,
-}: {
-  session: SessionData;
-  compact?: boolean;
-}) {
-  const sources = Array.from(
-    new Set(
-      session.sources?.filter((source): source is InteractionSource =>
-        Boolean(source),
-      ) ?? [],
-    ),
-  );
-
-  if (sources.length <= 1) {
-    return (
-      <SourceBadge
-        source={session.source ?? sources[0]}
-        className={
-          compact
-            ? "max-w-[11rem] min-w-0 overflow-hidden px-1.5 py-0 text-[10px]"
-            : "max-w-[11rem] min-w-0 overflow-hidden"
-        }
-        labelClassName="min-w-0"
-      />
-    );
-  }
-
-  return (
-    <Badge
-      variant="outline"
-      className={
-        compact
-          ? "max-w-[11rem] min-w-0 overflow-hidden px-1.5 py-0 text-[10px]"
-          : "max-w-[11rem] min-w-0 overflow-hidden text-xs"
-      }
-    >
-      <span className="flex min-w-0 items-center gap-1.5">
-        <Layers className="h-3 w-3 shrink-0" />
-        <span className="truncate">Mixed Sources</span>
-      </span>
-    </Badge>
   );
 }

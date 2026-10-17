@@ -143,7 +143,6 @@ vi.mock("@/components/agent-icon-picker", () => ({
 }));
 
 import { useAppAccess } from "@/lib/apps/use-app-access";
-import { useOrganizationMembers } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { AppSettingsForm } from "./app-settings-form";
 
@@ -199,9 +198,6 @@ beforeEach(() => {
     canDeleteApp: true,
     isPending: false,
   });
-  vi.mocked(useOrganizationMembers).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useOrganizationMembers>);
   vi.mocked(useAssignableTeams).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useAssignableTeams>);

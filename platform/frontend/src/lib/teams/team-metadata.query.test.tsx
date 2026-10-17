@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import {
   useAssignableTeams,
+  useMyTeams,
   useTeams,
   useTeamsWithVaultFolders,
 } from "./team.query";
@@ -92,6 +93,64 @@ it("isolates compact and full caches while preserving request filters and full r
     });
   expect(result.current.full.data?.[0].members).toHaveLength(1);
   expect(result.current.light.data?.[0]).toEqual(team);
+});
+it("keeps rows without members in their own cache entry", async () => {
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/teams`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      requests.push(query);
+      return HttpResponse.json({
+        data: [
+          {
+            ...team,
+            memberCount: 1,
+            labels: [],
+            descendantTeams: [],
+            ...(query.get("includeMembers") === "false"
+              ? {}
+              : { members: [{ id: "membership", userId: "viewer" }] }),
+          },
+        ],
+      });
+    }),
+  );
+  const { result } = renderHook(
+    () => ({
+      full: useTeams({ name: "Ops" }),
+      withoutMembers: useTeams({ name: "Ops", includeMembers: false }),
+    }),
+    setup(),
+  );
+  await waitFor(() =>
+    expect(
+      result.current.full.isSuccess && result.current.withoutMembers.isSuccess,
+    ).toBe(true),
+  );
+  expect(requests).toHaveLength(2);
+  expect(requests.map((q) => q.get("includeMembers"))).toEqual(
+    expect.arrayContaining([null, "false"]),
+  );
+  expect(result.current.full.data?.[0].members).toHaveLength(1);
+  expect(result.current.withoutMembers.data?.[0]).not.toHaveProperty("members");
+  expect(result.current.withoutMembers.data?.[0].memberCount).toBe(1);
+});
+it("requests the caller's teams without relations", async () => {
+  const requests: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/teams`, ({ request }) => {
+      requests.push(new URL(request.url).searchParams);
+      return HttpResponse.json({
+        data: [{ ...team, memberCount: 4, myRole: "admin" }],
+      });
+    }),
+  );
+  const { result } = renderHook(() => useMyTeams(), setup());
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  expect(requests).toHaveLength(1);
+  expect(requests[0].get("mine")).toBe("true");
+  expect(requests[0].get("includeRelations")).toBe("false");
+  expect(result.current.data?.[0].myRole).toBe("admin");
 });
 it.each([
   false,

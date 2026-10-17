@@ -2533,10 +2533,18 @@ class AgentModel {
     const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
     if (userId && restrictToAccessible) {
       whereConditions.push(
-        inArray(
-          schema.agentsTable.id,
-          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
-        ),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Apply the accessible-ID predicate directly to avoid a roster self-join.
+        and(
+          notDeleted(schema.agentsTable),
+          or(
+            explicitAgentReadCondition(principals),
+            organizationLlmProxyCondition(userId),
+          ),
+        ) as SQL,
+        // SPDX-SnippetEnd
       );
     }
 
@@ -3001,6 +3009,7 @@ class AgentModel {
      */
     environmentId: string | null;
     lookups?: PrincipalSource;
+    includeDetails?: boolean;
   }): Promise<
     Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
   > {
@@ -3020,11 +3029,17 @@ class AgentModel {
 
     if (isAdmin) {
       return db
-        .selectDistinct({
+        .select({
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
-          description: schema.agentsTable.description,
-          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+          description:
+            params.includeDetails === false
+              ? sql<string | null>`NULL`
+              : schema.agentsTable.description,
+          builtInAgentConfig:
+            params.includeDetails === false
+              ? sql<Agent["builtInAgentConfig"]>`NULL`
+              : schema.agentsTable.builtInAgentConfig,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -3039,8 +3054,14 @@ class AgentModel {
       .select({
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
-        description: schema.agentsTable.description,
-        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+        description:
+          params.includeDetails === false
+            ? sql<string | null>`NULL`
+            : schema.agentsTable.description,
+        builtInAgentConfig:
+          params.includeDetails === false
+            ? sql<Agent["builtInAgentConfig"]>`NULL`
+            : schema.agentsTable.builtInAgentConfig,
       })
       .from(schema.agentsTable)
       .where(

@@ -103,13 +103,13 @@ describe("AccessSection", () => {
           name: "Platform",
           description: "Core platform team",
           myRole: "admin",
-          members: [{ userId: "u1" }, { userId: "u2" }],
+          memberCount: 2,
         },
         {
           id: "t2",
           name: "Design",
           myRole: "member",
-          members: [{ userId: "u1" }],
+          memberCount: 1,
         },
       ] as unknown as ReturnType<typeof useMyTeams>["data"],
     });

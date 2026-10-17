@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useLimits } from "@/lib/limits.query";
@@ -19,7 +20,12 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 };
 
-const TEAM = { id: "team-support", name: "Support", members: [] };
+const TEAM = {
+  id: "team-support",
+  name: "Support",
+  memberCount: 3,
+  myRole: "admin",
+};
 
 beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
@@ -74,6 +80,43 @@ describe("BudgetFields team usage", () => {
 
     expect(legend("This key, at most")).toHaveTextContent("$260");
     expect(screen.getByText(/the team limit stops it first/)).toBeVisible();
+  });
+});
+
+describe("BudgetFields billing team choices", () => {
+  it("offers a non-cost-manager only the teams they administer, with member counts", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    // Rows as the server returns them for ?mine=true&includeRelations=false:
+    // the caller's role and a count, never member arrays.
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [
+        { id: "t-admin", name: "Platform", memberCount: 4, myRole: "admin" },
+        { id: "t-member", name: "Research", memberCount: 9, myRole: "member" },
+      ],
+    } as unknown as ReturnType<typeof useMyTeams>);
+    const user = userEvent.setup();
+    render(
+      <BudgetFields
+        subject="key"
+        idPrefix="test"
+        billingTeamId={null}
+        onBillingTeamIdChange={vi.fn()}
+        spendCap={null}
+        onSpendCapChange={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Who pays for this key?" }),
+    );
+
+    expect(screen.getByRole("option", { name: /^Platform/ })).toHaveTextContent(
+      "4 members",
+    );
+    expect(screen.queryByRole("option", { name: /^Research/ })).toBeNull();
   });
 });
 

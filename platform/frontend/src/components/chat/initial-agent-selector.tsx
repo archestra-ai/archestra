@@ -3,7 +3,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
-  isBuiltInCatalogId,
 } from "@archestra/shared";
 import {
   Check,
@@ -11,6 +10,7 @@ import {
   ExternalLink,
   Infinity as InfinityIcon,
   Plus,
+  RotateCw,
   Search,
   SlidersHorizontal,
   Wrench,
@@ -355,10 +355,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     ];
   }, [currentAgent, knowledgeBasesData, connectorsData]);
 
-  const hasNonBuiltInTools =
-    triggerSubagents.length > 0 ||
-    assignedServers.some((server) => !isBuiltInCatalogId(server.catalog.id));
-
   // The icons are "known" once this agent's own data has arrived; until then
   // the slot shows placeholders, never the previous agent's icons.
   const triggerIconsLoaded =
@@ -606,9 +602,49 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                     setSearch(e.target.value);
                     if (listRef.current) listRef.current.scrollTop = 0;
                   }}
-                  className="h-8 rounded-lg border-transparent bg-muted/50 pl-8 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                  className={cn(
+                    "h-8 rounded-lg border-transparent bg-muted/50 pl-8 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0",
+                    page.isError && "pr-9",
+                  )}
                   autoFocus
                 />
+                {page.isError && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="Retry loading agents"
+                        className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        disabled={page.isFetching || search !== debouncedSearch}
+                        onClick={() => {
+                          if (!page.isFetchNextPageError) {
+                            void page.refetch();
+                          } else {
+                            loadMore();
+                          }
+                        }}
+                      >
+                        <RotateCw
+                          aria-hidden
+                          className={cn(
+                            "size-3.5",
+                            page.isFetching &&
+                              "animate-spin motion-reduce:animate-none",
+                          )}
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <span>
+                        {page.isFetching
+                          ? "Loading agents…"
+                          : "Retry loading agents"}
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
               </div>
             </div>
             <div
@@ -698,24 +734,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 ))
               )}
             </div>
-            {page.isError && (
-              <div className="flex justify-center border-t px-2 py-1.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={page.isFetching || search !== debouncedSearch}
-                  onClick={() => {
-                    if (page.isError && !page.isFetchNextPageError) {
-                      void page.refetch();
-                    } else {
-                      loadMore();
-                    }
-                  }}
-                >
-                  {page.isFetching ? "Loading agents…" : "Retry loading agents"}
-                </Button>
-              </div>
-            )}
             <div className="flex items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
                 <Link href={agentNewHref("agent")}>
@@ -737,25 +755,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             </div>
           </PopoverContent>
         </Popover>
-
-        {/* A button cannot nest inside the agent's, so the shortcut for an
-            agent with no tools of its own sits just after it. */}
-        {currentAgent &&
-          !currentAgent.accessAllTools &&
-          triggerIconsLoaded &&
-          canEditCurrentAgent &&
-          !hasNonBuiltInTools && (
-            <AddToolsButton
-              // Tucked into the end of the tool circles when there are any,
-              // so it reads as the next one in the stack.
-              overlap={
-                triggerSubagents.length > 0 ||
-                assignedServers.length > 0 ||
-                knowledgeSources.some((source) => source.connectorType)
-              }
-              onClick={() => openQuickEdit(currentAgent.id, "add-tools")}
-            />
-          )}
       </div>
 
       {/* Outside the popover on purpose: connecting closes the list, and a
@@ -1312,39 +1311,6 @@ function AgentToolIcons({
         </HoverCardContent>
       </HoverCard>
     </>
-  );
-}
-
-/** Shortcut for an agent with no tools of its own; opens Add tools. */
-function AddToolsButton({
-  overlap,
-  onClick,
-}: {
-  overlap: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Add tools"
-          onClick={onClick}
-          className={cn(
-            "size-5 rounded-full bg-muted hover:bg-muted/80",
-            // The agent button's end padding plus the row gap leave 20px
-            // between the last circle and this one; -ml-4 closes that to the
-            // circles' own 6px overlap.
-            overlap ? "relative mr-1 -ml-4 ring-1 ring-background" : "ml-1",
-            CIRCLE_LIFT,
-          )}
-        >
-          <Plus className="size-3 text-muted-foreground" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top">Add tools</TooltipContent>
-    </Tooltip>
   );
 }
 

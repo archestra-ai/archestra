@@ -1,3 +1,4 @@
+import type { CreatedBy } from "@archestra/shared";
 import {
   type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
@@ -79,6 +80,8 @@ import {
   type UpdateAgent,
 } from "@/types";
 import type { AgentOptionFilters } from "@/types/agent";
+import type { SuggestedPromptInput } from "@/types/agent-suggested-prompt";
+import type { LabelWithDetails } from "@/types/label";
 import { isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
@@ -91,7 +94,6 @@ import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
-import AgentPinModel from "./agent-pin";
 import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
@@ -100,8 +102,6 @@ import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
 import { idArrayCondition } from "./id-array-condition";
-import { latestCreatedAtByKey } from "./latest-created-at";
-import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel, {
   type ObjectPolicy,
@@ -577,52 +577,6 @@ class AgentModel {
     for (const agent of agents) {
       agent.suggestedPrompts = promptsMap.get(agent.id) ?? [];
     }
-  }
-
-  /**
-   * Populate lastUsedAt on agents: the most recent moment anything ran through
-   * the agent, whichever came last of
-   *
-   * - an MCP request (any JSON-RPC method) routed through its gateway endpoint,
-   * - an LLM call made on its behalf.
-   *
-   * Null when neither ever happened. Both halves are needed because the two
-   * kinds of agent are used differently: an MCP gateway is all requests and no
-   * LLM calls, while an agent driven from chat may answer for months without
-   * ever routing a tool call. Reading only the MCP log would report such an
-   * agent as never used.
-   */
-  private static async populateLastUsedAt(agents: Agent[]): Promise<void> {
-    const agentIds = agents.map((a) => a.id);
-    if (agentIds.length === 0) return;
-
-    const [lastCallMap, lastInteractionMap] = await Promise.all([
-      McpToolCallModel.getLastCallAtForAgents(agentIds),
-      AgentModel.getLastInteractionAtForAgents(agentIds),
-    ]);
-
-    for (const agent of agents) {
-      const lastCallAt = lastCallMap.get(agent.id) ?? null;
-      const lastInteractionAt = lastInteractionMap.get(agent.id) ?? null;
-      agent.lastUsedAt = mostRecent(lastCallAt, lastInteractionAt);
-    }
-  }
-
-  /**
-   * When each agent last had an LLM call made on its behalf, absent for agents
-   * with none. Read straight off `interactions` rather than through
-   * `InteractionModel`, which imports this module — the same reason the
-   * `lastUsedAt` sort below reads `mcpToolCallsTable` directly.
-   */
-  private static async getLastInteractionAtForAgents(
-    agentIds: string[],
-  ): Promise<Map<string, Date>> {
-    return latestCreatedAtByKey({
-      table: schema.interactionsTable,
-      keyColumn: schema.interactionsTable.profileId,
-      createdAtColumn: schema.interactionsTable.createdAt,
-      keys: agentIds,
-    });
   }
 
   /**
@@ -2076,7 +2030,7 @@ class AgentModel {
           direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
         );
     } else if (sorting?.sortBy === "toolsCount") {
-      // Ordered by the count the Tools column shows (see getListToolCounts):
+      // Ordered by the count the Tools column shows (see findAllPaginated):
       // all assignments, minus subagent delegations, minus the knowledge
       // search tool when the agent has no knowledge sources. Only the few
       // special tools are joined; the plain count needs no join.
@@ -2282,82 +2236,110 @@ class AgentModel {
       return createPaginatedResult([], total, pagination);
     }
 
-    // Step 2: Get full agent data for the paginated agent IDs. Tool refs are
-    // a query of their own: joined, every agent row came back once per
-    // assigned tool, system prompt and icon included.
-    const [agentRows, toolRows] = await Promise.all([
-      db
-        .select()
-        .from(schema.agentsTable)
-        .where(inArray(schema.agentsTable.id, sortedAgentIds)),
-      filters?.includeTools !== false
-        ? db
-            .select({
-              agentId: schema.agentToolsTable.agentId,
-              tool: agentToolRefColumns,
-            })
-            .from(schema.agentToolsTable)
-            .innerJoin(
-              schema.toolsTable,
-              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-            )
-            .where(inArray(schema.agentToolsTable.agentId, sortedAgentIds))
-        : Promise.resolve([]),
+    // Step 2: everything the list shows for these agents, in two statements
+    // run together: findListEnrichment for the rows and their light aspects,
+    // findListToolsAndLastCall for the tools and the last MCP call.
+    const includeTools = filters?.includeTools !== false;
+    const [enriched, heavy] = await Promise.all([
+      AgentModel.findListEnrichment({
+        agentIds: sortedAgentIds,
+        includeTools,
+        userId,
+      }),
+      AgentModel.findListToolsAndLastCall({
+        agentIds: sortedAgentIds,
+        includeTools,
+      }),
     ]);
+    for (const entry of enriched) {
+      const aspects = heavy.get(entry.row.id);
+      entry.tools = aspects?.tools ?? [];
+      entry.lastCallAtMs = aspects?.lastCallAtMs ?? null;
+      entry.toolCounts ??= countListTools(entry.tools);
+    }
 
     // Sort in memory to maintain the order from the sorted query
     const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
-    agentRows.sort(
-      (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
+    enriched.sort(
+      (a, b) => (orderMap.get(a.row.id) ?? 0) - (orderMap.get(b.row.id) ?? 0),
     );
 
-    const agents: Agent[] = agentRows.map((agent) => ({
-      ...agent,
-      tools: [],
-      teams: [] as Array<{ id: string; name: string }>,
-      users: [] as Array<{ id: string; name: string; email: string }>,
-      labels: [],
-      knowledgeBaseIds: [],
-      connectorIds: [],
-      suggestedPrompts: [],
-    }));
-    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-    for (const row of toolRows) {
-      agentsById.get(row.agentId)?.tools.push(row.tool);
-    }
-    const agentIds = agents.map((agent) => agent.id);
-
-    // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, usersMap, labelsMap] = await Promise.all([
-      AgentTeamModel.getTeamDetailsForAgents(agentIds),
-      AgentUserModel.getUserDetailsForAgents(agentIds),
-      AgentLabelModel.getLabelsForAgents(agentIds),
-    ]);
-
-    // Assign teams, grantees, and labels to each agent
-    for (const agent of agents) {
-      agent.teams = teamsMap.get(agent.id) || [];
-      agent.users = usersMap.get(agent.id) || [];
-      agent.labels = labelsMap.get(agent.id) || [];
-    }
-
-    await Promise.all([
-      AgentModel.populateGrantedScope(agents),
-      AgentModel.populateAuthorNames(agents),
-      AgentModel.populateKnowledgeBaseIds(agents),
-      AgentModel.populateConnectorIds(agents),
-      AgentModel.populateSuggestedPrompts(agents),
-      AgentModel.populateResolvedLlm(agents),
-      AgentModel.populateLastUsedAt(agents),
-    ]);
-    // Counted after the knowledge sources are populated: the knowledge
-    // search tool counts only for an agent that has some.
-    const [pinnedAtByAgent, toolCounts] = await Promise.all([
-      userId
-        ? AgentPinModel.getPinnedAtForAgents({ userId, agentIds })
-        : new Map<string, Date>(),
-      AgentModel.getListToolCounts(agents),
-    ]);
+    const policies = enriched.flatMap((entry) => entry.policies);
+    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
+      resources: ["agent", "mcpGateway"],
+      scopes: sortedAgentIds,
+      policies,
+    });
+    const agents: Agent[] = enriched.map((entry) => {
+      const recipient = recipients.get(entry.row.id);
+      const teamNames = new Map(
+        entry.teams.map((team) => [team.id, team.name]),
+      );
+      const userById = new Map(entry.users.map((user) => [user.id, user]));
+      const lastCallAt =
+        entry.lastCallAtMs === null ? null : new Date(entry.lastCallAtMs);
+      const lastInteractionAt =
+        entry.lastInteractionAtMs === null
+          ? null
+          : new Date(entry.lastInteractionAtMs);
+      const provider: SupportedProvider | null =
+        entry.llmKey?.provider ?? entry.model?.provider ?? null;
+      return {
+        ...entry.row,
+        tools: entry.tools,
+        teams: (recipient?.teamIds ?? []).flatMap((id) => {
+          const name = teamNames.get(id);
+          return name === undefined ? [] : [{ id, name }];
+        }),
+        users: (recipient?.userIds ?? []).flatMap((id) => {
+          const user = id === entry.row.authorId ? undefined : userById.get(id);
+          return user ? [user] : [];
+        }),
+        labels: entry.labels,
+        knowledgeBaseIds: entry.knowledgeBaseIds,
+        connectorIds: entry.connectorIds,
+        suggestedPrompts: entry.suggestedPrompts,
+        authorName: entry.creator?.name ?? null,
+        authorEmail: entry.creator?.email ?? null,
+        createdBy: entry.creator ?? null,
+        resolvedLlmProvider: provider,
+        resolvedLlmProviderKeyName: entry.row.llmApiKeyId
+          ? (entry.llmKey?.name ?? null)
+          : null,
+        llmProviderRequiresPerUserCredential: provider
+          ? providerRequiresPerUserCredential(provider)
+          : false,
+        resolvedLlmModelName: entry.row.modelId
+          ? (entry.model?.modelName ?? null)
+          : null,
+        lastUsedAt: mostRecent(lastCallAt, lastInteractionAt),
+      } as Agent;
+    });
+    await AgentModel.populateGrantedScope(agents, policies);
+    const pinnedAtByAgent = new Map(
+      enriched.flatMap((entry) =>
+        entry.pinnedAtMs === null
+          ? []
+          : [[entry.row.id, new Date(entry.pinnedAtMs)] as const],
+      ),
+    );
+    // Subagents are delegation tools, and the knowledge search tool counts
+    // only for an agent with knowledge sources, as in
+    // filterUnavailableKnowledgeTools.
+    const toolCounts = new Map(
+      agents.map((agent, index) => {
+        const counts = enriched[index]?.toolCounts;
+        return [
+          agent.id,
+          {
+            toolsCount:
+              (counts?.tools ?? 0) -
+              (hasKnowledgeSources(agent) ? 0 : (counts?.knowledgeTools ?? 0)),
+            subagentsCount: counts?.subagents ?? 0,
+          },
+        ];
+      }),
+    );
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
     return createPaginatedResult(
@@ -2369,62 +2351,6 @@ class AgentModel {
       })),
       total,
       pagination,
-    );
-  }
-
-  /**
-   * Each listed agent's tool and subagent counts, as its `tools` would give
-   * them, without loading the tools: subagents are delegation tools, and the
-   * knowledge search tool counts only for an agent with knowledge sources, as
-   * in filterUnavailableKnowledgeTools.
-   */
-  private static async getListToolCounts(
-    agents: Array<Pick<Agent, "id" | "knowledgeBaseIds" | "connectorIds">>,
-  ): Promise<Map<string, { toolsCount: number; subagentsCount: number }>> {
-    if (agents.length === 0) return new Map();
-    const delegate = schema.toolsTable.delegateToAgentId;
-    const isKnowledgeTool = isKnowledgeSearchToolName(schema.toolsTable.name);
-    const rows = await db
-      .select({
-        agentId: schema.agentToolsTable.agentId,
-        tools: sql<number>`count(*) filter (where ${delegate} is null)`.mapWith(
-          Number,
-        ),
-        subagents:
-          sql<number>`count(*) filter (where ${delegate} is not null)`.mapWith(
-            Number,
-          ),
-        knowledgeTools:
-          sql<number>`count(*) filter (where ${delegate} is null and ${isKnowledgeTool})`.mapWith(
-            Number,
-          ),
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        inArray(
-          schema.agentToolsTable.agentId,
-          agents.map((agent) => agent.id),
-        ),
-      )
-      .groupBy(schema.agentToolsTable.agentId);
-    const countsByAgent = new Map(rows.map((row) => [row.agentId, row]));
-    return new Map(
-      agents.map((agent) => {
-        const counts = countsByAgent.get(agent.id);
-        return [
-          agent.id,
-          {
-            toolsCount:
-              (counts?.tools ?? 0) -
-              (hasKnowledgeSources(agent) ? 0 : (counts?.knowledgeTools ?? 0)),
-            subagentsCount: counts?.subagents ?? 0,
-          },
-        ];
-      }),
     );
   }
 
@@ -2714,6 +2640,193 @@ class AgentModel {
       .limit(remaining)
       .offset(Math.max(0, offset - own.length));
     return [...ownPage, ...rest];
+  }
+
+  /**
+   * The page's two heaviest aspects, read set-based in a statement of their
+   * own so they run beside findListEnrichment instead of after it: each
+   * agent's tools (when the list shows them) and its last MCP call.
+   */
+  private static async findListToolsAndLastCall(params: {
+    agentIds: string[];
+    includeTools: boolean;
+  }): Promise<Map<string, { tools: ToolRef[]; lastCallAtMs: number | null }>> {
+    if (params.agentIds.length === 0) return new Map();
+    const ids = sql`ARRAY[${sql.join(
+      params.agentIds.map((id) => sql`${id}`),
+      sql`, `,
+    )}]::uuid[]`;
+    const tools = params.includeTools
+      ? sql`SELECT at.agent_id, json_agg(json_build_object(
+            'id', t.id, 'agentId', t.agent_id, 'catalogId', t.catalog_id,
+            'delegateToAgentId', t.delegate_to_agent_id,
+            'delegateToA2aConnectionId', t.delegate_to_a2a_connection_id,
+            'name', t.name, 'rawName', t.raw_name, 'description', t.description
+          )) AS tools
+          FROM agent_tools at INNER JOIN tools t ON t.id = at.tool_id
+          WHERE at.agent_id = ANY(${ids})
+          GROUP BY at.agent_id`
+      : sql`SELECT NULL::uuid AS agent_id, NULL::json AS tools WHERE false`;
+    const result = await db.execute<{
+      agent_id: string;
+      tools: ToolRef[] | null;
+      last_call_at_ms: number | null;
+    }>(sql`
+      SELECT coalesce(tl.agent_id, lc.agent_id) AS agent_id, tl.tools,
+        floor(extract(epoch from lc.last_call_at) * 1000)::float8 AS last_call_at_ms
+      FROM (${tools}) tl
+      FULL JOIN (
+        SELECT mtc.agent_id, max(mtc.created_at) AS last_call_at
+        FROM mcp_tool_calls mtc
+        WHERE mtc.agent_id = ANY(${ids})
+        GROUP BY mtc.agent_id
+      ) lc ON lc.agent_id = tl.agent_id`);
+    return new Map(
+      result.rows.map((row) => [
+        row.agent_id,
+        { tools: row.tools ?? [], lastCallAtMs: row.last_call_at_ms },
+      ]),
+    );
+  }
+
+  /**
+   * One statement for everything an agent list row shows besides its order:
+   * the agent rows plus one correlated subselect per aspect (tool refs, the
+   * agent's own policy and the names it grants to, labels, knowledge bases,
+   * connectors, suggested prompts, the caller's pin, last use, creator and
+   * resolved model). Timestamps come back as epoch milliseconds.
+   */
+  private static async findListEnrichment(params: {
+    agentIds: string[];
+    includeTools: boolean;
+    userId?: string;
+  }): Promise<ListEnrichment[]> {
+    if (params.agentIds.length === 0) return [];
+    const agentId = qualified(schema.agentsTable.id);
+    const agentScope = sql`${agentId}::text`;
+    // organization_id leads the policies' primary key: with it each row is
+    // one index probe, without it a skip scan.
+    const policyOfAgent = sql`p.organization_id = ${qualified(schema.agentsTable.organizationId)}
+      AND p.resource IN ('agent', 'mcpGateway') AND p.scope = ${agentScope}`;
+    const epochMs = (value: SQL) =>
+      sql`floor(extract(epoch from ${value}) * 1000)::float8`;
+    const rows = await db
+      .select({
+        row: getTableColumns(schema.agentsTable),
+        // One probe of the agent's policies yields them and the names of the
+        // teams and users their grants name.
+        access: sql<{
+          policies: ObjectPolicy[];
+          teams: Array<{ id: string; name: string }>;
+          users: Array<{ id: string; name: string; email: string }>;
+        }>`(
+          SELECT json_build_object(
+            'policies', pol.policies,
+            'teams', (
+              SELECT coalesce(json_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name)), '[]'::json)
+              FROM jsonb_array_elements(pol.grant_sets) gs,
+                jsonb_array_elements(gs) g
+                INNER JOIN team t ON t.id = g->'subject'->>'id'
+              WHERE g->'subject'->>'type' = 'team'),
+            'users', (
+              SELECT coalesce(json_agg(DISTINCT jsonb_build_object('id', u.id, 'name', u.name, 'email', u.email)), '[]'::json)
+              FROM jsonb_array_elements(pol.grant_sets) gs,
+                jsonb_array_elements(gs) g
+                INNER JOIN "user" u ON u.id = g->'subject'->>'id'
+              WHERE g->'subject'->>'type' = 'user'))
+          FROM (
+            SELECT
+              coalesce(json_agg(json_build_object(
+                'organizationId', p.organization_id, 'resource', p.resource,
+                'scope', p.scope, 'grants', p.grants
+              )), '[]'::json) AS policies,
+              coalesce(jsonb_agg(p.grants), '[]'::jsonb) AS grant_sets
+            FROM resource_permission_policies p WHERE ${policyOfAgent}) pol)`,
+        labels: sql<LabelWithDetails[]>`(
+          SELECT coalesce(json_agg(json_build_object(
+            'keyId', al.key_id, 'valueId', al.value_id,
+            'key', coalesce(lk.key, ''), 'value', coalesce(lv.value, '')
+          ) ORDER BY lk.key), '[]'::json)
+          FROM agent_labels al
+            LEFT JOIN label_keys lk ON lk.id = al.key_id
+            LEFT JOIN label_values lv ON lv.id = al.value_id
+          WHERE al.agent_id = ${agentId})`,
+        // Assignment order. The ids are a set; the batch reads this replaced
+        // left their order to the plan.
+        knowledgeBaseIds: sql<string[]>`(
+          SELECT coalesce(json_agg(akb.knowledge_base_id
+            ORDER BY akb.created_at, akb.knowledge_base_id), '[]'::json)
+          FROM agent_knowledge_base akb
+            INNER JOIN knowledge_bases kb ON kb.id = akb.knowledge_base_id
+          WHERE akb.agent_id = ${agentId} AND kb.deleted_at IS NULL)`,
+        connectorIds: sql<string[]>`(
+          SELECT coalesce(json_agg(aca.connector_id
+            ORDER BY aca.created_at, aca.connector_id), '[]'::json)
+          FROM agent_connector_assignment aca
+            INNER JOIN knowledge_base_connectors kc ON kc.id = aca.connector_id
+          WHERE aca.agent_id = ${agentId} AND kc.deleted_at IS NULL)`,
+        suggestedPrompts: sql<SuggestedPromptInput[]>`(
+          SELECT coalesce(json_agg(json_build_object(
+            'summaryTitle', sp.summary_title, 'prompt', sp.prompt
+          ) ORDER BY sp.sort_order), '[]'::json)
+          FROM agent_suggested_prompts sp WHERE sp.agent_id = ${agentId})`,
+        pinnedAtMs: params.userId
+          ? sql<number | null>`(
+              SELECT ${epochMs(sql`ap.pinned_at`)} FROM agent_pins ap
+              WHERE ap.user_id = ${params.userId} AND ap.agent_id = ${agentId})`
+          : sql<number | null>`NULL::float8`,
+        lastInteractionAtMs: sql<number | null>`(
+          SELECT ${epochMs(sql`i.created_at`)} FROM interactions i
+          WHERE i.profile_id = ${agentId}
+          ORDER BY i.created_at DESC NULLS LAST LIMIT 1)`,
+        creatorUser: sql<{ id: string; name: string; email: string } | null>`(
+          SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
+          FROM "user" u WHERE u.id = ${qualified(schema.agentsTable.authorId)})`,
+        creatorServiceAccount: sql<{ id: string; name: string } | null>`(
+          SELECT json_build_object('id', sa.id, 'name', sa.name)
+          FROM service_accounts sa
+          WHERE sa.id = ${qualified(schema.agentsTable.createdByServiceAccountId)})`,
+        llmKey: sql<{ name: string; provider: SupportedProvider } | null>`(
+          SELECT json_build_object('name', k.name, 'provider', k.provider)
+          FROM ${schema.llmProviderApiKeysTable} k WHERE k.id = ${qualified(schema.agentsTable.llmApiKeyId)})`,
+        // With the tools at hand the caller counts them (countListTools);
+        // only a list without tools counts in SQL.
+        toolCounts: params.includeTools
+          ? sql<ListToolCounts | null>`NULL::json`
+          : sql<ListToolCounts | null>`(
+          SELECT json_build_object(
+            'tools', count(*) filter (where tc.delegate_to_agent_id is null),
+            'subagents', count(*) filter (where tc.delegate_to_agent_id is not null),
+            'knowledgeTools', count(*) filter (
+              where tc.delegate_to_agent_id is null
+                and ${isKnowledgeSearchToolName(sql.raw("tc.name"))}
+            )
+          )
+          FROM agent_tools atc INNER JOIN tools tc ON tc.id = atc.tool_id
+          WHERE atc.agent_id = ${agentId})`,
+        model: sql<{ provider: SupportedProvider; modelName: string } | null>`(
+          SELECT json_build_object('provider', m.provider, 'modelName', m.model_id)
+          FROM models m WHERE m.id = ${qualified(schema.agentsTable.modelId)})`,
+      })
+      .from(schema.agentsTable)
+      .where(inArray(schema.agentsTable.id, params.agentIds));
+    return rows.map(
+      ({ creatorUser, creatorServiceAccount, access, ...entry }) => ({
+        ...entry,
+        ...access,
+        // Filled in by the caller from findListToolsAndLastCall.
+        tools: [],
+        lastCallAtMs: null,
+        // A service account that created the agent wins, as in CreatedByModel.id.
+        creator: entry.row.createdByServiceAccountId
+          ? creatorServiceAccount
+            ? CreatedByModel.fromServiceAccount(creatorServiceAccount)
+            : null
+          : creatorUser
+            ? CreatedByModel.fromUser(creatorUser)
+            : null,
+      }),
+    );
   }
 
   private static getPersonalAgentPriorityOrderClauses(userId?: string) {
@@ -5674,6 +5787,27 @@ function hasKnowledgeSources(
  * after a server prefix. Only the leading `_%` is a wildcard. Shared by the
  * list's Tools count and its sort so the two agree.
  */
+/**
+ * The list's tool counts from an agent's tools, by the rule the `toolCounts`
+ * SQL applies: delegations are subagents, and the knowledge search tool is
+ * counted apart (isQueryKnowledgeSourcesTool, the JS twin of
+ * isKnowledgeSearchToolName).
+ */
+function countListTools(
+  tools: Array<Pick<ToolRef, "delegateToAgentId" | "name">>,
+): ListToolCounts {
+  const counts = { tools: 0, subagents: 0, knowledgeTools: 0 };
+  for (const tool of tools) {
+    if (tool.delegateToAgentId !== null) {
+      counts.subagents++;
+      continue;
+    }
+    counts.tools++;
+    if (isQueryKnowledgeSourcesTool(tool.name)) counts.knowledgeTools++;
+  }
+  return counts;
+}
+
 function isKnowledgeSearchToolName(name: AnyPgColumn | SQL): SQL {
   const prefixed = `_%${escapeLikePattern(
     `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
@@ -6294,3 +6428,31 @@ const ChatRosterCursorPositionSchema = z.object({
   rank: z.number().int().min(0).max(3),
   name: z.string(),
 });
+
+type ToolRef = Agent["tools"][number];
+
+type ListEnrichment = {
+  row: typeof schema.agentsTable.$inferSelect;
+  tools: ToolRef[];
+  policies: ObjectPolicy[];
+  teams: Array<{ id: string; name: string }>;
+  users: Array<{ id: string; name: string; email: string }>;
+  labels: LabelWithDetails[];
+  knowledgeBaseIds: string[];
+  connectorIds: string[];
+  suggestedPrompts: SuggestedPromptInput[];
+  pinnedAtMs: number | null;
+  lastCallAtMs: number | null;
+  lastInteractionAtMs: number | null;
+  creator: CreatedBy | null;
+  llmKey: { name: string; provider: SupportedProvider } | null;
+  model: { provider: SupportedProvider; modelName: string } | null;
+  /** Null when the list shows tools: the caller counts them. */
+  toolCounts: ListToolCounts | null;
+};
+
+type ListToolCounts = {
+  tools: number;
+  subagents: number;
+  knowledgeTools: number;
+};

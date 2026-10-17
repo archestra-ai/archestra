@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 /** Per-user pins for the paginated Agents surface. */
@@ -27,29 +27,6 @@ class AgentPinModel {
           eq(schema.agentPinsTable.agentId, params.agentId),
         ),
       );
-  }
-
-  /** Resolve caller-relative pin timestamps for a page in one query. */
-  static async getPinnedAtForAgents(params: {
-    userId: string;
-    agentIds: string[];
-  }): Promise<Map<string, Date>> {
-    if (params.agentIds.length === 0) return new Map();
-
-    const rows = await db
-      .select({
-        agentId: schema.agentPinsTable.agentId,
-        pinnedAt: schema.agentPinsTable.pinnedAt,
-      })
-      .from(schema.agentPinsTable)
-      .where(
-        and(
-          eq(schema.agentPinsTable.userId, params.userId),
-          inArray(schema.agentPinsTable.agentId, params.agentIds),
-        ),
-      );
-
-    return new Map(rows.map((row) => [row.agentId, row.pinnedAt]));
   }
 }
 

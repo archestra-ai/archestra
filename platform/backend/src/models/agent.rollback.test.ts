@@ -1528,6 +1528,84 @@ describe("AgentModel", () => {
       expect(await sorted("asc")).toEqual([...descending].reverse());
     });
 
+    test("counts tools the same whether or not the list carries them", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeKnowledgeBase,
+      makeMember,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      // Names on both sides of the knowledge search tool rule. Counted as it:
+      // the bare name, a server prefix, a longer separator run. Not: nothing
+      // before the separator, a further segment, a longer short name.
+      const server = `srv${crypto.randomUUID().slice(0, 8)}`;
+      const names = [
+        "query_knowledge_sources",
+        `${server}__query_knowledge_sources`,
+        `${server}___query_knowledge_sources`,
+        "__query_knowledge_sources",
+        `${server}__query_knowledge_sources__other`,
+        `${server}__query_knowledge_sourcesx`,
+      ];
+      const tools = await Promise.all(names.map((name) => makeTool({ name })));
+      const target = await makeAgent({ organizationId: org.id });
+      const withSources = await makeAgent({
+        organizationId: org.id,
+        name: "Counted twice with sources",
+      });
+      const withoutSources = await makeAgent({
+        organizationId: org.id,
+        name: "Counted twice without sources",
+      });
+      for (const agent of [withSources, withoutSources]) {
+        for (const tool of tools) {
+          await makeAgentTool(agent.id, tool.id);
+        }
+        await AgentToolModel.assignDelegation({
+          agentId: agent.id,
+          targetAgentId: target.id,
+        });
+      }
+      await AgentKnowledgeBaseModel.assign(
+        withSources.id,
+        (await makeKnowledgeBase(org.id)).id,
+      );
+      const counts = async (includeTools: boolean) =>
+        (
+          await AgentModel.findAllPaginated(
+            { limit: 20, offset: 0 },
+            { sortBy: "name", sortDirection: "asc" },
+            { name: "Counted twice", includeTools },
+            admin.id,
+            true,
+          )
+        ).data.map(({ name, toolsCount, subagentsCount }) => ({
+          name,
+          toolsCount,
+          subagentsCount,
+        }));
+
+      const fromSql = await counts(false);
+      expect(fromSql).toEqual([
+        {
+          name: "Counted twice with sources",
+          toolsCount: 6,
+          subagentsCount: 1,
+        },
+        {
+          name: "Counted twice without sources",
+          toolsCount: 3,
+          subagentsCount: 1,
+        },
+      ]);
+      expect(await counts(true)).toEqual(fromSql);
+    });
+
     test("counts tools and subagents as the tools show them, with or without the tools", async ({
       makeAdmin,
       makeAgent,

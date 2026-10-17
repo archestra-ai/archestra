@@ -60,6 +60,18 @@ describe("GET /api/agent-catalog", () => {
       { type: "agent", value: { id: delta.id, name: "Delta" } },
     ]);
 
+    // A page past the end has no rows but keeps the totals.
+    const pastEnd = await ctx.app.inject({
+      method: "GET",
+      url: "/api/agent-catalog?sortBy=name&sortDirection=asc&limit=2&offset=4",
+    });
+    expect(pastEnd.statusCode, pastEnd.body).toBe(200);
+    expect(pastEnd.json()).toMatchObject({
+      data: [],
+      pagination: { total: 4, hasNext: false, hasPrev: true },
+      totals: { agents: 2, externalAgents: 2 },
+    });
+
     const descending = await ctx.app.inject({
       method: "GET",
       url: "/api/agent-catalog?sortBy=name&sortDirection=desc&limit=4&offset=0",

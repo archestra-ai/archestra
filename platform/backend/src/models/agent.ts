@@ -1952,30 +1952,37 @@ class AgentModel {
             asc(candidates.id),
           ];
 
-    const [rows, [totals]] = await Promise.all([
-      db
-        .select({
-          type: candidates.resourceType,
-          id: candidates.id,
-        })
-        .from(candidates)
-        .orderBy(...candidateOrder)
-        .limit(params.pagination.limit)
-        .offset(params.pagination.offset),
-      db
-        .select({
-          total: count(),
-          agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent')`,
-          externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external')`,
-        })
-        .from(candidates),
-    ]);
+    // The totals ride on the page as window counts, so the candidate set,
+    // with its per-row authorization, is built once per request.
+    const page = await db
+      .select({
+        type: candidates.resourceType,
+        id: candidates.id,
+        total: sql<number>`COUNT(*) OVER ()`,
+        agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent') OVER ()`,
+        externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external') OVER ()`,
+      })
+      .from(candidates)
+      .orderBy(...candidateOrder)
+      .limit(params.pagination.limit)
+      .offset(params.pagination.offset);
+    // A page past the end has no row to carry the totals.
+    const [totals] =
+      page.length > 0 || params.pagination.offset === 0
+        ? page
+        : await db
+            .select({
+              total: count(),
+              agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent')`,
+              externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external')`,
+            })
+            .from(candidates);
 
     return {
-      rows,
-      total: Number(totals.total),
-      agentTotal: Number(totals.agentTotal),
-      externalAgentTotal: Number(totals.externalAgentTotal),
+      rows: page.map(({ type, id }) => ({ type, id })),
+      total: Number(totals?.total ?? 0),
+      agentTotal: Number(totals?.agentTotal ?? 0),
+      externalAgentTotal: Number(totals?.externalAgentTotal ?? 0),
     };
   }
 

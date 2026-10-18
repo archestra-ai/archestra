@@ -5,7 +5,7 @@ import type { CoverageRule } from "@/types/openappa-coverage";
 import type { LabelChange } from "@/types/openappa-label-changes";
 
 /** A recorded label change, with the tool and the policy rule behind it. */
-export type LabelChangeView = LabelChange & {
+type LabelChangeView = LabelChange & {
   /** The full tool name, from the record or the logged tool call. */
   tool: string | null;
   /**

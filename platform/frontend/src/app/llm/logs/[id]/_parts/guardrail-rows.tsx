@@ -265,7 +265,7 @@ export function GuardrailsBar({
   const blocked = consults.filter((c) => c.decision === "blocked").length;
   const unanswered = consults.filter((c) => c.outcome !== "answered").length;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b bg-muted/20 px-4 py-1 text-[11px] text-muted-foreground">
+    <div className="flex items-center gap-x-3 gap-y-0.5 overflow-x-auto border-b bg-muted/20 px-4 py-1 text-[11px] whitespace-nowrap text-muted-foreground [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="inline-flex h-7 cursor-default items-center gap-1.5 tabular-nums lg:h-6">
@@ -277,7 +277,9 @@ export function GuardrailsBar({
               <span className="font-medium text-foreground/90">
                 {consults.length}
               </span>{" "}
-              {consults.length === 1 ? "check" : "checks"}
+              <span className="max-sm:sr-only">
+                {consults.length === 1 ? "check" : "checks"}
+              </span>
             </span>
             {blocked > 0 ? (
               <span className="inline-flex items-center gap-0.5 font-medium text-rose-700 dark:text-rose-300">
@@ -404,7 +406,9 @@ function ChangeStepper({
                 changes.length
               )}{" "}
               <span className="max-lg:hidden">label </span>
-              {changes.length === 1 ? "change" : "changes"}
+              <span className="max-sm:hidden">
+                {changes.length === 1 ? "change" : "changes"}
+              </span>
             </span>
           </UnstyledButton>
         </TooltipTrigger>
@@ -443,7 +447,7 @@ function GutterKey() {
       <TooltipTrigger asChild>
         <ul
           aria-label="Label gutter key: colour is trust, stripes mean the audience is narrowed"
-          className="flex h-6 cursor-default items-center gap-x-2.5 whitespace-nowrap max-md:order-last max-md:basis-full"
+          className="flex h-6 cursor-default items-center gap-x-2.5 whitespace-nowrap max-sm:hidden max-md:order-last max-md:basis-full"
         >
           <li className="inline-flex items-center gap-1">
             <GutterSwatch label={{ trust: "trusted", audience: "public" }} />

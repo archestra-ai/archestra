@@ -49,7 +49,7 @@ export function SessionHeaderTitle({
       </span>
       <span
         title={title}
-        className="min-w-0 truncate text-[17px] leading-6 lg:text-xl lg:leading-7"
+        className="min-w-0 truncate text-[17px] leading-6 max-lg:self-start lg:text-xl lg:leading-7"
       >
         {title}
       </span>
@@ -253,11 +253,14 @@ export function SessionIdentityLine({
 
 /**
  * Lines the identity up under the title text: the back arrow and its gap
- * (32), then the avatar (44) and its gap (14). The title row is 40px for a
- * 28px line, so the identity rises into that slack: it reads as the title's
- * second line, and the pair centres on the avatar.
+ * (32), then the avatar (44) and its gap (14). It rises into the title row's
+ * slack so it reads as the title's second line. Below `lg` the avatar sets
+ * the row's height (44px) and the title sits at its top, so the identity
+ * rises by the rest of the row (20px), plus the header grid's 8px row gap on
+ * phones or the 4px description margin from `sm`. From `lg` the row is 40px
+ * for a 28px line.
  */
-const IDENTITY_INSET = "pl-[90px] sm:-mt-1.5";
+const IDENTITY_INSET = "pl-[90px] -mt-7 sm:-mt-6 lg:-mt-2.5";
 
 function SessionHeaderAvatar({ session }: { session: LogSession }) {
   const appName = useAppName();

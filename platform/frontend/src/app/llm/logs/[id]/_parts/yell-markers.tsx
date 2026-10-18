@@ -154,7 +154,9 @@ export function YellStepper({
               ) : (
                 yells.length
               )}{" "}
-              {yells.length === 1 ? "yell" : "yells"}
+              <span className="max-sm:hidden">
+                {yells.length === 1 ? "yell" : "yells"}
+              </span>
             </span>
             {supers > 0 ? (
               <span
@@ -239,7 +241,7 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
       <blockquote className="mt-2 rounded-md border bg-muted/40 px-2.5 py-2 text-xs leading-[18px] break-words whitespace-pre-wrap text-foreground/90">
         {yell.message}
       </blockquote>
-      <dl className="mt-2 grid grid-cols-3 divide-x overflow-hidden rounded-md border text-[11px]">
+      <dl className="mt-2 grid grid-cols-2 divide-x overflow-hidden rounded-md border text-[11px]">
         <Fact label="Status">
           {yell.resolvedAt ? (
             <span
@@ -262,19 +264,6 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
         <Fact label="Report">
           {yell.hasArchive ? (
             <DownloadReport yellId={yell.id} />
-          ) : (
-            <span className="text-muted-foreground">None</span>
-          )}
-        </Fact>
-        <Fact label="Chat">
-          {yell.conversationId ? (
-            <Link
-              href={`/chat/${yell.conversationId}`}
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              Open
-              <span className="sr-only"> investigation chat</span>
-            </Link>
           ) : (
             <span className="text-muted-foreground">None</span>
           )}

@@ -7,16 +7,12 @@ import {
   useState,
 } from "react";
 import { useGuardrailsArena } from "./__arena__/guardrails-arena";
-import { RequestWaterfall as V1 } from "./__arena__/v1";
-import { RequestWaterfall as V2 } from "./__arena__/v2";
-import { RequestWaterfall as V3 } from "./__arena__/v3";
-import { RequestWaterfall as V4 } from "./__arena__/v4";
-import { RequestWaterfall as V5 } from "./__arena__/v5";
+import { RequestWaterfall as N1 } from "./__arena__/n1";
+import { RequestWaterfall as N2 } from "./__arena__/n2";
+import { RequestWaterfall as N3 } from "./__arena__/n3";
+import { RequestWaterfall as N4 } from "./__arena__/n4";
 import { RequestWaterfall as V6 } from "./__arena__/v6";
-import { RequestWaterfall as V7 } from "./__arena__/v7";
 import { RequestWaterfall as V8 } from "./__arena__/v8";
-import { RequestWaterfall as V9 } from "./__arena__/v9";
-import { RequestWaterfall as V10 } from "./__arena__/v10";
 import { RequestWaterfall } from "./request-waterfall";
 
 export {
@@ -24,8 +20,9 @@ export {
   GuardrailsArenaProvider,
 } from "./__arena__/guardrails-arena";
 
-const VARIANTS = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
-const STORAGE_KEY = "design-arena:guardrails-2";
+const VARIANTS = [N1, N2, N3, N4, V6, V8];
+const LABELS = ["A", "B", "C", "D", "old 6", "old 8"];
+const STORAGE_KEY = "design-arena:guardrails-3";
 
 export function ArenaWaterfall(props: ComponentProps<typeof RequestWaterfall>) {
   const { guardrails, selectedConsultKey, selectConsult, selectSpan } =
@@ -76,7 +73,7 @@ function DesignArena({
     <div className="space-y-2">
       <div className="inline-flex flex-wrap items-center gap-1 rounded-md border bg-muted/40 px-2 py-1 text-xs">
         <span className="pr-1 text-muted-foreground">Prototype</span>
-        {["Current", ...variants.map((_, i) => `${i + 1}`)].map((label, i) => (
+        {["Current", ...LABELS.slice(0, variants.length)].map((label, i) => (
           <button
             key={label}
             type="button"

@@ -103,7 +103,7 @@ test("a long conversation opens on its end and mounts earlier messages on scroll
   await page
     .getByRole("button", { name: /Show earlier messages/ })
     .first()
-    .click();
+    .press("Enter");
   await expect(page.locator(MESSAGE)).toHaveCount(90);
 
   await page.goto(`/chat/${conversation.id}#message-%`);

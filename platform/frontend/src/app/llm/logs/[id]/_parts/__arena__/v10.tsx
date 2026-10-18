@@ -1,25 +1,22 @@
 "use client";
 // design-arena: do not commit
+import { DecisionIcon } from "./guardrails-arena";
 import {
   AUDIENCE_TONE,
-  type ConsultDecision,
   DECISION_TONE,
   type GuardrailsData,
   type LabelSegment,
+  type LabelState,
   type MockConsult,
   ROLE_LABEL,
   TRUST_TONE,
+  type Trust,
 } from "./guardrails-mock";
 
 import {
-  ArrowRight,
   CornerDownRight,
-  type LucideIcon,
   MessageSquareText,
-  Shield,
-  ShieldAlert,
   ShieldCheck,
-  ShieldX,
 } from "lucide-react";
 import {
   type KeyboardEvent,
@@ -55,6 +52,7 @@ import { formatDate } from "@/lib/utils/date-time";
 import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
+  type InteractionSummary,
   type RequestSpan,
   requestLabel,
   SPAN_KINDS,
@@ -109,9 +107,18 @@ export function RequestWaterfall({
   emptyMessage = "No requests recorded for this session yet.",
   revealHighlighted = true,
   guardrails = null,
+  selectedConsultKey = null,
+  onSelectConsult,
 }: {
   /** Mock OpenAPPA consults + label timeline (arena only). */
   guardrails?: GuardrailsData | null;
+  /** The consult open in the details pane below, if any. */
+  selectedConsultKey?: string | null;
+  /**
+   * Opens a consult in the details pane below (and selects its tool call).
+   * Null closes it.
+   */
+  onSelectConsult?: (key: string | null) => void;
   timeline: Timeline | null;
   loading: boolean;
   profileName: string | null;
@@ -170,6 +177,22 @@ export function RequestWaterfall({
     return counts;
   }, [spans]);
 
+  const guard = useMemo(
+    () => buildGuardIndex(guardrails, spans),
+    [guardrails, spans],
+  );
+  const rowGuard = (span: TimelineSpan): RowGuard | null =>
+    guard
+      ? {
+          label: guard.labelAt(span.start),
+          change: guard.changeByRow.get(span.key) ?? null,
+          consults: guard.consultsByTool.get(span.key) ?? [],
+          selectedConsultKey,
+          onSelectConsult: (key) => onSelectConsult?.(key),
+          onSelectRow: onSelect,
+        }
+      : null;
+
   const pageTotals = useMemo(() => {
     let tokens = 0;
     let billed = 0;
@@ -181,48 +204,6 @@ export function RequestWaterfall({
     }
     return { tokens, billed };
   }, [spans]);
-
-  // Guardrails: consults grouped onto the tool call they were raised for, the
-  // label segments this page covers, and the label in force at its end.
-  const guard = useMemo(() => {
-    if (!guardrails || spans.length === 0) return null;
-    const byTool = new Map<string, MockConsult[]>();
-    for (const consult of guardrails.consults) {
-      if (!consult.toolCallKey) continue;
-      const list = byTool.get(consult.toolCallKey) ?? [];
-      list.push(consult);
-      byTool.set(consult.toolCallKey, list);
-    }
-    const pageStart = Math.min(...spans.map((span) => span.start));
-    const pageEnd = Math.max(...spans.map((span) => span.end));
-    const segments = guardrails.labels.filter(
-      (seg) => seg.end > pageStart && seg.start < pageEnd && seg.w > 0,
-    );
-    return {
-      byTool,
-      segments,
-      current: guardrails.labelAt(pageEnd - 1),
-      changes: segments.filter((seg) => seg.cause && seg.start >= pageStart)
-        .length,
-    };
-  }, [guardrails, spans]);
-
-  /** A ribbon segment's click: its first row lands at the top of the list. */
-  const jumpToSegment = (seg: LabelSegment) => {
-    const target =
-      spans.find((span) => span.start >= seg.start && span.start < seg.end) ??
-      spans.find((span) => span.end > seg.start);
-    const scroller = scrollerRef.current;
-    const row = target ? rowRefs.current.get(target.key) : undefined;
-    if (!target || !scroller || !row) return;
-    const top =
-      row.getBoundingClientRect().top -
-      scroller.getBoundingClientRect().top +
-      scroller.scrollTop;
-    scroller.scrollTo({ top: top - COLUMN_HEADER_PX, behavior: "smooth" });
-    onSelect(target.key);
-    row.focus({ preventScroll: true });
-  };
 
   // Keep the selection in view inside the list when it changes from outside
   // it (the details pane's stepper, a page change landing on a new default,
@@ -335,26 +316,35 @@ export function RequestWaterfall({
                 </li>
               ))}
             {guard ? (
-              <li className="inline-flex items-center gap-1.5">
-                <ShieldCheck
-                  className="size-3 text-muted-foreground"
-                  strokeWidth={2}
-                  aria-hidden="true"
-                />
-                <span>Guarded</span>
-                <span className="text-muted-foreground/70 tabular-nums">
-                  {guard.byTool.size}
-                </span>
-              </li>
+              <>
+                {/* Plain words for the two guardrail marks; the colours
+                    never stand alone. */}
+                <li className="hidden items-center gap-1.5 lg:inline-flex">
+                  <ShieldCheck
+                    className="size-3.5 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <span>Guardrail checks</span>
+                  <span className="text-muted-foreground/70 tabular-nums">
+                    {guard.consultCount}
+                  </span>
+                </li>
+                <li className="hidden items-center gap-1.5 lg:inline-flex">
+                  <span>Left edge:</span>
+                  <span
+                    className={cn("h-3 w-1 rounded-full", GUTTER.trusted)}
+                    aria-hidden="true"
+                  />
+                  <span>Trusted</span>
+                  <span
+                    className={cn("h-3 w-1 rounded-full", GUTTER.suspicious)}
+                    aria-hidden="true"
+                  />
+                  <span>Suspicious</span>
+                </li>
+              </>
             ) : null}
           </ul>
-          {guard ? (
-            <LabelBadge
-              trust={guard.current.trust}
-              audience={guard.current.audience}
-              changes={guard.changes}
-            />
-          ) : null}
           <span className="hidden items-center gap-1 text-[11px] text-muted-foreground xl:inline-flex">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>
@@ -464,6 +454,19 @@ export function RequestWaterfall({
                       style={{ left: `${b.x * 100}%`, width: `${b.w * 100}%` }}
                     />
                   ))}
+                  {/* Where the label switched: a faint line down the whole
+                      list at the exact time, so the switch reads across
+                      rows, not only on its own. */}
+                  {guard?.changes.map((change) => (
+                    <span
+                      key={`label-change-${change.segment.start}`}
+                      className={cn(
+                        "absolute inset-y-0 hidden w-px opacity-30 lg:block",
+                        change.tone.bar,
+                      )}
+                      style={{ left: `${change.segment.x * 100}%` }}
+                    />
+                  ))}
                   {selected ? (
                     <>
                       <span
@@ -501,6 +504,7 @@ export function RequestWaterfall({
                     },
                     onSelect: () => onSelect(span.key),
                     onOpen: () => onOpen(span),
+                    guard: rowGuard(span),
                   };
                   return span.type === "request" ? (
                     <RequestRow
@@ -515,7 +519,6 @@ export function RequestWaterfall({
                       key={span.key}
                       span={span}
                       display={serverDisplayByName.get(span.call.mcpServerName)}
-                      consults={guard?.byTool.get(span.key)}
                       {...rowProps}
                     />
                   );
@@ -526,26 +529,31 @@ export function RequestWaterfall({
         </div>
       </div>
 
-      {/* Status bar, with the label ribbon above the totals when
-          guardrails are on. */}
-      <div className="border-t bg-muted/40">
-        {guard && guardrails && timeline ? (
-          <LabelRibbon
-            layout={layout}
-            segments={guard.segments}
-            consults={guardrails.consults}
-            breaks={timeline.breaks}
-            selected={selected}
-            onJump={jumpToSegment}
-          />
-        ) : null}
-        <div className="flex h-11 items-center justify-between gap-3 overflow-hidden px-4 text-xs whitespace-nowrap text-muted-foreground tabular-nums lg:h-[45px]">
-          {status ? (
-            <span className="flex min-w-0 items-center gap-x-3 overflow-hidden lg:gap-x-2">
-              {status}
-            </span>
-          ) : (
-            <>
+      {/* Status bar */}
+      <div className="flex h-11 items-center justify-between gap-3 overflow-hidden border-t bg-muted/40 px-4 text-xs whitespace-nowrap text-muted-foreground tabular-nums lg:h-[45px]">
+        {status ? (
+          <span className="flex min-w-0 items-center gap-x-3 overflow-hidden lg:gap-x-2">
+            {status}
+          </span>
+        ) : (
+          <>
+            {guard ? (
+              <span className="flex min-w-0 items-center gap-x-2 overflow-hidden">
+                <StatusText
+                  requests={spans.length - kindCounts.tool}
+                  toolCalls={kindCounts.tool}
+                  tokens={pageTotals.tokens}
+                  billed={pageTotals.billed}
+                  timeline={timeline}
+                  compact
+                />
+                <LabelSummary
+                  guard={guard}
+                  selectedKey={selectedKey}
+                  onSelect={onSelect}
+                />
+              </span>
+            ) : (
               <StatusText
                 requests={spans.length - kindCounts.tool}
                 toolCalls={kindCounts.tool}
@@ -553,17 +561,17 @@ export function RequestWaterfall({
                 billed={pageTotals.billed}
                 timeline={timeline}
               />
-              {pagination && pagination.total > pagination.pageSize ? (
-                <StatusBarPagination
-                  pageIndex={pagination.pageIndex}
-                  pageSize={pagination.pageSize}
-                  total={pagination.total}
-                  onPaginationChange={pagination.onPaginationChange}
-                />
-              ) : null}
-            </>
-          )}
-        </div>
+            )}
+            {pagination && pagination.total > pagination.pageSize ? (
+              <StatusBarPagination
+                pageIndex={pagination.pageIndex}
+                pageSize={pagination.pageSize}
+                total={pagination.total}
+                onPaginationChange={pagination.onPaginationChange}
+              />
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );
@@ -611,7 +619,7 @@ type Layout = "trace" | "tools";
 // display:none there, so it takes no grid track.
 const GRIDS: Record<Layout, string> = {
   trace:
-    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_104px_84px]",
+    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_72px_84px]",
   tools:
     "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_84px]",
 };
@@ -648,12 +656,15 @@ function StatusText({
   tokens,
   billed,
   timeline,
+  compact = false,
 }: {
   requests: number;
   toolCalls: number;
   tokens: number;
   billed: number;
   timeline: Timeline | null;
+  /** Leave room for the label summary: span and idle only on 2xl. */
+  compact?: boolean;
 }) {
   // Phones keep the request count and the bill beside the paging (tokens
   // and the span are in the facts card); separators only exist where it is
@@ -716,6 +727,9 @@ function StatusText({
           className={cn(
             "items-center gap-2",
             part.wideOnly ? "hidden lg:inline-flex" : "inline-flex",
+            compact &&
+              (part.key === "span" || part.key === "idle" || part.key === "tokens") &&
+              "lg:hidden 2xl:inline-flex",
           )}
         >
           {index > 0 ? (
@@ -738,6 +752,8 @@ type RowProps = {
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
   onOpen: () => void;
+  /** The row's label, label change and guardrail checks (arena only). */
+  guard: RowGuard | null;
 };
 
 /** One row's frame and track; the cells around the track vary by kind. */
@@ -750,6 +766,7 @@ function RowShell({
   buttonRef,
   onSelect,
   onOpen,
+  guard,
   name,
   detail,
   time,
@@ -772,25 +789,65 @@ function RowShell({
   const grid = GRIDS[layout];
   const tools = layout === "tools";
   const latencyPlacement = placeLatency(span);
+  // A row with checks or a label change lays its own track out (chips,
+  // duration and the change in one cluster beside the bar), so the plain
+  // latency label steps aside for it.
+  const decorated =
+    guard !== null && (guard.consults.length > 0 || guard.change !== null);
+  const latencyInButton = !decorated || latencyPlacement === "inside";
+  const change = guard?.change ?? null;
   return (
-    <li>
+    <li className={guard ? "relative" : undefined}>
       <UnstyledButton
         ref={buttonRef}
         tabIndex={selected ? 0 : -1}
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
         onDoubleClick={onOpen}
-        aria-label={label}
+        aria-label={
+          guard
+            ? `${label}, label ${labelName(guard.label)}${change ? `, ${change.long}` : ""}`
+            : label
+        }
         className={cn(
           "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",
           grid,
+          guard && "relative",
           selected
-            ? "bg-primary/[0.07] shadow-[inset_2px_0_0_var(--color-primary)]"
+            ? guard
+              ? // The label edge covers the first 4px; the selection mark
+                // shows beside it.
+                "bg-primary/[0.07] shadow-[inset_6px_0_0_var(--color-primary)]"
+              : "bg-primary/[0.07] shadow-[inset_2px_0_0_var(--color-primary)]"
             : "hover:bg-muted/50",
           highlighted && "ring-2 ring-primary/50 ring-inset",
           "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset",
         )}
       >
+        {/* The label edge: the session's label when this row started, one
+            contiguous ribbon down the list. A dot marks the row that moved
+            it. */}
+        {guard ? (
+          <>
+            <span
+              aria-hidden="true"
+              title={`Label: ${labelName(guard.label)}`}
+              className={cn(
+                "absolute top-0 -bottom-px left-0 w-1",
+                GUTTER[guard.label.trust],
+              )}
+            />
+            {change ? (
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "absolute top-1/2 left-0 size-2.5 -translate-y-1/2 rounded-full ring-2 ring-card",
+                  change.tone.bar,
+                )}
+              />
+            ) : null}
+          </>
+        ) : null}
         {/* Name over its detail line: model or server, then the clock
             time (phones show the latency there instead, having no axis
             labels). One rail in the kind's colour spans both lines. */}
@@ -819,6 +876,18 @@ function RowShell({
                 selected ? "text-foreground/70" : "text-muted-foreground",
               )}
             >
+              {/* Phones: the track is too narrow for the change marker, so
+                  the change is said in words on the row's second line. */}
+              {change ? (
+                <span
+                  className={cn(
+                    "shrink-0 rounded-sm bg-current/10 px-1 text-[10px] leading-4 font-semibold lg:hidden",
+                    change.tone.text,
+                  )}
+                >
+                  {change.phone}
+                </span>
+              ) : null}
               {detail}
               <span
                 aria-hidden="true"
@@ -852,7 +921,7 @@ function RowShell({
               width: `max(5px, ${span.w * 100}%)`,
             }}
           />
-          {latency && !tools ? (
+          {latency && !tools && latencyInButton ? (
             <span
               role="img"
               aria-label={latency.label}
@@ -883,7 +952,7 @@ function RowShell({
           <span
             className={cn(
               WIDE_ONLY,
-              "items-center justify-end gap-1 px-3 text-muted-foreground tabular-nums",
+              "items-center justify-end px-3 text-muted-foreground tabular-nums",
             )}
           >
             {tokens}
@@ -891,7 +960,13 @@ function RowShell({
         )}
 
         {/* Cost, or a tool call's duration */}
-        <span className="flex items-center justify-end gap-1.5 pr-4 tabular-nums">
+        <span
+          className={cn(
+            "flex items-center justify-end gap-1.5 pr-4 tabular-nums",
+            // Phones put the row's shield chip here instead of the dash.
+            !tools && guard && guard.consults.length > 0 && "max-lg:invisible",
+          )}
+        >
           {tools ? (
             <span className={cn(!selected && "text-muted-foreground")}>
               {latency?.text ?? "—"}
@@ -901,6 +976,15 @@ function RowShell({
           )}
         </span>
       </UnstyledButton>
+      {guard && decorated ? (
+        <RowGuardOverlay
+          span={span}
+          layout={layout}
+          selected={selected}
+          guard={guard}
+          latency={latencyInButton ? null : latency}
+        />
+      ) : null}
     </li>
   );
 }
@@ -978,18 +1062,7 @@ function RequestRow({
           ? { text: latency, label: `Total request latency: ${latency}` }
           : null
       }
-      tokens={
-        <>
-          <span>{formatCompactNumber(row.inputTokens ?? 0)}</span>
-          <ArrowRight
-            className="size-3 text-muted-foreground/50"
-            aria-hidden="true"
-          />
-          <span className="text-foreground/80">
-            {formatCompactNumber(row.outputTokens ?? 0)}
-          </span>
-        </>
-      }
+      tokens={<TokensStack row={row} />}
       cost={
         // On a plan the figure is list price, never billed: dimmed with a
         // hollow mark, which fits the column where a chip did not.
@@ -1019,13 +1092,10 @@ function RequestRow({
 function ToolCallRow({
   span,
   display,
-  consults,
   ...rowProps
 }: RowProps & {
   span: ToolCallSpan;
   display: McpServerDisplay | undefined;
-  /** Guardrail consults raised for this call, gate and result alike. */
-  consults?: MockConsult[];
 }) {
   const { call } = span;
   const content = readMcpToolCall(call);
@@ -1046,11 +1116,7 @@ function ToolCallRow({
     <RowShell
       span={span}
       {...rowProps}
-      label={`${content.method === "tools/call" ? "Tool call" : "Method"} ${name} on ${server}, ${latency}${outcome}${
-        consults?.length
-          ? `, guarded: ${DECISION_TONE[strongestDecision(consults)].label.toLowerCase()}`
-          : ""
-      }`}
+      label={`${content.method === "tools/call" ? "Tool call" : "Method"} ${name} on ${server}, ${latency}${outcome}`}
       name={
         <>
           <span className="truncate font-mono text-[12px] font-medium">
@@ -1058,7 +1124,6 @@ function ToolCallRow({
           </span>
           <McpCallChip method={content.method} />
           {marked ? <McpToolCallStatusIcon status={status} /> : null}
-          {consults?.length ? <GuardShield consults={consults} /> : null}
         </>
       }
       detail={
@@ -1129,180 +1194,386 @@ function WaterfallSkeleton({ layout }: { layout: Layout }) {
   );
 }
 
-// ============================================================================
-// Guardrails (arena)
-// ============================================================================
-
-/** Most consequential first: the shield takes the strongest decision's tint. */
-const DECISION_RANK: ConsultDecision[] = [
-  "blocked",
-  "redacted",
-  "approved",
-  "labeled",
-  "allowed",
-];
-const DECISION_ICON: Record<ConsultDecision, LucideIcon> = {
-  blocked: ShieldX,
-  redacted: ShieldAlert,
-  approved: ShieldCheck,
-  labeled: Shield,
-  allowed: ShieldCheck,
-};
-/** Routine outcomes stay quiet so the notable ones read at a glance. */
-const QUIET_DECISIONS = new Set<ConsultDecision>(["allowed", "labeled"]);
-
-const RIBBON_GRIDS: Record<Layout, string> = {
-  trace:
-    "grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_188px]",
-  tools:
-    "grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_84px]",
-};
-
-function strongestDecision(consults: MockConsult[]): ConsultDecision {
-  return (
-    DECISION_RANK.find((d) => consults.some((c) => c.decision === d)) ??
-    "allowed"
-  );
-}
-
-function clock(ms: number) {
-  return formatDate({
-    date: new Date(ms).toISOString(),
-    dateFormat: "HH:mm:ss",
-  });
-}
-
-/** A guarded tool call's mark beside its name; the consults are its tooltip. */
-function GuardShield({ consults }: { consults: MockConsult[] }) {
-  const decision = strongestDecision(consults);
-  const Icon = DECISION_ICON[decision];
+/**
+ * Output on top, the figure that varies most from request to request, with
+ * the input under it, labeled, in the name cell's two-line rhythm. Exact
+ * counts and the cache split are on hover.
+ */
+function TokensStack({ row }: { row: InteractionSummary }) {
+  const lines = [
+    { label: "Output", value: row.outputTokens },
+    { label: "Input", value: row.inputTokens },
+    { label: "Cache read", value: row.cacheReadTokens, minor: true },
+    { label: "Cache write", value: row.cacheWriteTokens, minor: true },
+  ].filter((line) => !line.minor || line.value);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center",
-            DECISION_TONE[decision].text,
-            QUIET_DECISIONS.has(decision) && "opacity-60",
-          )}
-        >
-          <Icon className="size-3" strokeWidth={2.25} aria-hidden="true" />
+        <span className="flex flex-col items-end leading-tight tabular-nums">
+          <span className="text-[13px] text-foreground/90">
+            {formatCompactNumber(row.outputTokens ?? 0)}
+          </span>
+          <span className="flex items-baseline gap-1 text-[10px] text-muted-foreground/70">
+            <span className="text-[9px] tracking-wide uppercase">in</span>
+            {formatCompactNumber(row.inputTokens ?? 0)}
+          </span>
         </span>
       </TooltipTrigger>
-      <TooltipContent
-        side="bottom"
-        align="start"
-        className="w-[300px] px-0 py-0 text-left"
-      >
-        <div className="flex items-center justify-between border-b px-3 py-1.5 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">Guardrails</span>
-          <span className="tabular-nums">
-            {consults.length} {consults.length === 1 ? "consult" : "consults"}
-          </span>
-        </div>
-        <ol className="divide-y divide-border/60">
-          {consults.map((consult) => (
-            <li key={consult.key} className="grid gap-0.5 px-3 py-1.5">
-              <span className="flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    "shrink-0 rounded-sm px-1 text-[10px] leading-4 font-medium",
-                    DECISION_TONE[consult.decision].chip,
-                  )}
-                >
-                  {DECISION_TONE[consult.decision].label}
-                </span>
-                <span className="min-w-0 truncate font-medium">
-                  {consult.externalName}
-                </span>
-                <span className="ml-auto shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                  {formatLatency(consult.durationMs)}
-                </span>
-              </span>
-              <span className="truncate text-[11px] text-muted-foreground">
-                {ROLE_LABEL[consult.role]},{" "}
-                {consult.beforeCall ? "before the call" : "on the result"}
-                {consult.outcome !== "answered" ? (
-                  <span className="text-amber-700 dark:text-amber-300">
-                    {consult.outcome === "timeout" ? ", timed out" : ", failed"}
-                  </span>
-                ) : null}
-              </span>
-              <span className="truncate font-mono text-[11px] text-foreground/80">
-                {consult.answer}
-              </span>
-            </li>
+      <TooltipContent side="left" className="tabular-nums">
+        <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5">
+          {lines.map((line) => (
+            <div
+              key={line.label}
+              className={cn("contents", line.minor && "opacity-70")}
+            >
+              <dt>{line.label}</dt>
+              <dd className="text-right">
+                {(line.value ?? 0).toLocaleString()}
+              </dd>
+            </div>
           ))}
-        </ol>
+        </dl>
       </TooltipContent>
     </Tooltip>
   );
 }
 
-/** The toolbar's compact readout of the label in force at the page's end. */
-function LabelBadge({
-  trust,
-  audience,
-  changes,
-}: Pick<LabelSegment, "trust" | "audience"> & { changes: number }) {
+// ============================================================================
+// Guardrails (arena): label edge, change markers, shield chips, status summary
+// ============================================================================
+
+type LabelChange = {
+  /** The segment the change opened. */
+  segment: LabelSegment;
+  /** The row that carries the marker: the cause, or the first row after it. */
+  anchorKey: string | null;
+  /** The check that set the label, when one did. */
+  consult: MockConsult | null;
+  /** "Trust → Suspicious", "Reset → Trusted · Public". */
+  long: string;
+  /** "→ Suspicious", for the status bar. */
+  short: string;
+  /** The phone row's second-line note. */
+  phone: string;
+  tone: { text: string; bar: string };
+};
+
+type GuardIndex = {
+  consultsByTool: Map<string, MockConsult[]>;
+  changes: LabelChange[];
+  changeByRow: Map<string, LabelChange>;
+  first: LabelState;
+  consultCount: number;
+  labelAt: (ms: number) => LabelState;
+};
+
+type RowGuard = {
+  label: LabelState;
+  change: LabelChange | null;
+  consults: MockConsult[];
+  selectedConsultKey: string | null;
+  onSelectConsult: (key: string) => void;
+  onSelectRow: (key: string) => void;
+};
+
+const GUTTER: Record<Trust, string> = {
+  trusted: "bg-emerald-500/45 dark:bg-emerald-400/40",
+  suspicious: "bg-rose-500 dark:bg-rose-400",
+};
+
+function labelName(state: LabelState): string {
+  return `${TRUST_TONE[state.trust].label} · ${AUDIENCE_TONE[state.audience].label}`;
+}
+
+function buildGuardIndex(
+  guardrails: GuardrailsData | null,
+  spans: TimelineSpan[],
+): GuardIndex | null {
+  if (!guardrails) return null;
+  const keys = new Set(spans.map((span) => span.key));
+  const consultsByTool = new Map<string, MockConsult[]>();
+  for (const consult of guardrails.consults) {
+    if (!consult.toolCallKey || !keys.has(consult.toolCallKey)) continue;
+    const list = consultsByTool.get(consult.toolCallKey) ?? [];
+    list.push(consult);
+    consultsByTool.set(consult.toolCallKey, list);
+  }
+
+  const changes: LabelChange[] = [];
+  guardrails.labels.forEach((segment, index) => {
+    const from = guardrails.labels[index - 1];
+    const cause = segment.cause;
+    if (!from || !cause) return;
+    const reset = cause.kind === "reset";
+    const trustMoved = segment.trust !== from.trust;
+    const audienceMoved = segment.audience !== from.audience;
+    if (!reset && !trustMoved && !audienceMoved) return;
+    const trust = TRUST_TONE[segment.trust];
+    const audience = AUDIENCE_TONE[segment.audience];
+    const words = [
+      trustMoved ? `Trust → ${trust.label}` : null,
+      audienceMoved ? `Audience → ${audience.label}` : null,
+    ].filter((word): word is string => word !== null);
+    const long = reset ? `Reset → ${labelName(segment)}` : words.join(", ");
+    const anchorKey =
+      cause.toolCallKey && keys.has(cause.toolCallKey)
+        ? cause.toolCallKey
+        : (spans.find((span) => span.start >= segment.start)?.key ?? null);
+    changes.push({
+      segment,
+      anchorKey,
+      consult:
+        guardrails.consults.find((c) => c.key === cause.consultKey) ?? null,
+      long,
+      short: reset
+        ? `↺ ${labelName(segment)}`
+        : `→ ${[trustMoved ? trust.label : null, audienceMoved ? audience.label : null].filter(Boolean).join(" · ")}`,
+      phone: reset ? "Label reset" : long,
+      tone:
+        reset || trustMoved
+          ? { text: trust.text, bar: trust.bar }
+          : { text: audience.text, bar: audience.bar },
+    });
+  });
+
+  const changeByRow = new Map<string, LabelChange>();
+  for (const change of changes) {
+    if (change.anchorKey) changeByRow.set(change.anchorKey, change);
+  }
+  return {
+    consultsByTool,
+    changes,
+    changeByRow,
+    first: guardrails.labels[0] ?? { trust: "trusted", audience: "public" },
+    consultCount: guardrails.consults.length,
+    labelAt: guardrails.labelAt,
+  };
+}
+
+/**
+ * The interactive layer over a decorated row, a sibling of the row button
+ * (buttons cannot nest): shield chips beside the bar, the duration, the
+ * label change marker at its exact time, and on phones one shield chip in
+ * the last column.
+ */
+function RowGuardOverlay({
+  span,
+  layout,
+  selected,
+  guard,
+  latency,
+}: {
+  span: TimelineSpan;
+  layout: Layout;
+  selected: boolean;
+  guard: RowGuard;
+  /** Set when the overlay, not the row, places the duration. */
+  latency: { text: string; label: string } | null;
+}) {
+  const tools = layout === "tools";
+  const { consults, change } = guard;
+  const placement = placeLatency(span);
+  const end = span.x + span.w;
+  const before = consults.filter((c) => c.beforeCall);
+  const after = consults.filter((c) => !c.beforeCall);
+  // Phones' compressed track has no room; the tools layout's track is the
+  // widest cell it has, so it keeps them.
+  const shown = tools ? "flex" : "hidden lg:flex";
+  const chip = (consult: MockConsult) => (
+    <ConsultChip
+      key={consult.key}
+      consult={consult}
+      selected={consult.key === guard.selectedConsultKey}
+      onSelect={guard.onSelectConsult}
+    />
+  );
+  const duration =
+    latency && !tools ? (
+      <span
+        role="img"
+        aria-label={latency.label}
+        className={cn(
+          "px-0.5 text-[11px] whitespace-nowrap tabular-nums",
+          selected ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {latency.text}
+      </span>
+    ) : null;
+  const pill = change ? <ChangePill change={change} guard={guard} /> : null;
+  const leftOf = (children: ReactNode) => (
+    <span
+      className={cn(
+        shown,
+        "pointer-events-none absolute top-1/2 -translate-y-1/2 items-center gap-1",
+      )}
+      style={{ right: `calc(${(1 - span.x) * 100}% + 4px)` }}
+    >
+      {children}
+    </span>
+  );
+  const rightOf = (children: ReactNode) => (
+    <span
+      className={cn(
+        shown,
+        "pointer-events-none absolute top-1/2 -translate-y-1/2 items-center gap-1",
+      )}
+      style={{
+        left: `calc(max(${end * 100}%, ${span.x * 100}% + 5px) + 4px)`,
+      }}
+    >
+      {children}
+    </span>
+  );
+  const roomAfter = end <= 0.93;
+  const primary =
+    consults.find((c) => c.key === guard.selectedConsultKey) ??
+    consults.find((c) => c.decision === "blocked") ??
+    consults.find((c) => c.outcome !== "answered") ??
+    consults[0];
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-0 grid",
+        GRIDS[layout],
+      )}
+    >
+      <div />
+      <div className="relative mx-2 lg:mx-3">
+        {change ? (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "absolute inset-y-1.5 w-0.5 -translate-x-1/2 rounded-full",
+              tools ? "block" : "hidden lg:block",
+              change.tone.bar,
+            )}
+            style={{ left: `${change.segment.x * 100}%` }}
+          />
+        ) : null}
+        {placement === "after" ? (
+          <>
+            {before.length > 0 ? leftOf(before.map(chip)) : null}
+            {rightOf(
+              <>
+                {after.map(chip)}
+                {duration}
+                {pill}
+              </>,
+            )}
+          </>
+        ) : placement === "before" ? (
+          <>
+            {leftOf(
+              <>
+                {pill}
+                {duration}
+                {before.map(chip)}
+                {roomAfter ? null : after.map(chip)}
+              </>,
+            )}
+            {roomAfter && after.length > 0 ? rightOf(after.map(chip)) : null}
+          </>
+        ) : (
+          <>
+            {consults.length > 0 ? leftOf(consults.map(chip)) : null}
+            {pill ? (
+              <span
+                className={cn(
+                  shown,
+                  "pointer-events-none absolute top-1/2 -translate-y-1/2",
+                )}
+                style={
+                  change && change.segment.x > 0.72
+                    ? { right: `calc(${(1 - change.segment.x) * 100}% + 5px)` }
+                    : { left: `calc(${(change?.segment.x ?? 0) * 100}% + 5px)` }
+                }
+              >
+                {pill}
+              </span>
+            ) : null}
+          </>
+        )}
+      </div>
+      {tools ? null : <div className="hidden lg:block" />}
+      <div className="flex items-center justify-end pr-3">
+        {!tools && primary ? (
+          <span className="flex lg:hidden">
+            <ConsultChip
+              consult={primary}
+              count={consults.length}
+              selected={consults.some(
+                (c) => c.key === guard.selectedConsultKey,
+              )}
+              onSelect={guard.onSelectConsult}
+            />
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One guardrail check on a tool call: a shield in a 20px circle, coloured
+ * only when it blocked or failed to answer. Opens the check below.
+ */
+function ConsultChip({
+  consult,
+  selected,
+  onSelect,
+  count = 1,
+}: {
+  consult: MockConsult;
+  selected: boolean;
+  onSelect: (key: string) => void;
+  /** Phones show one chip for all of a call's checks. */
+  count?: number;
+}) {
+  const decision = DECISION_TONE[consult.decision];
+  const when = consult.beforeCall ? "before the call" : "on the result";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: the tooltip needs a focus target
-          tabIndex={0}
-          aria-label={`Session label: ${TRUST_TONE[trust].label}, ${AUDIENCE_TONE[audience].label}`}
-          className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[4px] border bg-card px-1.5 text-[11px] leading-none whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        <UnstyledButton
+          onClick={() => onSelect(consult.key)}
+          aria-pressed={selected}
+          aria-label={`Guardrail check: ${ROLE_LABEL[consult.role]} ${consult.externalName}, ${decision.label.toLowerCase()} ${when}${count > 1 ? `, ${count} checks` : ""}. Open details`}
+          className={cn(
+            "pointer-events-auto relative inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border bg-card shadow-xs outline-none transition-colors",
+            "hover:border-foreground/40 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60",
+            consult.decision === "blocked"
+              ? "border-rose-500/60"
+              : consult.outcome !== "answered"
+                ? "border-amber-500/60"
+                : "border-border",
+            selected &&
+              "border-primary bg-primary/15 ring-2 ring-primary/40 hover:border-primary hover:bg-primary/20",
+          )}
         >
-          <span
-            aria-hidden="true"
-            className={cn("size-1.5 rounded-full", TRUST_TONE[trust].bar)}
+          <DecisionIcon
+            consult={consult}
+            className={cn(selected && "text-primary")}
           />
-          <span className={cn("font-medium", TRUST_TONE[trust].text)}>
-            {TRUST_TONE[trust].label}
-          </span>
-          <span aria-hidden="true" className="h-2.5 w-px bg-border" />
-          <span className={AUDIENCE_TONE[audience].text}>
-            {AUDIENCE_TONE[audience].label}
-          </span>
-        </span>
+          {count > 1 ? (
+            <span className="absolute -top-1.5 -right-1.5 min-w-3.5 rounded-full bg-foreground px-0.5 text-center text-[9px] leading-3.5 font-semibold text-background tabular-nums">
+              {count}
+            </span>
+          ) : null}
+        </UnstyledButton>
       </TooltipTrigger>
-      <TooltipContent side="bottom" align="end" className="w-60 text-left">
-        <p className="font-medium">Session label at the end of this page</p>
-        <p className="mt-0.5 text-muted-foreground">
-          {changes === 0
-            ? "Unchanged on this page."
-            : `Changed ${changes} ${changes === 1 ? "time" : "times"} on this page. The ribbon above the totals shows when.`}
-        </p>
-        <div className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1 text-[11px]">
-          <span className="text-muted-foreground">Trust</span>
-          <span className="flex flex-wrap gap-x-2">
-            {(Object.keys(TRUST_TONE) as (keyof typeof TRUST_TONE)[]).map(
-              (t) => (
-                <span key={t} className="inline-flex items-center gap-1">
-                  <span
-                    className={cn("h-1 w-3 rounded-full", TRUST_TONE[t].bar)}
-                  />
-                  {TRUST_TONE[t].label}
-                </span>
-              ),
-            )}
+      <TooltipContent side="top" className="max-w-72">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium">
+            {ROLE_LABEL[consult.role]} · {consult.externalName}
+            {count > 1 ? ` (+${count - 1} more)` : ""}
           </span>
-          <span className="text-muted-foreground">Audience</span>
-          <span className="flex flex-wrap gap-x-2">
-            {(Object.keys(AUDIENCE_TONE) as (keyof typeof AUDIENCE_TONE)[]).map(
-              (a) => (
-                <span key={a} className="inline-flex items-center gap-1">
-                  <span
-                    className={cn(
-                      "h-[3px] w-3 rounded-full",
-                      AUDIENCE_TONE[a].bar,
-                    )}
-                  />
-                  {AUDIENCE_TONE[a].label}
-                </span>
-              ),
-            )}
+          <span>
+            {decision.label} {when} · {consult.answer}
+          </span>
+          <span className="opacity-70">
+            {formatLatency(consult.durationMs)} · Click for the check's details
           </span>
         </div>
       </TooltipContent>
@@ -1311,143 +1582,110 @@ function LabelBadge({
 }
 
 /**
- * The page's label over time, on the list's own axis: trust above, audience
- * below, consult ticks over it and the selection marked. A segment's click
- * brings its first row to the top of the list.
+ * The label change on its cause row, in words. Opens the check that set the
+ * label, or selects the row when no check did (a release, a reset).
  */
-function LabelRibbon({
-  layout,
-  segments,
-  consults,
-  breaks,
-  selected,
-  onJump,
+function ChangePill({
+  change,
+  guard,
 }: {
-  layout: Layout;
-  segments: LabelSegment[];
-  consults: MockConsult[];
-  breaks: Timeline["breaks"];
-  selected: TimelineSpan | null;
-  onJump: (seg: LabelSegment) => void;
+  change: LabelChange;
+  guard: RowGuard;
 }) {
-  const blocked = consults.filter((c) => c.decision === "blocked").length;
+  const { consult } = change;
+  const active = consult !== null && consult.key === guard.selectedConsultKey;
+  const open = () => {
+    if (consult) guard.onSelectConsult(consult.key);
+    else if (change.anchorKey) guard.onSelectRow(change.anchorKey);
+  };
   return (
-    <div
-      className={cn(
-        "grid h-7 border-b border-border/60 text-[11px] text-muted-foreground",
-        RIBBON_GRIDS[layout],
-      )}
-    >
-      <div className="hidden items-center gap-1.5 pl-4 lg:flex">
-        <Shield className="size-3" strokeWidth={2} aria-hidden="true" />
-        <span className="font-medium">Label</span>
-        <span className="text-muted-foreground/60">trust, audience</span>
-      </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          onClick={open}
+          aria-pressed={consult ? active : undefined}
+          aria-label={`${change.long}. ${change.segment.cause?.summary ?? ""}. ${consult ? "Open the check that set it" : "Select the call that caused it"}`}
+          className={cn(
+            "pointer-events-auto inline-flex h-5 shrink-0 cursor-pointer items-center gap-1 rounded-sm border border-current/30 bg-card px-1.5 text-[11px] leading-none font-medium whitespace-nowrap shadow-xs outline-none transition-colors",
+            "hover:border-current/60 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60",
+            change.tone.text,
+            active && "border-primary ring-2 ring-primary/40",
+          )}
+        >
+          {change.long}
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-72">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium">Label is now {labelName(change.segment)}</span>
+          <span>{change.segment.cause?.summary}</span>
+          <span className="opacity-70">
+            {consult
+              ? `Set by ${consult.externalName} · click for the check's details`
+              : "Click to select the call that caused it"}
+          </span>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
-      <div className="relative mx-4 lg:mx-3">
-        {/* Consult density: one hairline per consult, blocked ones in rose. */}
-        <div aria-hidden="true" className="absolute inset-x-0 top-[5px] h-1">
-          {consults.map((c) => (
-            <span
-              key={c.key}
+/**
+ * The status bar's label story: where it started, then each change as a
+ * link to the row that caused it.
+ */
+function LabelSummary({
+  guard,
+  selectedKey,
+  onSelect,
+}: {
+  guard: GuardIndex;
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}) {
+  const { changes, first } = guard;
+  return (
+    <span className="hidden min-w-0 items-center gap-1.5 overflow-hidden lg:inline-flex">
+      <span aria-hidden="true" className="h-3 w-px shrink-0 bg-border" />
+      <span className="shrink-0">Label:</span>
+      <span className="shrink-0 font-medium text-foreground/80">
+        {labelName(first)}
+      </span>
+      {changes.map((change) => (
+        <Tooltip key={`summary-${change.segment.start}`}>
+          <TooltipTrigger asChild>
+            <UnstyledButton
+              disabled={!change.anchorKey}
+              onClick={() => change.anchorKey && onSelect(change.anchorKey)}
+              aria-label={`${change.long}: select ${change.segment.cause?.toolName ?? "the row"}`}
               className={cn(
-                "absolute inset-y-0 w-px",
-                c.decision === "blocked"
-                  ? "bg-rose-500 dark:bg-rose-400"
-                  : "bg-foreground/25",
+                "shrink-0 cursor-pointer rounded-sm px-0.5 font-medium underline decoration-dotted decoration-1 underline-offset-[3px] outline-none transition-colors",
+                "hover:bg-accent hover:decoration-solid focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default",
+                change.tone.text,
+                change.anchorKey !== null &&
+                  change.anchorKey === selectedKey &&
+                  "bg-primary/10 decoration-solid",
               )}
-              style={{ left: `${c.x * 100}%` }}
-            />
-          ))}
-        </div>
-
-        <div className="absolute inset-x-0 top-[11px] h-[7px] overflow-hidden rounded-[2px]">
-          {segments.map((seg) => (
-            <Tooltip key={seg.start}>
-              <TooltipTrigger asChild>
-                <UnstyledButton
-                  onClick={() => onJump(seg)}
-                  aria-label={`${TRUST_TONE[seg.trust].label}, ${AUDIENCE_TONE[seg.audience].label}, from ${clock(seg.start)}. Jump to its first row`}
-                  className="absolute inset-y-0 flex flex-col gap-px border-l border-card opacity-80 outline-none transition-opacity duration-100 first:border-l-0 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
-                  style={{
-                    left: `${seg.x * 100}%`,
-                    width: `max(3px, ${seg.w * 100}%)`,
-                  }}
-                >
-                  <span
-                    className={cn("h-1 w-full", TRUST_TONE[seg.trust].bar)}
-                  />
-                  <span
-                    className={cn(
-                      "h-0.5 w-full",
-                      AUDIENCE_TONE[seg.audience].bar,
-                    )}
-                  />
-                </UnstyledButton>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="w-64 text-left">
-                <p className="flex items-center gap-1.5">
-                  <span
-                    className={cn("font-medium", TRUST_TONE[seg.trust].text)}
-                  >
-                    {TRUST_TONE[seg.trust].label}
-                  </span>
-                  <span aria-hidden="true" className="h-2.5 w-px bg-border" />
-                  <span className={AUDIENCE_TONE[seg.audience].text}>
-                    {AUDIENCE_TONE[seg.audience].label}
-                  </span>
-                  <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
-                    {clock(seg.start)} to {clock(seg.end)}
-                  </span>
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  {seg.cause ? seg.cause.summary : "Session start"}
-                  {seg.cause?.toolName ? (
-                    <span className="font-mono text-foreground/80">
-                      {" "}
-                      ({seg.cause.toolName})
-                    </span>
-                  ) : null}
-                </p>
-                <p className="mt-1 text-[11px] text-muted-foreground/70">
-                  Click to jump to its first row
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          ))}
-          {/* Folded idle stretches, as on the axis. */}
-          {breaks.map((b) => (
-            <span
-              key={`ribbon-fold-${b.x}`}
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 bg-[repeating-linear-gradient(135deg,transparent_0_2px,var(--color-card)_2px_3px)] opacity-70"
-              style={{ left: `${b.x * 100}%`, width: `${b.w * 100}%` }}
-            />
-          ))}
-        </div>
-
-        {selected ? (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute top-[3px] bottom-[3px] w-px bg-primary"
-            style={{ left: `${selected.x * 100}%` }}
-          />
-        ) : null}
-      </div>
-
-      <div className="hidden items-center justify-end gap-2 pr-4 tabular-nums lg:flex">
-        <span>
-          {consults.length} {consults.length === 1 ? "consult" : "consults"}
-        </span>
-        {blocked > 0 ? (
-          <>
-            <span aria-hidden="true" className="h-3 w-px bg-border" />
-            <span className="text-rose-700 dark:text-rose-300">
-              {blocked} blocked
-            </span>
-          </>
-        ) : null}
-      </div>
-    </div>
+            >
+              {change.short}
+            </UnstyledButton>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-72">
+            <div className="flex flex-col gap-0.5">
+              <span className="font-medium">{change.long}</span>
+              <span>{change.segment.cause?.summary}</span>
+              <span className="opacity-70">
+                {change.segment.cause?.toolName
+                  ? `Caused by ${change.segment.cause.toolName} · click to select it`
+                  : "Click to select the row"}
+              </span>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      ))}
+      <span className="shrink-0 text-muted-foreground/70">
+        ({changes.length} {changes.length === 1 ? "change" : "changes"})
+      </span>
+    </span>
   );
 }

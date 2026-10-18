@@ -55,6 +55,7 @@ export function ToolCallOverview({
   onStep,
   current = false,
   timing = "session",
+  checks,
   footer,
 }: {
   span: ToolCallSpan;
@@ -67,6 +68,8 @@ export function ToolCallOverview({
   onStep: (delta: number) => void;
   current?: boolean;
   timing?: "session" | "excerpt";
+  /** The guardrail checks the call went through, listed after its timing. */
+  checks?: ReactNode;
   /** Pinned below the facts, such as the MCP page's links row. */
   footer?: ReactNode;
 }) {
@@ -181,6 +184,7 @@ export function ToolCallOverview({
             ) : null}
           </dl>
         </OverviewSection>
+        {checks}
       </div>
 
       {footer ? <div className="border-t bg-card/70 p-3">{footer}</div> : null}

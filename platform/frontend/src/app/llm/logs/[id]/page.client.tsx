@@ -41,7 +41,11 @@ import {
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
 import { RequestDetails } from "./_parts/request-details";
-import { ArenaWaterfall } from "./_parts/__arena__"; // design-arena: do not commit
+import {
+  ArenaDetails,
+  ArenaWaterfall,
+  GuardrailsArenaProvider,
+} from "./_parts/__arena__"; // design-arena: do not commit
 import { RequestWaterfall } from "./_parts/request-waterfall";
 import { SessionFacts } from "./_parts/session-facts";
 import {
@@ -345,76 +349,81 @@ export default function SessionDetailPage({
             aria-label="Requests and request details"
             className="isolate overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
           >
-            <ArenaWaterfall
+            <GuardrailsArenaProvider
               timeline={timeline}
-              loading={interactionsLoading}
-              profileName={profileName}
-              serverDisplayByName={serverDisplayByName}
-              conversationRowId={
-                latestHasConversation ? conversationRowId : null
-              }
-              selectedKey={selected?.key ?? null}
-              highlightedKey={linkedKey}
-              onSelect={setPickedKey}
-              onOpen={openSpan}
-              openHint="Enter or double-click opens a tool call"
-              notice={
-                <ToolCallsNotice
-                  failed={sessionToolCalls.isError}
-                  onRetry={() => sessionToolCalls.refetch()}
-                  truncated={sessionToolCalls.truncated}
-                  missingToolCallId={
-                    sessionToolCalls.targetMissing ? targetToolCallId : null
-                  }
-                  missingRequest={linkedRequest.targetMissing}
-                />
-              }
-              pagination={
-                paginationMeta && paginationMeta.total > 0
-                  ? {
-                      pageIndex,
-                      pageSize,
-                      offset,
-                      total: paginationMeta.total,
-                      onPaginationChange: setPagination,
+              onSelectSpan={setPickedKey}
+            >
+              <ArenaWaterfall
+                timeline={timeline}
+                loading={interactionsLoading}
+                profileName={profileName}
+                serverDisplayByName={serverDisplayByName}
+                conversationRowId={
+                  latestHasConversation ? conversationRowId : null
+                }
+                selectedKey={selected?.key ?? null}
+                highlightedKey={linkedKey}
+                onSelect={setPickedKey}
+                onOpen={openSpan}
+                openHint="Enter or double-click opens a tool call"
+                notice={
+                  <ToolCallsNotice
+                    failed={sessionToolCalls.isError}
+                    onRetry={() => sessionToolCalls.refetch()}
+                    truncated={sessionToolCalls.truncated}
+                    missingToolCallId={
+                      sessionToolCalls.targetMissing ? targetToolCallId : null
                     }
-                  : null
-              }
-              totalRequests={totalRequests}
-              action={
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={() => exportSession.mutate({ sessionId })}
-                  disabled={exportDisabled}
-                >
-                  {exportSession.isPending ? (
-                    <Loader2 className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Download aria-hidden="true" />
-                  )}
-                  {/* Phones show the glyph alone beside the card's title. */}
-                  <span className="max-lg:sr-only">Export JSON</span>
-                </Button>
-              }
-            />
-            <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
-            <RequestDetails
-              height={detailsHeight}
-              loading={interactionsLoading}
-              span={selected}
-              origin={timeline?.origin ?? 0}
-              previous={selectedIndex > 0 ? spans[selectedIndex - 1] : null}
-              index={selectedIndex}
-              count={spans.length}
-              profileName={profileName}
-              providerLabel={providerLabel}
-              serverDisplayByName={serverDisplayByName}
-              onStep={step}
-              latestRequestId={conversationRowId}
-              onJumpToLatest={jumpToConversation}
-            />
+                    missingRequest={linkedRequest.targetMissing}
+                  />
+                }
+                pagination={
+                  paginationMeta && paginationMeta.total > 0
+                    ? {
+                        pageIndex,
+                        pageSize,
+                        offset,
+                        total: paginationMeta.total,
+                        onPaginationChange: setPagination,
+                      }
+                    : null
+                }
+                totalRequests={totalRequests}
+                action={
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => exportSession.mutate({ sessionId })}
+                    disabled={exportDisabled}
+                  >
+                    {exportSession.isPending ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Download aria-hidden="true" />
+                    )}
+                    {/* Phones show the glyph alone beside the card's title. */}
+                    <span className="max-lg:sr-only">Export JSON</span>
+                  </Button>
+                }
+              />
+              <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
+              <ArenaDetails
+                height={detailsHeight}
+                loading={interactionsLoading}
+                span={selected}
+                origin={timeline?.origin ?? 0}
+                previous={selectedIndex > 0 ? spans[selectedIndex - 1] : null}
+                index={selectedIndex}
+                count={spans.length}
+                profileName={profileName}
+                providerLabel={providerLabel}
+                serverDisplayByName={serverDisplayByName}
+                onStep={step}
+                latestRequestId={conversationRowId}
+                onJumpToLatest={jumpToConversation}
+              />
+            </GuardrailsArenaProvider>
           </section>
         </div>
       </PageLayout>

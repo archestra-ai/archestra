@@ -3,6 +3,7 @@
 // the session's real tool calls. The real backend does not serve per-session
 // consults or a label timeline yet; this models what it would.
 
+import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import type { Timeline, ToolCallSpan } from "../session-timeline";
 
@@ -49,6 +50,8 @@ export type MockConsult = {
   toolName: string | null;
   /** True when it ran before the call (gate), false when on its result. */
   beforeCall: boolean;
+  /** The full stored record, as GET /api/openappa/external-consults serves it. */
+  record: ExternalConsult;
 };
 
 export type LabelState = { trust: Trust; audience: Audience };
@@ -178,7 +181,9 @@ export const ROLE_LABEL: Record<ConsultRole, string> = {
   audience_source: "Audience source",
 };
 
-export function buildGuardrailsMock(timeline: Timeline | null): GuardrailsData | null {
+export function buildGuardrailsMock(
+  timeline: Timeline | null,
+): GuardrailsData | null {
   if (!timeline || timeline.spans.length === 0) return null;
   const timeToX = makeTimeToX(timeline);
   const tools = timeline.spans.filter(
@@ -186,7 +191,10 @@ export function buildGuardrailsMock(timeline: Timeline | null): GuardrailsData |
   );
 
   const consults: MockConsult[] = [];
-  const push = (c: Omit<MockConsult, "x" | "w" | "key" | "end">) => {
+  const push = (
+    c: Omit<MockConsult, "x" | "w" | "key" | "end" | "record">,
+    args: unknown = {},
+  ) => {
     const end = c.start + c.durationMs;
     const x = timeToX(c.start);
     consults.push({
@@ -195,74 +203,92 @@ export function buildGuardrailsMock(timeline: Timeline | null): GuardrailsData |
       end,
       x,
       w: Math.max(0, timeToX(end) - x),
+      record: mockRecord(c, end, args),
     });
   };
 
   for (const tool of tools) {
-    const name = readMcpToolCall(tool.call).toolName ?? "tool";
+    const content = readMcpToolCall(tool.call);
+    const name = content.toolName ?? "tool";
+    const args = content.args ?? {};
     const h = hash(tool.call.id);
     const writes = WRITE_TOOLS.some((w) => name.includes(w));
     const reads = READ_TOOLS.some((r) => name.includes(r));
     // Authority gate before writes and a share of everything else.
     if (writes || h % 5 === 0) {
-      const human = name.includes("create_pull_request") || name.includes("post_message");
+      const human =
+        name.includes("create_pull_request") || name.includes("post_message");
       const blocked = !human && h % 23 === 0;
       const dur = human ? 4200 + (h % 9000) : 140 + (h % 900);
-      push({
-        id: `${tool.call.id}-auth`,
-        role: "authority",
-        externalName: human ? "approval" : "write-policy",
-        backend: human ? "hitl" : "llm",
-        outcome: h % 41 === 0 ? "timeout" : "answered",
-        decision: blocked ? "blocked" : human ? "approved" : "allowed",
-        answer: blocked
-          ? `deny: ${name} writes outside the task scope`
-          : human
-            ? "approved by Admin"
-            : "allow",
-        start: tool.start - dur - 30,
-        durationMs: dur,
-        toolCallKey: tool.key,
-        toolName: name,
-        beforeCall: true,
-      });
+      push(
+        {
+          id: `${tool.call.id}-auth`,
+          role: "authority",
+          externalName: human ? "approval" : "write-policy",
+          backend: human ? "hitl" : "llm",
+          outcome: h % 41 === 0 ? "timeout" : "answered",
+          decision: blocked ? "blocked" : human ? "approved" : "allowed",
+          answer: blocked
+            ? `deny: ${name} writes outside the task scope`
+            : human
+              ? "approved by Admin"
+              : "allow",
+          start: tool.start - dur - 30,
+          durationMs: dur,
+          toolCallKey: tool.key,
+          toolName: name,
+          beforeCall: true,
+        },
+        args,
+      );
     }
     // Annotators label what reads bring back.
     if (reads && h % 2 === 0) {
       const dur = 220 + (h % 700);
-      const external = name.includes("get_file_contents") || name.includes("search_code") || name.includes("get_job_logs");
-      push({
-        id: `${tool.call.id}-ann`,
-        role: "annotator",
-        externalName: "trust-annotator",
-        backend: "llm",
-        outcome: h % 37 === 0 ? "non_success" : "answered",
-        decision: "labeled",
-        answer: external ? "trust → suspicious (third-party content)" : "audience → internal",
-        start: tool.end + 15,
-        durationMs: dur,
-        toolCallKey: tool.key,
-        toolName: name,
-        beforeCall: false,
-      });
+      const external =
+        name.includes("get_file_contents") ||
+        name.includes("search_code") ||
+        name.includes("get_job_logs");
+      push(
+        {
+          id: `${tool.call.id}-ann`,
+          role: "annotator",
+          externalName: "trust-annotator",
+          backend: "llm",
+          outcome: h % 37 === 0 ? "non_success" : "answered",
+          decision: "labeled",
+          answer: external
+            ? "trust → suspicious (third-party content)"
+            : "audience → internal",
+          start: tool.end + 15,
+          durationMs: dur,
+          toolCallKey: tool.key,
+          toolName: name,
+          beforeCall: false,
+        },
+        args,
+      );
     }
     // A sanitizer on postgres results.
     if (name.includes("query") && h % 3 === 0) {
       const dur = 60 + (h % 200);
-      push({
-        id: `${tool.call.id}-san`,
-        role: "sanitizer",
-        externalName: "pii-redactor",
-        backend: "archestra",
-        outcome: "answered",
-        decision: "redacted",
-        answer: "redacted 3 email addresses",
-        start: tool.end + 10,
-        durationMs: dur,
-        toolCallKey: tool.key,
-        toolName: name,
-        beforeCall: false,
-      });
+      push(
+        {
+          id: `${tool.call.id}-san`,
+          role: "sanitizer",
+          externalName: "pii-redactor",
+          backend: "archestra",
+          outcome: "answered",
+          decision: "redacted",
+          answer: "redacted 3 email addresses",
+          start: tool.end + 10,
+          durationMs: dur,
+          toolCallKey: tool.key,
+          toolName: name,
+          beforeCall: false,
+        },
+        args,
+      );
     }
   }
   consults.sort((a, b) => a.start - b.start);
@@ -270,10 +296,18 @@ export function buildGuardrailsMock(timeline: Timeline | null): GuardrailsData |
   // Label timeline: a handful of moves driven by specific tool results.
   const origin = timeline.origin;
   const finish = Math.max(...timeline.spans.map((s) => s.end));
-  const moves: { at: number; state: LabelState; cause: LabelSegment["cause"] }[] = [];
+  const moves: {
+    at: number;
+    state: LabelState;
+    cause: LabelSegment["cause"];
+  }[] = [];
   const firstOf = (match: (name: string) => boolean, after = origin) =>
-    tools.find((t) => t.start > after && match(readMcpToolCall(t.call).toolName ?? ""));
-  const internalRead = firstOf((n) => n.includes("query") || n.includes("search"));
+    tools.find(
+      (t) => t.start > after && match(readMcpToolCall(t.call).toolName ?? ""),
+    );
+  const internalRead = firstOf(
+    (n) => n.includes("query") || n.includes("search"),
+  );
   if (internalRead) {
     moves.push({
       at: internalRead.end + 20,
@@ -282,7 +316,10 @@ export function buildGuardrailsMock(timeline: Timeline | null): GuardrailsData |
         kind: "narrowed",
         toolName: readMcpToolCall(internalRead.call).toolName,
         toolCallKey: internalRead.key,
-        consultKey: consults.find((c) => c.toolCallKey === internalRead.key && c.role === "annotator")?.key ?? null,
+        consultKey:
+          consults.find(
+            (c) => c.toolCallKey === internalRead.key && c.role === "annotator",
+          )?.key ?? null,
         summary: "Read internal data; audience narrowed to internal",
       },
     });
@@ -299,12 +336,18 @@ export function buildGuardrailsMock(timeline: Timeline | null): GuardrailsData |
         kind: "admitted",
         toolName: readMcpToolCall(external.call).toolName,
         toolCallKey: external.key,
-        consultKey: consults.find((c) => c.toolCallKey === external.key && c.role === "annotator")?.key ?? null,
+        consultKey:
+          consults.find(
+            (c) => c.toolCallKey === external.key && c.role === "annotator",
+          )?.key ?? null,
         summary: "Admitted third-party content; trust lowered to suspicious",
       },
     });
   }
-  const team = firstOf((n) => n.includes("post_message"), external?.end ?? origin);
+  const team = firstOf(
+    (n) => n.includes("post_message"),
+    external?.end ?? origin,
+  );
   if (team) {
     moves.push({
       at: team.start - 5,
@@ -352,7 +395,9 @@ export function buildGuardrailsMock(timeline: Timeline | null): GuardrailsData |
     labels,
     timeToX,
     labelAt: (ms) => {
-      const hit = labels.find((s) => ms >= s.start && ms < s.end) ?? labels[labels.length - 1];
+      const hit =
+        labels.find((s) => ms >= s.start && ms < s.end) ??
+        labels[labels.length - 1];
       return { trust: hit.trust, audience: hit.audience };
     },
     trustLevels: ["suspicious", "trusted"],
@@ -364,7 +409,14 @@ export function buildGuardrailsMock(timeline: Timeline | null): GuardrailsData |
 // Internal helpers
 // ============================================================================
 
-const WRITE_TOOLS = ["edit_file", "create", "post_message", "run_command", "delete", "push"];
+const WRITE_TOOLS = [
+  "edit_file",
+  "create",
+  "post_message",
+  "run_command",
+  "delete",
+  "push",
+];
 const READ_TOOLS = ["get_", "list_", "search", "query", "read_file"];
 
 function segment(
@@ -415,4 +467,112 @@ function hash(value: string): number {
     h = Math.imul(h, 16777619);
   }
   return Math.abs(h);
+}
+
+function mockRecord(
+  c: Omit<MockConsult, "x" | "w" | "key" | "end" | "record">,
+  end: number,
+  args: unknown,
+): ExternalConsult {
+  const tool = c.toolName ?? "tool";
+  const request =
+    c.role === "authority"
+      ? {
+          version: 1,
+          kind: "authorize",
+          tool: { name: tool, arguments: args },
+          label: { trust: "trusted", audience: ["internal"] },
+          question: `May the agent call ${tool} with these arguments?`,
+        }
+      : c.role === "sanitizer"
+        ? {
+            version: 1,
+            kind: "sanitize",
+            tool: { name: tool, arguments: args },
+          }
+        : {
+            version: 1,
+            kind: "annotate",
+            tool: { name: tool, arguments: args },
+            result_excerpt: "…first 2 KB of the tool's result…",
+          };
+  const answer =
+    c.outcome !== "answered"
+      ? null
+      : c.decision === "blocked"
+        ? { allow: false, reason: c.answer.replace(/^deny: /, "") }
+        : c.decision === "approved"
+          ? { allow: true, approved_by: "Admin", channel: "chat" }
+          : c.decision === "allowed"
+            ? { allow: true }
+            : c.decision === "redacted"
+              ? { redactions: [{ kind: "email", count: 3 }] }
+              : {
+                  delta_trust: c.answer.includes("suspicious")
+                    ? "suspicious"
+                    : "trusted",
+                  delta_audience: c.answer.includes("internal")
+                    ? "internal"
+                    : "public",
+                };
+  const diagnostics =
+    c.backend === "llm" && c.outcome === "answered"
+      ? btoa(
+          JSON.stringify({
+            jev_diagnostics: {
+              version: 1,
+              model: "claude-haiku-4-5",
+              attempts: ["ok"],
+              labels:
+                c.role === "annotator"
+                  ? {
+                      delta_trust: {
+                        probabilities: c.answer.includes("suspicious")
+                          ? { suspicious: 0.86, trusted: 0.14 }
+                          : { trusted: 0.93, suspicious: 0.07 },
+                        decision: c.answer.includes("suspicious")
+                          ? "suspicious"
+                          : "trusted",
+                      },
+                      delta_audience: {
+                        probabilities: { internal: 0.71, public: 0.29 },
+                        decision: "internal",
+                      },
+                    }
+                  : {
+                      requires_trusted: {
+                        probability: c.decision === "blocked" ? 0.18 : 0.94,
+                        threshold: 0.5,
+                        decision: c.decision !== "blocked",
+                      },
+                    },
+              elapsed_ms: c.durationMs,
+            },
+          }),
+        )
+      : null;
+  return {
+    id: `00000000-0000-4000-8000-${String(hash(c.id)).padStart(12, "0").slice(0, 12)}`,
+    organizationId: "org",
+    sessionId: "user:admin|5e9a3b2c-7d4f-4b8e-a1c3-2f6b9d4e7a01",
+    callerId: "user:admin",
+    createdAt: new Date(end).toISOString(),
+    startedAt: new Date(c.start).toISOString(),
+    durationMs: c.durationMs,
+    role: c.role,
+    externalName: c.externalName,
+    backend: c.backend,
+    request,
+    outcome: c.outcome,
+    answer,
+    rawResponse: null,
+    httpStatus: c.backend === "llm" || c.backend === "url" ? 200 : null,
+    diagnostics,
+    diagnosticsTruncated: false,
+    root: "root:5e9a3b2c",
+    trajectory: "root:5e9a3b2c",
+    callId: c.toolCallKey ? `toolu_${c.id.slice(0, 18)}` : null,
+    offerId: null,
+    callDigest: null,
+  };
 }

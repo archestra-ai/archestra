@@ -4,9 +4,9 @@ import {
   type ComponentProps,
   type ReactNode,
   useEffect,
-  useMemo,
   useState,
 } from "react";
+import { useGuardrailsArena } from "./__arena__/guardrails-arena";
 import { RequestWaterfall as V1 } from "./__arena__/v1";
 import { RequestWaterfall as V2 } from "./__arena__/v2";
 import { RequestWaterfall as V3 } from "./__arena__/v3";
@@ -17,23 +17,32 @@ import { RequestWaterfall as V7 } from "./__arena__/v7";
 import { RequestWaterfall as V8 } from "./__arena__/v8";
 import { RequestWaterfall as V9 } from "./__arena__/v9";
 import { RequestWaterfall as V10 } from "./__arena__/v10";
-import { buildGuardrailsMock } from "./__arena__/guardrails-mock";
 import { RequestWaterfall } from "./request-waterfall";
 
+export {
+  ArenaDetails,
+  GuardrailsArenaProvider,
+} from "./__arena__/guardrails-arena";
+
 const VARIANTS = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
-const STORAGE_KEY = "design-arena:guardrails";
+const STORAGE_KEY = "design-arena:guardrails-2";
 
 export function ArenaWaterfall(props: ComponentProps<typeof RequestWaterfall>) {
-  const guardrails = useMemo(
-    () => buildGuardrailsMock(props.timeline),
-    [props.timeline],
-  );
+  const { guardrails, selectedConsultKey, selectConsult, selectSpan } =
+    useGuardrailsArena();
   return (
     <DesignArena
-      current={<RequestWaterfall {...props} />}
+      current={<RequestWaterfall {...props} onSelect={selectSpan} />}
       variants={VARIANTS.map((Variant, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: fixed list
-        <Variant key={index} {...props} guardrails={guardrails} />
+        <Variant
+          // biome-ignore lint/suspicious/noArrayIndexKey: fixed list
+          key={index}
+          {...props}
+          onSelect={selectSpan}
+          guardrails={guardrails}
+          selectedConsultKey={selectedConsultKey}
+          onSelectConsult={selectConsult}
+        />
       ))}
     />
   );
@@ -48,23 +57,26 @@ function DesignArena({
 }) {
   const [sel, setSel] = useState(-1);
   useEffect(() => {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw === null) return;
-    const saved = Number(raw);
-    if (Number.isInteger(saved) && saved >= -1 && saved < variants.length) {
-      setSel(saved);
-    }
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw === null) return;
+      const saved = Number(raw);
+      if (Number.isInteger(saved) && saved >= -1 && saved < variants.length) {
+        setSel(saved);
+      }
+    } catch {}
   }, [variants.length]);
   const pick = (index: number) => {
     setSel(index);
-    window.localStorage.setItem(STORAGE_KEY, String(index));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, String(index));
+    } catch {}
   };
   return (
     <div className="space-y-2">
       <div className="inline-flex flex-wrap items-center gap-1 rounded-md border bg-muted/40 px-2 py-1 text-xs">
         <span className="pr-1 text-muted-foreground">Prototype</span>
         {["Current", ...variants.map((_, i) => `${i + 1}`)].map((label, i) => (
-          // biome-ignore lint/plugin: arena scaffolding
           <button
             key={label}
             type="button"

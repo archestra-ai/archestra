@@ -2,6 +2,7 @@
 
 import type { SupportedProvider } from "@archestra/shared";
 import { ArrowRight } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   describeModelOrigin,
   formatCompactNumber,
@@ -40,6 +41,7 @@ import {
   requestLabel,
   SPAN_KINDS,
   type TimelineSpan,
+  type ToolCallSpan,
 } from "./session-timeline";
 import { ToolCallOverview, ToolCallPayload } from "./tool-call-details";
 
@@ -68,6 +70,7 @@ export function RequestDetails({
   latestRequestId,
   onJumpToLatest,
   excerpt,
+  toolCallChecks,
 }: {
   /** The resizable pane height, applied from `lg`. */
   height: number;
@@ -87,6 +90,8 @@ export function RequestDetails({
   latestRequestId: string | null;
   onJumpToLatest: (() => void) | null;
   excerpt?: { currentKey: string };
+  /** The guardrail checks a selected tool call went through. */
+  toolCallChecks?: (span: ToolCallSpan) => ReactNode;
 }) {
   if (!span) {
     return (
@@ -136,6 +141,7 @@ export function RequestDetails({
           onStep={onStep}
           timing={excerpt ? "excerpt" : "session"}
           current={current}
+          checks={toolCallChecks?.(span)}
         />
         <ToolCallPayload call={span.call} outcomeNotice={!current} />
       </section>

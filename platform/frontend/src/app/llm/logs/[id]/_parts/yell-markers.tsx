@@ -337,15 +337,27 @@ function InvestigateLink({ yell }: { yell: TraceYell }) {
   const investigation = useYellInvestigation(yell);
   const { data: allowed } = useHasPermissions(investigation.permissions);
   if (!allowed) return null;
+  const hintId = `yell-investigate-${yell.id}`;
   return (
-    <UnstyledButton
-      onClick={investigation.launch}
-      disabled={investigation.disabled}
-      className="mt-2 inline-flex cursor-pointer items-center gap-1 rounded-sm text-xs text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default disabled:opacity-60"
-    >
-      <MessageCircle className="size-3.5" aria-hidden="true" />
-      {investigation.label}
-    </UnstyledButton>
+    <div className="mt-2.5 border-t pt-2">
+      <UnstyledButton
+        onClick={investigation.launch}
+        disabled={investigation.disabled}
+        aria-describedby={hintId}
+        className="inline-flex cursor-pointer items-center gap-1 rounded-sm text-xs font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default disabled:opacity-60"
+      >
+        <MessageCircle className="size-3.5" aria-hidden="true" />
+        {investigation.label}
+      </UnstyledButton>
+      <p
+        id={hintId}
+        className="mt-0.5 text-[11px] leading-4 text-muted-foreground"
+      >
+        {yell.conversationId
+          ? "Picks up the chat already looking into this yell."
+          : "Opens a chat with the guardrails policy agent. It reads this report, explains why the agent got stuck, and can fix the policy or mark the yell resolved."}
+      </p>
+    </div>
   );
 }
 

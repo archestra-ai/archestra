@@ -42,10 +42,10 @@ export function useAgentCatalog(
     },
     // A restored or earlier catalog may predate a creation or deletion: paint
     // it at once, then revalidate it on mount. A catalog that the server
-    // streamed to this page, or that arrived since this mount, is as fresh as
-    // any query.
+    // streamed to this page, or that arrived after this mount, is as fresh as
+    // any query. One stamped in the mount's own millisecond counts as earlier.
     staleTime: (catalog) =>
-      streamedQueries.has(catalog) || catalog.state.dataUpdatedAt >= mountedAt
+      streamedQueries.has(catalog) || catalog.state.dataUpdatedAt > mountedAt
         ? DEFAULT_STALE_TIME
         : 0,
     enabled,

@@ -223,9 +223,11 @@ describe("agent catalog freshness", () => {
     const current = makeAgentCatalog({ agents: [newAgent] });
     // A recently restored cache is still fresh under the app's one-minute
     // stale time, but must not hide a creation or retain a deleted agent.
+    // Restored data keeps the time it was fetched, before this page mounted.
     client.setQueryData(
       agentCatalogQueryKeys.list({ includeTools: false, ...query }),
       previous,
+      { updatedAt: Date.now() - 30_000 },
     );
     let requests = 0;
     server.use(
@@ -236,6 +238,43 @@ describe("agent catalog freshness", () => {
     );
 
     const { result } = renderHook(() => useAgentCatalog(query), { wrapper });
+
+    expect(result.current.data).toEqual(previous);
+    await waitFor(() => expect(result.current.data).toEqual(current));
+    expect(requests).toBe(1);
+  });
+
+  it("refreshes a catalog stamped in the same millisecond as the mount", async () => {
+    const { client, wrapper } = setup();
+    const query = {
+      offset: 0,
+      limit: DEFAULT_TABLE_LIMIT,
+      excludeOtherPersonalAgents: true,
+      pinned: false,
+    };
+    const previous = makeAgentCatalog({
+      agents: [makeAgent({ id: "old-agent", name: "Old agent" })],
+    });
+    const current = makeAgentCatalog({
+      agents: [makeAgent({ id: "new-agent", name: "New agent" })],
+    });
+    let requests = 0;
+    server.use(
+      http.get(`${origin}/api/agent-catalog`, () => {
+        requests += 1;
+        return HttpResponse.json(current);
+      }),
+    );
+
+    // The cache write and the mount read the same clock value, as they can
+    // when both happen within one millisecond.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    client.setQueryData(
+      agentCatalogQueryKeys.list({ includeTools: false, ...query }),
+      previous,
+    );
+    const { result } = renderHook(() => useAgentCatalog(query), { wrapper });
+    clock.mockRestore();
 
     expect(result.current.data).toEqual(previous);
     await waitFor(() => expect(result.current.data).toEqual(current));

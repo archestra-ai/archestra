@@ -337,6 +337,12 @@ describe("McpCatalogItemDetailPage overview", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("does not open an app's backing entry, which the registry never lists", () => {
+    renderPage({ serverType: "app" });
+
+    expect(screen.getByText("Server not found")).toBeInTheDocument();
+  });
+
   it("names the main page in the tab strip, so a secondary tab has a way back", () => {
     renderPage();
 

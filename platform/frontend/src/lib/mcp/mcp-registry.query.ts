@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -47,6 +48,8 @@ export type McpRegistryIssueIndex = {
       | "authorId"
       | "createdByServiceAccountId"
       | "authorName"
+      | "icon"
+      | "iconUrl"
     > & { alertMutes: NonNullable<WireCatalogItem["alertMutes"]> }
   >;
   servers: Array<
@@ -68,6 +71,12 @@ export type McpRegistryIssueIndex = {
  * are patched as arrays by the install-status cache sync.
  */
 export const mcpRegistryQueryKey = ["mcp-registry"] as const;
+
+/**
+ * Registry rows a picker's Add list shows at a time (agent tools, tool
+ * exclusions, app tools); a search narrows the rest on the server.
+ */
+export const REGISTRY_PICKER_PAGE_SIZE = 50;
 export const mcpRegistryIssueIndexQueryKey = [
   ...mcpRegistryQueryKey,
   "issue-index",
@@ -147,6 +156,8 @@ export function useMcpRegistryPage(
      * rows under it.
      */
     placeholderScope?: string;
+    /** Refetch on an interval, e.g. while an install on the page deploys. */
+    refetchInterval?: number | false;
   },
 ) {
   const scope = options?.placeholderScope ?? "";
@@ -154,6 +165,7 @@ export function useMcpRegistryPage(
   return useQuery({
     ...registryPageQueryOptions(queryClient, params, scope),
     enabled: options?.enabled ?? true,
+    refetchInterval: options?.refetchInterval,
     placeholderData: (previousData, previousQuery) =>
       previousQuery?.queryKey.at(-1) === scope ? previousData : undefined,
   });
@@ -247,12 +259,40 @@ function mcpServersForCatalogsQueryKey(catalogIds: string[]) {
 
 const PAGE_INSTALLS_STALE_MS = 30_000;
 
+/**
+ * Every catalog item the viewer can see, as a name and icon directory: the
+ * issue index's items with one display icon each (an emoji, or the link to the
+ * item's image). For icon maps and name lookups that used to load the whole
+ * catalog with its configuration.
+ */
+export function useMcpCatalogDirectory(options?: { enabled?: boolean }) {
+  const query = useMcpRegistryIssueIndex(options);
+  const items = useMemo(
+    () =>
+      query.data?.catalogItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        serverType: item.serverType,
+        environmentId: item.environmentId,
+        icon: item.iconUrl ?? item.icon,
+      })),
+    [query.data],
+  );
+  return { ...query, data: items };
+}
+
+export type McpCatalogDirectoryItem = NonNullable<
+  ReturnType<typeof useMcpCatalogDirectory>["data"]
+>[number];
+
 export function catalogItemQueryOptions(id: string) {
   return queryOptions({
     queryKey: ["mcp-catalog", "item", id],
     queryFn: async () => {
+      // Only what a list shows: not a hidden runtime variant behind an id.
       const { data, error } = await getInternalMcpCatalogItem({
         path: { id },
+        query: { listedOnly: true },
       });
       throwOnApiError(error, { allowNotFound: true });
       return data ?? null;
@@ -274,7 +314,12 @@ export async function fetchInternalMcpCatalogItem(
   queryClient: QueryClient,
   id: string,
 ): Promise<FullCatalogItem | null> {
-  const item = await queryClient.fetchQuery(catalogItemQueryOptions(id));
+  // An action often loads the item twice in a row (a list loads it, then the
+  // view it opens does); a few seconds of freshness lets the second reuse it.
+  const item = await queryClient.fetchQuery({
+    ...catalogItemQueryOptions(id),
+    staleTime: ACTION_ITEM_STALE_TIME_MS,
+  });
   return item ? toFullCatalogItem(item) : null;
 }
 
@@ -388,6 +433,8 @@ function normalizeIssueIndex(
       environmentId: item.environmentId ?? null,
       authorId: item.authorId ?? null,
       createdByServiceAccountId: item.createdByServiceAccountId ?? null,
+      icon: item.icon ?? null,
+      iconUrl: item.iconUrl ?? null,
       authorName: item.authorName ?? null,
       alertMutes: item.alertMutes ?? [],
     })),
@@ -403,3 +450,5 @@ function normalizeIssueIndex(
     })),
   };
 }
+
+const ACTION_ITEM_STALE_TIME_MS = 5_000;

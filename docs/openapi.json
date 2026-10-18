@@ -248359,6 +248359,10 @@
                     "type": "string",
                     "maxLength": 256
                   },
+                  "searchDescriptions": {
+                    "description": "Match the search against descriptions too, not only names.",
+                    "type": "boolean"
+                  },
                   "labels": {
                     "type": "object",
                     "additionalProperties": {
@@ -248447,6 +248451,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "includeBuiltIn": {
+                    "description": "Also list the built-in MCP server entry.",
+                    "type": "boolean"
+                  },
+                  "includeDefaultEnvironment": {
+                    "description": "With environmentIds: also match items in the Default environment (no environment).",
+                    "type": "boolean"
+                  },
+                  "includeApps": {
+                    "description": "Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.",
+                    "type": "boolean"
                   },
                   "rankTiers": {
                     "description": "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.",
@@ -248603,6 +248619,18 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "appId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "appEnabled": {
+                            "nullable": true,
+                            "type": "boolean"
+                          },
+                          "docsUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "icon": {
                             "nullable": true,
                             "type": "string"
@@ -248676,6 +248704,24 @@
                           "enterpriseManaged": {
                             "type": "boolean"
                           },
+                          "setupNeeds": {
+                            "type": "object",
+                            "properties": {
+                              "signIn": {
+                                "type": "boolean"
+                              },
+                              "settings": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "signIn",
+                              "settings"
+                            ],
+                            "additionalProperties": false
+                          },
                           "install": {
                             "type": "object",
                             "properties": {
@@ -248715,6 +248761,7 @@
                           "skillCount",
                           "catalogReinstallRequired",
                           "dynamicConnectionMcpServerId",
+                          "docsUrl",
                           "icon",
                           "iconUrl",
                           "alertMutes",
@@ -248722,6 +248769,7 @@
                           "imageApprovalRequired",
                           "bindsCredential",
                           "enterpriseManaged",
+                          "setupNeeds",
                           "install"
                         ],
                         "additionalProperties": false
@@ -249437,6 +249485,10 @@
                     "type": "string",
                     "maxLength": 256
                   },
+                  "searchDescriptions": {
+                    "description": "Match the search against descriptions too, not only names.",
+                    "type": "boolean"
+                  },
                   "labels": {
                     "type": "object",
                     "additionalProperties": {
@@ -249525,6 +249577,18 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "includeBuiltIn": {
+                    "description": "Also list the built-in MCP server entry.",
+                    "type": "boolean"
+                  },
+                  "includeDefaultEnvironment": {
+                    "description": "With environmentIds: also match items in the Default environment (no environment).",
+                    "type": "boolean"
+                  },
+                  "includeApps": {
+                    "description": "Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.",
+                    "type": "boolean"
                   },
                   "rankTiers": {
                     "description": "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.",
@@ -249884,6 +249948,12 @@
                           "authorName": {
                             "type": "string"
                           },
+                          "icon": {
+                            "type": "string"
+                          },
+                          "iconUrl": {
+                            "type": "string"
+                          },
                           "alertMutes": {
                             "type": "array",
                             "items": {
@@ -249945,6 +250015,9 @@
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
                           },
                           "catalogId": {
                             "type": "string",
@@ -250047,6 +250120,7 @@
                         },
                         "required": [
                           "id",
+                          "name",
                           "catalogId",
                           "scope",
                           "localInstallationStatus",
@@ -251000,6 +251074,15 @@
         ],
         "description": "Get Internal MCP catalog item by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "listedOnly",
+            "required": false,
+            "description": "Answer 404 for hidden runtime variants (Playwright per-environment rows); app backings are still returned. Default false."
+          },
           {
             "schema": {
               "type": "string",
@@ -311282,6 +311365,17 @@
             "name": "catalogIds",
             "required": false,
             "description": "Only installs of these catalog items (comma-separated, at most 100)."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "catalogSlug",
+            "required": false,
+            "description": "Only installs of catalog items whose name, slugified as in tool names (lowercase, spaces as _, other characters dropped), is this."
           },
           {
             "schema": {

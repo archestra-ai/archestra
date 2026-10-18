@@ -256,6 +256,13 @@ function rowOf(item: CatalogItem, installs: Install[]): RegistryRow {
     imageApprovalRequired: false,
     bindsCredential: false,
     enterpriseManaged: !!item.enterpriseManagedConfig,
+    setupNeeds: {
+      signIn: !!item.oauthConfig,
+      settings:
+        (item.localConfig?.environment?.filter(
+          (env) => env.promptOnInstallation,
+        ).length ?? 0) + Object.keys(item.userConfig ?? {}).length,
+    },
     install: {
       visibleCount: own.length,
       installedForViewer: own.some(

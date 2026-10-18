@@ -3,12 +3,17 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { searchMcpRegistryMock, getMcpServersMock, getIssueIndexMock } =
-  vi.hoisted(() => ({
-    searchMcpRegistryMock: vi.fn(),
-    getMcpServersMock: vi.fn(),
-    getIssueIndexMock: vi.fn(),
-  }));
+const {
+  searchMcpRegistryMock,
+  getMcpServersMock,
+  getIssueIndexMock,
+  getCatalogItemMock,
+} = vi.hoisted(() => ({
+  searchMcpRegistryMock: vi.fn(),
+  getMcpServersMock: vi.fn(),
+  getIssueIndexMock: vi.fn(),
+  getCatalogItemMock: vi.fn(),
+}));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -19,6 +24,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       searchMcpRegistry: searchMcpRegistryMock,
       getMcpServers: getMcpServersMock,
       getMcpRegistryIssueIndex: getIssueIndexMock,
+      getInternalMcpCatalogItem: getCatalogItemMock,
     },
   };
 });
@@ -28,11 +34,13 @@ vi.mock("@/lib/auth/auth.query", () => ({
 }));
 
 import {
+  fetchInternalMcpCatalogItem,
   startMcpRegistryEarlyRequests,
   useMcpRegistryIssueIndex,
   useMcpRegistryPage,
   useMcpServersForCatalogs,
 } from "./mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "./use-mcp-registry-rows-by-ids";
 
 describe("registry page installs", () => {
   it("come with the page, so the page's installs need no request of their own", async () => {
@@ -241,5 +249,134 @@ describe("registry early requests", () => {
       expect(result.current.page.data?.data[0]?.id).toBe("cat-a"),
     );
     expect(searchMcpRegistryMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("registry rows by id", () => {
+  beforeEach(() => {
+    searchMcpRegistryMock.mockReset();
+  });
+
+  it("has not loaded while the first real id set is still loading", async () => {
+    const pending: Array<() => void> = [];
+    const release = () => {
+      for (const resolve of pending.splice(0)) resolve();
+    };
+    searchMcpRegistryMock.mockImplementation(
+      (request?: { body?: { catalogIds?: string[] } }) =>
+        new Promise((resolve) => {
+          pending.push(() =>
+            resolve({
+              data: {
+                data: (request?.body?.catalogIds ?? []).map((id) => ({
+                  id,
+                  name: id,
+                })),
+                pagination: { total: 1 },
+                selectableTotal: 0,
+                installs: [],
+              },
+            }),
+          );
+        }),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    // A caller's ids are empty until their own source loads.
+    const { result, rerender } = renderHook(
+      ({ ids }: { ids: string[] }) => useMcpRegistryRowsByIds(ids),
+      { wrapper, initialProps: { ids: [] as string[] } },
+    );
+    expect(result.current.hasLoaded).toBe(false);
+
+    rerender({ ids: ["cat-a"] });
+    expect(result.current.hasLoaded).toBe(false);
+
+    release();
+    await waitFor(() => expect(result.current.hasLoaded).toBe(true));
+  });
+
+  it("keeps the rows already known while a changed id set loads", async () => {
+    // Each request answers with one row per id; the second one waits.
+    let releaseSecond: () => void = () => {};
+    searchMcpRegistryMock.mockImplementation(
+      (request?: { body?: { catalogIds?: string[] } }) => {
+        const catalogIds = request?.body?.catalogIds ?? [];
+        const answer = {
+          data: {
+            data: catalogIds.map((id) => ({ id, name: id })),
+            pagination: { total: catalogIds.length },
+            selectableTotal: 0,
+            installs: [],
+          },
+        };
+        if (catalogIds.length !== 2) return Promise.resolve(answer);
+        return new Promise((resolve) => {
+          releaseSecond = () => resolve(answer);
+        });
+      },
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result, rerender } = renderHook(
+      ({ ids }: { ids: string[] }) => useMcpRegistryRowsByIds(ids),
+      { wrapper, initialProps: { ids: ["cat-a"] } },
+    );
+    await waitFor(() => expect(result.current.hasLoaded).toBe(true));
+
+    rerender({ ids: ["cat-a", "cat-b"] });
+
+    // The known row stays, and the editors do not go back to loading.
+    expect(result.current.data.map((row) => row.id)).toEqual(["cat-a"]);
+    expect(result.current.hasLoaded).toBe(true);
+    expect(result.current.isPending).toBe(true);
+
+    releaseSecond();
+    await waitFor(() =>
+      expect(result.current.data.map((row) => row.id)).toEqual([
+        "cat-a",
+        "cat-b",
+      ]),
+    );
+    expect(result.current.isPending).toBe(false);
+
+    // A removed id leaves at once.
+    rerender({ ids: ["cat-b"] });
+    expect(result.current.data.map((row) => row.id)).toEqual(["cat-b"]);
+  });
+});
+
+describe("loading a full catalog item for an action", () => {
+  it("serves a second action started right after the first from the same load", async () => {
+    getCatalogItemMock.mockResolvedValue({
+      data: { id: "cat-a", name: "a", toolCount: 1, skillCount: 0 },
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    // The Add tools list loads the item, then the Choose tools view does.
+    await fetchInternalMcpCatalogItem(queryClient, "cat-a");
+    const item = await fetchInternalMcpCatalogItem(queryClient, "cat-a");
+
+    expect(item?.id).toBe("cat-a");
+    expect(getCatalogItemMock).toHaveBeenCalledTimes(1);
+    // The registry's pages open only items a list shows.
+    expect(getCatalogItemMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: { id: "cat-a" },
+        query: { listedOnly: true },
+      }),
+    );
   });
 });

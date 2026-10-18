@@ -155,6 +155,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Only installs of these catalog items (comma-separated, at most 100).",
             ),
+          catalogSlug: z
+            .string()
+            .min(1)
+            .max(256)
+            .optional()
+            .describe(
+              "Only installs of catalog items whose name, slugified as in tool names (lowercase, spaces as _, other characters dropped), is this.",
+            ),
           includeAssignedAgents: z
             .preprocess(
               (value) => value === "true" || value === true,
@@ -187,6 +195,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         assignmentTeamIds,
         catalogId,
         catalogIds,
+        catalogSlug,
         status,
         includeAssignedAgents,
       } = query;
@@ -270,6 +279,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogId,
           // The registry asks for the installs of the catalog rows on screen.
           catalogIds,
+          // A tool's server prefix, for its logs.
+          catalogSlug,
           // Agent usage is included only when the caller asks for it.
           includeAssignedAgents: includeAssignedAgents === true,
           // serverType:"app" backings are managed on the Apps surface, not

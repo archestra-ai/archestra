@@ -22,7 +22,7 @@ const {
   mockUseConversations,
   mockUseMyAgentRuns,
   mockUseAgentOptions,
-  mockUseInternalMcpCatalog,
+  mockUseMcpRegistryPage,
   mockUseSkillsPaginated,
   mockUseApps,
   mockUseProjects,
@@ -36,7 +36,7 @@ const {
   mockUseConversations: vi.fn(),
   mockUseMyAgentRuns: vi.fn(),
   mockUseAgentOptions: vi.fn(),
-  mockUseInternalMcpCatalog: vi.fn(),
+  mockUseMcpRegistryPage: vi.fn(),
   mockUseSkillsPaginated: vi.fn(),
   mockUseApps: vi.fn(),
   mockUseProjects: vi.fn(),
@@ -112,8 +112,8 @@ vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  useInternalMcpCatalog: mockUseInternalMcpCatalog,
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpRegistryPage: mockUseMcpRegistryPage,
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({
@@ -293,7 +293,7 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
     });
     mockUseAgentOptions.mockReturnValue({ data: [] });
-    mockUseInternalMcpCatalog.mockReturnValue({ data: [] });
+    mockUseMcpRegistryPage.mockReturnValue({ data: undefined });
     mockUseSkillsPaginated.mockReturnValue({ data: { data: [] } });
     mockUseApps.mockReturnValue({ data: { data: [] } });
     mockUseProjects.mockReturnValue({ data: { data: [] } });
@@ -632,16 +632,66 @@ describe("ConversationSearchPalette", () => {
     });
 
     it("finds an MCP server in the registry by its name", () => {
-      mockUseInternalMcpCatalog.mockReturnValue({
-        data: [{ id: "cat-1", name: "GitHub MCP" }],
+      mockUseMcpRegistryPage.mockReturnValue({
+        data: { data: [{ id: "cat-1", name: "GitHub MCP" }] },
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
       search("github");
 
+      // Searched by the server, by name, including the built-in Archestra
+      // entry the registry page leaves out.
+      expect(mockUseMcpRegistryPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: "github",
+          limit: 5,
+          includeBuiltIn: true,
+        }),
+        expect.objectContaining({ enabled: true }),
+      );
       expect(screen.getByText("MCP Servers")).toBeInTheDocument();
       fireEvent.click(screen.getByText("GitHub MCP"));
       expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry/cat-1");
+    });
+
+    it("offers the built-in Archestra entry when it matches", () => {
+      mockUseMcpRegistryPage.mockReturnValue({
+        data: {
+          data: [
+            { id: "00000000-0000-4000-8000-000000000001", name: "Archestra" },
+          ],
+        },
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "arch" },
+      });
+
+      expect(screen.getByText("MCP Servers")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Archestra"));
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/mcp/registry/00000000-0000-4000-8000-000000000001",
+      );
+    });
+
+    it("offers the built-in Archestra entry when it matches", () => {
+      mockUseMcpRegistryPage.mockReturnValue({
+        data: {
+          data: [
+            { id: "00000000-0000-4000-8000-000000000001", name: "Archestra" },
+          ],
+        },
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      search("arch");
+
+      expect(screen.getByText("MCP Servers")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Archestra"));
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/mcp/registry/00000000-0000-4000-8000-000000000001",
+      );
     });
 
     it("finds a skill through the server search and opens it", () => {
@@ -715,11 +765,13 @@ describe("ConversationSearchPalette", () => {
     });
 
     it("keeps each group short so chat matches stay in view", () => {
-      mockUseInternalMcpCatalog.mockReturnValue({
-        data: Array.from({ length: 8 }, (_, index) => ({
-          id: `cat-${index}`,
-          name: `GitHub MCP ${index}`,
-        })),
+      mockUseMcpRegistryPage.mockReturnValue({
+        data: {
+          data: Array.from({ length: 8 }, (_, index) => ({
+            id: `cat-${index}`,
+            name: `GitHub MCP ${index}`,
+          })),
+        },
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 

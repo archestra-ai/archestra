@@ -135,6 +135,10 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
+  isServableIconDataUrl,
+  SERVABLE_ICON_TYPES,
+} from "@/utils/servable-icon";
+import {
   broadcastMcpInstallationStatus,
   broadcastMcpServersChanged,
 } from "@/websocket";
@@ -190,6 +194,10 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
   MCP_REGISTRY_SORT_KEYS,
 ).extend({
   search: z.string().trim().max(256).optional(),
+  searchDescriptions: z
+    .boolean()
+    .optional()
+    .describe("Match the search against descriptions too, not only names."),
   // Each key is one more EXISTS in the query.
   labels: z
     .record(z.string().max(256), z.array(z.string().max(256)).max(100))
@@ -229,6 +237,22 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
     .describe(
       "Only these items. An empty list matches nothing; omit it for every item.",
     ),
+  includeBuiltIn: z
+    .boolean()
+    .optional()
+    .describe("Also list the built-in MCP server entry."),
+  includeDefaultEnvironment: z
+    .boolean()
+    .optional()
+    .describe(
+      "With environmentIds: also match items in the Default environment (no environment).",
+    ),
+  includeApps: z
+    .boolean()
+    .optional()
+    .describe(
+      "Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.",
+    ),
   rankTiers: z
     .array(z.array(z.string().uuid()).max(10_000))
     .max(1_000)
@@ -260,6 +284,9 @@ const McpRegistryRowSchema = ListInternalMcpCatalogSchema.pick({
   providesSkills: true,
   catalogReinstallRequired: true,
   dynamicConnectionMcpServerId: true,
+  appId: true,
+  appEnabled: true,
+  docsUrl: true,
 }).extend({
   /** An emoji icon; image icons are served from `iconUrl` instead. */
   icon: z.string().nullable(),
@@ -270,6 +297,15 @@ const McpRegistryRowSchema = ListInternalMcpCatalogSchema.pick({
   /** An environment variable is bound to a stored credential. */
   bindsCredential: z.boolean(),
   enterpriseManaged: z.boolean(),
+  /**
+   * What connecting this item asks of the person: an account sign-in, or a
+   * number of settings to fill in. Lets a picker say so without loading the
+   * item's full configuration.
+   */
+  setupNeeds: z.object({
+    signIn: z.boolean(),
+    settings: z.number().int(),
+  }),
   install: z.object({
     /** Installs of this item the caller can see. */
     visibleCount: z.number().int(),
@@ -297,12 +333,16 @@ const McpRegistryIssueIndexSchema = z.object({
       authorId: z.string().optional(),
       createdByServiceAccountId: z.string().optional(),
       authorName: z.string().optional(),
+      /** An emoji icon; image icons are linked through `iconUrl`. */
+      icon: z.string().optional(),
+      iconUrl: z.string().optional(),
       alertMutes: z.array(McpServerAlertMuteSchema).optional(),
     }),
   ),
   servers: z.array(
     SelectMcpServerSchema.pick({
       id: true,
+      name: true,
       catalogId: true,
       scope: true,
       localInstallationStatus: true,
@@ -574,6 +614,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           pagination: { limit, offset },
         });
       const ids = items.map((item) => item.id);
+      // App backings carry their app's id and state, as on the full list.
+      const appCatalogIds = items
+        .filter((item) => item.serverType === "app")
+        .map((item) => item.id);
+      const [appIdByCatalog, appEnabledByCatalog] = await Promise.all([
+        AppModel.getAppIdsByCatalogIds(appCatalogIds),
+        AppModel.getAppEnabledByCatalogIds(appCatalogIds),
+      ]);
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -649,6 +697,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             providesSkills: item.providesSkills,
             catalogReinstallRequired: item.catalogReinstallRequired,
             dynamicConnectionMcpServerId: item.dynamicConnectionMcpServerId,
+            docsUrl: item.docsUrl,
+            appId:
+              item.serverType === "app"
+                ? (appIdByCatalog.get(item.id) ?? null)
+                : null,
+            appEnabled:
+              item.serverType === "app"
+                ? (appEnabledByCatalog.get(item.id) ?? null)
+                : null,
             icon: imageIcon ? null : (item.icon ?? null),
             iconUrl:
               imageIcon && item.icon && isServableIconDataUrl(item.icon)
@@ -663,6 +720,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               (env) => env.credentialId,
             ),
             enterpriseManaged: !!item.enterpriseManagedConfig,
+            setupNeeds: {
+              signIn: !!item.oauthConfig,
+              settings:
+                (item.localConfig?.environment?.filter(
+                  (env) => env.promptOnInstallation,
+                ).length ?? 0) + Object.keys(item.userConfig ?? {}).length,
+            },
             install: installs.get(item.id) ?? {
               visibleCount: 0,
               installedForViewer: false,
@@ -756,7 +820,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       });
       return reply.send({
-        catalogItems: catalogItems.map(withoutEmptyFields),
+        catalogItems: catalogItems.map(
+          ({ emojiIcon, hasImageIcon, updatedAt, ...item }) =>
+            withoutEmptyFields({
+              ...item,
+              icon: emojiIcon,
+              iconUrl: hasImageIcon
+                ? registryIconUrlForVersion(item.id, `u${updatedAt.getTime()}`)
+                : null,
+            }),
+        ),
         servers: servers.map(withoutEmptyFields),
       });
     },
@@ -1214,6 +1287,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
+        querystring: z.object({
+          listedOnly: z
+            .preprocess(
+              (value) => value === "true" || value === true,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Answer 404 for hidden runtime variants (Playwright per-environment rows); app backings are still returned. Default false.",
+            ),
+        }),
         response: constructResponseSchema(
           SelectInternalMcpCatalogSchema.extend({
             // The list figures a detail page or install dialog shows, so
@@ -1240,6 +1324,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
+        // Hidden runtime variants are never listed. API clients still open
+        // one through an install's catalogId; the registry's pages do not.
+        rootOnly: request.query.listedOnly === true,
       });
 
       if (!catalogItem) {
@@ -3446,6 +3533,13 @@ async function resolveRegistryQuery(
     },
     filters: {
       search: body.search,
+      searchDescriptions: body.searchDescriptions,
+      includeBuiltIn: body.includeBuiltIn,
+      includeDefaultEnvironment: body.includeDefaultEnvironment,
+      // App backings are gated by `app:read`, as on the full list.
+      includeApps:
+        body.includeApps === true &&
+        (await hasPermission({ app: ["read"] }, request.headers)).success,
       labels: body.labels,
       environmentIds: body.environmentIds,
       authorIds: body.authorIds,
@@ -3523,7 +3617,15 @@ function summarizeRegistryInstalls(
 
 /** A content-versioned link, so a changed icon is a new URL. */
 function registryIconUrl(catalogId: string, icon: string): string {
-  return `/api/internal_mcp_catalog/${catalogId}/icon?v=${iconVersion(icon)}`;
+  return registryIconUrlForVersion(catalogId, iconVersion(icon));
+}
+
+/**
+ * The icon route link for a version token. The issue index versions by the
+ * item's update time so it never reads the image bytes; any edit is a new URL.
+ */
+function registryIconUrlForVersion(catalogId: string, version: string): string {
+  return `/api/internal_mcp_catalog/${catalogId}/icon?v=${version}`;
 }
 
 function iconVersion(icon: string): string {
@@ -3531,30 +3633,6 @@ function iconVersion(icon: string): string {
 }
 
 /** The bytes of an image `data:` URL, or null for anything else. */
-/**
- * Image types a browser shows in an `<img>`. The icon route serves only these,
- * so an upload of any other type never reaches a browser under its own
- * content type. SVG stays: many server icons are SVG, and the route's CSP
- * (`default-src 'none'; sandbox`) blocks its scripts and every fetch.
- */
-const SERVABLE_ICON_TYPES = new Set([
-  "image/apng",
-  "image/avif",
-  "image/bmp",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/svg+xml",
-  "image/vnd.microsoft.icon",
-  "image/webp",
-  "image/x-icon",
-]);
-
-function isServableIconDataUrl(value: string): boolean {
-  const mimeType = /^data:(image\/[a-z0-9.+-]+)[;,]/i.exec(value)?.[1];
-  return !!mimeType && SERVABLE_ICON_TYPES.has(mimeType.toLowerCase());
-}
-
 function decodeImageDataUrl(
   value: string,
 ): { mimeType: string; bytes: Buffer } | null {

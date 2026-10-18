@@ -1,5 +1,6 @@
 import {
   archestraApiSdk,
+  type archestraApiTypes,
   ManagedResourceSchema,
   type Permissions,
   ResourcePermissionActionSchema,
@@ -268,6 +269,23 @@ export function useDefaultCredentialsEnabled({
   });
 }
 
+/**
+ * Put a server-resolved session and bootstrap into a fresh query cache, under
+ * the keys the shell's gates and the session check read, so a server-rendered
+ * page renders signed in on the server and on the first browser render alike
+ * — and neither asks for them again while they are fresh.
+ */
+export function seedShellQueries(
+  queryClient: QueryClient,
+  seed: {
+    session: unknown;
+    bootstrap: archestraApiTypes.GetBootstrapResponses["200"];
+  },
+) {
+  queryClient.setQueryData(authQueryKeys.session(), seed.session);
+  applyBootstrap(queryClient, seed.bootstrap);
+}
+
 // ===
 
 /**
@@ -284,16 +302,23 @@ async function seedBootstrapQueries(queryClient: QueryClient) {
   try {
     const { data } = await archestraApiSdk.getBootstrap();
     if (!data) return;
-    queryClient.setQueryData(authQueryKeys.userPermissions(), data.permissions);
-    queryClient.setQueryData(
-      authQueryKeys.scopedCapabilities(),
-      data.scopedCapabilities,
-    );
-    queryClient.setQueryData(["config"], data.config);
-    if (data.organization) {
-      queryClient.setQueryData(["organization", "details"], data.organization);
-    }
+    applyBootstrap(queryClient, data);
   } catch {
     // Fall back to the individual requests.
+  }
+}
+
+function applyBootstrap(
+  queryClient: QueryClient,
+  data: archestraApiTypes.GetBootstrapResponses["200"],
+) {
+  queryClient.setQueryData(authQueryKeys.userPermissions(), data.permissions);
+  queryClient.setQueryData(
+    authQueryKeys.scopedCapabilities(),
+    data.scopedCapabilities,
+  );
+  queryClient.setQueryData(["config"], data.config);
+  if (data.organization) {
+    queryClient.setQueryData(["organization", "details"], data.organization);
   }
 }

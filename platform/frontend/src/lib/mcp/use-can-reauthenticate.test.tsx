@@ -7,7 +7,10 @@ vi.mock("@/lib/teams/team.query");
 
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMyTeams } from "@/lib/teams/team.query";
-import { useCanReauthenticate } from "./use-can-reauthenticate";
+import {
+  useCanReauthenticate,
+  useCanReauthenticateInputsReady,
+} from "./use-can-reauthenticate";
 
 const CURRENT_USER = "user-self";
 const TEAM_ID = "team-1";
@@ -129,5 +132,31 @@ describe("useCanReauthenticate", () => {
       teams: [{ id: TEAM_ID, myRole: "member" }],
     });
     expect(canReauth({ scope: null, teamId: TEAM_ID })).toBe(true);
+  });
+});
+
+describe("useCanReauthenticateInputsReady", () => {
+  function ready(teams: { isPending: boolean; isError: boolean }) {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: CURRENT_USER } },
+      isPending: false,
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: undefined,
+      ...teams,
+    } as unknown as ReturnType<typeof useMyTeams>);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    return renderHook(() => useCanReauthenticateInputsReady()).result.current;
+  }
+
+  it("is ready once the teams load, and not while they load or after they fail", () => {
+    expect(ready({ isPending: false, isError: false })).toBe(true);
+    expect(ready({ isPending: true, isError: false })).toBe(false);
+    // Without teams every team connection reads as "not a member": a rule
+    // built on that must not override the server's ranking.
+    expect(ready({ isPending: false, isError: true })).toBe(false);
   });
 });

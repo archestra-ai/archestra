@@ -233,6 +233,18 @@ describe("external MCP Skill routes", () => {
         ),
     );
 
+    ExternalMcpSkillUsageEventModel.recordUsage({
+      mcpServerId: server.id,
+      uri: stored.uri,
+      userId: ctx.user.id,
+    });
+    ExternalMcpSkillUsageEventModel.recordUsage({
+      mcpServerId: server.id,
+      uri: stored.uri,
+      userId: null,
+    });
+    await drainBackgroundWork();
+
     const response = await ctx.app.inject({
       method: "GET",
       url: `/api/skills/external/${stored.id}?mcpServerId=${server.id}`,
@@ -242,6 +254,10 @@ describe("external MCP Skill routes", () => {
     expect(response.json()).toMatchObject({
       content: "# current source",
       description: "Current.",
+      // The detail keeps the matched skill's usage summary.
+      usageCount: 2,
+      usageUserCount: 1,
+      lastUsedAt: expect.any(String),
     });
   });
 });

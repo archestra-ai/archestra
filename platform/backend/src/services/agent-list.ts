@@ -48,6 +48,8 @@ export async function populateAgentListActivationSkillCounts(params: {
               organizationId: params.organizationId,
               userId: params.userId,
               environmentId,
+              // Only counted: skip native instruction bodies at the SQL boundary.
+              includeContent: false,
             }),
           ] as const,
       ),

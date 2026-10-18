@@ -7,8 +7,8 @@ import { listExternalMcpSkills } from "@/services/external-mcp-skills";
 import { listAccessibleCatalogSkills } from "@/skills/skill-catalog-prompt";
 import type {
   AgentActivationSkillReference,
-  ExternalMcpSkillListItem,
-  PluginSkillListItem,
+  ExternalMcpSkillCatalogItem,
+  PluginSkillCatalogItem,
   Skill,
 } from "@/types";
 
@@ -25,8 +25,8 @@ export interface SkillAvailabilityContext {
 
 export type PolicyIndependentAvailableAgentSkill =
   | { source: "native"; skill: Skill }
-  | { source: "plugin"; skill: PluginSkillListItem }
-  | { source: "external"; skill: ExternalMcpSkillListItem };
+  | { source: "plugin"; skill: PluginSkillCatalogItem }
+  | { source: "external"; skill: ExternalMcpSkillCatalogItem };
 
 export function getAvailableAgentSkillReference(
   available: PolicyIndependentAvailableAgentSkill,

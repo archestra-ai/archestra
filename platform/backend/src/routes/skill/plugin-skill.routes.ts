@@ -31,6 +31,7 @@ const pluginSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await listPluginSkills({
           organizationId,
           userId: user.id,
+          includeUsage: true,
         }),
       );
     },

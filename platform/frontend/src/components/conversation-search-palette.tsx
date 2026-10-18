@@ -224,6 +224,7 @@ export function ConversationSearchPalette({
   } = useConversations({
     enabled: open && isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
+    limit: PALETTE_CONVERSATION_LIMIT,
   });
 
   // Agent Runtime sessions live in the same sidebar timeline as chats,
@@ -1195,3 +1196,9 @@ const GRID_GROUP_CLASS_NAME =
   "[&_[cmdk-group-items]]:grid [&_[cmdk-group-items]]:grid-cols-2 [&_[cmdk-group-items]]:gap-1";
 const PAGES_GRID_CLASS_NAME =
   "[&_[cmdk-group-items]]:grid [&_[cmdk-group-items]]:grid-cols-2 sm:[&_[cmdk-group-items]]:grid-cols-3 [&_[cmdk-group-items]]:gap-x-1";
+
+/**
+ * The palette's recent list before a query is typed: the server's maximum, as
+ * this is where the sidebar's "More" leads.
+ */
+const PALETTE_CONVERSATION_LIMIT = 250;

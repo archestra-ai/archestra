@@ -95,7 +95,6 @@ export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connect
 export { default as LimitModel, LimitValidationService } from "./limit";
 export { default as LlmOauthClientModel } from "./llm-oauth-client";
 export { default as LlmProviderApiKeyModel } from "./llm-provider-api-key";
-export type { ModelSyncState } from "./llm-provider-api-key-model";
 export {
   default as LlmProviderApiKeyModelLinkModel,
   selectionKey,

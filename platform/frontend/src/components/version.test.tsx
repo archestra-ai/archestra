@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockUseHealth,
+  mockUseConfig,
+  mockUseIsAuthenticated,
   mockUseLatestGitHubRelease,
   mockUseOrganization,
   mockUseAppearanceSettings,
 } = vi.hoisted(() => ({
   mockUseHealth: vi.fn(),
+  mockUseConfig: vi.fn(),
+  mockUseIsAuthenticated: vi.fn(),
   mockUseLatestGitHubRelease: vi.fn(),
   mockUseOrganization: vi.fn(),
   mockUseAppearanceSettings: vi.fn(),
@@ -42,7 +46,15 @@ vi.mock("@/lib/config/config", () => ({
 }));
 
 vi.mock("@/lib/config/health.query", () => ({
-  useHealth: () => mockUseHealth(),
+  useHealth: (params?: { enabled?: boolean }) => mockUseHealth(params),
+}));
+
+vi.mock("@/lib/config/config.query", () => ({
+  useConfig: () => mockUseConfig(),
+}));
+
+vi.mock("@/lib/auth/auth.hook", () => ({
+  useIsAuthenticated: () => mockUseIsAuthenticated(),
 }));
 
 vi.mock("@/lib/github/github-release.query", () => ({
@@ -62,6 +74,9 @@ describe("Version", () => {
     vi.clearAllMocks();
     mockConfig.enterpriseFeatures.fullWhiteLabeling = false;
 
+    // Signed out by default: the version comes from /health.
+    mockUseIsAuthenticated.mockReturnValue(false);
+    mockUseConfig.mockReturnValue({ data: undefined });
     mockUseHealth.mockReturnValue({
       data: { version: "1.1.32" },
     });
@@ -74,6 +89,17 @@ describe("Version", () => {
     });
     mockUseOrganization.mockReturnValue({ data: null });
     mockUseAppearanceSettings.mockReturnValue({ data: null });
+  });
+
+  it("signed in, reads the version from the loaded config instead of asking /health", () => {
+    mockUseIsAuthenticated.mockReturnValue(true);
+    mockUseConfig.mockReturnValue({ data: { version: "1.1.32" } });
+    mockUseHealth.mockReturnValue({ data: undefined });
+
+    render(<Version inline />);
+
+    expect(screen.getByText(/Version: 1\.1\.32/)).toBeInTheDocument();
+    expect(mockUseHealth).toHaveBeenCalledWith({ enabled: false });
   });
 
   it("shows the latest release link by default", () => {

@@ -34386,6 +34386,7 @@ export type GetBootstrapResponses = {
             newAppsLockedByDefault: boolean;
         } | null;
         config: {
+            version: string;
             enterpriseFeatures: {
                 core: boolean;
                 knowledgeBase: boolean;
@@ -35294,6 +35295,10 @@ export type GetChatConversationsData = {
     path?: never;
     query?: {
         search?: string;
+        /**
+         * Recent conversations to return when not searching. Pinned ones are always added.
+         */
+        limit?: number;
         /**
          * Include each chat's artifact and todo list (default true). False returns them as null for lightweight lists.
          */
@@ -41886,6 +41891,7 @@ export type GetConfigResponses = {
      * Default Response
      */
     200: {
+        version: string;
         enterpriseFeatures: {
             core: boolean;
             knowledgeBase: boolean;

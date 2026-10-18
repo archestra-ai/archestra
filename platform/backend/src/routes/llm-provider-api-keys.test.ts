@@ -1,6 +1,8 @@
 import { providerDisplayNames } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -1712,6 +1714,49 @@ describe("LLM Provider API Keys Scope Update", () => {
 
     expect(updateResponse.statusCode).toBe(400);
     expect(updateResponse.json().error.message).toContain("per-user");
+  });
+
+  test("records the credential kind on create and keeps it current when the value is replaced", async () => {
+    const storedKind = async (id: string) =>
+      (
+        await db
+          .select({ kind: schema.llmProviderApiKeysTable.credentialKind })
+          .from(schema.llmProviderApiKeysTable)
+          .where(eq(schema.llmProviderApiKeysTable.id, id))
+      )[0]?.kind;
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "My OpenAI",
+        provider: "openai",
+        apiKey: "sk-openai-personal-key",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const { id } = createResponse.json();
+    expect(await storedKind(id)).toBe("api_key");
+
+    const toSubscription = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${id}`,
+      payload: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "refresh-token",
+          accountId: "account-id",
+        }),
+      },
+    });
+    expect(toSubscription.statusCode).toBe(200);
+    expect(await storedKind(id)).toBe("chatgpt");
+
+    const backToKey = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${id}`,
+      payload: { apiKey: "sk-openai-personal-key-2" },
+    });
+    expect(backToKey.statusCode).toBe(200);
+    expect(await storedKind(id)).toBe("api_key");
   });
 });
 

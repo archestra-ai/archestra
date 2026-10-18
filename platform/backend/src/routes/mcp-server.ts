@@ -33,7 +33,6 @@ import logger from "@/logging";
 import {
   AccountModel,
   AgentModel,
-  AgentTeamModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerAlertMuteModel,
@@ -124,15 +123,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      const [byOrg, canSeeAgent] = await Promise.all([
-        AgentModel.getAutoModeAgentDetailsByOrganizations([organizationId]),
-        getVisibleAgentFilter({ userId: user.id, organizationId }),
+      const byOrg = await AgentModel.getAutoModeAgentDetailsByOrganizations([
+        organizationId,
       ]);
-      return reply.send(
-        (byOrg.get(organizationId) ?? []).filter((agent) =>
-          canSeeAgent(agent.id),
-        ),
-      );
+      const agents = byOrg.get(organizationId) ?? [];
+      const canSeeAgent = await getVisibleAgentFilter({
+        userId: user.id,
+        organizationId,
+        agentIds: agents.map((agent) => agent.id),
+      });
+      return reply.send(agents.filter((agent) => canSeeAgent(agent.id)));
     },
   );
 
@@ -306,7 +306,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const [decorated, canSeeAgent] = await Promise.all([
         decorateMcpServerListEntries({ servers: allServers, userId: user.id }),
-        getVisibleAgentFilter({ userId: user.id, organizationId }),
+        getVisibleAgentFilter({
+          userId: user.id,
+          organizationId,
+          agentIds: [
+            ...new Set(
+              allServers.flatMap(
+                (server) =>
+                  server.assignedAgents?.map((agent) => agent.id) ?? [],
+              ),
+            ),
+          ],
+        }),
       ]);
 
       return reply.send(
@@ -351,6 +362,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const canSeeAgent = await getVisibleAgentFilter({
         userId: user.id,
         organizationId,
+        agentIds: server.assignedAgents?.map((agent) => agent.id) ?? [],
       });
       return reply.send({
         ...server,
@@ -4005,7 +4017,11 @@ function filterInstallUserConfigValues(params: {
 async function getVisibleAgentFilter(params: {
   userId: string;
   organizationId: string;
+  /** The agents the response would name; only these are checked. */
+  agentIds: string[];
 }): Promise<(agentId: string) => boolean> {
+  // Status-only lists (includeAssignedAgents=false) name no agents at all.
+  if (params.agentIds.length === 0) return () => false;
   const [managesSharedInstalls, isAgentAdmin] = await Promise.all([
     userHasPermission(
       params.userId,
@@ -4019,7 +4035,9 @@ async function getVisibleAgentFilter(params: {
     return () => true;
   }
   const accessibleAgentIds = new Set(
-    await AgentTeamModel.getUserAccessibleAgentIds(params.userId, false),
+    await AgentModel.findAccessibleIdsForUser(params.userId, false, undefined, {
+      among: params.agentIds,
+    }),
   );
   return (agentId) => accessibleAgentIds.has(agentId);
 }

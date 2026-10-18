@@ -1,5 +1,5 @@
 {
-  "id": "a654f5d1-a431-4922-82b9-cd05ab3ab4e6",
+  "id": "33643fb1-aef5-4988-9ed5-a2220afbb524",
   "prevId": "66f14d1d-b4d2-4d4e-a0fa-36a180b11fe4",
   "version": "7",
   "dialect": "postgresql",
@@ -10424,13 +10424,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "new_session_policy": {
-          "name": "new_session_policy",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'live'"
         }
       },
       "indexes": {},
@@ -15256,6 +15249,27 @@
           "method": "btree",
           "with": {}
         },
+        "api_key_models_api_key_id_synced_at_idx": {
+          "name": "api_key_models_api_key_id_synced_at_idx",
+          "columns": [
+            {
+              "expression": "api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "synced_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "api_key_models_model_id_idx": {
           "name": "api_key_models_model_id_idx",
           "columns": [
@@ -15413,6 +15427,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "credential_kind": {
+          "name": "credential_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_by_service_account_id": {
           "name": "created_by_service_account_id",
@@ -27922,36 +27942,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.openappa_deployments": {
-      "name": "openappa_deployments",
-      "schema": "",
-      "columns": {
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "head": {
-          "name": "head",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "openappa_deployments_head_positive": {
-          "name": "openappa_deployments_head_positive",
-          "value": "\"openappa_deployments\".\"head\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.openappa_dispatch_leases": {
       "name": "openappa_dispatch_leases",
       "schema": "",
@@ -28801,112 +28791,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.openappa_policy_revisions": {
-      "name": "openappa_policy_revisions",
-      "schema": "",
-      "columns": {
-        "deployment": {
-          "name": "deployment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "revision": {
-          "name": "revision",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "hash": {
-          "name": "hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "openappa_policy_revisions_key_idx": {
-          "name": "openappa_policy_revisions_key_idx",
-          "columns": [
-            {
-              "expression": "deployment",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "revision",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "openappa_policy_revisions_deployment_fk": {
-          "name": "openappa_policy_revisions_deployment_fk",
-          "tableFrom": "openappa_policy_revisions",
-          "tableTo": "openappa_deployments",
-          "columnsFrom": [
-            "deployment"
-          ],
-          "columnsTo": [
-            "name"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "openappa_policy_revisions_hash_fk": {
-          "name": "openappa_policy_revisions_hash_fk",
-          "tableFrom": "openappa_policy_revisions",
-          "tableTo": "openappa_policy_files",
-          "columnsFrom": [
-            "hash"
-          ],
-          "columnsTo": [
-            "hash"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "openappa_policy_revisions_pk": {
-          "name": "openappa_policy_revisions_pk",
-          "columns": [
-            "deployment",
-            "revision"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "openappa_policy_revisions_revision_positive": {
-          "name": "openappa_policy_revisions_revision_positive",
-          "value": "\"openappa_policy_revisions\".\"revision\" > 0"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.openappa_processed_results": {

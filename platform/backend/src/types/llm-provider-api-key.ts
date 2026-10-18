@@ -14,20 +14,36 @@ import { LabelWithDetailsSchema } from "./label";
 import { SecretStorageTypeSchema } from "./mcp-server";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
+/**
+ * What kind of credential a key stores: an ordinary API key, or one of the
+ * subscription credentials. Recorded when the value is written so reads can
+ * tell per-user credentials apart without resolving the secret.
+ */
+export const LlmProviderCredentialKindSchema = z.enum([
+  "api_key",
+  ...SubscriptionCredentialKindSchema.options,
+]);
+export type LlmProviderCredentialKind = z.infer<
+  typeof LlmProviderCredentialKindSchema
+>;
+
 export const SelectLlmProviderApiKeySchema = createSelectSchema(
   schema.llmProviderApiKeysTable,
-).extend({
-  provider: SupportedProvidersSchema,
-  scope: ResourceVisibilityScopeSchema,
-  // baseUrl is nullable in the DB schema (text without .notNull()) but
-  // drizzle-zod's createSelectSchema defaults text columns to z.string().
-  // Override to match the actual DB column nullability so Fastify response
-  // serialization doesn't throw when baseUrl is null.
-  baseUrl: z.string().nullable(),
-  inferenceBaseUrl: z.string().nullable(),
-  extraHeaders: z.record(z.string(), z.string()).nullable(),
-  requiresReauthentication: z.boolean().optional(),
-});
+)
+  // Server-side bookkeeping; clients get the derived `subscriptionKind`.
+  .omit({ credentialKind: true })
+  .extend({
+    provider: SupportedProvidersSchema,
+    scope: ResourceVisibilityScopeSchema,
+    // baseUrl is nullable in the DB schema (text without .notNull()) but
+    // drizzle-zod's createSelectSchema defaults text columns to z.string().
+    // Override to match the actual DB column nullability so Fastify response
+    // serialization doesn't throw when baseUrl is null.
+    baseUrl: z.string().nullable(),
+    inferenceBaseUrl: z.string().nullable(),
+    extraHeaders: z.record(z.string(), z.string()).nullable(),
+    requiresReauthentication: z.boolean().optional(),
+  });
 
 export const InsertLlmProviderApiKeySchema = createInsertSchema(
   schema.llmProviderApiKeysTable,
@@ -38,6 +54,7 @@ export const InsertLlmProviderApiKeySchema = createInsertSchema(
     updatedAt: true,
     createdByServiceAccountId: true,
     requiresReauthentication: true,
+    credentialKind: true,
   })
   .extend({
     provider: SupportedProvidersSchema,
@@ -54,6 +71,7 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
     organizationId: true,
     createdByServiceAccountId: true,
     requiresReauthentication: true,
+    credentialKind: true,
     createdAt: true,
     updatedAt: true,
   })
@@ -66,6 +84,18 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
   });
 
 export type LlmProviderApiKey = z.infer<typeof SelectLlmProviderApiKeySchema>;
+/** What the scheduled model sync reads off a key. */
+export type LlmProviderApiKeyForModelSync = Pick<
+  LlmProviderApiKey,
+  | "id"
+  | "organizationId"
+  | "name"
+  | "provider"
+  | "secretId"
+  | "baseUrl"
+  | "extraHeaders"
+  | "isSystem"
+>;
 export type InsertLlmProviderApiKey = z.infer<
   typeof InsertLlmProviderApiKeySchema
 >;

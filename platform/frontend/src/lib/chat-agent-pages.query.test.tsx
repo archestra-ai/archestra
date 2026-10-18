@@ -66,19 +66,14 @@ it("waits for exact preferred references before resolving a project default outs
     http.get(`${origin}/api/agents/chat-roster`, async ({ request }) => {
       const url = new URL(request.url);
       requests.push(url);
+      // A bootstrap that leaves the defaults out (a server from before it
+      // included them, or defaults the caller cannot use).
       if (url.searchParams.get("bootstrap") === "true")
         return HttpResponse.json([agent("fallback")]);
-      expect((url.searchParams.get("ids")?.split(",") ?? []).sort()).toEqual([
-        "member-default",
-        "org-default",
-        "project-default",
-      ]);
       await held;
-      return HttpResponse.json([
-        agent("project-default"),
-        agent("member-default"),
-        agent("org-default"),
-      ]);
+      return HttpResponse.json(
+        (url.searchParams.get("ids")?.split(",") ?? []).map((id) => agent(id)),
+      );
     }),
   );
   const { wrapper } = setup();
@@ -103,7 +98,14 @@ it("waits for exact preferred references before resolving a project default outs
     },
     { wrapper },
   );
-  await waitFor(() => expect(requests).toHaveLength(2));
+  // The caller's own id is looked up at once, alongside the bootstrap; the
+  // defaults the bootstrap left out follow in a lookup of their own.
+  await waitFor(() => expect(requests).toHaveLength(3));
+  expect(
+    requests
+      .filter((url) => url.searchParams.has("ids"))
+      .map((url) => url.searchParams.get("ids")?.split(",").sort()),
+  ).toEqual([["project-default"], ["member-default", "org-default"]]);
   expect(result.current.state.agentId).toBeNull();
   await act(async () => release());
   await waitFor(() =>

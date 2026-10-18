@@ -53678,7 +53678,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get authorized chat agent identities and model references\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `agent:read`; only internal agents visible to the caller are returned.",
+        "description": "Get authorized chat agent identities and model references. With `bootstrap`, the starting roster plus the caller's and the organization's default agents the caller can use.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `agent:read`; only internal agents visible to the caller are returned.",
         "parameters": [
           {
             "schema": {
@@ -123194,6 +123194,9 @@
                     "config": {
                       "type": "object",
                       "properties": {
+                        "version": {
+                          "type": "string"
+                        },
                         "enterpriseFeatures": {
                           "type": "object",
                           "properties": {
@@ -123541,6 +123544,7 @@
                         }
                       },
                       "required": [
+                        "version",
                         "enterpriseFeatures",
                         "smallTeamTier",
                         "features",
@@ -126455,7 +126459,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "List all conversations for current user with agent details. Optionally filter by search query.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "description": "List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -126464,6 +126468,18 @@
             "in": "query",
             "name": "search",
             "required": false
+          },
+          {
+            "schema": {
+              "default": 250,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 250
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "description": "Recent conversations to return when not searching. Pinned ones are always added."
           },
           {
             "schema": {
@@ -150763,6 +150779,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "version": {
+                      "type": "string"
+                    },
                     "enterpriseFeatures": {
                       "type": "object",
                       "properties": {
@@ -151110,6 +151129,7 @@
                     }
                   },
                   "required": [
+                    "version",
                     "enterpriseFeatures",
                     "smallTeamTier",
                     "features",

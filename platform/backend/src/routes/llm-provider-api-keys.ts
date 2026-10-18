@@ -773,6 +773,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
           {
             initialPermissionGrants: body.initialGrants ?? [],
+            apiKeyValue: actualApiKeyValue ?? null,
           },
           // SPDX-SnippetEnd
         );
@@ -1020,6 +1021,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const newTeamId = apiKeyFromDB.teamId;
 
       let newSecretId: string | null = null;
+      // The value this request stores, to record its credential kind once the
+      // key row points at it.
+      let storedCredentialValue: string | undefined;
 
       if (body.apiKey) {
         // A new secret value alone can flip an existing shared key into a
@@ -1169,6 +1173,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           newSecretId = secret.id;
         }
+        storedCredentialValue = testValue;
       } else if (
         body.baseUrl !== undefined ||
         body.inferenceBaseUrl !== undefined ||
@@ -1293,6 +1298,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
           throw error;
         }
+      }
+
+      if (storedCredentialValue !== undefined) {
+        await LlmProviderApiKeyModel.recordCredentialKind({
+          id: params.id,
+          apiKeyValue: storedCredentialValue,
+        });
       }
 
       if (body.apiKey) {
@@ -1434,6 +1446,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           secretId: secret.id,
         });
       }
+      await LlmProviderApiKeyModel.recordCredentialKind({
+        id: keyRow.id,
+        apiKeyValue: latestValue,
+      });
 
       await LlmProviderApiKeyModel.setRequiresReauthentication({
         id: keyRow.id,

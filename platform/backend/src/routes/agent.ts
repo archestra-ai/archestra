@@ -50,6 +50,7 @@ import {
   OrganizationModel,
   ProjectModel,
 } from "@/models";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
 import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
@@ -85,6 +86,7 @@ import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
+  type AgentAccessContext,
   AgentActivationSkillPolicyResponseSchema,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
@@ -448,7 +450,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatAgentRoster,
         description:
-          "Get authorized chat agent identities and model references",
+          "Get authorized chat agent identities and model references. With `bootstrap`, the starting roster plus the caller's and the organization's default agents the caller can use.",
         tags: ["Agents"],
         querystring: z.object({
           bootstrap: z
@@ -471,22 +473,51 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, user, organizationId }, reply) => {
-      const params = await getPermittedAgentRosterOptions({
-        query: {
-          agentType: "agent",
-          excludeBuiltIn: true,
-          includeTools: false,
-          view: "chat",
-        },
-        userId: user.id,
-        organizationId,
-        ids: query.ids,
-      });
-      return reply.send(
-        query.bootstrap && query.ids === undefined
-          ? await AgentModel.findChatRosterBootstrap(params)
-          : await AgentModel.findChatRoster(params),
-      );
+      if (!query.bootstrap || query.ids !== undefined) {
+        return reply.send(
+          await AgentModel.findChatRoster(
+            await getPermittedAgentRosterOptions({
+              query: CHAT_ROSTER_QUERY,
+              userId: user.id,
+              organizationId,
+              ids: query.ids,
+            }),
+          ),
+        );
+      }
+      // The bootstrap also carries the caller's and the organization's
+      // default agents, so a chat page can pick its agent without a second,
+      // dependent roster request for them.
+      const [params, defaultAgentId, organization] = await Promise.all([
+        getPermittedAgentRosterOptions({
+          query: CHAT_ROSTER_QUERY,
+          userId: user.id,
+          organizationId,
+        }),
+        MemberModel.getDefaultAgentId(user.id, organizationId),
+        OrganizationModel.getById(organizationId),
+      ]);
+      const defaultIds = [
+        ...new Set(
+          [defaultAgentId, organization?.defaultAgentId].filter(
+            (id): id is string => !!id,
+          ),
+        ),
+      ];
+      const [starting, defaults] = await Promise.all([
+        AgentModel.findChatRosterBootstrap(params),
+        defaultIds.length > 0
+          ? AgentModel.findChatRoster({
+              ...params,
+              options: { ...params.options, ids: defaultIds },
+            })
+          : Promise.resolve([]),
+      ]);
+      return reply.send([
+        ...new Map(
+          [...starting, ...defaults].map((agent) => [agent.id, agent]),
+        ).values(),
+      ]);
     },
   );
 
@@ -964,14 +995,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
+      // Only the agent's own prompts matter here, not the full agent.
       const agent = await requireReadableAgent({
         id,
         userId: user.id,
         organizationId,
+        load: AgentModel.findByIdForAccess,
       });
+      const suggestedPrompts =
+        (await AgentSuggestedPromptModel.getForAgents([agent.id])).get(
+          agent.id,
+        ) ?? [];
       return reply.send(
         await getDocsSuggestedPrompts({
-          agent,
+          agent: { id: agent.id, suggestedPrompts },
           userId: user.id,
           organizationId,
         }),
@@ -2821,13 +2858,19 @@ export default agentRoutes;
  * themselves, so resolving the live agent here (findById excludes deleted
  * rows) is what keeps a deleted agent's history unreachable.
  */
-async function requireReadableAgent(params: {
+async function requireReadableAgent<
+  T extends AgentAccessContext & Pick<Agent, "agentType"> = Agent,
+>(params: {
   id: string;
   userId: string;
   organizationId: string;
-}): Promise<Agent> {
+  /** How to read the agent; the full agent unless the caller needs less. */
+  load?: (id: string) => Promise<T | null>;
+}): Promise<T> {
   // admin lookup first to learn the type, then enforce type-specific RBAC
-  const agent = await AgentModel.findById(params.id, params.userId, true);
+  const agent = params.load
+    ? await params.load(params.id)
+    : ((await AgentModel.findById(params.id, params.userId, true)) as T | null);
   if (!agent || agent.organizationId !== params.organizationId) {
     throw new ApiError(404, "Agent not found");
   }
@@ -3179,6 +3222,14 @@ type AgentRosterRequest = {
   optionsView?: boolean;
   ids?: string[];
 };
+
+/** The chat roster's filter: internal, non-built-in agents, no tools. */
+const CHAT_ROSTER_QUERY = {
+  agentType: "agent",
+  excludeBuiltIn: true,
+  includeTools: false,
+  view: "chat",
+} as const;
 
 async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
   const { userId, organizationId } = params;

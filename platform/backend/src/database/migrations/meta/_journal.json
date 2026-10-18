@@ -3988,8 +3988,15 @@
     {
       "idx": 569,
       "version": "7",
-      "when": 1792295027507,
-      "tag": "0569_calm_hellfire_club",
+      "when": 1792286825952,
+      "tag": "0569_overconfident_dragon_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 570,
+      "version": "7",
+      "when": 1792296954088,
+      "tag": "0570_calm_hellfire_club",
       "breakpoints": true
     }
   ]

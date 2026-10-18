@@ -44,6 +44,10 @@ type DialogKey =
   | "no-auth"
   | "manage";
 
+/**
+ * @param options.enabled Whether to load the issue index up front. Disabled
+ *   callers still work: a trigger loads the catalog item it opens.
+ */
 export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
   // Every visible install's scope and owner, from the registry's slim issue
   // index; the item a flow opens is loaded by id when it opens.

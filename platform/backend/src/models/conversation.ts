@@ -115,14 +115,16 @@ class ConversationModel {
     userId: string,
     organizationId: string,
     searchQuery?: string,
-    options?: {
+    options: {
+      /** Non-search rows to return, newest first; pinned chats are always added. */
+      limit?: number;
       /** False returns null `artifact` and `todoList` without reading them. */
       includeArtifacts?: boolean;
-    },
+    } = {},
   ): Promise<Conversation[]> {
     const trimmedSearch = searchQuery?.trim();
     const conversationColumns = listConversationColumns(
-      options?.includeArtifacts ?? true,
+      options.includeArtifacts ?? true,
     );
 
     // Build WHERE conditions
@@ -318,36 +320,61 @@ class ConversationModel {
       return Array.from(conversationMap.values());
     } else {
       // Non-search case: exclude messages for performance
-      const rows = await db
-        .select({
-          conversation: conversationColumns,
-          shareVisibility: conversationShareVisibility(),
-          projectName: schema.projectsTable.name,
-          projectIcon: schema.projectsTable.icon,
-          // No systemPrompt here: list rows only need identity/config refs,
-          // and a roster of custom agents can carry very large prompts.
-          // findById selects it for the flows that need it (e.g. compaction).
-          agent: {
-            id: schema.agentsTable.id,
-            name: schema.agentsTable.name,
-            agentType: schema.agentsTable.agentType,
-            toolExposureMode: schema.agentsTable.toolExposureMode,
-            llmApiKeyId: schema.agentsTable.llmApiKeyId,
-            deletedAt: schema.agentsTable.deletedAt,
-          },
-        })
-        .from(schema.conversationsTable)
-        .leftJoin(
-          schema.agentsTable,
-          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
-        )
-        .leftJoin(
-          schema.projectsTable,
-          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
-        )
-        .where(and(...conditions))
-        .orderBy(desc(schema.conversationsTable.lastMessageAt))
-        .limit(ConversationModel.LIST_RESULT_LIMIT);
+      const limit = Math.min(
+        options.limit ?? ConversationModel.LIST_RESULT_LIMIT,
+        ConversationModel.LIST_RESULT_LIMIT,
+      );
+      const listQuery = (where: SQL | undefined, rowLimit?: number) => {
+        const query = db
+          .select({
+            conversation: conversationColumns,
+            shareVisibility: conversationShareVisibility(),
+            projectName: schema.projectsTable.name,
+            projectIcon: schema.projectsTable.icon,
+            // No systemPrompt here: list rows only need identity/config refs,
+            // and a roster of custom agents can carry very large prompts.
+            // findById selects it for the flows that need it (e.g. compaction).
+            agent: {
+              id: schema.agentsTable.id,
+              name: schema.agentsTable.name,
+              agentType: schema.agentsTable.agentType,
+              toolExposureMode: schema.agentsTable.toolExposureMode,
+              llmApiKeyId: schema.agentsTable.llmApiKeyId,
+              deletedAt: schema.agentsTable.deletedAt,
+            },
+          })
+          .from(schema.conversationsTable)
+          .leftJoin(
+            schema.agentsTable,
+            eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+          )
+          .leftJoin(
+            schema.projectsTable,
+            eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+          )
+          .where(where)
+          .orderBy(desc(schema.conversationsTable.lastMessageAt));
+        return rowLimit === undefined ? query : query.limit(rowLimit);
+      };
+      // Pinned chats show in the sidebar however old they are, so they are
+      // read on their own rather than cut off by the recent-chats limit, up
+      // to the list's own cap.
+      const [recentRows, pinnedRows] = await Promise.all([
+        listQuery(and(...conditions), limit),
+        listQuery(
+          and(...conditions, isNotNull(schema.conversationsTable.pinnedAt)),
+          ConversationModel.LIST_RESULT_LIMIT,
+        ),
+      ]);
+      const recentIds = new Set(recentRows.map((row) => row.conversation.id));
+      const rows = [
+        ...recentRows,
+        ...pinnedRows.filter((row) => !recentIds.has(row.conversation.id)),
+      ].sort(
+        (a, b) =>
+          b.conversation.lastMessageAt.getTime() -
+          a.conversation.lastMessageAt.getTime(),
+      );
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
@@ -1362,11 +1389,18 @@ function listProjectIcon(icon: string | null | undefined): string | null {
 }
 
 /**
- * Conversation columns for a list read. Without artifacts, the document and
- * todo list come back as null and are not read; each can be hundreds of KB.
+/**
+ * Conversation columns for a list read: never the encrypted-chat escrow
+ * bookkeeping, which no list response carries. Without artifacts, the
+ * document and todo list come back as null and are not read; each can be
+ * hundreds of KB.
  */
 function listConversationColumns(includeArtifacts: boolean) {
-  const columns = getTableColumns(schema.conversationsTable);
+  const {
+    encryptedChatEscrow: _encryptedChatEscrow,
+    encryptedChatDekFingerprint: _encryptedChatDekFingerprint,
+    ...columns
+  } = getTableColumns(schema.conversationsTable);
   if (includeArtifacts) return columns;
   return {
     ...columns,
@@ -1377,10 +1411,12 @@ function listConversationColumns(includeArtifacts: boolean) {
 
 type ConversationRow = typeof schema.conversationsTable.$inferSelect;
 
-function withVisibleAgent(
-  conversation: typeof schema.conversationsTable.$inferSelect,
+function withVisibleAgent<
+  T extends Pick<typeof schema.conversationsTable.$inferSelect, "agentId">,
+>(
+  conversation: T,
   agent: JoinedConversationAgent,
-): typeof schema.conversationsTable.$inferSelect & {
+): T & {
   agent: Conversation["agent"];
 } {
   if (!agent?.id || agent.deletedAt !== null) {

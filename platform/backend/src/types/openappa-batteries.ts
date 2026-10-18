@@ -272,9 +272,9 @@ export const EffectivePolicyViewSchema = EffectivePolicySchema.omit({
   composition: CompositionViewSchema,
   retained: RetainedAnnotatorsViewSchema.nullable(),
   /**
-   * The policy revision the runtime decides every conversation under now, and
-   * when it was published. A saved change publishes at the next protected
-   * call; null before the first one.
+   * The deployment head and its publication time. A saved change publishes at
+   * the next protected live call; null before the first publish. Pinned
+   * families keep their opening policy.
    */
   servedRevision: z
     .object({ revision: z.number().int(), publishedAt: z.date() })

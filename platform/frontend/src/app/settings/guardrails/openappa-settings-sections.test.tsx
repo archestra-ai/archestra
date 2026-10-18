@@ -270,7 +270,7 @@ test("an administrator gives new sessions a policy snapshot and returns them to 
   });
   expect(selector).toHaveTextContent("New sessions reference the live policy");
   expect(container).toHaveTextContent(
-    "A policy change applies to every session at its next tool call.",
+    "Live sessions take policy changes at their next tool call. Sessions opened with a snapshot keep it.",
   );
 
   fireEvent.click(selector);
@@ -281,7 +281,7 @@ test("an administrator gives new sessions a policy snapshot and returns them to 
     expect(selector).toHaveTextContent("New sessions keep a policy snapshot"),
   );
   expect(container).toHaveTextContent(
-    "No policy revision is published, so running sessions keep the revision they have",
+    "No policy revision is published, so existing live sessions keep their current revision",
   );
 
   await waitFor(() => expect(selector).toBeEnabled());

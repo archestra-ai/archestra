@@ -81,7 +81,7 @@ export function OpenAppaEnforcementSetting() {
 /**
  * Which policy a new session decides under: the organization's live policy,
  * or a snapshot it keeps for life. While the snapshot is selected, no policy
- * revision is published, so running sessions keep the revision they have.
+ * revision is published, so existing live sessions keep their current revision.
  */
 export function OpenAppaNewSessionPolicySetting() {
   const deployment = useGuardrailsDeployment({ poll: true });
@@ -95,8 +95,8 @@ export function OpenAppaNewSessionPolicySetting() {
       title="Policy for new sessions"
       description={
         deployment.data?.newSessionPolicy === "snapshot"
-          ? "A new session keeps the policy it opens with. A policy change applies to new sessions only. No policy revision is published, so running sessions keep the revision they have until you select the live policy again."
-          : "A policy change applies to every session at its next tool call."
+          ? "New sessions keep their opening policy. No policy revision is published, so existing live sessions keep their current revision until you select live again. Snapshot sessions keep their policy when live updates resume."
+          : "Live sessions take policy changes at their next tool call. Sessions opened with a snapshot keep it."
       }
       control={
         deployment.data ? (
@@ -119,7 +119,7 @@ export function OpenAppaNewSessionPolicySetting() {
             <SelectContent position="popper" align="end">
               <SelectItem
                 value="live"
-                description="A policy change applies to every session."
+                description="Live sessions use the latest policy."
               >
                 New sessions reference the live policy
               </SelectItem>

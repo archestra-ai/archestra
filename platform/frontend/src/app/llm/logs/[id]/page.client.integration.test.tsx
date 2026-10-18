@@ -144,6 +144,36 @@ it("shows total latency per request and leaves untimed records empty", async () 
   expect(screen.getAllByLabelText(/Total request latency/)).toHaveLength(3);
 });
 
+it("leads each request's tokens with its output, labels the input, and gives exact counts on hover", async () => {
+  serveSession({
+    rows: [
+      summary({
+        id: "request-0",
+        inputTokens: 12_345,
+        outputTokens: 678,
+        cacheReadTokens: 9_000,
+        cacheWriteTokens: null,
+      }),
+    ],
+  });
+
+  await renderPage();
+
+  const requests = await screen.findByRole("list", { name: "Requests" });
+  const output = await within(requests).findByText("678");
+  const cell = output.parentElement as HTMLElement;
+  expect(within(cell).getByText("in")).toBeVisible();
+  expect(within(cell).getByText("12.3K")).toBeVisible();
+
+  await userEvent.hover(cell);
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip).toHaveTextContent("Output678");
+  expect(tooltip).toHaveTextContent("Input12,345");
+  expect(tooltip).toHaveTextContent("Cache read9,000");
+  // A cache count the provider did not report is left out, not shown as 0.
+  expect(tooltip).not.toHaveTextContent("Cache write");
+});
+
 it("opens the request a link names, moving to the page that holds it", async () => {
   // Sixty requests, newest first: the linked one is the 56th newest, so it
   // sits on page two of fifty.

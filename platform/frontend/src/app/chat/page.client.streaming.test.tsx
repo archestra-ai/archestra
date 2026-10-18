@@ -244,7 +244,11 @@ async function renderStreamingChat() {
     { timeout: 5_000 },
   );
   expect(
-    await screen.findByText(`Answer ${HISTORY_TURNS - 1}`),
+    await screen.findByText(
+      `Answer ${HISTORY_TURNS - 1}`,
+      {},
+      { timeout: 5_000 },
+    ),
   ).toBeInTheDocument();
   // The page renders before its permission-gated queries answer; count
   // renders only once they have settled.

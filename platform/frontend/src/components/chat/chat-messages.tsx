@@ -77,12 +77,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import {
-  useCancelChatMcpTask,
-  useConversation,
-  useProfileToolsWithIds,
-} from "@/lib/chat/chat.query";
+import { useCancelChatMcpTask, useConversation } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   getToolErrorText,
@@ -318,8 +315,10 @@ export function ChatMessages({
     [getToolName],
   );
 
-  // Build tool name → icon map from agent tools + catalog data
-  const { data: agentTools } = useProfileToolsWithIds(agentId);
+  // Build tool name → icon map from agent tools + catalog data. The agent
+  // detail is already loaded by the chat page and carries no tool schemas.
+  const { data: agent } = useProfile(agentId);
+  const agentTools = agent?.tools;
   const { data: catalogItems } = useInternalMcpCatalog({
     enabled: !!agentId && !!canReadMcpRegistry,
   });

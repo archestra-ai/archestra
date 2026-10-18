@@ -121,7 +121,6 @@ import {
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
-import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
@@ -524,10 +523,10 @@ export async function handleLLMProxy<
         )
       : undefined;
   const untrustedAppaChatSource =
-    isAppaChatSource(parsedSource) && !isLoopbackRequest(request);
+    isAppaChatSource(parsedSource) && !internalCall;
   // `model_router` is assigned by the route auth override, not accepted from
   // the public source header. APPA-capable Chat sources have the same
-  // loopback-only trust boundary.
+  // internal-proof-only trust boundary.
   const source: InteractionSource =
     authOverride?.source ??
     openCodeSource ??
@@ -1050,10 +1049,9 @@ export async function handleLLMProxy<
   // handlers agree on it.
   const encryptedChat = await resolveEncryptedChatAuditContext({
     source,
-    // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
-    // from forwarded headers, and this seam must only ever match the
-    // loopback socket the in-app chat actually dials.
-    requestIp: request.socket.remoteAddress,
+    // The in-process proof, not the socket: this seam must only ever match a
+    // call this process made itself (the in-app chat).
+    internalCall,
     sessionId,
     userId,
     dek: readEncryptedChatDek(request),
@@ -1082,7 +1080,11 @@ export async function handleLLMProxy<
       : null,
   );
 
-  const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
+  const attributedAppId = await resolveAttributedAppId(
+    request,
+    resolvedAgent,
+    internalCall,
+  );
 
   try {
     // A redacted audit context cannot retain an enforceable trajectory safely.
@@ -1158,7 +1160,7 @@ export async function handleLLMProxy<
     // rather than a conversation.
     const isInternalChat =
       isAppaChatSource(source) &&
-      isLoopbackRequest(request) &&
+      internalCall &&
       !((authenticatedApp || virtualKeyId) && !authenticatedUserId);
 
     // Identifies which declared tools the platform gateway served after
@@ -1342,6 +1344,7 @@ export async function handleLLMProxy<
         },
         chatSource: isInternalChat ? source : undefined,
         externalAgentId,
+        inProcessRequest: internalCall,
         internalCall: proof.guardrail,
         installerSetupBypass,
         ingress: appaIngress,
@@ -3743,6 +3746,7 @@ async function persistProxyInteraction({
 async function resolveAttributedAppId(
   request: FastifyRequest,
   agent: GatewayAgent,
+  internalCall: boolean,
 ): Promise<string | undefined> {
   const raw = request.headers[APP_ID_HEADER.toLowerCase()];
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -3750,10 +3754,10 @@ async function resolveAttributedAppId(
     return undefined;
   }
 
-  if (!isLoopbackRequest(request)) {
+  if (!internalCall) {
     logger.warn(
       { agentId: agent.id },
-      "Ignoring app attribution header from a non-loopback peer",
+      "Ignoring app attribution header without internal proof",
     );
     return undefined;
   }

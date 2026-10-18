@@ -20,6 +20,7 @@ import {
   OrganizationModel,
   TeamModel,
 } from "@/models";
+import AgentUsageModel from "@/models/agent-usage";
 import type { TeamMemberRole } from "@/types/team-role";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
@@ -349,9 +350,26 @@ async function seedMockData() {
     200, // number of interactions
   );
 
-  // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible interaction structure
-  await db.insert(schema.interactionsTable).values(interactionData as any);
+  const insertedInteractions = await db
+    .insert(schema.interactionsTable)
+    // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible interaction structure
+    .values(interactionData as any)
+    .returning({
+      profileId: schema.interactionsTable.profileId,
+      createdAt: schema.interactionsTable.createdAt,
+    });
   logger.info(`✅ Created ${interactionData.length} interactions`);
+
+  // Inserted directly, so stamp each agent as InteractionModel.create would.
+  const newestByAgent = new Map<string, Date>();
+  for (const { profileId, createdAt } of insertedInteractions) {
+    if (!profileId) continue;
+    const newest = newestByAgent.get(profileId);
+    if (!newest || createdAt > newest) newestByAgent.set(profileId, createdAt);
+  }
+  for (const [agentId, usedAt] of newestByAgent) {
+    await AgentUsageModel.recordUse({ agentId, usedAt });
+  }
 }
 
 /**

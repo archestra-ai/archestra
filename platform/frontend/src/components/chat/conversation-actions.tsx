@@ -38,7 +38,6 @@ import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from
 import {
   useCreateProject,
   useCreateProjectFromConversation,
-  useProjects,
 } from "@/lib/projects/projects.query";
 import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 
@@ -105,9 +104,6 @@ export function useConversationActions({
   const { data: canReadProjects } = useHasPermissions({ project: ["read"] });
   const { data: canCreateProject } = useHasPermissions({
     project: ["create"],
-  });
-  const { data: projects } = useProjects({
-    enabled: canReadProjects === true,
   });
   const updateMutation = useUpdateConversation();
   const pinMutation = usePinConversation();
@@ -227,7 +223,6 @@ export function useConversationActions({
       {mayChangeProject && (
         <ConversationProjectActions
           projectId={conversation.projectId}
-          projects={projects ?? []}
           isPending={
             updateMutation.isPending ||
             createProjectMutation.isPending ||

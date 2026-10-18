@@ -170,6 +170,54 @@ describe("agent routes", () => {
     expect(await toolsOf("&includeTools=false")).toEqual([[]]);
   });
 
+  test("lists tool and subagent counts with or without the tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      name: "Counted Gateway",
+      agentType: "mcp_gateway",
+    });
+    const subagent = await makeAgent({
+      organizationId,
+      name: "Counted Helper",
+    });
+    for (const name of ["counted_one", "counted_two"]) {
+      const tool = await makeTool({ name, parameters: {} });
+      await makeAgentTool(gateway.id, tool.id);
+    }
+    await AgentToolModel.assignDelegation({
+      agentId: gateway.id,
+      targetAgentId: subagent.id,
+    });
+    const listed = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?name=Counted%20Gateway&agentTypes=mcp_gateway${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const [row] = response.json().data;
+      return {
+        toolsCount: row.toolsCount,
+        subagentsCount: row.subagentsCount,
+        tools: row.tools.length,
+      };
+    };
+
+    expect(await listed("")).toEqual({
+      toolsCount: 2,
+      subagentsCount: 1,
+      tools: 3,
+    });
+    expect(await listed("&includeTools=false")).toEqual({
+      toolsCount: 2,
+      subagentsCount: 1,
+      tools: 0,
+    });
+  });
+
   async function expectAgentTypeSoftDelete(
     agentType: "mcp_gateway",
     makeAgent: (overrides: {

@@ -99,7 +99,7 @@ function renderActions({
     accessPolicies: globalActions,
   });
   client.setQueryData(
-    ["scoped-capabilities"],
+    ["auth", "scopedCapabilities"],
     [{ resource, scope, action: "read" }],
   );
   render(

@@ -91,13 +91,14 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
     });
   });
 
-  describe("getAllModelsWithApiKeys", () => {
+  describe("findLinkedModels", () => {
     test("returns empty array when no models exist", async ({
       makeOrganization,
     }) => {
       await makeOrganization();
-      const result =
-        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
+      const result = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
+        visibleKeyIds: [],
+      });
       expect(result).toEqual([]);
     });
 
@@ -133,8 +134,9 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         model.id,
       ]);
 
-      const result =
-        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
+      const result = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
+        visibleKeyIds: [apiKey.id],
+      });
       expect(result).toHaveLength(1);
       expect(result[0].model.id).toBe(model.id);
       expect(result[0].apiKeys).toHaveLength(1);
@@ -185,8 +187,9 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         lastSyncedAt: new Date(),
       });
 
-      const result =
-        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
+      const result = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
+        visibleKeyIds: [],
+      });
 
       // Only the linked model should be returned
       expect(result).toHaveLength(1);
@@ -224,8 +227,9 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       ]);
 
       // Verify model is visible before deletion
-      let result =
-        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
+      let result = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
+        visibleKeyIds: [],
+      });
       expect(result).toHaveLength(1);
 
       // Delete the API key (cascade deletes api_key_models entries)
@@ -233,12 +237,133 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       await LlmProviderApiKeyModel.delete(apiKey.id);
 
       // Model should no longer appear since it has no linked API keys
-      result = await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
+      result = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
+        visibleKeyIds: [],
+      });
       expect(result).toHaveLength(0);
 
       // But the model itself still exists in the models table
       const orphanedModel = await ModelModel.findById(model.id);
       expect(orphanedModel).not.toBeNull();
+    });
+  });
+
+  describe("findLinkedModels filters", () => {
+    test("attaches only visible keys and keeps models whose keys are all hidden", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const visible = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+      const hidden = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+      // A best-tier model id, so the hidden key's sync marks its link best.
+      const shared = await makeModel("gpt-6-astra");
+      const hiddenOnly = await makeModel("gpt-hidden-only");
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(visible.id, [
+        shared.id,
+      ]);
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        hidden.id,
+        [shared, hiddenOnly],
+        "openai",
+      );
+
+      const result = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
+        visibleKeyIds: [visible.id],
+      });
+
+      expect(
+        result.map(({ model, isBest, apiKeys }) => ({
+          modelId: model.modelId,
+          isBest,
+          keys: apiKeys.map((key) => key.id),
+        })),
+      ).toEqual([
+        // The marker counts on any linked key, including a hidden one.
+        { modelId: "gpt-6-astra", isBest: true, keys: [visible.id] },
+        { modelId: "gpt-hidden-only", isBest: false, keys: [] },
+      ]);
+    });
+
+    test("narrows to models of the listed visible keys, or to embedding models", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const first = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+      const second = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+      const chat = await makeModel("gpt-chat");
+      const embedding = await makeModel("text-embedding", 1536);
+      const other = await makeModel("gpt-other");
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(first.id, [
+        chat.id,
+        embedding.id,
+      ]);
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(second.id, [
+        chat.id,
+        other.id,
+      ]);
+      const read = async (
+        filters: Parameters<
+          typeof LlmProviderApiKeyModelLinkModel.findLinkedModels
+        >[0],
+      ) =>
+        (await LlmProviderApiKeyModelLinkModel.findLinkedModels(filters)).map(
+          ({ model, apiKeys }) => [model.modelId, apiKeys.length],
+        );
+
+      expect(
+        await read({
+          visibleKeyIds: [first.id, second.id],
+          apiKeyIds: [first.id],
+        }),
+      ).toEqual([
+        // Every visible key that serves the model stays attached.
+        ["gpt-chat", 2],
+        ["text-embedding", 1],
+      ]);
+      // A key the caller cannot see narrows to nothing.
+      expect(
+        await read({ visibleKeyIds: [second.id], apiKeyIds: [first.id] }),
+      ).toEqual([]);
+      expect(
+        await read({ visibleKeyIds: [first.id], embeddingOnly: true }),
+      ).toEqual([["text-embedding", 1]]);
+    });
+
+    test("findModelsByKey lists each key's models without hidden ones", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const key = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+      const shown = await makeModel("gpt-shown");
+      const ignored = await makeModel("gpt-ignored");
+      await ModelModel.update(ignored.id, { ignored: true });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        shown.id,
+        ignored.id,
+      ]);
+
+      expect(
+        await LlmProviderApiKeyModelLinkModel.findModelsByKey([key.id]),
+      ).toEqual([{ apiKeyId: key.id, id: shown.id, modelId: "gpt-shown" }]);
     });
   });
 
@@ -674,3 +799,20 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
     });
   });
 });
+
+function makeModel(modelId: string, embeddingDimensions: 1536 | null = null) {
+  return ModelModel.create({
+    externalId: `openai/${modelId}`,
+    provider: "openai",
+    modelId,
+    description: modelId,
+    contextLength: 128000,
+    inputModalities: ["text"],
+    outputModalities: embeddingDimensions ? [] : ["text"],
+    supportsToolCalling: !embeddingDimensions,
+    promptPricePerToken: "0.000001",
+    completionPricePerToken: "0.000002",
+    embeddingDimensions,
+    lastSyncedAt: new Date(),
+  });
+}

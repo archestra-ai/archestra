@@ -492,6 +492,46 @@ class LlmProviderApiKeyModel {
       (key) => key.createdBy,
     );
   }
+
+  /**
+   * Ids of the keys {@link getVisibleKeys} returns, without loading what a
+   * key list displays (labels, owners, scopes).
+   */
+  static async getVisibleKeyIds(
+    organizationId: string,
+    userId: string,
+  ): Promise<string[]> {
+    const keys = await db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        provider: schema.llmProviderApiKeysTable.provider,
+        userId: schema.llmProviderApiKeysTable.userId,
+        createdBy: schema.llmProviderApiKeysTable.createdBy,
+        credentialKind: schema.llmProviderApiKeysTable.credentialKind,
+        secretId: schema.llmProviderApiKeysTable.secretId,
+        secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          await LlmProviderApiKeyModel.accessCondition({
+            organizationId,
+            userId,
+            action: "read",
+          }),
+        ),
+      );
+    return (await withoutOthersPerUserCredentials(keys, userId)).map(
+      (key) => key.id,
+    );
+  }
   // SPDX-SnippetEnd
 
   /**
@@ -1695,6 +1735,31 @@ async function resolveCredentialKinds(
     }),
   );
   return kinds;
+}
+
+/**
+ * Drop the keys a list read must not show this user: other people's
+ * credentials that work for one person only (see isListedFor). The kind comes
+ * from its column; only rows written before it existed resolve their secret,
+ * once.
+ */
+async function withoutOthersPerUserCredentials<
+  T extends {
+    id: string;
+    provider: SupportedProvider;
+    userId: string | null;
+    createdBy: string | null;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    secretIsByosVault: boolean | null;
+    credentialKind: LlmProviderCredentialKind | null;
+  },
+>(keys: T[], userId: string): Promise<T[]> {
+  const kinds = await resolveCredentialKinds(keys);
+  return keys.filter((key) =>
+    isListedFor({ key, kind: kinds.get(key.id), userId }),
+  );
 }
 
 /**

@@ -52,6 +52,8 @@ export interface ChatSession {
   transportActivitySequence: number;
   /** Monotonic signal advanced only when the assistant response progresses. */
   responseProgressSequence: number;
+  /** True once a stalled turn's reattaches are used up; the stall notice shows only then. */
+  stallRecoveryExhausted: boolean;
   sendMessage: (
     message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
   ) => void;

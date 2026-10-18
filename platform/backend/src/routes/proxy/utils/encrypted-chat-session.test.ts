@@ -104,7 +104,7 @@ describe("resolveEncryptedChatAuditContext", () => {
 
   const chatParams = () => ({
     source: "chat" as const,
-    requestIp: "127.0.0.1",
+    internalCall: true,
     sessionId: encryptedChatConversationId,
     userId,
     dek,
@@ -178,11 +178,11 @@ describe("resolveEncryptedChatAuditContext", () => {
     }
   });
 
-  test("none when the request did not arrive over loopback", async () => {
+  test("none when the request lacks the internal proof", async () => {
     await expect(
       resolveEncryptedChatAuditContext({
         ...chatParams(),
-        requestIp: "203.0.113.7",
+        internalCall: false,
       }),
     ).resolves.toEqual({ kind: "none" });
   });

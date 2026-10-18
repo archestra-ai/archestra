@@ -133,22 +133,6 @@ describe("useConversations", () => {
     } as Awaited<ReturnType<typeof archestraApiSdk.getChatConversations>>);
   });
 
-  it("asks for the sidebar's recent page, and searches without a limit", async () => {
-    const wrapper = createWrapper();
-    renderHook(() => useConversations({}), { wrapper });
-    await waitFor(() =>
-      expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
-        query: { limit: 50 },
-      }),
-    );
-    renderHook(() => useConversations({ search: " report " }), { wrapper });
-    await waitFor(() =>
-      expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
-        query: { search: "report" },
-      }),
-    );
-  });
-
   it("does not fetch while disabled", () => {
     renderHook(() => useConversations({ enabled: false }), {
       wrapper: createWrapper(),
@@ -173,6 +157,30 @@ describe("useConversations", () => {
       expect(result.current.data).toHaveLength(1);
     });
     expect(archestraApiSdk.getChatConversations).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for the sidebar's recent page without artifacts, and searches without a limit", async () => {
+    // The sidebar and the search palette never show a chat's document or
+    // todo list, which can be hundreds of kilobytes per row.
+    const { rerender } = renderHook(
+      ({ search }) => useConversations({ search }),
+      {
+        wrapper: createWrapper(),
+        initialProps: { search: undefined as string | undefined },
+      },
+    );
+    await waitFor(() =>
+      expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
+        query: { includeArtifacts: false, limit: 50 },
+      }),
+    );
+
+    rerender({ search: " budget " });
+    await waitFor(() =>
+      expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
+        query: { includeArtifacts: false, search: "budget" },
+      }),
+    );
   });
 });
 

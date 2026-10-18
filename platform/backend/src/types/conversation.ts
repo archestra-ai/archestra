@@ -180,19 +180,7 @@ export const UpdateConversationSchema = createUpdateSchema(
     agentId: z.string().uuid().optional(),
   });
 
-/**
- * A conversation as lists return it: without the message-sized artifact and
- * todo list, which only the single-conversation read carries.
- */
-export const SelectConversationListItemSchema = SelectConversationSchema.omit({
-  artifact: true,
-  todoList: true,
-});
-
 export type Conversation = z.infer<typeof SelectConversationSchema>;
-export type ConversationListItem = z.infer<
-  typeof SelectConversationListItemSchema
->;
 export type InsertConversation = z.infer<typeof InsertConversationSchema>;
 /** API request body type (pinnedAt as ISO string) */
 export type UpdateConversationInput = z.infer<typeof UpdateConversationSchema>;

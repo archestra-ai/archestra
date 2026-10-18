@@ -41,7 +41,6 @@ const {
   getAgentCredentialReadiness,
   getAgentDefaultSuggestedPrompts,
   getAgents,
-  getAgentOptions,
   getChatAgentRoster,
   getDefaultMcpGateway,
   getAgent,
@@ -64,68 +63,12 @@ const chatAgentsQueryKey = [
   "v3",
 ] as const;
 
-/** Metadata-only internal agents for selectors and runtime labels. */
-export async function fetchInternalAgentOptions() {
-  const { data, error } = await getAgentOptions({
-    query: { agentType: "agent", excludeBuiltIn: true },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data ?? [];
-}
-
-export function useInternalAgentOptions(params?: { enabled?: boolean }) {
-  return useAgentOptions({
-    filters: { agentType: "agent", excludeBuiltIn: true },
-    enabled: params?.enabled,
-  });
-}
-
 async function fetchChatAgents() {
   const { data, error } = await getChatAgentRoster({
     query: { bootstrap: true },
   });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
-}
-
-const delegationTargetAgentsQuery = {
-  agentType: "agent",
-  excludeBuiltIn: true,
-} as const;
-
-export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
-  return useAgentOptions({
-    filters: delegationTargetAgentsQuery,
-    enabled: params?.enabled,
-  });
-}
-
-/** Names and presentation data only; fetch a resource before editing it. */
-export function useAgentOptions(
-  params: {
-    filters?: archestraApiTypes.GetAgentOptionsData["query"];
-    enabled?: boolean;
-  } = {},
-) {
-  const filters = { excludeBuiltIn: true, ...params.filters };
-  if (
-    filters.agentTypes?.length === 1 &&
-    (filters.agentType === undefined ||
-      filters.agentType === filters.agentTypes[0])
-  ) {
-    filters.agentType = filters.agentTypes[0];
-    delete filters.agentTypes;
-  }
-  return useQuery({
-    queryKey: ["agents", "options", filters],
-    queryFn: async () => {
-      if (filters.ids?.length === 0) return [];
-      const { data, error } = await getAgentOptions({ query: filters });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
-    enabled: params.enabled,
-  });
 }
 
 type CloneAgentArgs = {
@@ -200,6 +143,7 @@ export function useProfilesPaginated(
     ids,
     excludeIds,
     includeTools,
+    includeTotal,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -252,6 +196,7 @@ export function useProfilesPaginated(
         ids,
         excludeIds,
         includeTools,
+        includeTotal,
       },
     ],
     queryFn: async () => {
@@ -279,6 +224,7 @@ export function useProfilesPaginated(
           ids,
           excludeIds,
           includeTools,
+          includeTotal,
         },
       });
       throwOnApiError(error, { toastOnError: false });
@@ -330,8 +276,15 @@ export function usePinnedAgentIds(params?: { enabled?: boolean }) {
   const { data: pinned } = useQuery({
     queryKey: ["agents", "pinned-ids"],
     queryFn: async () => {
+      // Only the ids are kept, so it skips the agents' tool assignments.
       const { data, error } = await getAgents({
-        query: { pinned: true, agentTypes: ["agent"], limit: 100, offset: 0 },
+        query: {
+          pinned: true,
+          agentTypes: ["agent"],
+          limit: 100,
+          offset: 0,
+          includeTools: false,
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return (data?.data ?? []).map((agent) => agent.id);
@@ -984,12 +937,6 @@ export function useChatAgents(params?: {
   };
 }
 
-export function useOrgScopedAgents() {
-  return useAgentOptions({
-    filters: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
-  });
-}
-
 export function useExportAgent() {
   return useMutation({
     mutationFn: async (id: string) => {
@@ -1052,8 +999,13 @@ function findCachedAgent(
     .findAll({ queryKey: ["agents"] })) {
     // Chat and selector rosters deliberately carry partial Agent data. It is
     // enough to paint and initialize chat, but must never seed an editing form
-    // as though it came from the full detail endpoint.
-    if (["chat-roster", "options"].includes(String(query.queryKey[1])))
+    // as though it came from the full detail endpoint. Gateway tool rows hold
+    // tools, not agents.
+    if (
+      ["chat-roster", "options", "gateway-tool-rows"].includes(
+        String(query.queryKey[1]),
+      )
+    )
       continue;
     // A list fetched without tools would seed a detail with no tools, which
     // reads as "this agent has none" until the seed goes stale. The filters

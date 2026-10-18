@@ -4,7 +4,6 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Check,
@@ -76,6 +75,7 @@ export function AddToolsView({
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
+    includeToolDetails: false,
     enabled: !!agentId,
   });
   const { catalogName: builtInCatalogName } = useArchestraMcpIdentity();
@@ -129,22 +129,12 @@ export function AddToolsView({
     [catalogItems, allCredentials, assignedCatalogIds, builtInCatalogName],
   );
 
-  const connectedIds = useMemo(
-    () => rows.filter((row) => row.connected).map((row) => row.catalog.id),
-    [rows],
+  // The catalog row counts the tools its picker lists.
+  const toolCountByCatalog = new Map<string, number>(
+    rows
+      .filter((row) => row.connected)
+      .map((row) => [row.catalog.id, row.catalog.toolCount]),
   );
-  const toolQueries = useQueries({
-    queries: connectedIds.map((id) => ({
-      queryKey: ["mcp-catalog", id, "tools", "picker"],
-      queryFn: () => fetchCatalogTools(id),
-      staleTime: 60_000,
-    })),
-  });
-  const toolCountByCatalog = new Map<string, number>();
-  connectedIds.forEach((id, index) => {
-    const data = toolQueries[index]?.data;
-    if (data) toolCountByCatalog.set(id, data.length);
-  });
 
   const matches = rows.filter((row) => {
     if (!search) return true;

@@ -5,7 +5,11 @@ import {
   ResourcePermissionActionSchema,
 } from "@archestra/shared";
 import { type QueryClient, useQuery } from "@tanstack/react-query";
-import { hasPagePermissions, hasPermissions } from "@/lib/auth/auth.utils";
+import {
+  hasPagePermissions,
+  hasPermissions,
+  pageUsesCapabilities,
+} from "@/lib/auth/auth.utils";
 import { sessionConfirmation } from "@/lib/auth/session-confirmation";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
@@ -16,6 +20,10 @@ export const authQueryKeys = {
   session: () => [...authQueryKeys.all, "session"] as const,
   sessions: () => [...authQueryKeys.all, "sessions"] as const,
   userPermissions: () => [...authQueryKeys.all, "userPermissions"] as const,
+  // Under `all` so role, member and team changes, which invalidate it,
+  // refresh object grants along with the permission map.
+  scopedCapabilities: () =>
+    [...authQueryKeys.all, "scopedCapabilities"] as const,
   defaultCredentialsEnabled: () =>
     [...authQueryKeys.all, "defaultCredentialsEnabled"] as const,
 };
@@ -113,24 +121,29 @@ export function useHasPermissions(
   };
 }
 
-/** Page discovery accepts an object read grant; it does not imply global read. */
+/**
+ * Page discovery accepts an object read grant; it does not imply global read.
+ * A page that no grant can open does not wait for the scoped capabilities.
+ */
 export function useHasPagePermissions(required: Permissions) {
+  const needsCapabilities = pageUsesCapabilities(required);
   const permissions = useAllPermissions();
-  const capabilities = useScopedCapabilities();
+  const capabilities = useScopedCapabilities(needsCapabilities);
   return {
     data: hasPagePermissions({
       userPermissions: permissions.data,
       required,
       capabilities: capabilities.data ?? [],
     }),
-    isPending: permissions.isPending || capabilities.isPending,
+    isPending:
+      permissions.isPending || (needsCapabilities && capabilities.isPending),
   };
 }
 
 export function useScopedCapabilities(enabled = true) {
   const { data: session } = useSession();
   return useQuery({
-    queryKey: ["scoped-capabilities"],
+    queryKey: authQueryKeys.scopedCapabilities(),
     enabled: enabled && !!session?.user,
     queryFn: async ({ client }) => {
       const seed = await awaitBootstrapSeed(client);
@@ -139,6 +152,11 @@ export function useScopedCapabilities(enabled = true) {
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
+    // Same lifetime as the permission map it completes: page guards wait on
+    // both, so restoring only one would leave a guarded page empty on refresh.
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    meta: PERSISTED_QUERY_META,
   });
 }
 
@@ -233,9 +251,19 @@ export function usePermissionMap<Key extends string>(
   return result;
 }
 
-export function useDefaultCredentialsEnabled() {
+/**
+ * Whether the default admin credentials are still active. `enabled: false`
+ * skips the request. The sidebar warnings pass it for viewers who never see
+ * the default-credentials warning.
+ */
+export function useDefaultCredentialsEnabled({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   return useQuery({
     queryKey: authQueryKeys.defaultCredentialsEnabled(),
+    enabled,
     queryFn: async () => {
       const { data, error } =
         await archestraApiSdk.getDefaultCredentialsStatus();
@@ -299,7 +327,7 @@ function startBootstrapSeed(queryClient: QueryClient) {
         data.permissions,
       );
       queryClient.setQueryData(
-        ["scoped-capabilities"],
+        authQueryKeys.scopedCapabilities(),
         data.scopedCapabilities,
       );
       queryClient.setQueryData(["config"], data.config);

@@ -121,25 +121,32 @@ class CreatedByModel {
       : [];
 
     const creators = new Map<string, CreatedBy>(
-      rows.map((row) => [
-        row.id,
-        // The columns are `notNull` in the schema but empty strings happen
-        // (SSO-provisioned accounts that never set a display name), and an
-        // empty label renders as a blank cell. Normalising here means no
-        // caller has to remember to.
-        { id: row.id, name: row.name || null, email: row.email || null },
-      ]),
+      rows.map((row) => [row.id, CreatedByModel.fromUser(row)]),
     );
     for (const account of accounts) {
-      const id = `${SERVICE_ACCOUNT_PREFIX}${account.id}`;
-      creators.set(id, {
-        id,
-        name: account.name,
-        email: null,
-        type: "service_account",
-      });
+      const creator = CreatedByModel.fromServiceAccount(account);
+      creators.set(creator.id, creator);
     }
     return creators;
+  }
+
+  /** A human creator from its user row. */
+  static fromUser(row: { id: string; name: string; email: string }): CreatedBy {
+    // The columns are `notNull` in the schema but empty strings happen
+    // (SSO-provisioned accounts that never set a display name), and an empty
+    // label renders as a blank cell. Normalising here means no caller has to
+    // remember to.
+    return { id: row.id, name: row.name || null, email: row.email || null };
+  }
+
+  /** A service-account creator from its account row. */
+  static fromServiceAccount(account: { id: string; name: string }): CreatedBy {
+    return {
+      id: `${SERVICE_ACCOUNT_PREFIX}${account.id}`,
+      name: account.name,
+      email: null,
+      type: "service_account",
+    };
   }
 
   /**

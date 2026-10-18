@@ -186,10 +186,7 @@ export default function NewMcpCatalogItemPage() {
                   <ArrowLeft className="h-4 w-4" />
                   Back
                 </Button>
-                <ArchestraCatalogTab
-                  catalogItems={catalogItems}
-                  onSelectServer={handleSelectFromCatalog}
-                />
+                <ArchestraCatalogTab onSelectServer={handleSelectFromCatalog} />
               </div>
             )}
 

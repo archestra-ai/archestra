@@ -468,7 +468,12 @@ export default class ResourcePermissionPolicyModel {
       return [];
     const table = schema.resourcePermissionPoliciesTable;
     const policies = await db
-      .select()
+      .select({
+        organizationId: table.organizationId,
+        resource: table.resource,
+        scope: table.scope,
+        grants: table.grants,
+      })
       .from(table)
       .where(
         and(
@@ -587,11 +592,15 @@ export default class ResourcePermissionPolicyModel {
 
   /**
    * Whether an object's own grants give it the named audience — the label the
-   * retired visibility field used to carry, now derived from
+   * retired visibility field used to carry, in the terms of
    * {@link sharedAudience}: `org` when the policy reaches the organization or
    * a role, `team` when it reaches a team, and `personal` otherwise (the
    * owner alone, or named people). List filters and orderings that read the
    * old field read this instead, so they follow permission edits.
+   *
+   * Each audience is one primary-key probe with JSONB containment rather than
+   * {@link sharedAudience}'s aggregate over the grant entries, because lists
+   * evaluate it for every row.
    */
   static audienceIs(params: {
     organizationId: string | SQLWrapper;
@@ -600,14 +609,29 @@ export default class ResourcePermissionPolicyModel {
     ownerColumn: SQLWrapper;
     audience: "personal" | "team" | "org";
   }) {
-    const shared = ResourcePermissionPolicyModel.sharedAudience(params);
+    const reachesOrganization = readGrantContainment(
+      sql`audience_policy.grants`,
+      ORGANIZATION_AUDIENCE_SUBJECTS,
+    );
+    const reachesTeam = readGrantContainment(sql`audience_policy.grants`, [
+      { type: "team" },
+    ]);
     switch (params.audience) {
       case "org":
-        return sql<boolean>`coalesce(${shared} = 'organization', false)`;
+        return objectPolicyMatches(params, reachesOrganization);
       case "team":
-        return sql<boolean>`coalesce(${shared} = 'team', false)`;
+        return objectPolicyMatches(
+          params,
+          sql`(${reachesTeam} AND NOT ${reachesOrganization})`,
+        );
       case "personal":
-        return sql<boolean>`coalesce(${shared}, 'user') = 'user'`;
+        return sql<boolean>`NOT ${objectPolicyMatches(
+          params,
+          readGrantContainment(sql`audience_policy.grants`, [
+            ...ORGANIZATION_AUDIENCE_SUBJECTS,
+            { type: "team" },
+          ]),
+        )}`;
     }
   }
 
@@ -1300,32 +1324,70 @@ function sharedWithCallerCondition(params: {
   ownerColumn: SQLWrapper;
   subjects: PermissionSubject[];
 }): SQL<boolean> {
-  const teamIds = params.subjects
-    .filter((subject) => subject.type === "team")
-    .map((subject) => subject.id);
+  const teams = params.subjects.filter((subject) => subject.type === "team");
   const selfIds = params.subjects
     .filter(
       (subject) => subject.type === "user" || subject.type === "serviceAccount",
     )
     .map((subject) => subject.id);
+  const grants = sql`audience_policy.grants`;
   const reaches: SQL[] = [];
-  if (teamIds.length > 0)
+  if (teams.length > 0) reaches.push(readGrantContainment(grants, teams));
+  // A grant to the caller's own id under either self type counts, unless the
+  // caller owns the object: that grant is `mine`.
+  for (const id of new Set(selfIds))
     reaches.push(
-      sql`(shared_entry->'subject'->>'type' = 'team' AND ${inArray(sql`shared_entry->'subject'->>'id'`, teamIds)})`,
-    );
-  if (selfIds.length > 0)
-    reaches.push(
-      sql`(shared_entry->'subject'->>'type' IN ('user', 'serviceAccount') AND ${inArray(sql`shared_entry->'subject'->>'id'`, selfIds)} AND shared_entry->'subject'->>'id' IS DISTINCT FROM ${params.ownerColumn}::text)`,
+      sql`(${params.ownerColumn}::text IS DISTINCT FROM ${id} AND ${readGrantContainment(
+        grants,
+        [
+          { type: "user", id },
+          { type: "serviceAccount", id },
+        ],
+      )})`,
     );
   if (reaches.length === 0) return sql<boolean>`false`;
+  return objectPolicyMatches(params, sql`(${sql.join(reaches, sql` OR `)})`);
+}
+
+/** Subjects whose read grant gives an object the `org` audience. */
+const ORGANIZATION_AUDIENCE_SUBJECTS = [
+  { type: "organization" },
+  { type: "role" },
+] as const;
+
+/**
+ * Whether `grants` holds a read grant to any of `subjects`; a subject without
+ * an id matches every subject of its type. Stored grants are arrays of
+ * `{ subject: { type, id }, actions: string[] }`, so containment of
+ * `[{ subject, actions: ["read"] }]` is the entry test
+ * `subject matches AND (entry->'actions') ? 'read'`, and the grants GIN
+ * index can serve it.
+ */
+function readGrantContainment(
+  grants: SQL,
+  subjects: ReadonlyArray<{ type: string; id?: string }>,
+): SQL<boolean> {
+  const patterns = subjects.map(
+    (subject) => sql`${JSON.stringify([{ subject, actions: ["read"] }])}`,
+  );
+  return sql<boolean>`${grants} @> ANY(ARRAY[${sql.join(patterns, sql`, `)}]::jsonb[])`;
+}
+
+/** Whether the object's own policy row, found by primary key, satisfies `condition`. */
+function objectPolicyMatches(
+  params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+  },
+  condition: SQL,
+): SQL<boolean> {
   return sql<boolean>`EXISTS (
-    SELECT 1 FROM resource_permission_policies shared_policy,
-      jsonb_array_elements(shared_policy.grants) shared_entry
-    WHERE shared_policy.organization_id = ${params.organizationId}
-      AND shared_policy.resource = ${params.resource}
-      AND shared_policy.scope = ${params.scopeColumn}::text
-      AND (shared_entry->'actions') ? 'read'
-      AND (${sql.join(reaches, sql` OR `)})
+    SELECT 1 FROM resource_permission_policies audience_policy
+    WHERE audience_policy.organization_id = ${params.organizationId}
+      AND audience_policy.resource = ${params.resource}
+      AND audience_policy.scope = ${params.scopeColumn}::text
+      AND ${condition}
   )`;
 }
 

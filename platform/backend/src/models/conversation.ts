@@ -21,7 +21,6 @@ import { notDeletedConversation } from "@/database/schemas/conversation";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import type {
   Conversation,
-  ConversationListItem,
   ConversationOrigin,
   InsertConversation,
   MessageFeedback,
@@ -119,9 +118,14 @@ class ConversationModel {
     options: {
       /** Non-search rows to return, newest first; pinned chats are always added. */
       limit?: number;
+      /** False returns null `artifact` and `todoList` without reading them. */
+      includeArtifacts?: boolean;
     } = {},
-  ): Promise<ConversationListItem[]> {
+  ): Promise<Conversation[]> {
     const trimmedSearch = searchQuery?.trim();
+    const conversationColumns = listConversationColumns(
+      options.includeArtifacts ?? true,
+    );
 
     // Build WHERE conditions
     const conditions = [
@@ -218,7 +222,7 @@ class ConversationModel {
 
       const rows = await db
         .select({
-          conversation: LIST_CONVERSATION_COLUMNS,
+          conversation: conversationColumns,
           message: getTableColumns(schema.messagesTable),
           shareVisibility: conversationShareVisibility(),
           projectName: schema.projectsTable.name,
@@ -261,7 +265,7 @@ class ConversationModel {
         );
 
       // Group messages by conversation
-      const conversationMap = new Map<string, ConversationListItem>();
+      const conversationMap = new Map<string, Conversation>();
 
       for (const row of rows) {
         const conversationId = row.conversation.id;
@@ -323,7 +327,7 @@ class ConversationModel {
       const listQuery = (where: SQL | undefined, rowLimit?: number) => {
         const query = db
           .select({
-            conversation: LIST_CONVERSATION_COLUMNS,
+            conversation: conversationColumns,
             shareVisibility: conversationShareVisibility(),
             projectName: schema.projectsTable.name,
             projectIcon: schema.projectsTable.icon,
@@ -1383,17 +1387,27 @@ function listProjectIcon(icon: string | null | undefined): string | null {
 }
 
 /**
- * The conversation columns list reads select: everything except the
- * message-sized ones (the artifact, the todo list) and the encrypted-chat
- * escrow bookkeeping, which no list response carries.
+/**
+ * Conversation columns for a list read: never the encrypted-chat escrow
+ * bookkeeping, which no list response carries. Without artifacts, the
+ * document and todo list come back as null and are not read; each can be
+ * hundreds of KB.
  */
-const {
-  artifact: _artifact,
-  todoList: _todoList,
-  encryptedChatEscrow: _encryptedChatEscrow,
-  encryptedChatDekFingerprint: _encryptedChatDekFingerprint,
-  ...LIST_CONVERSATION_COLUMNS
-} = getTableColumns(schema.conversationsTable);
+function listConversationColumns(includeArtifacts: boolean) {
+  const {
+    encryptedChatEscrow: _encryptedChatEscrow,
+    encryptedChatDekFingerprint: _encryptedChatDekFingerprint,
+    ...columns
+  } = getTableColumns(schema.conversationsTable);
+  if (includeArtifacts) return columns;
+  return {
+    ...columns,
+    artifact: sql<ConversationRow["artifact"]>`null`,
+    todoList: sql<ConversationRow["todoList"]>`null`,
+  };
+}
+
+type ConversationRow = typeof schema.conversationsTable.$inferSelect;
 
 function withVisibleAgent<
   T extends Pick<typeof schema.conversationsTable.$inferSelect, "agentId">,

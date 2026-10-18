@@ -24,9 +24,14 @@ import { usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useSecretsType } from "@/lib/secrets.query";
 
-export function useSettingsTabs() {
+/** `enabled: false` skips the secrets-type lookup until the tabs are shown. */
+export function useSettingsTabs({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const { data: secretsType } = useSecretsType();
+  const { data: secretsType } = useSecretsType({ enabled });
   const openappaEnabled = useFeature("openappaEnabled");
   return [
     ...(permissionMap?.["/settings/appearance"]

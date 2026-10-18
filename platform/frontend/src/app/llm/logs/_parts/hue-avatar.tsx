@@ -41,25 +41,32 @@ export function PersonAvatar({
 
 /**
  * An agent's square tile: initials on the hue of its id, a database glyph for
- * the knowledge base, a dashed trash can once the agent is gone.
+ * the knowledge base, a dashed trash can once the agent is gone. `md` fronts
+ * a table cell; `sm` sits inline in a line of text.
  */
 export function AgentIdenticon({
   seed,
   name,
   variant,
+  size = "md",
 }: {
   seed: string;
   name: string;
   variant: "agent" | "knowledge" | "deleted";
+  size?: "sm" | "md";
 }) {
+  const dims = IDENTICON_SIZES[size];
   if (variant === "deleted") {
     return (
       <span
         role="img"
         aria-label={name}
-        className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-muted-foreground/50 text-muted-foreground"
+        className={cn(
+          "flex shrink-0 items-center justify-center border border-dashed border-muted-foreground/50 text-muted-foreground",
+          dims.tile,
+        )}
       >
-        <Trash2 className="size-3.5" aria-hidden="true" />
+        <Trash2 className={dims.glyph} aria-hidden="true" />
       </span>
     );
   }
@@ -68,13 +75,18 @@ export function AgentIdenticon({
       role="img"
       aria-label={name}
       className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold tracking-tight ring-1 ring-black/[0.04] ring-inset dark:ring-white/[0.08]",
+        "flex shrink-0 items-center justify-center font-semibold tracking-tight ring-1 ring-black/[0.04] ring-inset dark:ring-white/[0.08]",
+        dims.tile,
         HUE_TONE,
       )}
       style={hueStyle(seed)}
     >
       {variant === "knowledge" ? (
-        <Database className="size-3.5" strokeWidth={2.25} aria-hidden="true" />
+        <Database
+          className={dims.glyph}
+          strokeWidth={2.25}
+          aria-hidden="true"
+        />
       ) : (
         initialsOf(withoutGenericWords(name))
       )}
@@ -85,6 +97,11 @@ export function AgentIdenticon({
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+const IDENTICON_SIZES = {
+  sm: { tile: "size-[18px] rounded-[5px] text-[8px]", glyph: "size-2.5" },
+  md: { tile: "size-8 rounded-lg text-[11px]", glyph: "size-3.5" },
+} as const;
 
 const HUE_TONE =
   "bg-[oklch(0.93_0.045_var(--hue))] text-[oklch(0.44_0.12_var(--hue))] dark:bg-[oklch(0.34_0.07_var(--hue))] dark:text-[oklch(0.9_0.07_var(--hue))]";

@@ -91,6 +91,7 @@ let mockConversations: Array<{
   };
 }> = [];
 
+const mockUseProjects = vi.fn();
 let mockProjects: Array<{
   id: string;
   name: string;
@@ -174,7 +175,15 @@ vi.mock("@/lib/chat/chat.query", () => ({
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
-  useProjects: () => ({ data: mockProjects }),
+  // Answers like the endpoint: `pinned` splits the list, results are paged.
+  useProjects: (filters?: { pinned?: boolean; enabled?: boolean }) => {
+    mockUseProjects(filters);
+    const data =
+      filters?.pinned === undefined
+        ? mockProjects
+        : mockProjects.filter((p) => Boolean(p.pinnedAt) === filters.pinned);
+    return { data: { data, pagination: { total: data.length } } };
+  },
   usePinProject: () => ({ mutate: vi.fn() }),
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateProjectFromConversation: () => ({
@@ -197,19 +206,19 @@ vi.mock("@/components/agent-icon", () => ({
 }));
 
 vi.mock("@/app/_parts/conversation-project-actions", () => ({
+  // The real menu fetches and searches its own projects; this stand-in picks
+  // the first fixture project.
   ConversationProjectActions: ({
     projectId,
-    projects,
     onProjectChange,
   }: {
     projectId: string | null;
-    projects: Array<{ id: string; name: string }>;
     onProjectChange: (projectId: string | null) => Promise<void>;
   }) => (
     <button
       type="button"
       onClick={() =>
-        void onProjectChange(projectId ? null : (projects[0]?.id ?? null))
+        void onProjectChange(projectId ? null : (mockProjects[0]?.id ?? null))
       }
     >
       {projectId ? "Remove from project" : "Add to project"}
@@ -963,6 +972,27 @@ describe("ChatSidebarSection", () => {
 
     expect(screen.getByText("Only Chat")).toBeInTheDocument();
     expect(screen.queryByText("More")).not.toBeInTheDocument();
+  });
+
+  it("asks the server for pinned projects only", () => {
+    mockProjects = [
+      {
+        id: "project-1",
+        name: "Pinned one",
+        icon: null,
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+      { id: "project-2", name: "Not pinned", icon: null, pinnedAt: null },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    // The sidebar never asks for the whole list: every chat page renders it.
+    for (const [filters] of mockUseProjects.mock.calls) {
+      expect(filters).toMatchObject({ pinned: true, limit: 100, offset: 0 });
+    }
+    expect(screen.getByText("Pinned one")).toBeInTheDocument();
+    expect(screen.queryByText("Not pinned")).not.toBeInTheDocument();
   });
 
   it("shows a pinned project's emoji and name when an emoji is present", () => {

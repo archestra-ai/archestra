@@ -59,7 +59,9 @@ import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
 import CreatedByModel from "./created-by";
-import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionPolicyModel, {
+  type ObjectPolicy,
+} from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type ResourceAccessFilter,
 } from "./resource-permission-subject";
@@ -266,7 +268,11 @@ class SkillModel {
    */
   static async withGrantedScope<
     T extends { id: string; organizationId: string; scope: string },
-  >(skills: T[]): Promise<(T & { scope: ResourceVisibilityScope })[]> {
+  >(
+    skills: T[],
+    /** These skills' policies, when the caller already loaded them. */
+    policies?: ObjectPolicy[],
+  ): Promise<(T & { scope: ResourceVisibilityScope })[]> {
     const idsByOrganization = new Map<string, string[]>();
     for (const skill of skills) {
       idsByOrganization.set(skill.organizationId, [
@@ -280,6 +286,7 @@ class SkillModel {
         organizationId,
         resource: "skill",
         scopes,
+        policies,
       });
       for (const [id, { audience }] of found) audiences.set(id, audience);
     }

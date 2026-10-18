@@ -848,7 +848,7 @@ exit 0
       const setupPath = path.join(root, "setup.ps1");
       const source = path.join(home, "marketplace-source");
       const skills = {
-        cloneUrl: "https://new-token@example.com/skills/repo.git",
+        cloneUrl: "https://token:new-token@example.com/skills/repo.git",
         marketplaceName: "test-skills",
         hasSkills: true,
         pluginNames: [],

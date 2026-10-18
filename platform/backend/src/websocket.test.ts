@@ -1582,6 +1582,7 @@ describe("websocket MCP deployment statuses", () => {
     service.mcpLogsSubscriptions.clear();
     service.mcpExecSubscriptions.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
+    service.lastMcpDeploymentRefreshAt = 0;
   });
 
   afterEach(() => {
@@ -1653,6 +1654,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     expect(ws.send).toHaveBeenCalledTimes(1);
     const sentMessage = JSON.parse(
@@ -1756,6 +1758,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     const sentMessage = JSON.parse(
       (ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string,
@@ -1812,6 +1815,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({
@@ -1875,6 +1879,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(true);
     expect(service.mcpDeploymentStatusPollInterval).not.toBeNull();
@@ -1939,6 +1944,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     const firstSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
     expect(firstSubscription).toBeDefined();
@@ -1951,6 +1957,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     const secondSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
     expect(secondSubscription).toBeDefined();
@@ -1967,6 +1974,7 @@ describe("websocket MCP deployment statuses shared poller", () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     service.clientContexts.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
+    service.lastMcpDeploymentRefreshAt = 0;
   });
 
   afterEach(() => {
@@ -1985,11 +1993,13 @@ describe("websocket MCP deployment statuses shared poller", () => {
       close: vi.fn(),
     }) as unknown as WS;
 
-  const subscribe = (ws: WS) =>
-    service.handleMessage(
+  const subscribe = async (ws: WS) => {
+    await service.handleMessage(
       { type: "subscribe_mcp_deployment_statuses", payload: {} },
       ws,
     );
+    await flushDeferredRefresh();
+  };
 
   test("one tick triggers a single shared refresh for multiple subscribers", async ({
     makeOrganization,
@@ -2598,7 +2608,145 @@ describe("websocket MCP deployment statuses shared poller", () => {
     expect(retried.payload.statuses[mcpServer.id].state).toBe("running");
   });
 
-  test("socket closed during subscribe awaits is not registered and poller stays off", async ({
+  describe("a new subscriber", () => {
+    const setup = async (fixtures: {
+      makeOrganization: () => Promise<{ id: string }>;
+      makeUser: () => Promise<{ id: string }>;
+      makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+      makeInternalMcpCatalog: (
+        overrides: Record<string, unknown>,
+      ) => Promise<{ id: string }>;
+      makeMcpServer: (
+        overrides: Record<string, unknown>,
+      ) => Promise<{ id: string }>;
+    }) => {
+      const org = await fixtures.makeOrganization();
+      const user = await fixtures.makeUser();
+      const team = await fixtures.makeTeam(org.id, user.id);
+      const catalog = await fixtures.makeInternalMcpCatalog({
+        serverType: "local",
+        organizationId: org.id,
+      });
+      await fixtures.makeMcpServer({
+        scope: "team",
+        catalogId: catalog.id,
+        ownerId: user.id,
+        teamId: team.id,
+      });
+      const refreshSpy = vi
+        .spyOn(McpServerRuntimeManager, "refreshAllStates")
+        .mockResolvedValue(undefined);
+      vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue(
+        { status: "running", mcpServers: {} },
+      );
+      const ws = makeWs();
+      service.clientContexts.set(ws, {
+        userId: user.id,
+        organizationId: org.id,
+        userIsMcpServerAdmin: true,
+      });
+      const handle = () =>
+        service.handleMessage(
+          { type: "subscribe_mcp_deployment_statuses", payload: {} },
+          ws,
+        );
+      return { ws, refreshSpy, handle };
+    };
+
+    test("is answered from the summary with no refresh while the watchers keep it current", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const fixtures = {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      } as unknown as Parameters<typeof setup>[0];
+      const { ws, refreshSpy, handle } = await setup(fixtures);
+      vi.spyOn(
+        McpServerRuntimeManager,
+        "deploymentStateWatchersActive",
+        "get",
+      ).mockReturnValue(true);
+      service.lastMcpDeploymentRefreshAt = Date.now();
+
+      await handle();
+      await flushDeferredRefresh();
+
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    test("is answered from the summary first and refreshed after the handler when the summary may be stale", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const fixtures = {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      } as unknown as Parameters<typeof setup>[0];
+      const { ws, refreshSpy, handle } = await setup(fixtures);
+      vi.spyOn(
+        McpServerRuntimeManager,
+        "deploymentStateWatchersActive",
+        "get",
+      ).mockReturnValue(false);
+      service.lastMcpDeploymentRefreshAt = Date.now() - 5 * 60_000;
+
+      await handle();
+
+      // The handler answered without running the refresh itself.
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      expect(refreshSpy).not.toHaveBeenCalled();
+
+      await flushDeferredRefresh();
+
+      expect(refreshSpy).toHaveBeenCalledTimes(1);
+      // Nothing changed, so the push after the refresh sends nothing more.
+      expect(ws.send).toHaveBeenCalledTimes(1);
+    });
+
+    test("waits for the first refresh when there is no summary yet, and gets it pushed", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const fixtures = {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      } as unknown as Parameters<typeof setup>[0];
+      const { ws, refreshSpy, handle } = await setup(fixtures);
+      service.lastMcpDeploymentRefreshAt = 0;
+
+      await handle();
+
+      expect(ws.send).not.toHaveBeenCalled();
+      expect(refreshSpy).not.toHaveBeenCalled();
+
+      await flushDeferredRefresh();
+
+      expect(refreshSpy).toHaveBeenCalledTimes(1);
+      expect(ws.send).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  test("a socket closed before the first refresh answers is dropped and the poller stops", async ({
     makeOrganization,
     makeUser,
     makeMcpServer,
@@ -2647,10 +2795,11 @@ describe("websocket MCP deployment statuses shared poller", () => {
     // setTimeout is real in this describe, so waitFor can poll
     await vi.waitFor(() => expect(refreshSpy).toHaveBeenCalled());
 
-    // Socket closes while subscribe is still awaiting the refresh
+    // The socket closes while the first refresh (after the handler) runs.
+    await subscribePromise;
     (ws as { readyState: number }).readyState = WS.CLOSED;
     resolveRefresh?.();
-    await subscribePromise;
+    await flushDeferredRefresh();
 
     expect(ws.send).not.toHaveBeenCalled();
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(false);
@@ -3866,3 +4015,13 @@ describe("cross-replica MCP status delivery", () => {
     }
   });
 });
+
+/**
+ * A new deployment-status subscriber's refresh runs after the subscribe
+ * handler returns (setImmediate), then pushes; let both finish.
+ */
+async function flushDeferredRefresh() {
+  for (let i = 0; i < 3; i++) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}

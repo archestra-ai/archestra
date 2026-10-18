@@ -10,7 +10,10 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
+import {
+  MOBILE_HEADER_ACTIONS_CONTAINER_ID,
+  MOBILE_HEADER_TITLE_CONTAINER_ID,
+} from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
@@ -38,6 +41,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
+import { useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { lazyComponent, preloadableLazy } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
@@ -103,8 +107,10 @@ export function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState();
   const sidebarWidth = useSidebarWidthState();
   // Every signed-in user sees the active banner.
+  // The banner waits for the page's first data (see useShellReady).
+  const shellReady = useShellReady();
   const { data: notification } = useActiveSiteNotification({
-    enabled: !isAuthPage && !isBrowserPreview && !isAppRuntime,
+    enabled: shellReady && !isAuthPage && !isBrowserPreview && !isAppRuntime,
   });
 
   const redirectingToTwoFactorSetup = useTwoFactorEnrollmentRedirect(
@@ -208,11 +214,17 @@ export function AppShell({ children }: AppShellProps) {
                 />
               )}
               <ImpersonationBanner />
-              <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+              <header className="h-14 border-b border-border flex md:hidden items-center justify-between gap-4 px-4 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
                 <NavAwareSidebarTrigger />
                 <div
+                  id={MOBILE_HEADER_TITLE_CONTAINER_ID}
+                  className="flex min-w-0 flex-1 items-center"
+                />
+                {/* Collapsed while empty, so the header gap does not push a
+                    page's title row off the right edge. */}
+                <div
                   id={MOBILE_HEADER_ACTIONS_CONTAINER_ID}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 empty:hidden"
                 />
               </header>
             </div>
@@ -392,7 +404,7 @@ function NavAwareSidebarTrigger() {
   const { showCollapsedToggleDot } = useNavOnboarding();
   return (
     <SidebarTrigger
-      className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2"
+      className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2"
       showDot={showCollapsedToggleDot}
     />
   );

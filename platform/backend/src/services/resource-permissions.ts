@@ -4,7 +4,9 @@ import {
   DEFAULT_CREDENTIAL_GRANTS,
   hasScopedPermission,
   isBuiltInCatalogId,
+  isManagedResource,
   isResourcePermissionPreset,
+  isResourcePermissionScope,
   ManagedResourceSchema,
   ORGANIZATION_WIDE_RESOURCES,
   PERMISSIONS_LOCKOUT_CODE,
@@ -1261,20 +1263,29 @@ function expandScopedGrants(params: {
   subjectKeys: Set<string>;
 }): ManagedScopedPermission[] {
   return params.policies.flatMap((policy) => {
-    const resource = ManagedResourceSchema.safeParse(policy.resource);
+    const { resource } = policy;
     if (
-      !resource.success ||
-      !ResourcePermissionScopeSchema.safeParse(policy.scope).success
+      !isManagedResource(resource) ||
+      !isResourcePermissionScope(policy.scope)
     )
       return [];
     return policy.grants.flatMap((grant) =>
       params.subjectKeys.has(subjectKey(grant.subject))
-        ? grant.actions.map((action) => ({
-            organizationId: policy.organizationId,
-            resource: resource.data,
-            scope: policy.scope,
-            action,
-          }))
+        ? grant.actions.flatMap((action) => {
+            // Historical documents can retain actions removed from the API.
+            // Ignore those without widening the remaining grant to a preset.
+            const parsed = ResourcePermissionActionSchema.safeParse(action);
+            return parsed.success
+              ? [
+                  {
+                    organizationId: policy.organizationId,
+                    resource,
+                    scope: policy.scope,
+                    action: parsed.data,
+                  },
+                ]
+              : [];
+          })
         : [],
     );
   });

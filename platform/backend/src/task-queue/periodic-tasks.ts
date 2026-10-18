@@ -8,6 +8,11 @@ type PeriodicTaskDefinition = {
 };
 
 const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
+  {
+    taskType: "interaction_user_activity_rebuild",
+    intervalSeconds: 30,
+    payload: {},
+  },
   // Runs every 30s (not 60): besides enqueuing due syncs, this task drives
   // connector-run recovery — reaping expired leases, reconciling statuses, and
   // sweeping stalled embeddings — so its cadence is the quantization on how fast

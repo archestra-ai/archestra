@@ -9,6 +9,7 @@ import {
   inArray,
   isNotNull,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
@@ -26,6 +27,7 @@ import type {
 } from "@/types/knowledge-connector";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
@@ -124,6 +126,8 @@ class KnowledgeBaseConnectorModel {
     status?: "active" | "deleted";
     /** The list's `access`, `sharedWith`, and `owner` filters. */
     access?: ResourceAccessFilter;
+    /** Restrict to these connector ids; omit when not filtering. */
+    ids?: string[];
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const {
       organizationId,
@@ -157,6 +161,9 @@ class KnowledgeBaseConnectorModel {
         teamIds: viewerTeamIds,
         scope: visibilityScope,
       }),
+      ...(params.ids
+        ? [inArray(schema.knowledgeBaseConnectorsTable.id, params.ids)]
+        : []),
       ...(connectorType
         ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
         : []),
@@ -308,6 +315,25 @@ class KnowledgeBaseConnectorModel {
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt));
+  }
+
+  /**
+   * The viewer's read reach over `knowledge_base_connectors`, as
+   * findByKnowledgeBaseIds applies it without a `visibilityScope`, for a
+   * statement that embeds the same filter. Undefined when it filters nothing.
+   */
+  static async visibilityCondition(params: {
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
+    viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
+  }): Promise<SQL | undefined> {
+    return await buildVisibilityFilter({
+      canReadAll: params.canReadAll,
+      userId: params.viewerUserId,
+      principal: params.viewerPrincipal,
+      teamIds: params.viewerTeamIds,
+    });
   }
 
   static async findByKnowledgeBaseIds(
@@ -747,6 +773,7 @@ class KnowledgeBaseConnectorModel {
     organizationId: string;
   }): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       // `sql.raw`: SET is a utility command and takes no bind parameters, so
       // `= $1` is a syntax error. The value is a module constant, never input.
       await tx.execute(

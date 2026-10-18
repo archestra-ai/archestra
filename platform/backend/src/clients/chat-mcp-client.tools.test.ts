@@ -965,6 +965,41 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
     );
   });
 
+  test("tools cached for one LLM session never file calls under another", async () => {
+    // Headless runs can share an isolation key while filing their model calls
+    // under different sessions; each call must carry its own run's session.
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+      isolationKey: "exec-shared",
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as never);
+
+    const first = await chatClient.getChatMcpTools({
+      ...baseParams,
+      sessionId: "session-a",
+    });
+    const second = await chatClient.getChatMcpTools({
+      ...baseParams,
+      sessionId: "session-b",
+    });
+    await second.extsrv__fetch_data.execute?.({}, execOptions("call-b"));
+    await first.extsrv__fetch_data.execute?.({}, execOptions("call-a"));
+
+    const linkOf = (index: number) => {
+      const tokenAuth = vi.mocked(mcpClient.executeToolCallForOwner).mock.calls[
+        index
+      ][2];
+      return [tokenAuth?.llmSessionId, tokenAuth?.llmToolCallId];
+    };
+    expect([linkOf(0), linkOf(1)]).toEqual([
+      ["session-b", "call-b"],
+      ["session-a", "call-a"],
+    ]);
+  });
+
   test("a delegation dispatched through run_tool carries the caller's chain", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv({
       gatewayTools: [

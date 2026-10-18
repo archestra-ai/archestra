@@ -296,7 +296,7 @@ describe("ConversationSearchPalette", () => {
     mockUseInternalMcpCatalog.mockReturnValue({ data: [] });
     mockUseSkillsPaginated.mockReturnValue({ data: { data: [] } });
     mockUseApps.mockReturnValue({ data: { data: [] } });
-    mockUseProjects.mockReturnValue({ data: [] });
+    mockUseProjects.mockReturnValue({ data: { data: [] } });
     mockUseKnowledgeBases.mockReturnValue({ data: [] });
     mockUsePlugins.mockReturnValue({ data: [] });
     mockUseEnvironments.mockReturnValue({ data: { environments: [] } });
@@ -688,7 +688,7 @@ describe("ConversationSearchPalette", () => {
 
     it("finds a project by its name and opens it", () => {
       mockUseProjects.mockReturnValue({
-        data: [{ id: "proj-1", name: "Quarterly Review" }],
+        data: { data: [{ id: "proj-1", name: "Quarterly Review" }] },
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
@@ -696,6 +696,10 @@ describe("ConversationSearchPalette", () => {
 
       fireEvent.click(screen.getByText("Quarterly Review"));
       expect(mockRouterPush).toHaveBeenCalledWith("/projects/proj-1");
+      // The server searches; the palette asks for a bounded page of matches.
+      expect(mockUseProjects).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "quarterly", limit: 5, offset: 0 }),
+      );
     });
 
     it("finds a plugin by its display name and opens it", () => {

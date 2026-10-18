@@ -1,4 +1,6 @@
 import {
+  AGENT_OPTIONS_MAX_IDS,
+  AGENT_OPTIONS_MAX_PAGE_SIZE,
   type AgentType,
   CursorQuerySchema,
   createCursorPaginatedResponseSchema,
@@ -90,7 +92,6 @@ import {
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
   AgentListItemSchema,
-  type AgentOption,
   AgentOptionFiltersSchema,
   AgentOptionSchema,
   type AgentScope,
@@ -274,7 +275,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional()
               .describe(
-                "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the agents themselves, such as name pickers: the tool refs carry every assigned tool's name and description, which on an organization of any size is most of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
+                "Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'.",
+              ),
+            includeTotal: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows. With false, the count is skipped and `hasNext` stays exact. `total` is then a lower bound: the agents up to this page, plus one when more follow.",
               ),
           })
           .merge(PaginationQuerySchema)
@@ -318,6 +328,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           providerApiKeyId,
           pinned,
           includeTools,
+          includeTotal,
           limit,
           offset,
           sortBy,
@@ -381,6 +392,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           providerApiKeyId,
           pinned,
           includeTools,
+          includeTotal,
         },
         user.id,
         isAdmin,
@@ -553,26 +565,32 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentOptions,
         description:
-          "Get authorized agent names and presentation fields for selectors",
+          "List authorized agent options one page at a time. Filter by up to 200 IDs; pages hold up to 1,000 items.",
         tags: ["Agents"],
-        querystring: AgentOptionsQuerySchema,
-        response: constructResponseSchema(z.array(AgentOptionSchema)),
+        querystring: AgentOptionsListQuerySchema,
+        response: constructResponseSchema(
+          createCursorPaginatedResponseSchema(AgentOptionSchema),
+        ),
       },
     },
-    async ({ query, user, organizationId }, reply) =>
-      reply.send(
-        (
-          await findPermittedAgentOptions({
-            query,
-            userId: user.id,
-            organizationId,
-            ids: query.ids,
-          })
-        ).map((agent) => ({
-          ...agent,
-          users: (agent.users ?? []).map(({ id }) => ({ id })),
-        })),
-      ),
+    async ({ query, user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query,
+        userId: user.id,
+        organizationId,
+        optionsView: true,
+        ids: query.ids,
+      });
+      return reply.send(
+        await AgentModel.findOptionsPage({
+          ...params,
+          // This route takes no search or picker filters, unlike /options/page;
+          // pages use the default newest-first order.
+          filters: {},
+          pagination: query,
+        }),
+      );
+    },
   );
 
   fastify.get(
@@ -3173,6 +3191,7 @@ const AgentRosterQuerySchema = z.object({
     ),
 });
 
+/** Shared by every options route; IDs stay short enough for the request line. */
 const AgentOptionsQuerySchema = AgentRosterQuerySchema.omit({
   view: true,
   includeTools: true,
@@ -3180,9 +3199,20 @@ const AgentOptionsQuerySchema = AgentRosterQuerySchema.omit({
   ids: z
     .preprocess(
       (value) => (typeof value === "string" ? value.split(",") : value),
-      z.array(z.uuid()),
+      z.array(z.uuid()).max(AGENT_OPTIONS_MAX_IDS),
     )
     .optional(),
+});
+
+/** Every response is one bounded page. */
+const AgentOptionsListQuerySchema = AgentOptionsQuerySchema.extend({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(AGENT_OPTIONS_MAX_PAGE_SIZE)
+    .default(100),
+  cursor: z.string().optional(),
 });
 
 type AgentRosterRequest = {
@@ -3192,17 +3222,6 @@ type AgentRosterRequest = {
   optionsView?: boolean;
   ids?: string[];
 };
-
-async function findPermittedAgentOptions(
-  params: Omit<AgentRosterRequest, "optionsView">,
-): Promise<AgentOption[]> {
-  const { userId, isAgentAdmin, options } =
-    await getPermittedAgentRosterOptions(params);
-  return AgentModel.findAll(userId, isAgentAdmin, {
-    ...options,
-    view: "options",
-  });
-}
 
 /** The chat roster's filter: internal, non-built-in agents, no tools. */
 const CHAT_ROSTER_QUERY = {

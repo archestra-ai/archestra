@@ -117,7 +117,7 @@ export const CacheKey = {
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
   /** Most active users in an organization's LLM logs, for the logs user filter */
-  InteractionUserOptions: "interaction-user-options",
+  InteractionUserOptions: "interaction-user-options-v2",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */
   KbGroupTokens: "kb-group-tokens",
   /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */

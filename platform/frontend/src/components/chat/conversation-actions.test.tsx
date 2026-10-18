@@ -26,7 +26,7 @@ vi.mock("@/lib/chat/global-chat.context", () => ({
 }));
 
 vi.mock("@/lib/projects/projects.query", () => ({
-  useProjects: () => ({ data: [] }),
+  useProjects: () => ({ data: { data: [] } }),
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateProjectFromConversation: () => ({
     mutateAsync: vi.fn(),

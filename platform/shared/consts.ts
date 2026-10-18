@@ -494,3 +494,11 @@ export function isEditableTextFile(params: {
     mime === "text/plain"
   );
 }
+
+/**
+ * Bounds of `GET /api/agents/options`. IDs travel in the query string, and
+ * Node refuses a request line + headers over 16 KB with a 431, so the ID
+ * filter stays at the same cap as `/api/agents/credential-readiness`.
+ */
+export const AGENT_OPTIONS_MAX_IDS = 200;
+export const AGENT_OPTIONS_MAX_PAGE_SIZE = 1000;

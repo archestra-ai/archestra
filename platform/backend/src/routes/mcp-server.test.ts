@@ -4471,7 +4471,7 @@ describe("mcp server core route coverage", () => {
 
       const response = await app.inject({
         method: "GET",
-        url: "/api/mcp_server",
+        url: "/api/mcp_server?includeAssignedAgents=true",
       });
 
       expect(response.statusCode).toBe(200);
@@ -4494,17 +4494,21 @@ describe("mcp server core route coverage", () => {
           pinned: false,
         },
       ]);
-      const compact = await app.inject({
-        method: "GET",
-        url: "/api/mcp_server?includeAssignedAgents=false",
-      });
-      expect(compact.statusCode).toBe(200);
-      expect(compact.json()).toEqual(
-        servers.map((entry: { assignedAgents: unknown[] }) => ({
-          ...entry,
-          assignedAgents: [],
-        })),
-      );
+      // Without the explicit opt-in, and with an explicit false, the list
+      // carries no agents.
+      for (const url of [
+        "/api/mcp_server",
+        "/api/mcp_server?includeAssignedAgents=false",
+      ]) {
+        const compact = await app.inject({ method: "GET", url });
+        expect(compact.statusCode).toBe(200);
+        expect(compact.json()).toEqual(
+          servers.map((entry: { assignedAgents: unknown[] }) => ({
+            ...entry,
+            assignedAgents: [],
+          })),
+        );
+      }
     });
 
     test("names to a member only the agents they can open, on the list and on one server", async ({
@@ -4558,7 +4562,10 @@ describe("mcp server core route coverage", () => {
           !(resource === "mcpServerInstallation" && action === "update"),
       );
 
-      const list = await app.inject({ method: "GET", url: "/api/mcp_server" });
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=true",
+      });
       const listed = list
         .json()
         .find((s: { id: string }) => s.id === server.id);
@@ -4567,8 +4574,8 @@ describe("mcp server core route coverage", () => {
       ).toEqual(["Mine", "Shared"]);
 
       // Visibility is checked for the agents the response names, never by
-      // listing every agent the member can reach; a status-only list names
-      // none and checks nothing.
+      // listing every agent the member can reach; a status-only list (the
+      // default) names none and checks nothing.
       const { default: AgentModel } = await import("@/models/agent");
       const accessibleIds = vi.spyOn(AgentModel, "findAccessibleIdsForUser");
       await app.inject({
@@ -4577,6 +4584,11 @@ describe("mcp server core route coverage", () => {
       });
       expect(accessibleIds).not.toHaveBeenCalled();
       await app.inject({ method: "GET", url: "/api/mcp_server" });
+      expect(accessibleIds).not.toHaveBeenCalled();
+      await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=true",
+      });
       expect(accessibleIds).toHaveBeenCalledTimes(1);
       expect(
         [...(accessibleIds.mock.calls[0]?.[3]?.among ?? [])].sort(),

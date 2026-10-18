@@ -414,7 +414,7 @@ const PromptInputContent = ({
     .trimStart()
     .startsWith("/");
   const { data: skillsData } = useSkillsPaginated(
-    { limit: 100, forAgentId: agentId ?? undefined },
+    { limit: 100, forAgentId: agentId ?? undefined, includeContent: false },
     {
       enabled: skillSlashCommandsEnabled && !!agentId && isSkillCommandDraft,
     },

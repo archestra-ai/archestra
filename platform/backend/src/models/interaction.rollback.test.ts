@@ -4048,7 +4048,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(100);
@@ -4091,7 +4094,10 @@ describe("InteractionModel", () => {
       await drainBackgroundWork();
 
       // Subscription usage costs the org $0 and must not burn down the limit
-      let usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      let usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(0);
       expect(usage[0].tokensOut).toBe(0);
@@ -4117,7 +4123,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(10);
       expect(usage[0].tokensOut).toBe(20);
@@ -4159,7 +4168,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(50);
@@ -4215,12 +4227,18 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const userUsage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const userUsage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(userUsage).toHaveLength(1);
       expect(userUsage[0].tokensIn).toBe(75);
       expect(userUsage[0].tokensOut).toBe(150);
 
-      const vkUsage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const vkUsage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(vkUsage).toHaveLength(1);
       expect(vkUsage[0].tokensIn).toBe(75);
       expect(vkUsage[0].tokensOut).toBe(150);
@@ -4283,16 +4301,25 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const agentUsage = await LimitModel.getModelUsageBreakdown(agentLimit.id);
+      const agentUsage =
+        (await LimitModel.getModelUsageBreakdowns([agentLimit.id])).get(
+          agentLimit.id,
+        ) ?? [];
       expect(agentUsage).toHaveLength(1);
       expect(agentUsage[0].tokensIn).toBe(80);
       expect(agentUsage[0].tokensOut).toBe(160);
 
-      const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+      const teamUsage =
+        (await LimitModel.getModelUsageBreakdowns([teamLimit.id])).get(
+          teamLimit.id,
+        ) ?? [];
       expect(teamUsage).toHaveLength(1);
       expect(teamUsage[0].tokensIn).toBe(80);
 
-      const orgUsage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+      const orgUsage =
+        (await LimitModel.getModelUsageBreakdowns([orgLimit.id])).get(
+          orgLimit.id,
+        ) ?? [];
       expect(orgUsage).toHaveLength(1);
       expect(orgUsage[0].tokensIn).toBe(80);
     });
@@ -4339,7 +4366,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+      const teamUsage =
+        (await LimitModel.getModelUsageBreakdowns([teamLimit.id])).get(
+          teamLimit.id,
+        ) ?? [];
       expect(teamUsage).toHaveLength(1);
       expect(teamUsage[0].tokensIn).toBe(80);
       expect(teamUsage[0].tokensOut).toBe(160);
@@ -4401,13 +4431,19 @@ describe("InteractionModel", () => {
       await drainBackgroundWork();
 
       // team1 all-models limit should be updated
-      const team1Usage = await LimitModel.getModelUsageBreakdown(team1Limit.id);
+      const team1Usage =
+        (await LimitModel.getModelUsageBreakdowns([team1Limit.id])).get(
+          team1Limit.id,
+        ) ?? [];
       expect(team1Usage).toHaveLength(1);
       expect(team1Usage[0].tokensIn).toBe(100);
       expect(team1Usage[0].tokensOut).toBe(200);
 
       // team2 specific-model limit should also be updated
-      const team2Usage = await LimitModel.getModelUsageBreakdown(team2Limit.id);
+      const team2Usage =
+        (await LimitModel.getModelUsageBreakdowns([team2Limit.id])).get(
+          team2Limit.id,
+        ) ?? [];
       expect(team2Usage).toHaveLength(1);
       expect(team2Usage[0].tokensIn).toBe(100);
       expect(team2Usage[0].tokensOut).toBe(200);
@@ -4471,7 +4507,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].tokensIn).toBe(0);
       expect(usage[0].tokensOut).toBe(0);
@@ -4511,7 +4550,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([userLimit.id])).get(
+          userLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(60);
@@ -4554,7 +4596,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(vkLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([vkLimit.id])).get(
+          vkLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(40);
@@ -4605,7 +4650,10 @@ describe("InteractionModel", () => {
 
       await drainBackgroundWork();
 
-      const usage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+      const usage =
+        (await LimitModel.getModelUsageBreakdowns([orgLimit.id])).get(
+          orgLimit.id,
+        ) ?? [];
       expect(usage).toHaveLength(1);
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(90);

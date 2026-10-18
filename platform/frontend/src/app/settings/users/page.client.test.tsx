@@ -57,7 +57,7 @@ import {
 import { useDisableInvitations } from "@/lib/config/config.query";
 import { type Member, useMembersPaginated } from "@/lib/member.query";
 import {
-  useActiveOrganization,
+  useActiveOrganizationId,
   useDeletePendingSignupMember,
   useMemberSignupStatus,
   useOrganization,
@@ -155,10 +155,10 @@ beforeEach(() => {
   vi.mocked(useAllPermissions).mockReturnValue({ data: {} } as ReturnType<
     typeof useAllPermissions
   >);
-  vi.mocked(useActiveOrganization).mockReturnValue({
-    data: { id: "org-1" },
+  vi.mocked(useActiveOrganizationId).mockReturnValue({
+    data: "org-1",
     isPending: false,
-  } as unknown as ReturnType<typeof useActiveOrganization>);
+  });
   vi.mocked(useOrganization).mockReturnValue({
     data: { requireTwoFactor: false },
   } as unknown as ReturnType<typeof useOrganization>);

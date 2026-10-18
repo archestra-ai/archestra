@@ -138,14 +138,11 @@ describe.each([
       url: `/api/agents/${agent.id}/pin`,
     });
     expect(response.statusCode).toBe(200);
-    expect(
-      (
-        await AgentPinModel.getPinnedAtForAgents({
-          userId: admin.id,
-          agentIds: [agent.id],
-        })
-      ).has(agent.id),
-    ).toBe(false);
+    const trash = await listAgents(
+      app,
+      `status=deleted&name=${encodeURIComponent(agent.name)}`,
+    );
+    expect(trash.data.find((row) => row.id === agent.id)?.pinnedAt).toBeNull();
   });
 
   test("pinned filters preserve totals, paginate, and order newest pin first", async ({
@@ -251,11 +248,13 @@ describe.each([
       url: `/api/agents/${resource.id}/pin`,
     });
     expect(response.statusCode).toBe(200);
-    const pins = await AgentPinModel.getPinnedAtForAgents({
-      userId: reader.id,
-      agentIds: [resource.id],
-    });
-    expect(pins.has(resource.id)).toBe(true);
+    const list = await listAgents(
+      app,
+      `name=${encodeURIComponent(resource.name)}`,
+    );
+    expect(list.data.find((row) => row.id === resource.id)?.pinnedAt).toEqual(
+      expect.any(String),
+    );
   });
 
   test("pin routes are registered for dynamic agent authorization", () => {

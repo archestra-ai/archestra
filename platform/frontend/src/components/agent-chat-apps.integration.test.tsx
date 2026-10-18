@@ -97,11 +97,13 @@ describe("Channel takeover agent names", () => {
         expect(params.get("agentType")).toBe("agent");
         expect(params.getAll("ids")).toEqual(["source-agent"]);
         const excludesBuiltIn = params.get("excludeBuiltIn") === "true";
-        return HttpResponse.json(
-          source.builtIn && excludesBuiltIn
-            ? []
-            : [{ id: "source-agent", ...source, icon: "🔎" }],
-        );
+        return HttpResponse.json({
+          data:
+            source.builtIn && excludesBuiltIn
+              ? []
+              : [{ id: "source-agent", ...source, icon: "🔎" }],
+          pagination: { limit: 1000, hasNext: false, nextCursor: null },
+        });
       }),
     );
     const user = userEvent.setup();

@@ -28,6 +28,8 @@ vi.mock("sonner");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: vi.fn(),
+  // The key pickers' per-key model counts.
+  useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: vi.fn(),

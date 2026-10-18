@@ -34,7 +34,6 @@ const {
 } = archestraApiSdk;
 
 type InternalMcpCatalogParams = {
-  initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   enabled?: boolean;
 };
 type McpCatalogLabelValuesQuery = NonNullable<
@@ -99,7 +98,6 @@ export function useInternalMcpCatalog(
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
-    initialData: params?.initialData,
     enabled: params?.enabled,
   });
 }

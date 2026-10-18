@@ -5,7 +5,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { fetchAllSkills } from "@/lib/skills/skill.query";
 import { useGatewayServers } from "./use-gateway-servers";
@@ -150,9 +150,12 @@ it("retains selector options when a refetch fails", async () => {
             },
             { status: 503 },
           )
-        : HttpResponse.json([
-            { id: "gateway", name: "Gateway", agentType: "mcp_gateway" },
-          ]),
+        : HttpResponse.json({
+            data: [
+              { id: "gateway", name: "Gateway", agentType: "mcp_gateway" },
+            ],
+            pagination: { limit: 1000, hasNext: false, nextCursor: null },
+          }),
     ),
   );
   const client = new QueryClient({
@@ -165,7 +168,7 @@ it("retains selector options when a refetch fails", async () => {
   // render accessed.
   const { result } = renderHook(
     () => {
-      const options = useAgentOptions();
+      const options = useAgentOptionsByIds({ ids: ["gateway"] });
       return { options, isError: options.isError };
     },
     { wrapper },

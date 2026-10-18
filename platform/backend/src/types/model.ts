@@ -419,3 +419,18 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   embeddingClientImageCapable: z.boolean().nullable(),
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;
+
+/**
+ * A model as a picker shows it: name, provider and price. The slim form of
+ * {@link ModelWithApiKeysSchema}.
+ */
+export const LlmModelOptionSchema = ModelWithApiKeysSchema.pick({
+  id: true,
+  modelId: true,
+  provider: true,
+  description: true,
+  pricePerMillionInput: true,
+  pricePerMillionOutput: true,
+  isFree: true,
+  isBest: true,
+});

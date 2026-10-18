@@ -34,6 +34,7 @@ import {
   constructResponseSchema,
   type LabelWithDetails,
   type LinkedApiKey,
+  LlmModelOptionSchema,
   type Model,
   ModelCapabilitiesSchema,
   type ModelTeamDetail,
@@ -305,59 +306,80 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z.object({
           access: ResourceAccessQuerySchema,
           sharedWith: ResourceSharedWithQuerySchema,
+          apiKeyIds: z
+            .preprocess(
+              (value) =>
+                typeof value === "string"
+                  ? value.split(",").filter(Boolean)
+                  : value,
+              z.array(z.string().uuid()).max(100),
+            )
+            .optional()
+            .describe("Only models linked to one of these provider keys."),
+          embedding: z
+            .preprocess(
+              (value) => value === "true" || value === true,
+              z.boolean(),
+            )
+            .optional()
+            .describe("Only embedding models (models with known dimensions)."),
+          includeAssignments: z
+            .preprocess(
+              (value) => value !== "false" && value !== false,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Include each model's teams, users and labels (default true). False returns them empty, for pickers that show only the models.",
+            ),
         }),
         response: constructResponseSchema(z.array(ModelWithApiKeysSchema)),
       },
     },
     async ({ organizationId, user, query }, reply) => {
-      const allModelsWithApiKeys =
-        await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
-
       // The link table spans every org and user (models are global metadata),
-      // so restrict the attached keys to the caller's visibility — the same
-      // rules as the Model Providers page (own personal + team + org keys,
-      // other users' personal keys hidden even from admins). Without this,
-      // per-user providers leak every member's personal key as identical
-      // "Microsoft 365 Copilot" entries. Models keep showing with an empty
-      // key list, like the unlinked llm-proxy models below.
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      const isLlmProviderApiKeyAdmin = await ResourcePermissions.allows({
-        userId: user.id,
-        organizationId: organizationId,
-        resource: "llmProviderApiKey",
-        scope: "*",
-        action: "update",
-      });
-      const visibleKeys = await LlmProviderApiKeyModel.getVisibleKeys(
-        organizationId,
-        user.id,
-        userTeamIds,
-        isLlmProviderApiKeyAdmin,
-      );
-      const visibleKeyIds = new Set(visibleKeys.map((key) => key.id));
-      const modelsWithApiKeys = allModelsWithApiKeys.map((item) => ({
-        ...item,
-        apiKeys: item.apiKeys.filter((key) => visibleKeyIds.has(key.id)),
-      }));
+      // so attach only the caller's visible keys — the same rules as the Model
+      // Providers page (own personal + team + org keys, other users' personal
+      // keys hidden even from admins). Without this, per-user providers leak
+      // every member's personal key as identical "Microsoft 365 Copilot"
+      // entries. Models keep showing with an empty key list, like the unlinked
+      // llm-proxy models below.
+      const modelsWithApiKeys =
+        await LlmProviderApiKeyModelLinkModel.findLinkedModels({
+          visibleKeyIds: await LlmProviderApiKeyModel.getVisibleKeyIds(
+            organizationId,
+            user.id,
+          ),
+          apiKeyIds: query.apiKeyIds,
+          embeddingOnly: query.embedding,
+        });
 
-      const linkedModelIds = new Set(
-        modelsWithApiKeys.map((item) => item.model.id),
-      );
-      const llmProxyModels = await ModelModel.findLlmProxyModels();
-      const unlinkedLlmProxyModels = llmProxyModels.filter(
-        (model) => !linkedModelIds.has(model.id),
-      );
+      // Proxy-discovered models have no keys, so a key or embedding filter
+      // leaves them out.
+      const unlinkedLlmProxyModels =
+        query.apiKeyIds || query.embedding
+          ? []
+          : await findUnlinkedLlmProxyModels(modelsWithApiKeys);
 
       const enrichedModelIds = [
         ...modelsWithApiKeys.map((item) => item.model.id),
         ...unlinkedLlmProxyModels.map((model) => model.id),
       ];
       const [teamsByModelId, usersByModelId, labelsByModelId] =
-        await Promise.all([
-          ModelTeamModel.getTeamDetailsForModels(enrichedModelIds),
-          ModelUserModel.getUserDetailsForModels(enrichedModelIds),
-          ModelLabelModel.getLabelsForMany(enrichedModelIds),
-        ]);
+        query.includeAssignments === false
+          ? [
+              new Map<string, ModelTeamDetail[]>(),
+              new Map<
+                string,
+                Array<{ id: string; name: string; email: string }>
+              >(),
+              new Map<string, LabelWithDetails[]>(),
+            ]
+          : await Promise.all([
+              ModelTeamModel.getTeamDetailsForModels(enrichedModelIds),
+              ModelUserModel.getUserDetailsForModels(enrichedModelIds),
+              ModelLabelModel.getLabelsForMany(enrichedModelIds),
+            ]);
 
       const enriched = [
         ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) =>
@@ -407,25 +429,100 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning models with API keys",
       );
 
-      if (await userHasPermission(user.id, organizationId, "llmModel", "read"))
-        return reply.send(response);
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      const grants = await ResourcePermissions.resolveAll({
-        organizationId,
-        userId: user.id,
-      });
-      // SPDX-SnippetEnd
       return reply.send(
-        response.filter((model) =>
-          grants.some(
-            (grant) =>
-              grant.resource === "llmModel" &&
-              grant.action === "read" &&
-              (grant.scope === "*" || grant.scope === model.id),
+        await filterReadableModels({
+          models: response,
+          userId: user.id,
+          organizationId,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/llm-models/key-model-ids",
+    {
+      schema: {
+        operationId: RouteId.GetLlmModelIdsByKey,
+        description:
+          "For each provider key the caller can see, the ids of the models it serves, leaving out hidden models. The models are the ones GET /api/llm-models lists for that key.",
+        tags: ["LLM Models"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              apiKeyId: z.string().uuid(),
+              modelIds: z.array(z.string()),
+            }),
           ),
         ),
+      },
+    },
+    async ({ organizationId, user }, reply) => {
+      const rows = await filterReadableModels({
+        models: await LlmProviderApiKeyModelLinkModel.findModelsByKey(
+          await LlmProviderApiKeyModel.getVisibleKeyIds(
+            organizationId,
+            user.id,
+          ),
+        ),
+        userId: user.id,
+        organizationId,
+      });
+      const modelIdsByKey = new Map<string, string[]>();
+      for (const row of rows) {
+        const modelIds = modelIdsByKey.get(row.apiKeyId) ?? [];
+        modelIds.push(row.modelId);
+        modelIdsByKey.set(row.apiKeyId, modelIds);
+      }
+      return reply.send(
+        [...modelIdsByKey].map(([apiKeyId, modelIds]) => ({
+          apiKeyId,
+          modelIds,
+        })),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/llm-models/options",
+    {
+      schema: {
+        operationId: RouteId.GetLlmModelOptions,
+        description:
+          "The models GET /api/llm-models lists, in the same order, with only what a model picker shows: name, provider and price.",
+        tags: ["LLM Models"],
+        response: constructResponseSchema(z.array(LlmModelOptionSchema)),
+      },
+    },
+    async ({ organizationId, user }, reply) => {
+      // No visible keys: a picker needs each model and its `isBest` flag
+      // (still taken across every link), not the keys that serve it.
+      const linked = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
+        visibleKeyIds: [],
+      });
+      const unlinked = await findUnlinkedLlmProxyModels(linked);
+      const options = [
+        ...linked,
+        ...unlinked.map((model) => ({ model, isBest: false })),
+      ].map(({ model, isBest }) => {
+        const capabilities = ModelModel.toCapabilities(model);
+        return {
+          id: model.id,
+          modelId: model.modelId,
+          provider: model.provider,
+          description: model.description,
+          pricePerMillionInput: capabilities.pricePerMillionInput,
+          pricePerMillionOutput: capabilities.pricePerMillionOutput,
+          isFree: isFreeModel(model),
+          isBest,
+        };
+      });
+      return reply.send(
+        await filterReadableModels({
+          models: options,
+          userId: user.id,
+          organizationId,
+        }),
       );
     },
   );
@@ -777,4 +874,44 @@ function embeddingClientImageCapable(model: Model): boolean | null {
     model.modelId,
   );
   return clientModalities === null ? null : clientModalities.includes("image");
+}
+
+/** Proxy-discovered models that no provider key serves. */
+async function findUnlinkedLlmProxyModels(
+  linked: Array<{ model: { id: string } }>,
+): Promise<Model[]> {
+  const linkedModelIds = new Set(linked.map((item) => item.model.id));
+  return (await ModelModel.findLlmProxyModels()).filter(
+    (model) => !linkedModelIds.has(model.id),
+  );
+}
+
+/**
+ * Keep the models the caller may read: all of them with `llmModel:read`,
+ * otherwise those an `llmModel` read grant names.
+ */
+async function filterReadableModels<T extends { id: string }>(params: {
+  models: T[];
+  userId: string;
+  organizationId: string;
+}): Promise<T[]> {
+  const { models, userId, organizationId } = params;
+  if (await userHasPermission(userId, organizationId, "llmModel", "read"))
+    return models;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const grants = await ResourcePermissions.resolveAll({
+    organizationId,
+    userId,
+  });
+  // SPDX-SnippetEnd
+  return models.filter((model) =>
+    grants.some(
+      (grant) =>
+        grant.resource === "llmModel" &&
+        grant.action === "read" &&
+        (grant.scope === "*" || grant.scope === model.id),
+    ),
+  );
 }

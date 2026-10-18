@@ -25,6 +25,7 @@ export function KnowledgeView({
   agent,
   allKnowledgeBases,
   allConnectors,
+  isLoading = false,
   onBack,
 }: {
   agent: {
@@ -35,6 +36,8 @@ export function KnowledgeView({
   };
   allKnowledgeBases: KnowledgeBase[];
   allConnectors: Connector[];
+  /** Hides the empty state while the lists load. */
+  isLoading?: boolean;
   onBack: () => void;
 }) {
   const updateProfile = useUpdateProfile();
@@ -101,7 +104,8 @@ export function KnowledgeView({
       { onSuccess: onBack },
     );
 
-  const empty = allKnowledgeBases.length === 0 && allConnectors.length === 0;
+  const empty =
+    !isLoading && allKnowledgeBases.length === 0 && allConnectors.length === 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -209,11 +213,18 @@ export function KnowledgeView({
                 ))}
               </KnowledgeGroup>
             )}
-            {knowledgeBases.length === 0 && connectors.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No knowledge sources match "{search}"
-              </p>
-            )}
+            {knowledgeBases.length === 0 &&
+              connectors.length === 0 &&
+              (isLoading ? (
+                <p className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading knowledge sources
+                </p>
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No knowledge sources match "{search}"
+                </p>
+              ))}
           </div>
         </>
       )}

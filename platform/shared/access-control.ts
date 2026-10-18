@@ -1148,6 +1148,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RotateMcpOauthClientSecret]: {},
   [RouteId.DeleteMcpOauthClient]: {},
   [RouteId.GetModelsWithApiKeys]: {},
+  [RouteId.GetLlmModelIdsByKey]: {},
+  [RouteId.GetLlmModelOptions]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},
   // Delegation routes: agent-type permission checked dynamically in handler
@@ -1844,6 +1846,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAuditLog]: {
     auditLog: ["read"],
   },
+  [RouteId.GetAuditLogResources]: {
+    auditLog: ["read"],
+  },
 
   // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
   // The public marketplace git endpoint stays outside this map; it is allowlisted in
@@ -1994,7 +1999,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  // Every choice on the chooser, connecting an external agent included, creates
+  // an agent.
+  "/agents/new": { agent: ["create"] },
   "/agents/a2a": { agent: ["read"] },
+  "/agents/a2a/new": { agent: ["read"] },
+  "/agents/a2a/[id]": { agent: ["read"] },
   "/messaging-channels": { organizationSettings: ["read"] },
   "/messaging-channels/slack": { organizationSettings: ["read"] },
   "/messaging-channels/ms-teams": { organizationSettings: ["read"] },

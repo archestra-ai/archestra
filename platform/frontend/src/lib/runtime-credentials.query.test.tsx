@@ -145,7 +145,7 @@ describe("useCreateRuntimeCredential", () => {
       () => ({
         create: useCreateRuntimeCredential(),
         grants: useQuery({
-          queryKey: ["scoped-capabilities"],
+          queryKey: ["auth", "scopedCapabilities"],
           queryFn: () => ++grantReads,
         }),
       }),

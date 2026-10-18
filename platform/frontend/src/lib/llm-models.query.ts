@@ -21,6 +21,8 @@ import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 const {
   getLlmModels,
   getModelsWithApiKeys,
+  getLlmModelIdsByKey,
+  getLlmModelOptions,
   updateModel,
   syncLlmModels,
   bulkUpdateModels,
@@ -135,29 +137,62 @@ export function useLlmModelsByProvider(params?: LlmModelsParams) {
   };
 }
 
-export function useModelsWithApiKeys(options?: {
-  toastOnError?: boolean;
-  enabled?: boolean;
-  /** The models page's access filters; models have no owner. */
-  access?: NonNullable<
-    archestraApiTypes.GetModelsWithApiKeysData["query"]
-  >["access"];
-  sharedWith?: string[];
-}) {
-  const toastOnError = options?.toastOnError;
-  const access = options?.access;
-  const sharedWith = options?.sharedWith;
+type ModelsWithApiKeysQuery = NonNullable<
+  archestraApiTypes.GetModelsWithApiKeysData["query"]
+>;
+
+/**
+ * Models with their provider keys. Pickers narrow it with `apiKeyIds` or
+ * `embedding`, and pass `includeAssignments: false` when they show no teams,
+ * users or labels.
+ */
+export function useModelsWithApiKeys(
+  options?: {
+    toastOnError?: boolean;
+    enabled?: boolean;
+  } & Pick<
+    ModelsWithApiKeysQuery,
+    "access" | "sharedWith" | "apiKeyIds" | "embedding" | "includeAssignments"
+  >,
+) {
+  const { toastOnError, enabled, ...filters } = options ?? {};
+  const query = Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== undefined),
+  ) as ModelsWithApiKeysQuery;
   return useQuery({
     queryKey:
-      access || sharedWith
-        ? ["models-with-api-keys", { access, sharedWith }]
+      Object.keys(query).length > 0
+        ? ["models-with-api-keys", query]
         : ["models-with-api-keys"],
-    enabled: options?.enabled,
+    enabled,
     queryFn: async (): Promise<ModelWithApiKeys[]> => {
-      const { data, error } = await getModelsWithApiKeys({
-        query: { access, sharedWith },
-      });
+      const { data, error } = await getModelsWithApiKeys({ query });
       throwOnApiError(error, { toastOnError });
+      return data ?? [];
+    },
+  });
+}
+
+/** For each provider key the caller can see, the ids of its shown models. */
+export function useLlmModelIdsByKey(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["models-with-api-keys", "key-model-ids"],
+    enabled: options?.enabled,
+    queryFn: async () => {
+      const { data, error } = await getLlmModelIdsByKey();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+/** The catalog's models as a picker shows them: name, provider and price. */
+export function useLlmModelOptions() {
+  return useQuery({
+    queryKey: ["models-with-api-keys", "options"],
+    queryFn: async () => {
+      const { data, error } = await getLlmModelOptions();
+      throwOnApiError(error);
       return data ?? [];
     },
   });

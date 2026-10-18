@@ -1,22 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import { InternalMCPCatalog } from "./_parts/InternalMCPCatalog";
 
-export default function McpRegistryClient({
-  initialData,
-}: {
-  initialData: {
-    catalog: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
-    servers: archestraApiTypes.GetMcpServersResponses["200"];
-  };
-}) {
+export default function McpRegistryClient() {
   return (
     <div>
-      <InternalMCPCatalog
-        initialData={initialData.catalog}
-        installedServers={initialData.servers}
-      />
+      <InternalMCPCatalog />
     </div>
   );
 }

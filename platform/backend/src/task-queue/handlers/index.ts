@@ -19,6 +19,7 @@ import { handleConnectorSync } from "./connector-sync-handler";
 import { handleContentEncryptionBackfill } from "./content-encryption-backfill-handler.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, gated at boot by the retention license gate
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
+import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleLlmModelSync } from "./llm-model-sync-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
@@ -29,6 +30,10 @@ import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
+  taskQueueService.registerHandler(
+    "interaction_user_activity_rebuild",
+    handleInteractionUserActivityRebuild,
+  );
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
   taskQueueService.registerHandler("batch_embedding", handleBatchEmbedding);
   taskQueueService.registerHandler("permission_sync", handlePermissionSync);

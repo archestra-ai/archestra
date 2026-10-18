@@ -268,7 +268,7 @@ export function ConversationSearchPalette({
     (!href.startsWith("/settings/") || canSeeSettingsArea);
   const entitySearch = debouncedSearch.trim();
   const canSearchEntities = open && isAuthenticated && entitySearch.length > 0;
-  const settingsTabs = useSettingsTabs();
+  const settingsTabs = useSettingsTabs({ enabled: open });
   const agentOptions = useAgentOptionsPage({
     // The /agents page lists internal agents only; gateways and proxies
     // have their own pages.
@@ -278,7 +278,12 @@ export function ConversationSearchPalette({
     enabled: canSearchEntities && canOpenPage("/agents"),
   });
   const skillsPage = useSkillsPaginated(
-    { search: entitySearch, limit: ENTITY_RESULTS_LIMIT, offset: 0 },
+    {
+      search: entitySearch,
+      limit: ENTITY_RESULTS_LIMIT,
+      offset: 0,
+      includeContent: false,
+    },
     {
       enabled: canSearchEntities && canOpenPage("/skills"),
       toastOnError: false,
@@ -291,8 +296,10 @@ export function ConversationSearchPalette({
       toastOnError: false,
     },
   );
-  const { data: projects = [] } = useProjects({
+  const projectsPage = useProjects({
     search: entitySearch,
+    limit: ENTITY_RESULTS_LIMIT,
+    offset: 0,
     enabled: canSearchEntities && canOpenPage("/projects"),
     toastOnError: false,
   });
@@ -414,7 +421,10 @@ export function ConversationSearchPalette({
     },
     {
       heading: "Projects",
-      links: serverResults(projects).map((project) => ({
+      links: serverResults(
+        projectsPage.data?.data,
+        projectsPage.isPlaceholderData,
+      ).map((project) => ({
         key: `project-${project.id}`,
         href: `/projects/${project.id}`,
         label: project.name,

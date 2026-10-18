@@ -273,6 +273,7 @@ function AgentToolAvatars({ agentId }: { agentId: string }) {
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
+    includeToolDetails: false,
     enabled: !!agentId,
   });
 

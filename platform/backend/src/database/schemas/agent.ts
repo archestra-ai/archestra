@@ -233,6 +233,16 @@ const agentsTable = softDeletablePgTable(
      */
     latestVersion: integer("latest_version").notNull().default(0),
 
+    /**
+     * When anything last ran through the agent: the later of its newest MCP
+     * request (`mcp_tool_calls`) and its newest LLM call (`interactions`).
+     * Null means never used. Stamped forward-only by `AgentUsageModel` after
+     * each insert into those two tables, so lists can sort by it without
+     * scanning them. It outlives log retention: deleting old log rows does not
+     * move it back.
+     */
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+
     /** Service account creator; separate from human ownership. */
     createdByServiceAccountId: uuid("created_by_service_account_id").references(
       () => serviceAccountsTable.id,
@@ -254,6 +264,38 @@ const agentsTable = softDeletablePgTable(
     index("agents_environment_id_idx").on(table.environmentId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    // Agent lists: walk visible agents in name or creation order and stop at
+    // the page. The name indexes also carry the columns the list's
+    // visibility filter reads, so the list's count is an index-only scan.
+    index("agents_org_name_live_idx")
+      .on(
+        table.organizationId,
+        table.name,
+        table.id,
+        table.agentType,
+        table.authorId,
+        table.builtIn,
+        table.isDefault,
+      )
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("agents_org_name_deleted_idx")
+      .on(
+        table.organizationId,
+        table.name,
+        table.id,
+        table.agentType,
+        table.authorId,
+        table.builtIn,
+        table.isDefault,
+      )
+      .where(sql`${table.deletedAt} IS NOT NULL`),
+    index("agents_org_created_at_live_idx")
+      .on(table.organizationId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    // The Agents page's trash view lists deleted agents newest first.
+    index("agents_org_created_at_deleted_idx")
+      .on(table.organizationId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
     check(
       "agents_activation_skill_mode_check",
       sql`${table.activationSkillMode} IN ('all', 'manual')`,

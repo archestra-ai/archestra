@@ -420,18 +420,22 @@ export function RequestExample({
   const usesCatalog = keyType !== "standard" && mappedProviderKeys.length === 0;
   const { data: passthroughModels, isPending: passthroughModelsPending } =
     useLlmModels({ enabled: usesCatalog });
-  const { data: linkedModels, isPending: linkedModelsPending } =
-    useModelsWithApiKeys({ enabled: !usesCatalog });
-  const isPending = usesCatalog
-    ? passthroughModelsPending
-    : linkedModelsPending;
-
   // The general catalog spans every key the creator can access. For mapped
   // credentials, use the model-to-key links instead so this example only
   // offers models served by the provider keys the credential maps to.
   const mappedKeyIds = new Set(
     mappedProviderKeys.map((mapping) => mapping.providerApiKeyId),
   );
+  const readsLinkedModels = !usesCatalog && mappedKeyIds.size > 0;
+  const { data: linkedModels, isPending: linkedModelsPending } =
+    useModelsWithApiKeys({
+      enabled: readsLinkedModels,
+      apiKeyIds: [...mappedKeyIds].sort(),
+      includeAssignments: false,
+    });
+  const isPending = usesCatalog
+    ? passthroughModelsPending
+    : readsLinkedModels && linkedModelsPending;
   const candidates = usesCatalog
     ? (passthroughModels ?? []).map((model) => ({
         id: model.id,

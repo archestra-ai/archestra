@@ -60,7 +60,7 @@ export function KnowledgeBaseCard({
   onEditConnector: (connector: ConnectorItem) => void;
   onRemoveConnector: (connectorId: string) => void;
 }) {
-  const { connectors, assignedAgents, totalDocsIndexed } = knowledgeBase;
+  const { connectors, assignedAgentCount, totalDocsIndexed } = knowledgeBase;
   const visibleConnectors = connectors.slice(0, MAX_VISIBLE_CONNECTORS);
   const hiddenConnectors = connectors.slice(MAX_VISIBLE_CONNECTORS);
 
@@ -114,8 +114,8 @@ export function KnowledgeBaseCard({
         />
         <CardStat
           icon={<Bot className="h-3.5 w-3.5" />}
-          value={assignedAgents.length}
-          label={assignedAgents.length === 1 ? "agent" : "agents"}
+          value={assignedAgentCount}
+          label={assignedAgentCount === 1 ? "agent" : "agents"}
         />
       </div>
 

@@ -88,7 +88,6 @@ import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedu
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
-  AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
   CreatedByModel,
@@ -122,7 +121,6 @@ import {
   ConnectorCredentialsSchema,
   ConnectorRunTypeSchema,
   ConnectorSyncStatusSchema,
-  type ConnectorType,
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -150,6 +148,26 @@ const AssignedAgentSummarySchema = z.object({
   agentType: z.string(),
 });
 
+/** Opt-out for per-row agent arrays; `assignedAgentCount` always returns. */
+const IncludeAssignedAgentsQuerySchema = z
+  .preprocess((value) => value !== "false" && value !== false, z.boolean())
+  .optional()
+  .describe(
+    "Attach each row's assigned agents (default true). False returns an empty `assignedAgents` array, meaning 'not requested'; `assignedAgentCount` is returned either way.",
+  );
+
+/**
+ * Read rows by id: all visible matches come back in one page. The cap keeps
+ * the URL under the server's header size limit.
+ */
+const ListIdsQuerySchema = z
+  .preprocess(
+    (value) =>
+      typeof value === "string" ? value.split(",").filter(Boolean) : value,
+    z.array(z.string().uuid()).max(250),
+  )
+  .optional();
+
 /**
  * The stored row with its raw `created_by` user id swapped for the resolved
  * identity every "Created by" column renders. The id alone is useless to a
@@ -174,6 +192,7 @@ const KnowledgeBaseWithConnectorsSchema = KnowledgeBaseResponseSchema.extend({
   ),
   totalDocsIndexed: z.number(),
   assignedAgents: z.array(AssignedAgentSummarySchema),
+  assignedAgentCount: z.number().int().min(0),
   labels: z.array(LabelWithDetailsSchema),
 });
 
@@ -208,6 +227,7 @@ const KnowledgeBaseConnectorReadResponseSchema =
 const KnowledgeBaseConnectorListItemSchema =
   KnowledgeBaseConnectorReadResponseSchema.extend({
     assignedAgents: z.array(AssignedAgentSummarySchema),
+    assignedAgentCount: z.number().int().min(0),
     totalDocsIngested: z.number(),
   });
 
@@ -327,6 +347,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           access: ResourceAccessQuerySchema,
           sharedWith: ResourceSharedWithQuerySchema,
           owner: ResourceOwnerQuerySchema,
+          ids: ListIdsQuerySchema.describe(
+            "Only these knowledge bases (comma-separated IDs, at most 250), such as the ones an agent uses. All of them come back in one page; `limit` and `offset` do not apply.",
+          ),
+          includeAssignedAgents: IncludeAssignedAgentsQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
@@ -336,14 +360,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         query: {
-          limit,
-          offset,
+          limit: requestedLimit,
+          offset: requestedOffset,
           search,
           status,
           labels,
           access: relations,
           sharedWith,
           owner,
+          ids,
+          includeAssignedAgents,
           ...scopeFilters
         },
         organizationId,
@@ -351,6 +377,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
+      const { limit, offset } = listPage({
+        ids,
+        limit: requestedLimit,
+        offset: requestedOffset,
+      });
       // Viewing the trash is the delete permission's other half — the same
       // gate that put the rows there, as for skills and projects. Checked
       // before the access-control context is built so a rejected caller pays
@@ -372,9 +403,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Resolved once so the page query and the count agree, and so a filter
       // that matches nothing short circuits both.
       const parsedLabels = parseLabelsParam(labels);
-      const labelFilteredIds = parsedLabels
+      const labelMatchedIds = parsedLabels
         ? await KnowledgeBaseLabelModel.getIdsMatchingLabels(parsedLabels)
         : undefined;
+      // `ids` narrows the same way the label filter does, so both compose.
+      const labelMatchedIdSet = labelMatchedIds && new Set(labelMatchedIds);
+      const labelFilteredIds =
+        ids === undefined
+          ? labelMatchedIds
+          : labelMatchedIdSet === undefined
+            ? ids
+            : ids.filter((id) => labelMatchedIdSet.has(id));
 
       const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({
@@ -403,94 +442,40 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       ]);
 
-      // The trash view renders identity and `deletedAt` only, so the four
-      // enrichment queries below are skipped for it: their answers would
-      // describe links no other surface resolves while the knowledge base sits
-      // in the trash. Declared in the endpoint description, not silently
-      // narrowed.
-      // Resolved for the trash view too: "who made this" is exactly what you
-      // want when deciding whether a deleted knowledge base should come back.
-      const creators = await CreatedByModel.resolve(
-        knowledgeBases.map((kb) => CreatedByModel.id(kb, kb.createdBy)),
-      );
-
-      if (status === "deleted") {
-        return reply.send({
-          data: knowledgeBases.map((kb) => ({
-            ...kb,
-            createdBy: lookupCreator(
-              creators,
-              CreatedByModel.id(kb, kb.createdBy),
-            ),
-            connectors: [],
-            totalDocsIndexed: 0,
-            assignedAgents: [],
-            labels: [],
-          })),
-          pagination: calculatePaginationMeta(total, { limit, offset }),
-        });
-      }
-
-      const kbIds = knowledgeBases.map((kb) => kb.id);
-      const [allConnectors, docsIndexedByKbId, agentIdsByKbId, labelsByKbId] =
-        await Promise.all([
-          KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
-            canReadAll: access.canReadAll,
-            viewerTeamIds: access.teamIds,
-            viewerUserId: access.userId,
-          }),
-          KbConnectorDocumentCountModel.sumByKnowledgeBaseIds(kbIds),
-          AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
-          KnowledgeBaseLabelModel.getLabelsForMany(kbIds),
-        ]);
-
-      // Collect all unique agent IDs and batch-fetch their names
-      const allAgentIds = [...new Set([...agentIdsByKbId.values()].flat())];
-      const agentDetailsMap = new Map<
-        string,
-        { id: string; name: string; agentType: string }
-      >();
-      if (allAgentIds.length > 0) {
-        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+      // Read the page's creators, visible connectors, document totals,
+      // assigned agents and labels in one statement. With
+      // includeAssignedAgents=false, it reads only the agent count. The trash
+      // view reads only the creator, which helps decide whether to restore a
+      // deleted knowledge base. Its other links resolve to nothing in the
+      // trash, as the endpoint description states.
+      const { byId, firstCounts } = await KnowledgeBaseModel.findListEnrichment(
+        {
+          knowledgeBaseIds: knowledgeBases.map((kb) => kb.id),
           organizationId,
-          agentIds: allAgentIds,
-        });
-        for (const agent of agents) {
-          agentDetailsMap.set(agent.id, {
-            id: agent.id,
-            name: agent.name,
-            agentType: agent.agentType,
-          });
-        }
+          canReadAll: access.canReadAll,
+          viewerTeamIds: access.teamIds,
+          viewerUserId: access.userId,
+          viewerPrincipal: access.principal,
+          identityOnly: status === "deleted",
+          includeAssignedAgents: includeAssignedAgents !== false,
+        },
+      );
+      if (firstCounts.size > 0) {
+        await KbConnectorDocumentCountModel.storeFirstCounts(firstCounts);
       }
 
-      const connectorsByKbId = new Map<
-        string,
-        { id: string; name: string; connectorType: ConnectorType }[]
-      >();
-      for (const connector of allConnectors) {
-        const list = connectorsByKbId.get(connector.knowledgeBaseId) ?? [];
-        list.push({
-          id: connector.id,
-          name: connector.name,
-          connectorType: connector.connectorType,
-        });
-        connectorsByKbId.set(connector.knowledgeBaseId, list);
-      }
-
-      const data = knowledgeBases.map((kb) => ({
-        ...kb,
-        createdBy: lookupCreator(creators, CreatedByModel.id(kb, kb.createdBy)),
-        labels: labelsByKbId.get(kb.id) ?? [],
-        connectors: connectorsByKbId.get(kb.id) ?? [],
-        totalDocsIndexed: docsIndexedByKbId.get(kb.id) ?? 0,
-        assignedAgents: (agentIdsByKbId.get(kb.id) ?? [])
-          .map((id) => agentDetailsMap.get(id))
-          .filter(
-            (a): a is { id: string; name: string; agentType: string } =>
-              a !== undefined,
-          ),
-      }));
+      const data = knowledgeBases.map((kb) => {
+        const details = byId.get(kb.id);
+        return {
+          ...kb,
+          createdBy: details?.createdBy ?? null,
+          labels: details?.labels ?? [],
+          connectors: details?.connectors ?? [],
+          totalDocsIndexed: details?.totalDocsIndexed ?? 0,
+          assignedAgents: details?.assignedAgents ?? [],
+          assignedAgentCount: details?.assignedAgentCount ?? 0,
+        };
+      });
 
       return reply.send({
         data,
@@ -892,6 +877,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           access: ResourceAccessQuerySchema,
           sharedWith: ResourceSharedWithQuerySchema,
           owner: ResourceOwnerQuerySchema,
+          ids: ListIdsQuerySchema.describe(
+            "Only these connectors (comma-separated IDs, at most 250), such as the ones a page shows or an agent uses. All of them come back in one page; `limit` and `offset` do not apply.",
+          ),
+          includeAssignedAgents: IncludeAssignedAgentsQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseConnectorListItemSchema),
@@ -901,8 +890,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         query: {
-          limit,
-          offset,
+          limit: requestedLimit,
+          offset: requestedOffset,
           knowledgeBaseId,
           search,
           connectorType,
@@ -910,12 +899,19 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           access: relations,
           sharedWith,
           owner,
+          ids,
+          includeAssignedAgents,
         },
         organizationId,
         user,
       },
       reply,
     ) => {
+      const { limit, offset } = listPage({
+        ids,
+        limit: requestedLimit,
+        offset: requestedOffset,
+      });
       // Viewing the trash is the delete permission's other half — the same
       // gate that put the rows there, as for skills and projects. Checked
       // before the access-control context is built so a rejected caller pays
@@ -959,6 +955,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             viewerUserId: access.userId,
           },
         );
+        if (ids !== undefined) {
+          const requested = new Set(ids);
+          data = data.filter((connector) => requested.has(connector.id));
+        }
         total = data.length;
       } else {
         const result =
@@ -978,6 +978,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
             status,
+            ids,
             access: await ResourcePermissionSubjectModel.resolveAccessFilter({
               userId: user.id,
               organizationId,
@@ -1011,6 +1012,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               CreatedByModel.id(connector, connector.createdBy),
             ),
             assignedAgents: [],
+            assignedAgentCount: 0,
             labels: [],
             totalDocsIngested: 0,
           })),
@@ -1020,44 +1022,29 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Enrich connectors with assigned agents (batch query to avoid N+1)
       const connectorIds = data.map((c) => c.id);
-      const [agentIdsByConnector, labelsByConnector, docsByConnector] =
+      const [assignedAgents, labelsByConnector, docsByConnector] =
         await Promise.all([
-          AgentConnectorAssignmentModel.getAgentIdsForConnectors(connectorIds),
+          includeAssignedAgents === false
+            ? AgentConnectorAssignmentModel.countAgentsForConnectors({
+                connectorIds,
+                organizationId,
+              }).then((counts) => ({ counts, agentsByRowId: null }))
+            : resolveAssignedAgents({
+                organizationId,
+                agentIdsByRowId:
+                  AgentConnectorAssignmentModel.getAgentIdsForConnectors(
+                    connectorIds,
+                  ),
+              }),
           KnowledgeBaseConnectorLabelModel.getLabelsForMany(connectorIds),
           KbConnectorDocumentCountModel.findByConnectorIds(connectorIds),
         ]);
-
-      const allAgentIdsForConnectors = [
-        ...new Set([...agentIdsByConnector.values()].flat()),
-      ];
-      const connectorAgentDetailsMap = new Map<
-        string,
-        { id: string; name: string; agentType: string }
-      >();
-      if (allAgentIdsForConnectors.length > 0) {
-        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
-          organizationId,
-          agentIds: allAgentIdsForConnectors,
-        });
-        for (const agent of agents) {
-          connectorAgentDetailsMap.set(agent.id, {
-            id: agent.id,
-            name: agent.name,
-            agentType: agent.agentType,
-          });
-        }
-      }
 
       const enrichedData = data.map((connector) => ({
         ...connector,
         labels: labelsByConnector.get(connector.id) ?? [],
         totalDocsIngested: docsByConnector.get(connector.id) ?? 0,
-        assignedAgents: (agentIdsByConnector.get(connector.id) ?? [])
-          .map((id) => connectorAgentDetailsMap.get(id))
-          .filter(
-            (a): a is { id: string; name: string; agentType: string } =>
-              a !== undefined,
-          ),
+        ...assignedAgentFields(assignedAgents, connector.id),
       }));
 
       const validatedData = enrichedData.filter((connector) => {
@@ -3720,4 +3707,75 @@ async function withConnectorDetails<
     ),
   ]);
   return { ...connector, labels, createdBy };
+}
+
+type AssignedAgentSummary = z.infer<typeof AssignedAgentSummarySchema>;
+
+/**
+ * Per-row agent usage for a list page: always the count, plus the agents
+ * themselves when the caller asked for them (`agentsByRowId` is null when not).
+ */
+type AssignedAgents = {
+  counts: Map<string, number>;
+  agentsByRowId: Map<string, AssignedAgentSummary[]> | null;
+};
+
+/**
+ * Names the agents each row is assigned to, with one batch read of the agents
+ * for the whole page. Agents outside the organization or deleted drop out, and
+ * the count is taken from what remains so the two always agree.
+ */
+async function resolveAssignedAgents(params: {
+  organizationId: string;
+  agentIdsByRowId: Promise<Map<string, string[]>>;
+}): Promise<AssignedAgents> {
+  const agentIdsByRowId = await params.agentIdsByRowId;
+  const allAgentIds = [...new Set([...agentIdsByRowId.values()].flat())];
+  const agentsById = new Map<string, AssignedAgentSummary>();
+  if (allAgentIds.length > 0) {
+    const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+      organizationId: params.organizationId,
+      agentIds: allAgentIds,
+    });
+    for (const agent of agents) {
+      agentsById.set(agent.id, {
+        id: agent.id,
+        name: agent.name,
+        agentType: agent.agentType,
+      });
+    }
+  }
+
+  const agentsByRowId = new Map<string, AssignedAgentSummary[]>();
+  const counts = new Map<string, number>();
+  for (const [rowId, agentIds] of agentIdsByRowId) {
+    const agents = agentIds
+      .map((id) => agentsById.get(id))
+      .filter((agent): agent is AssignedAgentSummary => agent !== undefined);
+    agentsByRowId.set(rowId, agents);
+    counts.set(rowId, agents.length);
+  }
+  return { counts, agentsByRowId };
+}
+
+function assignedAgentFields(assigned: AssignedAgents, rowId: string) {
+  return {
+    assignedAgents: assigned.agentsByRowId?.get(rowId) ?? [],
+    assignedAgentCount: assigned.counts.get(rowId) ?? 0,
+  };
+}
+
+/**
+ * The page a list reads: the requested one, or all of `ids` at once. An empty
+ * `ids` keeps a limit of 1 because the page metadata divides by the limit and
+ * must report at least 1; the id filter already returns no rows.
+ */
+function listPage(params: {
+  ids: string[] | undefined;
+  limit: number;
+  offset: number;
+}): { limit: number; offset: number } {
+  return params.ids === undefined
+    ? { limit: params.limit, offset: params.offset }
+    : { limit: Math.max(params.ids.length, 1), offset: 0 };
 }

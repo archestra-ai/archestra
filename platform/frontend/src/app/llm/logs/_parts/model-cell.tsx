@@ -1,21 +1,19 @@
 "use client";
 
 import type { SupportedProvider } from "@archestra/shared";
-import Image from "next/image";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { providerLogoUrl } from "@/lib/provider-logos";
-import { cn } from "@/lib/utils/tailwind";
 import {
   describeModelOrigin,
   isFreeTierModel,
   type LogSession,
   shortModelName,
 } from "./logs-table-format";
+import { MakerDisc } from "./maker-disc";
 
 /**
  * The session's model by the name people use for it, behind its maker's logo
@@ -103,47 +101,5 @@ export function ModelCell({
         </ul>
       </TooltipContent>
     </Tooltip>
-  );
-}
-
-// ============================================================================
-// Internal helpers
-// ============================================================================
-
-/** The maker's logo, or its initial when there is no logo to show. */
-function MakerDisc({
-  provider,
-  vendor,
-  ring = true,
-}: {
-  provider: SupportedProvider | null;
-  vendor: string;
-  ring?: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background",
-        ring && "ring-2 ring-background",
-      )}
-    >
-      {provider ? (
-        <Image
-          src={providerLogoUrl(provider)}
-          alt={vendor}
-          width={11}
-          height={11}
-          className="shrink-0 object-contain dark:invert"
-        />
-      ) : (
-        <span
-          role="img"
-          aria-label={vendor}
-          className="text-[9px] font-semibold text-muted-foreground"
-        >
-          {vendor.charAt(0).toUpperCase()}
-        </span>
-      )}
-    </span>
   );
 }

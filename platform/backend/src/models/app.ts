@@ -32,6 +32,7 @@ import AppLabelModel from "./app-label";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import CreatedByModel from "./created-by";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpCatalogUserModel from "./mcp-catalog-user";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -876,6 +877,7 @@ class AppModel {
    */
   static async purge(id: string): Promise<void> {
     await withDbTransaction(async (tx) => {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       await tx
         .delete(schema.appVersionsTable)
         .where(eq(schema.appVersionsTable.appId, id));

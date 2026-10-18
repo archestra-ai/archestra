@@ -39,15 +39,20 @@ export interface McpServerFacetCounts {
  */
 export function useMcpServerIssues(
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>,
+  /** False holds the catalog, install and team reads (the sidebar badge). */
+  { enabled = true }: { enabled?: boolean } = {},
 ): {
   issuesByCatalog: Map<string, McpServerIssue[]>;
   facetCounts: McpServerFacetCounts;
 } {
-  const { data: catalogItems } = useInternalMcpCatalog();
-  const { data: servers } = useMcpServers({ includeAssignedAgents: false });
+  const { data: catalogItems } = useInternalMcpCatalog({ enabled });
+  const { data: servers } = useMcpServers({
+    includeAssignedAgents: false,
+    enabled,
+  });
   const { data: session } = useSession();
   const userId = session?.user?.id ?? null;
-  const canReauthenticate = useCanReauthenticate();
+  const canReauthenticate = useCanReauthenticate({ enabled });
   const { data: canManageInstalls } = useHasPermissions(
     { mcpRegistry: ["update"] },
     "*",

@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 
 const queryState = vi.hoisted(() => ({
   value: {
@@ -69,6 +70,9 @@ describe("AgentRunChatSession", () => {
     cancelState.mutate.mockReset();
     terminalState.props = null;
     shareDialogState.open = false;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
     queryState.value = {
       data: undefined,
       isPending: false,
@@ -225,6 +229,32 @@ describe("AgentRunChatSession", () => {
     expect(
       screen.queryByText("Port forwarding command"),
     ).not.toBeInTheDocument();
+  });
+
+  it("links the owner to the run's LLM trace when they may read logs", async () => {
+    const user = userEvent.setup();
+    queryState.value.data = run({ sessionId: "workspace-1" });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+
+    expect(
+      screen.getByRole("menuitem", { name: "View trace" }),
+    ).toHaveAttribute("href", "/llm/logs/workspace-1");
+  });
+
+  it("leaves the trace out without log:read", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    queryState.value.data = run({ sessionId: "workspace-1" });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+
+    expect(screen.getByRole("menuitem", { name: "View Agent" })).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "View trace" })).toBeNull();
   });
 
   it("shows a copyable port forwarding command for a configured workspace", async () => {

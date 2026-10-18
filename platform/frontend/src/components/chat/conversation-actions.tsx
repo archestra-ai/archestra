@@ -2,6 +2,7 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import {
+  Activity,
   Download,
   Pencil,
   Pin,
@@ -34,6 +35,7 @@ import {
 import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import {
   useCreateProject,
@@ -102,6 +104,8 @@ export function useConversationActions({
   const { data: canUpdate } = useHasPermissions({ chat: ["update"] });
   const { data: canDelete } = useHasPermissions({ chat: ["delete"] });
   const { data: canReadProjects } = useHasPermissions({ project: ["read"] });
+  const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
+  const { data: canReadAllLogs } = useHasPermissions({ log: ["admin"] });
   const { data: canCreateProject } = useHasPermissions({
     project: ["create"],
   });
@@ -130,6 +134,10 @@ export function useConversationActions({
   const isOwner = conversation.userId === session?.user.id;
   const mayUpdate = isOwner && canUpdate === true;
   const mayDelete = isOwner && canDelete === true;
+  // The chat's LLM requests are logged under its id. `log:read` shows a
+  // viewer their own requests; `log:admin` shows everyone's.
+  const mayViewTrace =
+    canReadLogs === true && (isOwner || canReadAllLogs === true);
   const mayShare =
     (canShare ?? isOwner) &&
     isActionAvailableForConversation(conversation, "share");
@@ -276,6 +284,17 @@ export function useConversationActions({
         <Download />
         Export Markdown
       </DropdownMenuItem>
+      {mayViewTrace && (
+        <DropdownMenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            router.push(llmSessionHref(id));
+          }}
+        >
+          <Activity />
+          View trace
+        </DropdownMenuItem>
+      )}
       {mayDelete && (
         <>
           <DropdownMenuSeparator />

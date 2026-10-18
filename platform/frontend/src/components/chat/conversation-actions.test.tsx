@@ -69,22 +69,49 @@ describe("useConversationActions", () => {
       "Project",
       "Share",
       "Export Markdown",
+      "View trace",
       "Delete",
     ]);
   });
 
-  it("offers only export on someone else's chat", () => {
+  it("offers export, and the trace to a log admin, on someone else's chat", () => {
     render(<Items userId="someone-else" />);
     expect(
       screen.getAllByRole("button").map((item) => item.textContent),
-    ).toEqual(["Export Markdown"]);
+    ).toEqual(["Export Markdown", "View trace"]);
+  });
+
+  it("shows the trace with log:read only on the viewer's own chat", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !("log" in permissions && permissions.log?.includes("admin")),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    const { unmount } = render(<Items userId="owner" />);
+    expect(screen.getByRole("button", { name: "View trace" })).toBeVisible();
+    unmount();
+
+    render(<Items userId="someone-else" />);
+    expect(screen.queryByRole("button", { name: "View trace" })).toBeNull();
+  });
+
+  it("hides the trace without log:read", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({ data: !("log" in permissions) }) as ReturnType<
+          typeof useHasPermissions
+        >,
+    );
+    render(<Items userId="owner" />);
+    expect(screen.queryByRole("button", { name: "View trace" })).toBeNull();
   });
 
   it("drops share, project and title generation on an encrypted chat", () => {
     render(<Items userId="owner" encryptedChat />);
     expect(
       screen.getAllByRole("button").map((item) => item.textContent),
-    ).toEqual(["Pin", "Rename", "Export Markdown", "Delete"]);
+    ).toEqual(["Pin", "Rename", "Export Markdown", "View trace", "Delete"]);
   });
 });
 

@@ -1,5 +1,5 @@
 {
-  "id": "1e2e0349-e199-4487-a001-082133452b64",
+  "id": "66f14d1d-b4d2-4d4e-a0fa-36a180b11fe4",
   "prevId": "78a14322-6998-4e5d-b1a6-cab764a62ddf",
   "version": "7",
   "dialect": "postgresql",
@@ -4891,6 +4891,34 @@
           ],
           "isUnique": false,
           "where": "\"agents\".\"deleted_at\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_org_gateway_profile_created_at_live_idx": {
+          "name": "agents_org_gateway_profile_created_at_live_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"agents\".\"deleted_at\" IS NULL AND \"agents\".\"agent_type\" IN ('mcp_gateway', 'profile')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -15221,27 +15249,6 @@
           "method": "btree",
           "with": {}
         },
-        "api_key_models_api_key_id_synced_at_idx": {
-          "name": "api_key_models_api_key_id_synced_at_idx",
-          "columns": [
-            {
-              "expression": "api_key_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "synced_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "first"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "api_key_models_model_id_idx": {
           "name": "api_key_models_model_id_idx",
           "columns": [
@@ -15399,12 +15406,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "credential_kind": {
-          "name": "credential_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_by_service_account_id": {
           "name": "created_by_service_account_id",

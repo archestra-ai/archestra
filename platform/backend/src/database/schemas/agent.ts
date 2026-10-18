@@ -296,6 +296,14 @@ const agentsTable = softDeletablePgTable(
     index("agents_org_created_at_deleted_idx")
       .on(table.organizationId, table.createdAt, table.id)
       .where(sql`${table.deletedAt} IS NOT NULL`),
+    // The gateways and profiles list walks only those rows newest first.
+    // On agents_org_created_at_live_idx it filters every chat agent and
+    // can reach the end of the index before it fills a page.
+    index("agents_org_gateway_profile_created_at_live_idx")
+      .on(table.organizationId, table.createdAt, table.id)
+      .where(
+        sql`${table.deletedAt} IS NULL AND ${table.agentType} IN ('mcp_gateway', 'profile')`,
+      ),
     check(
       "agents_activation_skill_mode_check",
       sql`${table.activationSkillMode} IN ('all', 'manual')`,

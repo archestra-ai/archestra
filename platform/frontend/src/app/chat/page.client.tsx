@@ -205,6 +205,7 @@ import {
   resolveChatModelState,
   resolvePreferredModelForProvider,
 } from "./chat-initial-state";
+import { composerMorph } from "./composer-morph";
 import {
   AppsPanelContent,
   BrowserPanel,
@@ -307,6 +308,16 @@ export function ChatPageContent({
   }, []);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
   const [hasOpenedRightPanel, setHasOpenedRightPanel] = useState(false);
+  // The composer's shared-element morph is for arriving from the centered
+  // new-chat (or project) composer. Between two conversations the composer
+  // stays put, and the morph only cost a document view transition that held
+  // the new composer's first frames, so it is off there. Decided once per
+  // mount, so the wrapper never changes under a composer holding a draft.
+  const [morphComposer] = useState(() => composerMorph.shouldMorph());
+  useEffect(() => {
+    if (!routeConversationId) return;
+    return composerMorph.registerConversationComposer();
+  }, [routeConversationId]);
   const [isApplyingAgentSelection, setIsApplyingAgentSelection] =
     useState(false);
   const pendingPromptRef = useRef<string | undefined>(undefined);
@@ -3513,8 +3524,10 @@ export function ChatPageContent({
                             splash → conversation swap the box morphs from
                             center screen to its bottom anchor. */}
                         <ViewTransition
-                          name="chat-composer"
-                          share="chat-composer-morph"
+                          name={morphComposer ? "chat-composer" : undefined}
+                          share={
+                            morphComposer ? "chat-composer-morph" : undefined
+                          }
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">

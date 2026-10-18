@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 
+import {
+  DEFAULT_THEME_ID,
+  type OrganizationTheme,
+  OrganizationThemeSchema,
+} from "@archestra/shared";
 import { getBackendBaseUrl } from "@/lib/config/config";
 
 const APPEARANCE_SETTINGS_PATH = "/api/organization/appearance-settings";
@@ -11,6 +16,13 @@ export type DeploymentFavicon = {
   bytes: ArrayBuffer | null;
   href: string;
   version: string | null;
+};
+
+/** What a document's first paint needs from the appearance settings. */
+type DeploymentAppearance = {
+  favicon: DeploymentFavicon;
+  /** The organization's theme, or null when unset or not recognised. */
+  theme: OrganizationTheme | null;
 };
 
 /**
@@ -25,8 +37,18 @@ export type DeploymentFavicon = {
  * the refresh). `/favicon.ico` itself always reads fresh (see
  * getDeploymentFavicon) and redirects an outdated `?v=` to the current asset.
  */
-export function getCachedDeploymentFavicon(): Promise<DeploymentFavicon> {
+export function getCachedDeploymentAppearance(): Promise<DeploymentAppearance> {
   return deploymentFaviconCache.get();
+}
+
+/**
+ * The `<html>` class for the organization's theme (`theme-<id>`, see
+ * themes.css), so the server-rendered page paints in it. Without a known
+ * theme it falls back to the default one, never to the unthemed (white)
+ * `:root`. The client keeps applying later changes (useOrgTheme).
+ */
+export function themeClassName(theme: OrganizationTheme | null): string {
+  return `theme-${theme ?? DEFAULT_THEME_ID}`;
 }
 
 /** Start the first read at server start, so the first document finds it. */
@@ -41,7 +63,7 @@ export function warmDeploymentFavicon(): void {
  * default. The answer also refreshes the document cache above.
  */
 export async function getDeploymentFavicon(): Promise<DeploymentFavicon> {
-  return deploymentFaviconCache.refresh();
+  return (await deploymentFaviconCache.refresh()).favicon;
 }
 
 // ===
@@ -52,19 +74,20 @@ const FAVICON_TTL_MS = 30_000;
 const COLD_WAIT_MS = 200;
 
 class DeploymentFaviconCache {
-  private value: { favicon: DeploymentFavicon; readAt: number } | null = null;
-  private inFlight: Promise<DeploymentFavicon> | null = null;
+  private value: { appearance: DeploymentAppearance; readAt: number } | null =
+    null;
+  private inFlight: Promise<DeploymentAppearance> | null = null;
 
-  async get(): Promise<DeploymentFavicon> {
+  async get(): Promise<DeploymentAppearance> {
     if (this.value) {
       if (Date.now() - this.value.readAt >= FAVICON_TTL_MS) {
         void this.refresh();
       }
-      return this.value.favicon;
+      return this.value.appearance;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<DeploymentFavicon>((resolve) => {
-      timer = setTimeout(() => resolve(defaultFavicon()), COLD_WAIT_MS);
+    const timeout = new Promise<DeploymentAppearance>((resolve) => {
+      timer = setTimeout(() => resolve(defaultAppearance()), COLD_WAIT_MS);
     });
     try {
       return await Promise.race([this.refresh(), timeout]);
@@ -78,13 +101,13 @@ class DeploymentFaviconCache {
    * read is not cached: it answers with the last good value, or the default,
    * and the next document tries again.
    */
-  refresh(): Promise<DeploymentFavicon> {
-    this.inFlight ??= readDeploymentFavicon()
-      .then((favicon) => {
-        this.value = { favicon, readAt: Date.now() };
-        return favicon;
+  refresh(): Promise<DeploymentAppearance> {
+    this.inFlight ??= readDeploymentAppearance()
+      .then((appearance) => {
+        this.value = { appearance, readAt: Date.now() };
+        return appearance;
       })
-      .catch(() => this.value?.favicon ?? defaultFavicon())
+      .catch(() => this.value?.appearance ?? defaultAppearance())
       .finally(() => {
         this.inFlight = null;
       });
@@ -95,7 +118,7 @@ class DeploymentFaviconCache {
 const deploymentFaviconCache = new DeploymentFaviconCache();
 
 /** Throws when the backend cannot answer, so the cache keeps its last value. */
-async function readDeploymentFavicon(): Promise<DeploymentFavicon> {
+async function readDeploymentAppearance(): Promise<DeploymentAppearance> {
   // Do not put this in Next's data cache: appearance mutations happen in the
   // backend, so the frontend cannot reliably invalidate a Next cache tag.
   // The backend already uses an invalidated process-local appearance cache;
@@ -108,7 +131,18 @@ async function readDeploymentFavicon(): Promise<DeploymentFavicon> {
     throw new Error(`appearance settings: ${response.status}`);
   }
 
-  const { favicon } = (await response.json()) as { favicon?: unknown };
+  const body = (await response.json()) as {
+    favicon?: unknown;
+    theme?: unknown;
+  };
+  const parsedTheme = OrganizationThemeSchema.safeParse(body.theme);
+  return {
+    favicon: parseFavicon(body.favicon),
+    theme: parsedTheme.success ? parsedTheme.data : null,
+  };
+}
+
+function parseFavicon(favicon: unknown): DeploymentFavicon {
   if (typeof favicon !== "string" || !favicon.startsWith(PNG_DATA_URI_PREFIX)) {
     return defaultFavicon();
   }
@@ -131,6 +165,10 @@ async function readDeploymentFavicon(): Promise<DeploymentFavicon> {
 
 function getServerBackendBaseUrl() {
   return process.env.ARCHESTRA_INTERNAL_API_BASE_URL || getBackendBaseUrl();
+}
+
+function defaultAppearance(): DeploymentAppearance {
+  return { favicon: defaultFavicon(), theme: null };
 }
 
 function defaultFavicon(): DeploymentFavicon {

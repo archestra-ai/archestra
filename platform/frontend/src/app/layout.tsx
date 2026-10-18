@@ -17,7 +17,10 @@ import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { hasSessionCookie } from "@/lib/auth/session-cookie.server";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
-import { getCachedDeploymentFavicon } from "@/lib/favicon.server";
+import {
+  getCachedDeploymentAppearance,
+  themeClassName,
+} from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
@@ -233,8 +236,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [favicon, cookieStore] = await Promise.all([
-    getCachedDeploymentFavicon(),
+  const [{ favicon, theme }, cookieStore] = await Promise.all([
+    getCachedDeploymentAppearance(),
     cookies(),
   ]);
   // Presence only; nothing is fetched for it. See WithAuthCheck.
@@ -244,7 +247,7 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${latoFont.variable} ${geistFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable}`}
+      className={`${latoFont.variable} ${geistFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable} ${themeClassName(theme)}`}
     >
       <head>
         <link rel="describedby" href="/llms.txt" type="text/plain" />

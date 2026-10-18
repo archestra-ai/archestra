@@ -19,6 +19,7 @@ import type { ApiError } from "@/types";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { handleServerError } from "./server/error-handler";
 import { registerLlmProxyDrain } from "./server/llm-proxy-drain";
+import { parseLoadedSourceMaps } from "./server/source-maps";
 
 const BROWSER_API_FAVICON_HREF = Symbol("browserApiFaviconHref");
 
@@ -110,6 +111,11 @@ export const createFastifyInstance = () => {
         // Branding must never turn a successful API response into an error.
         done();
       }
+    })
+    // Runs inside listen() before the port opens; see parseLoadedSourceMaps.
+    .addHook("onReady", (done) => {
+      parseLoadedSourceMaps();
+      done();
     })
     .setErrorHandler<ApiError | Error>(handleServerError);
 

@@ -18,10 +18,14 @@ type ReauthCandidate = {
  * with theirs. Installation admins may act on team and org connections.
  * Otherwise: team member with update; org denied. All paths require create.
  */
-export function useCanReauthenticate() {
+export function useCanReauthenticate({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data: userTeams } = useMyTeams();
+  const { data: userTeams } = useMyTeams({ enabled });
   const { data: hasCreatePermission } = useHasPermissions({
     mcpServerInstallation: ["create"],
   });

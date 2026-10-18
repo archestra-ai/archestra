@@ -7,6 +7,7 @@ import {
   formatPermissionConstraint,
   hasPagePermissions,
   hasPermissions,
+  pageUsesCapabilities,
 } from "./auth.utils";
 
 describe("hasPermissions", () => {
@@ -145,6 +146,16 @@ describe("scoped page discovery", () => {
         capabilities,
       }),
     ).toBe(false);
+  });
+  it("waits for capabilities only where a grant can open the page", () => {
+    expect(pageUsesCapabilities({ mcpRegistry: ["read"] })).toBe(true);
+    expect(
+      pageUsesCapabilities({ organization: ["read"], agent: ["read"] }),
+    ).toBe(true);
+    // A grant never satisfies a mutation, nor a resource without object grants.
+    expect(pageUsesCapabilities({ mcpRegistry: ["update"] })).toBe(false);
+    expect(pageUsesCapabilities({ auditLog: ["read"] })).toBe(false);
+    expect(pageUsesCapabilities({})).toBe(false);
   });
   it("opens the service accounts page for someone granted one account", () => {
     // The settings page asks for `serviceAccount: ["read"]`, and a per-object

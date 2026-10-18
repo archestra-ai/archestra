@@ -1,5 +1,14 @@
 import { describe, expect, test } from "@/test";
+import type { InsertKbDocument } from "@/types";
+import AgentModel from "./agent";
+import AgentKnowledgeBaseModel from "./agent-knowledge-base";
+import CreatedByModel from "./created-by";
+import { KnowledgeBaseLabelModel } from "./entity-labels";
+import KbConnectorDocumentCountModel from "./kb-connector-document-count";
+import KbDocumentModel from "./kb-document";
 import KnowledgeBaseModel from "./knowledge-base";
+import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 describe("KnowledgeBaseModel", () => {
   describe("create", () => {
@@ -362,4 +371,224 @@ describe("KnowledgeBaseModel", () => {
       expect(descriptionCount).toBe(1);
     });
   });
+
+  describe("findListEnrichment", () => {
+    test("totals every assigned connector's documents, counting a connector once and keeping that total", async ({
+      makeMember,
+      makeUser,
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const withoutConnectors = await makeKnowledgeBase(org.id);
+      const shown = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const unseen = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        access: "personal",
+      });
+      const deleted = await makeKnowledgeBaseConnector(kb.id, org.id);
+      for (const connectorId of [shown.id, shown.id, unseen.id, deleted.id]) {
+        await KbDocumentModel.create(documentData(connectorId, org.id));
+      }
+      await KnowledgeBaseConnectorModel.delete(deleted.id);
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const member = await memberReach(user.id, org.id);
+
+      const first = await KnowledgeBaseModel.findListEnrichment({
+        knowledgeBaseIds: [kb.id, withoutConnectors.id],
+        organizationId: org.id,
+        ...member,
+      });
+      // Unseen and soft-deleted connectors still hold documents of this base.
+      expect(first.byId.get(kb.id)?.totalDocsIndexed).toBe(4);
+      expect(first.byId.get(withoutConnectors.id)?.totalDocsIndexed).toBe(0);
+      expect(first.byId.get(kb.id)?.connectors.map((c) => c.id)).toEqual([
+        shown.id,
+      ]);
+      expect(first.firstCounts).toEqual(
+        new Map([
+          [shown.id, 2],
+          [unseen.id, 1],
+          [deleted.id, 1],
+        ]),
+      );
+
+      await KbConnectorDocumentCountModel.storeFirstCounts(first.firstCounts);
+      await KbDocumentModel.create(documentData(shown.id, org.id));
+      const second = await KnowledgeBaseModel.findListEnrichment({
+        knowledgeBaseIds: [kb.id],
+        organizationId: org.id,
+        ...member,
+      });
+      expect(second.byId.get(kb.id)?.totalDocsIndexed).toBe(4);
+      expect(second.firstCounts.size).toBe(0);
+    });
+
+    test("lists the live agents of its organization, its labels and its creator", async ({
+      makeMember,
+      makeOrganization,
+      makeAgent,
+      makeKnowledgeBase,
+      makeServiceAccount,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const author = await makeUser();
+      const account = await makeServiceAccount(org.id);
+      const byUser = await makeKnowledgeBase(org.id, { createdBy: author.id });
+      const byAccount = await KnowledgeBaseModel.create({
+        organizationId: org.id,
+        name: "Made by an account",
+        createdBy: CreatedByModel.id(
+          { createdByServiceAccountId: account.id },
+          null,
+        ),
+      });
+      const first = await makeAgent({ organizationId: org.id, name: "First" });
+      const second = await makeAgent({
+        organizationId: org.id,
+        name: "Second",
+      });
+      const removed = await makeAgent({ organizationId: org.id });
+      const elsewhere = await makeAgent({ organizationId: otherOrg.id });
+      for (const agent of [first, second, removed, elsewhere]) {
+        await AgentKnowledgeBaseModel.assign(agent.id, byUser.id);
+      }
+      await AgentModel.delete(removed.id);
+      const viewerUser = await makeUser();
+      await makeMember(viewerUser.id, org.id);
+      await KnowledgeBaseLabelModel.syncLabels(byUser.id, [
+        { key: "team", value: "search" },
+        { key: "env", value: "prod" },
+      ]);
+
+      const { byId } = await KnowledgeBaseModel.findListEnrichment({
+        knowledgeBaseIds: [byUser.id, byAccount.id],
+        organizationId: org.id,
+        ...(await memberReach(viewerUser.id, org.id)),
+      });
+
+      // The test transaction gives every assignment the same created_at, so
+      // the order is not asserted.
+      expect(byId.get(byUser.id)?.assignedAgents).toHaveLength(2);
+      expect(byId.get(byUser.id)?.assignedAgents).toEqual(
+        expect.arrayContaining([
+          { id: first.id, name: "First", agentType: first.agentType },
+          { id: second.id, name: "Second", agentType: second.agentType },
+        ]),
+      );
+      expect(byId.get(byUser.id)?.labels.map((l) => l.key)).toEqual([
+        "env",
+        "team",
+      ]);
+      expect(byId.get(byUser.id)?.createdBy).toEqual({
+        id: author.id,
+        name: author.name,
+        email: author.email,
+      });
+      expect(byId.get(byAccount.id)?.createdBy).toMatchObject({
+        name: account.name,
+        type: "service_account",
+      });
+    });
+
+    test("counts the assigned agents by the same rule whether or not it lists them", async ({
+      makeAgent,
+      makeKnowledgeBase,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const live = await makeAgent({ organizationId: org.id });
+      const removed = await makeAgent({ organizationId: org.id });
+      const elsewhere = await makeAgent({ organizationId: otherOrg.id });
+      for (const agent of [live, removed, elsewhere]) {
+        await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+      }
+      await AgentModel.delete(removed.id);
+      const read = (includeAssignedAgents: boolean) =>
+        KnowledgeBaseModel.findListEnrichment({
+          knowledgeBaseIds: [kb.id],
+          organizationId: org.id,
+          canReadAll: true,
+          includeAssignedAgents,
+        });
+
+      const listed = (await read(true)).byId.get(kb.id);
+      const counted = (await read(false)).byId.get(kb.id);
+
+      expect(listed?.assignedAgents.map((agent) => agent.id)).toEqual([
+        live.id,
+      ]);
+      expect(listed?.assignedAgentCount).toBe(1);
+      expect(counted?.assignedAgents).toEqual([]);
+      expect(counted?.assignedAgentCount).toBe(1);
+    });
+
+    test("reads only the creator for the trash view", async ({
+      makeOrganization,
+      makeAgent,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const author = await makeUser();
+      const kb = await makeKnowledgeBase(org.id, { createdBy: author.id });
+      await makeKnowledgeBaseConnector(kb.id, org.id);
+      const agent = await makeAgent({ organizationId: org.id });
+      await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
+
+      const { byId, firstCounts } = await KnowledgeBaseModel.findListEnrichment(
+        {
+          knowledgeBaseIds: [kb.id],
+          organizationId: org.id,
+          canReadAll: true,
+          identityOnly: true,
+        },
+      );
+
+      expect(byId.get(kb.id)).toEqual({
+        createdBy: { id: author.id, name: author.name, email: author.email },
+        connectors: [],
+        totalDocsIndexed: 0,
+        assignedAgents: [],
+        assignedAgentCount: 0,
+        labels: [],
+      });
+      expect(firstCounts.size).toBe(0);
+    });
+  });
 });
+
+/** A plain member's reach, as the list route passes it. */
+async function memberReach(userId: string, organizationId: string) {
+  return {
+    canReadAll: false,
+    viewerUserId: userId,
+    viewerTeamIds: [],
+    viewerPrincipal: await ResourcePermissionSubjectModel.resolvePrincipal({
+      userId,
+      organizationId,
+    }),
+  };
+}
+
+function documentData(
+  connectorId: string,
+  organizationId: string,
+): InsertKbDocument {
+  const id = crypto.randomUUID();
+  return {
+    connectorId,
+    organizationId,
+    sourceId: id,
+    title: `Document ${id}`,
+    content: `Content ${id}`,
+    contentHash: `hash-${id}`,
+  };
+}

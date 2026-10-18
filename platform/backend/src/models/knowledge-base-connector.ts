@@ -9,6 +9,7 @@ import {
   inArray,
   isNotNull,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
@@ -314,6 +315,25 @@ class KnowledgeBaseConnectorModel {
         ),
       )
       .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt));
+  }
+
+  /**
+   * The viewer's read reach over `knowledge_base_connectors`, as
+   * findByKnowledgeBaseIds applies it without a `visibilityScope`, for a
+   * statement that embeds the same filter. Undefined when it filters nothing.
+   */
+  static async visibilityCondition(params: {
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
+    viewerUserId?: string;
+    viewerPrincipal?: GrantPrincipal;
+  }): Promise<SQL | undefined> {
+    return await buildVisibilityFilter({
+      canReadAll: params.canReadAll,
+      userId: params.viewerUserId,
+      principal: params.viewerPrincipal,
+      teamIds: params.viewerTeamIds,
+    });
   }
 
   static async findByKnowledgeBaseIds(

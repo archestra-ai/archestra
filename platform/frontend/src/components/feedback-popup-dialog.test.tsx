@@ -10,6 +10,8 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
+// The shell's gate is released in these tests.
+vi.mock("@/lib/shell-deferral", () => ({ useShellReady: () => true }));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 

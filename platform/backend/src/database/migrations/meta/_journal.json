@@ -3998,6 +3998,13 @@
       "when": 1792306450351,
       "tag": "0570_roster_option_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 571,
+      "version": "7",
+      "when": 1792316295638,
+      "tag": "0571_policy_read_access",
+      "breakpoints": true
     }
   ]
 }

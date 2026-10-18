@@ -3,7 +3,7 @@ import type {
   ResourcePermissionGrant,
   ScopedResource,
 } from "@archestra/shared";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -13,7 +13,9 @@ import {
   primaryKey,
   text,
   timestamp,
+  uuid,
 } from "drizzle-orm/pg-core";
+import type { ResourceReadAudience } from "@/types/resource-permission";
 import organizationsTable from "./organization";
 
 /** One versioned document per resource scope prevents lost grant/revoke edits. */
@@ -41,6 +43,41 @@ const resourcePermissionPoliciesTable = pgTable(
       .default(false),
     revision: integer("revision").notNull().default(1),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+    // Read access, derived from the row by PostgreSQL on every write so lists
+    // can filter, order and count on indexed columns. Read only through the
+    // list predicates; whole-row reads name the stored columns instead
+    // (POLICY_COLUMNS in the model), so no payload carries these.
+    /** The object id for a scope that names one object; null for `*`. */
+    scopeId: uuid("scope_id").generatedAlwaysAs(
+      (): SQL =>
+        sql`CASE WHEN ${resourcePermissionPoliciesTable.scope} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN ${resourcePermissionPoliciesTable.scope}::uuid END`,
+    ),
+    /**
+     * `org` when a read grant reaches the organization or a role, else `team`
+     * when one reaches a team, else `personal`, as
+     * `ResourcePermissionPolicyModel.audienceIs` reads the grants.
+     */
+    readAudience: text("read_audience")
+      .$type<ResourceReadAudience>()
+      .generatedAlwaysAs(
+        (): SQL => sql`CASE
+          WHEN ${resourcePermissionPoliciesTable.grants} @> '[{"subject":{"type":"organization"},"actions":["read"]}]'
+            OR ${resourcePermissionPoliciesTable.grants} @> '[{"subject":{"type":"role"},"actions":["read"]}]' THEN 'org'
+          WHEN ${resourcePermissionPoliciesTable.grants} @> '[{"subject":{"type":"team"},"actions":["read"]}]' THEN 'team'
+          ELSE 'personal'
+        END`,
+      ),
+    /**
+     * Every read grant's stored subject as `organization_id/type:id`. The
+     * organization prefix keeps `role:member` and `organization:*` from
+     * matching other organizations' policies through the index.
+     */
+    readSubjects: text("read_subjects")
+      .array()
+      .generatedAlwaysAs(
+        (): SQL =>
+          sql`resource_permission_read_subjects(${resourcePermissionPoliciesTable.organizationId}, ${resourcePermissionPoliciesTable.grants})`,
+      ),
   },
   (table) => [
     // Subject lookups use JSONB containment across the organization catalog.
@@ -48,6 +85,18 @@ const resourcePermissionPoliciesTable = pgTable(
       "gin",
       table.grants.op("jsonb_path_ops"),
     ),
+    // Object policies by audience, and by who they grant read to, for lists.
+    index("resource_permission_policies_read_audience_idx")
+      .on(
+        table.organizationId,
+        table.resource,
+        table.readAudience,
+        table.scopeId,
+      )
+      .where(sql`${table.scopeId} IS NOT NULL`),
+    index("resource_permission_policies_read_subjects_idx")
+      .using("gin", table.readSubjects)
+      .where(sql`${table.scopeId} IS NOT NULL`),
     // Agent rosters read the agents and gateways granted to a caller; the
     // organization's other policies (skills, apps, chats) stay out of it.
     index("resource_permission_policies_agent_grants_idx")

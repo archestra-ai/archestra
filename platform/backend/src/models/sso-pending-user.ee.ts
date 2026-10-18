@@ -178,7 +178,13 @@ class SsoPendingUserModel {
       }
 
       const policies = await tx
-        .select()
+        .select({
+          organizationId: schema.resourcePermissionPoliciesTable.organizationId,
+          resource: schema.resourcePermissionPoliciesTable.resource,
+          scope: schema.resourcePermissionPoliciesTable.scope,
+          grants: schema.resourcePermissionPoliciesTable.grants,
+          revision: schema.resourcePermissionPoliciesTable.revision,
+        })
         .from(schema.resourcePermissionPoliciesTable)
         .where(
           and(

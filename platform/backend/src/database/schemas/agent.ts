@@ -320,6 +320,19 @@ const agentsTable = softDeletablePgTable(
       .where(
         sql`${table.deletedAt} IS NULL AND ${table.agentType} IN ('mcp_gateway', 'profile')`,
       ),
+    // The Agents catalog's default order: a page reads listable agents newest
+    // first, author included, without visiting the rows.
+    index("agents_catalog_created_idx")
+      .on(
+        table.organizationId,
+        table.agentType,
+        table.createdAt.desc().nullsFirst(),
+        table.name,
+        table.id,
+        // Lets a page read the author without visiting the row.
+        table.authorId,
+      )
+      .where(sql`${table.deletedAt} IS NULL AND NOT ${table.builtIn}`),
     check(
       "agents_activation_skill_mode_check",
       sql`${table.activationSkillMode} IN ('all', 'manual')`,

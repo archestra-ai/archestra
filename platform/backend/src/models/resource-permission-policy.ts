@@ -840,7 +840,7 @@ export default class ResourcePermissionPolicyModel {
     const policies =
       params.policies === undefined
         ? await db
-            .select()
+            .select(POLICY_COLUMNS)
             .from(table)
             .where(
               and(
@@ -1088,7 +1088,7 @@ export default class ResourcePermissionPolicyModel {
   }
   static async find(params: PolicyKey) {
     const [policy] = await db
-      .select()
+      .select(POLICY_COLUMNS)
       .from(schema.resourcePermissionPoliciesTable)
       .where(policyCondition(params));
     return policy ?? null;
@@ -1108,7 +1108,7 @@ export default class ResourcePermissionPolicyModel {
   }) {
     const table = schema.resourcePermissionPoliciesTable;
     return db
-      .select()
+      .select(POLICY_COLUMNS)
       .from(table)
       .where(
         and(
@@ -1139,7 +1139,7 @@ export default class ResourcePermissionPolicyModel {
             params.resource === "agentRun",
         })
         .onConflictDoNothing()
-        .returning();
+        .returning(POLICY_COLUMNS);
       return created ?? null;
     }
     const [updated] = await db
@@ -1156,7 +1156,7 @@ export default class ResourcePermissionPolicyModel {
         updatedAt: new Date(),
       })
       .where(and(policyCondition(params), eq(table.revision, params.revision)))
-      .returning();
+      .returning(POLICY_COLUMNS);
     return updated ?? null;
   }
 
@@ -1176,7 +1176,7 @@ export default class ResourcePermissionPolicyModel {
     const table = schema.resourcePermissionPoliciesTable;
     const executor = params.tx ?? db;
     const [policy] = await executor
-      .select()
+      .select(POLICY_COLUMNS)
       .from(table)
       .where(policyCondition(params));
     if (!policy) return false;
@@ -1406,3 +1406,21 @@ function objectPolicyMatches(
 
 const OBJECT_POLICY_SCOPE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A policy row as the application reads it: the stored columns, without the
+ * read-access columns PostgreSQL generates for list predicates, so whole-row
+ * reads return what they always did.
+ */
+const POLICY_COLUMNS = {
+  organizationId: schema.resourcePermissionPoliciesTable.organizationId,
+  resource: schema.resourcePermissionPoliciesTable.resource,
+  scope: schema.resourcePermissionPoliciesTable.scope,
+  grants: schema.resourcePermissionPoliciesTable.grants,
+  legacySharingMigrated:
+    schema.resourcePermissionPoliciesTable.legacySharingMigrated,
+  legacyOrganizationAudience:
+    schema.resourcePermissionPoliciesTable.legacyOrganizationAudience,
+  revision: schema.resourcePermissionPoliciesTable.revision,
+  updatedAt: schema.resourcePermissionPoliciesTable.updatedAt,
+};

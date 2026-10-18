@@ -114,6 +114,8 @@ describe("0489 schema", () => {
       SELECT column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
       WHERE table_name = 'resource_permission_policies'
+        -- The read-access columns a later migration derives from these.
+        AND is_generated = 'NEVER'
       ORDER BY ordinal_position`);
     expect(
       columns.rows.map((column) => [

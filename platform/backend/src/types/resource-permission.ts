@@ -10,6 +10,14 @@ import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
+/**
+ * Who an object's own read grants reach beyond specific people, as the
+ * database derives it into `resource_permission_policies.read_audience`.
+ */
+export type ResourceReadAudience = z.infer<typeof ResourceReadAudienceSchema>;
+
+// The generated read-access columns serve list predicates only and are never
+// part of a policy payload.
 export const ResourcePermissionPolicySchema = createSelectSchema(
   schema.resourcePermissionPoliciesTable,
   {
@@ -17,7 +25,7 @@ export const ResourcePermissionPolicySchema = createSelectSchema(
     scope: ResourcePermissionScopeSchema,
     grants: z.array(ResourcePermissionGrantSchema),
   },
-);
+).omit({ scopeId: true, readAudience: true, readSubjects: true });
 
 export type ResourcePermissionPolicy = z.infer<
   typeof ResourcePermissionPolicySchema
@@ -65,3 +73,5 @@ export const PermissionSubjectOptionSchema = z.object({
   name: z.string(),
   email: z.string().optional(),
 });
+
+const ResourceReadAudienceSchema = z.enum(["personal", "team", "org"]);

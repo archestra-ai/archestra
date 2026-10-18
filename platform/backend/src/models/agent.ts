@@ -14,6 +14,7 @@ import {
   parseFullToolName,
   providerRequiresPerUserCredential,
   RESOURCE_ACCESS_RELATIONS,
+  type ResourceAccessRelation,
   type ResourcePermissionGrant,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
@@ -45,6 +46,7 @@ import {
 } from "drizzle-orm";
 import { type AnyPgColumn, alias, unionAll } from "drizzle-orm/pg-core";
 import { z } from "zod";
+import { requestScope } from "@/auth/request-scope";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -1603,14 +1605,11 @@ class AgentModel {
           // Like the agents page without admin access: an admin can use
           // every agent, but pickers offer only theirs and those shared
           // with them or the organization.
-          ResourcePermissionPolicyModel.accessRelationCondition({
-            organizationId: schema.agentsTable.organizationId,
-            resource: "agent",
-            scopeColumn: schema.agentsTable.id,
-            ownerColumn: schema.agentsTable.authorId,
+          agentRelationCondition({
             userId: params.userId,
-            subjects: principal.subjects,
+            principals: [principal],
             relations: ["mine", "shared", "org"],
+            resource: "agent",
           }),
           params.includePersonal ? undefined : not(agentAudienceIs("personal")),
         ),
@@ -1693,46 +1692,65 @@ class AgentModel {
     externalAgentAction?: "read" | "delete";
     excludeOtherPersonalExternalAgents?: boolean;
   }): Promise<AgentCatalogCandidatePage> {
-    const regularWhereClause = await AgentModel.buildListWhereClause({
-      filters: {
-        ...params.filters,
-        agentTypes: ["agent"],
-      },
-      userId: params.userId,
-      isAgentAdmin: params.isAgentAdmin,
-    });
-    // The Show filter's internal prefilter and external branch share one
-    // resolution of the caller's subjects.
-    const accessSubjects = params.filters?.access
-      ? (
-          await ResourcePermissionSubjectModel.resolvePrincipals({
-            userId: params.userId,
-            organizationId: params.filters.organizationId,
-          })
-        ).flatMap((principal) => principal.subjects)
-      : [];
-    const regularAccessCandidates = catalogAccessCandidateIds({
-      organizationId: params.filters?.organizationId,
-      userId: params.userId,
-      subjects: accessSubjects,
-      selection: params.filters?.access,
-      includeBuiltIn:
-        params.filters?.includeBuiltIn === true &&
-        params.isAgentAdmin &&
-        !params.filters?.scope,
-    });
+    const organizationId = params.filters?.organizationId ?? "";
     const includeExternalAgents =
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
       !params.filters?.providerApiKeyId &&
       params.filters?.pinned !== true &&
       params.filters?.scope !== "built_in";
-    const externalWhereConditions: SQL[] = [
+    // Most organizations list no external agents; without one, the external
+    // half of the statement folds away instead of being planned.
+    const [reader, hasExternalAgents] = await Promise.all([
+      resolveAgentReader({ organizationId, userId: params.userId }),
       includeExternalAgents
-        ? eq(
-            schema.a2aRemoteAgentsTable.organizationId,
-            params.filters?.organizationId ?? "",
-          )
+        ? catalogHasExternalAgents(organizationId)
+        : Promise.resolve(false),
+    ]);
+    // A query that reads a few agents probes each one's policy; one that
+    // reads them all lets PostgreSQL hash the matching policies (see
+    // agentRelationCondition). Pins and explicit ids are always few.
+    const few =
+      params.filters?.pinned === true || params.filters?.ids !== undefined;
+    const labelConditions = params.filters?.labels
+      ? await agentLabelConditions(params.filters.labels)
+      : [];
+    const regularCondition = (probe: "row" | "set", policyJoined?: boolean) =>
+      catalogRegularCondition({
+        filters: params.filters,
+        userId: params.userId,
+        isAgentAdmin: params.isAgentAdmin,
+        reader,
+        probe: few ? "row" : probe,
+        labelConditions,
+        policyJoined,
+      });
+    const regularPerAgent = regularCondition("row");
+    const regularWhereClause = regularCondition("set");
+    // Without a `*` read grant the caller's agents are bounded by the
+    // policies that name them: read them once and take page and total from
+    // that set. Built-in agents have no such policy, so a list that adds
+    // them keeps the general shape.
+    const fromCallerPolicies =
+      !reader.readsEveryAgent &&
+      !few &&
+      !(
+        params.filters?.includeBuiltIn === true &&
+        params.isAgentAdmin &&
+        !params.filters?.scope
+      );
+    const visibleAgents = fromCallerPolicies
+      ? catalogVisibleAgents({
+          organizationId,
+          reader,
+          relations: params.filters?.access?.relations,
+          agentCondition: regularCondition("row", true),
+          sortBy: params.sorting?.sortBy,
+        })
+      : undefined;
+    const externalWhereConditions: SQL[] = [
+      hasExternalAgents
+        ? eq(schema.a2aRemoteAgentsTable.organizationId, organizationId)
         : sql<boolean>`false`,
     ];
 
@@ -1795,7 +1813,7 @@ class AgentModel {
     if (params.filters?.access) {
       const externalAccessCondition = externalAgentAccessCondition({
         userId: params.userId,
-        subjects: accessSubjects,
+        subjects: reader.subjects,
         selection: params.filters.access,
       });
       if (externalAccessCondition)
@@ -1812,7 +1830,7 @@ class AgentModel {
     }
     externalWhereConditions.push(
       await A2aRemoteAgentModel.accessCondition({
-        organizationId: params.filters?.organizationId ?? "",
+        organizationId,
         userId: params.userId,
         action: params.externalAgentAction ?? "read",
       }),
@@ -1837,115 +1855,135 @@ class AgentModel {
           ),
       ),
     );
+    const externalWhereClause = and(...externalWhereConditions) as SQL;
 
-    const { regular: regularSortValue, external: externalSortValue } =
-      catalogSortValue(params.sorting?.sortBy);
-    const regularCandidates = db
-      .select({
-        resourceType: sql<"agent" | "external">`'agent'`.as("resource_type"),
-        sortValue: regularSortValue.as("sort_value"),
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        createdAt: schema.agentsTable.createdAt,
-        teamName: sql<string>`COALESCE(${agentFirstGrantedTeamName()}, '')`.as(
-          "team_name",
-        ),
-        // The author test is cheap and rejects nearly every row, so it runs
-        // before the policy probe.
-        personalPriority: sql<number>`CASE
-          WHEN ${schema.agentsTable.authorId} = ${params.userId}
-            AND ${agentAudienceIs("personal")}
-          THEN 0 ELSE 1 END`.as("personal_priority"),
-        pinnedAt: sql<Date | null>`(
-          SELECT ${schema.agentPinsTable.pinnedAt}
-          FROM ${schema.agentPinsTable}
-          WHERE ${schema.agentPinsTable.userId} = ${params.userId}
-            AND ${schema.agentPinsTable.agentId} = ${schema.agentsTable.id}
-        )`.as("pinned_at"),
-      })
-      .from(schema.agentsTable)
-      .where(and(regularWhereClause, regularAccessCandidates));
-    const externalCandidates = db
-      .select({
-        resourceType: sql<"agent" | "external">`'external'`.as("resource_type"),
-        sortValue: externalSortValue.as("sort_value"),
-        id: schema.a2aRemoteAgentsTable.id,
-        name: schema.a2aRemoteAgentsTable.name,
-        createdAt: schema.a2aRemoteAgentsTable.createdAt,
-        teamName:
-          sql<string>`COALESCE(${externalAgentFirstGrantedTeamName()}, '')`.as(
-            "team_name",
-          ),
-        personalPriority: sql<number>`CASE
-          WHEN ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
-            AND ${externalAgentAudienceIs("personal")}
-          THEN 0 ELSE 1 END`.as("personal_priority"),
-        pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
-      })
-      .from(schema.a2aRemoteAgentsTable)
-      .where(and(...externalWhereConditions));
-    const candidates = unionAll(regularCandidates, externalCandidates).as(
-      "agent_catalog_candidates",
-    );
-    const direction = params.sorting?.sortDirection === "asc" ? asc : desc;
-    const sortColumn =
-      params.sorting?.sortBy === "name"
-        ? candidates.name
-        : params.sorting?.sortBy === "team"
-          ? candidates.teamName
-          : params.sorting?.sortBy &&
-              CATALOG_COMPUTED_SORTS.has(params.sorting.sortBy)
-            ? candidates.sortValue
-            : candidates.createdAt;
-
+    const descending = params.sorting?.sortDirection !== "asc";
     // The caller's own personal agents lead the default order. A column the
     // caller sorts by orders the whole list, or "Last used" would show the
     // most recent agent below every one of theirs.
     const isDefaultOrder =
-      params.sorting?.sortBy === undefined ||
-      params.sorting.sortBy === "createdAt";
-    const candidateOrder =
+      params.filters?.pinned !== true &&
+      (params.sorting?.sortBy === undefined ||
+        params.sorting.sortBy === "createdAt");
+    const sortColumn =
+      params.sorting?.sortBy === "name"
+        ? "name"
+        : params.sorting?.sortBy === "team"
+          ? "team_name"
+          : params.sorting?.sortBy &&
+              CATALOG_COMPUTED_SORTS.has(params.sorting.sortBy)
+            ? "sort_value"
+            : "created_at";
+    const order: CatalogOrderKey[] =
       params.filters?.pinned === true
-        ? [desc(candidates.pinnedAt), asc(candidates.name), asc(candidates.id)]
+        ? [
+            ["pinned_at", "DESC"],
+            ["name", "ASC"],
+            ["id", "ASC"],
+          ]
         : [
-            ...(isDefaultOrder ? [asc(candidates.personalPriority)] : []),
-            direction(sortColumn),
-            asc(candidates.name),
-            asc(candidates.resourceType),
-            asc(candidates.id),
+            ...(isDefaultOrder
+              ? [["personal_priority", "ASC"] as CatalogOrderKey]
+              : []),
+            [sortColumn, descending ? "DESC" : "ASC"],
+            ["name", "ASC"],
+            ["resource_type", "ASC"],
+            ["id", "ASC"],
           ];
+    const { limit, offset } = params.pagination;
 
-    // The totals ride on the page as window counts, so the candidate set,
-    // with its per-row authorization, is built once per request.
-    const page = await db
+    // The external agents are few, and their policy tests are many: they are
+    // filtered once into `external_candidates`, which the page and the total
+    // both read, so the planner works through those tests once.
+    const { external: externalSortValue } = catalogSortValue(
+      params.sorting?.sortBy,
+    );
+    const externalCandidates = db
       .select({
-        type: candidates.resourceType,
-        id: candidates.id,
-        total: sql<number>`COUNT(*) OVER ()`,
-        agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent') OVER ()`,
-        externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external') OVER ()`,
+        resourceType: sql<string>`'external'`.as("resource_type"),
+        personalPriority: (isDefaultOrder
+          ? sql<number>`CASE
+              WHEN ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
+                AND ${externalAgentAudienceIs("personal")}
+              THEN 0 ELSE 1 END`
+          : sql<number>`1`
+        ).as("personal_priority"),
+        sortValue: externalSortValue.as("sort_value"),
+        teamName: (params.sorting?.sortBy === "team"
+          ? sql<string>`COALESCE(${externalAgentFirstGrantedTeamName()}, '')`
+          : sql<string>`''`
+        ).as("team_name"),
+        pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
+        createdAt: schema.a2aRemoteAgentsTable.createdAt,
+        name: schema.a2aRemoteAgentsTable.name,
+        id: schema.a2aRemoteAgentsTable.id,
       })
-      .from(candidates)
-      .orderBy(...candidateOrder)
-      .limit(params.pagination.limit)
-      .offset(params.pagination.offset);
-    // A page past the end has no row to carry the totals.
-    const [totals] =
-      page.length > 0 || params.pagination.offset === 0
-        ? page
-        : await db
-            .select({
-              total: count(),
-              agentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'agent')`,
-              externalAgentTotal: sql<number>`COUNT(*) FILTER (WHERE ${candidates.resourceType} = 'external')`,
-            })
-            .from(candidates);
+      .from(schema.a2aRemoteAgentsTable)
+      .where(externalWhereClause);
+
+    const page = visibleAgents
+      ? sql`SELECT * FROM (
+          (SELECT ${isDefaultOrder ? sql`personal_priority, created_at, name, 'agent' AS resource_type, id` : sql`'agent' AS resource_type, sort_value, team_name, NULL::timestamp AS pinned_at, created_at, name, id`}
+            FROM visible_agents)
+          UNION ALL
+          (SELECT ${isDefaultOrder ? sql`personal_priority, created_at, name, resource_type, id` : sql`resource_type, sort_value, team_name, pinned_at, created_at, name, id`}
+            FROM external_candidates)
+        ) catalog_candidates
+        ORDER BY ${catalogOrderBy(order)}
+        LIMIT ${limit} OFFSET ${offset}`
+      : isDefaultOrder
+        ? catalogDefaultOrderPage({
+            regularWhereClause: regularPerAgent,
+            organizationId,
+            userId: params.userId,
+            descending,
+            order,
+            limit,
+            offset,
+          })
+        : catalogSortedPage({
+            regularWhereClause: few ? regularPerAgent : regularWhereClause,
+            sortBy: params.sorting?.sortBy,
+            pinned: params.filters?.pinned === true,
+            userId: params.userId,
+            order,
+            limit,
+            offset,
+          });
+    // One count over the same predicates. With a `*` read grant and the
+    // default "Show" selection this is a hashed semi-join of the listable
+    // agents against the matching policy rows, which measured faster than
+    // counting own, org and shared agents apart.
+    const agentTotal = visibleAgents
+      ? sql`(SELECT count(*) FROM visible_agents)`
+      : sql`(SELECT count(*) FROM ${schema.agentsTable} WHERE ${regularWhereClause})`;
+
+    // The page and both totals in one statement: the totals are exact counts
+    // of the same predicates, and the page rows ride along as an ordered
+    // array, so a page past the end still carries them.
+    const result = await db.execute<{
+      agent_total: string | number;
+      external_agent_total: string | number;
+      rows: [AgentCatalogRowRef["type"], string][];
+    }>(sql`WITH external_candidates AS MATERIALIZED (${externalCandidates}),
+      ${visibleAgents ? sql`visible_agents AS MATERIALIZED (${visibleAgents}),` : sql``}
+      catalog_page AS (${page})
+      SELECT
+        ${agentTotal} AS agent_total,
+        (SELECT count(*) FROM external_candidates) AS external_agent_total,
+        coalesce(
+          (SELECT json_agg(json_build_array(catalog_page.resource_type, catalog_page.id) ORDER BY ${catalogOrderBy(order, "catalog_page")}) FROM catalog_page),
+          '[]'::json
+        ) AS rows`);
+    const [totals] = result.rows;
+    const agentCount = Number(totals?.agent_total ?? 0);
+    const externalAgentCount = Number(totals?.external_agent_total ?? 0);
 
     return {
-      rows: page.map(({ type, id }) => ({ type, id })),
-      total: Number(totals?.total ?? 0),
-      agentTotal: Number(totals?.agentTotal ?? 0),
-      externalAgentTotal: Number(totals?.externalAgentTotal ?? 0),
+      rows: (totals?.rows ?? []).map(([type, id]) => ({ type, id })),
+      total: agentCount + externalAgentCount,
+      agentTotal: agentCount,
+      externalAgentTotal: externalAgentCount,
     };
   }
 
@@ -2440,47 +2478,13 @@ class AgentModel {
         );
     }
     if (filters?.labels) {
-      for (const [key, values] of Object.entries(filters.labels)) {
-        const agentIdsWithLabel = await db
-          .selectDistinct({ agentId: schema.agentLabelsTable.agentId })
-          .from(schema.agentLabelsTable)
-          .innerJoin(
-            schema.labelKeysTable,
-            eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
-          )
-          .innerJoin(
-            schema.labelValuesTable,
-            eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
-          )
-          .where(
-            and(
-              eq(schema.labelKeysTable.key, key),
-              inArray(schema.labelValuesTable.value, values),
-            ),
-          );
-        const ids = agentIdsWithLabel.map((row) => row.agentId);
-        whereConditions.push(
-          ids.length > 0
-            ? inArray(schema.agentsTable.id, ids)
-            : sql<boolean>`false`,
-        );
-      }
+      whereConditions.push(...(await agentLabelConditions(filters.labels)));
     }
     if (filters?.pinned !== undefined) {
       if (!userId) {
         whereConditions.push(sql<boolean>`false`);
       } else {
-        const pinExists = exists(
-          db
-            .select({ value: sql`1` })
-            .from(schema.agentPinsTable)
-            .where(
-              and(
-                eq(schema.agentPinsTable.userId, userId),
-                eq(schema.agentPinsTable.agentId, schema.agentsTable.id),
-              ),
-            ),
-        );
+        const pinExists = agentPinnedBy(userId);
         whereConditions.push(
           filters.pinned ? pinExists : sql`NOT ${pinExists}`,
         );
@@ -6429,26 +6433,18 @@ function organizationLlmProxyCondition(userId: string): SQL {
 }
 
 /**
- * {@link ResourcePermissionPolicyModel.audienceIs} for every agent kind. The
+ * {@link ResourcePermissionPolicyModel.audienceIs} for every agent kind, read
+ * from the `read_audience` column of the agent's own policy row. The
  * organization's LLM proxy has no grant namespace and serves the whole
  * organization, so it always reads as `org`.
  */
 function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
   const table = schema.agentsTable;
-  const byResource = (resource: "agent" | "mcpGateway") =>
-    ResourcePermissionPolicyModel.audienceIs({
-      organizationId: table.organizationId,
-      resource,
-      scopeColumn: table.id,
-      ownerColumn: table.authorId,
-      audience,
-    });
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   return or(
-    and(inArray(table.agentType, ["agent", "profile"]), byResource("agent")),
-    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+    and(ne(table.agentType, "llm_proxy"), agentPolicyAudienceIs({ audience })),
     and(
       eq(table.agentType, "llm_proxy"),
       audience === "org" ? sql`true` : sql`false`,
@@ -6459,9 +6455,11 @@ function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
 
 /**
  * {@link ResourcePermissionPolicyModel.accessRelationCondition} for every
- * agent kind. The organization's LLM proxy has no grant namespace and serves
- * the whole organization, so it is always `org`, counts as shared with the
- * organization, and has no owner.
+ * agent kind: the "Show" relations from the policy row's read-access columns
+ * (see {@link agentRelationCondition}), the "Owner" and "Shared with"
+ * narrowing from its grants. The organization's LLM proxy has no grant
+ * namespace and serves the whole organization, so it is always `org`, counts
+ * as shared with the organization, and has no owner.
  */
 function agentAccessCondition(params: {
   userId: string;
@@ -6471,7 +6469,7 @@ function agentAccessCondition(params: {
   const { relations, sharedWith, ownerIds } = params.selection;
   const table = schema.agentsTable;
   const subjects = params.principals.flatMap((principal) => principal.subjects);
-  const byResource = (resource: "agent" | "mcpGateway") =>
+  const narrowing = (resource: "agent" | "mcpGateway") =>
     ResourcePermissionPolicyModel.accessRelationCondition({
       organizationId: table.organizationId,
       resource,
@@ -6479,10 +6477,17 @@ function agentAccessCondition(params: {
       ownerColumn: table.authorId,
       userId: params.userId,
       subjects,
-      ...params.selection,
+      relations: [],
+      sharedWith,
+      ownerIds,
     });
-  const agentCondition = byResource("agent");
-  if (!agentCondition) return undefined;
+  const relationCondition = agentRelationCondition({
+    userId: params.userId,
+    principals: params.principals,
+    relations,
+  });
+  const agentNarrowing = narrowing("agent");
+  if (!relationCondition && !agentNarrowing) return undefined;
   const llmProxyMatches =
     (!relations?.length || relations.includes("org")) &&
     (!sharedWith?.length ||
@@ -6492,8 +6497,14 @@ function agentAccessCondition(params: {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   return or(
-    and(inArray(table.agentType, ["agent", "profile"]), agentCondition),
-    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+    and(
+      ne(table.agentType, "llm_proxy"),
+      relationCondition,
+      or(
+        and(inArray(table.agentType, ["agent", "profile"]), agentNarrowing),
+        and(eq(table.agentType, "mcp_gateway"), narrowing("mcpGateway")),
+      ),
+    ),
     and(
       eq(table.agentType, "llm_proxy"),
       llmProxyMatches ? sql`true` : sql`false`,
@@ -6563,21 +6574,16 @@ function externalAgentFirstGrantedTeamName() {
 
 /** Agents whose own policy grants read to any of `teamIds`. */
 function agentGrantsReadToAnyTeam(teamIds: string[]): SQL {
-  const table = schema.agentsTable;
-  const byResource = (resource: "agent" | "mcpGateway") =>
-    ResourcePermissionPolicyModel.grantsReadToAnyTeam({
-      organizationId: table.organizationId,
-      resource,
-      scopeColumn: table.id,
-      teamIds,
-    });
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  return or(
-    and(inArray(table.agentType, ["agent", "profile"]), byResource("agent")),
-    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
-  ) as SQL;
+  return agentPolicyMatches({
+    condition: sql`agent_policy.read_subjects && ARRAY(
+      SELECT agent_policy.organization_id || '/team:' || team_id
+      FROM unnest(${textArray(teamIds)}) team_id
+    )`,
+    via: "scope",
+  });
   // SPDX-SnippetEnd
 }
 
@@ -6607,93 +6613,771 @@ function agentGrantedTeamIds() {
 }
 
 // ===
-// Agent catalog access prefilter
+// Agent read access, from the agent's own policy row
 // ===
 
 /**
- * The agents the catalog's "Show" filter can keep, as one id set the database
- * builds once, so the plan starts from those rows instead of testing the
- * relation filter on every agent. An administrator reads every agent through
- * the `*` grant, so that test otherwise ran against every other member's
- * personal agent.
- *
- * The set is a superset of what the relations keep: `mine` needs the caller
- * as author; `shared` needs a read grant to one of the caller's teams or own
- * ids; `org` needs a read grant to the organization or a role. The set holds
- * exactly the authored agents and the agents whose policy has such a grant,
- * and the exact relation filter stays ANDed on top, so the prefilter can only
- * remove rows that filter removes too. It is undefined where no such set
- * exists: a selection with `others` (rows nobody is granted), or with no or
- * every relation (no relation filter at all). The catalog's regular branch
- * lists only `agent` rows, so only `agent` policies are read.
+ * The caller in one organization: every subject a grant can name to reach
+ * them, and whether a read grant on the organization's `*` agent policy
+ * already reaches every agent.
  */
-function catalogAccessCandidateIds(params: {
-  organizationId: string | undefined;
+type AgentReader = {
   userId: string;
-  /** The caller's subjects, e.g. from `resolvePrincipals`. */
+  principals: GrantPrincipal[];
+  /** The caller's subjects, e.g. for the external agents' filters. */
   subjects: PermissionSubject[];
-  selection: ResourceAccessSelection | undefined;
-  includeBuiltIn: boolean;
-}): SQL | undefined {
-  const selected = new Set(
-    params.selection?.relations ?? RESOURCE_ACCESS_RELATIONS,
-  );
-  if (
-    !params.organizationId ||
-    selected.size === 0 ||
-    selected.has("others") ||
-    RESOURCE_ACCESS_RELATIONS.every((relation) => selected.has(relation))
-  )
-    return undefined;
+  readsEveryAgent: boolean;
+};
+
+async function resolveAgentReader(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<AgentReader> {
+  // Both reads are shared with the rest of the request: the principal is
+  // memoized by the request scope (see resolvePrincipal), and so is the
+  // organization's `*` agent policy here.
+  const [principals, wildcardPolicy] = await Promise.all([
+    ResourcePermissionSubjectModel.resolvePrincipals(params),
+    requestScope.memo(`policy\0${params.organizationId}\0agent\0*`, () =>
+      ResourcePermissionPolicyModel.find({
+        organizationId: params.organizationId,
+        resource: "agent",
+        scope: "*",
+      }),
+    ),
+  ]);
+  const subjects = principals.flatMap((principal) => principal.subjects);
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  const grantedSubjects: Array<{ type: string; id?: string }> = [];
-  if (selected.has("shared")) {
-    for (const subject of params.subjects) {
-      if (subject.type === "team") grantedSubjects.push(subject);
-      // The relation matches the caller's own ids under either self type.
-      if (subject.type === "user" || subject.type === "serviceAccount")
-        grantedSubjects.push(
-          { type: "user", id: subject.id },
-          { type: "serviceAccount", id: subject.id },
-        );
-    }
-  }
-  // Any organization or role grant makes the audience `org`.
-  if (selected.has("org"))
-    grantedSubjects.push({ type: "organization" }, { type: "role" });
+  // The same subject match as the wildcard probe in
+  // `ResourcePermissionPolicyModel.grantCondition`.
+  const readsEveryAgent = (wildcardPolicy?.grants ?? []).some(
+    (grant) =>
+      grant.actions.includes("read") &&
+      subjects.some(
+        (subject) =>
+          subject.type === grant.subject.type &&
+          subject.id === grant.subject.id,
+      ),
+  );
+  // SPDX-SnippetEnd
+  return {
+    userId: params.userId,
+    principals,
+    subjects,
+    readsEveryAgent,
+  };
+}
 
+/**
+ * Whether the agent's own policy row matches `condition`, which reads the row
+ * as `agent_policy`. `agent` policies govern agents and profiles,
+ * `mcpGateway` policies gateways. An agent without a policy row matches
+ * nothing.
+ *
+ * `scope_id` joins the row by the agent id, which lets the planner start
+ * from the policy indexes; the primary key probe suits a few agents read in
+ * index order.
+ */
+function agentPolicyMatches(params: {
+  condition: SQL;
+  via: "scope" | "scopeId";
+  /** Fixes the resource when only one agent kind is listed. */
+  resource?: "agent" | "mcpGateway";
+  /**
+   * Fixes the organization when the list is of one organization, so a
+   * hashed policy set is keyed by the agent id alone.
+   */
+  organizationId?: string;
+}): SQL<boolean> {
   const table = schema.agentsTable;
-  const sources: SQL[] = [];
-  if (selected.has("mine"))
-    sources.push(
-      sql`SELECT own_agent.id FROM ${table} own_agent WHERE own_agent.author_id = ${params.userId}`,
-    );
-  if (grantedSubjects.length > 0) {
-    const patterns = grantedSubjects.map(
-      (subject) => sql`${JSON.stringify([{ subject, actions: ["read"] }])}`,
-    );
-    // Policy scopes are object ids or `*`; only object ids name an agent.
-    sources.push(sql`SELECT CASE WHEN access_policy.scope ~* ${UUID_PATTERN}
-        THEN access_policy.scope::uuid END
-      FROM resource_permission_policies access_policy
-      WHERE access_policy.organization_id = ${params.organizationId}
-        AND access_policy.resource = 'agent'
-        AND access_policy.scope <> '*'
-        AND access_policy.grants @> ANY(ARRAY[${sql.join(patterns, sql`, `)}]::jsonb[])`);
-  }
-  if (params.includeBuiltIn)
-    sources.push(
-      sql`SELECT built_in_agent.id FROM ${table} built_in_agent WHERE built_in_agent.organization_id = ${params.organizationId} AND built_in_agent.built_in`,
-    );
-  if (sources.length === 0) return sql<boolean>`false`;
-  return sql<boolean>`${table.id} IN (${sql.join(sources, sql` UNION ALL `)})`;
+  const organizationId = params.organizationId ?? table.organizationId;
+  const probe = (resource: "agent" | "mcpGateway") =>
+    params.via === "scope"
+      ? // A scalar lookup by primary key, which PostgreSQL evaluates per
+        // agent instead of hashing every policy first: an index-ordered page
+        // stops after a few agents. The key is unique, so this is the EXISTS.
+        sql<boolean>`coalesce((
+          SELECT ${params.condition} FROM resource_permission_policies agent_policy
+          WHERE agent_policy.organization_id = ${organizationId}
+            AND agent_policy.resource = ${resource}
+            AND agent_policy.scope = ${table.id}::text
+        ), false)`
+      : sql<boolean>`EXISTS (
+          SELECT 1 FROM resource_permission_policies agent_policy
+          WHERE agent_policy.organization_id = ${organizationId}
+            AND agent_policy.resource = ${resource}
+            AND agent_policy.scope_id = ${table.id}
+            AND agent_policy.scope_id IS NOT NULL
+            AND ${params.condition}
+        )`;
+  if (params.resource) return probe(params.resource);
+  // One arm per agent kind, each with its own resource, so a hashed policy
+  // set holds only that resource's rows.
+  return sql<boolean>`((${inArray(table.agentType, ["agent", "profile"])} AND ${probe("agent")})
+    OR (${table.agentType} = 'mcp_gateway' AND ${probe("mcpGateway")}))`;
+}
+
+/**
+ * The agent's audience from its policy row's `read_audience`, as
+ * {@link ResourcePermissionPolicyModel.audienceIs} reads the grants: an agent
+ * without a policy row is `personal`.
+ */
+function agentPolicyAudienceIs(params: {
+  audience: "personal" | "team" | "org";
+  resource?: "agent" | "mcpGateway";
+  organizationId?: string;
+  /** See {@link agentRelationCondition}; `set` by default. */
+  probe?: "row" | "set";
+}): SQL<boolean> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Joined on scope_id, an audience test reads only the audience index, both
+  // as a per-agent lookup and as the hashed set PostgreSQL builds for a list.
+  if (params.audience === "personal")
+    return sql<boolean>`NOT ${agentPolicyMatches({
+      condition: sql`agent_policy.read_audience IN ('org', 'team')`,
+      via: params.probe === "row" ? "scope" : "scopeId",
+      resource: params.resource,
+      organizationId: params.organizationId,
+    })}`;
+  return agentPolicyMatches({
+    condition: sql`agent_policy.read_audience = ${params.audience}`,
+    via: params.probe === "row" ? "scope" : "scopeId",
+    resource: params.resource,
+    organizationId: params.organizationId,
+  });
   // SPDX-SnippetEnd
 }
 
-const UUID_PATTERN =
-  "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+/**
+ * The "Show" relations of
+ * {@link ResourcePermissionPolicyModel.accessRelationCondition}, read from the
+ * agent's policy row (`agent_policy`). Undefined when no relation or every
+ * relation is selected, because neither applies a filter.
+ *
+ * `shared` is `sharedWithCallerCondition` exactly: a read grant to one of the
+ * caller's teams, or to one of the caller's own ids (either self type) on an
+ * agent that id did not author. Keys carry the organization of the principal
+ * they come from, as `read_subjects` does.
+ */
+function agentRelationParts(params: {
+  userId: string;
+  principals: GrantPrincipal[];
+  relations: ResourceAccessRelation[] | undefined;
+}):
+  | {
+      selected: Set<ResourceAccessRelation>;
+      mine: SQL;
+      /** On `agent_policy`, for a disjunction that has no `mine` in it. */
+      sharedExact: SQL;
+      sharedReadsAgent: boolean;
+      /**
+       * On `agent_policy`, for a disjunction that has `mine` in it: a grant
+       * to the caller's own id needs no author test there, which keeps the
+       * test free of the agent row so PostgreSQL can hash it.
+       */
+      sharedBesideMine: SQL;
+      sharedBesideMineReadsAgent: boolean;
+      org: SQL;
+    }
+  | undefined {
+  const selected = new Set(params.relations ?? RESOURCE_ACCESS_RELATIONS);
+  if (
+    selected.size === 0 ||
+    RESOURCE_ACCESS_RELATIONS.every((relation) => selected.has(relation))
+  )
+    return undefined;
+  const table = schema.agentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const teamKeys: string[] = [];
+  const selfKeysById = new Map<string, string[]>();
+  for (const principal of params.principals)
+    for (const subject of principal.subjects) {
+      if (subject.type === "team")
+        teamKeys.push(readSubjectKey(principal.organizationId, subject));
+      if (subject.type === "user" || subject.type === "serviceAccount")
+        selfKeysById.set(subject.id, [
+          ...(selfKeysById.get(subject.id) ?? []),
+          readSubjectKey(principal.organizationId, {
+            type: "user",
+            id: subject.id,
+          }),
+          readSubjectKey(principal.organizationId, {
+            type: "serviceAccount",
+            id: subject.id,
+          }),
+        ]);
+    }
+  const shared = (besideMine: boolean) => {
+    const reaches: SQL[] = [];
+    if (teamKeys.length > 0)
+      reaches.push(sql`agent_policy.read_subjects && ${textArray(teamKeys)}`);
+    for (const [id, keys] of selfKeysById)
+      reaches.push(
+        besideMine && id === params.userId
+          ? sql`agent_policy.read_subjects && ${textArray(keys)}`
+          : sql`(${table.authorId} IS DISTINCT FROM ${id} AND agent_policy.read_subjects && ${textArray(keys)})`,
+      );
+    return reaches.length > 0
+      ? sql`(${sql.join(reaches, sql` OR `)})`
+      : sql`false`;
+  };
+  // Whether a shared test reads the agent row (an author test).
+  const otherSelfIds = [...selfKeysById.keys()].filter(
+    (id) => id !== params.userId,
+  );
+  return {
+    selected,
+    mine: sql`${table.authorId} = ${params.userId}`,
+    sharedExact: shared(false),
+    sharedReadsAgent: selfKeysById.size > 0,
+    sharedBesideMine: shared(true),
+    sharedBesideMineReadsAgent: otherSelfIds.length > 0,
+    org: sql`agent_policy.read_audience = 'org'`,
+  };
+  // SPDX-SnippetEnd
+}
+
+/** The selected "Show" relations, without a read check. */
+function agentRelationCondition(params: {
+  userId: string;
+  principals: GrantPrincipal[];
+  relations: ResourceAccessRelation[] | undefined;
+  resource?: "agent" | "mcpGateway";
+  organizationId?: string;
+  /**
+   * `row` probes each agent's policy by primary key, for a query that reads
+   * a few agents (an index-ordered page, pins); `set` lets PostgreSQL hash
+   * the matching policies, for one that reads them all (a count, a sort).
+   */
+  probe?: "row" | "set";
+}): SQL | undefined {
+  const parts = agentRelationParts(params);
+  if (!parts) return undefined;
+  const { selected } = parts;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const kept: SQL[] = [];
+  if (selected.has("mine")) kept.push(parts.mine);
+  const onPolicy: SQL[] = [];
+  if (selected.has("shared"))
+    onPolicy.push(
+      selected.has("mine") ? parts.sharedBesideMine : parts.sharedExact,
+    );
+  if (selected.has("org")) onPolicy.push(parts.org);
+  // Joining on scope_id lets PostgreSQL hash the policy side, which only
+  // works when the condition does not read the agent row; otherwise, and for
+  // a few agents, each agent probes its policy by primary key.
+  const via = (condition: SQL, reads: boolean) =>
+    agentPolicyMatches({
+      condition,
+      via: reads || params.probe === "row" ? "scope" : "scopeId",
+      resource: params.resource,
+      organizationId: params.organizationId,
+    });
+  if (onPolicy.length > 0)
+    kept.push(
+      via(
+        sql`(${sql.join(onPolicy, sql` OR `)})`,
+        selected.has("shared") &&
+          !selected.has("mine") &&
+          parts.sharedReadsAgent,
+      ),
+    );
+  if (selected.has("others"))
+    kept.push(
+      sql`NOT (coalesce(${parts.mine}, false) OR ${via(
+        sql`(${parts.sharedBesideMine} OR ${parts.org})`,
+        parts.sharedBesideMineReadsAgent,
+      )})`,
+    );
+  return sql`(${sql.join(kept, sql` OR `)})`;
+  // SPDX-SnippetEnd
+}
+
+/**
+ * The catalog's read check, as `explicitAgentReadCondition` decides it: a
+ * read grant to one of the caller's subjects in this organization on the
+ * agent's own policy. Uncorrelated, so PostgreSQL can start from the few
+ * policies the grantee index finds. Undefined when a `*` read grant reaches
+ * every agent.
+ */
+function catalogReadCheck(params: {
+  organizationId: string;
+  reader: AgentReader;
+}): SQL | undefined {
+  const { reader } = params;
+  if (reader.readsEveryAgent) return undefined;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const keys = reader.principals
+    .filter((principal) => principal.organizationId === params.organizationId)
+    .flatMap((principal) =>
+      principal.subjects.map((subject) =>
+        readSubjectKey(principal.organizationId, subject),
+      ),
+    );
+  if (keys.length === 0) return sql<boolean>`false`;
+  return sql<boolean>`${schema.agentsTable.id} IN (
+    SELECT readable_policy.scope_id FROM resource_permission_policies readable_policy
+    WHERE readable_policy.organization_id = ${params.organizationId}
+      AND readable_policy.resource = 'agent'
+      AND readable_policy.scope_id IS NOT NULL
+      AND readable_policy.read_subjects && ${textArray(keys)}
+  )`;
+  // SPDX-SnippetEnd
+}
+
+/** A grant subject in the `organization_id/type:id` form of `read_subjects`. */
+function readSubjectKey(
+  organizationId: string,
+  subject: Pick<PermissionSubject, "type" | "id">,
+): string {
+  return `${organizationId}/${subject.type}:${subject.id}`;
+}
+
+function textArray(values: string[]): SQL {
+  return sql`${sql.param(values)}::text[]`;
+}
+
+// ===
+// Agent catalog statement
+// ===
+
+/**
+ * The catalog's internal-agent predicate: `buildListWhereClause` for
+ * `agentTypes: ["agent"]`, with every read and relation test on the
+ * read-access columns and without the other agent kinds' arms, so the
+ * planner can walk the catalog indexes.
+ */
+function catalogRegularCondition(params: {
+  filters?: AgentListFilters;
+  userId: string;
+  isAgentAdmin: boolean;
+  reader: AgentReader;
+  /** See {@link agentRelationCondition}. */
+  probe: "row" | "set";
+  /**
+   * The read check and the "Show" relations are applied on the policy row
+   * the query joins (see {@link catalogVisibleAgents}), so leave them out.
+   */
+  policyJoined?: boolean;
+  /** {@link agentLabelConditions} of the label filter, resolved once. */
+  labelConditions: SQL[];
+}): SQL {
+  const { filters, userId, isAgentAdmin, reader, probe } = params;
+  const table = schema.agentsTable;
+  const status = filters?.status ?? "active";
+  const organizationId = filters?.organizationId ?? "";
+  const includeBuiltIn =
+    filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
+  const conditions: SQL[] = [
+    eq(table.organizationId, organizationId),
+    sql`${table.agentType} = 'agent'`,
+    getAgentStatusCondition(status),
+  ];
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const relations = filters?.access?.relations;
+  const readCondition = catalogReadCheck({ organizationId, reader });
+  if (readCondition && !params.policyJoined) conditions.push(readCondition);
+  const relation = params.policyJoined
+    ? undefined
+    : agentRelationCondition({
+        userId,
+        principals: reader.principals,
+        relations,
+        resource: "agent",
+        organizationId,
+        probe,
+      });
+  if (relation)
+    conditions.push(
+      includeBuiltIn ? (or(sql`${table.builtIn}`, relation) as SQL) : relation,
+    );
+  // SPDX-SnippetEnd
+  if (filters?.ids) {
+    conditions.push(
+      filters.ids.length > 0
+        ? inArray(table.id, filters.ids)
+        : sql<boolean>`false`,
+    );
+  }
+  if (filters?.name) {
+    conditions.push(ilike(table.name, `%${escapeLikePattern(filters.name)}%`));
+  }
+  if (filters?.providerApiKeyId === "organization-default") {
+    conditions.push(isNull(table.llmApiKeyId), isNull(table.modelId));
+  } else if (filters?.providerApiKeyId) {
+    conditions.push(eq(table.llmApiKeyId, filters.providerApiKeyId));
+  }
+
+  const chatAssistant =
+    filters?.view === "chat" && enterpriseTier.isOpenappaActive();
+  if (filters?.scope === "built_in") {
+    conditions.push(sql`${table.builtIn}`);
+  } else if (
+    filters?.scope === "personal" ||
+    filters?.scope === "team" ||
+    filters?.scope === "org"
+  ) {
+    conditions.push(
+      agentPolicyAudienceIs({
+        audience: filters.scope,
+        resource: "agent",
+        organizationId,
+        probe,
+      }),
+      sql`NOT ${table.builtIn}`,
+    );
+  } else if (!includeBuiltIn) {
+    conditions.push(
+      chatAssistant
+        ? (or(
+            sql`NOT ${table.builtIn}`,
+            eq(
+              sql<string>`coalesce(${table.builtInAgentConfig}->>'name', '')`,
+              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+            ),
+          ) as SQL)
+        : sql`NOT ${table.builtIn}`,
+    );
+  }
+  if (!isAgentAdmin && !chatAssistant)
+    conditions.push(sql`NOT ${table.builtIn}`);
+  if (filters?.teamIds?.length) {
+    conditions.push(agentGrantsReadToAnyTeam(filters.teamIds));
+  }
+  if (filters?.authorIds?.length) {
+    conditions.push(inArray(table.authorId, filters.authorIds));
+  }
+  if (filters?.excludeAuthorIds?.length) {
+    conditions.push(
+      or(
+        isNull(table.authorId),
+        notInArray(table.authorId, filters.excludeAuthorIds),
+      ) as SQL,
+    );
+  }
+  if (filters?.excludeIds?.length) {
+    conditions.push(notInArray(table.id, filters.excludeIds));
+  }
+  // Someone else's personal agent stays out unless the caller reads it by a
+  // grant; a `*` grant reads every agent, so it keeps them all.
+  if (filters?.excludeOtherPersonalAgents && readCondition) {
+    conditions.push(
+      or(
+        sql`NOT ${agentPolicyAudienceIs({ audience: "personal", resource: "agent", organizationId, probe })}`,
+        eq(table.authorId, userId),
+        readCondition,
+      ) as SQL,
+    );
+  }
+  // "Owner" and "Shared with" narrow on the policy's grants, as in
+  // `buildListWhereClause`.
+  if (
+    filters?.access?.ownerIds?.length ||
+    filters?.access?.sharedWith?.length
+  ) {
+    const narrowing = ResourcePermissionPolicyModel.accessRelationCondition({
+      organizationId: table.organizationId,
+      resource: "agent",
+      scopeColumn: table.id,
+      ownerColumn: table.authorId,
+      userId,
+      subjects: reader.subjects,
+      relations: [],
+      sharedWith: filters.access.sharedWith,
+      ownerIds: filters.access.ownerIds,
+    });
+    if (narrowing)
+      conditions.push(
+        includeBuiltIn
+          ? (or(sql`${table.builtIn}`, narrowing) as SQL)
+          : narrowing,
+      );
+  }
+  conditions.push(...params.labelConditions);
+  if (filters?.pinned !== undefined) {
+    const pinExists = agentPinnedBy(userId);
+    conditions.push(filters.pinned ? pinExists : sql`NOT ${pinExists}`);
+  }
+  // As in `buildListWhereClause`: outside an administrator's explicit scope
+  // or deleted view, the list keeps only live agents the caller can read.
+  const isDefaultActiveAllView =
+    filters?.scope === undefined && status !== "deleted";
+  if (!isAgentAdmin || isDefaultActiveAllView) {
+    conditions.push(isNull(table.deletedAt));
+  }
+  return and(...conditions) as SQL;
+}
+
+/**
+ * The internal agents a caller without a `*` read grant sees, read once from
+ * the policies that name the caller: the grantee index finds them, each
+ * joins its agent by id, and the read check, the "Show" relations and the
+ * personal priority all read that one policy row. The page and the total are
+ * both taken from this set, which is bounded by the caller's grants.
+ */
+function catalogVisibleAgents(params: {
+  organizationId: string;
+  reader: AgentReader;
+  relations: ResourceAccessRelation[] | undefined;
+  /** {@link catalogRegularCondition} with `policyJoined`. */
+  agentCondition: SQL;
+  sortBy: string | undefined;
+}): SQL {
+  const table = schema.agentsTable;
+  const { reader } = params;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const keys = reader.principals
+    .filter((principal) => principal.organizationId === params.organizationId)
+    .flatMap((principal) =>
+      principal.subjects.map((subject) =>
+        readSubjectKey(principal.organizationId, subject),
+      ),
+    );
+  const parts = agentRelationParts({
+    userId: reader.userId,
+    principals: reader.principals,
+    relations: params.relations,
+  });
+  const relation: SQL[] = [];
+  if (parts) {
+    const { selected } = parts;
+    if (selected.has("mine")) relation.push(parts.mine);
+    if (selected.has("shared"))
+      relation.push(
+        selected.has("mine") ? parts.sharedBesideMine : parts.sharedExact,
+      );
+    if (selected.has("org")) relation.push(parts.org);
+    if (selected.has("others"))
+      relation.push(
+        sql`NOT (coalesce(${parts.mine}, false) OR ${parts.sharedBesideMine} OR ${parts.org})`,
+      );
+  }
+  const { regular: sortValue } = catalogSortValue(params.sortBy);
+  const teamName =
+    params.sortBy === "team"
+      ? sql`COALESCE(${agentFirstGrantedTeamName()}, '')`
+      : sql`''`;
+  return sql`SELECT
+      ${table.id} AS id,
+      ${table.name} AS name,
+      ${table.createdAt} AS created_at,
+      CASE WHEN ${table.authorId} = ${reader.userId} AND agent_policy.read_audience = 'personal' THEN 0 ELSE 1 END AS personal_priority,
+      ${sortValue} AS sort_value,
+      ${teamName} AS team_name
+    FROM resource_permission_policies agent_policy
+    JOIN ${table} ON ${table.id} = agent_policy.scope_id
+    WHERE agent_policy.organization_id = ${params.organizationId}
+      AND agent_policy.resource = 'agent'
+      AND agent_policy.scope_id IS NOT NULL
+      AND ${keys.length > 0 ? sql`agent_policy.read_subjects && ${textArray(keys)}` : sql`false`}
+      ${relation.length > 0 ? sql`AND (${sql.join(relation, sql` OR `)})` : sql``}
+      AND ${params.agentCondition}`;
+  // SPDX-SnippetEnd
+}
+
+/** Whether the organization has an external agent the catalog can list. */
+async function catalogHasExternalAgents(
+  organizationId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ value: sql`1` })
+    .from(schema.a2aRemoteAgentsTable)
+    .innerJoin(
+      schema.a2aConnectionsTable,
+      eq(
+        schema.a2aConnectionsTable.remoteAgentId,
+        schema.a2aRemoteAgentsTable.id,
+      ),
+    )
+    .innerJoin(
+      schema.toolsTable,
+      eq(
+        schema.toolsTable.delegateToA2aConnectionId,
+        schema.a2aConnectionsTable.id,
+      ),
+    )
+    .where(eq(schema.a2aRemoteAgentsTable.organizationId, organizationId))
+    .limit(1);
+  return row !== undefined;
+}
+
+type CatalogOrderKey = [
+  (
+    | "personal_priority"
+    | "pinned_at"
+    | "sort_value"
+    | "team_name"
+    | "created_at"
+    | "name"
+    | "resource_type"
+    | "id"
+  ),
+  "ASC" | "DESC",
+];
+
+function catalogOrderBy(order: CatalogOrderKey[], relation?: string): SQL {
+  return sql.join(
+    order.map(
+      ([column, direction]) =>
+        sql`${relation ? sql`${sql.identifier(relation)}.` : sql``}${sql.identifier(column)} ${sql.raw(direction)}`,
+    ),
+    sql`, `,
+  );
+}
+
+/**
+ * The default order's page: the caller's own personal agents, every other
+ * internal agent, and the external agents, each read in index order up to
+ * the end of the page, then merged. No branch sorts or counts more than
+ * `offset + limit` rows.
+ */
+function catalogDefaultOrderPage(params: {
+  regularWhereClause: SQL;
+  organizationId: string;
+  userId: string;
+  descending: boolean;
+  order: CatalogOrderKey[];
+  limit: number;
+  offset: number;
+}): SQL {
+  const table = schema.agentsTable;
+  const prefix = params.offset + params.limit;
+  const byCreatedAt = params.descending ? desc : asc;
+  const createdAtDirection = sql.raw(params.descending ? "DESC" : "ASC");
+  const regularBranch = (personalPriority: 0 | 1, condition: SQL) =>
+    db
+      .select({
+        personalPriority: sql<number>`${sql.raw(String(personalPriority))}`.as(
+          "personal_priority",
+        ),
+        createdAt: table.createdAt,
+        name: table.name,
+        resourceType: sql<string>`'agent'`.as("resource_type"),
+        id: table.id,
+      })
+      .from(table)
+      .where(and(params.regularWhereClause, condition))
+      .orderBy(byCreatedAt(table.createdAt), asc(table.name), asc(table.id))
+      .limit(prefix);
+  return sql`SELECT * FROM (
+      (${regularBranch(0, sql`${table.authorId} = ${params.userId} AND ${agentPolicyAudienceIs({ audience: "personal", resource: "agent", organizationId: params.organizationId, probe: "row" })}`)})
+      UNION ALL
+      (${regularBranch(1, sql`(${table.authorId} IS DISTINCT FROM ${params.userId} OR NOT ${agentPolicyAudienceIs({ audience: "personal", resource: "agent", organizationId: params.organizationId, probe: "row" })})`)})
+      UNION ALL
+      (SELECT personal_priority, created_at, name, resource_type, id
+        FROM external_candidates
+        ORDER BY personal_priority, created_at ${createdAtDirection}, name, id
+        LIMIT ${prefix})
+    ) catalog_candidates
+    ORDER BY ${catalogOrderBy(params.order)}
+    LIMIT ${params.limit} OFFSET ${params.offset}`;
+}
+
+/** A page in a column's order, or the pinned list's: one sort of the matches. */
+function catalogSortedPage(params: {
+  regularWhereClause: SQL;
+  sortBy: string | undefined;
+  pinned: boolean;
+  userId: string;
+  order: CatalogOrderKey[];
+  limit: number;
+  offset: number;
+}): SQL {
+  const table = schema.agentsTable;
+  const { regular: regularSortValue } = catalogSortValue(params.sortBy);
+  const regularCandidates = db
+    .select({
+      resourceType: sql<string>`'agent'`.as("resource_type"),
+      sortValue: regularSortValue.as("sort_value"),
+      teamName: (params.sortBy === "team"
+        ? sql<string>`COALESCE(${agentFirstGrantedTeamName()}, '')`
+        : sql<string>`''`
+      ).as("team_name"),
+      pinnedAt: (params.pinned
+        ? sql<Date | null>`(
+            SELECT ${schema.agentPinsTable.pinnedAt}
+            FROM ${schema.agentPinsTable}
+            WHERE ${schema.agentPinsTable.userId} = ${params.userId}
+              AND ${schema.agentPinsTable.agentId} = ${table.id}
+          )`
+        : sql<Date | null>`NULL::timestamp`
+      ).as("pinned_at"),
+      createdAt: table.createdAt,
+      name: table.name,
+      id: table.id,
+    })
+    .from(table)
+    .where(params.regularWhereClause);
+  return sql`SELECT * FROM (
+      (${regularCandidates})
+      UNION ALL
+      (SELECT resource_type, sort_value, team_name, pinned_at, created_at, name, id
+        FROM external_candidates)
+    ) catalog_candidates
+    ORDER BY ${catalogOrderBy(params.order)}
+    LIMIT ${params.limit} OFFSET ${params.offset}`;
+}
+
+function agentPinnedBy(userId: string): SQL {
+  return exists(
+    db
+      .select({ value: sql`1` })
+      .from(schema.agentPinsTable)
+      .where(
+        and(
+          eq(schema.agentPinsTable.userId, userId),
+          eq(schema.agentPinsTable.agentId, schema.agentsTable.id),
+        ),
+      ),
+  );
+}
+
+/** One condition per label key: the agent carries one of its values. */
+async function agentLabelConditions(
+  labels: Record<string, string[]>,
+): Promise<SQL[]> {
+  const conditions: SQL[] = [];
+  for (const [key, values] of Object.entries(labels)) {
+    const agentIdsWithLabel = await db
+      .selectDistinct({ agentId: schema.agentLabelsTable.agentId })
+      .from(schema.agentLabelsTable)
+      .innerJoin(
+        schema.labelKeysTable,
+        eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
+      )
+      .innerJoin(
+        schema.labelValuesTable,
+        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
+      )
+      .where(
+        and(
+          eq(schema.labelKeysTable.key, key),
+          inArray(schema.labelValuesTable.value, values),
+        ),
+      );
+    const ids = agentIdsWithLabel.map((row) => row.agentId);
+    conditions.push(
+      ids.length > 0
+        ? inArray(schema.agentsTable.id, ids)
+        : sql<boolean>`false`,
+    );
+  }
+  return conditions;
+}
 
 // ===
 // Agent catalog sorting

@@ -60,9 +60,9 @@ export { default as openappaArchestraAnnotatorRoutes } from "./openappa-archestr
 export { default as openappaBatteriesRoutes } from "./openappa-batteries/openappa-batteries.routes";
 export { default as openappaCoverageRoutes } from "./openappa-coverage/openappa-coverage.routes";
 export { default as openappaExternalConsultsRoutes } from "./openappa-external-consults/openappa-external-consults.routes";
-export { default as openappaLabelChangesRoutes } from "./openappa-label-changes/openappa-label-changes.routes";
 export { default as openappaGithubSyncRoutes } from "./openappa-github-sync/openappa-github-sync.routes";
 export { default as openappaHelpersRoutes } from "./openappa-helpers/openappa-helpers.routes";
+export { default as openappaLabelChangesRoutes } from "./openappa-label-changes/openappa-label-changes.routes";
 export { default as openappaPolicyTestsRoutes } from "./openappa-policy-tests/openappa-policy-tests.routes";
 export { default as openappaRemediesRoutes } from "./openappa-remedies/openappa-remedies.routes";
 export { default as openappaTrustAudienceRoutes } from "./openappa-trust-audience/openappa-trust-audience.routes";

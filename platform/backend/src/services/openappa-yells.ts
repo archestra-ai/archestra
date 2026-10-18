@@ -5,8 +5,8 @@ import CreatedByModel from "@/models/created-by";
 import InteractionModel from "@/models/interaction";
 import McpToolCallModel from "@/models/mcp-tool-call";
 import OpenAppaYellModel from "@/models/openappa-yell";
-import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import ServiceAccountModel from "@/models/service-account";
+import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
 import type { OpenAppaYellQuery } from "@/types/openappa-yell";
 
@@ -103,9 +103,16 @@ async function present<
  * else the session's nearest logged `yell` call.
  */
 async function traceLinks(
-  rows: { id: string; sessionId: string; toolCallId: string; createdAt: Date }[],
+  rows: {
+    id: string;
+    sessionId: string;
+    toolCallId: string;
+    createdAt: Date;
+  }[],
   organizationId: string,
-): Promise<Map<string, { llmSessionId: string; mcpToolCallId: string | null }>> {
+): Promise<
+  Map<string, { llmSessionId: string; mcpToolCallId: string | null }>
+> {
   const llmSessionOf = (row: { sessionId: string }) =>
     row.sessionId.slice(row.sessionId.indexOf("|") + 1);
   const sessionIds = [...new Set(rows.map(llmSessionOf))].filter(Boolean);

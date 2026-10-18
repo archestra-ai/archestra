@@ -8,6 +8,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Download,
   Megaphone,
   MessageCircle,
   ShieldOff,
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useOpenAppaYellArchive } from "@/lib/openappa-yells.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import type { TraceYell } from "./guardrails";
@@ -257,9 +259,9 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
             </span>
           )}
         </Fact>
-        <Fact label="Archive">
+        <Fact label="Report">
           {yell.hasArchive ? (
-            <span>{yell.withTrajectory ? "With trace" : "Included"}</span>
+            <DownloadReport yellId={yell.id} />
           ) : (
             <span className="text-muted-foreground">None</span>
           )}
@@ -329,6 +331,22 @@ function OffBand({
         </p>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Downloads the yell's diagnostic report (a gzipped JSON archive). */
+function DownloadReport({ yellId }: { yellId: string }) {
+  const archive = useOpenAppaYellArchive();
+  return (
+    <UnstyledButton
+      onClick={() => archive.mutate({ id: yellId, download: true })}
+      disabled={archive.isPending}
+      className="inline-flex cursor-pointer items-center gap-0.5 rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default disabled:opacity-60"
+    >
+      <Download className="size-3" aria-hidden="true" />
+      Download
+      <span className="sr-only"> report</span>
+    </UnstyledButton>
   );
 }
 

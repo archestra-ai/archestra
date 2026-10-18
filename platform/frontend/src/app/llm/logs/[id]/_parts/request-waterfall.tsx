@@ -1,12 +1,28 @@
 "use client";
 
-import { CornerDownRight, MessageSquareText } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CornerDownRight,
+  Eye,
+  EyeOff,
+  Lock,
+  MessageSquareText,
+  RotateCcw,
+  Send,
+  Shield,
+  ShieldAlert,
+  ShieldX,
+} from "lucide-react";
 import {
   type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
   type ReactNode,
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import {
   describeModelOrigin,
@@ -35,6 +51,33 @@ import { formatDate } from "@/lib/utils/date-time";
 import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
+  buildEntries,
+  ChangeNote,
+  ConsultRow,
+  type Entry,
+  GuardrailsBar,
+  type GutterProps,
+  gutterWords,
+  HiddenChecksBadge,
+  type LabelChange,
+  LabelGutter,
+  pageChanges,
+  pageConsults,
+  SELECTED_EDGE,
+  SELECTED_PAST_GUTTER,
+} from "./guardrail-rows";
+import {
+  audienceTone,
+  CONSULT_KIND,
+  DECISION_TONE,
+  type GuardrailsData,
+  type LabelSegment,
+  type LabelState,
+  type TraceConsult,
+  type TraceYell,
+  trustTone,
+} from "./guardrails";
+import {
   type InteractionSummary,
   type RequestSpan,
   requestLabel,
@@ -45,6 +88,8 @@ import {
   type ToolCallSpan,
 } from "./session-timeline";
 import { StatusBarPagination } from "./status-bar-pagination";
+import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
+import { YellChip, YellRowMarks } from "./yell-markers";
 
 export type RequestsPagination = {
   pageIndex: number;
@@ -89,7 +134,19 @@ export function RequestWaterfall({
   status,
   emptyMessage = "No requests recorded for this session yet.",
   revealHighlighted = true,
+  guardrails = null,
+  selectedConsultKey = null,
+  onSelectConsult,
 }: {
+  /** The session's guardrail checks and label history, when OpenAPPA is on. */
+  guardrails?: GuardrailsData | null;
+  /** The consult open in the details pane below, if any. */
+  selectedConsultKey?: string | null;
+  /**
+   * Opens a consult in the details pane below (and selects its tool call).
+   * Null closes it.
+   */
+  onSelectConsult?: (key: string | null) => void;
   timeline: Timeline | null;
   loading: boolean;
   profileName: string | null;
@@ -131,6 +188,95 @@ export function RequestWaterfall({
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const scrollerRef = useRef<HTMLDivElement>(null);
   const selected = spans.find((span) => span.key === selectedKey) ?? null;
+  const [checksShown, setChecksShown] = useState(true);
+
+  // Every row the list draws, in order: requests and tool calls, and each
+  // tool call's checks just above (gates) and below (result checks) it.
+  // Label changes add no rows: the gutter carries them.
+  const entries = useMemo(
+    () => buildEntries({ spans, guardrails, checksShown }),
+    [spans, guardrails, checksShown],
+  );
+  const steppable = entries;
+  const changes = useMemo(
+    () => (guardrails ? pageChanges({ entries, guardrails }) : []),
+    [entries, guardrails],
+  );
+  const { notesByKey, nodesByKey } = useMemo(() => {
+    const notes = new Map<string, LabelChange[]>();
+    const nodes = new Map<
+      string,
+      { top: LabelChange[]; bottom: LabelChange[] }
+    >();
+    for (const change of changes) {
+      notes.set(change.noteKey, [...(notes.get(change.noteKey) ?? []), change]);
+      const node = nodes.get(change.nodeKey) ?? { top: [], bottom: [] };
+      node[change.nodeAt].push(change);
+      nodes.set(change.nodeKey, node);
+    }
+    return { notesByKey: notes, nodesByKey: nodes };
+  }, [changes]);
+  const openConsult =
+    selectedConsultKey && guardrails
+      ? (guardrails.consults.find((c) => c.key === selectedConsultKey) ?? null)
+      : null;
+  /** A consult row is the selection when it is open and drawn. */
+  const consultRowSelected =
+    openConsult !== null &&
+    entries.some(
+      (entry) =>
+        entry.type === "consult" && entry.consult.key === openConsult.key,
+    );
+  const consultsOnPage = useMemo(
+    () =>
+      entries.length === 0 || !guardrails
+        ? []
+        : pageConsults({ spans, guardrails }),
+    [entries, spans, guardrails],
+  );
+  const labelHere = guardrails
+    ? guardrails.labelAt(
+        openConsult?.start ??
+          selected?.start ??
+          Math.max(0, ...spans.map((span) => span.end)),
+      )
+    : null;
+  const labelHereName = openConsult
+    ? openConsult.externalName
+    : selected
+      ? "selected row"
+      : "end of page";
+  const focusKey = consultRowSelected ? selectedConsultKey : selectedKey;
+  // A change selects what caused it: the tool call (its details say why the
+  // label changed), else the check, else the first row under the new label.
+  const activateChange = (change: LabelChange) => {
+    if (change.target.type === "consult") onSelectConsult?.(change.target.key);
+    else onSelect(change.target.key);
+  };
+  const yellByKey = new Map(
+    (guardrails?.yells ?? []).flatMap((yell) =>
+      yell.toolCallKey ? [[yell.toolCallKey, yell] as const] : [],
+    ),
+  );
+  const yellsOnPage = spans.flatMap((span) => {
+    const yell = yellByKey.get(span.key);
+    return yell ? [yell] : [];
+  });
+  const isChangeActive = (change: LabelChange) =>
+    change.target.type === "consult"
+      ? change.target.key === selectedConsultKey
+      : !selectedConsultKey && change.target.key === selectedKey;
+  const gutterFor = (entry: Entry, index: number): GutterProps | null =>
+    entry.gutter
+      ? {
+          label: entry.gutter,
+          odd: index % 2 === 1,
+          nodes: nodesByKey.get(entry.key) ?? null,
+          isChangeActive,
+          onActivateChange: activateChange,
+        }
+      : null;
+  const edges = consultRowSelected && openConsult ? openConsult : selected;
   const layout: Layout =
     spans.length > 0 && spans.every((span) => span.type === "tool")
       ? "tools"
@@ -166,9 +312,9 @@ export function RequestWaterfall({
   // yank a reader who is looking at the details pane.
   useEffect(() => {
     const scroller = scrollerRef.current;
-    const row = selectedKey ? rowRefs.current.get(selectedKey) : undefined;
+    const row = focusKey ? rowRefs.current.get(focusKey) : undefined;
     if (scroller && row) scrollWithin(scroller, row);
-  }, [selectedKey]);
+  }, [focusKey]);
 
   const revealedKey = useRef<string | null>(null);
   useEffect(() => {
@@ -184,29 +330,40 @@ export function RequestWaterfall({
     row.scrollIntoView?.({ block: "center" });
   });
 
+  // The arrows step through checks too, so a gate or a result check opens
+  // in the pane below the same way a row does.
   const moveTo = (index: number) => {
-    const target = spans[index];
+    const target = steppable[index];
     if (!target) return;
-    onSelect(target.key);
-    rowRefs.current.get(target.key)?.focus({ preventScroll: true });
+    if (target.type === "consult") {
+      onSelectConsult?.(target.consult.key);
+      rowRefs.current.get(target.consult.key)?.focus({ preventScroll: true });
+      return;
+    }
+    onSelect(target.span.key);
+    rowRefs.current.get(target.span.key)?.focus({ preventScroll: true });
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLOListElement>) => {
-    const current = spans.findIndex((span) => span.key === selectedKey);
+    const current = steppable.findIndex((entry) =>
+      entry.type === "consult"
+        ? consultRowSelected && entry.consult.key === selectedConsultKey
+        : !consultRowSelected && entry.span.key === selectedKey,
+    );
     const targets: Record<string, number> = {
       ArrowDown: current + 1,
       ArrowUp: current - 1,
       Home: 0,
-      End: spans.length - 1,
+      End: steppable.length - 1,
     };
-    if (event.key === "Enter" && selected) {
+    if (event.key === "Enter" && selected && !consultRowSelected) {
       event.preventDefault();
       onOpen(selected);
       return;
     }
     if (!(event.key in targets)) return;
     event.preventDefault();
-    moveTo(Math.min(spans.length - 1, Math.max(0, targets[event.key])));
+    moveTo(Math.min(steppable.length - 1, Math.max(0, targets[event.key])));
   };
 
   // Keep tick labels clear of the idle-break pills in the axis.
@@ -220,8 +377,8 @@ export function RequestWaterfall({
   return (
     <div>
       {/* Phones: the title, the count and the action on one line, the
-          legend on one line below. Wide: one row, the legend and the action
-          at the right end. */}
+          legend below, wrapping onto more lines when it runs out of room.
+          Wide: one row, the legend and the action at the right end. */}
       <header className="flex flex-col gap-1.5 border-b px-4 py-2.5 lg:flex-row lg:items-center lg:gap-x-6">
         <div className="flex min-w-0 items-center gap-2 lg:contents">
           <div className="flex min-w-0 flex-1 items-baseline gap-2 lg:flex-none">
@@ -243,7 +400,7 @@ export function RequestWaterfall({
         <div className="flex min-w-0 items-center gap-x-5 lg:ml-auto">
           <ul
             aria-label="Request kinds"
-            className="flex min-w-0 items-center gap-x-4 overflow-hidden text-xs whitespace-nowrap text-muted-foreground lg:flex-wrap lg:gap-y-1"
+            className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
           >
             {(Object.keys(SPAN_KINDS) as SpanKind[])
               .filter((kind) => !hideEmptyKinds || kindCounts[kind] > 0)
@@ -251,10 +408,9 @@ export function RequestWaterfall({
                 <li
                   key={kind}
                   className={cn(
-                    "inline-flex items-center gap-1.5",
-                    // An empty kind is a key to the colours; phones have no
-                    // room for it.
-                    kindCounts[kind] === 0 && "opacity-40 max-lg:hidden",
+                    "inline-flex items-center gap-1.5 whitespace-nowrap",
+                    // An empty kind is still a key to the colours.
+                    kindCounts[kind] === 0 && "opacity-40",
                   )}
                 >
                   <span
@@ -278,6 +434,23 @@ export function RequestWaterfall({
           </span>
         </div>
       </header>
+      {guardrails ? (
+        <GuardrailsBar
+          consults={consultsOnPage}
+          changes={changes}
+          activeChange={changes.findIndex(isChangeActive)}
+          onActivateChange={activateChange}
+          label={labelHere}
+          labelName={labelHereName}
+          checksShown={checksShown}
+          onToggleChecks={() => setChecksShown((shown) => !shown)}
+          yells={yellsOnPage}
+          selectedKey={consultRowSelected ? null : selectedKey}
+          onSelectYell={(yell) => {
+            if (yell.toolCallKey) onSelect(yell.toolCallKey);
+          }}
+        />
+      ) : null}
       {notice}
 
       <div
@@ -380,16 +553,16 @@ export function RequestWaterfall({
                       style={{ left: `${b.x * 100}%`, width: `${b.w * 100}%` }}
                     />
                   ))}
-                  {selected ? (
+                  {edges ? (
                     <>
                       <span
                         className="absolute inset-y-0 z-10 border-l border-dashed border-primary/60"
-                        style={{ left: `${selected.x * 100}%` }}
+                        style={{ left: `${edges.x * 100}%` }}
                       />
                       <span
                         className="absolute inset-y-0 z-10 border-l border-dashed border-primary/60"
                         style={{
-                          left: `${(selected.x + selected.w) * 100}%`,
+                          left: `${(edges.x + edges.w) * 100}%`,
                         }}
                       />
                     </>
@@ -406,10 +579,37 @@ export function RequestWaterfall({
                 onKeyDown={onKeyDown}
                 aria-label="Requests"
               >
-                {spans.map((span) => {
+                {entries.map((entry, index) => {
+                  if (entry.type === "consult") {
+                    const { consult } = entry;
+                    const isSelected =
+                      consultRowSelected && consult.key === selectedConsultKey;
+                    return (
+                      <ConsultRow
+                        key={entry.key}
+                        layout={layout}
+                        consult={consult}
+                        toolSpan={entry.toolSpan}
+                        gutter={gutterFor(entry, index)}
+                        note={notesByKey.get(entry.key) ?? null}
+                        selected={isSelected}
+                        buttonRef={(el) => {
+                          if (el) rowRefs.current.set(consult.key, el);
+                          else rowRefs.current.delete(consult.key);
+                        }}
+                        onSelect={() => onSelectConsult?.(consult.key)}
+                      />
+                    );
+                  }
+                  const { span } = entry;
                   const rowProps = {
                     layout,
-                    selected: span.key === selectedKey,
+                    selected: span.key === selectedKey && !consultRowSelected,
+                    ancestor: span.key === selectedKey && consultRowSelected,
+                    gutter: gutterFor(entry, index),
+                    note: notesByKey.get(entry.key) ?? null,
+                    yell: yellByKey.get(span.key) ?? null,
+                    guardrailsOffAt: guardrails?.guardrailsOffAt ?? null,
                     highlighted: span.key === highlightedKey,
                     buttonRef: (el: HTMLButtonElement | null) => {
                       if (el) rowRefs.current.set(span.key, el);
@@ -431,6 +631,7 @@ export function RequestWaterfall({
                       key={span.key}
                       span={span}
                       display={serverDisplayByName.get(span.call.mcpServerName)}
+                      hiddenChecks={checksShown ? [] : entry.checks}
                       {...rowProps}
                     />
                   );
@@ -501,23 +702,6 @@ export function McpCallChip({ method }: { method: string }) {
 // Internal helpers
 // ============================================================================
 
-/**
- * "trace": Name, Model, Time, track, Tokens, Cost. "tools", when every row is
- * a tool call: Name, Server, Time, track, Duration.
- */
-type Layout = "trace" | "tools";
-
-// The Name cell carries two lines (name; model or server · clock time), so
-// there are no separate Model and Time columns and the track takes their
-// width. Phones keep Name, a compact track and the last figure; Tokens is
-// display:none there, so it takes no grid track.
-const GRIDS: Record<Layout, string> = {
-  trace:
-    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_72px_84px]",
-  tools:
-    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_84px]",
-};
-const WIDE_ONLY = "hidden lg:flex";
 /** The sticky column header, which a row scrolled to the top must clear. */
 const COLUMN_HEADER_PX = 32;
 
@@ -636,6 +820,16 @@ function StatusText({
 type RowProps = {
   layout: Layout;
   selected: boolean;
+  /** Its check is the selection: the row reads as that check's parent. */
+  ancestor?: boolean;
+  /** The label gutter at the row's left edge (and its change nodes). */
+  gutter?: GutterProps | null;
+  /** Label changes this row caused, noted on its detail line. */
+  note?: LabelChange[] | null;
+  /** The yell this row's call sent. */
+  yell?: TraceYell | null;
+  /** When a superyell turned guardrails off, epoch ms. */
+  guardrailsOffAt?: number | null;
   highlighted: boolean;
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
@@ -648,6 +842,11 @@ function RowShell({
   label,
   layout,
   selected,
+  ancestor = false,
+  gutter = null,
+  note = null,
+  yell = null,
+  guardrailsOffAt = null,
   highlighted,
   buttonRef,
   onSelect,
@@ -674,21 +873,40 @@ function RowShell({
   const grid = GRIDS[layout];
   const tools = layout === "tools";
   const latencyPlacement = placeLatency(span);
+  const off =
+    Boolean(yell?.superyell) ||
+    (guardrailsOffAt !== null && span.start >= guardrailsOffAt);
   return (
-    <li>
+    <li className="relative">
+      {yell || off ? (
+        <YellRowMarks
+          yell={yell}
+          off={off}
+          guardrailsOffAt={guardrailsOffAt}
+          hasGutter={Boolean(gutter)}
+          selected={selected}
+          onSelectRow={onSelect}
+        />
+      ) : null}
+      {gutter ? <LabelGutter {...gutter} onSelectRow={onSelect} /> : null}
       <UnstyledButton
         ref={buttonRef}
         tabIndex={selected ? 0 : -1}
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
         onDoubleClick={onOpen}
-        aria-label={label}
+        aria-label={`${label}${gutterWords(gutter, note)}${off ? ", guardrails off" : ""}`}
         className={cn(
           "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",
           grid,
           selected
-            ? "bg-primary/[0.07] shadow-[inset_2px_0_0_var(--color-primary)]"
-            : "hover:bg-muted/50",
+            ? cn(
+                "bg-primary/[0.07]",
+                gutter ? SELECTED_PAST_GUTTER : SELECTED_EDGE,
+              )
+            : ancestor
+              ? "bg-primary/[0.035] hover:bg-primary/[0.06]"
+              : "hover:bg-muted/50",
           highlighted && "ring-2 ring-primary/50 ring-inset",
           "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset",
         )}
@@ -735,6 +953,7 @@ function RowShell({
               <span className="shrink-0 lg:hidden">
                 {tools ? time : (latency?.text ?? "—")}
               </span>
+              {note && note.length > 0 ? <ChangeNote changes={note} /> : null}
             </span>
           </span>
         </span>
@@ -910,10 +1129,13 @@ function RequestRow({
 function ToolCallRow({
   span,
   display,
+  hiddenChecks = [],
   ...rowProps
 }: RowProps & {
   span: ToolCallSpan;
   display: McpServerDisplay | undefined;
+  /** Its checks while the toolbar hides them: summarised in the name. */
+  hiddenChecks?: TraceConsult[];
 }) {
   const { call } = span;
   const content = readMcpToolCall(call);
@@ -941,7 +1163,11 @@ function ToolCallRow({
             {name}
           </span>
           <McpCallChip method={content.method} />
+          {rowProps.yell ? <YellChip yell={rowProps.yell} /> : null}
           {marked ? <McpToolCallStatusIcon status={status} /> : null}
+          {hiddenChecks.length > 0 ? (
+            <HiddenChecksBadge checks={hiddenChecks} />
+          ) : null}
         </>
       }
       detail={

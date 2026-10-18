@@ -68,10 +68,14 @@ describe("LogsSectionLayout", () => {
     expect(screen.getByRole("heading", { name: "Logs" })).toBeVisible();
   });
 
-  it("shows the Guardrails consult tab when OpenAPPA is enabled and permitted", () => {
+  it("orders the tabs by the request's path: proxy, gateway, guardrails, connections, then audit", () => {
     vi.mocked(usePathname).mockReturnValue("/llm/logs");
     vi.mocked(useFeature).mockReturnValue(true);
-    vi.mocked(usePermissionMap).mockReturnValue({ "/consults/logs": true });
+    vi.mocked(usePermissionMap).mockReturnValue({
+      "/consults/logs": true,
+      "/connections/logs": true,
+      "/audit/logs": true,
+    });
 
     render(
       <LogsSectionLayout listPath="/llm/logs">
@@ -79,8 +83,24 @@ describe("LogsSectionLayout", () => {
       </LogsSectionLayout>,
     );
 
-    expect(
-      screen.getAllByRole("link", { name: "Guardrails consult" }).length,
-    ).toBeGreaterThan(0);
+    const tabs = screen
+      .getAllByRole("link")
+      .map((link) => link.textContent)
+      .filter((name) =>
+        [
+          "LLM Proxy",
+          "MCP Gateway",
+          "Guardrail consults",
+          "Agent connections",
+          "Audit",
+        ].includes(name ?? ""),
+      );
+    expect([...new Set(tabs)]).toEqual([
+      "LLM Proxy",
+      "MCP Gateway",
+      "Guardrail consults",
+      "Agent connections",
+      "Audit",
+    ]);
   });
 });

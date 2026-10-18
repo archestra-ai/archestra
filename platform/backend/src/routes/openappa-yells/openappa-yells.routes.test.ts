@@ -14,6 +14,7 @@ import {
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ConversationModel from "@/models/conversation";
+import McpToolCallModel from "@/models/mcp-tool-call";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
@@ -122,6 +123,63 @@ describe("OpenAPPA yells", () => {
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
     ).toEqual({ unresolved: 2, superyells: 1 });
+  });
+
+  test("lists a session's yells with their place in its trace", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    await makeInteraction(agent.id, { sessionId: "chat-1" });
+    const yellCall = (llmToolCallId: string) =>
+      McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "archestra",
+        method: "tools/call",
+        toolCall: { id: llmToolCallId, name: "archestra__yell", arguments: {} },
+        toolResult: null,
+        sessionId: "chat-1",
+        llmToolCallId,
+      });
+    const first = await yellCall("toolu_1");
+    const second = await yellCall("toolu_2");
+    const inSession = (toolCallId: string, superyell = false) =>
+      OpenAppaYellModel.record({
+        organizationId,
+        callerId: `user:${user.id}`,
+        sessionId: `user:${user.id}|chat-1`,
+        toolCallId,
+        message: toolCallId,
+        withTrajectory: false,
+        superyell,
+      });
+    const yell = await inSession("toolu_1");
+    const superyell = await inSession("toolu_2", true);
+    const unlogged = await record("From a session with no logged requests");
+
+    const list = (
+      await app.inject({
+        url: "/api/openappa/yells?status=all&llmSessionId=chat-1",
+      })
+    ).json();
+
+    expect(
+      Object.fromEntries(
+        list.data.map((row: { id: string; trace: unknown }) => [
+          row.id,
+          row.trace,
+        ]),
+      ),
+    ).toEqual({
+      [yell.id]: { llmSessionId: "chat-1", mcpToolCallId: first.id },
+      [superyell.id]: { llmSessionId: "chat-1", mcpToolCallId: second.id },
+    });
+    const all = (
+      await app.inject({ url: "/api/openappa/yells?status=all" })
+    ).json();
+    expect(
+      all.data.find((row: { id: string }) => row.id === unlogged.id),
+    ).toMatchObject({ trace: null });
   });
 
   test("lists and counts only the active organization's reports and paginates search", async ({
@@ -442,6 +500,32 @@ describe("OpenAPPA yells", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: missing.id, caller: null }),
         expect.objectContaining({ id: system.id, caller: null }),
+      ]),
+    );
+  });
+
+  test("names the app that sent a yell, within the report organization", async ({
+    makeApp,
+    makeOrganization,
+  }) => {
+    const reporter = await makeApp({ organizationId, name: "Release notes" });
+    const foreignApp = await makeApp({
+      organizationId: (await makeOrganization()).id,
+      name: "Other release notes",
+    });
+    const yell = await record("App report", { callerId: `app:${reporter.id}` });
+    const foreign = await record("Unmatched app", {
+      callerId: `app:${foreignApp.id}`,
+    });
+    const list = (await app.inject({ url: "/api/openappa/yells" })).json();
+    expect(list.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: yell.id,
+          caller: null,
+          callerApp: { id: reporter.id, name: "Release notes" },
+        }),
+        expect.objectContaining({ id: foreign.id, callerApp: null }),
       ]),
     );
   });

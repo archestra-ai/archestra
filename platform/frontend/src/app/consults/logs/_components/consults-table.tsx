@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import {
@@ -24,7 +25,6 @@ import {
   useExternalConsults,
 } from "@/lib/openappa/external-consults.query";
 import { buildConsultColumns } from "./consult-columns";
-import { ConsultDetailSheet } from "./consult-detail-sheet";
 import { type ConsultView, toConsultView } from "./consult-details";
 import { ALL_OUTCOMES, OUTCOME_LABEL } from "./consult-outcome-badge";
 
@@ -34,7 +34,7 @@ export function ConsultsTable() {
   const cursorPagination = useCursorPagination({
     defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
-  const [selected, setSelected] = useState<ConsultView | null>(null);
+  const router = useRouter();
 
   const dateTimePicker = useDateTimeRangePicker({
     startDateFromUrl: searchParams.get("startDate"),
@@ -191,13 +191,10 @@ export function ConsultsTable() {
         emptyMessage="No Guardrails consults recorded yet. Annotator and authority calls will appear here as they happen."
         filteredEmptyMessage="No consults match your filters"
         onClearFilters={clearFilters}
-        onRowClick={(row) => setSelected(row)}
-        getRowClassName={(row) =>
-          row.consult.id === selected?.consult.id ? "bg-muted" : undefined
-        }
+        // A consult opens on its own page, which leads on to the session
+        // trace it happened in when that session was logged.
+        onRowClick={(row) => router.push(`/consults/logs/${row.consult.id}`)}
       />
-
-      <ConsultDetailSheet view={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }

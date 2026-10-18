@@ -895,6 +895,24 @@ class AppModel {
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */
+  /** App names by id, within one organization; missing ids are absent. */
+  static async getNamesByIds(params: {
+    ids: string[];
+    organizationId: string;
+  }): Promise<Map<string, string>> {
+    if (params.ids.length === 0) return new Map();
+    const rows = await db
+      .select({ id: schema.appsTable.id, name: schema.appsTable.name })
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, params.organizationId),
+          inArray(schema.appsTable.id, params.ids),
+        ),
+      );
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
   /**
    * Ids, names, visibility and deletion state for a bulk route's audit record,
    * used on both sides of the write. Deliberately much narrower than

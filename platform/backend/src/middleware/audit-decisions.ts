@@ -1072,6 +1072,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "external consult dataset the native runtime appends",
   },
+  openappaLabelChangesTable: {
+    audited: false,
+    reason: "label history dataset the native runtime appends",
+  },
   openappaRootOpeningsTable: {
     audited: false,
     reason:

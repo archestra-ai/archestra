@@ -1733,6 +1733,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenAppaYell]: { log: ["read"] },
   [RouteId.UpdateOpenAppaYell]: { log: ["read"] },
   [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  [RouteId.GetOpenappaExternalConsult]: { log: ["read"] },
+  [RouteId.GetOpenappaLabelChanges]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
   [RouteId.GetOpenappaCoverageEntities]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageTools]: { guardrailsPolicy: ["read"] },
@@ -2041,6 +2043,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { log: ["read"] },
+  "/consults/logs/[id]": { log: ["read"] },
   "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge

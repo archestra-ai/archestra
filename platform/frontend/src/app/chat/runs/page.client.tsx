@@ -2,6 +2,7 @@
 
 import { formatDistance } from "date-fns";
 import {
+  Activity,
   Bot,
   Copy,
   History,
@@ -45,9 +46,13 @@ import {
   useMyAgentRun,
 } from "@/lib/agent-runtime.query";
 import { useRuntimeClock } from "@/lib/agent-runtime-time";
-import { useScopedCapabilities } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 
 export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [resumedRun, setResumedRun] = useState<{
@@ -83,6 +88,10 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const run = query.data;
   usePageTitle(run?.title ?? "Agent Runtime");
   const now = useRuntimeClock(true);
+
+  // The run's LLM requests are logged under its session id, which only the
+  // owner is sent; `log:read` lets them open their own trace.
+  const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
 
   // Metadata and the log stream are readable by shared viewers, but attaching
   // to the live terminal runs a shell under the owner's own credentials — so it
@@ -311,6 +320,14 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                             <span>View Agent</span>
                           </Link>
                         </DropdownMenuItem>
+                        {canReadLogs && run.sessionId ? (
+                          <DropdownMenuItem asChild>
+                            <Link href={llmSessionHref(run.sessionId)}>
+                              <Activity className="size-4" />
+                              <span>View trace</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        ) : null}
                         <DropdownMenuItem
                           disabled={!availableConnectionCommand}
                           onSelect={() => setConnectionDialogOpen(true)}

@@ -1353,6 +1353,54 @@ builtin = "hitl"
     assert.equal(Number(stored.rows[0].n), 0);
   });
 
+  await t.test('a label change is recorded under the event that moved it, after a baseline', async (st) => {
+    const organization_id = `smoke-org-${randomUUID()}`;
+    await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
+    st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID() };
+    assert.equal((await call(session, 'plain-1', 'read_plain')).decision, 'allow_call');
+    await result(session, 'plain-1', 'nothing to see');
+    // Reading untrusted content narrows trust: the call is held until the
+    // session accepts the narrower label, and admitting its result moves it.
+    const denied = await call(session, 'narrow-1', 'read_untrusted');
+    assert.equal(denied.decision, 'deny_call');
+    await hook(session, { event: 'remedy', operation_id: 'accept-1', arguments: { offer_id: denied.offers[0].offer_id } });
+    assert.equal((await call(session, 'narrow-2', 'read_untrusted')).decision, 'allow_call');
+    await result(session, 'narrow-2', 'web page text');
+
+    const { rows } = await client.query(
+      'SELECT event, call_id, trust_before, audience_before, trust_after, audience_after, session_id FROM openappa_label_changes WHERE organization_id = $1 ORDER BY created_at, id',
+      [organization_id],
+    );
+    const status = await native.getOpenappaStatus(organization_id, session.session_id, policy);
+    assert.equal(rows[0].event, 'session_start');
+    assert.equal(rows[0].trust_before, rows[0].trust_after);
+    assert.equal(rows[0].audience_before, rows[0].audience_after);
+    // Unchanged labels wrote nothing more: one change, filed under the result
+    // that moved it.
+    const changes = rows.slice(1);
+    assert.equal(changes.length, 1);
+    assert.deepEqual(
+      {
+        event: changes[0].event,
+        call_id: changes[0].call_id,
+        trust_before: changes[0].trust_before,
+        trust_after: changes[0].trust_after,
+        audience_after: changes[0].audience_after,
+        session_id: changes[0].session_id,
+      },
+      {
+        event: 'tool_result',
+        call_id: 'call:narrow-2',
+        trust_before: rows[0].trust_after,
+        trust_after: status.trust,
+        audience_after: status.audience,
+        session_id: session.session_id,
+      },
+    );
+    assert.equal(status.trust, 'suspicious');
+  });
+
   await t.test('a consult under the Metadata only log setting keeps who and how, never what', async (st) => {
     const organization_id = `smoke-org-${randomUUID()}`;
     await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);

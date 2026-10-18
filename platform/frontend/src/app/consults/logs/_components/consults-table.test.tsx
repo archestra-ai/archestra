@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   afterAll,
   afterEach,
@@ -19,6 +19,9 @@ import {
   it,
   vi,
 } from "vitest";
+import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
+import { ConsultPayloads } from "./consult-detail-sheet";
+import { toConsultView } from "./consult-details";
 import { ConsultsTable } from "./consults-table";
 
 vi.mock("next/navigation");
@@ -28,6 +31,7 @@ const origin = "http://localhost:9000";
 const consultsUrl = `${origin}/api/openappa/external-consults`;
 const server = setupServer();
 const requests: URL[] = [];
+const push = vi.fn();
 // jsdom has no Blob URLs; the export needs one to hand the file to the browser.
 const jsdomCreateObjectURL = URL.createObjectURL;
 
@@ -36,6 +40,10 @@ beforeEach(() => {
   requests.length = 0;
   URL.createObjectURL = () => "blob:consults";
   URL.revokeObjectURL = () => {};
+  push.mockReset();
+  vi.mocked(useRouter).mockReturnValue({
+    push,
+  } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(usePathname).mockReturnValue("/consults/logs");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(
@@ -127,34 +135,40 @@ it("exports JSONL with the current filters", async () => {
   expect(exportRequest?.searchParams.has("cursor")).toBe(false);
 });
 
-it("opens a metadata-only consult without its withheld content", async () => {
-  const notStored = { __redacted: "log_content_policy" };
+it("opens a consult on its own page, which leads on to its session", async () => {
   server.use(
     http.get(consultsUrl, () =>
       HttpResponse.json({
-        data: [
-          {
-            ...CONSULT,
-            request: {
-              ...notStored,
-              kind: "annotation",
-              artifact: {
-                args: { name: "fetch", arguments: notStored },
-              },
-            },
-            answer: null,
-            diagnostics: null,
-          },
-        ],
+        data: [CONSULT],
         pagination: { limit: 20, nextCursor: null, hasNext: false },
       }),
     ),
   );
   renderTable();
 
-  fireEvent.click(await screen.findByText("fetch"));
+  fireEvent.click(await screen.findByText(CONSULT.externalName));
 
-  expect(await screen.findByText("Content not stored")).toBeInTheDocument();
+  expect(push).toHaveBeenCalledWith(`/consults/logs/${CONSULT.id}`);
+});
+
+it("shows a metadata-only consult without its withheld content", () => {
+  const notStored = { __redacted: "log_content_policy" };
+  render(
+    <ConsultPayloads
+      view={toConsultView({
+        ...CONSULT,
+        request: {
+          ...notStored,
+          kind: "annotation",
+          artifact: { args: { name: "fetch", arguments: notStored } },
+        },
+        answer: null,
+        diagnostics: null,
+      } as ExternalConsult)}
+    />,
+  );
+
+  expect(screen.getByText("Content not stored")).toBeInTheDocument();
   expect(screen.getByText("Tool: fetch")).toBeInTheDocument();
   expect(screen.queryByText(/log_content_policy/)).not.toBeInTheDocument();
   expect(screen.queryByText("No answer.")).not.toBeInTheDocument();

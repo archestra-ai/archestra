@@ -92100,6 +92100,10 @@ export type GetOpenappaExternalConsultsData = {
         root?: string;
         sessionId?: string;
         /**
+         * An LLM session ID, as on the LLM logs page: consults from every trajectory of that session, sub-agents included
+         */
+        llmSessionId?: string;
+        /**
          * Case-insensitive substring of the external's name or the session ID
          */
         search?: string;
@@ -92219,6 +92223,119 @@ export type GetOpenappaExternalConsultsResponses = {
 };
 
 export type GetOpenappaExternalConsultsResponse = GetOpenappaExternalConsultsResponses[keyof GetOpenappaExternalConsultsResponses];
+
+export type GetOpenappaExternalConsultData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/openappa/external-consults/{id}';
+};
+
+export type GetOpenappaExternalConsultErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaExternalConsultError = GetOpenappaExternalConsultErrors[keyof GetOpenappaExternalConsultErrors];
+
+export type GetOpenappaExternalConsultResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        consult: {
+            id: string;
+            organizationId: string;
+            sessionId: string | null;
+            callerId: string | null;
+            createdAt: string;
+            startedAt: string;
+            durationMs: number;
+            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
+            externalName: string;
+            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra';
+            request: unknown;
+            outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+            answer: unknown;
+            rawResponse: string | null;
+            httpStatus: number | null;
+            diagnostics: string | null;
+            diagnosticsTruncated: boolean;
+            root: string;
+            trajectory: string;
+            callId: string | null;
+            offerId: string | null;
+            callDigest: string | null;
+        };
+        llmSessionId: string | null;
+        mcpToolCallId: string | null;
+    };
+};
+
+export type GetOpenappaExternalConsultResponse = GetOpenappaExternalConsultResponses[keyof GetOpenappaExternalConsultResponses];
 
 export type GetAppaGithubSyncData = {
     body?: never;
@@ -93488,6 +93605,128 @@ export type ConsultOpenappaBatteryHelperResponses = {
 
 export type ConsultOpenappaBatteryHelperResponse = ConsultOpenappaBatteryHelperResponses[keyof ConsultOpenappaBatteryHelperResponses];
 
+export type GetOpenappaLabelChangesData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * An LLM session ID, as on the LLM logs page
+         */
+        llmSessionId: string;
+    };
+    url: '/api/openappa/label-changes';
+};
+
+export type GetOpenappaLabelChangesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaLabelChangesError = GetOpenappaLabelChangesErrors[keyof GetOpenappaLabelChangesErrors];
+
+export type GetOpenappaLabelChangesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            root: string;
+            sessionId: string;
+            callerId: string | null;
+            createdAt: string;
+            event: 'session_start' | 'tool_call' | 'tool_result' | 'remedy' | 'child_return' | 'other';
+            callId: string | null;
+            /**
+             * The full tool name, from the record or the logged tool call
+             */
+            tool: string | null;
+            trustBefore: string;
+            audienceBefore: string;
+            trustAfter: string;
+            audienceAfter: string;
+            policyRevision: number | null;
+            /**
+             * The rule the current policy applies to the tool (the first that names it, else the catch-all). The engine does not record which rule matched a call.
+             */
+            rule: {
+                source: 'root' | 'battery' | 'catchall';
+                battery: string | null;
+                batteryEntry: string | null;
+                line: number | null;
+                /**
+                 * The rule's TOML block
+                 */
+                text: string | null;
+            } | null;
+        }>;
+    };
+};
+
+export type GetOpenappaLabelChangesResponse = GetOpenappaLabelChangesResponses[keyof GetOpenappaLabelChangesResponses];
+
 export type InspectOpenAppaPolicyTestsData = {
     body: {
         files: Array<{
@@ -94511,6 +94750,7 @@ export type GetOpenAppaYellsData = {
         cursor?: string;
         search?: string;
         status?: 'unresolved' | 'resolved' | 'all';
+        llmSessionId?: string;
     };
     url: '/api/openappa/yells';
 };
@@ -94609,10 +94849,18 @@ export type GetOpenAppaYellsResponses = {
                 name: string | null;
                 email: string | null;
             } | null;
+            callerApp: {
+                id: string;
+                name: string;
+            } | null;
             conversation: {
                 id: string;
                 title: string | null;
                 createdAt: string;
+            } | null;
+            trace: {
+                llmSessionId: string;
+                mcpToolCallId: string | null;
             } | null;
         }>;
         pagination: {
@@ -94814,10 +95062,18 @@ export type GetOpenAppaYellResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        callerApp: {
+            id: string;
+            name: string;
+        } | null;
         conversation: {
             id: string;
             title: string | null;
             createdAt: string;
+        } | null;
+        trace: {
+            llmSessionId: string;
+            mcpToolCallId: string | null;
         } | null;
     };
 };
@@ -94928,10 +95184,18 @@ export type UpdateOpenAppaYellResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        callerApp: {
+            id: string;
+            name: string;
+        } | null;
         conversation: {
             id: string;
             title: string | null;
             createdAt: string;
+        } | null;
+        trace: {
+            llmSessionId: string;
+            mcpToolCallId: string | null;
         } | null;
     };
 };

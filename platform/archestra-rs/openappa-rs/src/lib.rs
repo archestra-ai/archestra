@@ -9,6 +9,7 @@ mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+mod labels;
 mod lease;
 #[allow(dead_code)]
 mod peer;
@@ -2302,13 +2303,72 @@ impl State {
             withhold_content: input.withhold_consult_content,
         };
         let child_return = input.event == HookEventKind::ChildReturn;
+        let observation = self.label_observation(&input, &root);
         let result = recording.dispatch_in_family(input, root, key).await;
         consults::store(&sql, attribution, &consults);
+        if result.is_ok() {
+            self.record_label(&sql, observation);
+        }
         if child_return {
             result.map(mark_busy_hold)
         } else {
             result
         }
+    }
+
+    /// Who and what a label change after dispatching `input` is filed under.
+    fn label_observation(&self, input: &Input, root: &str) -> labels::Observation {
+        let event = match input.event {
+            HookEventKind::SessionStart => labels::ChangeEvent::SessionStart,
+            HookEventKind::ToolCall => labels::ChangeEvent::ToolCall,
+            HookEventKind::ToolResult | HookEventKind::CancelCall => {
+                labels::ChangeEvent::ToolResult
+            }
+            HookEventKind::Remedy => labels::ChangeEvent::Remedy,
+            HookEventKind::ChildReturn | HookEventKind::ChildEnd => {
+                labels::ChangeEvent::ChildReturn
+            }
+            HookEventKind::Yell
+            | HookEventKind::Prompt
+            | HookEventKind::TurnEnd
+            | HookEventKind::ChildAddress => labels::ChangeEvent::Other,
+        };
+        let call_id = match (&input.operation_id, &input.tool_call_id) {
+            (Some(operation), _) if operation.starts_with("call:") => Some(operation.clone()),
+            (_, Some(tool_call_id)) => Some(format!("call:{tool_call_id}")),
+            _ => None,
+        };
+        labels::Observation {
+            organization_id: input.organization_id.clone(),
+            root: root.to_owned(),
+            session_id: input.session_id.clone(),
+            caller_id: input.caller_id.clone(),
+            event,
+            call_id,
+            tool: input.tool.clone(),
+            policy_revision: self
+                .served
+                .and_then(|revision| i64::try_from(revision).ok()),
+        }
+    }
+
+    /// Reads the root's label after a dispatch and records it if it moved. A
+    /// root the runtime cannot read is skipped: the dataset never fails a dispatch.
+    fn record_label(&self, sql: &Sql<'_>, observation: labels::Observation) {
+        let Ok(status) = self
+            .runtime
+            .try_status(&TrajectoryId(observation.root.clone()))
+        else {
+            return;
+        };
+        labels::record(
+            sql,
+            observation,
+            labels::Label {
+                trust: status.trust,
+                audience: status.audience,
+            },
+        );
     }
 
     /// The root of the family `input` belongs to: the owner's for a proxy-stamped

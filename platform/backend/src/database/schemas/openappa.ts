@@ -20,6 +20,7 @@ import type {
   ExternalConsultOutcome,
   ExternalConsultRole,
 } from "@/types/openappa-external-consults";
+import type { LabelChangeEvent } from "@/types/openappa-label-changes";
 import type { ThreadCall, ThreadTool } from "@/types/openappa-thread-state";
 import type {
   UnenforcedCallReason,
@@ -461,5 +462,46 @@ export const openappaExternalConsultsTable = pgTable(
     ),
     index("openappa_external_consults_created_idx").on(table.createdAt),
     index("openappa_external_consults_root_idx").on(table.root),
+  ],
+);
+
+// One row per change a dispatch made to its root trajectory's label (trust
+// and audience), written by Rust after the dispatch, under the family's lock.
+// What a session trace shows as the label over time; never read by a
+// decision. Sub-agent trajectories reach it when their result returns.
+export const openappaLabelChangesTable = pgTable(
+  "openappa_label_changes",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    root: text().notNull(),
+    sessionId: text("session_id").notNull(),
+    callerId: text("caller_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 })
+      .notNull()
+      .defaultNow(),
+    event: text().$type<LabelChangeEvent>().notNull(),
+    // The runtime's operation id, `call:<id>`, as on external consults.
+    callId: text("call_id"),
+    tool: text(),
+    trustBefore: text("trust_before").notNull(),
+    audienceBefore: text("audience_before").notNull(),
+    trustAfter: text("trust_after").notNull(),
+    audienceAfter: text("audience_after").notNull(),
+    // The organization policy revision the dispatch was decided under, when
+    // the family follows it; the rule that applied is read from it.
+    policyRevision: bigint("policy_revision", { mode: "number" }),
+  },
+  (table) => [
+    index("openappa_label_changes_root_created_idx").on(
+      table.root,
+      table.createdAt,
+    ),
+    index("openappa_label_changes_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
   ],
 );

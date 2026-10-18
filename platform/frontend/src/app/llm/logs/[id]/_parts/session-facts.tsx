@@ -221,7 +221,7 @@ export function SessionFacts({
           }
         >
           <FactValue>
-            <span>{formatCompactNumber(tokens)}</span>
+            <span className="shrink-0">{formatCompactNumber(tokens)}</span>
             {cached > 0 ? (
               <CacheMeter
                 read={totals.cacheReadTokens}
@@ -656,10 +656,12 @@ function CacheMeter({ read, write }: { read: number; write: number }) {
   const total = read + write;
   const readPct = total > 0 ? (read / total) * 100 : 0;
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-normal tracking-normal whitespace-nowrap text-muted-foreground">
+    // Shrinks with its cell: a cached count far larger than the total (cache
+    // reported beside the input) would otherwise run into the next fact.
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-normal tracking-normal whitespace-nowrap text-muted-foreground">
       <span
         aria-hidden="true"
-        className="flex h-1 w-8 overflow-hidden rounded-full bg-muted"
+        className="flex h-1 w-8 shrink-0 overflow-hidden rounded-full bg-muted"
       >
         <span
           className="bg-sky-500/80 dark:bg-sky-400/80"
@@ -671,7 +673,12 @@ function CacheMeter({ read, write }: { read: number; write: number }) {
         />
       </span>
       {/* Phones show the figure on the line below. */}
-      <span className="max-lg:hidden">{formatCompactNumber(total)} cached</span>
+      <span
+        className="min-w-0 truncate max-lg:hidden"
+        title={`${total.toLocaleString()} cached`}
+      >
+        {formatCompactNumber(total)} cached
+      </span>
     </span>
   );
 }

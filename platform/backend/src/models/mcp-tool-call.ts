@@ -13,6 +13,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lte,
   or,
@@ -407,6 +408,84 @@ class McpToolCallModel {
    * @param idOrScope with a scope, `ownUserId` limits run-based session
    * resolution to that user's interactions, as their own-logs view requires.
    */
+  /**
+   * The session's tool calls that carry the model's call id, as `{id,
+   * llmToolCallId, toolName}`: what guardrail records (keyed by that call id)
+   * are matched against.
+   */
+  static async findModelCallIdsBySession(params: {
+    organizationId: string;
+    sessionId: string;
+  }): Promise<
+    { id: string; llmToolCallId: string; toolName: string | null }[]
+  > {
+    const rows = await db
+      .select({
+        id: schema.mcpToolCallsTable.id,
+        llmToolCallId: schema.mcpToolCallsTable.llmToolCallId,
+        toolName: sql<
+          string | null
+        >`${schema.mcpToolCallsTable.toolCall}->>'name'`,
+      })
+      .from(schema.mcpToolCallsTable)
+      .where(
+        and(
+          eq(schema.mcpToolCallsTable.sessionId, params.sessionId),
+          isNotNull(schema.mcpToolCallsTable.llmToolCallId),
+          mcpToolCallBelongsToOrganization(params.organizationId),
+        ),
+      );
+    return rows.flatMap((row) =>
+      row.llmToolCallId
+        ? [
+            {
+              id: row.id,
+              llmToolCallId: row.llmToolCallId,
+              toolName: row.toolName,
+            },
+          ]
+        : [],
+    );
+  }
+
+  /**
+   * The logged `yell` calls of the given LLM sessions, oldest first: what a
+   * yell links to in the session trace.
+   */
+  static async findYellCallsBySessions(params: {
+    organizationId: string;
+    sessionIds: string[];
+  }): Promise<
+    {
+      id: string;
+      sessionId: string;
+      llmToolCallId: string | null;
+      createdAt: Date;
+    }[]
+  > {
+    if (params.sessionIds.length === 0) return [];
+    const table = schema.mcpToolCallsTable;
+    const rows = await db
+      .select({
+        id: table.id,
+        sessionId: table.sessionId,
+        llmToolCallId: table.llmToolCallId,
+        createdAt: table.createdAt,
+      })
+      .from(table)
+      .where(
+        and(
+          inArray(table.sessionId, params.sessionIds),
+          sql`${table.toolCall}->>'name' LIKE '%\\_\\_yell'`,
+          mcpToolCallBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .orderBy(asc(table.createdAt));
+    return rows.flatMap((row) =>
+      row.sessionId ? [{ ...row, sessionId: row.sessionId }] : [],
+    );
+  }
+
   static async findById(
     idOrScope:
       | string

@@ -277,6 +277,12 @@ export const handlers: HttpHandler[] = [
     ],
   }),
   ...getJson("/api/openappa/policy-tests/runs", []),
+  // A session trace reads its guardrail checks and label history; none by default.
+  ...getJson("/api/openappa/external-consults", {
+    data: [],
+    pagination: { limit: 100, hasNext: false, nextCursor: null },
+  }),
+  ...getJson("/api/openappa/label-changes", { data: [] }),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
   ...getJson("/api/openappa/yells", {
     data: [],

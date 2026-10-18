@@ -483,6 +483,44 @@ function matchesSessionKey(sessionKey: string): SQL {
 }
 
 class InteractionModel {
+  /** Whether the organization has any LLM request logged under a session. */
+  static async existsBySessionId(params: {
+    organizationId: string;
+    sessionId: string;
+  }): Promise<boolean> {
+    const [result] = await db
+      .select({ id: schema.interactionsTable.id })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.sessionId, params.sessionId),
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .limit(1);
+    return result !== undefined;
+  }
+
+  /** The ones among `sessionIds` that have logged requests in the organization. */
+  static async findLoggedSessionIds(params: {
+    organizationId: string;
+    sessionIds: string[];
+  }): Promise<Set<string>> {
+    if (params.sessionIds.length === 0) return new Set();
+    const rows = await db
+      .selectDistinct({ sessionId: schema.interactionsTable.sessionId })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          inArray(schema.interactionsTable.sessionId, params.sessionIds),
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      );
+    return new Set(
+      rows.flatMap((row) => (row.sessionId ? [row.sessionId] : [])),
+    );
+  }
+
   static async existsByRunId(runId: string): Promise<boolean> {
     const [result] = await db
       .select({ id: schema.interactionsTable.id })

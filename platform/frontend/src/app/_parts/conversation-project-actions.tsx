@@ -69,7 +69,7 @@ export function ConversationProjectActions({
     <Fragment>
       <DropdownMenuSub open={open} onOpenChange={setOpen}>
         <DropdownMenuSubTrigger disabled={isPending}>
-          <FolderInput className="h-4 w-4 mr-2" />
+          <FolderInput />
           <span>Change project</span>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="w-64 p-0">

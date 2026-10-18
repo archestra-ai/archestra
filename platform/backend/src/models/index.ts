@@ -122,6 +122,7 @@ export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
 export { default as OAuthRefreshTokenModel } from "./oauth-refresh-token";
 export { default as OpenappaExternalConsultModel } from "./openappa-external-consult";
+export { default as OpenappaLabelChangeModel } from "./openappa-label-change";
 export { default as OpenAppaOperationModel } from "./openappa-operation";
 export { default as OpenAppaSessionModel } from "./openappa-session";
 export { default as OrganizationModel } from "./organization";

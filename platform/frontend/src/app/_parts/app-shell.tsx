@@ -202,7 +202,7 @@ export function AppShell({ children }: AppShellProps) {
           <main
             id={MAIN_CONTENT_ID}
             tabIndex={-1}
-            className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto md:overflow-hidden focus:outline-none"
+            className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto md:overflow-clip focus:outline-none"
           >
             <div className="shrink-0">
               <ConnectivityBar />

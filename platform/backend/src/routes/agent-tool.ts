@@ -553,7 +553,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // Only the access columns: the tools are read on their own below.
       const agent = await AgentModel.findByIdForAccess(agentId);
-      if (!agent) {
+      if (!agent || agent.organizationId !== organizationId) {
         throw new ApiError(404, `Agent with ID ${agentId} not found`);
       }
 
@@ -724,7 +724,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { agentId }, organizationId, user }, reply) => {
       // Only the access columns, to learn the type; the targets are read below.
       const agent = await AgentModel.findByIdForAccess(agentId);
-      if (!agent) {
+      if (!agent || agent.organizationId !== organizationId) {
         throw new ApiError(404, "Agent not found");
       }
 

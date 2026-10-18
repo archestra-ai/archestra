@@ -357,11 +357,13 @@ class ConversationModel {
         return rowLimit === undefined ? query : query.limit(rowLimit);
       };
       // Pinned chats show in the sidebar however old they are, so they are
-      // read on their own rather than cut off by the recent-chats limit.
+      // read on their own rather than cut off by the recent-chats limit, up
+      // to the list's own cap.
       const [recentRows, pinnedRows] = await Promise.all([
         listQuery(and(...conditions), limit),
         listQuery(
           and(...conditions, isNotNull(schema.conversationsTable.pinnedAt)),
+          ConversationModel.LIST_RESULT_LIMIT,
         ),
       ]);
       const recentIds = new Set(recentRows.map((row) => row.conversation.id));

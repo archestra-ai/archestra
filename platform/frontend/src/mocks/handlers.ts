@@ -81,6 +81,8 @@ import {
   userStatisticsFor,
 } from "./data/statistics";
 
+import { registryHandlers } from "./registry";
+
 // Every endpoint is registered once, under its backend-relative path, which
 // MSW matches against any origin. Both consumers arrive that way: the browser
 // worker sees same-origin `/api/...` requests, and the mock backend route
@@ -458,6 +460,8 @@ export const handlers: HttpHandler[] = [
   // "tools" segment can never be read as a catalog id.
   ...getJson("/api/internal_mcp_catalog/tools", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
+  // Paged search, issue index and by-id reads, derived from the lists above.
+  ...registryHandlers,
   ...getJson("/api/mcp_server", installedServersSeed),
   // Org-wide auto-mode roster; per-test seeds override when a test needs
   // auto-mode agents in the usage surfaces.

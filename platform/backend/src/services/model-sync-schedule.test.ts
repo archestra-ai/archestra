@@ -41,6 +41,7 @@ describe("scheduled LLM model sync", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe("models.dev metadata", () => {
@@ -53,7 +54,7 @@ describe("scheduled LLM model sync", () => {
       expect(modelsDev.requests).toBe(1);
     });
 
-    test("a failing models.dev does not stop key syncs and is not retried on the next tick", async ({
+    test("a failing models.dev does not stop key syncs, fails the tick once, and waits 15 minutes before the next try", async ({
       makeLlmProviderApiKey,
     }) => {
       // The retry backoff waits in real time; skip the waits.
@@ -61,6 +62,9 @@ describe("scheduled LLM model sync", () => {
         modelsDevClient as unknown as { sleep: (ms: number) => Promise<void> },
         "sleep",
       ).mockResolvedValue();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const start = new Date();
+      vi.setSystemTime(start);
       modelsDev.status = 500;
       const vllm = serveModels("vllm.test");
       const apiKey = await makeLlmProviderApiKey(organizationId, null, {
@@ -68,15 +72,49 @@ describe("scheduled LLM model sync", () => {
         baseUrl: "http://vllm.test/v1",
       });
 
-      await syncDueModels();
+      // The task queue records the failed tick; the key sync still ran.
+      await expect(syncDueModels()).rejects.toThrow(
+        "models.dev metadata sync failed",
+      );
       const failedRequests = modelsDev.requests;
       expect(failedRequests).toBeGreaterThan(0);
       expect(vllm.hits).toBe(1);
       expect(await linkedModelCount(apiKey.id)).toBe(2);
 
-      modelsDevClient.clearFetchCache();
+      // The metadata sync itself stays off for 15 minutes. (The vLLM key's own
+      // 5-minute resync still reads the catalog, so count sync attempts.)
+      const attempts = vi.spyOn(
+        modelsDevClient as unknown as { syncWithRetry: () => Promise<number> },
+        "syncWithRetry",
+      );
+      modelsDev.status = 200;
+      vi.setSystemTime(new Date(start.getTime() + 15 * TimeInMs.Minute - 1));
       await syncDueModels();
-      expect(modelsDev.requests).toBe(failedRequests);
+      expect(attempts).not.toHaveBeenCalled();
+
+      vi.setSystemTime(new Date(start.getTime() + 15 * TimeInMs.Minute + 1));
+      await syncDueModels();
+      expect(attempts).toHaveBeenCalledTimes(1);
+      attempts.mockRestore();
+    });
+
+    test("reports both failures when the key lookup and models.dev fail in one tick", async () => {
+      vi.spyOn(
+        modelsDevClient as unknown as { sleep: (ms: number) => Promise<void> },
+        "sleep",
+      ).mockResolvedValue();
+      modelsDev.status = 500;
+      const lookup = vi
+        .spyOn(LlmProviderApiKeyModel, "findDueForModelSync")
+        .mockRejectedValue(new Error("due-key lookup failed"));
+
+      const error = await syncDueModels().catch((reason: unknown) => reason);
+      lookup.mockRestore();
+
+      expect(error).toBeInstanceOf(AggregateError);
+      expect(
+        (error as AggregateError).errors.map((e: Error) => e.message),
+      ).toEqual(["due-key lookup failed", "models.dev metadata sync failed"]);
     });
   });
 
@@ -136,6 +174,33 @@ describe("scheduled LLM model sync", () => {
       vi.setSystemTime(after(TimeInMs.Day));
       await syncDueModels();
       expect([vllm.hits, openrouter.hits, deepseek.hits]).toEqual([4, 3, 2]);
+    });
+
+    test("resyncs ollama-native keys every 5 minutes, like ollama", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const ollama = serveModels("ollama.test", { ollama: true });
+      const ollamaNative = serveModels("ollama-native.test", { ollama: true });
+      await makeLlmProviderApiKey(organizationId, null, {
+        provider: "ollama",
+        baseUrl: "http://ollama.test/v1",
+      });
+      await makeLlmProviderApiKey(organizationId, null, {
+        provider: "ollama-native",
+        baseUrl: "http://ollama-native.test",
+      });
+      const start = new Date("2026-10-01T12:00:00.000Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(start);
+
+      await syncDueModels();
+      expect([ollama.hits, ollamaNative.hits]).toEqual([1, 1]);
+
+      vi.setSystemTime(
+        new Date(start.getTime() + 5 * TimeInMs.Minute + TimeInMs.Second),
+      );
+      await syncDueModels();
+      expect([ollama.hits, ollamaNative.hits]).toEqual([2, 2]);
     });
 
     test("treats a key synced exactly one TTL ago as stale", async ({
@@ -287,6 +352,39 @@ describe("scheduled LLM model sync", () => {
       await syncDueModels();
       expect(down.hits).toBeGreaterThan(downHitsAfterFirstTry);
       expect(up.hits).toBe(2);
+    });
+
+    test("still syncs a key when its attempt marker cannot be written, and tries it again next tick", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const down = serveModels("down.test", { status: 503 });
+      const up = serveModels("up.test");
+      const downKey = await makeLlmProviderApiKey(organizationId, null, {
+        provider: "vllm",
+        baseUrl: "http://down.test/v1",
+      });
+      const upKey = await makeLlmProviderApiKey(organizationId, null, {
+        provider: "vllm",
+        baseUrl: "http://up.test/v1",
+      });
+      const set = cacheManager.set.bind(cacheManager);
+      vi.spyOn(cacheManager, "set").mockImplementation((key, value, ttl) =>
+        key.startsWith("llm-model-sync-attempt-")
+          ? Promise.reject(new Error("cache unavailable"))
+          : set(key, value, ttl),
+      );
+
+      await syncDueModels();
+      expect(up.hits).toBe(1);
+      expect(await linkedModelCount(upKey.id)).toBe(2);
+      const downHitsAfterFirstTry = down.hits;
+      expect(downHitsAfterFirstTry).toBeGreaterThan(0);
+      expect(await attemptMarker(downKey.id)).toBeUndefined();
+
+      // Without a marker the failing key is due again; the synced one is fresh.
+      await syncDueModels();
+      expect(down.hits).toBeGreaterThan(downHitsAfterFirstTry);
+      expect(up.hits).toBe(1);
     });
 
     test("syncs at most the cap per tick, never-synced and oldest first, and leaves the rest unmarked for the next tick", async ({
@@ -449,7 +547,12 @@ describe("scheduled LLM model sync", () => {
 
   function serveModels(
     host: string,
-    options: { status?: number; embeddings?: boolean; models?: string[] } = {},
+    options: {
+      status?: number;
+      embeddings?: boolean;
+      models?: string[];
+      ollama?: boolean;
+    } = {},
   ) {
     const counter = { hits: 0 };
     const modelIds = options.models ?? [`${host}-small`, `${host}-large`];
@@ -465,6 +568,15 @@ describe("scheduled LLM model sync", () => {
         });
       }),
     );
+    if (options.ollama) {
+      // Enrichment is optional: the fetcher falls back to name heuristics.
+      server.use(
+        http.post(
+          `http://${host}/api/show`,
+          () => new HttpResponse(null, { status: 404 }),
+        ),
+      );
+    }
     if (options.embeddings) {
       server.use(
         http.get(`http://${host}/v1/embeddings/models`, () =>

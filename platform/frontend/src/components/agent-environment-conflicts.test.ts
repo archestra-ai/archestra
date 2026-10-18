@@ -3,24 +3,20 @@ import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 
-const {
-  useAgentToolsMock,
-  useBulkUpdateAgentToolsMock,
-  useInternalMcpCatalogMock,
-} = vi.hoisted(() => ({
-  useAgentToolsMock: vi.fn(),
-  useBulkUpdateAgentToolsMock: vi.fn(),
-  useInternalMcpCatalogMock: vi.fn(),
-}));
+const { useAgentToolsMock, useBulkUpdateAgentToolsMock, useRowsByIdsMock } =
+  vi.hoisted(() => ({
+    useAgentToolsMock: vi.fn(),
+    useBulkUpdateAgentToolsMock: vi.fn(),
+    useRowsByIdsMock: vi.fn(),
+  }));
 
 vi.mock("@/lib/agent-tools.query", () => ({
   useAgentTools: useAgentToolsMock,
   useBulkUpdateAgentTools: useBulkUpdateAgentToolsMock,
 }));
 
-vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: useInternalMcpCatalogMock,
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
+  useMcpRegistryRowsByIds: useRowsByIdsMock,
 }));
 
 vi.mock("sonner");
@@ -74,7 +70,7 @@ describe("useAgentEnvironmentConflicts", () => {
       mutateAsync: bulkUpdate,
       isPending: false,
     });
-    useInternalMcpCatalogMock.mockReturnValue(catalogQuery([]));
+    useRowsByIdsMock.mockReturnValue(catalogQuery([]));
     useAgentToolsMock.mockReturnValue(toolsQuery([]));
   });
 
@@ -91,9 +87,7 @@ describe("useAgentEnvironmentConflicts", () => {
   });
 
   it("blocks the save when a read failed", () => {
-    useInternalMcpCatalogMock.mockReturnValue(
-      catalogQuery([], { isError: true }),
-    );
+    useRowsByIdsMock.mockReturnValue(catalogQuery([], { isError: true }));
 
     const { result } = setup();
 
@@ -105,7 +99,7 @@ describe("useAgentEnvironmentConflicts", () => {
     // Apps are catalogs like any other here, and the tools editor offers them
     // for this agent type — so the check has to load them or an app-only
     // conflict reads as no conflict at all.
-    useInternalMcpCatalogMock.mockReturnValue(
+    useRowsByIdsMock.mockReturnValue(
       catalogQuery([
         {
           id: "app-1",
@@ -125,8 +119,10 @@ describe("useAgentEnvironmentConflicts", () => {
 
     const { result } = setup();
 
-    expect(useInternalMcpCatalogMock).toHaveBeenCalledWith(
-      expect.objectContaining({ includeApps: true }),
+    // Only the catalogs the agent has tools from, apps included.
+    expect(useRowsByIdsMock).toHaveBeenLastCalledWith(
+      ["app-1"],
+      expect.objectContaining({ includeApps: true, includeBuiltIn: true }),
     );
     expect(result.current.conflicts).toEqual([
       { catalogId: "app-1", name: "Expenses App" },
@@ -136,7 +132,7 @@ describe("useAgentEnvironmentConflicts", () => {
   });
 
   it("clears once every catalog belongs to the new environment", () => {
-    useInternalMcpCatalogMock.mockReturnValue(
+    useRowsByIdsMock.mockReturnValue(
       catalogQuery([
         { id: "catalog-1", name: "Jira", environmentId: OTHER_ENVIRONMENT },
         // Builtins are reachable from every environment.
@@ -162,7 +158,7 @@ describe("useAgentEnvironmentConflicts", () => {
   });
 
   it("stays out of the way, and off the wire, when the form is not moving the agent", () => {
-    useInternalMcpCatalogMock.mockReturnValue(
+    useRowsByIdsMock.mockReturnValue(
       catalogQuery([{ id: "catalog-1", name: "Jira", environmentId: null }]),
     );
     useAgentToolsMock.mockReturnValue(
@@ -173,16 +169,14 @@ describe("useAgentEnvironmentConflicts", () => {
 
     expect(result.current.conflicts).toEqual([]);
     expect(result.current.blocksSave).toBe(false);
-    expect(useInternalMcpCatalogMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    );
+    expect(useRowsByIdsMock).toHaveBeenLastCalledWith([], expect.anything());
     expect(useAgentToolsMock).toHaveBeenCalledWith(AGENT_ID, {
       enabled: false,
     });
   });
 
   it("unassigns every tool of the conflicting catalogs and re-reads the answer", async () => {
-    useInternalMcpCatalogMock.mockReturnValue(
+    useRowsByIdsMock.mockReturnValue(
       catalogQuery([{ id: "catalog-1", name: "Jira", environmentId: null }]),
     );
     useAgentToolsMock.mockReturnValue(
@@ -216,7 +210,7 @@ describe("useAgentEnvironmentConflicts", () => {
       removed: [],
       failed: [{ error: "Tool is pinned by a policy" }],
     });
-    useInternalMcpCatalogMock.mockReturnValue(
+    useRowsByIdsMock.mockReturnValue(
       catalogQuery([{ id: "catalog-1", name: "Jira", environmentId: null }]),
     );
     useAgentToolsMock.mockReturnValue(
@@ -234,7 +228,7 @@ describe("useAgentEnvironmentConflicts", () => {
     // Without a fresh read there is nothing to judge the environment on, and
     // "could not check" is not the same answer as "nothing is in the way".
     refetch.mockResolvedValue({ data: undefined, isError: true });
-    useInternalMcpCatalogMock.mockReturnValue(
+    useRowsByIdsMock.mockReturnValue(
       catalogQuery([{ id: "catalog-1", name: "Jira", environmentId: null }]),
     );
     useAgentToolsMock.mockReturnValue(
@@ -254,7 +248,7 @@ describe("useAgentEnvironmentConflicts", () => {
       data: [{ id: "tool-9", catalogId: "catalog-1" }],
       isError: false,
     });
-    useInternalMcpCatalogMock.mockReturnValue(
+    useRowsByIdsMock.mockReturnValue(
       catalogQuery([{ id: "catalog-1", name: "Jira", environmentId: null }]),
     );
     useAgentToolsMock.mockReturnValue(
@@ -270,7 +264,7 @@ describe("useAgentEnvironmentConflicts", () => {
 
   it("reports a failed removal rather than letting the save go ahead", async () => {
     bulkUpdate.mockRejectedValue(new Error("refused"));
-    useInternalMcpCatalogMock.mockReturnValue(
+    useRowsByIdsMock.mockReturnValue(
       catalogQuery([{ id: "catalog-1", name: "Jira", environmentId: null }]),
     );
     useAgentToolsMock.mockReturnValue(

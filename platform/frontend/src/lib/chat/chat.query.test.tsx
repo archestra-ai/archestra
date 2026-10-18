@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { handleApiError } from "@/lib/utils/api";
 import {
+  conversationsQueryKey,
   invalidateConversationFileQueries,
   mergeUpdatedConversationIntoCache,
   useClearChatErrors,
@@ -97,7 +98,7 @@ describe("useConversations", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const conversations = [makeConversation()];
-    queryClient.setQueryData(["conversations", undefined, 50], conversations);
+    queryClient.setQueryData(conversationsQueryKey(), conversations);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -329,6 +330,51 @@ describe("useConversation error handling", () => {
   });
 });
 
+describe("useConversation caching", () => {
+  it("serves a switch back within 30 s from the cache, and refetches after it", async () => {
+    vi.clearAllMocks();
+    const getConversation = vi.mocked(archestraApiSdk.getChatConversation);
+    getConversation.mockReset();
+    getConversation.mockResolvedValue({
+      data: makeConversation(),
+      error: undefined,
+    } as Awaited<ReturnType<typeof getConversation>>);
+    const wrapper = createWrapper();
+    const mount = (options?: { refetchOnMount?: boolean }) =>
+      renderHook(() => useConversation("conversation-1", options), {
+        wrapper,
+      });
+    const start = new Date("2026-10-01T12:00:00.000Z").getTime();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(start);
+    try {
+      const first = mount();
+      await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+      first.unmount();
+
+      vi.setSystemTime(start + 29_000);
+      const back = mount();
+      await act(async () => {});
+      expect(back.result.current.data?.id).toBe("conversation-1");
+      expect(getConversation).toHaveBeenCalledTimes(1);
+      back.unmount();
+
+      // Stale now. A reader that opts out of mount refetches does not fetch.
+      vi.setSystemTime(start + 31_000);
+      const reader = mount({ refetchOnMount: false });
+      await act(async () => {});
+      expect(getConversation).toHaveBeenCalledTimes(1);
+      reader.unmount();
+
+      const later = mount();
+      await waitFor(() => expect(getConversation).toHaveBeenCalledTimes(2));
+      later.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("useMemberDefaultModel error handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -372,6 +418,28 @@ describe("useMemberDefaultModel error handling", () => {
       }),
     );
     expect(result.current.isError).toBe(false);
+  });
+});
+
+describe("useMemberDefaultModel caching", () => {
+  it("serves a remount within 30 s from the cache", async () => {
+    vi.clearAllMocks();
+    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue({
+      data: { modelId: "model-1", chatApiKeyId: "key-1" },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getMemberDefaultModel>>);
+    const wrapper = createWrapper();
+
+    const first = renderHook(() => useMemberDefaultModel(), { wrapper });
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    first.unmount();
+    const second = renderHook(() => useMemberDefaultModel(), { wrapper });
+
+    expect(second.result.current.data).toEqual({
+      modelId: "model-1",
+      chatApiKeyId: "key-1",
+    });
+    expect(archestraApiSdk.getMemberDefaultModel).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -656,7 +724,7 @@ describe("conversation read-state hooks", () => {
     });
     // Seeded fresh (staleTime > 0), so useConversations serves it without an
     // immediate refetch — the hooks read this directly.
-    queryClient.setQueryData(["conversations", undefined], seed);
+    queryClient.setQueryData(conversationsQueryKey(), seed);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -685,7 +753,7 @@ describe("conversation read-state hooks", () => {
 
     const list = queryClient.getQueryData<
       Array<{ id: string; unread: boolean }>
-    >(["conversations", undefined]);
+    >(conversationsQueryKey());
     expect(list?.find((c) => c.id === "c1")?.unread).toBe(false);
     expect(list?.find((c) => c.id === "c2")?.unread).toBe(true);
     await waitFor(() =>
@@ -732,7 +800,7 @@ describe("conversation read-state hooks", () => {
     // A conversation_updated refresh lands while the chat is open.
     act(() => {
       queryClient.setQueryData(
-        ["conversations", undefined],
+        conversationsQueryKey(),
         seededList({ id: "c1", unread: true }),
       );
     });
@@ -872,10 +940,9 @@ describe("useDeleteConversation project-list invalidation", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(
-      ["conversations", undefined],
-      [{ ...makeConversation(), ...conversation }],
-    );
+    queryClient.setQueryData(conversationsQueryKey(), [
+      { ...makeConversation(), ...conversation },
+    ]);
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

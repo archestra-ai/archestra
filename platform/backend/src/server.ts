@@ -66,6 +66,7 @@ import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee"
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import {
   createAgentToolsIndexes,
+  createMcpServerIndexes,
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
@@ -1027,10 +1028,11 @@ const startWebServer = async () => {
       // Fire-and-forget index maintenance, all concurrent (non-write-blocking):
       // drop the legacy interactions payload indexes on deployments upgrading
       // from before migration 0116 stopped creating them, and build the
-      // agent_tools lookup indexes. Idempotent; errors are logged inside and
-      // retried next boot.
+      // agent_tools and mcp_server lookup indexes. Idempotent; errors are
+      // logged inside and retried next boot.
       void dropLegacyPayloadTrgmIndexes();
       void createAgentToolsIndexes();
+      void createMcpServerIndexes();
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1500,6 +1502,7 @@ const startWorker = async () => {
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();
     void createAgentToolsIndexes();
+    void createMcpServerIndexes();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

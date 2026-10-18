@@ -115,8 +115,10 @@ export function SetupStepper({
 export function useTestConnectionTarget(item: CatalogItem) {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
+  // Only this item's installs, narrowed on the server.
   const { data: allMcpServers } = useMcpServers({
     includeAssignedAgents: false,
+    catalogId: item.id,
   });
 
   const servers = (allMcpServers ?? []).filter((s) => s.catalogId === item.id);

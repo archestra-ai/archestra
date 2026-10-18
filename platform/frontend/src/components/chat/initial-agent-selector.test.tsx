@@ -117,6 +117,10 @@ const {
   mockSwitchAccess: vi.fn((_params: unknown) => {}),
 }));
 
+const { registryPageRequests } = vi.hoisted(() => ({
+  registryPageRequests: [] as Array<Record<string, unknown>>,
+}));
+
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 
@@ -192,6 +196,63 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useCatalogTools: () => ({ data: [] }),
   useInternalMcpCatalog: (options?: unknown) =>
     mockUseInternalMcpCatalog(options),
+}));
+
+// The selector reads names and icons from the registry's directory and loads
+// a catalog item by id when a flow opens it; both answer from the same list.
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpCatalogDirectory: (options?: unknown) =>
+    mockUseInternalMcpCatalog(options),
+  // The Add tools list: registry rows from the same list, installed when the
+  // installs mock holds one for the item.
+  useMcpRegistryPage: (params: {
+    installState?: string;
+    catalogIds?: string[];
+    limit?: number;
+    search?: string;
+  }) => {
+    registryPageRequests.push(params);
+    const installs = (mockUseMcpServersGroupedByCatalog() ?? {}) as Record<
+      string,
+      unknown[]
+    >;
+    const rows = (
+      (mockUseInternalMcpCatalog()?.data ?? []) as Array<{ id: string }>
+    )
+      .map((item) => ({
+        ...item,
+        iconUrl: null,
+        toolCount: 2,
+        setupNeeds: { signIn: false, settings: 0 },
+        install: {
+          visibleCount: installs[item.id]?.length ?? 0,
+          installedForViewer: (installs[item.id]?.length ?? 0) > 0,
+          primaryServerId: null,
+        },
+      }))
+      // As the server filters: "installed" is an install the viewer can use.
+      .filter(
+        (row) =>
+          (!params.catalogIds || params.catalogIds.includes(row.id)) &&
+          (params.installState === "installed"
+            ? row.install.installedForViewer
+            : params.installState === "not-installed"
+              ? !row.install.installedForViewer
+              : true),
+      );
+    return {
+      data: {
+        data: rows.slice(0, params.limit ?? rows.length),
+        pagination: { total: rows.length },
+        installs: [],
+      },
+      isPending: false,
+    };
+  },
+  fetchInternalMcpCatalogItem: async (_queryClient: unknown, id: string) =>
+    (
+      mockUseInternalMcpCatalog()?.data as Array<{ id: string }> | undefined
+    )?.find((item) => item.id === id) ?? null,
 }));
 
 vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
@@ -460,6 +521,7 @@ describe("InitialAgentSelector quick-edit dialog", () => {
   };
 
   beforeEach(() => {
+    registryPageRequests.length = 0;
     mockServerTools.mockClear();
     mockUseInternalMcpCatalog.mockReturnValue({ data: [catalog] } as never);
     vi.mocked(fetchCatalogTools).mockResolvedValue([
@@ -605,6 +667,34 @@ describe("InitialAgentSelector quick-edit dialog", () => {
       target: "tools",
       all: true,
     });
+  });
+
+  it("lists servers a page at a time, searching and filtering on the server", async () => {
+    mockUseMcpServersGroupedByCatalog.mockReturnValue(personalInstall);
+    const user = userEvent.setup();
+    renderSelector();
+
+    const dialog = await openAddTools(user);
+
+    // Counts come from the server's totals.
+    expect(
+      await within(dialog).findByRole("button", { name: "Connected 1" }),
+    ).toBeInTheDocument();
+    expect(
+      registryPageRequests.every((params) => (params.limit as number) <= 100),
+    ).toBe(true);
+
+    await user.type(within(dialog).getByLabelText("Search servers"), "every");
+    await waitFor(() =>
+      expect(registryPageRequests.some((p) => p.search === "every")).toBe(true),
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", { name: /^Not connected/ }),
+    );
+    expect(
+      registryPageRequests.some((p) => p.installState === "not-installed"),
+    ).toBe(true);
   });
 
   it("connects a server inside the dialog, then adds its tools", async () => {

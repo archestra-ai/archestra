@@ -16,6 +16,7 @@ import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { hasSessionCookie } from "@/lib/auth/session-cookie.server";
+import { prefetchShellSeed } from "@/lib/auth/shell-seed.server";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
 import {
   getCachedDeploymentAppearance,
@@ -236,9 +237,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [{ favicon, theme }, cookieStore] = await Promise.all([
+  const [{ favicon, theme }, cookieStore, shellSeed] = await Promise.all([
     getCachedDeploymentAppearance(),
     cookies(),
+    prefetchShellSeed(),
   ]);
   // Presence only; nothing is fetched for it. See WithAuthCheck.
   const sessionCookie = hasSessionCookie(cookieStore);
@@ -271,7 +273,7 @@ export default async function RootLayout({
       <body className="font-sans antialiased">
         <VisualViewportHeight />
         <MswInit>
-          <ArchestraQueryClientProvider>
+          <ArchestraQueryClientProvider shellSeed={shellSeed}>
             <ChatProvider>
               <ThemeProvider
                 attribute="class"

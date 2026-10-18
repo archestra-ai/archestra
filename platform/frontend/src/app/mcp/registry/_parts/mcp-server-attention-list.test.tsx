@@ -5,7 +5,10 @@ import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { McpServerAttentionList } from "./mcp-server-attention-list";
-import type { CatalogItem, InstalledServer } from "./mcp-server-card";
+import type {
+  RegistryListItem as CatalogItem,
+  InstalledServer,
+} from "./mcp-server-card";
 
 const {
   deleteMutateAsync,
@@ -53,7 +56,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
 }));
 
 const item = (id: string, name: string) =>
-  ({ id, name, icon: null }) as CatalogItem;
+  ({ id, name, icon: null, iconUrl: null }) as unknown as CatalogItem;
 
 const server = (id: string, catalogId: string, name: string) =>
   ({
@@ -222,7 +225,7 @@ describe("McpServerAttentionList", () => {
     const catalog = {
       ...item("cat-1", "Documentation reader"),
       description: "Reads current product documentation",
-    } as CatalogItem;
+    } as unknown as CatalogItem;
     const connection = server("srv-1", catalog.id, catalog.name);
 
     renderWithQuery(

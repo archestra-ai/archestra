@@ -93,68 +93,34 @@ export async function dropLegacyPayloadTrgmIndexes(
  * Failures are logged and retried on the next boot.
  */
 export async function createAgentToolsIndexes(
-  options: {
-    /**
-     * Tests set this to false: PGlite rejects the concurrent forms.
-     * Production callers always build concurrently.
-     */
-    concurrently?: boolean;
-    /**
-     * Tests pass the test database client. Production opens a dedicated
-     * connection and closes it when done.
-     */
-    client?: IndexMaintenanceClient;
-  } = {},
-): Promise<Record<string, AgentToolsIndexResult>> {
-  const concurrently = options.concurrently ?? true;
-  const results: Record<string, AgentToolsIndexResult> = {};
-  let connection: pg.Client | null = null;
-  try {
-    let client = options.client;
-    if (!client) {
-      connection = await openMaintenanceConnection();
-      client = connection;
-    }
-    // One process builds at a time. The others skip and check again next boot.
-    const lock = await client.query(
-      "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
-      [AGENT_TOOLS_INDEX_LOCK],
-    );
-    if (!lock.rows[0]?.acquired) {
-      logger.info(
-        { indexNames: AGENT_TOOLS_INDEXES.map((index) => index.name) },
-        "Another process is building the agent_tools indexes; skipping",
-      );
-      for (const index of AGENT_TOOLS_INDEXES) results[index.name] = "locked";
-      return results;
-    }
-    try {
-      for (const index of AGENT_TOOLS_INDEXES) {
-        results[index.name] = await ensureAgentToolsIndex({
-          client,
-          index,
-          concurrently,
-        });
-      }
-    } finally {
-      await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [
-        AGENT_TOOLS_INDEX_LOCK,
-      ]);
-    }
-    return results;
-  } catch (error) {
-    // Opening the connection or taking the lock failed.
-    logger.warn(
-      { error: error instanceof Error ? error.message : String(error) },
-      "Failed to build agent_tools indexes; will retry on next boot",
-    );
-    for (const index of AGENT_TOOLS_INDEXES) {
-      results[index.name] ??= "failed";
-    }
-    return results;
-  } finally {
-    await connection?.end().catch(() => {});
-  }
+  options: IndexMaintenanceOptions = {},
+): Promise<Record<string, MaintainedIndexResult>> {
+  return ensureMaintainedIndexes({
+    indexes: AGENT_TOOLS_INDEXES,
+    lockKey: AGENT_TOOLS_INDEX_LOCK,
+    options,
+  });
+}
+
+/**
+ * Build the partial index behind "the installs of these catalog items":
+ * `mcp_server (catalog_id) WHERE deleted_at IS NULL`. The MCP registry's
+ * count and its "has an install you can act on" filter test that per catalog
+ * row; without the index each test scans every live install, so the count
+ * grows with catalog items × installs.
+ *
+ * Built the same way as {@link createAgentToolsIndexes}: concurrently, on a
+ * dedicated connection, under its own advisory lock, checked rather than
+ * trusted, and retried on the next boot after a failure.
+ */
+export async function createMcpServerIndexes(
+  options: IndexMaintenanceOptions = {},
+): Promise<Record<string, MaintainedIndexResult>> {
+  return ensureMaintainedIndexes({
+    indexes: MCP_SERVER_INDEXES,
+    lockKey: MCP_SERVER_INDEX_LOCK,
+    options,
+  });
 }
 
 // SPDX-SnippetBegin
@@ -205,7 +171,7 @@ export async function dropContentTrgmIndexesUnderEncryption(
 // Internal implementation
 // ============================================================
 
-type AgentToolsIndexResult =
+type MaintainedIndexResult =
   | "created"
   | "rebuilt_invalid"
   | "already_valid"
@@ -220,34 +186,123 @@ interface IndexMaintenanceClient {
   ): Promise<{ rows: Record<string, unknown>[] }>;
 }
 
-interface AgentToolsIndex {
+interface IndexMaintenanceOptions {
+  /**
+   * Tests set this to false: PGlite rejects the concurrent forms.
+   * Production callers always build concurrently.
+   */
+  concurrently?: boolean;
+  /**
+   * Tests pass the test database client. Production opens a dedicated
+   * connection and closes it when done.
+   */
+  client?: IndexMaintenanceClient;
+}
+
+interface MaintainedIndex {
+  table: string;
   name: string;
   columns: readonly string[];
   /** As pg_get_expr prints it, so an existing index can be compared. */
   predicate: string;
 }
 
-const AGENT_TOOLS_INDEXES: readonly AgentToolsIndex[] = [
+const AGENT_TOOLS_INDEXES: readonly MaintainedIndex[] = [
   {
+    table: "agent_tools",
     name: "agent_tools_mcp_server_id_agent_id_idx",
     columns: ["mcp_server_id", "agent_id"],
     predicate: "(mcp_server_id IS NOT NULL)",
   },
   {
+    table: "agent_tools",
     name: "agent_tools_tool_id_agent_id_idx",
     columns: ["tool_id", "agent_id"],
     predicate: "(mcp_server_id IS NULL)",
   },
 ];
 const AGENT_TOOLS_INDEX_LOCK = "index-maintenance:agent_tools";
+const MCP_SERVER_INDEXES: readonly MaintainedIndex[] = [
+  {
+    table: "mcp_server",
+    name: "mcp_server_catalog_id_live_idx",
+    columns: ["catalog_id"],
+    predicate: "(deleted_at IS NULL)",
+  },
+];
+const MCP_SERVER_INDEX_LOCK = "index-maintenance:mcp_server";
 // The concurrent build and drop wait for every older transaction to finish,
 // and lock_timeout bounds those waits too. A short bound fails the build
 // behind any long transaction and leaves an invalid index that every write
-// still updates. The wait does not block reads or writes of agent_tools, but
-// it does block VACUUM and DDL on the table, so it stays well under the
-// statement timeout.
+// still updates. The wait does not block reads or writes of the table, but
+// it does block VACUUM and DDL on it, so it stays well under the statement
+// timeout.
 const MAINTENANCE_LOCK_TIMEOUT = "20min";
 const MAINTENANCE_STATEMENT_TIMEOUT = "30min";
+
+/**
+ * Checks, repairs or builds each index of one table on a dedicated connection
+ * under a session advisory lock. Never throws: failures are logged, reported
+ * per index and retried on the next boot.
+ */
+async function ensureMaintainedIndexes(params: {
+  indexes: readonly MaintainedIndex[];
+  lockKey: string;
+  options: IndexMaintenanceOptions;
+}): Promise<Record<string, MaintainedIndexResult>> {
+  const { indexes, lockKey, options } = params;
+  const concurrently = options.concurrently ?? true;
+  const indexNames = indexes.map((index) => index.name);
+  const results: Record<string, MaintainedIndexResult> = {};
+  let connection: pg.Client | null = null;
+  try {
+    let client = options.client;
+    if (!client) {
+      connection = await openMaintenanceConnection();
+      client = connection;
+    }
+    // One process builds at a time. The others skip and check again next boot.
+    const lock = await client.query(
+      "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
+      [lockKey],
+    );
+    if (!lock.rows[0]?.acquired) {
+      logger.info(
+        { indexNames },
+        "Another process is building these indexes; skipping",
+      );
+      for (const name of indexNames) results[name] = "locked";
+      return results;
+    }
+    try {
+      for (const index of indexes) {
+        results[index.name] = await ensureMaintainedIndex({
+          client,
+          index,
+          concurrently,
+        });
+      }
+    } finally {
+      await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [
+        lockKey,
+      ]);
+    }
+    return results;
+  } catch (error) {
+    // Opening the connection or taking the lock failed.
+    logger.warn(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        indexNames,
+      },
+      "Failed to build indexes; will retry on next boot",
+    );
+    for (const name of indexNames) results[name] ??= "failed";
+    return results;
+  } finally {
+    await connection?.end().catch(() => {});
+  }
+}
 
 async function openMaintenanceConnection(): Promise<pg.Client> {
   const client = new pg.Client({
@@ -279,50 +334,56 @@ async function openMaintenanceConnection(): Promise<pg.Client> {
 }
 
 /** Checks, repairs or builds one index and logs the outcome. Never throws. */
-async function ensureAgentToolsIndex(params: {
+async function ensureMaintainedIndex(params: {
   client: IndexMaintenanceClient;
-  index: AgentToolsIndex;
+  index: MaintainedIndex;
   concurrently: boolean;
-}): Promise<AgentToolsIndexResult> {
+}): Promise<MaintainedIndexResult> {
   const { index } = params;
   const started = performance.now();
   try {
-    const result = await buildAgentToolsIndex(params);
+    const result = await buildMaintainedIndex(params);
     const context = {
+      table: index.table,
       indexName: index.name,
       result,
       elapsedMs: Math.round(performance.now() - started),
     };
     if (result === "created" || result === "rebuilt_invalid") {
-      logger.info(context, "Built agent_tools index");
+      logger.info(context, "Built index");
     } else if (result === "unexpected_definition") {
       logger.warn(
         context,
         "Index name is taken by an unexpected definition; leaving it alone",
       );
     } else {
-      logger.debug(context, "agent_tools index is already valid");
+      logger.debug(context, "Index is already valid");
     }
     return result;
   } catch (error) {
     logger.warn(
       {
         error: error instanceof Error ? error.message : String(error),
+        table: index.table,
         indexName: index.name,
       },
-      "Failed to build agent_tools index; will retry on next boot",
+      "Failed to build index; will retry on next boot",
     );
     return "failed";
   }
 }
 
-async function buildAgentToolsIndex(params: {
+async function buildMaintainedIndex(params: {
   client: IndexMaintenanceClient;
-  index: AgentToolsIndex;
+  index: MaintainedIndex;
   concurrently: boolean;
-}): Promise<AgentToolsIndexResult> {
+}): Promise<MaintainedIndexResult> {
   const { client, index, concurrently } = params;
-  const existing = await inspectIndex({ client, name: index.name });
+  const existing = await inspectIndex({
+    client,
+    name: index.name,
+    table: index.table,
+  });
   if (existing) {
     if (!hasExpectedDefinition({ existing, index })) {
       return "unexpected_definition";
@@ -331,18 +392,18 @@ async function buildAgentToolsIndex(params: {
     // An interrupted concurrent build leaves an invalid index. IF NOT EXISTS
     // would keep it forever, so drop it and build again.
     logger.info(
-      { indexName: index.name },
-      "Dropping invalid agent_tools index",
+      { table: index.table, indexName: index.name },
+      "Dropping invalid index",
     );
     await client.query(
-      `DROP INDEX ${concurrently ? "CONCURRENTLY " : ""}"${index.name}"`,
+      `DROP INDEX ${concurrently ? "CONCURRENTLY " : ""}IF EXISTS "${index.name}"`,
     );
   }
 
-  logger.info({ indexName: index.name }, "Building agent_tools index");
+  logger.info({ table: index.table, indexName: index.name }, "Building index");
   await client.query(
     `CREATE INDEX ${concurrently ? "CONCURRENTLY " : ""}"${index.name}" ` +
-      `ON "agent_tools" (${index.columns.map((column) => `"${column}"`).join(", ")}) ` +
+      `ON "${index.table}" (${index.columns.map((column) => `"${column}"`).join(", ")}) ` +
       `WHERE ${index.predicate}`,
   );
   return existing ? "rebuilt_invalid" : "created";
@@ -351,12 +412,13 @@ async function buildAgentToolsIndex(params: {
 async function inspectIndex(params: {
   client: IndexMaintenanceClient;
   name: string;
+  table: string;
 }): Promise<Record<string, unknown> | undefined> {
-  const { client, name } = params;
+  const { client, name, table } = params;
   const result = await client.query(
     `SELECT c.relkind::text AS relkind, am.amname::text AS amname,
             i.indisvalid, i.indisready, i.indisunique, i.indnkeyatts, i.indnatts,
-            i.indrelid = to_regclass('agent_tools') AS on_table,
+            i.indrelid = to_regclass($2) AS on_table,
             i.indexprs IS NULL AS plain_columns,
             pg_get_expr(i.indpred, i.indrelid) AS predicate,
             ARRAY(
@@ -369,14 +431,14 @@ async function inspectIndex(params: {
      LEFT JOIN pg_index i ON i.indexrelid = c.oid
      LEFT JOIN pg_am am ON am.oid = c.relam
      WHERE c.oid = to_regclass($1)`,
-    [name],
+    [name, table],
   );
   return result.rows[0];
 }
 
 function hasExpectedDefinition(params: {
   existing: Record<string, unknown>;
-  index: AgentToolsIndex;
+  index: MaintainedIndex;
 }): boolean {
   const { existing, index } = params;
   return (

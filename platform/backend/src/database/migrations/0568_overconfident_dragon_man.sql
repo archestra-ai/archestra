@@ -1,1 +1,0 @@
-ALTER TABLE "chat_api_keys" ADD COLUMN "credential_kind" text;

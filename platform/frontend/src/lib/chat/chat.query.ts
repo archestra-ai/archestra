@@ -148,12 +148,29 @@ const SCHEDULE_SEED_MAX_POLLS = 120;
  */
 const SIDEBAR_CONVERSATION_LIMIT = 50;
 
+/**
+ * The cache key of one conversation list read. Mutations update every list
+ * through the `["conversations"]` prefix.
+ */
+export function conversationsQueryKey({
+  search,
+  limit = SIDEBAR_CONVERSATION_LIMIT,
+}: {
+  search?: string;
+  limit?: number;
+} = {}) {
+  return ["conversations", search, limit] as const;
+}
+
 export function useConversation(
   conversationId?: string,
   options?: {
     /**
      * False for components that only read the conversation the chat page
      * already loads, so mounting them never starts a request of its own.
+     * Only safe next to the page's own observer of the same conversation,
+     * which refetches a stale entry: alone, such a reader shows a cached
+     * conversation (kept for 10 minutes) without revalidating it.
      */
     refetchOnMount?: boolean;
   },
@@ -367,7 +384,7 @@ export function useConversations({
   limit?: number;
 }) {
   return useQuery({
-    queryKey: ["conversations", search, limit],
+    queryKey: conversationsQueryKey({ search, limit }),
     queryFn: async () => {
       const trimmedSearch = search?.trim();
       // List rows never show the artifact or todo list.
@@ -678,6 +695,9 @@ export function useMemberDefaultModel() {
         modelId: null,
         chatApiKeyId: null,
       }),
+    // Changing the model in chat writes the new default into this query, so
+    // remounts and refocuses within 30 s need no request.
+    staleTime: 30_000,
   });
 }
 

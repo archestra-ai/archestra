@@ -6,9 +6,11 @@ import {
 } from "@archestra/shared";
 import {
   and,
+  asc,
   count,
   desc,
   eq,
+  exists,
   ilike,
   inArray,
   isNotNull,
@@ -41,14 +43,18 @@ import {
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
+import { SERVABLE_ICON_TYPES } from "@/utils/servable-icon";
+import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import LimitModel from "./limit";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
+import type { RegistryInstallViewer } from "./mcp-server";
 import McpServerModel from "./mcp-server";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type PrincipalSource,
   type ResourceAccessSelection,
 } from "./resource-permission-subject";
 import SecretModel from "./secret";
@@ -70,6 +76,43 @@ type CatalogListOptions = {
   environmentId?: string | null;
   /** The list's "Show", "Shared with", and "Owner" filters, read against `userId`. */
   access?: ResourceAccessSelection;
+  /** A request's memoized principal source, so the caller is resolved once. */
+  lookups?: PrincipalSource;
+};
+
+export type RegistryListOptions = CatalogListOptions & {
+  /** Whose installs decide the "installed" filter and the attention order. */
+  installViewer: RegistryInstallViewer;
+};
+
+export type RegistryListFilters = {
+  /** Name substring, case-insensitive. */
+  search?: string;
+  /** Match `search` against descriptions too (the pickers); names only otherwise. */
+  searchDescriptions?: boolean;
+  /** Label key → accepted values; every key must match one of its values. */
+  labels?: Record<string, string[]>;
+  environmentIds?: string[];
+  /** With `environmentIds`: also match items in the Default environment. */
+  includeDefaultEnvironment?: boolean;
+  /** Items whose author is one of these users (and not a service account). */
+  authorIds?: string[];
+  /** Items created by one of these service accounts. */
+  authorServiceAccountIds?: string[];
+  /** Installed means an install the viewer can see and use. */
+  installState?: "installed" | "not-installed";
+  catalogIds?: string[];
+  /** Also list the built-in Archestra entry (the registry page does not). */
+  includeBuiltIn?: boolean;
+  /** Also list app backing entries; the caller checks `app:read`. */
+  includeApps?: boolean;
+};
+
+export type RegistrySorting = {
+  sortBy?: "name" | "createdAt" | "toolCount" | "attention" | "issueAge";
+  sortDirection?: "asc" | "desc";
+  /** Catalog ids ranked by the browser, tier by tier, for the attention orders. */
+  rankTiers?: string[][];
 };
 
 /**
@@ -299,6 +342,235 @@ class InternalMcpCatalogModel {
     return rows.map((row) => row.id);
   }
 
+  /**
+   * One page of the MCP registry list. Every filter, the order and the total
+   * are decided in SQL over the items the viewer may list (the same set as
+   * {@link findAll}, minus the built-in Archestra entry); only the page's
+   * items are then decorated with labels, teams, tool stats and author names.
+   */
+  static async findRegistryPage(params: {
+    options: RegistryListOptions;
+    filters: RegistryListFilters;
+    sorting: RegistrySorting;
+    pagination: { limit: number; offset: number };
+  }): Promise<{
+    items: ListInternalMcpCatalog[];
+    total: number;
+    /**
+     * Matches that have an install the viewer can see (selectable rows). Any
+     * visible install, usable or not, can stand in for its item, so this is
+     * the number of rows `registry/search/ids` returns before its cap.
+     */
+    selectableTotal: number;
+  }> {
+    const catalog = schema.internalMcpCatalogTable;
+    const where = await InternalMcpCatalogModel.buildRegistryCondition(
+      params.options,
+      params.filters,
+    );
+    const [pageRows, [{ total, selectableTotal }]] = await Promise.all([
+      db
+        .select({ id: catalog.id })
+        .from(catalog)
+        .where(where)
+        .orderBy(
+          ...InternalMcpCatalogModel.registryOrderBy(
+            params.sorting,
+            params.options.installViewer,
+          ),
+        )
+        .limit(params.pagination.limit)
+        .offset(params.pagination.offset),
+      db
+        .select({
+          total: count(),
+          selectableTotal: sql<number>`count(*) filter (where ${McpServerModel.visibleInstallExistsCondition(
+            {
+              viewer: params.options.installViewer,
+              catalogIdColumn: catalog.id,
+            },
+          )})::int`,
+        })
+        .from(catalog)
+        .where(where),
+    ]);
+    const ids = pageRows.map((row) => row.id);
+    if (ids.length === 0) {
+      return {
+        items: [],
+        total: Number(total),
+        selectableTotal: Number(selectableTotal),
+      };
+    }
+
+    const dbItems = await db
+      .select()
+      .from(catalog)
+      .where(inArray(catalog.id, ids));
+    const position = new Map(ids.map((id, index) => [id, index]));
+    dbItems.sort(
+      (a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0),
+    );
+    const items = await InternalMcpCatalogModel.attachListMetadata(dbItems);
+    await InternalMcpCatalogModel.populateAuthorNames(items);
+    return {
+      items,
+      total: Number(total),
+      selectableTotal: Number(selectableTotal),
+    };
+  }
+
+  /**
+   * Ids and names of every registry item matching the filters, in list
+   * order, capped at `limit`. Backs "select all that match": the selection
+   * needs identities, not decorated rows.
+   */
+  static async findRegistryMatchingIds(params: {
+    options: RegistryListOptions;
+    filters: RegistryListFilters;
+    sorting: RegistrySorting;
+    limit: number;
+    /**
+     * Only items with an install the viewer can see, the rows select-all can
+     * act on, so the limit counts only those.
+     */
+    withVisibleInstall?: boolean;
+  }): Promise<Array<{ id: string; name: string }>> {
+    const catalog = schema.internalMcpCatalogTable;
+    const where = and(
+      await InternalMcpCatalogModel.buildRegistryCondition(
+        params.options,
+        params.filters,
+      ),
+      params.withVisibleInstall
+        ? McpServerModel.visibleInstallExistsCondition({
+            viewer: params.options.installViewer,
+            catalogIdColumn: catalog.id,
+          })
+        : undefined,
+    );
+    return db
+      .select({ id: catalog.id, name: catalog.name })
+      .from(catalog)
+      .where(where)
+      .orderBy(
+        ...InternalMcpCatalogModel.registryOrderBy(
+          params.sorting,
+          params.options.installViewer,
+        ),
+      )
+      .limit(params.limit);
+  }
+
+  /**
+   * Every catalog item the viewer may list, reduced to what the registry's
+   * issue rule and filter options read. No icons, descriptions or
+   * configuration: this is loaded on every page for the sidebar count.
+   */
+  static async findRegistryIssueIndex(options: CatalogListOptions): Promise<
+    Array<{
+      id: string;
+      name: string;
+      serverType: ListInternalMcpCatalog["serverType"];
+      multitenant: boolean;
+      dynamicConnectionMcpServerId: string | null;
+      environmentId: string | null;
+      authorId: string | null;
+      createdByServiceAccountId: string | null;
+      authorName: string | null;
+      /** An emoji icon; null for an image icon or none. */
+      emojiIcon: string | null;
+      hasImageIcon: boolean;
+      updatedAt: Date;
+    }>
+  > {
+    const catalog = schema.internalMcpCatalogTable;
+    const where = await InternalMcpCatalogModel.buildVisibleCondition(options);
+    const rows = await db
+      .select({
+        id: catalog.id,
+        name: catalog.name,
+        serverType: catalog.serverType,
+        multitenant: catalog.multitenant,
+        dynamicConnectionMcpServerId: catalog.dynamicConnectionMcpServerId,
+        environmentId: catalog.environmentId,
+        authorId: catalog.authorId,
+        createdByServiceAccountId: catalog.createdByServiceAccountId,
+        // The image bytes stay in the database: callers link the icon route,
+        // which serves only the image types a browser shows.
+        emojiIcon: sql<
+          string | null
+        >`case when ${catalog.icon} like 'data:%' then null else ${catalog.icon} end`,
+        hasImageIcon: sql<boolean>`coalesce(${inArray(
+          sql`substring(lower(left(${catalog.icon}, 64)) from '^data:(image/[a-z0-9.+-]+)[;,]')`,
+          [...SERVABLE_ICON_TYPES],
+        )}, false)`,
+        updatedAt: catalog.updatedAt,
+      })
+      .from(catalog)
+      .where(where)
+      .orderBy(asc(catalog.name), asc(catalog.id));
+    const creatorIds = new Set<string>();
+    for (const row of rows) {
+      const creatorId = CreatedByModel.id(row, row.authorId);
+      if (creatorId) creatorIds.add(creatorId);
+    }
+    const creators =
+      creatorIds.size > 0
+        ? await CreatedByModel.resolve([...creatorIds])
+        : new Map();
+    return rows.map((row) => ({
+      ...row,
+      authorName:
+        lookupCreator(creators, CreatedByModel.id(row, row.authorId))?.name ??
+        null,
+    }));
+  }
+
+  /**
+   * The tool and skill figures a list row carries, for one item. Kept apart
+   * from {@link findById} so runtime paths that load an item by id do not pay
+   * for the counts; the by-id route asks for them explicitly.
+   */
+  static async getListStats(id: string): Promise<{
+    toolCount: number;
+    skillCount: number;
+    providesUi: boolean;
+    providesSkills: boolean;
+  }> {
+    const [toolStats, skillStats] = await Promise.all([
+      InternalMcpCatalogModel.getToolStats([id]),
+      InternalMcpCatalogModel.getSkillStats([id]),
+    ]);
+    const skillCount = skillStats.get(id) ?? 0;
+    return {
+      toolCount: toolStats.get(id)?.toolCount ?? 0,
+      skillCount,
+      providesUi: toolStats.get(id)?.providesUi ?? false,
+      providesSkills: skillCount > 0,
+    };
+  }
+
+  /**
+   * The stored icon of one catalog item the viewer may list, with the time it
+   * last changed. Null when the item is not visible or has no icon.
+   */
+  static async findIconForViewer(params: {
+    id: string;
+    options: CatalogListOptions;
+  }): Promise<{ icon: string; updatedAt: Date } | null> {
+    const catalog = schema.internalMcpCatalogTable;
+    const where = await InternalMcpCatalogModel.buildVisibleCondition(
+      params.options,
+    );
+    const [row] = await db
+      .select({ icon: catalog.icon, updatedAt: catalog.updatedAt })
+      .from(catalog)
+      .where(and(eq(catalog.id, params.id), where));
+    if (!row?.icon) return null;
+    return { icon: row.icon, updatedAt: row.updatedAt };
+  }
+
   private static async listAll(
     options: CatalogListOptions | undefined,
     includeApps: boolean,
@@ -376,9 +648,11 @@ class InternalMcpCatalogModel {
     const principals =
       await InternalMcpCatalogModel.resolveListPrincipals(options);
 
+    // `%` and `_` in the query are text to find, not wildcards.
+    const pattern = `%${escapeLikePattern(query)}%`;
     const baseSearchCondition = or(
-      ilike(schema.internalMcpCatalogTable.name, `%${query}%`),
-      ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
+      ilike(schema.internalMcpCatalogTable.name, pattern),
+      ilike(schema.internalMcpCatalogTable.description, pattern),
     );
 
     // SPDX-SnippetBegin
@@ -471,6 +745,8 @@ class InternalMcpCatalogModel {
       userId?: string;
       isAdmin?: boolean;
       organizationId?: string;
+      /** Not a hidden runtime variant or legacy preset row. */
+      rootOnly?: boolean;
     },
   ): Promise<InternalMcpCatalog | null> {
     const {
@@ -478,6 +754,7 @@ class InternalMcpCatalogModel {
       userId,
       isAdmin,
       organizationId,
+      rootOnly = false,
     } = options ?? {};
 
     if (userId && !isAdmin && !organizationId) {
@@ -501,6 +778,9 @@ class InternalMcpCatalogModel {
         and(
           eq(schema.internalMcpCatalogTable.id, id),
           notDeleted(schema.internalMcpCatalogTable),
+          rootOnly
+            ? isNull(schema.internalMcpCatalogTable.parentCatalogItemId)
+            : undefined,
         ),
       );
 
@@ -1933,6 +2213,203 @@ class InternalMcpCatalogModel {
    * over all active tools: a UI resource on a hidden tool still means the
    * server provides UI.
    */
+  /**
+   * The items {@link findAll} returns for these options, as one condition:
+   * the organization's (or global) entries the viewer can read.
+   */
+  private static async buildVisibleCondition(
+    options: CatalogListOptions,
+    includeApps = false,
+  ): Promise<SQL | undefined> {
+    const catalog = schema.internalMcpCatalogTable;
+    const base = await InternalMcpCatalogModel.buildListCondition(
+      options,
+      includeApps,
+    );
+    if (!options.organizationId) return base;
+    return and(
+      or(
+        eq(catalog.organizationId, options.organizationId),
+        isNull(catalog.organizationId),
+      ),
+      base,
+    );
+  }
+
+  private static async buildRegistryCondition(
+    options: RegistryListOptions,
+    filters: RegistryListFilters,
+  ): Promise<SQL | undefined> {
+    const catalog = schema.internalMcpCatalogTable;
+    const conditions: Array<SQL | undefined> = [
+      await InternalMcpCatalogModel.buildVisibleCondition(
+        options,
+        filters.includeApps,
+      ),
+      // The registry page never lists the built-in Archestra entry; pickers
+      // that offer it opt in.
+      filters.includeBuiltIn
+        ? undefined
+        : ne(catalog.id, ARCHESTRA_MCP_CATALOG_ID),
+    ];
+    const search = filters.search?.trim();
+    if (search) {
+      const pattern = `%${escapeLikePattern(search)}%`;
+      const byName = ilike(catalog.name, pattern);
+      conditions.push(
+        filters.searchDescriptions
+          ? (or(byName, ilike(catalog.description, pattern)) ?? byName)
+          : byName,
+      );
+    }
+    // AND across keys, any of the selected values within one key.
+    for (const [key, values] of Object.entries(filters.labels ?? {})) {
+      if (values.length === 0) continue;
+      conditions.push(
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(schema.mcpCatalogLabelsTable)
+            .innerJoin(
+              schema.labelKeysTable,
+              eq(schema.mcpCatalogLabelsTable.keyId, schema.labelKeysTable.id),
+            )
+            .innerJoin(
+              schema.labelValuesTable,
+              eq(
+                schema.mcpCatalogLabelsTable.valueId,
+                schema.labelValuesTable.id,
+              ),
+            )
+            .where(
+              and(
+                eq(schema.mcpCatalogLabelsTable.catalogId, catalog.id),
+                eq(schema.labelKeysTable.key, key),
+                inArray(schema.labelValuesTable.value, values),
+              ),
+            ),
+        ),
+      );
+    }
+    if (filters.environmentIds) {
+      const inEnvironments =
+        filters.environmentIds.length > 0
+          ? inArray(catalog.environmentId, filters.environmentIds)
+          : sql`false`;
+      conditions.push(
+        filters.includeDefaultEnvironment
+          ? (or(inEnvironments, isNull(catalog.environmentId)) as SQL)
+          : inEnvironments,
+      );
+    }
+    // The author a row shows is its service account when it has one, else its
+    // human author, so a user id matches only items no service account made.
+    if (filters.authorIds || filters.authorServiceAccountIds) {
+      conditions.push(
+        or(
+          and(
+            inArray(catalog.authorId, filters.authorIds ?? []),
+            isNull(catalog.createdByServiceAccountId),
+          ),
+          inArray(
+            catalog.createdByServiceAccountId,
+            filters.authorServiceAccountIds ?? [],
+          ),
+        ),
+      );
+    }
+    if (filters.catalogIds) {
+      conditions.push(inArray(catalog.id, filters.catalogIds));
+    }
+    if (filters.installState) {
+      const installed = McpServerModel.installedForViewerCondition({
+        viewer: options.installViewer,
+        catalogIdColumn: catalog.id,
+      });
+      conditions.push(
+        filters.installState === "installed"
+          ? installed
+          : sql`not ${installed}`,
+      );
+    }
+    return and(...conditions);
+  }
+
+  /**
+   * ORDER BY for a registry page. Every order ends on the id so a page
+   * boundary never repeats or skips an item that ties with its neighbour.
+   *
+   * The attention orders rank by `rankTiers`: the browser classifies issues
+   * from the live deployment feed the server does not hold, and sends the
+   * catalog ids tier by tier. Unranked items follow the last tier.
+   */
+  private static registryOrderBy(
+    sorting: RegistrySorting,
+    viewer: RegistryInstallViewer,
+  ): SQL[] {
+    const catalog = schema.internalMcpCatalogTable;
+    const direction = sorting.sortDirection === "asc" ? asc : desc;
+    const byName = [asc(sql`lower(${catalog.name})`), asc(catalog.name)];
+    // No tiers means no rank term at all: a bare constant in ORDER BY would
+    // be read as a column position.
+    const byTier = (): SQL[] => {
+      const tiers = (sorting.rankTiers ?? []).filter((t) => t.length > 0);
+      if (tiers.length === 0) return [];
+      return [
+        asc(
+          sql`case ${sql.join(
+            tiers.map(
+              (tier, index) =>
+                sql`when ${inArray(catalog.id, tier)} then ${index}::int`,
+            ),
+            sql` `,
+          )} else ${tiers.length}::int end`,
+        ),
+      ];
+    };
+    switch (sorting.sortBy) {
+      case "name":
+        return [
+          direction(sql`lower(${catalog.name})`),
+          direction(catalog.name),
+          asc(catalog.id),
+        ];
+      case "createdAt":
+        return [direction(catalog.createdAt), asc(catalog.id)];
+      case "toolCount":
+        return [
+          direction(sql`(
+            select count(*) from ${schema.toolsTable}
+            where ${schema.toolsTable.catalogId} = ${catalog.id}
+              and ${notDeleted(schema.toolsTable)}
+              and ${ToolModel.listableCatalogToolPredicate()}
+          )`),
+          ...byName,
+          asc(catalog.id),
+        ];
+      case "issueAge":
+        return [...byTier(), desc(catalog.createdAt), asc(catalog.id)];
+      default:
+        return [
+          ...byTier(),
+          // Without install read access nothing is installed for the viewer;
+          // the term is left out (a constant in ORDER BY is not allowed).
+          ...(viewer.canReadInstalls
+            ? [
+                desc(
+                  McpServerModel.installedForViewerCondition({
+                    viewer,
+                    catalogIdColumn: catalog.id,
+                  }),
+                ),
+              ]
+            : []),
+          ...byName,
+          asc(catalog.id),
+        ];
+    }
+  }
+
   private static async resolveListPrincipals(
     options: CatalogListOptions | undefined,
   ): Promise<{
@@ -1941,10 +2418,13 @@ class InternalMcpCatalogModel {
   }> {
     const viewer =
       options?.userId && options.organizationId
-        ? await ResourcePermissionSubjectModel.resolvePrincipal({
-            userId: options.userId,
-            organizationId: options.organizationId,
-          })
+        ? await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+            options.lookups,
+            {
+              userId: options.userId,
+              organizationId: options.organizationId,
+            },
+          )
         : null;
     const context = options?.readGrantContext;
     if (!context) return { viewer, readGrant: null };
@@ -1956,7 +2436,10 @@ class InternalMcpCatalogModel {
       viewer,
       readGrant: sameCaller
         ? viewer
-        : await ResourcePermissionSubjectModel.resolvePrincipal(context),
+        : await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+            options?.lookups,
+            context,
+          ),
     };
   }
 

@@ -112,8 +112,10 @@ export function EditCatalogContent({
   const showApproveBanner =
     !!isInstallAdmin && item.imageApprovalRequired === true && !approvedNow;
 
+  // Only this item's installs, narrowed on the server.
   const { data: servers = [] } = useMcpServers({
     includeAssignedAgents: false,
+    catalogId: item.id,
   });
   const affectedServerCount = servers.filter(
     (s) => s.catalogId === item.id,

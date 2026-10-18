@@ -1,5 +1,5 @@
 {
-  "id": "622e1b49-e4e3-4884-af95-f19fbec658d8",
+  "id": "66f14d1d-b4d2-4d4e-a0fa-36a180b11fe4",
   "prevId": "78a14322-6998-4e5d-b1a6-cab764a62ddf",
   "version": "7",
   "dialect": "postgresql",
@@ -4891,6 +4891,34 @@
           ],
           "isUnique": false,
           "where": "\"agents\".\"deleted_at\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_org_gateway_profile_created_at_live_idx": {
+          "name": "agents_org_gateway_profile_created_at_live_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"agents\".\"deleted_at\" IS NULL AND \"agents\".\"agent_type\" IN ('mcp_gateway', 'profile')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -15378,12 +15406,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "credential_kind": {
-          "name": "credential_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_by_service_account_id": {
           "name": "created_by_service_account_id",

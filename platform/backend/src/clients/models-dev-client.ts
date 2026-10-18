@@ -493,8 +493,9 @@ export class ModelsDevClient {
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
       mistral: ["mistral/"],
-      perplexity: ["perplexity/"],
-      // Not synced from models.dev, which has no Agent API catalog.
+      // Not synced from models.dev (mapProvider skips it), which has no Agent
+      // API catalog.
+      perplexity: [],
       groq: ["groq/"],
       xai: ["xai/"],
       bedrock: ["amazon-bedrock/"],
@@ -571,9 +572,10 @@ export class ModelsDevClient {
 
   /**
    * Syncs when the last sync is older than the sync interval, retrying
-   * transient failures with exponential backoff. Never throws: a sync that
-   * still fails is logged, and no call tries again for 15 minutes (shared
-   * across pods). Run by the scheduled model sync.
+   * transient failures with exponential backoff. A sync that still fails is
+   * logged and rethrown, and no call tries again for 15 minutes (shared
+   * across pods), so each failure window reports once. Run by the scheduled
+   * model sync.
    */
   async syncIfNeeded(): Promise<void> {
     if (await cacheManager.get<true>(MODELS_DEV_SYNC_FAILED_CACHE_KEY)) {
@@ -595,6 +597,7 @@ export class ModelsDevClient {
         .catch(() => {
           // Logged by the cache manager; the next call simply retries.
         });
+      throw error;
     }
   }
 

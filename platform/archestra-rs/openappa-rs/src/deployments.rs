@@ -158,6 +158,9 @@ impl Frozen {
 /// The latest deployment of every organization that dispatched, by organization id.
 /// Only an organization's latest policy is served, so an entry is replaced when that
 /// policy or its credentials change, and the map holds one entry per organization.
+/// Snapshot and frozen entries have separate input checks and are retained across
+/// mode switches until replaced on a mismatch. Forgetting a live deployment does
+/// not invalidate either cache. Organization entries live for this process's lifetime.
 #[derive(Default)]
 pub(crate) struct Deployments {
     by_organization: Mutex<HashMap<String, Pinned>>,
@@ -417,6 +420,9 @@ impl Deployments {
 
     /// Drop the organization's deployment when it is still `pinned`, so the next
     /// dispatch prepares and publishes from the policy it carries.
+    /// A held `Pinned` reaches callers only through `Clone`, sharing its content
+    /// allocation. Pointer identity distinguishes that entry from a replacement
+    /// with equal text, so an older dispatch cannot evict the replacement.
     fn forget(&self, organization_id: &str, pinned: &Pinned) {
         let mut held = self
             .by_organization

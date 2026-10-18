@@ -366,6 +366,8 @@ function Agents() {
     };
   }, []);
   const catalogResponse = rowsReady ? currentCatalog : undefined;
+  // True only from mount to the deferred render: for that one frame the list
+  // shows its placeholder even though its rows are at hand.
   const areRowsDeferred = !rowsReady && currentCatalog !== undefined;
   const automaticPinRows: AgentListRow[] = automaticPinsResponse?.data ?? [];
   const scopedCapabilities = useScopedCapabilities();

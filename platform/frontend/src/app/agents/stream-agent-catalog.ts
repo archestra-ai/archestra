@@ -47,7 +47,8 @@ export async function streamAgentCatalog(
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  const prefetchCatalog = (query: CatalogQuery) => {
+  // `list` names the failed request in the error, for logs.
+  const prefetchCatalog = (query: CatalogQuery, list: string) => {
     const request = agentCatalogListQuery(query);
     void client.prefetchQuery({
       queryKey: agentCatalogQueryKeys.list(request),
@@ -56,7 +57,7 @@ export async function streamAgentCatalog(
           headers,
           query: request,
         });
-        if (error) throw new Error("Couldn't load the agent catalog");
+        if (error) throw new Error(`Couldn't load the ${list}`);
         return data ?? null;
       },
       meta: STREAMED_QUERY_META,
@@ -64,7 +65,7 @@ export async function streamAgentCatalog(
   };
 
   // The pinned agents do not depend on the automatic pins: start them first.
-  prefetchCatalog(pinnedAgentsQuery(DEFAULT_CATALOG_FILTERS));
+  prefetchCatalog(pinnedAgentsQuery(DEFAULT_CATALOG_FILTERS), "pinned agents");
 
   const [member, organization] = await Promise.all([
     archestraApiSdk.getMemberDefaultAgent({ headers }),
@@ -102,8 +103,13 @@ export async function streamAgentCatalog(
       isDeletedView: false,
       excludeIds,
     }),
+    "agent list",
   );
-  if (excludeIds) prefetchCatalog(automaticPinsQuery(excludeIds));
+  if (excludeIds)
+    prefetchCatalog(
+      automaticPinsQuery(excludeIds),
+      "automatically pinned agents",
+    );
 
   return dehydrateInFlight(client);
 }

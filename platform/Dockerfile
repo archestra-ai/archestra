@@ -527,7 +527,9 @@ ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 # and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
 # supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
 # before python3 is installed and cannot lift it.
-RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" && \
+# CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0. expat arrives
+# transitively with python3 here, so it needs the same explicit floor.
+RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.9.0-r0" && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \

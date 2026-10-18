@@ -173,6 +173,28 @@ test('snapshot mode freezes following families, pins new ones, and resumes only 
   assert.ok(pinnedRows.rows.every(row => !row.payload.toString('utf8').includes('"BasisAdvanced"')));
 });
 
+test('frozen following status observes another process publication without appending', { skip: !databaseUrl }, async (t) => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  t.after(() => db.end());
+  const organization = `frozen-status-${randomUUID()}`;
+  const session = { organization_id: organization, caller_id: 'user:test', session_id: randomUUID() };
+  const before = own(allow, organization);
+  const after = own(deny, organization);
+  const frozen = { ...hosted(after), snapshot: true };
+  const hook = async (event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
+  assert.equal((await hook({ event: 'session_start' }, hosted(before))).decision, 'ack');
+  assert.equal((await native.getOpenappaStatus(organization, session.session_id, frozen)).policyRevision, 1);
+  assert.deepEqual(inAnotherProcess([{ session: { ...session, session_id: randomUUID() }, event: { event: 'session_start' }, policy: after }]), ['ack']);
+  const events = async () => Number((await db.query('SELECT count(*) AS count FROM openappa_events WHERE root=$1', [rootOf(session)])).rows[0].count);
+  const beforeStatus = await events();
+  assert.equal((await native.getOpenappaStatus(organization, session.session_id, frozen)).policyRevision, 2, 'status refreshes the frozen view before the next dispatch');
+  assert.equal(await events(), beforeStatus, 'status appends no trajectory event');
+  assert.deepEqual((await db.query('SELECT revision FROM openappa_policy_revisions WHERE deployment=$1 ORDER BY revision', [organization])).rows.map(row => Number(row.revision)), [1, 2], 'status appends no policy revision');
+  await assert.rejects(() => hook(callRead(1), frozen), /not declared in this policy/, 'the next event uses the same stricter policy the status reported');
+});
+
 test('status for a session that never started publishes no policy revision', { skip: !databaseUrl }, async (t) => {
   await native.initializeOpenappa(databaseUrl, 2);
   const db = new Client({ connectionString: databaseUrl });

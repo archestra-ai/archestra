@@ -324,6 +324,12 @@ impl Deployments {
         stale: Option<&PublishedDeployment>,
     ) -> Result<PublishedDeployment, String> {
         let organization_id = line.as_str();
+        let (head_store, head_line) = (store.clone(), line.clone());
+        let head = tokio::task::spawn_blocking(move || head_store.head(&head_line))
+            .await
+            .map_err(|error| error.to_string())?
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| format!("deployment {line} has no head for its following families"))?;
         {
             let mut frozen = self.frozen.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some(stale) = stale
@@ -333,22 +339,15 @@ impl Deployments {
             {
                 frozen.remove(organization_id);
             }
-            if let Some(held) = frozen
-                .get(organization_id)
-                .filter(|held| held.serves(line, policy))
-            {
+            if let Some(held) = frozen.get(organization_id).filter(|held| {
+                held.serves(line, policy) && held.published.revision() == head.revision.value()
+            }) {
                 return Ok(held.published.clone());
             }
         }
         let (runtime, store) = (runtime.clone(), store.clone());
         let (line, credentials) = (line.clone(), policy.credentials.clone());
         let frozen = tokio::task::spawn_blocking(move || -> Result<Frozen, String> {
-            let head = store
-                .head(&line)
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| {
-                    format!("deployment {line} has no head for its following families")
-                })?;
             let CompiledPolicy {
                 mut config,
                 variables,

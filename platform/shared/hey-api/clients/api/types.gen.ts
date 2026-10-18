@@ -94750,6 +94750,7 @@ export type GetOpenAppaYellsData = {
         cursor?: string;
         search?: string;
         status?: 'unresolved' | 'resolved' | 'all';
+        llmSessionId?: string;
     };
     url: '/api/openappa/yells';
 };
@@ -94852,6 +94853,10 @@ export type GetOpenAppaYellsResponses = {
                 id: string;
                 title: string | null;
                 createdAt: string;
+            } | null;
+            trace: {
+                llmSessionId: string;
+                mcpToolCallId: string | null;
             } | null;
         }>;
         pagination: {
@@ -95058,6 +95063,10 @@ export type GetOpenAppaYellResponses = {
             title: string | null;
             createdAt: string;
         } | null;
+        trace: {
+            llmSessionId: string;
+            mcpToolCallId: string | null;
+        } | null;
     };
 };
 
@@ -95171,6 +95180,10 @@ export type UpdateOpenAppaYellResponses = {
             id: string;
             title: string | null;
             createdAt: string;
+        } | null;
+        trace: {
+            llmSessionId: string;
+            mcpToolCallId: string | null;
         } | null;
     };
 };

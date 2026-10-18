@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
 import type { LabelChangeRecord } from "@/lib/openappa/label-changes.query";
+import type { OpenAppaYell } from "@/lib/openappa-yells.query";
 import { buildGuardrails } from "./guardrails";
 import {
   buildTimeline,
@@ -79,6 +80,35 @@ describe("buildGuardrails", () => {
     expect(guardrails?.labelAt(BASE + 8_000)?.trust).toBe("suspicious");
   });
 
+  it("places yells on their calls and turns guardrails off at the first superyell", () => {
+    const guardrails = buildGuardrails({
+      timeline: timeline(),
+      consults: [],
+      labelChanges: [],
+      yells: [
+        yell({ id: "late", at: 15_000, superyell: true, mcpToolCallId: null }),
+        yell({
+          id: "off",
+          at: 12_000,
+          superyell: true,
+          mcpToolCallId: "write",
+        }),
+        yell({ id: "first", at: 7_000, mcpToolCallId: "read" }),
+        yell({ id: "elsewhere", at: 8_000, mcpToolCallId: "not-in-trace" }),
+      ],
+    });
+
+    expect(
+      guardrails?.yells.map((y) => [y.key, y.toolCallKey, y.superyell]),
+    ).toEqual([
+      ["yell:first", "tool:read", false],
+      ["yell:elsewhere", null, false],
+      ["yell:off", "tool:write", true],
+      ["yell:late", null, true],
+    ]);
+    expect(guardrails?.guardrailsOffAt).toBe(BASE + 12_000);
+  });
+
   it("has nothing to show without checks or a label history", () => {
     expect(
       buildGuardrails({ timeline: timeline(), consults: [], labelChanges: [] }),
@@ -114,6 +144,33 @@ function timeline() {
   });
   if (!result) throw new Error("no timeline");
   return result;
+}
+
+function yell(params: {
+  id: string;
+  at: number;
+  superyell?: boolean;
+  mcpToolCallId: string | null;
+}): OpenAppaYell {
+  return {
+    id: params.id,
+    organizationId: "org",
+    callerId: "user:u1",
+    sessionId: "user:u1|session",
+    toolCallId: `toolu_${params.id}`,
+    message: `yell ${params.id}`,
+    withTrajectory: false,
+    superyell: params.superyell ?? false,
+    hasArchive: false,
+    createdAt: at(params.at),
+    reportedAt: null,
+    reportFailed: false,
+    resolvedAt: null,
+    resolvedBy: null,
+    caller: null,
+    conversation: null,
+    trace: { llmSessionId: "session", mcpToolCallId: params.mcpToolCallId },
+  };
 }
 
 function consult(params: {

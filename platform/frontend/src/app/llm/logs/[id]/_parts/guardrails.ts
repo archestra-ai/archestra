@@ -1,12 +1,17 @@
 // The session trace's guardrails: the checks OpenAPPA ran (stored external
-// consults) and the session's label over time (recorded label changes),
-// placed on the trace's own time axis.
+// consults), the session's label over time (recorded label changes) and the
+// agent's yells, placed on the trace's own time axis.
 
 import { policyLineHref } from "@/app/openappa/_parts/policy-line-href";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
 import type { LabelChangeRecord } from "@/lib/openappa/label-changes.query";
-import type { Timeline, ToolCallSpan } from "./session-timeline";
+import type { OpenAppaYell } from "@/lib/openappa-yells.query";
+import {
+  type Timeline,
+  type ToolCallSpan,
+  toolCallSpanKey,
+} from "./session-timeline";
 
 /** A trust level, such as `trusted` or `suspicious` (policies may add more). */
 export type Trust = string;
@@ -81,8 +86,33 @@ export type LabelSegment = LabelState & {
   } | null;
 };
 
+/** A yell the agent sent from this session, in the trace's shape. */
+export type TraceYell = {
+  /** `yell:<id>`. */
+  key: string;
+  id: string;
+  message: string;
+  /** Sent while break the glass was on: guardrails were off from here. */
+  superyell: boolean;
+  withTrajectory: boolean;
+  hasArchive: boolean;
+  /** Epoch ms. */
+  at: number;
+  /** Position on the trace's axis, 0..1. */
+  x: number;
+  /** The logged `yell` call's span, when it is in this trace. */
+  toolCallKey: string | null;
+  resolvedAt: string | null;
+  /** The chat an admin opened to investigate it, if any. */
+  conversationId: string | null;
+};
+
 export type GuardrailsData = {
   consults: TraceConsult[];
+  /** Oldest first. */
+  yells: TraceYell[];
+  /** When the first superyell turned guardrails off, epoch ms; else null. */
+  guardrailsOffAt: number | null;
   /** Contiguous, oldest first; empty when no label change was recorded. */
   labels: LabelSegment[];
   /** Maps an epoch-ms time onto the timeline's 0..1 axis (idle folds respected). */
@@ -99,13 +129,16 @@ export function buildGuardrails({
   timeline,
   consults,
   labelChanges,
+  yells = [],
 }: {
   timeline: Timeline | null;
   consults: ExternalConsult[];
   labelChanges: LabelChangeRecord[];
+  yells?: OpenAppaYell[];
 }): GuardrailsData | null {
   if (!timeline || timeline.spans.length === 0) return null;
-  if (consults.length === 0 && labelChanges.length === 0) return null;
+  if (consults.length === 0 && labelChanges.length === 0 && yells.length === 0)
+    return null;
   const timeToX = makeTimeToX(timeline);
   const toolByCallId = new Map<string, ToolCallSpan>();
   for (const span of timeline.spans) {
@@ -123,8 +156,32 @@ export function buildGuardrails({
     consults: traceConsults,
     timeToX,
   });
+  const spanKeys = new Set(timeline.spans.map((span) => span.key));
+  const traceYells = yells
+    .map((yell): TraceYell => {
+      const at = Date.parse(String(yell.createdAt));
+      const callKey = yell.trace?.mcpToolCallId
+        ? toolCallSpanKey(yell.trace.mcpToolCallId)
+        : null;
+      return {
+        key: `yell:${yell.id}`,
+        id: yell.id,
+        message: yell.message,
+        superyell: yell.superyell,
+        withTrajectory: yell.withTrajectory,
+        hasArchive: yell.hasArchive,
+        at,
+        x: timeToX(at),
+        toolCallKey: callKey && spanKeys.has(callKey) ? callKey : null,
+        resolvedAt: yell.resolvedAt ? String(yell.resolvedAt) : null,
+        conversationId: yell.conversation?.id ?? null,
+      };
+    })
+    .sort((a, b) => a.at - b.at);
   return {
     consults: traceConsults,
+    yells: traceYells,
+    guardrailsOffAt: traceYells.find((yell) => yell.superyell)?.at ?? null,
     labels,
     timeToX,
     labelAt: (ms) => {

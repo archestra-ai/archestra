@@ -1,4 +1,5 @@
 "use client";
+
 // The session trace's guardrails state: the checks and label history, which
 // check is open in the details pane, and the pane that shows it.
 
@@ -28,6 +29,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
 import { useSessionConsults } from "@/lib/openappa/external-consults.query";
 import { useSessionLabelChanges } from "@/lib/openappa/label-changes.query";
+import { useSessionYells } from "@/lib/openappa-yells.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ConsultDetails } from "./consult-details";
 import {
@@ -44,6 +46,7 @@ import { OverviewSection } from "./overview-parts";
 import { RequestDetails } from "./request-details";
 import { RequestWaterfall } from "./request-waterfall";
 import type { Timeline } from "./session-timeline";
+import { YellDetails } from "./yell-markers";
 
 type GuardrailsState = {
   guardrails: GuardrailsData | null;
@@ -81,14 +84,19 @@ export function GuardrailsProvider({
     llmSessionId: sessionId,
     enabled: openappaEnabled,
   });
+  const { data: yells } = useSessionYells({
+    llmSessionId: sessionId,
+    enabled: openappaEnabled,
+  });
   const guardrails = useMemo(
     () =>
       buildGuardrails({
         timeline,
         consults: consults ?? [],
         labelChanges: labelChanges ?? [],
+        yells: yells?.data ?? [],
       }),
-    [timeline, consults, labelChanges],
+    [timeline, consults, labelChanges, yells],
   );
 
   const [selectedConsultKey, setSelectedConsultKey] = useState<string | null>(
@@ -181,6 +189,7 @@ export function TraceDetails(props: ComponentProps<typeof RequestDetails>) {
       toolCallChecks={(span) => {
         const checks =
           guardrails?.consults.filter((c) => c.toolCallKey === span.key) ?? [];
+        const yell = guardrails?.yells.find((y) => y.toolCallKey === span.key);
         const changeIndex =
           guardrails?.labels.findIndex(
             (segment) => segment.cause?.toolCallKey === span.key,
@@ -194,6 +203,7 @@ export function TraceDetails(props: ComponentProps<typeof RequestDetails>) {
             : null;
         return (
           <>
+            {yell ? <YellDetails yell={yell} /> : null}
             {change ? (
               <LabelChangeWhy
                 before={change.before}

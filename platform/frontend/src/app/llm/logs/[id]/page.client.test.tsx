@@ -55,6 +55,9 @@ vi.mock("@/lib/openappa/external-consults.query", () => ({
 vi.mock("@/lib/openappa/label-changes.query", () => ({
   useSessionLabelChanges: () => ({ data: [] }),
 }));
+vi.mock("@/lib/openappa-yells.query", () => ({
+  useSessionYells: () => ({ data: undefined }),
+}));
 vi.mock("@/lib/mcp-logs/use-mcp-server-display", () => ({
   useMcpServerDisplayByName: () => ({
     servers: [],

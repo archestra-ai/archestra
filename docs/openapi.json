@@ -350496,7 +350496,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "One external consult Guardrails recorded, with where it happened: `llmSessionId` is the LLM session it belongs to and `mcpToolCallId` the logged tool call it was raised for, each null when not logged. Access is as for the list.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs",
+        "description": "One external consult Guardrails recorded, with where it happened: `llmSessionId` is the LLM session it belongs to and `mcpToolCallId` the logged tool call it was raised for, each null when not logged. Access is as for the list.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells",
         "parameters": [
           {
             "schema": {
@@ -350917,7 +350917,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaDiagnostics:read"
+            "log:read"
           ]
         }
       }
@@ -355391,7 +355391,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The trust and audience label of an LLM session over time, oldest first: a `session_start` baseline, then one row per change, with the event that moved it and the rule the current policy applies to the tool. Viewers who may not read everyone's consults see only their own sessions.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs",
+        "description": "The trust and audience label of an LLM session over time, oldest first: a `session_start` baseline, then one row per change, with the event that moved it and the rule the current policy applies to the tool. Viewers who may not read everyone's consults see only their own sessions.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells",
         "parameters": [
           {
             "schema": {
@@ -355785,7 +355785,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaDiagnostics:read"
+            "log:read"
           ]
         }
       }
@@ -359694,6 +359694,16 @@
             "in": "query",
             "name": "status",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "in": "query",
+            "name": "llmSessionId",
+            "required": false
           }
         ],
         "responses": {
@@ -359813,6 +359823,26 @@
                               "createdAt"
                             ],
                             "additionalProperties": false
+                          },
+                          "trace": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "llmSessionId": {
+                                "type": "string"
+                              },
+                              "mcpToolCallId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            },
+                            "required": [
+                              "llmSessionId",
+                              "mcpToolCallId"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -359831,7 +359861,8 @@
                           "resolvedBy",
                           "hasArchive",
                           "caller",
-                          "conversation"
+                          "conversation",
+                          "trace"
                         ],
                         "additionalProperties": false
                       }
@@ -360513,6 +360544,26 @@
                         "createdAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "trace": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "llmSessionId": {
+                          "type": "string"
+                        },
+                        "mcpToolCallId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "llmSessionId",
+                        "mcpToolCallId"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -360531,7 +360582,8 @@
                     "resolvedBy",
                     "hasArchive",
                     "caller",
-                    "conversation"
+                    "conversation",
+                    "trace"
                   ],
                   "additionalProperties": false
                 }
@@ -360926,6 +360978,26 @@
                         "createdAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "trace": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "llmSessionId": {
+                          "type": "string"
+                        },
+                        "mcpToolCallId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "llmSessionId",
+                        "mcpToolCallId"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -360944,7 +361016,8 @@
                     "resolvedBy",
                     "hasArchive",
                     "caller",
-                    "conversation"
+                    "conversation",
+                    "trace"
                   ],
                   "additionalProperties": false
                 }

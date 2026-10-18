@@ -58,9 +58,9 @@ import {
   type LabelSegment,
   type LabelState,
   type TraceConsult,
+  type TraceYell,
   trustTone,
 } from "./guardrails";
-
 import { DecisionIcon, DecisionTerm, RoleTerm } from "./guardrails-context";
 import {
   type InteractionSummary,
@@ -73,6 +73,7 @@ import {
   type ToolCallSpan,
 } from "./session-timeline";
 import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
+import { YellStepper } from "./yell-markers";
 
 // ============================================================================
 // Guardrail rows
@@ -242,6 +243,9 @@ export function GuardrailsBar({
   labelName,
   checksShown,
   onToggleChecks,
+  yells,
+  selectedKey,
+  onSelectYell,
 }: {
   consults: TraceConsult[];
   changes: LabelChange[];
@@ -252,6 +256,11 @@ export function GuardrailsBar({
   labelName: string;
   checksShown: boolean;
   onToggleChecks: () => void;
+  /** The page's yells whose calls are on it. */
+  yells: TraceYell[];
+  /** The selected span, when a span (not a check) is selected. */
+  selectedKey: string | null;
+  onSelectYell: (yell: TraceYell) => void;
 }) {
   const blocked = consults.filter((c) => c.decision === "blocked").length;
   const unanswered = consults.filter((c) => c.outcome !== "answered").length;
@@ -291,6 +300,13 @@ export function GuardrailsBar({
           guarded. Click one to open its details below.
         </TooltipContent>
       </Tooltip>
+      {yells.length > 0 ? (
+        <YellStepper
+          yells={yells}
+          selectedKey={selectedKey}
+          onSelect={onSelectYell}
+        />
+      ) : null}
       <UnstyledButton
         aria-pressed={checksShown}
         aria-label={checksShown ? "Hide check rows" : "Show check rows"}

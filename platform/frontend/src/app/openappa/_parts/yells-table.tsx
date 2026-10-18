@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Activity,
   Check,
   Download,
   Megaphone,
@@ -27,11 +28,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import {
   type OpenAppaYell,
   useOpenAppaYellArchive,
@@ -39,7 +41,7 @@ import {
   useResolveOpenAppaYell,
 } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { useOpenAppaChatLaunch } from "./openappa-chat-button";
+import { useYellInvestigation } from "./use-yell-investigation";
 
 export function YellsTable() {
   const [search, setSearch] = useState("");
@@ -115,7 +117,7 @@ export function YellsTable() {
     {
       id: "actions",
       header: "Actions",
-      size: canResolve ? 128 : 96,
+      size: 96,
       cell: ({ row }) => (
         <YellRowActions
           yell={row.original}
@@ -225,45 +227,6 @@ export function YellsTable() {
   );
 }
 
-function useYellInvestigation(yell: OpenAppaYell) {
-  const router = useRouter();
-  const { href, agents, permissions } = useOpenAppaChatLaunch({
-    subject: { kind: "yell", yellId: yell.id },
-  });
-  const archive = useOpenAppaYellArchive();
-  const { conversation } = yell;
-  return {
-    permissions,
-    label: conversation ? "Open investigation" : "Investigate in chat",
-    disabled:
-      !conversation && (archive.isPending || (!href && !agents.isError)),
-    launch: () => {
-      if (conversation) {
-        router.push(`/chat/${conversation.id}`);
-        return;
-      }
-      if (!href) {
-        void agents.refetch();
-        return;
-      }
-      if (!yell.hasArchive) {
-        router.push(href);
-        return;
-      }
-      archive.mutate(
-        { id: yell.id },
-        {
-          onSuccess: (file) => {
-            if (!file) return;
-            setPendingChatHandoffFiles([file]);
-            router.push(`${href}&attachments=1`);
-          },
-        },
-      );
-    },
-  };
-}
-
 function YellRowActions({
   yell,
   canResolve,
@@ -275,8 +238,13 @@ function YellRowActions({
   pending: boolean;
   onResolve: () => void;
 }) {
-  const investigation = useYellInvestigation(yell);
+  const investigation = useYellInvestigation({
+    id: yell.id,
+    hasArchive: yell.hasArchive,
+    conversationId: yell.conversation?.id ?? null,
+  });
   const archive = useOpenAppaYellArchive();
+  const traceHref = useYellTraceHref(yell);
   return (
     <TableRowActions
       actions={[
@@ -287,6 +255,17 @@ function YellRowActions({
           disabled: investigation.disabled,
           onClick: investigation.launch,
         },
+      ]}
+      dropdownActions={[
+        ...(traceHref
+          ? [
+              {
+                icon: <Activity className="size-4" />,
+                label: "View trace",
+                href: traceHref,
+              },
+            ]
+          : []),
         ...(canResolve
           ? [
               {
@@ -313,6 +292,24 @@ function YellRowActions({
           : []),
       ]}
     />
+  );
+}
+
+/**
+ * The yell's session trace, opened on its `yell` call. Only for a session
+ * whose requests were logged, and that the viewer may read: their own, or
+ * anyone's with `log:admin`.
+ */
+function useYellTraceHref(yell: OpenAppaYell): string | null {
+  const { data: session } = useSession();
+  const { data: canReadAllLogs } = useHasPermissions({ log: ["admin"] });
+  const { trace } = yell;
+  if (!trace) return null;
+  const own = session?.user.id && yell.callerId === `user:${session.user.id}`;
+  if (!own && !canReadAllLogs) return null;
+  return llmSessionHref(
+    trace.llmSessionId,
+    trace.mcpToolCallId ? { toolCall: trace.mcpToolCallId } : undefined,
   );
 }
 

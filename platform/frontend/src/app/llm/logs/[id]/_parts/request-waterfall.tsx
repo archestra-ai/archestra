@@ -74,6 +74,7 @@ import {
   type LabelSegment,
   type LabelState,
   type TraceConsult,
+  type TraceYell,
   trustTone,
 } from "./guardrails";
 import {
@@ -88,6 +89,7 @@ import {
 } from "./session-timeline";
 import { StatusBarPagination } from "./status-bar-pagination";
 import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
+import { YellChip, YellRowMarks } from "./yell-markers";
 
 export type RequestsPagination = {
   pageIndex: number;
@@ -251,6 +253,15 @@ export function RequestWaterfall({
     if (change.target.type === "consult") onSelectConsult?.(change.target.key);
     else onSelect(change.target.key);
   };
+  const yellByKey = new Map(
+    (guardrails?.yells ?? []).flatMap((yell) =>
+      yell.toolCallKey ? [[yell.toolCallKey, yell] as const] : [],
+    ),
+  );
+  const yellsOnPage = spans.flatMap((span) => {
+    const yell = yellByKey.get(span.key);
+    return yell ? [yell] : [];
+  });
   const isChangeActive = (change: LabelChange) =>
     change.target.type === "consult"
       ? change.target.key === selectedConsultKey
@@ -433,6 +444,11 @@ export function RequestWaterfall({
           labelName={labelHereName}
           checksShown={checksShown}
           onToggleChecks={() => setChecksShown((shown) => !shown)}
+          yells={yellsOnPage}
+          selectedKey={consultRowSelected ? null : selectedKey}
+          onSelectYell={(yell) => {
+            if (yell.toolCallKey) onSelect(yell.toolCallKey);
+          }}
         />
       ) : null}
       {notice}
@@ -592,6 +608,8 @@ export function RequestWaterfall({
                     ancestor: span.key === selectedKey && consultRowSelected,
                     gutter: gutterFor(entry, index),
                     note: notesByKey.get(entry.key) ?? null,
+                    yell: yellByKey.get(span.key) ?? null,
+                    guardrailsOffAt: guardrails?.guardrailsOffAt ?? null,
                     highlighted: span.key === highlightedKey,
                     buttonRef: (el: HTMLButtonElement | null) => {
                       if (el) rowRefs.current.set(span.key, el);
@@ -808,6 +826,10 @@ type RowProps = {
   gutter?: GutterProps | null;
   /** Label changes this row caused, noted on its detail line. */
   note?: LabelChange[] | null;
+  /** The yell this row's call sent. */
+  yell?: TraceYell | null;
+  /** When a superyell turned guardrails off, epoch ms. */
+  guardrailsOffAt?: number | null;
   highlighted: boolean;
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
@@ -823,6 +845,8 @@ function RowShell({
   ancestor = false,
   gutter = null,
   note = null,
+  yell = null,
+  guardrailsOffAt = null,
   highlighted,
   buttonRef,
   onSelect,
@@ -849,8 +873,21 @@ function RowShell({
   const grid = GRIDS[layout];
   const tools = layout === "tools";
   const latencyPlacement = placeLatency(span);
+  const off =
+    Boolean(yell?.superyell) ||
+    (guardrailsOffAt !== null && span.start >= guardrailsOffAt);
   return (
     <li className="relative">
+      {yell || off ? (
+        <YellRowMarks
+          yell={yell}
+          off={off}
+          guardrailsOffAt={guardrailsOffAt}
+          hasGutter={Boolean(gutter)}
+          selected={selected}
+          onSelectRow={onSelect}
+        />
+      ) : null}
       {gutter ? <LabelGutter {...gutter} onSelectRow={onSelect} /> : null}
       <UnstyledButton
         ref={buttonRef}
@@ -858,7 +895,7 @@ function RowShell({
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
         onDoubleClick={onOpen}
-        aria-label={`${label}${gutterWords(gutter, note)}`}
+        aria-label={`${label}${gutterWords(gutter, note)}${off ? ", guardrails off" : ""}`}
         className={cn(
           "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",
           grid,
@@ -1126,6 +1163,7 @@ function ToolCallRow({
             {name}
           </span>
           <McpCallChip method={content.method} />
+          {rowProps.yell ? <YellChip yell={rowProps.yell} /> : null}
           {marked ? <McpToolCallStatusIcon status={status} /> : null}
           {hiddenChecks.length > 0 ? (
             <HiddenChecksBadge checks={hiddenChecks} />

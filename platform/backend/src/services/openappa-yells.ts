@@ -2,7 +2,10 @@ import type { CreatedBy } from "@archestra/shared";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import CreatedByModel from "@/models/created-by";
+import InteractionModel from "@/models/interaction";
+import McpToolCallModel from "@/models/mcp-tool-call";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import ServiceAccountModel from "@/models/service-account";
 import { ApiError } from "@/types";
 import type { OpenAppaYellQuery } from "@/types/openappa-yell";
@@ -66,17 +69,23 @@ export async function downloadOpenAppaYell(params: {
   return archive;
 }
 
-async function present<T extends { id: string; callerId: string }>(
-  rows: T[],
-  viewer: { organizationId: string; userId: string },
-) {
-  const [withCaller, conversations] = await Promise.all([
+async function present<
+  T extends {
+    id: string;
+    callerId: string;
+    sessionId: string;
+    toolCallId: string;
+    createdAt: Date;
+  },
+>(rows: T[], viewer: { organizationId: string; userId: string }) {
+  const [withCaller, conversations, traces] = await Promise.all([
     withCallers(rows, viewer.organizationId),
     OpenAppaYellModel.findConversations({
       ids: rows.map((row) => row.id),
       organizationId: viewer.organizationId,
       userId: viewer.userId,
     }),
+    traceLinks(rows, viewer.organizationId),
   ]);
   const byYell = new Map(
     conversations.map(({ yellId, ...conversation }) => [yellId, conversation]),
@@ -84,7 +93,56 @@ async function present<T extends { id: string; callerId: string }>(
   return withCaller.map((row) => ({
     ...row,
     conversation: byYell.get(row.id) ?? null,
+    trace: traces.get(row.id) ?? null,
   }));
+}
+
+/**
+ * Each yell's place in a session trace. The LLM session is the client's own
+ * session id; the yell's call matches the logged call by the model's call id,
+ * else the session's nearest logged `yell` call.
+ */
+async function traceLinks(
+  rows: { id: string; sessionId: string; toolCallId: string; createdAt: Date }[],
+  organizationId: string,
+): Promise<Map<string, { llmSessionId: string; mcpToolCallId: string | null }>> {
+  const llmSessionOf = (row: { sessionId: string }) =>
+    row.sessionId.slice(row.sessionId.indexOf("|") + 1);
+  const sessionIds = [...new Set(rows.map(llmSessionOf))].filter(Boolean);
+  const [logged, calls] = await Promise.all([
+    InteractionModel.findLoggedSessionIds({ organizationId, sessionIds }),
+    McpToolCallModel.findYellCallsBySessions({ organizationId, sessionIds }),
+  ]);
+  const links = new Map<
+    string,
+    { llmSessionId: string; mcpToolCallId: string | null }
+  >();
+  for (const row of rows) {
+    const llmSessionId = llmSessionOf(row);
+    if (!logged.has(llmSessionId)) continue;
+    const callId = withoutTrajectoryStamp(row.toolCallId);
+    const inSession = calls.filter((call) => call.sessionId === llmSessionId);
+    const call =
+      inSession.find(
+        (candidate) =>
+          candidate.llmToolCallId !== null &&
+          withoutTrajectoryStamp(candidate.llmToolCallId) === callId,
+      ) ?? nearest(inSession, row.createdAt);
+    links.set(row.id, { llmSessionId, mcpToolCallId: call?.id ?? null });
+  }
+  return links;
+}
+
+/** The call logged closest to `at`, within a minute of it. */
+function nearest<T extends { createdAt: Date }>(calls: T[], at: Date) {
+  let best: T | undefined;
+  for (const call of calls) {
+    const gap = Math.abs(call.createdAt.getTime() - at.getTime());
+    if (gap > 60_000) continue;
+    if (!best || gap < Math.abs(best.createdAt.getTime() - at.getTime()))
+      best = call;
+  }
+  return best;
 }
 
 async function withCallers<T extends { callerId: string }>(

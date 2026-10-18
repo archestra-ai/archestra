@@ -8526,7 +8526,7 @@ export const getOpenappaExternalConsults = <ThrowOnError extends boolean = false
  *
  * Authorization:
  *
- * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
+ * `log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
  */
 export const getOpenappaExternalConsult = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaExternalConsultData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaExternalConsultResponses, GetOpenappaExternalConsultErrors, ThrowOnError>({ url: '/api/openappa/external-consults/{id}', ...options });
 
@@ -8740,7 +8740,7 @@ export const consultOpenappaBatteryHelper = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `openappaDiagnostics:read`: Read all organization yells and your own consult logs
+ * `log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells
  */
 export const getOpenappaLabelChanges = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaLabelChangesData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaLabelChangesResponses, GetOpenappaLabelChangesErrors, ThrowOnError>({ url: '/api/openappa/label-changes', ...options });
 

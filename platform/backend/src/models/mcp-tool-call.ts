@@ -448,6 +448,44 @@ class McpToolCallModel {
     );
   }
 
+  /**
+   * The logged `yell` calls of the given LLM sessions, oldest first: what a
+   * yell links to in the session trace.
+   */
+  static async findYellCallsBySessions(params: {
+    organizationId: string;
+    sessionIds: string[];
+  }): Promise<
+    {
+      id: string;
+      sessionId: string;
+      llmToolCallId: string | null;
+      createdAt: Date;
+    }[]
+  > {
+    if (params.sessionIds.length === 0) return [];
+    const table = schema.mcpToolCallsTable;
+    const rows = await db
+      .select({
+        id: table.id,
+        sessionId: table.sessionId,
+        llmToolCallId: table.llmToolCallId,
+        createdAt: table.createdAt,
+      })
+      .from(table)
+      .where(
+        and(
+          inArray(table.sessionId, params.sessionIds),
+          sql`${table.toolCall}->>'name' LIKE '%\\_\\_yell'`,
+          mcpToolCallBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .orderBy(asc(table.createdAt));
+    return rows.flatMap((row) =>
+      row.sessionId ? [{ ...row, sessionId: row.sessionId }] : [],
+    );
+  }
+
   static async findById(
     idOrScope:
       | string

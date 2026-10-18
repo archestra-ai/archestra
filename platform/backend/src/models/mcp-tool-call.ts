@@ -410,17 +410,22 @@ class McpToolCallModel {
    */
   /**
    * The session's tool calls that carry the model's call id, as `{id,
-   * llmToolCallId}`: what a guardrail consult (keyed by that call id) is
-   * matched against.
+   * llmToolCallId, toolName}`: what guardrail records (keyed by that call id)
+   * are matched against.
    */
   static async findModelCallIdsBySession(params: {
     organizationId: string;
     sessionId: string;
-  }): Promise<{ id: string; llmToolCallId: string }[]> {
+  }): Promise<
+    { id: string; llmToolCallId: string; toolName: string | null }[]
+  > {
     const rows = await db
       .select({
         id: schema.mcpToolCallsTable.id,
         llmToolCallId: schema.mcpToolCallsTable.llmToolCallId,
+        toolName: sql<
+          string | null
+        >`${schema.mcpToolCallsTable.toolCall}->>'name'`,
       })
       .from(schema.mcpToolCallsTable)
       .where(
@@ -432,7 +437,13 @@ class McpToolCallModel {
       );
     return rows.flatMap((row) =>
       row.llmToolCallId
-        ? [{ id: row.id, llmToolCallId: row.llmToolCallId }]
+        ? [
+            {
+              id: row.id,
+              llmToolCallId: row.llmToolCallId,
+              toolName: row.toolName,
+            },
+          ]
         : [],
     );
   }

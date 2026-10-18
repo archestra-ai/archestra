@@ -389,7 +389,7 @@ describe("GET /api/openappa/external-consults/:id", () => {
       organizationId,
       sessionId: "user:a|chat-1/sub",
       root: "root-1",
-      callId: "toolu_abc",
+      callId: "call:toolu_abc",
     });
 
     const response = await get(id);

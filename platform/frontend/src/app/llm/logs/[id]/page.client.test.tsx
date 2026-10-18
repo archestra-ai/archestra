@@ -48,9 +48,12 @@ vi.mock("@/lib/mcp/mcp-tool-call.query", () => ({
   useSessionMcpToolCalls: vi.fn(),
 }));
 // Server display names come from the installed-server and catalog lists.
-// The session's guardrail consults: none here.
+// The session's guardrail records: none here.
 vi.mock("@/lib/openappa/external-consults.query", () => ({
   useSessionConsults: () => ({ data: [] }),
+}));
+vi.mock("@/lib/openappa/label-changes.query", () => ({
+  useSessionLabelChanges: () => ({ data: [] }),
 }));
 vi.mock("@/lib/mcp-logs/use-mcp-server-display", () => ({
   useMcpServerDisplayByName: () => ({

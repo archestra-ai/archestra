@@ -150,7 +150,7 @@ fn insert(
 }
 
 /// The driver's own message is only "db error"; the server's reason is its source.
-fn described(error: impl std::error::Error) -> PostgresError {
+pub(crate) fn described(error: impl std::error::Error) -> PostgresError {
     match error.source() {
         Some(source) => PostgresError(format!("{error}: {source}")),
         None => PostgresError(error.to_string()),

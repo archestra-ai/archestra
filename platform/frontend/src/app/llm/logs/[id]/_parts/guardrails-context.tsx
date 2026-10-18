@@ -1,9 +1,9 @@
 "use client";
-// design-arena: do not commit
-// Shared arena state for the guardrails prototypes: the mock data, which
-// consult is open in the details pane, and the pane that shows it.
+// The session trace's guardrails state: the checks and label history, which
+// check is open in the details pane, and the pane that shows it.
 
 import { ArrowRight, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   type ComponentProps,
@@ -17,35 +17,35 @@ import {
 } from "react";
 import { toConsultView } from "@/app/consults/logs/_components/consult-details";
 import { CodeBlock } from "@/components/ai-elements/code-block";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useFeature } from "@/lib/config/config.query";
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
-import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
-import {
-  type ExternalConsult,
-  useSessionConsults,
-} from "@/lib/openappa/external-consults.query";
+import { useSessionConsults } from "@/lib/openappa/external-consults.query";
+import { useSessionLabelChanges } from "@/lib/openappa/label-changes.query";
 import { cn } from "@/lib/utils/tailwind";
-import { ConsultDetails } from "../consult-details";
-import { OverviewSection } from "../overview-parts";
-import { RequestDetails } from "../request-details";
-import type { Timeline, ToolCallSpan } from "../session-timeline";
+import { ConsultDetails } from "./consult-details";
 import {
-  AUDIENCE_TONE,
-  buildGuardrailsMock,
+  audienceTone,
+  buildGuardrails,
   DECISION_TONE,
   type GuardrailsData,
   type LabelSegment,
-  type MockConsult,
   ROLE_LABEL,
-  TRUST_TONE,
-} from "./guardrails-mock";
+  type TraceConsult,
+  trustTone,
+} from "./guardrails";
+import { OverviewSection } from "./overview-parts";
+import { RequestDetails } from "./request-details";
+import { RequestWaterfall } from "./request-waterfall";
+import type { Timeline } from "./session-timeline";
 
-type ArenaState = {
+type GuardrailsState = {
   guardrails: GuardrailsData | null;
   /** The consult open in the details pane, if any. */
   selectedConsultKey: string | null;
@@ -58,50 +58,38 @@ type ArenaState = {
   selectSpan: (key: string | null) => void;
 };
 
-const ArenaContext = createContext<ArenaState | null>(null);
+const GuardrailsContext = createContext<GuardrailsState | null>(null);
 
-export function GuardrailsArenaProvider({
+export function GuardrailsProvider({
   timeline,
   sessionId,
   onSelectSpan,
   children,
 }: {
   timeline: Timeline | null;
-  /** The LLM session, whose real consults replace the mock ones. */
+  /** The LLM session whose guardrail records to read. */
   sessionId: string;
   onSelectSpan: (key: string | null) => void;
   children: ReactNode;
 }) {
-  const openappaEnabled = useFeature("openappaEnabled");
-  const { data: realConsults } = useSessionConsults({
+  const openappaEnabled = Boolean(useFeature("openappaEnabled"));
+  const { data: consults } = useSessionConsults({
     llmSessionId: sessionId,
-    enabled: Boolean(openappaEnabled),
+    enabled: openappaEnabled,
   });
-  const guardrails = useMemo(() => {
-    const mock = buildGuardrailsMock(timeline);
-    if (!mock || !timeline || !realConsults) return mock;
-    // Real consults once loaded (none means no checks); labels stay mock.
-    const consults = realConsults.map((consult) =>
-      fromRecord({ consult, timeline, timeToX: mock.timeToX }),
-    );
-    const labels = mock.labels.map((segment) =>
-      segment.cause
-        ? {
-            ...segment,
-            cause: {
-              ...segment.cause,
-              consultKey:
-                consults.find(
-                  (c) =>
-                    c.toolCallKey === segment.cause?.toolCallKey &&
-                    c.role === "annotator",
-                )?.key ?? null,
-            },
-          }
-        : segment,
-    );
-    return { ...mock, consults, labels };
-  }, [timeline, realConsults]);
+  const { data: labelChanges } = useSessionLabelChanges({
+    llmSessionId: sessionId,
+    enabled: openappaEnabled,
+  });
+  const guardrails = useMemo(
+    () =>
+      buildGuardrails({
+        timeline,
+        consults: consults ?? [],
+        labelChanges: labelChanges ?? [],
+      }),
+    [timeline, consults, labelChanges],
+  );
 
   const [selectedConsultKey, setSelectedConsultKey] = useState<string | null>(
     null,
@@ -124,7 +112,7 @@ export function GuardrailsArenaProvider({
     selectConsult(key);
   });
 
-  const state: ArenaState = {
+  const state: GuardrailsState = {
     guardrails,
     selectedConsultKey,
     selectConsult,
@@ -134,23 +122,44 @@ export function GuardrailsArenaProvider({
     },
   };
   return (
-    <ArenaContext.Provider value={state}>{children}</ArenaContext.Provider>
+    <GuardrailsContext.Provider value={state}>
+      {children}
+    </GuardrailsContext.Provider>
   );
 }
 
-export function useGuardrailsArena(): ArenaState {
-  const state = useContext(ArenaContext);
-  if (!state) throw new Error("GuardrailsArenaProvider missing");
+export function useGuardrails(): GuardrailsState {
+  const state = useContext(GuardrailsContext);
+  if (!state) throw new Error("GuardrailsProvider missing");
   return state;
+}
+
+/** The session's request list, with its guardrail checks and label gutter. */
+export function TraceWaterfall(
+  props: Omit<
+    ComponentProps<typeof RequestWaterfall>,
+    "guardrails" | "selectedConsultKey" | "onSelectConsult"
+  >,
+) {
+  const { guardrails, selectedConsultKey, selectConsult, selectSpan } =
+    useGuardrails();
+  return (
+    <RequestWaterfall
+      {...props}
+      onSelect={selectSpan}
+      guardrails={guardrails}
+      selectedConsultKey={selectedConsultKey}
+      onSelectConsult={selectConsult}
+    />
+  );
 }
 
 /**
  * The page's details pane, plus guardrails: a selected consult replaces it
  * with the consult's own details, and a selected tool call lists its checks.
  */
-export function ArenaDetails(props: ComponentProps<typeof RequestDetails>) {
-  const { guardrails, selectedConsultKey, selectConsult } =
-    useGuardrailsArena();
+export function TraceDetails(props: ComponentProps<typeof RequestDetails>) {
+  const { guardrails, selectedConsultKey, selectConsult } = useGuardrails();
   const consult = guardrails?.consults.find(
     (c) => c.key === selectedConsultKey,
   );
@@ -207,7 +216,7 @@ export function GuardrailChecks({
   checks,
   onOpen,
 }: {
-  checks: MockConsult[];
+  checks: TraceConsult[];
   onOpen: (key: string) => void;
 }) {
   return (
@@ -215,8 +224,7 @@ export function GuardrailChecks({
       <ul className="-mx-1.5 space-y-0.5">
         {checks.map((check) => (
           <li key={check.key}>
-            <button
-              type="button"
+            <UnstyledButton
               onClick={() => onOpen(check.key)}
               className="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs hover:bg-muted"
             >
@@ -238,7 +246,7 @@ export function GuardrailChecks({
               >
                 {DECISION_TONE[check.decision].label}
               </span>
-            </button>
+            </UnstyledButton>
           </li>
         ))}
       </ul>
@@ -250,7 +258,7 @@ export function DecisionIcon({
   consult,
   className,
 }: {
-  consult: MockConsult;
+  consult: TraceConsult;
   className?: string;
 }) {
   const Icon =
@@ -275,7 +283,7 @@ export function DecisionIcon({
   );
 }
 
-function DecisionLine({ consult }: { consult: MockConsult }) {
+function DecisionLine({ consult }: { consult: TraceConsult }) {
   return (
     <span
       className={cn(
@@ -307,17 +315,17 @@ export function LabelChangeWhy({
   if (before.trust !== after.trust) {
     parts.push({
       name: "Trust",
-      from: TRUST_TONE[before.trust].label,
-      to: TRUST_TONE[after.trust].label,
-      tone: TRUST_TONE[after.trust].text,
+      from: trustTone(before.trust).label,
+      to: trustTone(after.trust).label,
+      tone: trustTone(after.trust).text,
     });
   }
   if (before.audience !== after.audience) {
     parts.push({
       name: "Audience",
-      from: AUDIENCE_TONE[before.audience].label,
-      to: AUDIENCE_TONE[after.audience].label,
-      tone: AUDIENCE_TONE[after.audience].text,
+      from: audienceTone(before.audience).label,
+      to: audienceTone(after.audience).label,
+      tone: audienceTone(after.audience).text,
     });
   }
   return (
@@ -342,42 +350,59 @@ export function LabelChangeWhy({
       <p className="mt-2 text-xs leading-[18px] text-foreground/85">
         {cause.explanation}
       </p>
-      <figure className="mt-2 overflow-hidden rounded-md border bg-background/60">
-        <figcaption className="flex items-center justify-between gap-2 border-b px-2 py-1 text-[10px] text-muted-foreground">
-          <span className="truncate">{cause.ruleSource}</span>
-          <span className="shrink-0 font-mono">toml</span>
-        </figcaption>
-        <CodeBlock
-          code={cause.rule}
-          language="toml"
-          className="rounded-none border-0"
-          // The highlighter sets text-sm on its <code>; match the sentence
-          // above instead.
-          contentClassName="max-h-40 overflow-auto [&_code]:!text-xs [&_code]:!leading-[18px]"
-          // Policy lines keep their shape; a long one scrolls sideways.
-          contentStyle={{
-            fontSize: "0.75rem",
-            padding: "0.375rem 0.5rem",
-            overflowX: "auto",
-            whiteSpace: "pre",
-          }}
-        />
-      </figure>
+      {cause.rule ? (
+        <figure className="mt-2 overflow-hidden rounded-md border bg-background/60">
+          <figcaption className="flex items-center justify-between gap-2 border-b px-2 py-1 text-[10px] text-muted-foreground">
+            <span className="truncate">{cause.ruleSource}</span>
+            {cause.ruleHref ? (
+              <Link
+                href={cause.ruleHref}
+                className="shrink-0 text-primary underline-offset-4 hover:underline"
+              >
+                Open in policy
+              </Link>
+            ) : (
+              <span className="shrink-0 font-mono">toml</span>
+            )}
+          </figcaption>
+          <CodeBlock
+            code={cause.rule}
+            language="toml"
+            className="rounded-none border-0"
+            // The highlighter sets text-sm on its <code>; match the sentence
+            // above instead.
+            contentClassName="max-h-40 overflow-auto [&_code]:!text-xs [&_code]:!leading-[18px]"
+            // Policy lines keep their shape; a long one scrolls sideways.
+            contentStyle={{
+              fontSize: "0.75rem",
+              padding: "0.375rem 0.5rem",
+              overflowX: "auto",
+              whiteSpace: "pre",
+            }}
+          />
+        </figure>
+      ) : null}
+      {cause.rule ? (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          The rule your policy applies to this tool today.
+        </p>
+      ) : null}
       {cause.consultKey ? (
-        <button
-          type="button"
+        <Button
+          variant="link"
+          size="xs"
           onClick={() => cause.consultKey && onOpenConsult(cause.consultKey)}
-          className="mt-2 text-xs text-primary underline-offset-4 hover:underline"
+          className="mt-1 h-auto px-0 text-xs"
         >
           Open the check that decided it
-        </button>
+        </Button>
       ) : null}
     </OverviewSection>
   );
 }
 
 /** A guardrail role in words, explained on hover. */
-export function RoleTerm({ role }: { role: MockConsult["role"] }) {
+export function RoleTerm({ role }: { role: TraceConsult["role"] }) {
   return <Term label={ROLE_LABEL[role]} explanation={ROLE_EXPLANATION[role]} />;
 }
 
@@ -386,7 +411,7 @@ export function DecisionTerm({
   decision,
   className,
 }: {
-  decision: MockConsult["decision"];
+  decision: TraceConsult["decision"];
   className?: string;
 }) {
   return (
@@ -398,7 +423,7 @@ export function DecisionTerm({
   );
 }
 
-export const ROLE_EXPLANATION: Record<MockConsult["role"], string> = {
+export const ROLE_EXPLANATION: Record<TraceConsult["role"], string> = {
   authority:
     "Decides whether a call may run at all: allows it, blocks it, or asks a person to approve it first.",
   annotator:
@@ -409,7 +434,7 @@ export const ROLE_EXPLANATION: Record<MockConsult["role"], string> = {
     "Looks up who belongs to an audience, such as the members of a team or channel.",
 };
 
-const DECISION_EXPLANATION: Record<MockConsult["decision"], string> = {
+const DECISION_EXPLANATION: Record<TraceConsult["decision"], string> = {
   allowed: "The call was allowed to run.",
   approved: "A person approved the call before it ran.",
   blocked: "The call was stopped and never ran.",
@@ -442,90 +467,4 @@ function Term({
       <TooltipContent className="max-w-60">{explanation}</TooltipContent>
     </Tooltip>
   );
-}
-
-/** A stored consult in the trace's shape: placed on the axis, tied to its call. */
-function fromRecord({
-  consult,
-  timeline,
-  timeToX,
-}: {
-  consult: ExternalConsult;
-  timeline: Timeline;
-  timeToX: (ms: number) => number;
-}): MockConsult {
-  const start = new Date(consult.startedAt).getTime();
-  const end = start + consult.durationMs;
-  const tool = consult.callId
-    ? timeline.spans.find(
-        (span): span is ToolCallSpan =>
-          span.type === "tool" &&
-          span.call.llmToolCallId != null &&
-          modelCallId(span.call.llmToolCallId) === consult.callId,
-      )
-    : undefined;
-  const role = (
-    ["authority", "annotator", "sanitizer", "audience_source"] as const
-  ).includes(consult.role as MockConsult["role"])
-    ? (consult.role as MockConsult["role"])
-    : "annotator";
-  const answered = consult.outcome === "answered";
-  const answer = (consult.answer ?? {}) as Record<string, unknown>;
-  const decision: MockConsult["decision"] =
-    role === "authority"
-      ? !answered || answer.allow === false
-        ? "blocked"
-        : answer.approved_by
-          ? "approved"
-          : "allowed"
-      : role === "sanitizer"
-        ? "redacted"
-        : "labeled";
-  const x = timeToX(start);
-  return {
-    id: consult.id,
-    key: `consult:${consult.id}`,
-    role,
-    externalName: consult.externalName,
-    backend: consult.backend,
-    outcome:
-      consult.outcome === "answered" || consult.outcome === "timeout"
-        ? consult.outcome
-        : "non_success",
-    decision,
-    answer: summarizeAnswer(consult.answer),
-    start,
-    end,
-    durationMs: consult.durationMs,
-    x,
-    w: Math.max(0, timeToX(end) - x),
-    toolCallKey: tool?.key ?? null,
-    toolName: tool ? (readMcpToolCall(tool.call).toolName ?? null) : null,
-    beforeCall: role === "authority",
-    record: consult,
-  };
-}
-
-/**
- * The provider's id inside a trajectory stamp (`appat1` + base64url of
- * `<session>\0<call id>` + a 22-character tag), or the id as given.
- */
-function modelCallId(id: string): string {
-  if (!id.startsWith("appat1") || id.length <= 6 + 22) return id;
-  try {
-    const payload = id.slice(6, -22).replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = atob(
-      payload.padEnd(Math.ceil(payload.length / 4) * 4, "="),
-    );
-    const separator = decoded.indexOf("\u0000");
-    return separator > 0 ? decoded.slice(separator + 1) : id;
-  } catch {
-    return id;
-  }
-}
-
-function summarizeAnswer(answer: unknown): string {
-  if (answer == null) return "No answer";
-  const text = typeof answer === "string" ? answer : JSON.stringify(answer);
-  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
 }

@@ -1747,6 +1747,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateOpenAppaYell]: { openappaDiagnostics: ["read", "update"] },
   [RouteId.GetOpenappaExternalConsults]: { openappaDiagnostics: ["read"] },
   [RouteId.GetOpenappaExternalConsult]: { openappaDiagnostics: ["read"] },
+  [RouteId.GetOpenappaLabelChanges]: { openappaDiagnostics: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
   [RouteId.GetOpenappaCoverageEntities]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageTools]: { openappaPolicy: ["read"] },

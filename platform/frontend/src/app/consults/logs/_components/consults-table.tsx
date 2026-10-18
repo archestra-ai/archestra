@@ -25,7 +25,7 @@ import {
   useExternalConsults,
 } from "@/lib/openappa/external-consults.query";
 import { buildConsultColumns } from "./consult-columns";
-import { toConsultView } from "./consult-details";
+import { type ConsultView, toConsultView } from "./consult-details";
 import { ALL_OUTCOMES, OUTCOME_LABEL } from "./consult-outcome-badge";
 
 export function ConsultsTable() {

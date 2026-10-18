@@ -96,16 +96,17 @@ export async function findExternalConsult(params: {
       : null;
 
   // Tool calls log the model's call id, sometimes with a trajectory stamp;
-  // the consult keeps the bare id.
+  // the consult keeps the runtime's operation id, `call:<id>`.
+  const callId = row.callId?.replace(/^call:/, "") ?? null;
   let mcpToolCallId: string | null = null;
-  if (llmSessionId && row.callId) {
+  if (llmSessionId && callId) {
     const calls = await McpToolCallModel.findModelCallIdsBySession({
       organizationId,
       sessionId: llmSessionId,
     });
     mcpToolCallId =
       calls.find(
-        (call) => withoutTrajectoryStamp(call.llmToolCallId) === row.callId,
+        (call) => withoutTrajectoryStamp(call.llmToolCallId) === callId,
       )?.id ?? null;
   }
 

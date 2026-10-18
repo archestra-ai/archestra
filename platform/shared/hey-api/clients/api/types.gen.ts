@@ -93605,6 +93605,128 @@ export type ConsultOpenappaBatteryHelperResponses = {
 
 export type ConsultOpenappaBatteryHelperResponse = ConsultOpenappaBatteryHelperResponses[keyof ConsultOpenappaBatteryHelperResponses];
 
+export type GetOpenappaLabelChangesData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * An LLM session ID, as on the LLM logs page
+         */
+        llmSessionId: string;
+    };
+    url: '/api/openappa/label-changes';
+};
+
+export type GetOpenappaLabelChangesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaLabelChangesError = GetOpenappaLabelChangesErrors[keyof GetOpenappaLabelChangesErrors];
+
+export type GetOpenappaLabelChangesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            root: string;
+            sessionId: string;
+            callerId: string | null;
+            createdAt: string;
+            event: 'session_start' | 'tool_call' | 'tool_result' | 'remedy' | 'child_return' | 'other';
+            callId: string | null;
+            /**
+             * The full tool name, from the record or the logged tool call
+             */
+            tool: string | null;
+            trustBefore: string;
+            audienceBefore: string;
+            trustAfter: string;
+            audienceAfter: string;
+            policyRevision: number | null;
+            /**
+             * The rule the current policy applies to the tool (the first that names it, else the catch-all). The engine does not record which rule matched a call.
+             */
+            rule: {
+                source: 'root' | 'battery' | 'catchall';
+                battery: string | null;
+                batteryEntry: string | null;
+                line: number | null;
+                /**
+                 * The rule's TOML block
+                 */
+                text: string | null;
+            } | null;
+        }>;
+    };
+};
+
+export type GetOpenappaLabelChangesResponse = GetOpenappaLabelChangesResponses[keyof GetOpenappaLabelChangesResponses];
+
 export type InspectOpenAppaPolicyTestsData = {
     body: {
         files: Array<{

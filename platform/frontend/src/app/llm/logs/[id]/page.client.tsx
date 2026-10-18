@@ -40,12 +40,12 @@ import {
 } from "@/lib/interactions/interaction.query";
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
-import { RequestDetails } from "./_parts/request-details";
 import {
-  ArenaDetails,
-  ArenaWaterfall,
-  GuardrailsArenaProvider,
-} from "./_parts/__arena__"; // design-arena: do not commit
+  GuardrailsProvider,
+  TraceDetails,
+  TraceWaterfall,
+} from "./_parts/guardrails-context";
+import { RequestDetails } from "./_parts/request-details";
 import { RequestWaterfall } from "./_parts/request-waterfall";
 import { SessionFacts } from "./_parts/session-facts";
 import {
@@ -349,12 +349,12 @@ export default function SessionDetailPage({
             aria-label="Requests and request details"
             className="isolate overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
           >
-            <GuardrailsArenaProvider
+            <GuardrailsProvider
               timeline={timeline}
               sessionId={sessionId}
               onSelectSpan={setPickedKey}
             >
-              <ArenaWaterfall
+              <TraceWaterfall
                 timeline={timeline}
                 loading={interactionsLoading}
                 profileName={profileName}
@@ -409,7 +409,7 @@ export default function SessionDetailPage({
                 }
               />
               <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
-              <ArenaDetails
+              <TraceDetails
                 height={detailsHeight}
                 loading={interactionsLoading}
                 span={selected}
@@ -424,7 +424,7 @@ export default function SessionDetailPage({
                 latestRequestId={conversationRowId}
                 onJumpToLatest={jumpToConversation}
               />
-            </GuardrailsArenaProvider>
+            </GuardrailsProvider>
           </section>
         </div>
       </PageLayout>

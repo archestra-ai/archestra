@@ -12,7 +12,7 @@ const PNG_B =
 let favicons: typeof import("./favicon.server");
 const fetchMock = vi.fn();
 
-describe("getCachedDeploymentFavicon", () => {
+describe("getCachedDeploymentAppearance", () => {
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.resetModules();
@@ -28,8 +28,8 @@ describe("getCachedDeploymentFavicon", () => {
 
   it("answers documents from the last read without asking the backend again", async () => {
     fetchMock.mockResolvedValue(Response.json({ favicon: PNG_A }));
-    const first = await favicons.getCachedDeploymentFavicon();
-    const second = await favicons.getCachedDeploymentFavicon();
+    const { favicon: first } = await favicons.getCachedDeploymentAppearance();
+    const { favicon: second } = await favicons.getCachedDeploymentAppearance();
 
     expect(first.version).toMatch(/^[0-9a-f]{16}$/);
     expect(second.href).toBe(first.href);
@@ -38,41 +38,64 @@ describe("getCachedDeploymentFavicon", () => {
 
   it("serves the previous favicon once while a stale entry refreshes, then the new one", async () => {
     fetchMock.mockResolvedValue(Response.json({ favicon: PNG_A }));
-    const before = await favicons.getCachedDeploymentFavicon();
+    const { favicon: before } = await favicons.getCachedDeploymentAppearance();
 
     fetchMock.mockResolvedValue(Response.json({ favicon: PNG_B }));
     vi.advanceTimersByTime(30_000);
     // Stale: answered at once from the cache, refresh started behind it.
-    expect((await favicons.getCachedDeploymentFavicon()).href).toBe(
+    expect((await favicons.getCachedDeploymentAppearance()).favicon.href).toBe(
       before.href,
     );
     await vi.waitFor(async () =>
-      expect((await favicons.getCachedDeploymentFavicon()).href).not.toBe(
-        before.href,
-      ),
+      expect(
+        (await favicons.getCachedDeploymentAppearance()).favicon.href,
+      ).not.toBe(before.href),
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not hold a cold document longer than the cold wait", async () => {
     fetchMock.mockReturnValue(new Promise(() => undefined));
-    const pending = favicons.getCachedDeploymentFavicon();
+    const pending = favicons.getCachedDeploymentAppearance();
     await vi.advanceTimersByTimeAsync(200);
 
     await expect(pending).resolves.toMatchObject({
-      href: "/default-favicon.ico",
-      version: null,
+      favicon: { href: "/default-favicon.ico", version: null },
+      theme: null,
     });
   });
 
   it("keeps the last good favicon when the backend fails, and tries again next time", async () => {
     fetchMock.mockResolvedValue(Response.json({ favicon: PNG_A }));
-    const good = await favicons.getCachedDeploymentFavicon();
+    const { favicon: good } = await favicons.getCachedDeploymentAppearance();
 
     fetchMock.mockRejectedValue(new Error("backend unavailable"));
     expect((await favicons.getDeploymentFavicon()).href).toBe(good.href);
 
     fetchMock.mockResolvedValue(Response.json({ favicon: PNG_B }));
     expect((await favicons.getDeploymentFavicon()).href).not.toBe(good.href);
+  });
+
+  it("carries the organization's theme from the same cached read", async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({ favicon: null, theme: "cosmic-night" }),
+    );
+    const appearance = await favicons.getCachedDeploymentAppearance();
+    expect(appearance.theme).toBe("cosmic-night");
+    expect(favicons.themeClassName(appearance.theme)).toBe(
+      "theme-cosmic-night",
+    );
+    // Nothing more is asked of the backend for it.
+    await favicons.getCachedDeploymentAppearance();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the default theme rather than none", async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({ favicon: null, theme: "not-a-theme" }),
+    );
+    const appearance = await favicons.getCachedDeploymentAppearance();
+    expect(appearance.theme).toBeNull();
+    expect(favicons.themeClassName(appearance.theme)).toBe("theme-caffeine");
   });
 });

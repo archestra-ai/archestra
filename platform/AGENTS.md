@@ -109,6 +109,17 @@ tilt logs pnpm-dev-frontend          # Get frontend logs
 tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an update for the specified resource
 ```
 
+### Fresh Git Worktree
+
+A new worktree has no dependencies or native bindings. Before tests or type-check:
+
+```bash
+pnpm install --frozen-lockfile                  # from platform/
+pnpm --dir archestra-rs/<crate> build:dev       # each NAPI crate the tests load
+```
+
+A missing binding fails as `Unable to load @archestra/<crate> for <platform>`; the crates are the `archestra-rs/*` packages with a `build:dev` script.
+
 ## Environment Variables
 
 **Naming Convention**: All env vars MUST follow the pattern `ARCHESTRA_<PRODUCT_AREA>_<THING>` (e.g., `ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`, `ARCHESTRA_OTEL_VERBOSE_TRACING`).

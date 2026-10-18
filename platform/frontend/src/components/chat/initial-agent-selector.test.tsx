@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import * as quickEditViews from "./agent-quick-edit/lazy-views";
 import { InitialAgentSelector } from "./initial-agent-selector";
 
 const {
@@ -27,7 +28,9 @@ const {
   mockUseProfile,
   mockPinnedIds,
   mockSwitchAccess,
+  mockRoster,
 } = vi.hoisted(() => ({
+  mockRoster: { pending: false },
   agents: [
     {
       id: "agent-1",
@@ -124,13 +127,19 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/agent.query", () => ({
   useAgentCredentialReadinessPages: (options?: unknown) =>
     mockUseAgentCredentialReadiness(options),
-  useChatAgents: () => ({ data: agents }),
+  useChatAgents: () =>
+    mockRoster.pending
+      ? { data: undefined, isPending: true }
+      : { data: agents, isPending: false },
   useChatAgentPages: () => ({
-    data: {
-      pages: [
-        { data: agents, pagination: { hasNext: false, nextCursor: null } },
-      ],
-    },
+    // The pages load only when the picker opens.
+    data: mockRoster.pending
+      ? undefined
+      : {
+          pages: [
+            { data: agents, pagination: { hasNext: false, nextCursor: null } },
+          ],
+        },
     hasNextPage: false,
     fetchNextPage: vi.fn(),
     isPending: false,
@@ -314,6 +323,36 @@ beforeEach(() => {
   } as ReturnType<typeof useSession>);
   vi.mocked(useFeature).mockReturnValue(false);
   mockPinnedIds.splice(0);
+});
+
+// The quick-edit views are lazy chunks; load them so the dialog renders at once.
+beforeAll(async () => {
+  await Promise.all(
+    Object.values(quickEditViews).map((view) =>
+      typeof view === "function" && "preload" in view ? view.preload() : null,
+    ),
+  );
+});
+
+describe("InitialAgentSelector before the agent resolves", () => {
+  it("holds a placeholder instead of asking for a choice while the roster loads", () => {
+    mockRoster.pending = true;
+    try {
+      queryClient.clear();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <InitialAgentSelector currentAgentId={null} onAgentChange={vi.fn()} />
+        </QueryClientProvider>,
+      );
+      expect(
+        screen.getByRole("combobox", { name: "Loading agent" }),
+      ).toHaveAttribute("aria-busy", "true");
+      expect(screen.queryByText("Select agent")).not.toBeInTheDocument();
+    } finally {
+      mockRoster.pending = false;
+      mockUseProfile.mockClear();
+    }
+  });
 });
 
 describe("InitialAgentSelector keyboard navigation", () => {

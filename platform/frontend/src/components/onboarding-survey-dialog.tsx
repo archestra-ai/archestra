@@ -1,7 +1,6 @@
 "use client";
 
 import type { Permissions } from "@archestra/shared/permission.types";
-import posthog from "posthog-js";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +18,7 @@ import {
   useOnboardingSurveyEligibility,
   useSubmitOnboardingSurvey,
 } from "@/lib/onboarding/onboarding.query";
+import { posthogClient } from "@/lib/posthog-client";
 import { useShellReady } from "@/lib/shell-deferral";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -47,7 +47,7 @@ export function OnboardingSurveyDialog() {
   const open = isAdmin === true && eligibility?.eligible === true && !submitted;
 
   useEffect(() => {
-    if (open) posthog.capture("onboarding_survey_shown");
+    if (open) posthogClient.capture("onboarding_survey_shown");
   }, [open]);
 
   const emailValid =
@@ -70,7 +70,7 @@ export function OnboardingSurveyDialog() {
       },
       {
         onSuccess: () => {
-          posthog.capture("onboarding_survey_submitted");
+          posthogClient.capture("onboarding_survey_submitted");
           setSubmitted(true);
         },
       },

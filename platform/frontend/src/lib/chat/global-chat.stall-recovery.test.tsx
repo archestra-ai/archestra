@@ -2,7 +2,15 @@ import type { UIMessage } from "@ai-sdk/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render } from "@testing-library/react";
 import { useEffect } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   ChatProvider,
@@ -54,6 +62,12 @@ describe("stalled stream recovery", () => {
   let replays: ReplayBehavior[];
   let replayRequests: number;
   let session: ChatSessionSnapshot;
+
+  beforeAll(async () => {
+    // ChatProvider loads the session hook lazily. Load the module up front so
+    // the fake-timer steps below don't race its import.
+    await import("./chat-session-hook");
+  });
 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });

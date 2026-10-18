@@ -3,6 +3,8 @@ import type { ApiError } from "@archestra/shared";
 // "@archestra/shared" for the SDK don't erase this helper.
 import { getUserFacingApiErrorMessage } from "@archestra/shared/api-error";
 import { toast } from "sonner";
+import { sessionConfirmation } from "@/lib/auth/session-confirmation";
+import { errorReporting } from "@/lib/error-reporting";
 
 type ApiSdkError =
   | { error: Partial<ApiError> | Error | unknown }
@@ -134,7 +136,14 @@ export function handleApiError(error: ApiSdkError) {
     return;
   }
 
-  if (typeof window !== "undefined") {
+  // A 401 before the session is confirmed comes from the optimistic shell of
+  // a visitor whose cookie has expired: the sign-in redirect is the answer,
+  // not a toast over it.
+  const isUnconfirmedSignOut =
+    errorType === "api_authentication_error" &&
+    !sessionConfirmation.isSignedIn();
+
+  if (typeof window !== "undefined" && !isUnconfirmedSignOut) {
     // Errors stay long enough to read and copy; the close button dismisses early.
     // The toast shows the humanized message; Sentry keeps the raw error.
     // Keyed by message so a repeating failure (retries, several queries hitting
@@ -147,11 +156,9 @@ export function handleApiError(error: ApiSdkError) {
     errorType === undefined ||
     !NON_REPORTABLE_API_ERROR_TYPES.has(errorType)
   ) {
-    void import("@sentry/nextjs")
-      .then(({ captureException }) => {
-        captureException(sentryError, { extra: { originalError: error } });
-      })
-      .catch(() => undefined);
+    errorReporting.captureException(sentryError, {
+      extra: { originalError: error },
+    });
   }
   console.error(sentryError);
 }

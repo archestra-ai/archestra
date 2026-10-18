@@ -2,7 +2,6 @@
 
 import { FEEDBACK_TYPEFORM_URL } from "@archestra/shared";
 import type { Permissions } from "@archestra/shared/permission.types";
-import posthog from "posthog-js";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +18,7 @@ import {
   useMarkNavItemsSeen,
   useSeenNavItems,
 } from "@/lib/onboarding/onboarding.query";
+import { posthogClient } from "@/lib/posthog-client";
 import { useShellReady } from "@/lib/shell-deferral";
 
 /**
@@ -60,7 +60,7 @@ export function FeedbackPopupDialog() {
     activatedBeforeThisSession;
 
   useEffect(() => {
-    if (open) posthog.capture("feedback_popup_viewed");
+    if (open) posthogClient.capture("feedback_popup_viewed");
   }, [open]);
 
   const dismiss = () => {

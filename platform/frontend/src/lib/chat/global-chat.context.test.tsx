@@ -145,7 +145,9 @@ describe("ChatProvider retries", () => {
       </ChatProvider>,
     );
 
-    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled(), {
+      timeout: 5_000,
+    });
 
     vi.useFakeTimers();
     act(() => {

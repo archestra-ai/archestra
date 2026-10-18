@@ -14,6 +14,18 @@ describe("classifyChatSubmitAction", () => {
     ).toBe("send");
   });
 
+  it("queues a send made before the conversation's session exists", () => {
+    expect(
+      classifyChatSubmitAction({
+        status: "ready",
+        queueEnabled: true,
+        directSendPending: false,
+        isCompacting: false,
+        sessionPending: true,
+      }),
+    ).toBe("queue");
+  });
+
   it("queues a submit made while a turn is streaming", () => {
     for (const status of ["submitted", "streaming"]) {
       expect(

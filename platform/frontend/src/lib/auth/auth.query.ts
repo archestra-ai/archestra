@@ -11,6 +11,7 @@ import {
   hasPermissions,
   pageUsesCapabilities,
 } from "@/lib/auth/auth.utils";
+import { sessionConfirmation } from "@/lib/auth/session-confirmation";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
@@ -41,17 +42,21 @@ export function useSession() {
     queryKey: authQueryKeys.session(),
     queryFn: async ({ client: queryClient }) => {
       // Cold load only: a refresh restores the session from the persisted
-      // snapshot, and the shell's queries are already running by then.
+      // snapshot, and the shell's queries are already running by then. The
+      // seed runs alongside the session check but nothing waits on it here:
+      // the queries it fills await it themselves (awaitBootstrapSeed).
       const isColdLoad =
         queryClient.getQueryData(authQueryKeys.session()) === undefined;
-      const [{ data, error }] = await Promise.all([
-        authClient.getSession(),
-        isColdLoad ? seedBootstrapQueries(queryClient) : undefined,
-      ]);
+      if (isColdLoad) startBootstrapSeed(queryClient);
+      const { data, error } = await authClient.getSession();
       // An explicit authentication refusal clears the shell. An unavailable
       // server must enter the query's error state and retain the last session.
-      if (error?.status === 401 || error?.status === 403) return null;
+      if (error?.status === 401 || error?.status === 403) {
+        sessionConfirmation.set(false);
+        return null;
+      }
       throwOnApiError(error, { toastOnError: false });
+      sessionConfirmation.set(!!data?.user);
       return data;
     },
     staleTime: 5 * 60 * 1000,
@@ -141,7 +146,9 @@ export function useScopedCapabilities(enabled = true) {
   return useQuery({
     queryKey: authQueryKeys.scopedCapabilities(),
     enabled: enabled && !!session?.user,
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed) return seed.scopedCapabilities;
       const { data, error } = await archestraApiSdk.getScopedCapabilities();
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
@@ -196,7 +203,9 @@ export function useAllPermissions() {
 
   return useQuery({
     queryKey: authQueryKeys.userPermissions(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed) return seed.permissions;
       const { data, error } = await archestraApiSdk.getUserPermissions();
       throwOnApiError(error, { toastOnError: false });
       return data;
@@ -288,24 +297,59 @@ export function seedShellQueries(
 
 // ===
 
+type BootstrapData = NonNullable<
+  Awaited<ReturnType<typeof archestraApiSdk.getBootstrap>>["data"]
+>;
+
 /**
- * Seeds the queries the app shell waits on (permissions, scoped capabilities,
- * organization, config) from one `/api/bootstrap` request. Fired alongside the
- * session check on a cold load, so those queries are already fresh when the
- * session resolves and enables them, instead of starting a second wave.
+ * The cold load's `/api/bootstrap` answer while it is in flight, so a query it
+ * seeds that becomes enabled first (the session usually answers sooner) waits
+ * for it instead of starting a second request. Cleared once settled: later
+ * fetches of those queries are refreshes and go to their own endpoints.
+ */
+const bootstrapSeeds = new WeakMap<
+  QueryClient,
+  Promise<BootstrapData | null>
+>();
+
+/**
+ * Await the in-flight bootstrap seed, if any. Resolves to null when there is
+ * none or it failed, and the caller fetches its own endpoint.
+ *
+ * @public — also awaited by the config and organization queries
+ */
+export async function awaitBootstrapSeed(
+  queryClient: QueryClient,
+): Promise<BootstrapData | null> {
+  return (await bootstrapSeeds.get(queryClient)) ?? null;
+}
+
+/**
+ * Seeds the queries the app shell reads (permissions, scoped capabilities,
+ * organization, config) from one `/api/bootstrap` request, fired alongside
+ * the session check on a cold load, so those queries are already fresh when
+ * the session resolves and enables them, instead of starting a second wave.
  *
  * Best-effort: when signed out or on any failure nothing is seeded and each
  * query fetches its own endpoint as before. The keys are spelled out rather
  * than imported because the modules owning them import this one.
  */
-async function seedBootstrapQueries(queryClient: QueryClient) {
-  try {
-    const { data } = await archestraApiSdk.getBootstrap();
-    if (!data) return;
-    applyBootstrap(queryClient, data);
-  } catch {
-    // Fall back to the individual requests.
-  }
+function startBootstrapSeed(queryClient: QueryClient) {
+  if (bootstrapSeeds.has(queryClient)) return;
+  const seed = (async () => {
+    try {
+      const { data } = await archestraApiSdk.getBootstrap();
+      if (!data) return null;
+      applyBootstrap(queryClient, data);
+      return data;
+    } catch {
+      // Fall back to the individual requests.
+      return null;
+    } finally {
+      bootstrapSeeds.delete(queryClient);
+    }
+  })();
+  bootstrapSeeds.set(queryClient, seed);
 }
 
 function applyBootstrap(

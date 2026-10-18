@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   getCompactToolState,
   getCurrentEnabledToolIds,
@@ -423,5 +423,40 @@ describe("reviewed remedy rulings", () => {
 
     expect(getCompactToolState({ part, toolResultPart: null })).toBe("error");
     expect(getHumanRulingDisplay({ part, toolResultPart: null })).toBeNull();
+  });
+});
+
+describe("isCompactEligible auth check", () => {
+  it("parses a part's output once across renders, and again when it changes", () => {
+    const part = {
+      type: "tool-github__search",
+      state: "output-available",
+      output:
+        'Authentication required for "GitHub". To authenticate, visit: https://example.com/connect/github',
+    };
+    const check = () =>
+      isCompactEligible({
+        toolName: "github__search",
+        part: part as never,
+        toolResultPart: null,
+      });
+    // The auth parsers JSON.parse text that carries their marker; count those.
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      expect(check()).toBe(false);
+      const parsesForFirstRender = parse.mock.calls.length;
+      expect(parsesForFirstRender).toBeGreaterThan(0);
+      expect(check()).toBe(false);
+      // Other readers of the output parse it every time; the auth check's
+      // parse is the one the second render no longer pays for.
+      expect(parse.mock.calls.length - parsesForFirstRender).toBe(
+        parsesForFirstRender - 1,
+      );
+
+      part.output = "plain result";
+      expect(check()).toBe(true);
+    } finally {
+      parse.mockRestore();
+    }
   });
 });

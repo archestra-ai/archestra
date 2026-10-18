@@ -33,6 +33,7 @@ import {
   type NavGroup,
   type NavItem,
 } from "@/app/_parts/studio-nav";
+import { preloadAgentsPage } from "@/app/agents/preload";
 import { prefetchMcpRegistry } from "@/app/mcp/registry/_parts/prefetch-registry";
 import { AppLogo } from "@/components/app-logo";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
@@ -767,6 +768,10 @@ function SidebarPrefetchLink(
         // Route prefetch doesn't mount client query hooks. Start the matching
         // first page alongside it, not after the destination's JavaScript loads.
         if (href === "/apps") void prefetchApps(queryClient);
+        // The route prefetch stops at the Agents page's loading boundary;
+        // load its code as well. Its data streams from the server on the
+        // click, so nothing is fetched for it here.
+        if (href === "/agents") preloadAgentsPage();
         // The registry's payload carries no data on a client navigation (the
         // server renders its first page only into full page loads), so its
         // first page is fetched here, once.

@@ -7,22 +7,22 @@ import { formatPluginSkillName } from "@/skills/plugin-skill-activation";
 import { escapeXmlAttr } from "@/skills/skill-activation";
 import type {
   AgentActivationSkill,
-  ExternalMcpSkillListItem,
-  PluginSkillListItem,
+  ExternalMcpSkillCatalogItem,
+  PluginSkillCatalogItem,
 } from "@/types";
 
 export type ProjectedPluginSkill = {
   source: "plugin";
   wireName: string;
   activationName: string;
-  skill: PluginSkillListItem;
+  skill: PluginSkillCatalogItem;
 };
 
 export type ProjectedExternalSkill = {
   source: "external";
   wireName: string;
   activationName: string;
-  skill: ExternalMcpSkillListItem;
+  skill: ExternalMcpSkillCatalogItem;
 };
 
 type ProjectedLiveSkill = ProjectedPluginSkill | ProjectedExternalSkill;
@@ -111,8 +111,8 @@ export function toAgentActivationSkill(
 
 export function projectLiveSkillNames(params: {
   nativeNames: string[];
-  pluginSkills: PluginSkillListItem[];
-  externalSkills: ExternalMcpSkillListItem[];
+  pluginSkills: PluginSkillCatalogItem[];
+  externalSkills: ExternalMcpSkillCatalogItem[];
 }): ProjectedLiveSkill[] {
   const liveSkills: ProjectedLiveSkill[] = [
     ...params.pluginSkills.map((skill) => ({

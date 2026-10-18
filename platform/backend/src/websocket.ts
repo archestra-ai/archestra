@@ -37,6 +37,7 @@ import {
 } from "@/services/agent-runtime/output-capture";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
+import { projectMcpDeploymentStatuses } from "@/services/mcp-deployment-statuses";
 import {
   createPollingNotifyHub,
   createPostgresNotifyHub,
@@ -1369,32 +1370,8 @@ export class WebSocketService {
     // Build statuses from the runtime manager for this client
     const buildStatuses = (
       summary: typeof McpServerRuntimeManager.statusSummary,
-    ): Record<string, McpDeploymentStatusEntry> => {
-      const result: Record<string, McpDeploymentStatusEntry> = {};
-
-      for (const serverId of localServerIds) {
-        const deploymentStatus = summary.mcpServers[serverId];
-        if (deploymentStatus) {
-          result[serverId] = {
-            state: deploymentStatus.state,
-            message: deploymentStatus.message,
-            error: deploymentStatus.error,
-            restartCount: deploymentStatus.restartCount,
-            podAge: deploymentStatus.podAge,
-            podName: deploymentStatus.podName,
-            deploymentName: deploymentStatus.deploymentName ?? undefined,
-          };
-        } else {
-          result[serverId] = {
-            state: "not_created",
-            message: "Deployment not created",
-            error: null,
-          };
-        }
-      }
-
-      return result;
-    };
+    ): Record<string, McpDeploymentStatusEntry> =>
+      projectMcpDeploymentStatuses(summary, localServerIds);
 
     // Clients subscribe on every full page load and navigation, at the same
     // moment as the page's own API requests, and a full refresh is heavy work

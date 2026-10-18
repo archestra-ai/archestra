@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,6 +55,7 @@ const {
   useAppToolsMock,
   useInternalMcpCatalogMock,
   fetchCatalogToolsMock,
+  registryPageCalls,
 } = vi.hoisted(() => ({
   assignMutate: vi.fn(),
   unassignMutate: vi.fn(),
@@ -62,6 +63,7 @@ const {
   useAppToolsMock: vi.fn(),
   useInternalMcpCatalogMock: vi.fn(),
   fetchCatalogToolsMock: vi.fn(),
+  registryPageCalls: [] as unknown[],
 }));
 
 vi.mock("@/lib/app.query", () => ({
@@ -75,8 +77,44 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: useInternalMcpCatalogMock,
   fetchCatalogTools: fetchCatalogToolsMock,
+}));
+
+// The registry reads, answered from the catalog rows each test sets: the
+// app's servers by id, and the Add list's page.
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
+  useMcpRegistryRowsByIds: (ids: string[]) => ({
+    data: (useInternalMcpCatalogMock().data as Array<{ id: string }>).filter(
+      (row) => ids.includes(row.id),
+    ),
+    isPending: false,
+    hasLoaded: true,
+    isError: false,
+  }),
+}));
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  REGISTRY_PICKER_PAGE_SIZE: 50,
+  // Like the server: the search narrows by name, the page is sorted by name
+  // and cut to the limit.
+  useMcpRegistryPage: (params: { search?: string; limit?: number }) => {
+    registryPageCalls.push(params);
+    const all = useInternalMcpCatalogMock().data as Array<{ name: string }>;
+    const matching = all
+      .filter(
+        (row) =>
+          !params.search ||
+          row.name.toLowerCase().includes(params.search.toLowerCase()),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      data: {
+        data: matching.slice(0, params.limit ?? matching.length),
+        pagination: { total: matching.length },
+      },
+      isPending: false,
+      isFetching: false,
+    };
+  },
 }));
 
 // The catalog icon pulls in white-label app-name hooks the bare render lacks.
@@ -95,6 +133,8 @@ function makeCatalog(over: Record<string, unknown> = {}) {
     id: JIRA_CATALOG_ID,
     name: "JIRA",
     icon: null,
+    iconUrl: null,
+    toolCount: 2,
     serverType: "local",
     environmentId: null,
     ...over,
@@ -118,6 +158,24 @@ function renderTab() {
   );
 }
 
+const controlledClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
+function controlledEditor(
+  selected: Set<string>,
+  onSelectionChange: (next: Set<string>) => void,
+) {
+  return (
+    <QueryClientProvider client={controlledClient}>
+      <AppToolsEditor
+        appId={APP_ID}
+        selectedToolIds={selected}
+        onSelectionChange={onSelectionChange}
+      />
+    </QueryClientProvider>
+  );
+}
+
 // The staged host (the app settings form) drives selection as a controlled
 // Set; toggles report up via onSelectionChange instead of persisting live.
 function renderControlled(onSelectionChange: (next: Set<string>) => void) {
@@ -138,6 +196,7 @@ function renderControlled(onSelectionChange: (next: Set<string>) => void) {
 describe("AppToolsEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    registryPageCalls.length = 0;
     useAppMock.mockReturnValue({ data: { environmentId: null } });
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -278,6 +337,150 @@ describe("AppToolsEditor", () => {
     expect(unassignMutate).not.toHaveBeenCalled();
   });
 
+  it("keeps a selection change made while an added server's tools load", async () => {
+    const user = userEvent.setup();
+    const NOTION_ID = "notion-catalog";
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [makeCatalog(), makeCatalog({ id: NOTION_ID, name: "Notion" })],
+    });
+    let releaseNotion: (tools: unknown[]) => void = () => {};
+    fetchCatalogToolsMock.mockImplementation((id: string) =>
+      id === NOTION_ID
+        ? new Promise((resolve) => {
+            releaseNotion = resolve;
+          })
+        : Promise.resolve([
+            makeTool("t-create", "create_issue"),
+            makeTool("t-delete", "delete_issue"),
+          ]),
+    );
+    const onSelectionChange = vi.fn();
+    const view = render(
+      controlledEditor(new Set(["t-create"]), onSelectionChange),
+    );
+
+    await screen.findByRole("button", { name: /JIRA/ });
+    await user.click(screen.getByRole("button", { name: /add/i }));
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", { name: /notion/i }),
+    );
+    // The form changes the selection while Notion's tools are still loading.
+    view.rerender(
+      controlledEditor(new Set(["t-create", "t-delete"]), onSelectionChange),
+    );
+    releaseNotion([
+      {
+        id: "n-page",
+        name: "create_page",
+        description: null,
+        catalogId: NOTION_ID,
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(onSelectionChange).toHaveBeenLastCalledWith(
+        new Set(["t-create", "t-delete", "n-page"]),
+      ),
+    );
+  });
+
+  describe("a server picked from beyond the first page", () => {
+    // 60 servers before "Zulip" by name: Zulip is only on a searched page,
+    // and picking it closes the menu, which clears the search.
+    const ZULIP_ID = "zulip-catalog";
+    beforeEach(() => {
+      useInternalMcpCatalogMock.mockReturnValue({
+        data: [
+          makeCatalog(),
+          ...Array.from({ length: 60 }, (_, i) =>
+            makeCatalog({
+              id: `filler-${i}`,
+              name: `Filler ${String(i).padStart(2, "0")}`,
+            }),
+          ),
+          makeCatalog({ id: ZULIP_ID, name: "Zulip" }),
+        ],
+      });
+      fetchCatalogToolsMock.mockImplementation((id: string) =>
+        Promise.resolve(
+          id === ZULIP_ID
+            ? [
+                {
+                  id: "z-send",
+                  name: "send_message",
+                  description: null,
+                  catalogId: ZULIP_ID,
+                },
+              ]
+            : [makeTool("t-create", "create_issue")],
+        ),
+      );
+    });
+
+    async function pickZulip(user: ReturnType<typeof userEvent.setup>) {
+      await screen.findByRole("button", { name: /JIRA/ });
+      await user.click(screen.getByRole("button", { name: /add/i }));
+      await user.type(screen.getByRole("textbox"), "zulip");
+      await user.click(
+        await screen.findByRole("menuitemcheckbox", { name: /zulip/i }),
+      );
+      // Past the search debounce, the list is back on its first page.
+      await waitFor(() =>
+        expect(registryPageCalls.at(-1)).not.toHaveProperty("search"),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    it("searches descriptions as well as names", async () => {
+      const user = userEvent.setup();
+      renderTab();
+
+      await screen.findByRole("button", { name: /JIRA/ });
+      await user.click(screen.getByRole("button", { name: /add/i }));
+      await user.type(screen.getByRole("textbox"), "zulip");
+
+      await waitFor(() =>
+        expect(registryPageCalls.at(-1)).toMatchObject({
+          search: "zulip",
+          searchDescriptions: true,
+        }),
+      );
+    });
+
+    it("keeps its pill in the live editor", async () => {
+      const user = userEvent.setup();
+      renderTab();
+
+      await pickZulip(user);
+
+      // Its checklist is still open, and the pill stays once it closes.
+      expect(screen.getByLabelText("send_message")).not.toBeChecked();
+      await user.keyboard("{Escape}");
+      expect(
+        await screen.findByRole("button", { name: /^Zulip/ }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the staged tools visible and removable in the settings form", async () => {
+      const user = userEvent.setup();
+      let staged = new Set(["t-create"]);
+      const onSelectionChange = vi.fn((next: Set<string>) => {
+        staged = next;
+        view.rerender(controlledEditor(staged, onSelectionChange));
+      });
+      const view = render(controlledEditor(staged, onSelectionChange));
+
+      await pickZulip(user);
+
+      expect(staged).toEqual(new Set(["t-create", "z-send"]));
+      // The staged tool stays visible, and removable, in the server's checklist.
+      await user.keyboard("{Escape}");
+      expect(
+        await screen.findByRole("button", { name: /^Zulip/ }),
+      ).toHaveTextContent("(1)");
+    });
+  });
+
   it("flags an assigned server that sits outside the app's environment", async () => {
     useInternalMcpCatalogMock.mockReturnValue({
       data: [makeCatalog({ environmentId: "env-other" })],
@@ -332,5 +535,25 @@ describe("AppToolsEditor", () => {
     expect(await screen.findByText("create_issue")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(fetchCatalogToolsMock).not.toHaveBeenCalled();
+  });
+
+  it("lists the servers of the app's environment and the Default one a page at a time, loading tools only for its pills", async () => {
+    const NOTION_ID = "notion-catalog";
+    useAppMock.mockReturnValue({ data: { environmentId: "env-app" } });
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [makeCatalog(), makeCatalog({ id: NOTION_ID, name: "Notion" })],
+    });
+    renderTab();
+
+    await screen.findByRole("button", { name: /JIRA/ });
+
+    expect(registryPageCalls.at(-1)).toMatchObject({
+      environmentIds: ["env-app"],
+      includeDefaultEnvironment: true,
+      limit: 50,
+    });
+    // Notion is only offered in the list: its tools are not fetched.
+    expect(fetchCatalogToolsMock).toHaveBeenCalledWith(JIRA_CATALOG_ID);
+    expect(fetchCatalogToolsMock).not.toHaveBeenCalledWith(NOTION_ID);
   });
 });

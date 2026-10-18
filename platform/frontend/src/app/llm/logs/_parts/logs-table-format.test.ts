@@ -193,3 +193,16 @@ describe("sessionTitleOf", () => {
     ).toBeNull();
   });
 });
+
+describe("sessionTitleOf markdown", () => {
+  it("drops Markdown and HTML-entity syntax from the preview", () => {
+    expect(
+      sessionTitleOf({
+        lastUserMessagePreview:
+          "> Four concurrent clients: **860 → 178 events/sec**, about `79%` lower.&#x20;Too high &amp; slow.",
+      }),
+    ).toBe(
+      "Four concurrent clients: 860 → 178 events/sec, about 79% lower. Too high & slow.",
+    );
+  });
+});

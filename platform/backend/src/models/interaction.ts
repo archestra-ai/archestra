@@ -66,6 +66,7 @@ import type {
   UserInfo,
 } from "@/types";
 import {
+  AgentTypeSchema,
   InteractionAuthMethodSchema,
   LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH,
   normalizeInteractionResponse,
@@ -1979,6 +1980,10 @@ class InteractionModel {
         profileName: sql<
           string | null
         >`COALESCE(MAX(${schema.agentsTable.name}) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.name}))`,
+        // Same preference as profileName, so the type names the same agent.
+        profileAgentType: sql<
+          string | null
+        >`COALESCE(MAX(${schema.agentsTable.agentType}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.agentType}::text))`,
         externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
         authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
         authenticatedAppNames: sql<
@@ -2094,6 +2099,8 @@ class InteractionModel {
         models: s.models ? s.models.split(",").filter(Boolean) : [],
         profileId: s.profileId,
         profileName: s.profileName,
+        profileAgentType:
+          AgentTypeSchema.safeParse(s.profileAgentType).data ?? null,
         externalAgentIds,
         externalAgentIdLabels: externalAgentIds.map((id) =>
           resolveExternalAgentIdLabel(id, agentNamesMap),

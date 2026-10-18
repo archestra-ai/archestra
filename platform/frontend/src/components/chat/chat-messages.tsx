@@ -105,8 +105,8 @@ import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import { identifyAskUserGroups } from "./ask-user-groups";
@@ -305,7 +305,8 @@ export function ChatMessages({
   // detail is already loaded by the chat page and carries no tool schemas.
   const { data: agent } = useProfile(agentId);
   const agentTools = agent?.tools;
-  const { data: catalogItems } = useInternalMcpCatalog({
+  // Names and icons only: the registry's directory, not the full catalog.
+  const { data: catalogItems } = useMcpCatalogDirectory({
     enabled: !!agentId && !!canReadMcpRegistry,
   });
   const toolIconMap = useMemo(

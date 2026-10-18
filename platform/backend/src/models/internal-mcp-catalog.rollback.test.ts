@@ -515,6 +515,23 @@ describe("InternalMcpCatalogModel", () => {
       expect(results[0].labels[0].key).toBe("search-label");
     });
 
+    test("searchByQuery treats % and _ in the query as text", async () => {
+      const literal = await InternalMcpCatalogModel.create({
+        name: "search-literal-100%_off",
+        serverType: "remote",
+      });
+      await InternalMcpCatalogModel.create({
+        name: "search-literal-100xxoff",
+        serverType: "remote",
+      });
+
+      const results = await InternalMcpCatalogModel.searchByQuery("100%_off", {
+        expandSecrets: false,
+      });
+
+      expect(results.map((item) => item.id)).toEqual([literal.id]);
+    });
+
     test("getByIds returns labels", async () => {
       const catalog = await InternalMcpCatalogModel.create({
         name: "catalog-get-by-ids-labels",

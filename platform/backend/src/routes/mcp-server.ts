@@ -68,6 +68,7 @@ import {
   autoReinstallServer,
   reloadToolsForServer,
 } from "@/services/mcp-reinstall";
+import { decorateMcpServerListEntries } from "@/services/mcp-server-list";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
@@ -144,6 +145,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         querystring: z.object({
           catalogId: z.string().optional(),
+          catalogIds: z
+            .preprocess(
+              (val) =>
+                typeof val === "string" ? val.split(",").filter(Boolean) : val,
+              z.array(z.string().uuid()).max(100),
+            )
+            .optional()
+            .describe(
+              "Only installs of these catalog items (comma-separated, at most 100).",
+            ),
+          catalogSlug: z
+            .string()
+            .min(1)
+            .max(256)
+            .optional()
+            .describe(
+              "Only installs of catalog items whose name, slugified as in tool names (lowercase, spaces as _, other characters dropped), is this.",
+            ),
           includeAssignedAgents: z
             .preprocess(
               (value) => value === "true" || value === true,
@@ -175,6 +194,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         assignmentScope,
         assignmentTeamIds,
         catalogId,
+        catalogIds,
+        catalogSlug,
         status,
         includeAssignedAgents,
       } = query;
@@ -208,7 +229,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         for (const server of deleted) {
           if (
             server.serverType === "builtin" ||
-            (catalogId && server.catalogId !== catalogId)
+            (catalogId && server.catalogId !== catalogId) ||
+            (catalogIds && !catalogIds.includes(server.catalogId ?? ""))
           )
             continue;
           try {
@@ -255,6 +277,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // post-filtering made that request load and decorate every install
           // in the organization before discarding all but one.
           catalogId,
+          // The registry asks for the installs of the catalog rows on screen.
+          catalogIds,
+          // A tool's server prefix, for its logs.
+          catalogSlug,
           // Agent usage is included only when the caller asks for it.
           includeAssignedAgents: includeAssignedAgents === true,
           // serverType:"app" backings are managed on the Apps surface, not
@@ -278,31 +304,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const [alertMutesByCatalogId, credentialUsableIds, canSeeAgent] =
-        await Promise.all([
-          McpServerAlertMuteModel.findForViewer({
-            userId: user.id,
-            catalogIds: [
-              ...new Set(allServers.map((server) => server.catalogId)),
-            ],
-          }),
-          McpServerModel.getCredentialUsableServerIds(
-            user.id,
-            allServers.map((server) => server.id),
-          ),
-          getVisibleAgentFilter({ userId: user.id, organizationId }),
-        ]);
+      const [decorated, canSeeAgent] = await Promise.all([
+        decorateMcpServerListEntries({ servers: allServers, userId: user.id }),
+        getVisibleAgentFilter({ userId: user.id, organizationId }),
+      ]);
 
       return reply.send(
-        allServers.map((server) => ({
+        decorated.map((server) => ({
           ...server,
           assignedAgents: server.assignedAgents?.filter((agent) =>
             canSeeAgent(agent.id),
           ),
-          alertMutes: (
-            alertMutesByCatalogId.get(server.catalogId) ?? []
-          ).filter((mute) => mute.mcpServerId === server.id),
-          canUseCredential: credentialUsableIds.has(server.id),
         })),
       );
     },

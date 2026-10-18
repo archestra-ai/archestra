@@ -1,4 +1,5 @@
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import type { RequestLookups } from "@/auth/request-lookups";
 import {
   AgentModel,
   AgentToolModel,
@@ -78,11 +79,12 @@ interface AgentToolAssignmentRequest {
 export async function isPredefinedAdmin(params: {
   userId: string;
   organizationId: string;
+  /** A request's memoized lookups, so one request reads the membership once. */
+  lookups?: Pick<RequestLookups, "membership">;
 }): Promise<boolean> {
-  const membership = await MemberModel.getByUserId(
-    params.userId,
-    params.organizationId,
-  );
+  const membership = params.lookups
+    ? await params.lookups.membership(params)
+    : await MemberModel.getByUserId(params.userId, params.organizationId);
   return membership?.role === "admin";
 }
 

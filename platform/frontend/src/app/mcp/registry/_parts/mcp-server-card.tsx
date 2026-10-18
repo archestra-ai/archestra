@@ -61,8 +61,8 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import type { McpRegistryRow } from "@/lib/mcp/mcp-registry.query";
 import type { McpDeploymentFeedState } from "@/lib/mcp/mcp-server.query";
-import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
   canReinstallInstall,
   type McpServerIssue,
@@ -86,10 +86,10 @@ import {
   installBlockedSummary,
   useMcpInstallBlockers,
 } from "./mcp-credential-blockers";
-import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
+import { useRegistryPageServers } from "./registry-page-servers";
 import { isOwnPersonalInstall } from "./uninstall-scope";
 import {
   UninstallServerDialog,
@@ -103,8 +103,11 @@ export type CatalogItem =
 export type InstalledServer =
   archestraApiTypes.GetMcpServersResponses["200"][number];
 
+/** One row of the registry's paged list: what the cards and table read. */
+export type RegistryListItem = McpRegistryRow;
+
 export type McpServerCardProps = {
-  item: CatalogItem;
+  item: RegistryListItem;
   installedServer?: InstalledServer | null;
   installingItemId: string | null;
   installationStatus?:
@@ -173,7 +176,8 @@ export function McpServerCard({
 }: McpServerCardBaseProps) {
   const isPlaywrightVariant = isBuiltInPlaywright;
 
-  const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const { startChatById, isCreating: isChatCreating } =
+    useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
@@ -199,11 +203,8 @@ export function McpServerCard({
   const { canModify: canEditCatalog, isLoading: canEditCatalogLoading } =
     useCanModifyCatalogItem(variant !== "builtin" ? item : null);
 
-  // Fetch all MCP servers to get installations for logs dropdown. The card
-  // reads no per-install agents, so it shares the registry's compact list.
-  const { data: allMcpServers } = useMcpServers({
-    includeAssignedAgents: false,
-  });
+  // The installs of the items on this page, loaded once by the list.
+  const allMcpServers = useRegistryPageServers();
   // Teams the user may install a shared connection for: any team for an install
   // admin, otherwise only the teams they belong to.
   const { data: isMcpServerInstallAdmin } = useHasPermissions(
@@ -312,9 +313,9 @@ export function McpServerCard({
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
   // Install is offered only while the viewer has no connection they can use —
-  // the same rule as the registry's Installed filter and the server page.
-  const isInstalledForViewer =
-    isMcpServerInstalledForViewer(allServersForCatalog);
+  // the same rule as the registry's Installed filter and the server page,
+  // decided by the server for the row.
+  const isInstalledForViewer = item.install.installedForViewer;
 
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
@@ -544,7 +545,7 @@ export function McpServerCard({
       className="flex-1"
       disabled={isChatCreating}
       aria-label={`Chat using ${item.name}`}
-      onClick={() => startChat(item)}
+      onClick={() => startChatById(item.id)}
     >
       <MessageSquare className="h-4 w-4" />
       {isChatCreating ? "Creating..." : "Chat"}
@@ -1007,7 +1008,11 @@ export function McpServerCard({
         description={item.description}
         icon={
           <span className="relative flex size-9 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={20} />
+            <McpCatalogIcon
+              icon={item.iconUrl ?? item.icon}
+              catalogId={item.id}
+              size={20}
+            />
             {deploymentStatusIndicator}
           </span>
         }

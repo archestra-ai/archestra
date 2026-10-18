@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { McpCatalogItemEditPage } from "./page.client";
 
 vi.mock("next/navigation");
@@ -10,7 +10,7 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Archestra",
 }));
-vi.mock("@/lib/mcp/internal-mcp-catalog.query");
+vi.mock("@/lib/mcp/mcp-registry.query");
 vi.mock("@/components/mcp-catalog-icon", () => ({
   McpCatalogIcon: () => <span />,
 }));
@@ -46,17 +46,26 @@ describe("McpCatalogItemEditPage", () => {
       push,
       replace,
     } as unknown as ReturnType<typeof useRouter>);
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [
-        {
-          id: "server-1",
-          name: "filesystem",
-          icon: null,
-          serverType: "local",
-        },
-      ],
+    vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
+      data: {
+        id: "server-1",
+        name: "filesystem",
+        icon: null,
+        serverType: "local",
+      },
       isPending: false,
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
+  });
+
+  it("does not open an app's backing entry for editing", () => {
+    vi.mocked(useInternalMcpCatalogItem).mockReturnValue({
+      data: { id: "app-backing", name: "app", icon: null, serverType: "app" },
+      isPending: false,
+    } as unknown as ReturnType<typeof useInternalMcpCatalogItem>);
+
+    render(<McpCatalogItemEditPage id="app-backing" />);
+
+    expect(screen.getByText("Server not found")).toBeInTheDocument();
   });
 
   it("keeps the Test Connection page in the shared shell and advances to tool review", async () => {

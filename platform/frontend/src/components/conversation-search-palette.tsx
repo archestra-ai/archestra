@@ -73,7 +73,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpRegistryPage } from "@/lib/mcp/mcp-registry.query";
 import { usePlugins } from "@/lib/plugins/plugin.query";
 import { useProjects } from "@/lib/projects/projects.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
@@ -311,11 +311,24 @@ export function ConversationSearchPalette({
     name: entitySearch,
     enabled: canSearchEntities && canOpenPage("/settings/teams"),
   });
+  // MCP servers are searched by the server like skills: the first name
+  // matches from the registry's paged list, the built-in entry included.
+  const mcpPage = useMcpRegistryPage(
+    {
+      search: entitySearch,
+      includeBuiltIn: true,
+      sortBy: "name",
+      sortDirection: "asc",
+      limit: ENTITY_RESULTS_LIMIT,
+      offset: 0,
+    },
+    {
+      enabled: canSearchEntities && canOpenPage("/mcp/registry"),
+      placeholderScope: "search-palette",
+    },
+  );
   // No server-side name search for these; their pages also hold the whole
   // list and filter it in the browser.
-  const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({
-    enabled: canSearchEntities && canOpenPage("/mcp/registry"),
-  });
   const { data: plugins = [] } = usePlugins(
     canSearchEntities && canOpenPage("/plugins"),
   );
@@ -474,12 +487,14 @@ export function ConversationSearchPalette({
     },
     {
       heading: "MCP Servers",
-      links: nameMatches(mcpCatalogItems, (item) => item.name).map((item) => ({
-        key: `mcp-${item.id}`,
-        href: `/mcp/registry/${item.id}`,
-        label: item.name,
-        icon: Route,
-      })),
+      links: serverResults(mcpPage.data?.data, mcpPage.isPlaceholderData).map(
+        (item) => ({
+          key: `mcp-${item.id}`,
+          href: `/mcp/registry/${item.id}`,
+          label: item.name,
+          icon: Route,
+        }),
+      ),
     },
   ];
   const hasEntityMatches = searchGroups.some((group) => group.links.length > 0);

@@ -22,7 +22,8 @@ export type LogSession =
  * chat's name, then the last user message. Coding clients wrap mid-turn user
  * messages in harness markup (`<system-reminder>`, `<pasted_content>`, "The
  * user sent a new message while you were working:"), which says nothing
- * about the session, so it is stripped from the preview.
+ * about the session, so it is stripped from the preview, as is the
+ * Markdown and HTML-entity syntax a one-line title cannot render.
  */
 export function sessionTitleOf(session: {
   claudeCodeTitle?: string | null;
@@ -358,7 +359,24 @@ function cleanMessagePreview(text: string | null | undefined): string | null {
     .replace(/<system-reminder>[\s\S]*?(<\/system-reminder>|$)/g, " ")
     .replace(/<\/?pasted_content\b[^>]*>/g, " ")
     .replace(/^\s*The user sent a new message while you were working:/, " ")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) =>
+      String.fromCodePoint(Number.parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+    .replace(/&(amp|lt|gt|quot|nbsp);/g, (_, name: string) => ENTITIES[name])
+    // Block markers at line starts: quotes, headings, list bullets.
+    .replace(/^[ \t]*(?:>+|#{1,6}|[-*+])[ \t]+/gm, "")
+    // Emphasis and inline code markers; the words stay.
+    .replace(/(\*\*|__|\*|`+)(\S(?:[\s\S]*?\S)?)\1/g, "$2")
     .replace(/\s+/g, " ")
     .trim();
   return cleaned || null;
 }
+
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  nbsp: " ",
+};

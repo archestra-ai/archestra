@@ -27,7 +27,16 @@ vi.mock("./catalog-edit-access", () => ({
 }));
 
 vi.mock("./use-chat-with-catalog-item", () => ({
-  useChatWithCatalogItem: () => ({ startChat: vi.fn(), isCreating: false }),
+  useChatWithCatalogItem: () => ({
+    startChat: vi.fn(),
+    startChatById: vi.fn(),
+    isCreating: false,
+  }),
+}));
+
+// The page's installs reach the rows through the list's page-scoped request.
+vi.mock("./registry-page-servers", () => ({
+  useRegistryPageServers: () => useMcpServersMock().data,
 }));
 
 const {
@@ -67,23 +76,50 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import { useAppearanceSettings } from "@/lib/organization.query";
-import type { CatalogItem, InstalledServer } from "./mcp-server-card";
+import type { InstalledServer, RegistryListItem } from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
 
 const CURRENT_USER_ID = "user-me";
 
-const item = {
+const itemFields = {
   id: "cat-1",
   name: "some-remote-server",
   serverType: "remote",
   icon: null,
+  iconUrl: null,
   description: null,
   toolCount: 0,
   environmentId: null,
   imageApprovalRequired: false,
   multitenant: false,
   catalogReinstallRequired: false,
-} as unknown as CatalogItem;
+  bindsCredential: false,
+  enterpriseManaged: false,
+};
+
+/**
+ * A registry list row. The server summarizes each row's installs; here the
+ * summary follows whatever installs the test hands the page.
+ */
+function registryRow(fields: Record<string, unknown>): RegistryListItem {
+  const row = { ...fields } as unknown as RegistryListItem;
+  Object.defineProperty(row, "install", {
+    enumerable: true,
+    get: () => {
+      const servers = (useMcpServersMock.getMockImplementation()?.()?.data ??
+        []) as InstalledServer[];
+      const own = servers.filter((server) => server.catalogId === row.id);
+      return {
+        visibleCount: own.length,
+        installedForViewer: own.some((server) => server.canUseCredential),
+        primaryServerId: own[0]?.id ?? null,
+      };
+    },
+  });
+  return row;
+}
+
+const item = registryRow(itemFields);
 
 const personalInstall = {
   id: "srv-1",
@@ -218,11 +254,11 @@ describe("McpServerTable uninstall permission", () => {
 
   it("moves local runtime state to an icon dot and keeps Status installation-only", async () => {
     const user = userEvent.setup();
-    const localItem = {
-      ...item,
+    const localItem = registryRow({
+      ...itemFields,
       id: "cat-local",
       serverType: "local",
-    } as CatalogItem;
+    });
     const localInstall = {
       ...personalInstall,
       id: "srv-local",

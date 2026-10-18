@@ -1294,6 +1294,17 @@ describe("registerAuditLogHook", () => {
     });
   });
 
+  describe("denylist — MCP registry list read sent as POST", () => {
+    test.each([
+      "/api/internal_mcp_catalog/registry/search",
+      "/api/internal_mcp_catalog/registry/search/ids",
+    ])("POST %s writes zero rows", async (url) => {
+      await app.inject({ method: "POST", url });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+  });
+
   describe("denylist — high-volume chat surface sub-routes", () => {
     test("POST /api/chat stream endpoint writes zero rows", async () => {
       await app.inject({ method: "POST", url: "/api/chat" });

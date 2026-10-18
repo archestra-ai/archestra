@@ -415,6 +415,23 @@ vi.mock("@/lib/a2a-remote-agents.query", () => ({
   useSyncAgentA2aDelegations: useSyncAgentA2aDelegationsMock,
 }));
 
+// The environment-conflict check reads the agent's catalogs by id.
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
+  // Answers from the catalog rows each test sets, for the ids asked.
+  useMcpRegistryRowsByIds: (ids: string[]) => {
+    const catalog = useInternalMcpCatalogMock() ?? {};
+    return {
+      data: ((catalog.data ?? []) as Array<{ id: string }>).filter((row) =>
+        ids.includes(row.id),
+      ),
+      isPending: catalog.isPending ?? false,
+      hasLoaded: !(catalog.isPending ?? false),
+      isError: catalog.isError ?? false,
+      refetch: async () => [],
+    };
+  },
+}));
+
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: useInternalMcpCatalogMock,

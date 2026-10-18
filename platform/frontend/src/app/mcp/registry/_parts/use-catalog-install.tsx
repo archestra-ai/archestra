@@ -46,8 +46,11 @@ import {
   useEnterpriseManagedInstallConnectUrl,
 } from "@/lib/mcp/enterprise-managed-install-auth";
 import { isInstallInProgress } from "@/lib/mcp/install-status";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useInstallMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import {
+  fetchInternalMcpCatalogItem,
+  useMcpRegistryIssueIndex,
+} from "@/lib/mcp/mcp-registry.query";
+import { useInstallMcpServer } from "@/lib/mcp/mcp-server.query";
 import {
   clearPendingInstall,
   getPendingInstall,
@@ -119,10 +122,12 @@ export function useCatalogInstall(opts?: {
   const router = useRouter();
   const pathname = usePathname();
 
-  const { data: catalogItems } = useInternalMcpCatalog({});
-  const { data: installedServers } = useMcpServers({
-    includeAssignedAgents: false,
-  });
+  // The registry's slim issue index carries every visible install's status
+  // and every item's name, which is all the completion tracking reads. Full
+  // items are loaded by id when a flow actually opens one.
+  const { data: issueIndex } = useMcpRegistryIssueIndex();
+  const catalogItems = issueIndex?.catalogItems;
+  const installedServers = issueIndex?.servers;
   const installMutation = useInstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const queryClient = useQueryClient();
@@ -150,6 +155,8 @@ export function useCatalogInstall(opts?: {
   // torn down and the intent is still pending" (reopen) — on a remount the ref
   // is fresh, so the re-open effect takes over from the stashed intent.
   const deepLinkHandledRef = useRef(false);
+  // The `?install=` catalog id whose item is being loaded right now.
+  const deepLinkLoadingRef = useRef<string | null>(null);
   // Catalog ids with a direct (no-dialog) install request in flight.
   const directInstallsInFlightRef = useRef(new Set<string>());
 
@@ -241,7 +248,7 @@ export function useCatalogInstall(opts?: {
                   (item) => item.id === server.catalogId,
                 )?.name;
                 toast.success(
-                  `Successfully installed ${catalogName ?? server.name}`,
+                  `Successfully installed ${catalogName ?? "MCP server"}`,
                 );
               }
               // Force immediate deployment status refresh via WebSocket
@@ -637,13 +644,19 @@ export function useCatalogInstall(opts?: {
   // pre-target the connection — used by the item detail page's add-connection
   // actions.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only re-run on searchParams/catalogItems; install handlers are stable within a render
-  const installFromSearchParams = useCallback(() => {
+  const installFromSearchParams = useCallback(async () => {
     const installCatalogId = searchParams.get(MCP_CATALOG_INSTALL_QUERY_PARAM);
-    if (!installCatalogId || !catalogItems) return;
-
-    const catalogItem = catalogItems.find(
-      (item) => item.id === installCatalogId,
-    );
+    if (!installCatalogId) return;
+    // The item loads asynchronously; a second call for the same link while it
+    // does must not open a second dialog.
+    if (deepLinkLoadingRef.current === installCatalogId) return;
+    deepLinkLoadingRef.current = installCatalogId;
+    const catalogItem = await fetchInternalMcpCatalogItem(
+      queryClient,
+      installCatalogId,
+    ).finally(() => {
+      deepLinkLoadingRef.current = null;
+    });
     if (!catalogItem) return;
 
     const scopeParam = searchParams.get(
@@ -679,7 +692,7 @@ export function useCatalogInstall(opts?: {
       scopeParam ?? undefined,
       teamParam ?? undefined,
     );
-  }, [searchParams, catalogItems, pathname, router]);
+  }, [searchParams, pathname, router]);
 
   // Durable re-open: if the deep-link dialog was lost before the user acted, the
   // intent survives in sessionStorage. Once catalog + installs are loaded, and
@@ -694,10 +707,7 @@ export function useCatalogInstall(opts?: {
     const pending = getPendingInstall();
     if (!pending) return;
 
-    const catalogItem = catalogItems.find(
-      (item) => item.id === pending.catalogId,
-    );
-    if (!catalogItem) {
+    if (!catalogItems.some((item) => item.id === pending.catalogId)) {
       clearPendingInstall();
       return;
     }
@@ -720,7 +730,13 @@ export function useCatalogInstall(opts?: {
 
     if (!registerPendingInstallReopen()) return;
     deepLinkHandledRef.current = true;
-    openInstallForCatalogItem(catalogItem, pending.scope, pending.teamId);
+    void fetchInternalMcpCatalogItem(queryClient, pending.catalogId).then(
+      (catalogItem) => {
+        if (catalogItem) {
+          openInstallForCatalogItem(catalogItem, pending.scope, pending.teamId);
+        }
+      },
+    );
   }, [catalogItems, installedServers, isDialogOpened]);
 
   // Resume an enterprise-managed install after linking the configured IdP.
@@ -730,13 +746,20 @@ export function useCatalogInstall(opts?: {
 
     const intent = getPendingEnterpriseManagedInstall();
     if (!intent) return;
-
-    const catalogItem = catalogItems.find(
-      (item) => item.id === intent.catalogId,
-    );
-    if (!catalogItem) return;
+    if (!catalogItems.some((item) => item.id === intent.catalogId)) return;
 
     clearPendingEnterpriseManagedInstall();
+    void resumeEnterpriseManagedInstall(intent);
+  }, [catalogItems]);
+
+  const resumeEnterpriseManagedInstall = async (
+    intent: EnterpriseManagedInstallIntent,
+  ) => {
+    const catalogItem = await fetchInternalMcpCatalogItem(
+      queryClient,
+      intent.catalogId,
+    );
+    if (!catalogItem) return;
 
     setPreselectedTeamId(
       intent.scope === "team" ? (intent.teamId ?? null) : null,
@@ -766,7 +789,7 @@ export function useCatalogInstall(opts?: {
         });
         return;
     }
-  }, [catalogItems]);
+  };
 
   const handleNoAuthConfirm = async (result: NoAuthInstallResult) => {
     if (!noAuthCatalogItem) return;

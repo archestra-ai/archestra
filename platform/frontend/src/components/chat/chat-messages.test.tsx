@@ -271,7 +271,10 @@ vi.mock("@/lib/chat/chat-message.query", () => ({
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: () => ({ data: mockIconSources.catalogItems }),
+}));
+
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpCatalogDirectory: () => ({ data: mockIconSources.catalogItems }),
 }));
 
 const { mockUseMcpInstallOrchestrator } = vi.hoisted(() => ({

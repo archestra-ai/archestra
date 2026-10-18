@@ -7,6 +7,7 @@ import {
   useAllCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 
 /** One MCP server a gateway exposes, most tools first. */
 export interface GatewayServer {
@@ -34,23 +35,55 @@ export function useGatewayServers(
 ) {
   const profileQuery = useProfile(gatewayId);
   const gateway = profileQuery.data;
-  // Apps are catalog entries too; without them an app's tools have no name.
-  // The backend leaves them out for callers who can't read apps.
-  const { data: catalog } = useInternalMcpCatalog({ includeApps: true });
   const accessAll = gateway?.accessAllTools ?? false;
+  // An "access all tools" gateway lists every server in the registry, with
+  // its description and tool count, so it reads the whole catalog. Any other
+  // gateway only needs the catalogs its own tools come from, by id. Apps are
+  // catalog entries too; without them an app's tools have no name (the
+  // backend leaves them out for callers who can't read apps).
+  const { data: fullCatalog } = useInternalMcpCatalog({
+    includeApps: true,
+    enabled: !!gateway && accessAll,
+  });
+  const toolCatalogIds = useMemo(
+    () =>
+      accessAll
+        ? []
+        : [
+            ...new Set(
+              (gateway?.tools ?? []).flatMap((tool) =>
+                tool.catalogId ? [tool.catalogId] : [],
+              ),
+            ),
+          ],
+    [accessAll, gateway?.tools],
+  );
+  const toolCatalogRows = useMcpRegistryRowsByIds(toolCatalogIds, {
+    includeBuiltIn: true,
+    includeApps: true,
+  });
+  const catalog: Array<{
+    id: string;
+    name: string;
+    serverType: string;
+    icon: string | null;
+    iconUrl?: string | null;
+    description: string | null;
+    toolCount?: number;
+  }> = accessAll ? (fullCatalog ?? NO_CATALOG) : toolCatalogRows.data;
   const withTools = params?.withTools ?? false;
   const { data: catalogTools } = useAllCatalogTools({
     enabled: accessAll && withTools,
   });
 
   const servers = useMemo<GatewayServer[]>(() => {
-    const byId = new Map((catalog ?? []).map((c) => [c.id, c]));
+    const byId = new Map(catalog.map((c) => [c.id, c]));
     if (accessAll) {
       const toolsByCatalog = withTools
         ? groupCatalogTools(catalogTools)
         : new Map();
       // An "access all tools" gateway covers the MCP registry, not apps.
-      return (catalog ?? [])
+      return catalog
         .filter((c) => c.serverType !== "app")
         .map((c) => ({
           key: c.id,
@@ -58,7 +91,7 @@ export function useGatewayServers(
           catalogName: c.name,
           icon: c.icon,
           description: c.description,
-          toolCount: c.toolCount,
+          toolCount: c.toolCount ?? 0,
           tools: (toolsByCatalog.get(c.id) ?? []).map(
             (t: { name: string }) => ({
               name: shortToolName(t.name),
@@ -81,7 +114,7 @@ export function useGatewayServers(
           key: catalogId ?? "other",
           catalogId,
           catalogName: item?.name ?? nameFromPrefix(gateway?.tools, catalogId),
-          icon: item?.icon ?? null,
+          icon: item?.iconUrl ?? item?.icon ?? null,
           description: item?.description ?? null,
           toolCount: tools.length,
           tools: withTools ? tools : [],
@@ -92,6 +125,9 @@ export function useGatewayServers(
 
   return { gateway, profileQuery, accessAll, servers };
 }
+
+// Stable while the catalog loads, so the servers list keeps its identity.
+const NO_CATALOG: never[] = [];
 
 /** "linear__create_ticket" names its server "Linear". */
 function nameFromPrefix(

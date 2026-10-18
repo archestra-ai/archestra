@@ -185,6 +185,32 @@ describe("MCP registry list routes", () => {
       expect(names(await search({ search: "%_" }))).toEqual(["100%_done"]);
     });
 
+    test("matches descriptions too when a picker asks, with wildcards literal", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      await makeItem(makeInternalMcpCatalog, "jira", {
+        description: "Track issues in Atlassian",
+      });
+      await makeItem(makeInternalMcpCatalog, "atlassian-wiki");
+      await makeItem(makeInternalMcpCatalog, "notion", {
+        description: "100%_done pages",
+      });
+      await makeItem(makeInternalMcpCatalog, "slack", {
+        description: "100 percent chat",
+      });
+
+      // The registry page searches names only.
+      expect(names(await search({ search: "atlassian" }))).toEqual([
+        "atlassian-wiki",
+      ]);
+      expect(
+        names(await search({ search: "atlassian", searchDescriptions: true })),
+      ).toEqual(["atlassian-wiki", "jira"]);
+      expect(
+        names(await search({ search: "%_", searchDescriptions: true })),
+      ).toEqual(["notion"]);
+    });
+
     test("labels match every key and any value within a key", async ({
       makeInternalMcpCatalog,
     }) => {
@@ -349,6 +375,51 @@ describe("MCP registry list routes", () => {
       expect(names(await search({ sharedWith: [`team:${team.id}`] }))).toEqual([
         "ops-mine-installed",
       ]);
+    });
+
+    test("an environment filter can also take in the Default environment", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      await makeItem(makeInternalMcpCatalog, "default-env");
+      const elsewhere = crypto.randomUUID();
+
+      expect(names(await search({ environmentIds: [elsewhere] }))).toEqual([]);
+      expect(
+        names(
+          await search({
+            environmentIds: [elsewhere],
+            includeDefaultEnvironment: true,
+          }),
+        ),
+      ).toEqual(["default-env"]);
+      expect(
+        names(
+          await search({ environmentIds: [], includeDefaultEnvironment: true }),
+        ),
+      ).toEqual(["default-env"]);
+    });
+
+    test("says what connecting each row asks for", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      await makeItem(makeInternalMcpCatalog, "plain");
+      await makeItem(makeInternalMcpCatalog, "configured", {
+        userConfig: {
+          token: { type: "string", title: "Token", description: "" },
+          region: { type: "string", title: "Region", description: "" },
+        },
+      });
+
+      const page = (await search()) as unknown as {
+        data: Array<{ name: string; setupNeeds: unknown }>;
+      };
+
+      expect(
+        Object.fromEntries(page.data.map((row) => [row.name, row.setupNeeds])),
+      ).toEqual({
+        plain: { signIn: false, settings: 0 },
+        configured: { signIn: false, settings: 2 },
+      });
     });
 
     test("an author filter matches items a service account created", async ({
@@ -569,6 +640,36 @@ describe("MCP registry list routes", () => {
       expect(names(page)).toEqual(["first", "second", "fourth", "third"]);
     });
 
+    test("lists the built-in entry and app backings only when asked", async ({
+      makeInternalMcpCatalog,
+      makeApp,
+    }) => {
+      await makeInternalMcpCatalog({
+        id: ARCHESTRA_MCP_CATALOG_ID,
+        name: "Archestra",
+        serverType: "builtin",
+        organizationId: null,
+      });
+      await makeItem(makeInternalMcpCatalog, "github");
+      const app = await makeApp({
+        organizationId: ctx.organizationId,
+        authorId: ctx.user.id,
+        name: "Expense App",
+      });
+
+      expect(names(await search())).toEqual(["github"]);
+      expect(names(await search({ includeBuiltIn: true }))).toEqual([
+        "Archestra",
+        "github",
+      ]);
+      const withApps = await search({ includeApps: true });
+      const appRow = withApps.data.find(
+        (row) => (row as { serverType?: string }).serverType === "app",
+      ) as unknown as { appId: string; appEnabled: boolean | null };
+      expect(appRow.appId).toBe(app.id);
+      expect(names(withApps)).toContain("github");
+    });
+
     test("serves image icons by URL and keeps emoji inline", async ({
       makeInternalMcpCatalog,
     }) => {
@@ -599,6 +700,18 @@ describe("MCP registry list routes", () => {
 
       expect(row).toMatchObject({ icon: null, iconUrl: null });
       expect(response.statusCode).toBe(404);
+      const index = await ctx.app.inject({
+        method: "GET",
+        url: "/api/internal_mcp_catalog/registry/issue-index",
+      });
+      const indexed = (
+        index.json() as {
+          catalogItems: Array<{ id: string; icon?: string; iconUrl?: string }>;
+        }
+      ).catalogItems.find((item) => item.id === tiff.id);
+      expect(indexed).toBeDefined();
+      expect(indexed?.icon).toBeUndefined();
+      expect(indexed?.iconUrl).toBeUndefined();
     });
 
     test("a plain member lists only what they may read, and sees only their installs", async ({
@@ -864,6 +977,30 @@ describe("MCP registry list routes", () => {
   });
 
   describe("GET /api/internal_mcp_catalog/registry/issue-index", () => {
+    test("names each install, for pickers that list installs by name", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const item = await makeItem(makeInternalMcpCatalog, "named");
+      const install = await makeMcpServer({
+        catalogId: item.id,
+        scope: "org",
+        name: "named-install",
+      });
+
+      const index = (
+        await ctx.app.inject({
+          method: "GET",
+          url: "/api/internal_mcp_catalog/registry/issue-index",
+        })
+      ).json();
+
+      expect(
+        index.servers.find((server: { id: string }) => server.id === install.id)
+          ?.name,
+      ).toBe("named-install");
+    });
+
     test("carries every visible item and install without icons or configuration", async ({
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -916,6 +1053,10 @@ describe("MCP registry list routes", () => {
         }),
       ]);
       expect(body.servers[0]).not.toHaveProperty("teamId");
+      // Icon maps link the image instead of carrying it.
+      expect(body.catalogItems[0].iconUrl).toMatch(
+        new RegExp(`^/api/internal_mcp_catalog/${item.id}/icon\\?v=`),
+      );
       expect(body.servers[0]).not.toHaveProperty("oauthRefreshErrorMessage");
     });
   });
@@ -1000,6 +1141,34 @@ describe("MCP registry list routes", () => {
     expect(response.json().effectiveActions).toContain("update");
   });
 
+  test("GET /api/internal_mcp_catalog/:id opens a runtime variant unless asked for listed items only", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const root = await makeItem(makeInternalMcpCatalog, "root-server");
+    const variant = await makeItem(makeInternalMcpCatalog, "root-server-v", {
+      parentCatalogItemId: root.id,
+    });
+    const get = (query = "") =>
+      ctx.app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${variant.id}${query}`,
+      });
+
+    // API clients follow an install's catalogId to its variant, as before.
+    expect((await get()).statusCode).toBe(200);
+    // The registry's own pages open only what a list shows.
+    expect((await get("?listedOnly=true")).statusCode).toBe(404);
+    expect((await get("?listedOnly=false")).statusCode).toBe(200);
+    expect(
+      (
+        await ctx.app.inject({
+          method: "GET",
+          url: `/api/internal_mcp_catalog/${root.id}?listedOnly=true`,
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
   test("McpServerModel.findAll narrows to catalogIds in SQL", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -1019,6 +1188,34 @@ describe("MCP registry list routes", () => {
     );
 
     expect(found.map((server) => server.id)).toEqual([serverA.id]);
+  });
+
+  test("McpServerModel.findAll narrows to the catalog a tool prefix names", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const cloud = await makeItem(makeInternalMcpCatalog, "GitHub Cloud");
+    const other = await makeItem(makeInternalMcpCatalog, "github");
+    const cloudServer = await makeMcpServer({
+      catalogId: cloud.id,
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: other.id, scope: "org" });
+    const find = async (catalogSlug: string) =>
+      (
+        await McpServerModel.findAll(
+          ctx.user.id,
+          true,
+          ctx.organizationId,
+          undefined,
+          true,
+          { catalogSlug },
+        )
+      ).map((server) => server.id);
+
+    // A tool name carries "GitHub Cloud" as "github_cloud".
+    expect(await find("github_cloud")).toEqual([cloudServer.id]);
+    expect(await find("agent")).toEqual([]);
   });
 
   test("McpServerModel.findAll shows a plain member the same installs with or without catalogIds", async ({

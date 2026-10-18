@@ -64328,6 +64328,10 @@ export type SearchMcpRegistryData = {
         sortBy?: 'name' | 'createdAt' | 'toolCount' | 'attention' | 'issueAge';
         sortDirection?: 'asc' | 'desc';
         search?: string;
+        /**
+         * Match the search against descriptions too, not only names.
+         */
+        searchDescriptions?: boolean;
         labels?: {
             [key: string]: Array<string>;
         };
@@ -64360,6 +64364,18 @@ export type SearchMcpRegistryData = {
          * Only these items. An empty list matches nothing; omit it for every item.
          */
         catalogIds?: Array<string>;
+        /**
+         * Also list the built-in MCP server entry.
+         */
+        includeBuiltIn?: boolean;
+        /**
+         * With environmentIds: also match items in the Default environment (no environment).
+         */
+        includeDefaultEnvironment?: boolean;
+        /**
+         * Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.
+         */
+        includeApps?: boolean;
         /**
          * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.
          */
@@ -64468,6 +64484,9 @@ export type SearchMcpRegistryResponses = {
             providesSkills?: boolean;
             catalogReinstallRequired: boolean;
             dynamicConnectionMcpServerId: string | null;
+            appId?: string | null;
+            appEnabled?: boolean | null;
+            docsUrl: string | null;
             icon: string | null;
             iconUrl: string | null;
             alertMutes: Array<{
@@ -64482,6 +64501,10 @@ export type SearchMcpRegistryResponses = {
             imageApprovalRequired: boolean;
             bindsCredential: boolean;
             enterpriseManaged: boolean;
+            setupNeeds: {
+                signIn: boolean;
+                settings: number;
+            };
             install: {
                 visibleCount: number;
                 installedForViewer: boolean;
@@ -64573,6 +64596,10 @@ export type SearchMcpRegistryIdsData = {
         sortBy?: 'name' | 'createdAt' | 'toolCount' | 'attention' | 'issueAge';
         sortDirection?: 'asc' | 'desc';
         search?: string;
+        /**
+         * Match the search against descriptions too, not only names.
+         */
+        searchDescriptions?: boolean;
         labels?: {
             [key: string]: Array<string>;
         };
@@ -64605,6 +64632,18 @@ export type SearchMcpRegistryIdsData = {
          * Only these items. An empty list matches nothing; omit it for every item.
          */
         catalogIds?: Array<string>;
+        /**
+         * Also list the built-in MCP server entry.
+         */
+        includeBuiltIn?: boolean;
+        /**
+         * With environmentIds: also match items in the Default environment (no environment).
+         */
+        includeDefaultEnvironment?: boolean;
+        /**
+         * Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.
+         */
+        includeApps?: boolean;
         /**
          * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.
          */
@@ -64789,6 +64828,8 @@ export type GetMcpRegistryIssueIndexResponses = {
             authorId?: string;
             createdByServiceAccountId?: string;
             authorName?: string;
+            icon?: string;
+            iconUrl?: string;
             alertMutes?: Array<{
                 catalogId: string;
                 mcpServerId: string | null;
@@ -64800,6 +64841,7 @@ export type GetMcpRegistryIssueIndexResponses = {
         }>;
         servers: Array<{
             id: string;
+            name: string;
             catalogId: string;
             scope: 'personal' | 'team' | 'org';
             localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -65128,7 +65170,12 @@ export type GetInternalMcpCatalogItemData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Answer 404 for hidden runtime variants (Playwright per-environment rows); app backings are still returned. Default false.
+         */
+        listedOnly?: boolean;
+    };
     url: '/api/internal_mcp_catalog/{id}';
 };
 
@@ -81117,6 +81164,10 @@ export type GetMcpServersData = {
          * Only installs of these catalog items (comma-separated, at most 100).
          */
         catalogIds?: Array<string>;
+        /**
+         * Only installs of catalog items whose name, slugified as in tool names (lowercase, spaces as _, other characters dropped), is this.
+         */
+        catalogSlug?: string;
         /**
          * Include each listed install's assigned agents. Defaults to false, which returns an empty `assignedAgents` for every install. The lookup covers every install in the response, so narrow the list with `catalogId` when you need only some. GET /api/mcp_server/{id} returns the agents of one install.
          */

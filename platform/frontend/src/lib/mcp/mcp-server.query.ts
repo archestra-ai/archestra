@@ -17,6 +17,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -86,6 +87,7 @@ export function useMcpServers(params?: McpServersParams) {
       "mcp-servers",
       {
         catalogId: params?.catalogId,
+        catalogSlug: params?.catalogSlug,
         includeAssignedAgents,
         assignmentScope: params?.assignmentScope,
         assignmentTeamIds: params?.assignmentTeamIds,
@@ -96,6 +98,7 @@ export function useMcpServers(params?: McpServersParams) {
         query: {
           includeAssignedAgents,
           ...(params?.catalogId && { catalogId: params.catalogId }),
+          ...(params?.catalogSlug && { catalogSlug: params.catalogSlug }),
           ...(params?.assignmentScope && {
             assignmentScope: params.assignmentScope,
           }),
@@ -131,12 +134,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
         if (status === "error") {
           if (!runtimeInstallErrorsAlreadyTracked.has(serverId)) {
             runtimeInstallErrorsAlreadyTracked.add(serverId);
-            const server = queryClient
-              .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
-                queryKey: ["mcp-servers"],
-              })
-              .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
-              .find((candidate) => candidate.id === serverId);
+            const server = findCachedMcpServer(queryClient, serverId);
             trackEvent("mcp_server_installation_failed", {
               serverId,
               serverName: server?.name,
@@ -241,13 +239,30 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
  *
  * @param catalogId - Optional catalog ID to filter. If provided, only returns servers for that catalog.
  */
-export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
-  const { data: servers } = useMcpServers({
+export function useMcpServersGroupedByCatalog(
+  params?: McpServersQuery & {
+    /**
+     * Only the installs of these catalog items, for a list that shows a few
+     * of them: asked in requests of a hundred ids, the endpoint's limit.
+     * Omitted, every install the caller can see is read.
+     */
+    catalogIdsIn?: string[];
+  },
+) {
+  const scoped = params?.catalogIdsIn !== undefined;
+  const { data: allServers } = useMcpServers({
     includeAssignedAgents: false,
     catalogId: params?.catalogId,
     assignmentScope: params?.assignmentScope,
     assignmentTeamIds: params?.assignmentTeamIds,
+    enabled: !scoped,
   });
+  const scopedServers = useMcpServersForCatalogIds({
+    catalogIds: params?.catalogIdsIn ?? [],
+    assignmentScope: params?.assignmentScope,
+    assignmentTeamIds: params?.assignmentTeamIds,
+  });
+  const servers = scoped ? scopedServers : allServers;
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -468,14 +483,9 @@ export function useReloadMcpServerTools() {
     },
     onSuccess: async (result, variables) => {
       // Callers pass only the server id; recover name/catalogId from the
-      // cached mcp-servers lists (same lookup useMcpInstallationStatusCacheSync
-      // uses) for the toast and catalog-scoped invalidation.
-      const cachedServer = queryClient
-        .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
-          queryKey: ["mcp-servers"],
-        })
-        .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
-        .find((candidate) => candidate.id === variables.id);
+      // cache (same lookup useMcpInstallationStatusCacheSync uses) for the
+      // toast and catalog-scoped invalidation.
+      const cachedServer = findCachedMcpServer(queryClient, variables.id);
       const name = variables.name ?? cachedServer?.name;
       const catalogId = variables.catalogId ?? cachedServer?.catalogId;
 
@@ -1309,4 +1319,113 @@ function patchIssueIndexServer(params: {
       };
     },
   );
+}
+
+/**
+ * The installs of the given catalog items, assignable to a target when a scope
+ * is given; `undefined` until every chunk has answered. Each chunk is cached
+ * under `["mcp-servers", …]` like any server list, so status pushes and server
+ * changes reach it.
+ */
+function useMcpServersForCatalogIds(params: {
+  catalogIds: string[];
+  assignmentScope?: McpServersQuery["assignmentScope"];
+  assignmentTeamIds?: string[];
+}) {
+  const { data: canReadInstallations } = useHasPermissions({
+    mcpServerInstallation: ["read"],
+  });
+  const sortedIds = [...new Set(params.catalogIds)].sort();
+  const chunks: string[][] = [];
+  for (let i = 0; i < sortedIds.length; i += MAX_CATALOG_IDS_PER_REQUEST) {
+    chunks.push(sortedIds.slice(i, i + MAX_CATALOG_IDS_PER_REQUEST));
+  }
+  const servers = useQueries({
+    queries: chunks.map((catalogIds) => ({
+      queryKey: [
+        "mcp-servers",
+        {
+          catalogIds,
+          includeAssignedAgents: false,
+          assignmentScope: params.assignmentScope,
+          assignmentTeamIds: params.assignmentTeamIds,
+        },
+      ],
+      enabled: !!canReadInstallations,
+      queryFn: async () => {
+        const { data, error } = await getMcpServers({
+          query: {
+            catalogIds,
+            includeAssignedAgents: false,
+            ...(params.assignmentScope && {
+              assignmentScope: params.assignmentScope,
+            }),
+            ...(params.assignmentTeamIds && {
+              assignmentTeamIds: params.assignmentTeamIds,
+            }),
+          },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        return data ?? [];
+      },
+    })),
+    combine: combineServerChunks,
+  });
+
+  // A changed set of catalogs (the list's search, say) is a new request:
+  // keep the installs already known for the catalogs still asked for until
+  // it answers, so those rows do not read "Not connected" meanwhile. Only
+  // for the same target: another scope or team set can use other installs.
+  const targetKey = JSON.stringify([
+    params.assignmentScope ?? null,
+    params.assignmentTeamIds ?? null,
+  ]);
+  const lastAnswer = useRef<{
+    targetKey: string;
+    servers: NonNullable<typeof servers>;
+  } | null>(null);
+  if (servers) lastAnswer.current = { targetKey, servers };
+  const requestedKey = sortedIds.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: requestedKey stands for sortedIds
+  return useMemo(() => {
+    if (servers) return servers;
+    const kept = lastAnswer.current;
+    if (!kept || kept.targetKey !== targetKey) return undefined;
+    const requested = new Set(sortedIds);
+    return kept.servers.filter(
+      (server) => server.catalogId && requested.has(server.catalogId),
+    );
+  }, [servers, requestedKey, targetKey]);
+}
+
+function combineServerChunks<T>(results: Array<{ data: T[] | undefined }>) {
+  return results.every((result) => result.data)
+    ? results.flatMap((result) => result.data ?? [])
+    : undefined;
+}
+
+const MAX_CATALOG_IDS_PER_REQUEST = 100;
+
+/**
+ * An install's name and catalog from whatever the cache holds: any cached
+ * server list, else the registry's issue index (cached on every page for the
+ * sidebar badge), so pages that no longer load a full list still find it.
+ */
+function findCachedMcpServer(
+  queryClient: QueryClient,
+  serverId: string,
+): { name: string; catalogId: string | null } | undefined {
+  const listed = queryClient
+    .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
+      queryKey: ["mcp-servers"],
+    })
+    .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
+    .find((candidate) => candidate.id === serverId);
+  if (listed) return listed;
+  const indexed = queryClient
+    .getQueryData<McpRegistryIssueIndexWire>(mcpRegistryIssueIndexQueryKey)
+    ?.servers.find((candidate) => candidate.id === serverId);
+  return indexed
+    ? { name: indexed.name, catalogId: indexed.catalogId ?? null }
+    : undefined;
 }

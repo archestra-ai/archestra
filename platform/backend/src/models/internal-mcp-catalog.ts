@@ -43,6 +43,7 @@ import {
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
+import { SERVABLE_ICON_TYPES } from "@/utils/servable-icon";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import LimitModel from "./limit";
@@ -87,9 +88,13 @@ export type RegistryListOptions = CatalogListOptions & {
 export type RegistryListFilters = {
   /** Name substring, case-insensitive. */
   search?: string;
+  /** Match `search` against descriptions too (the pickers); names only otherwise. */
+  searchDescriptions?: boolean;
   /** Label key → accepted values; every key must match one of its values. */
   labels?: Record<string, string[]>;
   environmentIds?: string[];
+  /** With `environmentIds`: also match items in the Default environment. */
+  includeDefaultEnvironment?: boolean;
   /** Items whose author is one of these users (and not a service account). */
   authorIds?: string[];
   /** Items created by one of these service accounts. */
@@ -97,6 +102,10 @@ export type RegistryListFilters = {
   /** Installed means an install the viewer can see and use. */
   installState?: "installed" | "not-installed";
   catalogIds?: string[];
+  /** Also list the built-in Archestra entry (the registry page does not). */
+  includeBuiltIn?: boolean;
+  /** Also list app backing entries; the caller checks `app:read`. */
+  includeApps?: boolean;
 };
 
 export type RegistrySorting = {
@@ -469,6 +478,10 @@ class InternalMcpCatalogModel {
       authorId: string | null;
       createdByServiceAccountId: string | null;
       authorName: string | null;
+      /** An emoji icon; null for an image icon or none. */
+      emojiIcon: string | null;
+      hasImageIcon: boolean;
+      updatedAt: Date;
     }>
   > {
     const catalog = schema.internalMcpCatalogTable;
@@ -483,6 +496,16 @@ class InternalMcpCatalogModel {
         environmentId: catalog.environmentId,
         authorId: catalog.authorId,
         createdByServiceAccountId: catalog.createdByServiceAccountId,
+        // The image bytes stay in the database: callers link the icon route,
+        // which serves only the image types a browser shows.
+        emojiIcon: sql<
+          string | null
+        >`case when ${catalog.icon} like 'data:%' then null else ${catalog.icon} end`,
+        hasImageIcon: sql<boolean>`coalesce(${inArray(
+          sql`substring(lower(left(${catalog.icon}, 64)) from '^data:(image/[a-z0-9.+-]+)[;,]')`,
+          [...SERVABLE_ICON_TYPES],
+        )}, false)`,
+        updatedAt: catalog.updatedAt,
       })
       .from(catalog)
       .where(where)
@@ -722,6 +745,8 @@ class InternalMcpCatalogModel {
       userId?: string;
       isAdmin?: boolean;
       organizationId?: string;
+      /** Not a hidden runtime variant or legacy preset row. */
+      rootOnly?: boolean;
     },
   ): Promise<InternalMcpCatalog | null> {
     const {
@@ -729,6 +754,7 @@ class InternalMcpCatalogModel {
       userId,
       isAdmin,
       organizationId,
+      rootOnly = false,
     } = options ?? {};
 
     if (userId && !isAdmin && !organizationId) {
@@ -752,6 +778,9 @@ class InternalMcpCatalogModel {
         and(
           eq(schema.internalMcpCatalogTable.id, id),
           notDeleted(schema.internalMcpCatalogTable),
+          rootOnly
+            ? isNull(schema.internalMcpCatalogTable.parentCatalogItemId)
+            : undefined,
         ),
       );
 
@@ -2190,11 +2219,12 @@ class InternalMcpCatalogModel {
    */
   private static async buildVisibleCondition(
     options: CatalogListOptions,
+    includeApps = false,
   ): Promise<SQL | undefined> {
     const catalog = schema.internalMcpCatalogTable;
     const base = await InternalMcpCatalogModel.buildListCondition(
       options,
-      false,
+      includeApps,
     );
     if (!options.organizationId) return base;
     return and(
@@ -2212,13 +2242,25 @@ class InternalMcpCatalogModel {
   ): Promise<SQL | undefined> {
     const catalog = schema.internalMcpCatalogTable;
     const conditions: Array<SQL | undefined> = [
-      await InternalMcpCatalogModel.buildVisibleCondition(options),
-      // The registry never lists the built-in Archestra entry.
-      ne(catalog.id, ARCHESTRA_MCP_CATALOG_ID),
+      await InternalMcpCatalogModel.buildVisibleCondition(
+        options,
+        filters.includeApps,
+      ),
+      // The registry page never lists the built-in Archestra entry; pickers
+      // that offer it opt in.
+      filters.includeBuiltIn
+        ? undefined
+        : ne(catalog.id, ARCHESTRA_MCP_CATALOG_ID),
     ];
     const search = filters.search?.trim();
     if (search) {
-      conditions.push(ilike(catalog.name, `%${escapeLikePattern(search)}%`));
+      const pattern = `%${escapeLikePattern(search)}%`;
+      const byName = ilike(catalog.name, pattern);
+      conditions.push(
+        filters.searchDescriptions
+          ? (or(byName, ilike(catalog.description, pattern)) ?? byName)
+          : byName,
+      );
     }
     // AND across keys, any of the selected values within one key.
     for (const [key, values] of Object.entries(filters.labels ?? {})) {
@@ -2250,7 +2292,15 @@ class InternalMcpCatalogModel {
       );
     }
     if (filters.environmentIds) {
-      conditions.push(inArray(catalog.environmentId, filters.environmentIds));
+      const inEnvironments =
+        filters.environmentIds.length > 0
+          ? inArray(catalog.environmentId, filters.environmentIds)
+          : sql`false`;
+      conditions.push(
+        filters.includeDefaultEnvironment
+          ? (or(inEnvironments, isNull(catalog.environmentId)) as SQL)
+          : inEnvironments,
+      );
     }
     // The author a row shows is its service account when it has one, else its
     // human author, so a user id matches only items no service account made.

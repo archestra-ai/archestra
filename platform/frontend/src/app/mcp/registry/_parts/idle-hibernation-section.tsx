@@ -45,8 +45,10 @@ export function IdleHibernationSection({ item }: { item: CatalogItem }) {
   const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
   const { canModify } = useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
+  // Only this item's installs, narrowed on the server.
   const { data: servers = [] } = useMcpServers({
     includeAssignedAgents: false,
+    catalogId: item.id,
   });
 
   // The override lives on the installed server rows, and the reinstall route

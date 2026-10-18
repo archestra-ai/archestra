@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
 import McpGatewayLogsPage from "./page.client";
@@ -70,7 +70,9 @@ vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: vi.fn(),
+}));
+vi.mock("@/lib/mcp/mcp-registry.query", () => ({
+  useMcpCatalogDirectory: vi.fn(),
 }));
 vi.mock("@/lib/mcp/mcp-server.query", () => ({ useMcpServers: vi.fn() }));
 vi.mock("@/lib/mcp/mcp-tool-call.query", async (importOriginal) => ({
@@ -121,9 +123,9 @@ describe("McpGatewayLogsPage filters", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+    vi.mocked(useMcpCatalogDirectory).mockReturnValue({
       data: [],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    } as unknown as ReturnType<typeof useMcpCatalogDirectory>);
     vi.mocked(useMcpToolCalls).mockReturnValue({
       data: {
         data: [],
@@ -230,7 +232,7 @@ describe("McpGatewayLogsPage filters", () => {
         },
       ],
     } as unknown as ReturnType<typeof useMcpServers>);
-    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+    vi.mocked(useMcpCatalogDirectory).mockReturnValue({
       data: [
         {
           id: "document-search-catalog",
@@ -238,7 +240,7 @@ describe("McpGatewayLogsPage filters", () => {
           icon: "📚",
         },
       ],
-    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    } as unknown as ReturnType<typeof useMcpCatalogDirectory>);
     const user = userEvent.setup();
     render(<McpGatewayLogsPage />);
 
@@ -300,7 +302,7 @@ describe("McpGatewayLogsPage filters", () => {
           },
         ],
       } as unknown as ReturnType<typeof useMcpServers>);
-      vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      vi.mocked(useMcpCatalogDirectory).mockReturnValue({
         data: [
           {
             id: "document-search-catalog",
@@ -308,7 +310,7 @@ describe("McpGatewayLogsPage filters", () => {
             icon: "📚",
           },
         ],
-      } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+      } as unknown as ReturnType<typeof useMcpCatalogDirectory>);
     });
 
     it("shows the call, its gateway, credential, duration and time", () => {

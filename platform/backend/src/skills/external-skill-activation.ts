@@ -1,9 +1,12 @@
-import type { ExternalMcpSkillDetail, ExternalMcpSkillListItem } from "@/types";
+import type {
+  ExternalMcpSkillCatalogItem,
+  ExternalMcpSkillDetail,
+} from "@/types";
 import { escapeXmlAttr, neutralizeFrameTags } from "./skill-activation";
 
 export function formatExternalSkillName(
   skill: Pick<
-    ExternalMcpSkillListItem,
+    ExternalMcpSkillCatalogItem,
     "serverName" | "scope" | "mcpServerId" | "name"
   >,
 ): string {

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { LocalServerInstallResult } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
@@ -25,10 +26,12 @@ import {
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { getUsableConnectedCatalogIds } from "@/lib/mcp/connected-catalogs";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  fetchInternalMcpCatalogItem,
+  useMcpRegistryIssueIndex,
+} from "@/lib/mcp/mcp-registry.query";
 import {
   useInstallMcpServer,
-  useMcpServers,
   useReauthenticateMcpServer,
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
@@ -42,21 +45,17 @@ type DialogKey =
   | "manage";
 
 /**
- * @param options.enabled Whether to load the catalog and installed servers up
- *   front. Disabled callers still work: the first install or re-auth trigger
- *   loads them and then runs.
+ * @param options.enabled Whether to load the issue index up front. Disabled
+ *   callers still work: a trigger loads the catalog item it opens.
  */
 export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
-  // A trigger fired before the data loaded, kept until the catalog arrives.
-  const [pendingTrigger, setPendingTrigger] = useState<
-    | { kind: "install"; catalogId: string }
-    | { kind: "reauth"; catalogId: string; serverId: string }
-    | null
-  >(null);
-  const [demanded, setDemanded] = useState(false);
-  const enabled = (options?.enabled ?? true) || demanded;
-  const { data: catalogItems } = useInternalMcpCatalog({ enabled });
-  const { data: installedServers } = useMcpServers({ enabled });
+  // Every visible install's scope and owner, from the registry's slim issue
+  // index; the item a flow opens is loaded by id when it opens.
+  const queryClient = useQueryClient();
+  const { data: issueIndex } = useMcpRegistryIssueIndex({
+    enabled: options?.enabled,
+  });
+  const installedServers = issueIndex?.servers;
   const installMutation = useInstallMcpServer();
   const reauthMutation = useReauthenticateMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
@@ -66,8 +65,9 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
 
   // Catalogs the current user can use a connected server for. An "Authentication
   // Required" install card flips to a connected state once its catalog appears
-  // here (the install/reauth mutations and the OAuth callback both invalidate
-  // `useMcpServers`, so this refreshes when a connection completes). Scoped to
+  // here (the install/reauth mutations and the OAuth callback invalidate the
+  // server lists and the issue index, so this refreshes when a connection
+  // completes). Scoped to
   // servers the user can actually use — not merely see — so an admin viewing
   // another user's personal install does not falsely resolve the prompt.
   const connectedCatalogIds = useMemo(
@@ -95,8 +95,8 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
   const [reauthServerId, setReauthServerId] = useState<string | null>(null);
 
   const findCatalogItem = useCallback(
-    (catalogId: string) => catalogItems?.find((item) => item.id === catalogId),
-    [catalogItems],
+    (catalogId: string) => fetchInternalMcpCatalogItem(queryClient, catalogId),
+    [queryClient],
   );
 
   const initiateOAuthRedirect = useCallback(
@@ -213,8 +213,8 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
 
   /** Open the correct install dialog for a given catalog ID */
   const triggerInstallByCatalogId = useCallback(
-    (catalogId: string) => {
-      const catalogItem = findCatalogItem(catalogId);
+    async (catalogId: string) => {
+      const catalogItem = await findCatalogItem(catalogId);
       if (!catalogItem) return;
 
       if (catalogItem.serverType === "local") {
@@ -228,8 +228,8 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
 
   /** Trigger re-authentication for a specific server, preserving tool assignments */
   const triggerReauthByCatalogIdAndServerId = useCallback(
-    (catalogId: string, serverId: string) => {
-      const catalogItem = findCatalogItem(catalogId);
+    async (catalogId: string, serverId: string) => {
+      const catalogItem = await findCatalogItem(catalogId);
       if (!catalogItem) return;
 
       setReauthServerId(serverId);
@@ -406,50 +406,10 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
     setManageCatalogId(null);
   }, [closeDialog]);
 
-  const triggerInstall = useCallback(
-    (catalogId: string) => {
-      if (!catalogItems) {
-        setDemanded(true);
-        setPendingTrigger({ kind: "install", catalogId });
-        return;
-      }
-      triggerInstallByCatalogId(catalogId);
-    },
-    [catalogItems, triggerInstallByCatalogId],
-  );
-  const triggerReauth = useCallback(
-    (catalogId: string, serverId: string) => {
-      if (!catalogItems) {
-        setDemanded(true);
-        setPendingTrigger({ kind: "reauth", catalogId, serverId });
-        return;
-      }
-      triggerReauthByCatalogIdAndServerId(catalogId, serverId);
-    },
-    [catalogItems, triggerReauthByCatalogIdAndServerId],
-  );
-  useEffect(() => {
-    if (!pendingTrigger || !catalogItems) return;
-    setPendingTrigger(null);
-    if (pendingTrigger.kind === "install") {
-      triggerInstallByCatalogId(pendingTrigger.catalogId);
-    } else {
-      triggerReauthByCatalogIdAndServerId(
-        pendingTrigger.catalogId,
-        pendingTrigger.serverId,
-      );
-    }
-  }, [
-    pendingTrigger,
-    catalogItems,
-    triggerInstallByCatalogId,
-    triggerReauthByCatalogIdAndServerId,
-  ]);
-
   return {
     // Public API
-    triggerInstallByCatalogId: triggerInstall,
-    triggerReauthByCatalogIdAndServerId: triggerReauth,
+    triggerInstallByCatalogId,
+    triggerReauthByCatalogIdAndServerId,
     connectedCatalogIds,
 
     // Dialog state (for rendering)

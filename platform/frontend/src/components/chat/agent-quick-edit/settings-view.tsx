@@ -61,10 +61,9 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import {
-  useAllCatalogTools,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useAllCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 import { cn } from "@/lib/utils/tailwind";
 import { AgentReachBrowser } from "./agent-reach-browser";
 import { summarizeAllToolAccess } from "./all-access.utils";
@@ -72,8 +71,6 @@ import { connectorLabel as connectorTypeLabel } from "./connector-label";
 import { QuickEditFooter } from "./view-header";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
-type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 type KnowledgeBase =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
 type Connector =
@@ -119,7 +116,7 @@ export function AgentSettingsView({
   allKnowledgeBases: KnowledgeBase[];
   allConnectors: Connector[];
   onAddTools: () => void;
-  onChooseTools: (catalog: CatalogItem) => void;
+  onChooseTools: (catalog: { id: string }) => void;
   onEditSubagents: () => void;
   onEditKnowledge: () => void;
 }) {
@@ -449,9 +446,9 @@ function ToolsSection({
   highlightCatalogId: string | null;
   accessSwitch: ReactNode;
   onAddTools: () => void;
-  onChooseTools: (catalog: CatalogItem) => void;
+  onChooseTools: (catalog: { id: string }) => void;
 }) {
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [] } = useMcpCatalogDirectory();
   const { data: assignedToolsData, isPending } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
@@ -494,6 +491,15 @@ function ToolsSection({
             Number(a.id === highlightCatalogId),
         ),
     [catalogItems, assignedByCatalog, highlightCatalogId],
+  );
+  // The registry row counts the tools its picker lists.
+  const assignedRows = useMcpRegistryRowsByIds([...assignedByCatalog.keys()], {
+    includeBuiltIn: true,
+    includeApps: true,
+  });
+  const toolCountByCatalog = useMemo(
+    () => new Map(assignedRows.data.map((row) => [row.id, row.toolCount])),
+    [assignedRows.data],
   );
 
   const removeServer = (catalogId: string) => {
@@ -553,8 +559,7 @@ function ToolsSection({
           {assignedCatalogs.map((catalog) => {
             const entry = assignedByCatalog.get(catalog.id);
             const assignedCount = entry?.toolIds.length ?? 0;
-            // The catalog row counts the tools its picker lists.
-            const total = catalog.toolCount;
+            const total = toolCountByCatalog.get(catalog.id);
             const builtIn = isBuiltInCatalogId(catalog.id);
             const displayName =
               catalog.id === ARCHESTRA_MCP_CATALOG_ID
@@ -644,7 +649,7 @@ function AllToolsSection({
   accessSwitch: ReactNode;
   editExclusionsHref: string | null;
 }) {
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [] } = useMcpCatalogDirectory();
   const { data: catalogTools, isPending: toolsPending } = useAllCatalogTools();
   const { data: toolExclusions } = useAgentToolExclusions(agent.id);
   const { data: canReadKnowledgeBase } = useHasPermissions({

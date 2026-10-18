@@ -253,9 +253,11 @@ export function SessionIdentityLine({
 
 /**
  * Lines the identity up under the title text: the back arrow and its gap
- * (32), then the avatar (44) and its gap (14).
+ * (32), then the avatar (44) and its gap (14). The title row is 40px for a
+ * 28px line, so the identity rises into that slack: it reads as the title's
+ * second line, and the pair centres on the avatar.
  */
-const IDENTITY_INSET = "pl-[90px]";
+const IDENTITY_INSET = "pl-[90px] sm:-mt-1.5";
 
 function SessionHeaderAvatar({ session }: { session: LogSession }) {
   const appName = useAppName();

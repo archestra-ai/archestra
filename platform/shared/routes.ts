@@ -904,6 +904,7 @@ export const RouteId = {
   GetOpenAppaYell: "getOpenAppaYell",
   UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",
+  GetOpenappaExternalConsult: "getOpenappaExternalConsult",
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",

@@ -351,6 +351,7 @@ export default function SessionDetailPage({
           >
             <GuardrailsArenaProvider
               timeline={timeline}
+              sessionId={sessionId}
               onSelectSpan={setPickedKey}
             >
               <ArenaWaterfall

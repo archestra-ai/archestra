@@ -483,6 +483,24 @@ function matchesSessionKey(sessionKey: string): SQL {
 }
 
 class InteractionModel {
+  /** Whether the organization has any LLM request logged under a session. */
+  static async existsBySessionId(params: {
+    organizationId: string;
+    sessionId: string;
+  }): Promise<boolean> {
+    const [result] = await db
+      .select({ id: schema.interactionsTable.id })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          eq(schema.interactionsTable.sessionId, params.sessionId),
+          interactionBelongsToOrganization(params.organizationId),
+        ),
+      )
+      .limit(1);
+    return result !== undefined;
+  }
+
   static async existsByRunId(runId: string): Promise<boolean> {
     const [result] = await db
       .select({ id: schema.interactionsTable.id })

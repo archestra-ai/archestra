@@ -3,8 +3,8 @@
 // the session's real tool calls. The real backend does not serve per-session
 // consults or a label timeline yet; this models what it would.
 
-import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
+import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
 import type { Timeline, ToolCallSpan } from "../session-timeline";
 
 /** Least trusted first, as in the default policy trust chain. */
@@ -33,7 +33,7 @@ export type MockConsult = {
   role: ConsultRole;
   /** The external's configured name. */
   externalName: string;
-  backend: "llm" | "hitl" | "archestra" | "url" | "jev";
+  backend: ExternalConsult["backend"];
   outcome: ConsultOutcome;
   decision: ConsultDecision;
   /** One-line answer summary, e.g. "trust → suspicious". */

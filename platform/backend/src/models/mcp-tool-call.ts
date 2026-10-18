@@ -13,6 +13,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lte,
   or,
@@ -407,6 +408,35 @@ class McpToolCallModel {
    * @param idOrScope with a scope, `ownUserId` limits run-based session
    * resolution to that user's interactions, as their own-logs view requires.
    */
+  /**
+   * The session's tool calls that carry the model's call id, as `{id,
+   * llmToolCallId}`: what a guardrail consult (keyed by that call id) is
+   * matched against.
+   */
+  static async findModelCallIdsBySession(params: {
+    organizationId: string;
+    sessionId: string;
+  }): Promise<{ id: string; llmToolCallId: string }[]> {
+    const rows = await db
+      .select({
+        id: schema.mcpToolCallsTable.id,
+        llmToolCallId: schema.mcpToolCallsTable.llmToolCallId,
+      })
+      .from(schema.mcpToolCallsTable)
+      .where(
+        and(
+          eq(schema.mcpToolCallsTable.sessionId, params.sessionId),
+          isNotNull(schema.mcpToolCallsTable.llmToolCallId),
+          mcpToolCallBelongsToOrganization(params.organizationId),
+        ),
+      );
+    return rows.flatMap((row) =>
+      row.llmToolCallId
+        ? [{ id: row.id, llmToolCallId: row.llmToolCallId }]
+        : [],
+    );
+  }
+
   static async findById(
     idOrScope:
       | string

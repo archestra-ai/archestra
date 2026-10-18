@@ -38,6 +38,26 @@ class OpenappaExternalConsultModel {
     );
   }
 
+  /** One consult, when it is in the organization and the caller may read it. */
+  static async findById(params: {
+    organizationId: string;
+    id: string;
+    callerId?: string;
+  }): Promise<ExternalConsult | null> {
+    if (!UUID.test(params.id)) return null;
+    const conditions: SQL[] = [
+      eq(table.organizationId, params.organizationId),
+      eq(table.id, params.id),
+    ];
+    if (params.callerId) conditions.push(eq(table.callerId, params.callerId));
+    const [row] = await db
+      .select()
+      .from(table)
+      .where(and(...conditions))
+      .limit(1);
+    return row ?? null;
+  }
+
   /** The cursor that continues right after `row`, for a page cut short. */
   static cursorAfter(row: ExternalConsult): string {
     return encodeCursor(cursorPosition(row));

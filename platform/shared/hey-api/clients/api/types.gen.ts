@@ -92100,6 +92100,10 @@ export type GetOpenappaExternalConsultsData = {
         root?: string;
         sessionId?: string;
         /**
+         * An LLM session ID, as on the LLM logs page: consults from every trajectory of that session, sub-agents included
+         */
+        llmSessionId?: string;
+        /**
          * Case-insensitive substring of the external's name or the session ID
          */
         search?: string;
@@ -92219,6 +92223,119 @@ export type GetOpenappaExternalConsultsResponses = {
 };
 
 export type GetOpenappaExternalConsultsResponse = GetOpenappaExternalConsultsResponses[keyof GetOpenappaExternalConsultsResponses];
+
+export type GetOpenappaExternalConsultData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/openappa/external-consults/{id}';
+};
+
+export type GetOpenappaExternalConsultErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaExternalConsultError = GetOpenappaExternalConsultErrors[keyof GetOpenappaExternalConsultErrors];
+
+export type GetOpenappaExternalConsultResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        consult: {
+            id: string;
+            organizationId: string;
+            sessionId: string | null;
+            callerId: string | null;
+            createdAt: string;
+            startedAt: string;
+            durationMs: number;
+            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
+            externalName: string;
+            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra';
+            request: unknown;
+            outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+            answer: unknown;
+            rawResponse: string | null;
+            httpStatus: number | null;
+            diagnostics: string | null;
+            diagnosticsTruncated: boolean;
+            root: string;
+            trajectory: string;
+            callId: string | null;
+            offerId: string | null;
+            callDigest: string | null;
+        };
+        llmSessionId: string | null;
+        mcpToolCallId: string | null;
+    };
+};
+
+export type GetOpenappaExternalConsultResponse = GetOpenappaExternalConsultResponses[keyof GetOpenappaExternalConsultResponses];
 
 export type GetAppaGithubSyncData = {
     body?: never;

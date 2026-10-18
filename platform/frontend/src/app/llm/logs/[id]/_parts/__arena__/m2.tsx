@@ -1,17 +1,4 @@
 "use client";
-// design-arena: do not commit
-import {
-  AUDIENCE_TONE,
-  CONSULT_KIND,
-  DECISION_TONE,
-  type GuardrailsData,
-  type LabelSegment,
-  type LabelState,
-  type MockConsult,
-  ROLE_LABEL,
-  TRUST_TONE,
-} from "./guardrails-mock";
-import { DecisionIcon, DecisionTerm, RoleTerm } from "./guardrails-arena";
 
 import {
   ChevronLeft,
@@ -75,6 +62,19 @@ import {
   type ToolCallSpan,
 } from "../session-timeline";
 import { StatusBarPagination } from "../status-bar-pagination";
+import { DecisionIcon, DecisionTerm, RoleTerm } from "./guardrails-arena";
+// design-arena: do not commit
+import {
+  AUDIENCE_TONE,
+  CONSULT_KIND,
+  DECISION_TONE,
+  type GuardrailsData,
+  type LabelSegment,
+  type LabelState,
+  type MockConsult,
+  ROLE_LABEL,
+  TRUST_TONE,
+} from "./guardrails-mock";
 
 export type RequestsPagination = {
   pageIndex: number;

@@ -7,7 +7,7 @@ import type { ConsultView } from "@/app/consults/logs/_components/consult-detail
 import { ConsultOutcomeBadge } from "@/app/consults/logs/_components/consult-outcome-badge";
 import { PaneHeader } from "@/components/log-detail/pane-header";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-time";
 import {
   OVERVIEW_GRID,
   OverviewCell,
@@ -18,7 +18,7 @@ import {
 /**
  * A guardrail consult in the session's details pane, laid out like a tool
  * call's: the facts on the left, what the policy asked the external and what
- * it answered on the right. The same record the Guardrails consult log
+ * it answered on the right. The same record the Guardrail consults log
  * shows, reached from the trace instead.
  */
 export function ConsultDetails({

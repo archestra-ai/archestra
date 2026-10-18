@@ -6,6 +6,7 @@
 export const LLM_LOG_FOCUS_PARAM = {
   request: "request",
   toolCall: "toolCall",
+  consult: "consult",
 } as const;
 
 /** One session's page, optionally with a request or tool call preselected. */
@@ -20,6 +21,23 @@ export function llmSessionHref(
       ? [LLM_LOG_FOCUS_PARAM.request, focus.request]
       : [LLM_LOG_FOCUS_PARAM.toolCall, focus.toolCall];
   return `${path}?${param}=${encodeURIComponent(value)}`;
+}
+
+/**
+ * A guardrail consult, open on its session's page: the page holding the tool
+ * call it was raised for, when that call was logged.
+ */
+export function llmSessionConsultHref(params: {
+  sessionKey: string;
+  consultId: string;
+  mcpToolCallId: string | null;
+}): string {
+  const query = new URLSearchParams();
+  if (params.mcpToolCallId) {
+    query.set(LLM_LOG_FOCUS_PARAM.toolCall, params.mcpToolCallId);
+  }
+  query.set(LLM_LOG_FOCUS_PARAM.consult, params.consultId);
+  return `/llm/logs/${encodeURIComponent(params.sessionKey)}?${query}`;
 }
 
 /**

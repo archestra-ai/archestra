@@ -1746,6 +1746,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenAppaYell]: { openappaDiagnostics: ["read"] },
   [RouteId.UpdateOpenAppaYell]: { openappaDiagnostics: ["read", "update"] },
   [RouteId.GetOpenappaExternalConsults]: { openappaDiagnostics: ["read"] },
+  [RouteId.GetOpenappaExternalConsult]: { openappaDiagnostics: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
   [RouteId.GetOpenappaCoverageEntities]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageTools]: { openappaPolicy: ["read"] },
@@ -2054,6 +2055,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { openappaDiagnostics: ["read"] },
+  "/consults/logs/[id]": { openappaDiagnostics: ["read"] },
   "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge

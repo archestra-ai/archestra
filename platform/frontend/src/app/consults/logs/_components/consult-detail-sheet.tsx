@@ -28,33 +28,6 @@ import type {
 } from "./consult-details";
 import { ConsultOutcomeBadge } from "./consult-outcome-badge";
 
-export function ConsultDetailSheet({
-  view,
-  onClose,
-}: {
-  view: ConsultView | null;
-  onClose: () => void;
-}) {
-  return (
-    // Non-modal so the table stays clickable: picking another row swaps the
-    // consult shown instead of closing the panel.
-    <Sheet
-      modal={false}
-      open={view !== null}
-      onOpenChange={(open) => !open && onClose()}
-    >
-      <SheetContent
-        className="w-full overflow-y-auto sm:max-w-2xl"
-        onInteractOutside={(event) => {
-          if (isTableRow(event.target)) event.preventDefault();
-        }}
-      >
-        {view && <ConsultDetail view={view} />}
-      </SheetContent>
-    </Sheet>
-  );
-}
-
 /**
  * What the consult asked and answered: the request (or the tool call it was
  * about), the answer, the diagnostics and the raw record. Withheld and
@@ -140,42 +113,6 @@ export function ConsultPayloads({ view }: { view: ConsultView }) {
 }
 
 // === Internal components ===
-
-function isTableRow(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest("tbody tr") !== null;
-}
-
-function ConsultDetail({ view }: { view: ConsultView }) {
-  const { consult } = view;
-  return (
-    <>
-      <SheetHeader>
-        <SheetTitle className="flex items-center gap-2 font-mono text-base">
-          <span>{consult.externalName}</span>
-          <ConsultOutcomeBadge outcome={consult.outcome} />
-        </SheetTitle>
-        <SheetDescription>
-          {formatDate({
-            date: consult.createdAt,
-            dateFormat: "MMM d, yyyy · HH:mm:ss",
-          })}{" "}
-          · {consult.durationMs} ms · {consult.role} via {consult.backend}
-        </SheetDescription>
-      </SheetHeader>
-
-      <div className="space-y-6 px-4 pb-6">
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-          <MetaRow label="Session" value={consult.sessionId} />
-          <MetaRow label="Root" value={consult.root} />
-          <MetaRow label="Trajectory" value={consult.trajectory} />
-          <MetaRow label="Call" value={consult.callId} />
-          <MetaRow label="HTTP status" value={consult.httpStatus} />
-        </dl>
-        <ConsultPayloads view={view} />
-      </div>
-    </>
-  );
-}
 
 function DiagnosticsView({ diagnostics }: { diagnostics: ConsultDiagnostics }) {
   switch (diagnostics.kind) {
@@ -314,21 +251,6 @@ function ProbabilityRow({
         {(probability * 100).toFixed(1)}%
       </span>
     </div>
-  );
-}
-
-function MetaRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null;
-}) {
-  return (
-    <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="truncate font-mono text-xs leading-5">{value ?? "—"}</dd>
-    </>
   );
 }
 

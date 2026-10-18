@@ -4,12 +4,15 @@
 // consult is open in the details pane, and the pane that shows it.
 
 import { ArrowRight, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import {
   type ComponentProps,
   createContext,
   type ReactNode,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { toConsultView } from "@/app/consults/logs/_components/consult-details";
@@ -19,20 +22,27 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useFeature } from "@/lib/config/config.query";
+import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
+import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
+import {
+  type ExternalConsult,
+  useSessionConsults,
+} from "@/lib/openappa/external-consults.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ConsultDetails } from "../consult-details";
 import { OverviewSection } from "../overview-parts";
 import { RequestDetails } from "../request-details";
-import type { Timeline } from "../session-timeline";
+import type { Timeline, ToolCallSpan } from "../session-timeline";
 import {
   AUDIENCE_TONE,
   buildGuardrailsMock,
-  type LabelSegment,
-  TRUST_TONE,
   DECISION_TONE,
   type GuardrailsData,
+  type LabelSegment,
   type MockConsult,
   ROLE_LABEL,
+  TRUST_TONE,
 } from "./guardrails-mock";
 
 type ArenaState = {
@@ -52,25 +62,72 @@ const ArenaContext = createContext<ArenaState | null>(null);
 
 export function GuardrailsArenaProvider({
   timeline,
+  sessionId,
   onSelectSpan,
   children,
 }: {
   timeline: Timeline | null;
+  /** The LLM session, whose real consults replace the mock ones. */
+  sessionId: string;
   onSelectSpan: (key: string | null) => void;
   children: ReactNode;
 }) {
-  const guardrails = useMemo(() => buildGuardrailsMock(timeline), [timeline]);
+  const openappaEnabled = useFeature("openappaEnabled");
+  const { data: realConsults } = useSessionConsults({
+    llmSessionId: sessionId,
+    enabled: Boolean(openappaEnabled),
+  });
+  const guardrails = useMemo(() => {
+    const mock = buildGuardrailsMock(timeline);
+    if (!mock || !timeline || !realConsults) return mock;
+    // Real consults once loaded (none means no checks); labels stay mock.
+    const consults = realConsults.map((consult) =>
+      fromRecord({ consult, timeline, timeToX: mock.timeToX }),
+    );
+    const labels = mock.labels.map((segment) =>
+      segment.cause
+        ? {
+            ...segment,
+            cause: {
+              ...segment.cause,
+              consultKey:
+                consults.find(
+                  (c) =>
+                    c.toolCallKey === segment.cause?.toolCallKey &&
+                    c.role === "annotator",
+                )?.key ?? null,
+            },
+          }
+        : segment,
+    );
+    return { ...mock, consults, labels };
+  }, [timeline, realConsults]);
+
   const [selectedConsultKey, setSelectedConsultKey] = useState<string | null>(
     null,
   );
+  const selectConsult = (key: string | null) => {
+    const consult = guardrails?.consults.find((c) => c.key === key);
+    if (consult?.toolCallKey) onSelectSpan(consult.toolCallKey);
+    setSelectedConsultKey(key);
+  };
+
+  // `?consult=<id>` (the consult log's link) opens that check once it loads.
+  const searchParams = useSearchParams();
+  const linkedConsult = searchParams.get(LLM_LOG_FOCUS_PARAM.consult);
+  const appliedLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!linkedConsult || appliedLink.current === linkedConsult) return;
+    const key = `consult:${linkedConsult}`;
+    if (!guardrails?.consults.some((c) => c.key === key)) return;
+    appliedLink.current = linkedConsult;
+    selectConsult(key);
+  });
+
   const state: ArenaState = {
     guardrails,
     selectedConsultKey,
-    selectConsult: (key) => {
-      const consult = guardrails?.consults.find((c) => c.key === key);
-      if (consult?.toolCallKey) onSelectSpan(consult.toolCallKey);
-      setSelectedConsultKey(key);
-    },
+    selectConsult,
     selectSpan: (key) => {
       setSelectedConsultKey(null);
       onSelectSpan(key);
@@ -326,9 +383,7 @@ export function LabelChangeWhy({
 
 /** A guardrail role in words, explained on hover. */
 export function RoleTerm({ role }: { role: MockConsult["role"] }) {
-  return (
-    <Term label={ROLE_LABEL[role]} explanation={ROLE_EXPLANATION[role]} />
-  );
+  return <Term label={ROLE_LABEL[role]} explanation={ROLE_EXPLANATION[role]} />;
 }
 
 /** A check's outcome in words, explained on hover. */
@@ -392,4 +447,90 @@ function Term({
       <TooltipContent className="max-w-60">{explanation}</TooltipContent>
     </Tooltip>
   );
+}
+
+/** A stored consult in the trace's shape: placed on the axis, tied to its call. */
+function fromRecord({
+  consult,
+  timeline,
+  timeToX,
+}: {
+  consult: ExternalConsult;
+  timeline: Timeline;
+  timeToX: (ms: number) => number;
+}): MockConsult {
+  const start = new Date(consult.startedAt).getTime();
+  const end = start + consult.durationMs;
+  const tool = consult.callId
+    ? timeline.spans.find(
+        (span): span is ToolCallSpan =>
+          span.type === "tool" &&
+          span.call.llmToolCallId != null &&
+          modelCallId(span.call.llmToolCallId) === consult.callId,
+      )
+    : undefined;
+  const role = (
+    ["authority", "annotator", "sanitizer", "audience_source"] as const
+  ).includes(consult.role as MockConsult["role"])
+    ? (consult.role as MockConsult["role"])
+    : "annotator";
+  const answered = consult.outcome === "answered";
+  const answer = (consult.answer ?? {}) as Record<string, unknown>;
+  const decision: MockConsult["decision"] =
+    role === "authority"
+      ? !answered || answer.allow === false
+        ? "blocked"
+        : answer.approved_by
+          ? "approved"
+          : "allowed"
+      : role === "sanitizer"
+        ? "redacted"
+        : "labeled";
+  const x = timeToX(start);
+  return {
+    id: consult.id,
+    key: `consult:${consult.id}`,
+    role,
+    externalName: consult.externalName,
+    backend: consult.backend,
+    outcome:
+      consult.outcome === "answered" || consult.outcome === "timeout"
+        ? consult.outcome
+        : "non_success",
+    decision,
+    answer: summarizeAnswer(consult.answer),
+    start,
+    end,
+    durationMs: consult.durationMs,
+    x,
+    w: Math.max(0, timeToX(end) - x),
+    toolCallKey: tool?.key ?? null,
+    toolName: tool ? (readMcpToolCall(tool.call).toolName ?? null) : null,
+    beforeCall: role === "authority",
+    record: consult,
+  };
+}
+
+/**
+ * The provider's id inside a trajectory stamp (`appat1` + base64url of
+ * `<session>\0<call id>` + a 22-character tag), or the id as given.
+ */
+function modelCallId(id: string): string {
+  if (!id.startsWith("appat1") || id.length <= 6 + 22) return id;
+  try {
+    const payload = id.slice(6, -22).replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = atob(
+      payload.padEnd(Math.ceil(payload.length / 4) * 4, "="),
+    );
+    const separator = decoded.indexOf("\u0000");
+    return separator > 0 ? decoded.slice(separator + 1) : id;
+  } catch {
+    return id;
+  }
+}
+
+function summarizeAnswer(answer: unknown): string {
+  if (answer == null) return "No answer";
+  const text = typeof answer === "string" ? answer : JSON.stringify(answer);
+  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
 }

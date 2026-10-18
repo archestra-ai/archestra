@@ -168,6 +168,7 @@ function yell(params: {
     resolvedAt: null,
     resolvedBy: null,
     caller: null,
+    callerApp: null,
     conversation: null,
     trace: { llmSessionId: "session", mcpToolCallId: params.mcpToolCallId },
   };

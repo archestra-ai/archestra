@@ -359799,6 +359799,23 @@
                             ],
                             "additionalProperties": false
                           },
+                          "callerApp": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
                           "conversation": {
                             "nullable": true,
                             "type": "object",
@@ -359861,6 +359878,7 @@
                           "resolvedBy",
                           "hasArchive",
                           "caller",
+                          "callerApp",
                           "conversation",
                           "trace"
                         ],
@@ -360520,6 +360538,23 @@
                       ],
                       "additionalProperties": false
                     },
+                    "callerApp": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
                     "conversation": {
                       "nullable": true,
                       "type": "object",
@@ -360582,6 +360617,7 @@
                     "resolvedBy",
                     "hasArchive",
                     "caller",
+                    "callerApp",
                     "conversation",
                     "trace"
                   ],
@@ -360954,6 +360990,23 @@
                       ],
                       "additionalProperties": false
                     },
+                    "callerApp": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
                     "conversation": {
                       "nullable": true,
                       "type": "object",
@@ -361016,6 +361069,7 @@
                     "resolvedBy",
                     "hasArchive",
                     "caller",
+                    "callerApp",
                     "conversation",
                     "trace"
                   ],

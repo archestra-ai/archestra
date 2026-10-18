@@ -8,6 +8,8 @@ export const OpenAppaYellSchema = createSelectSchema(openappaYellsTable)
   .extend({
     hasArchive: z.boolean(),
     caller: CreatedByNullableSchema,
+    /** The app that sent the yell, when an app did (`callerId` `app:<id>`). */
+    callerApp: z.object({ id: z.string(), name: z.string() }).nullable(),
     conversation: z
       .object({
         id: z.uuid(),

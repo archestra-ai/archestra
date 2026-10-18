@@ -1,6 +1,7 @@
 import type { CreatedBy } from "@archestra/shared";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import logger from "@/logging";
+import AppModel from "@/models/app";
 import CreatedByModel from "@/models/created-by";
 import InteractionModel from "@/models/interaction";
 import McpToolCallModel from "@/models/mcp-tool-call";
@@ -161,7 +162,14 @@ async function withCallers<T extends { callerId: string }>(
   const ids = [
     ...new Set(rows.map(principalId).filter((id): id is string => id !== null)),
   ];
-  const [users, accounts] = await Promise.all([
+  const appIds = [
+    ...new Set(
+      rows
+        .filter((row) => row.callerId.startsWith("app:"))
+        .map((row) => row.callerId.slice(4)),
+    ),
+  ];
+  const [users, accounts, apps] = await Promise.all([
     CreatedByModel.resolve(
       ids.filter((id) => !id.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)),
     ),
@@ -171,22 +179,38 @@ async function withCallers<T extends { callerId: string }>(
         .map((id) => id.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length)),
       organizationId,
     ),
+    AppModel.getNamesByIds({ ids: appIds, organizationId }),
   ]);
-  return rows.map((row): T & { caller: CreatedBy | null } => {
-    const id = principalId(row);
-    if (!id) return { ...row, caller: null };
-    if (id.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)) {
-      const name = accounts.get(
-        id.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length),
-      );
-      return {
-        ...row,
-        caller:
-          name === undefined
-            ? null
-            : { id, name, email: null, type: "service_account" },
-      };
-    }
-    return { ...row, caller: users.get(id) ?? null };
-  });
+  return rows.map(
+    (
+      row,
+    ): T & {
+      caller: CreatedBy | null;
+      callerApp: { id: string; name: string } | null;
+    } => {
+      const appName = row.callerId.startsWith("app:")
+        ? apps.get(row.callerId.slice(4))
+        : undefined;
+      const callerApp =
+        appName === undefined
+          ? null
+          : { id: row.callerId.slice(4), name: appName };
+      const id = principalId(row);
+      if (!id) return { ...row, caller: null, callerApp };
+      if (id.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)) {
+        const name = accounts.get(
+          id.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length),
+        );
+        return {
+          ...row,
+          caller:
+            name === undefined
+              ? null
+              : { id, name, email: null, type: "service_account" },
+          callerApp,
+        };
+      }
+      return { ...row, caller: users.get(id) ?? null, callerApp };
+    },
+  );
 }

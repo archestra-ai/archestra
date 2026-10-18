@@ -3,12 +3,17 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Activity,
+  AppWindow,
+  Bot,
   Check,
+  CircleHelp,
   FileArchive,
+  KeyRound,
   Megaphone,
   MessageCircle,
   MessagesSquare,
   RotateCcw,
+  UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
@@ -22,6 +27,7 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Tooltip,
@@ -385,16 +391,35 @@ function YellCaller({ yell }: { yell: OpenAppaYell }) {
     return (
       <CreatedByCell createdBy={yell.caller} showServiceAccountBadge={false} />
     );
-  const label = yell.callerId.startsWith("user:service-account:")
-    ? "Unknown service account"
-    : yell.callerId.startsWith("user:")
-      ? "Unknown user"
-      : yell.callerId.startsWith("app:")
-        ? "App"
-        : yell.callerId.startsWith("virtual-key:")
-          ? "Virtual key"
-          : "Unattributed caller";
-  return <span className="text-xs text-muted-foreground">{label}</span>;
+  const { callerId, callerApp } = yell;
+  const [Icon, label, known] = callerApp
+    ? [AppWindow, callerApp.name, true]
+    : callerId.startsWith("app:")
+      ? [AppWindow, "Deleted app", false]
+      : callerId.startsWith("virtual-key:")
+        ? [KeyRound, "Virtual key", false]
+        : callerId.startsWith("user:service-account:")
+          ? [Bot, "Unknown service account", false]
+          : callerId.startsWith("user:")
+            ? [UserRound, "Unknown user", false]
+            : [CircleHelp, "Unattributed caller", false];
+  // The same avatar-and-name shape as a person's cell, so the column reads as
+  // one list whatever kind of caller sent the yell.
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <Avatar className="h-5 w-5 shrink-0" aria-hidden="true">
+        <AvatarFallback>
+          <Icon className="size-3" aria-hidden="true" />
+        </AvatarFallback>
+      </Avatar>
+      <span
+        className={cn("min-w-0 truncate", !known && "text-muted-foreground")}
+      >
+        {label}
+        {callerApp ? <span className="sr-only"> (app)</span> : null}
+      </span>
+    </span>
+  );
 }
 
 const SUPERYELL_HINT =

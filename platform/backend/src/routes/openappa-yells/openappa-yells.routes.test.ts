@@ -504,6 +504,32 @@ describe("OpenAPPA yells", () => {
     );
   });
 
+  test("names the app that sent a yell, within the report organization", async ({
+    makeApp,
+    makeOrganization,
+  }) => {
+    const reporter = await makeApp({ organizationId, name: "Release notes" });
+    const foreignApp = await makeApp({
+      organizationId: (await makeOrganization()).id,
+      name: "Other release notes",
+    });
+    const yell = await record("App report", { callerId: `app:${reporter.id}` });
+    const foreign = await record("Unmatched app", {
+      callerId: `app:${foreignApp.id}`,
+    });
+    const list = (await app.inject({ url: "/api/openappa/yells" })).json();
+    expect(list.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: yell.id,
+          caller: null,
+          callerApp: { id: reporter.id, name: "Release notes" },
+        }),
+        expect.objectContaining({ id: foreign.id, callerApp: null }),
+      ]),
+    );
+  });
+
   test("identifies service-account callers within the report organization", async ({
     makeServiceAccount,
     makeOrganization,

@@ -107,9 +107,9 @@ export const CONSULT_BACKEND_TERMS: Record<
     explanation: "A person asked to decide, such as approving a call in chat.",
   },
   archestra: {
-    label: "Archestra",
+    label: "Built-in",
     explanation:
-      "Archestra's built-in labeler, which asks the agent's model (or the organization's default).",
+      "The platform's built-in labeler, which asks the agent's model (or the organization's default).",
   },
 };
 

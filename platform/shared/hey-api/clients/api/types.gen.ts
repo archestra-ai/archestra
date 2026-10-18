@@ -94849,6 +94849,10 @@ export type GetOpenAppaYellsResponses = {
                 name: string | null;
                 email: string | null;
             } | null;
+            callerApp: {
+                id: string;
+                name: string;
+            } | null;
             conversation: {
                 id: string;
                 title: string | null;
@@ -95058,6 +95062,10 @@ export type GetOpenAppaYellResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        callerApp: {
+            id: string;
+            name: string;
+        } | null;
         conversation: {
             id: string;
             title: string | null;
@@ -95175,6 +95183,10 @@ export type UpdateOpenAppaYellResponses = {
             type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
+        } | null;
+        callerApp: {
+            id: string;
+            name: string;
         } | null;
         conversation: {
             id: string;

@@ -936,7 +936,7 @@ function Agents() {
   const renderLoadingSection = (title: string) => (
     <section className="space-y-3">
       <TableSectionHeading title={title} bulkActions={bulkActions} />
-      <AgentsTableSkeleton />
+      <AgentsTableSkeleton showEnvironment={showEnvironmentColumn} />
     </section>
   );
 

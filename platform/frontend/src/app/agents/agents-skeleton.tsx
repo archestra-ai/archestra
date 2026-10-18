@@ -56,7 +56,17 @@ export function AgentsPageSkeleton() {
 }
 
 /** The table while its first page loads: its columns, and rows to come. */
-export function AgentsTableSkeleton({ rows = 10 }: { rows?: number }) {
+export function AgentsTableSkeleton({
+  rows = 10,
+  showEnvironment = false,
+}: {
+  rows?: number;
+  /** The table adds this column when the organization has environments. */
+  showEnvironment?: boolean;
+}) {
+  const columns = showEnvironment
+    ? [...COLUMNS.slice(0, -1), ENVIRONMENT_COLUMN, ...COLUMNS.slice(-1)]
+    : COLUMNS;
   return (
     <div className="w-full space-y-4">
       <div className="overflow-x-auto rounded-md border">
@@ -65,7 +75,7 @@ export function AgentsTableSkeleton({ rows = 10 }: { rows?: number }) {
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-12" />
               <TableHead>Name</TableHead>
-              {COLUMNS.map(({ label, width }) => (
+              {columns.map(({ label, width }) => (
                 <TableHead key={label} className={width}>
                   {label}
                 </TableHead>
@@ -88,7 +98,7 @@ export function AgentsTableSkeleton({ rows = 10 }: { rows?: number }) {
                     </div>
                   </div>
                 </TableCell>
-                {COLUMNS.map(({ label }) => (
+                {columns.map(({ label }) => (
                   <TableCell key={label}>
                     <Skeleton className="h-4 w-10" />
                   </TableCell>
@@ -114,3 +124,6 @@ const COLUMNS = [
   { label: "Provider", width: "w-[96px]" },
   { label: "Actions", width: "w-[150px]" },
 ];
+
+// Between Provider and Actions, as in the table.
+const ENVIRONMENT_COLUMN = { label: "Environment", width: "w-[120px]" };

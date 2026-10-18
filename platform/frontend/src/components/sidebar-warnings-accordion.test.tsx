@@ -11,6 +11,11 @@ import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { SidebarWarningsAccordion } from "./sidebar-warnings-accordion";
 
+// The shell's deferral gate is released here unless a test holds it.
+const mockShellReady = vi.fn(() => true);
+vi.mock("@/lib/shell-deferral", () => ({
+  useShellReady: () => mockShellReady(),
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/environment.query", () => ({
@@ -159,6 +164,44 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     setup({ canUpdateEnvironment: false });
 
     expect(vi.mocked(useK8sCapabilities)).toHaveBeenCalledWith(false);
+  });
+
+  // Only the default admin, with password sign-in on, can see that warning.
+  it("does not ask for the default credentials status for a user other than the default admin", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { email: "someone@example.org" } },
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as ReturnType<typeof useDefaultCredentialsEnabled>);
+    vi.mocked(useDisableBasicAuth).mockReturnValue(false);
+    vi.mocked(useK8sCapabilities).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useK8sCapabilities>);
+
+    render(
+      <SidebarProvider>
+        <SidebarWarningsAccordion />
+      </SidebarProvider>,
+    );
+
+    expect(useDefaultCredentialsEnabled).toHaveBeenCalledWith({
+      enabled: false,
+    });
+  });
+
+  it("asks for nothing until the page's first data has settled", () => {
+    mockShellReady.mockReturnValueOnce(false);
+    setup({ canUpdateEnvironment: true });
+
+    expect(vi.mocked(useK8sCapabilities)).toHaveBeenCalledWith(false);
+    expect(useDefaultCredentialsEnabled).toHaveBeenCalledWith({
+      enabled: false,
+    });
   });
 
   it("links to the SSRF protection docs in a new tab", () => {

@@ -300,7 +300,7 @@ function ValidationCard() {
 
 function YellsCard() {
   const summary = useOpenAppaYellsSummary();
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   return (
     <StatusCard
       icon={

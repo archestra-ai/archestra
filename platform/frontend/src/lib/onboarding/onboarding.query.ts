@@ -18,11 +18,15 @@ export const onboardingKeys = {
  * Only this client mutates the set, so the cache never goes stale. No error
  * toast: when the query fails the dots simply don't render.
  */
-export function useSeenNavItems() {
+export function useSeenNavItems({
+  enabled = true,
+}: {
+  enabled?: boolean;
+} = {}) {
   const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: onboardingKeys.seenNavItems(),
-    enabled: isAuthenticated,
+    enabled: enabled && isAuthenticated,
     staleTime: Number.POSITIVE_INFINITY,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getOnboardingSeenNavItems();

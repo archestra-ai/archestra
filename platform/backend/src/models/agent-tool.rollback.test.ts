@@ -177,6 +177,74 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
     ]);
   });
 
+  test("returns each agent's full usage entry once per server, pinned over unpinned, without deleted agents", async ({
+    makeAgent,
+    makeUser,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const server = await makeMcpServer({ catalogId: catalog.id });
+    const idle = await makeMcpServer({ catalogId: catalog.id });
+    const other = await makeMcpServer();
+    const tool = await makeTool({ catalogId: catalog.id });
+    const otherTool = await makeTool({ catalogId: other.catalogId });
+    const author = await makeUser();
+
+    const authored = await makeAgent({
+      name: "Same Name",
+      authorId: author.id,
+    });
+    const twin = await makeAgent({ name: "Same Name" });
+    const both = await makeAgent({ name: "Both Kinds" });
+    const removed = await makeAgent({ name: "Removed" });
+    // Pinned to `server`: counts there only. A dynamic assignment of the same
+    // agent to the same catalog must not add a second, unpinned entry.
+    await makeAgentTool(both.id, tool.id, { mcpServerId: server.id });
+    await makeAgentTool(
+      both.id,
+      (await makeTool({ catalogId: catalog.id })).id,
+    );
+    await makeAgentTool(authored.id, tool.id);
+    await makeAgentTool(twin.id, tool.id);
+    await makeAgentTool(removed.id, tool.id);
+    await makeAgentTool(twin.id, otherTool.id);
+    await db
+      .update(schema.agentsTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.agentsTable.id, removed.id));
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      server.id,
+      idle.id,
+    ]);
+
+    const entry = (
+      agent: typeof both,
+      pinned: boolean,
+      owner?: { id: string; email: string },
+    ) => ({
+      id: agent.id,
+      name: agent.name,
+      agentType: agent.agentType,
+      accessAllTools: agent.accessAllTools,
+      organizationId: agent.organizationId,
+      // The stored column, which the fixture always writes as "personal".
+      scope: "personal",
+      ownerId: owner?.id ?? null,
+      ownerEmail: owner?.email ?? null,
+      pinned,
+    });
+    const sameName = [entry(authored, false, author), entry(twin, false)].sort(
+      (a, b) => a.id.localeCompare(b.id),
+    );
+    expect([...result.keys()]).toEqual([server.id, idle.id]);
+    expect(result.get(server.id)).toEqual([entry(both, true), ...sameName]);
+    expect(result.get(idle.id)).toEqual([entry(both, false), ...sameName]);
+  });
+
   test("counts pinned assignments only toward the pinned install; unpinned toward every install of the catalog", async ({
     makeAgent,
     makeTool,

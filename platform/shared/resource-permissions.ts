@@ -73,6 +73,23 @@ export const ResourcePermissionScopeSchema = z.union([
   z.string().uuid(),
 ]);
 
+/**
+ * Plain-function forms of {@link ManagedResourceSchema} and
+ * {@link ResourcePermissionScopeSchema}. Loops over every policy a caller
+ * holds use them, because a schema parse per row is slow. The scope pattern
+ * is the RFC 9562 form that `z.string().uuid()` accepts, plus the nil and
+ * max ids.
+ */
+export function isManagedResource(
+  value: string,
+): value is z.infer<typeof ManagedResourceSchema> {
+  return MANAGED_RESOURCES.has(value);
+}
+
+export function isResourcePermissionScope(value: string): boolean {
+  return value === "*" || RESOURCE_PERMISSION_SCOPE_UUID.test(value);
+}
+
 export const PermissionSubjectSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("user"), id: z.string().min(1) }),
   z.object({ type: z.literal("team"), id: z.string().min(1) }),
@@ -369,3 +386,10 @@ export function isResourcePermissionPreset(
     actions.every((action) => preset.includes(action))
   );
 }
+
+const MANAGED_RESOURCES: ReadonlySet<string> = new Set(
+  ManagedResourceSchema.options,
+);
+
+const RESOURCE_PERMISSION_SCOPE_UUID =
+  /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;

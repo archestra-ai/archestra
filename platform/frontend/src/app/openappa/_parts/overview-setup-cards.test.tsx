@@ -13,9 +13,11 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { appaGithubSyncQueryKey } from "@/lib/openappa-policy-views";
 import { OverviewSetupCards } from "./overview-setup-cards";
 
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
@@ -54,6 +56,10 @@ const source = {
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  // The Guardrails status is read only while OpenAPPA is on.
+  vi.mocked(useFeature).mockImplementation(
+    (feature) => feature === "openappaEnabled",
+  );
   Element.prototype.scrollIntoView = vi.fn();
   Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
   Element.prototype.setPointerCapture = vi.fn();

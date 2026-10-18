@@ -14757,6 +14757,10 @@ export type GetAgentsData = {
          * Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'.
          */
         includeTools?: boolean;
+        /**
+         * Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows. With false, the count is skipped and `hasNext` stays exact. `total` is then a lower bound: the agents up to this page, plus one when more follow.
+         */
+        includeTotal?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
@@ -29496,6 +29500,109 @@ export type GetAuditLogsResponses = {
 };
 
 export type GetAuditLogsResponse = GetAuditLogsResponses[keyof GetAuditLogsResponses];
+
+export type GetAuditLogResourcesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Case-insensitive substring of the resource name
+         */
+        search?: string;
+        /**
+         * Return only this resource, e.g. to label a preselected filter
+         */
+        resourceId?: string;
+        /**
+         * Maximum number of resources to return
+         */
+        limit?: number;
+    };
+    url: '/api/audit-logs/resources';
+};
+
+export type GetAuditLogResourcesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAuditLogResourcesError = GetAuditLogResourcesErrors[keyof GetAuditLogResourcesErrors];
+
+export type GetAuditLogResourcesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            resourceType: string;
+            resourceId: string;
+            name: string;
+        }>;
+    };
+};
+
+export type GetAuditLogResourcesResponse = GetAuditLogResourcesResponses[keyof GetAuditLogResourcesResponses];
 
 export type GetAuditLogData = {
     body?: never;
@@ -80470,7 +80577,7 @@ export type GetMcpServersData = {
     query?: {
         catalogId?: string;
         /**
-         * Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.
+         * Include each listed install's assigned agents. Defaults to false, which returns an empty `assignedAgents` for every install. The lookup covers every install in the response, so narrow the list with `catalogId` when you need only some. GET /api/mcp_server/{id} returns the agents of one install.
          */
         includeAssignedAgents?: boolean;
         assignmentScope?: 'personal' | 'team' | 'org';

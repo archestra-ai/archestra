@@ -63,9 +63,8 @@ type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   /** Hold resolution until the organization data is available. */
   isOrgLoading: boolean;
   /**
-   * Hold resolution until the project data is available. Resolution runs once,
-   * so without this a chat started in a project settles on the org default
-   * before its pin arrives and never re-resolves.
+   * Hold resolution until the project data is available so the initial
+   * selection uses its pin rather than temporarily choosing the org default.
    */
   isProjectLoading?: boolean;
   /**
@@ -141,6 +140,9 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   // Stores the resolved agent in a ref so the model init effect can read it
   // synchronously.
   const resolvedAgentRef = useRef<TAgent | null>(null);
+  const modelInitializedRef = useRef(false);
+  const resolvedProjectDefaultRef = useRef(projectDefaultAgentId ?? null);
+  const agentManuallySelectedRef = useRef(false);
 
   // Track which agentId URL param has been consumed (so we don't re-apply the
   // same one after the user clears the selection, but do apply a new one when
@@ -203,8 +205,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     // Wait for organization data to avoid a race where agents load before org,
     // causing the org default to be skipped.
     if (isOrgLoading) return;
-    // Same race for a chat started in a project: this effect resolves once, so
-    // a pin that lands afterwards would never be applied.
+    // Wait for the project pin before choosing an initial agent.
     if (isProjectLoading) return;
     if (isApiKeysLoading) return;
 
@@ -227,7 +228,16 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     // configured and the user can change agents; otherwise a stale hidden
     // picker value can trap restricted users on a previously selected agent.
     // Also skip if a URL param was consumed but state hasn't flushed yet.
-    if (!agentId && !urlParamsConsumedRef.current) {
+    // Follow a changed project default in an unsent composer, while preserving
+    // explicit agent choices and existing conversations.
+    const shouldFollowProjectDefault =
+      !routeConversationId &&
+      !agentManuallySelectedRef.current &&
+      resolvedProjectDefaultRef.current !== (projectDefaultAgentId ?? null);
+    if (
+      (!agentId || shouldFollowProjectDefault) &&
+      !urlParamsConsumedRef.current
+    ) {
       if (isPermissionResolving) return;
 
       const selection = resolveInitialAgentSelection({
@@ -240,6 +250,8 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       });
       if (!selection) return;
 
+      resolvedProjectDefaultRef.current = projectDefaultAgentId ?? null;
+      if (shouldFollowProjectDefault) modelInitializedRef.current = false;
       applyAgentSelection(selection.agent);
       // The saved-agent store is global, not per-project, so persisting a
       // project's pin here would carry it into unrelated chats afterwards. A
@@ -256,6 +268,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     isAgentsLoading,
     defaultAgentId,
     projectDefaultAgentId,
+    routeConversationId,
     organization?.defaultAgentId,
     isOrgLoading,
     isProjectLoading,
@@ -268,7 +281,6 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   // later). Uses modelInitializedRef instead of checking modelId to avoid a
   // race: ModelSelector's auto-select fires before this effect and sets modelId,
   // which would cause an early return and skip the proper priority chain.
-  const modelInitializedRef = useRef(false);
   useEffect(() => {
     if (!agentId) return;
     if (modelInitializedRef.current) return;
@@ -324,6 +336,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       setModelId("");
       setApiKeyId(null);
       modelInitializedRef.current = false;
+      agentManuallySelectedRef.current = false;
     }
   }, [routeConversationId]);
 
@@ -383,6 +396,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       const agent =
         agents.find((a) => a.id === nextAgentId) ?? resolveAgent?.(nextAgentId);
       if (!agent) return;
+      agentManuallySelectedRef.current = true;
       applyAgentSelection(agent);
       saveAgent(agent.id);
     },

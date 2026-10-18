@@ -147,7 +147,7 @@ describe("GET /api/openappa/external-consults", () => {
     ]);
   });
 
-  test("a openappaDiagnostics:read caller sees only their own consults, in json and jsonl", async ({
+  test("a log:read caller sees only their own consults, in json and jsonl", async ({
     makeUser,
     makeMember,
   }) => {
@@ -199,7 +199,7 @@ describe("GET /api/openappa/external-consults", () => {
     makeCustomRole,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { openappaDiagnostics: ["read", "admin"] },
+      permission: { log: ["read", "admin"] },
     });
     caller = await makeUser();
     await makeMember(caller.id, organizationId, { role: role.role });
@@ -213,26 +213,13 @@ describe("GET /api/openappa/external-consults", () => {
     expect((await list("?format=jsonl")).body).toContain(other);
   });
 
-  test("legacy log access alone no longer grants consult access", async ({
-    makeUser,
-    makeMember,
-    makeCustomRole,
-  }) => {
-    const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read"] },
-    });
-    caller = await makeUser();
-    await makeMember(caller.id, organizationId, { role: role.role });
-    expect((await list()).statusCode).toBe(403);
-  });
-
   test("an audience source's consult is withheld from a caller who cannot read members", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const logReader = await makeCustomRole(organizationId, {
-      permission: { openappaDiagnostics: ["read"] },
+      permission: { log: ["read"] },
     });
     const bytes = {
       rawResponse: Buffer.from('{"version":1}'),
@@ -301,7 +288,7 @@ describe("GET /api/openappa/external-consults", () => {
     );
   });
 
-  test("a caller without openappaDiagnostics:read is refused", async ({
+  test("a caller without log:read is refused", async ({
     makeUser,
     makeMember,
   }) => {

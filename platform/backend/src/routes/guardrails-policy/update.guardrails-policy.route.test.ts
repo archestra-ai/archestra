@@ -512,7 +512,7 @@ describe("guardrails policy authoring", () => {
   }) => {
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
-      permission: { openappaPolicy: ["read", "update"] },
+      permission: { guardrailsPolicy: ["read", "update"] },
     });
     await makeMember(author.id, orgId, { role: role.role });
     await GuardrailsDeploymentModel.setEnabled(false);
@@ -537,7 +537,7 @@ describe("guardrails policy authoring", () => {
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
       permission: {
-        openappaPolicy: ["read", "update"],
+        guardrailsPolicy: ["read", "update"],
         organizationSettings: ["read", "update"],
       },
     });
@@ -601,7 +601,7 @@ describe("guardrails policy authoring", () => {
     });
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
-      permission: { openappaPolicy: ["read", "update"] },
+      permission: { guardrailsPolicy: ["read", "update"] },
     });
     await makeMember(author.id, orgId, { role: role.role });
     const authorSession = await makeSession(author.id, {
@@ -760,16 +760,16 @@ describe("guardrails policy authoring", () => {
       agent: { id: "a", name: "A" },
     };
     for (const [tool, args, required] of [
-      ["archestra__get_guardrails_policy", {}, "openappaPolicy:read"],
+      ["archestra__get_guardrails_policy", {}, "guardrailsPolicy:read"],
       [
         "archestra__validate_guardrails_policy",
         { content },
-        "openappaPolicy:read",
+        "guardrailsPolicy:read",
       ],
       [
         "archestra__update_guardrails_policy",
         { content, expectedRevision: 0 },
-        "openappaPolicy:update",
+        "guardrailsPolicy:update",
       ],
     ] as const) {
       const denied = await executeArchestraTool(tool, args, context);

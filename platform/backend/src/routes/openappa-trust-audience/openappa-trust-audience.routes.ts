@@ -17,7 +17,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaTrustAudience,
         description:
-          "The trust levels and audiences the policy works with, the audience sources included batteries declare, and the rules naming each audience. `lastConsult` is filled only for a caller with `openappaDiagnostics:admin`.",
+          "The trust levels and audiences the policy works with, the audience sources included batteries declare, and the rules naming each audience. `lastConsult` is filled only for a caller with `log:admin`.",
         tags: ["OpenAPPA"],
         response: constructResponseSchema(TrustAudienceViewSchema),
       },

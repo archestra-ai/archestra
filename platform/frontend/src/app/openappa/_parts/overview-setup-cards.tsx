@@ -31,7 +31,7 @@ export function OverviewSetupCards() {
  * guardrail is for, and the button.
  */
 function PolicyStep() {
-  const { data: canEdit } = useHasPermissions({ openappaPolicy: ["update"] });
+  const { data: canEdit } = useHasPermissions({ guardrailsPolicy: ["update"] });
   return (
     <section className="mx-auto flex max-w-xl flex-col items-center px-2 py-10 text-center sm:py-16">
       {/* A flat disc rather than a blurred glow: the mark is pixel art with

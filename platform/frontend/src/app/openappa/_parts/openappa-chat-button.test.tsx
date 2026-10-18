@@ -53,8 +53,8 @@ beforeEach(() => {
     http.get(`${api}/api/user/permissions`, () =>
       HttpResponse.json(
         makeUserPermissions({
-          openappaPolicy: ["read", "update"],
-          openappaDiagnostics: ["read", "update", "admin"],
+          guardrailsPolicy: ["read", "update"],
+          log: ["read", "admin"],
         }),
       ),
     ),
@@ -158,7 +158,7 @@ test.each([
     promptKey: "writeValidations" as const,
     children: "Write a validation",
     permissions: {
-      openappaPolicy: ["read", "update"] as ("read" | "update")[],
+      guardrailsPolicy: ["read", "update"] as ("read" | "update")[],
     },
   },
   {
@@ -175,8 +175,8 @@ test.each([
         agent: ["read"],
         skill: ["read"],
         mcpGateway: ["read"],
-        openappaPolicy: [],
-        openappaDiagnostics: ["read"],
+        guardrailsPolicy: [],
+        log: ["read"],
       }),
     ),
   );
@@ -185,8 +185,8 @@ test.each([
   await waitFor(() =>
     expect(button).toHaveAccessibleDescription(
       props.promptKey === "writeValidations"
-        ? "Missing permissions: OpenAPPA Policy (read, update), Chats (create)"
-        : "Missing permissions: Chats (create), OpenAPPA Policy (read)",
+        ? "Missing permissions: Guardrails Policy (read, update), Chats (create)"
+        : "Missing permissions: Chats (create), Guardrails Policy (read)",
     ),
   );
   await userEvent.click(button);
@@ -198,6 +198,6 @@ test.each([
   const tooltip = await screen.findByRole("tooltip");
   expect(tooltip).toHaveTextContent("Missing permissions");
   expect(tooltip).toHaveTextContent("Chats: create");
-  expect(tooltip).toHaveTextContent("OpenAPPA Policy: read");
+  expect(tooltip).toHaveTextContent("Guardrails Policy: read");
   expect(tooltip).not.toHaveTextContent("Diagnostics");
 });

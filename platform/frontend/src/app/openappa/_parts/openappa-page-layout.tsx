@@ -25,10 +25,10 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
     null,
   );
   const { data: canReadYells } = useHasPermissions({
-    openappaDiagnostics: ["read"],
+    log: ["read"],
   });
   const { data: canReadPolicy } = useHasPermissions({
-    openappaPolicy: ["read"],
+    guardrailsPolicy: ["read"],
   });
   const appName = useAppName();
   const { isFresh } = useOpenAppaSetupState();

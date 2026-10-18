@@ -39,7 +39,7 @@ function generatePredefinedRolesSections(): string {
     } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
       section +=
         "Platform Admin holds **all permissions except** `log:admin`, " +
-        "`auditLog:admin`, `openappaDiagnostics:admin`, and `member:impersonate` — so holders run the " +
+        "`auditLog:admin`, and `member:impersonate` — so holders run the " +
         "platform (users, roles, settings, resources) while other members' " +
         "LLM/MCP logs, the org-wide audit trail, and impersonation stay out " +
         "of reach. They keep `log:read` and `auditLog:read`, which show " +

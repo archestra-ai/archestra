@@ -141,7 +141,7 @@ export function ValidationPageActions() {
         size="sm"
         variant="outline"
         promptKey="writeValidations"
-        permissions={{ openappaPolicy: ["read", "update"] }}
+        permissions={{ guardrailsPolicy: ["read", "update"] }}
         disabled={busy}
       >
         <MessageCircle />

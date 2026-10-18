@@ -924,7 +924,7 @@ describe("guardrails batteries", () => {
     const role = await makeCustomRole(organizationId, {
       permission: {
         organizationSettings: ["update"],
-        openappaPolicy: ["read", "update"],
+        guardrailsPolicy: ["read", "update"],
       },
     });
     await makeMember(manager.id, organizationId, { role: role.role });
@@ -1315,7 +1315,7 @@ describe("guardrails batteries", () => {
   }) => {
     const member = await makeUser();
     const reader = await makeCustomRole(organizationId, {
-      permission: { openappaPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"] },
     });
     await makeMember(member.id, organizationId, { role: reader.role });
     const memberApp = createFastifyInstance();

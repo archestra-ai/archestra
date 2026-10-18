@@ -169,7 +169,7 @@ export function BatteriesPanel() {
   // The batteries that fit a server, as the overview counts them.
   const summary = useCoverageSummary();
   const { data: canManage } = useHasPermissions({
-    openappaPolicy: ["update"],
+    guardrailsPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, and an uploaded
   // package may carry such code, so both take Can use on every credential too.

@@ -1342,7 +1342,7 @@ test.each([
     (permissions) =>
       ({
         data:
-          canWrite || permissions.openappaPolicy?.includes("update") !== true,
+          canWrite || permissions.guardrailsPolicy?.includes("update") !== true,
       }) as ReturnType<typeof useHasPermissions>,
   );
   server.use(
@@ -1787,7 +1787,7 @@ test("policy readers cannot select directories or edit files", async () => {
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions) =>
       ({
-        data: permissions.openappaPolicy?.includes("update") !== true,
+        data: permissions.guardrailsPolicy?.includes("update") !== true,
       }) as ReturnType<typeof useHasPermissions>,
   );
   server.use(

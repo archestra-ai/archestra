@@ -143,6 +143,10 @@ describe("agent skills routes", () => {
    * One org-wide plugin skill and one org-scoped MCP skill, each with a
    * recorded activation, plus spies on both usage summaries. Activation and
    * count paths must list these skills without aggregating that usage.
+   *
+   * Side effects for the rest of the test: turns `config.mcpGateway.skillsEnabled`
+   * on and makes `userHasPermission` resolve true; `afterEach` restores the
+   * flag and the mocks.
    */
   async function seedUsedPluginAndExternalSkills(params: {
     catalogId: string;

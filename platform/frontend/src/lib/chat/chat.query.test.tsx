@@ -330,6 +330,51 @@ describe("useConversation error handling", () => {
   });
 });
 
+describe("useConversation caching", () => {
+  it("serves a switch back within 30 s from the cache, and refetches after it", async () => {
+    vi.clearAllMocks();
+    const getConversation = vi.mocked(archestraApiSdk.getChatConversation);
+    getConversation.mockReset();
+    getConversation.mockResolvedValue({
+      data: makeConversation(),
+      error: undefined,
+    } as Awaited<ReturnType<typeof getConversation>>);
+    const wrapper = createWrapper();
+    const mount = (options?: { refetchOnMount?: boolean }) =>
+      renderHook(() => useConversation("conversation-1", options), {
+        wrapper,
+      });
+    const start = new Date("2026-10-01T12:00:00.000Z").getTime();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(start);
+    try {
+      const first = mount();
+      await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+      first.unmount();
+
+      vi.setSystemTime(start + 29_000);
+      const back = mount();
+      await act(async () => {});
+      expect(back.result.current.data?.id).toBe("conversation-1");
+      expect(getConversation).toHaveBeenCalledTimes(1);
+      back.unmount();
+
+      // Stale now. A reader that opts out of mount refetches does not fetch.
+      vi.setSystemTime(start + 31_000);
+      const reader = mount({ refetchOnMount: false });
+      await act(async () => {});
+      expect(getConversation).toHaveBeenCalledTimes(1);
+      reader.unmount();
+
+      const later = mount();
+      await waitFor(() => expect(getConversation).toHaveBeenCalledTimes(2));
+      later.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("useMemberDefaultModel error handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();

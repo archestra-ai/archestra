@@ -41,6 +41,7 @@ describe("scheduled LLM model sync", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe("models.dev metadata", () => {
@@ -173,6 +174,33 @@ describe("scheduled LLM model sync", () => {
       vi.setSystemTime(after(TimeInMs.Day));
       await syncDueModels();
       expect([vllm.hits, openrouter.hits, deepseek.hits]).toEqual([4, 3, 2]);
+    });
+
+    test("resyncs ollama-native keys every 5 minutes, like ollama", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const ollama = serveModels("ollama.test", { ollama: true });
+      const ollamaNative = serveModels("ollama-native.test", { ollama: true });
+      await makeLlmProviderApiKey(organizationId, null, {
+        provider: "ollama",
+        baseUrl: "http://ollama.test/v1",
+      });
+      await makeLlmProviderApiKey(organizationId, null, {
+        provider: "ollama-native",
+        baseUrl: "http://ollama-native.test",
+      });
+      const start = new Date("2026-10-01T12:00:00.000Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(start);
+
+      await syncDueModels();
+      expect([ollama.hits, ollamaNative.hits]).toEqual([1, 1]);
+
+      vi.setSystemTime(
+        new Date(start.getTime() + 5 * TimeInMs.Minute + TimeInMs.Second),
+      );
+      await syncDueModels();
+      expect([ollama.hits, ollamaNative.hits]).toEqual([2, 2]);
     });
 
     test("treats a key synced exactly one TTL ago as stale", async ({
@@ -324,6 +352,39 @@ describe("scheduled LLM model sync", () => {
       await syncDueModels();
       expect(down.hits).toBeGreaterThan(downHitsAfterFirstTry);
       expect(up.hits).toBe(2);
+    });
+
+    test("still syncs a key when its attempt marker cannot be written, and tries it again next tick", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const down = serveModels("down.test", { status: 503 });
+      const up = serveModels("up.test");
+      const downKey = await makeLlmProviderApiKey(organizationId, null, {
+        provider: "vllm",
+        baseUrl: "http://down.test/v1",
+      });
+      const upKey = await makeLlmProviderApiKey(organizationId, null, {
+        provider: "vllm",
+        baseUrl: "http://up.test/v1",
+      });
+      const set = cacheManager.set.bind(cacheManager);
+      vi.spyOn(cacheManager, "set").mockImplementation((key, value, ttl) =>
+        key.startsWith("llm-model-sync-attempt-")
+          ? Promise.reject(new Error("cache unavailable"))
+          : set(key, value, ttl),
+      );
+
+      await syncDueModels();
+      expect(up.hits).toBe(1);
+      expect(await linkedModelCount(upKey.id)).toBe(2);
+      const downHitsAfterFirstTry = down.hits;
+      expect(downHitsAfterFirstTry).toBeGreaterThan(0);
+      expect(await attemptMarker(downKey.id)).toBeUndefined();
+
+      // Without a marker the failing key is due again; the synced one is fresh.
+      await syncDueModels();
+      expect(down.hits).toBeGreaterThan(downHitsAfterFirstTry);
+      expect(up.hits).toBe(1);
     });
 
     test("syncs at most the cap per tick, never-synced and oldest first, and leaves the rest unmarked for the next tick", async ({
@@ -486,7 +547,12 @@ describe("scheduled LLM model sync", () => {
 
   function serveModels(
     host: string,
-    options: { status?: number; embeddings?: boolean; models?: string[] } = {},
+    options: {
+      status?: number;
+      embeddings?: boolean;
+      models?: string[];
+      ollama?: boolean;
+    } = {},
   ) {
     const counter = { hits: 0 };
     const modelIds = options.models ?? [`${host}-small`, `${host}-large`];
@@ -502,6 +568,15 @@ describe("scheduled LLM model sync", () => {
         });
       }),
     );
+    if (options.ollama) {
+      // Enrichment is optional: the fetcher falls back to name heuristics.
+      server.use(
+        http.post(
+          `http://${host}/api/show`,
+          () => new HttpResponse(null, { status: 404 }),
+        ),
+      );
+    }
     if (options.embeddings) {
       server.use(
         http.get(`http://${host}/v1/embeddings/models`, () =>

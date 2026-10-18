@@ -168,6 +168,9 @@ export function useConversation(
     /**
      * False for components that only read the conversation the chat page
      * already loads, so mounting them never starts a request of its own.
+     * Only safe next to the page's own observer of the same conversation,
+     * which refetches a stale entry: alone, such a reader shows a cached
+     * conversation (kept for 10 minutes) without revalidating it.
      */
     refetchOnMount?: boolean;
   },

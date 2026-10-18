@@ -199,7 +199,8 @@ impl Deployments {
 
     /// After a dispatch pinned to `stale` found that its line moved on: the
     /// organization's deployment pinned at the line's head when the head names the
-    /// same policy file, or `None` when it names another one.
+    /// same policy file, or `None` when it names another one or a concurrent
+    /// dispatch left no held deployment for the organization.
     ///
     /// Only the same file is pinned again. Another file at the head was published
     /// by a process that read the organization's policy after this dispatch did, so
@@ -546,6 +547,8 @@ fn frozen_head(
 
 /// Whether `composition` is the content hash of the organization's stored
 /// composition. An organization with none stored has nothing newer to protect.
+/// The host schema is in `backend/src/database/schemas/openappa-batteries.ts`
+/// (`openappaEffectivePoliciesTable`).
 fn stored_composition(
     store: &LogStore,
     organization_id: &str,

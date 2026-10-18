@@ -105,4 +105,13 @@ test("a long conversation opens on its end and mounts earlier messages on scroll
     .first()
     .click();
   await expect(page.locator(MESSAGE)).toHaveCount(90);
+
+  await page.goto(`/chat/${conversation.id}#message-%`);
+  await page.reload();
+  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeEditable();
+  await expect(page.getByText(/^Turn 119\./)).toBeInViewport();
+  await expect(page.locator(MESSAGE)).toHaveCount(30);
+  await expect(
+    page.getByRole("button", { name: "Show earlier messages (90 not shown)" }),
+  ).toBeVisible();
 });

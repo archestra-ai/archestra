@@ -185,5 +185,10 @@ export function TranscriptWindowEdge({
 function readDeepLinkedMessageId(): string | null {
   if (typeof window === "undefined") return null;
   const match = /^#message-(.+)$/.exec(window.location.hash);
-  return match ? decodeURIComponent(match[1]) : null;
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }

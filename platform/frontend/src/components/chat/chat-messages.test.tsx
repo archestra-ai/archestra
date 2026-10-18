@@ -426,6 +426,34 @@ describe("ChatMessages", () => {
     }
   });
 
+  it("ignores a malformed message fragment without losing the transcript", () => {
+    const messages = Array.from({ length: 100 }, (_, index) => ({
+      id: `m-${index}`,
+      role: index % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${index}` }],
+    })) as UIMessage[];
+    window.history.replaceState({}, "", "/chat/conv-1#message-%");
+    try {
+      render(
+        <ChatMessages
+          conversationId="conv-1"
+          messages={messages}
+          status="ready"
+        />,
+      );
+
+      expect(screen.getByText("Turn 99")).toBeInTheDocument();
+      expect(screen.queryByText("Turn 69")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "Show earlier messages (70 not shown)",
+        }),
+      ).toBeVisible();
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
   it("keeps the window's start when new messages arrive", () => {
     const messages = Array.from({ length: 50 }, (_, i) => ({
       id: `m-${i}`,

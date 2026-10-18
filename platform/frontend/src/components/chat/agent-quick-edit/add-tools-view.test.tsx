@@ -85,6 +85,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
 }));
 
 import { Dialog } from "@/components/ui/dialog";
+import { fetchInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { AddToolsView } from "./add-tools-view";
 
 function row(
@@ -106,7 +107,7 @@ function row(
   };
 }
 
-function renderView() {
+function renderView(handlers: { onChooseTools?: () => void } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -120,7 +121,7 @@ function renderView() {
           // biome-ignore lint/suspicious/noExplicitAny: the view only passes it on
           installer={{} as any}
           onBack={vi.fn()}
-          onChooseTools={vi.fn()}
+          onChooseTools={handlers.onChooseTools ?? vi.fn()}
           onConnect={vi.fn()}
           onAdded={vi.fn()}
           onFailed={vi.fn()}
@@ -274,5 +275,35 @@ describe("AddToolsView", () => {
     expect(
       screen.getByRole("button", { name: "Not connected 0" }),
     ).toBeInTheDocument();
+  });
+
+  it("holds a row's actions while its server loads for the clicked one", async () => {
+    const user = userEvent.setup();
+    let answer: (item: unknown) => void = () => {};
+    vi.mocked(fetchInternalMcpCatalogItem).mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve as (item: unknown) => void;
+      }) as never,
+    );
+    const onChooseTools = vi.fn();
+    renderView({ onChooseTools });
+    const jira = within(
+      (await screen.findByText("Jira")).closest("li") as HTMLElement,
+    );
+
+    await user.click(jira.getByRole("button", { name: "Choose tools" }));
+
+    expect(jira.getByRole("button", { name: "Choose tools" })).toBeDisabled();
+    expect(jira.getByRole("button", { name: "Add all" })).toBeDisabled();
+    expect(onChooseTools).not.toHaveBeenCalled();
+
+    answer({ id: "jira", name: "Jira" });
+
+    await vi.waitFor(() =>
+      expect(onChooseTools).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "jira" }),
+      ),
+    );
+    expect(jira.getByRole("button", { name: "Add all" })).toBeEnabled();
   });
 });

@@ -234,12 +234,28 @@ export function AddToolsView({
     (page.data?.pagination.total ?? 0) + builtInAdjustment - rows.length,
   );
 
+  // The action loading its row's full item: that row's buttons wait, and
+  // the clicked one spins.
+  const [loadingItem, setLoadingItem] = useState<{
+    id: string;
+    action: ItemAction;
+  } | null>(null);
   /** The full item an action works on, loaded when the action starts. */
   const withFullItem = async (
     row: { id: string },
+    action: ItemAction,
     act: (catalog: CatalogItem) => void,
   ) => {
-    const catalog = await fetchInternalMcpCatalogItem(queryClient, row.id);
+    setLoadingItem({ id: row.id, action });
+    let catalog: CatalogItem | null;
+    try {
+      catalog = await fetchInternalMcpCatalogItem(queryClient, row.id);
+    } catch {
+      // The API error is already toasted.
+      return;
+    } finally {
+      setLoadingItem(null);
+    }
     if (catalog) act(catalog);
   };
 
@@ -247,7 +263,7 @@ export function AddToolsView({
     if (row.setupNeeds.signIn) {
       installer.triggerInstallByCatalogId(row.id);
     } else {
-      void withFullItem(row, onConnect);
+      void withFullItem(row, "connect", onConnect);
     }
   };
 
@@ -317,6 +333,10 @@ export function AddToolsView({
                   const count = row.catalog.toolCount;
                   const noTools = count === 0;
                   const adding = addAll.addingCatalogId === row.catalog.id;
+                  const loading =
+                    loadingItem?.id === row.catalog.id
+                      ? loadingItem.action
+                      : null;
                   return (
                     <ServerRow
                       key={row.catalog.id}
@@ -346,29 +366,41 @@ export function AddToolsView({
                             <Button
                               variant="ghost"
                               size="xs"
-                              disabled={adding}
+                              disabled={adding || !!loading}
                               onClick={() =>
-                                void withFullItem(row.catalog, onChooseTools)
+                                void withFullItem(
+                                  row.catalog,
+                                  "choose",
+                                  onChooseTools,
+                                )
                               }
                             >
-                              Choose tools
+                              {loading === "choose" && (
+                                <Loader2 className="animate-spin" />
+                              )}
+                              <span>Choose tools</span>
                             </Button>
                             <Button
                               variant="outline"
                               size="xs"
-                              disabled={adding}
+                              disabled={adding || !!loading}
                               onClick={() =>
-                                void withFullItem(row.catalog, (catalog) =>
-                                  addAll.run({
-                                    catalog,
-                                    name: row.name,
-                                    onAdded,
-                                    onFailed,
-                                  }),
+                                void withFullItem(
+                                  row.catalog,
+                                  "add",
+                                  (catalog) =>
+                                    addAll.run({
+                                      catalog,
+                                      name: row.name,
+                                      onAdded,
+                                      onFailed,
+                                    }),
                                 )
                               }
                             >
-                              {adding && <Loader2 className="animate-spin" />}
+                              {(adding || loading === "add") && (
+                                <Loader2 className="animate-spin" />
+                              )}
                               <span>{adding ? "Adding…" : "Add all"}</span>
                             </Button>
                           </>
@@ -400,9 +432,13 @@ export function AddToolsView({
                       ) : (
                         <Button
                           size="xs"
+                          disabled={loadingItem?.id === row.catalog.id}
                           onClick={() => handleConnect(row.catalog)}
                         >
-                          Connect
+                          {loadingItem?.id === row.catalog.id && (
+                            <Loader2 className="animate-spin" />
+                          )}
+                          <span>Connect</span>
                         </Button>
                       )
                     }
@@ -1016,6 +1052,9 @@ const ADD_TOOLS_PAGE_SIZE = 100;
 function withCount(label: string, count: number | undefined) {
   return count === undefined ? label : `${label} ${count}`;
 }
+
+/** A row action that loads the server's full item before it runs. */
+type ItemAction = "choose" | "add" | "connect";
 
 type CountQuery = {
   data?: { data: unknown[]; pagination: { total: number } };

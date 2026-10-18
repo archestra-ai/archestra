@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { requestScope } from "@/auth/request-scope";
 import { describe, expect, test } from "@/test";
 import MemberModel from "./member";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
 import TeamModel from "./team";
 import UserModel from "./user";
@@ -78,13 +79,38 @@ describe("caller lookups shared by a read request", () => {
       }),
     );
     const write = await inRequest(false, () =>
-      countStatements(async () => {
-        await RoleCompositionModel.getUserSources(params);
-        await RoleCompositionModel.getUserSources(params);
-      }),
+      countStatements(async () => [
+        await RoleCompositionModel.getUserSources(params),
+        await RoleCompositionModel.getUserSources(params),
+      ]),
     );
     expect(read.result).toEqual([expected, expected]);
+    expect(write.result).toEqual([expected, expected]);
     expect(write.statements).toBe(2 * read.statements);
+  });
+
+  test("a write request sees team membership changes between access checks", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, user.id);
+    const params = { userId: user.id, organizationId: org.id };
+    const { before, after } = await inRequest(false, async () => {
+      const before =
+        await ResourcePermissionSubjectModel.resolvePrincipal(params);
+      await makeTeamMember(team.id, user.id);
+      const after =
+        await ResourcePermissionSubjectModel.resolvePrincipal(params);
+      return { before, after };
+    });
+    expect(before.subjects).not.toContainEqual({ type: "team", id: team.id });
+    expect(after.subjects).toContainEqual({ type: "team", id: team.id });
   });
 
   test("one statement gives a caller's role-source teams and every team their grants can name", async ({

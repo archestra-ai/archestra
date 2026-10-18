@@ -93,7 +93,25 @@ export default class RoleCompositionModel {
       params.organizationId,
     );
     if (!member) return [];
-    const { sourceTeams: teams } = await TeamModel.getUserTeamContext(params);
+    // Combined teams only save work when this read request can reuse them.
+    const teams = requestScope.isMemoizing()
+      ? (await TeamModel.getUserTeamContext(params)).sourceTeams
+      : await db
+          .select({
+            id: schema.teamsTable.id,
+            name: schema.teamsTable.name,
+            roles: schema.teamsTable.roles,
+          })
+          .from(schema.teamsTable)
+          .where(
+            and(
+              eq(schema.teamsTable.organizationId, params.organizationId),
+              TeamModel.effectiveMembershipCondition({
+                userId: params.userId,
+                teamIdColumn: schema.teamsTable.id,
+              }),
+            ),
+          );
     const assignments = [
       ...[...new Set(member.role.split(","))].map((role) => ({
         role: role.trim(),

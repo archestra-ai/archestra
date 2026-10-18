@@ -3977,6 +3977,13 @@
       "when": 1792280181708,
       "tag": "0567_list_page_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 568,
+      "version": "7",
+      "when": 1792283699755,
+      "tag": "0568_gateway_profile_list_index",
+      "breakpoints": true
     }
   ]
 }

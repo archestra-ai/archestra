@@ -129,6 +129,7 @@ function makeSessionSummary(
     models: ["gpt-5.4"],
     profileId: orgProxy.id,
     profileName: orgProxy.name,
+    profileAgentType: "llm_proxy",
     externalAgentIds: [],
     externalAgentIdLabels: [],
     authMethods: [],

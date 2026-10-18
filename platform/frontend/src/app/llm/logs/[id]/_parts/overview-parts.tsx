@@ -59,9 +59,9 @@ export function OverviewSection({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 px-4 py-3.5">
+    <section className="min-w-0 px-4 py-2.5">
       {title ? (
-        <div className="mb-2.5 flex items-baseline justify-between gap-3">
+        <div className="mb-1.5 flex items-baseline justify-between gap-3">
           <h3 className="text-xs text-muted-foreground">{title}</h3>
           {aside}
         </div>
@@ -88,6 +88,29 @@ export function OverviewFact({
     </div>
   );
 }
+
+/**
+ * Label-over-value pairs two to a row, so a section's figures fit the pane
+ * without scrolling; render inside a `<dl>` with {@link OVERVIEW_GRID}.
+ */
+export function OverviewCell({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <dt className="text-[11px] leading-4 text-muted-foreground">{label}</dt>
+      <dd className="truncate text-xs leading-4 tabular-nums">{children}</dd>
+    </div>
+  );
+}
+
+export const OVERVIEW_GRID = "grid grid-cols-2 gap-x-4 gap-y-1.5";
 
 export function BigFigure({
   value,

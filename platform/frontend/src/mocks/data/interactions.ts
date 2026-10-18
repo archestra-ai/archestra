@@ -54,6 +54,7 @@ export function makeSessionSummary(
     models: ["gpt-4o"],
     profileId: "test-profile-id",
     profileName: "Test Agent",
+    profileAgentType: "agent",
     externalAgentIds: [],
     externalAgentIdLabels: [],
     authMethods: [],

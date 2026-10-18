@@ -9,6 +9,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AgentTypeSchema } from "./agent";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { ToolCallBlockSchema } from "./interaction-guardrails";
 import {
@@ -873,6 +874,8 @@ export const SessionSummarySchema = z.object({
   models: z.array(z.string()),
   profileId: z.string().nullable(), // null when profile was deleted
   profileName: z.string().nullable(),
+  /** The agent's type, so a session run through the LLM Proxy or a gateway can say so. */
+  profileAgentType: AgentTypeSchema.nullable(),
   externalAgentIds: z.array(z.string()),
   externalAgentIdLabels: z.array(z.string().nullable()), // Resolved prompt names
   authMethods: z.array(InteractionAuthMethodSchema),

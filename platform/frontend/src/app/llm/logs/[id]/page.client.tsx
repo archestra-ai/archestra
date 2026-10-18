@@ -71,7 +71,7 @@ export default function SessionDetailPage({
   const appName = useAppName();
   const openappaEnabled = useFeature("openappaEnabled") === true;
   const { pageIndex, pageSize, offset, setPagination } =
-    useDataTableQueryParams();
+    useDataTableQueryParams({ defaultPageSize: 50 });
   const { label: providerLabel } = useModelProviderCatalog();
   const { displayByName: serverDisplayByName } = useMcpServerDisplayByName();
   // Links preselect one record: a tool call from `/mcp/logs`, or a request.

@@ -145,17 +145,17 @@ it("shows total latency per request and leaves untimed records empty", async () 
 });
 
 it("opens the request a link names, moving to the page that holds it", async () => {
-  // Fifteen requests, newest first: the linked one is the twelfth newest, so
-  // it sits on page two of ten.
-  const rows = Array.from({ length: 15 }, (_, i) =>
+  // Sixty requests, newest first: the linked one is the 56th newest, so it
+  // sits on page two of fifty.
+  const rows = Array.from({ length: 60 }, (_, i) =>
     summary({
       id: `request-${i}`,
       model: `model-${i}`,
-      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 15 - i)).toISOString(),
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 60 - i)).toISOString(),
     }),
   );
   serveSession({ rows });
-  let search = new URLSearchParams("request=request-11");
+  let search = new URLSearchParams("request=request-55");
   vi.mocked(useSearchParams).mockImplementation(
     () => search as ReturnType<typeof useSearchParams>,
   );
@@ -166,7 +166,7 @@ it("opens the request a link names, moving to the page that holds it", async () 
   const { rerender } = await renderPage();
   await waitFor(() =>
     expect(push).toHaveBeenCalledWith(
-      "/llm/logs/test-session?request=request-11&page=2&pageSize=10",
+      "/llm/logs/test-session?request=request-55&page=2&pageSize=50",
       { scroll: false },
     ),
   );
@@ -175,7 +175,7 @@ it("opens the request a link names, moving to the page that holds it", async () 
   const requests = await screen.findByRole("list", { name: "Requests" });
   expect(
     await within(requests).findByRole("button", {
-      name: /^Test Agent, Model 11,/,
+      name: /^Test Agent, Model 55,/,
     }),
   ).toHaveAttribute("aria-current", "true");
   expect(

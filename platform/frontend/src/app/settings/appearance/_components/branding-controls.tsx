@@ -8,6 +8,11 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { themes } from "@/themes";
@@ -167,33 +172,53 @@ function AssetTile({
       <FieldDescription id={`appearance-${field}-description`}>
         {hint}
       </FieldDescription>
-      <UnstyledButton
-        aria-label={`${value ? "Replace" : "Upload"} ${title}`}
-        aria-describedby={`appearance-${field}-description`}
-        disabled={disabled}
-        onClick={() => input.current?.click()}
-        className={cn(
-          "group relative flex h-14 w-full items-center justify-center overflow-hidden rounded-md border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-          dark ? "bg-zinc-950" : "bg-white",
-        )}
-      >
-        <img
-          src={value || "/logo-icon.svg"}
-          alt=""
+      <div className="relative">
+        <UnstyledButton
+          aria-label={`${value ? "Replace" : "Upload"} ${title}`}
+          aria-describedby={`appearance-${field}-description`}
+          disabled={disabled}
+          onClick={() => input.current?.click()}
           className={cn(
-            "object-contain",
-            field.startsWith("icon") || field === "favicon" || !value
-              ? "size-6"
-              : "max-h-9 max-w-[80%]",
+            "group relative flex h-14 w-full items-center justify-center overflow-hidden rounded-md border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+            dark ? "bg-zinc-950" : "bg-white",
           )}
-        />
-        <span
-          aria-hidden="true"
-          className="absolute bottom-1 right-1 rounded bg-background/90 p-1 text-foreground opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100"
         >
-          <Upload className="size-3" />
-        </span>
-      </UnstyledButton>
+          <img
+            src={value || "/logo-icon.svg"}
+            alt=""
+            className={cn(
+              "object-contain",
+              field.startsWith("icon") || field === "favicon" || !value
+                ? "size-6"
+                : "max-h-9 max-w-[80%]",
+            )}
+          />
+          <span
+            aria-hidden="true"
+            className="absolute bottom-1 right-1 rounded bg-background/90 p-1 text-foreground opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100"
+          >
+            <Upload className="size-3" />
+          </span>
+        </UnstyledButton>
+        {value && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <UnstyledButton
+                aria-label={`Reset ${title}`}
+                disabled={disabled}
+                onClick={() => {
+                  onChange(null);
+                  setError(null);
+                }}
+                className="absolute bottom-1 left-1 rounded bg-background/90 p-1 text-foreground opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+              >
+                <X className="size-3" />
+              </UnstyledButton>
+            </TooltipTrigger>
+            <TooltipContent>Reset to default</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       <Input
         ref={input}
         id={`appearance-${field}`}
@@ -226,21 +251,6 @@ function AssetTile({
           reader.readAsDataURL(file);
         }}
       />
-      {value && (
-        <Button
-          size="xs"
-          variant="ghost"
-          aria-label={`Reset ${title}`}
-          disabled={disabled}
-          onClick={() => {
-            onChange(null);
-            setError(null);
-          }}
-        >
-          <X />
-          <span>Reset</span>
-        </Button>
-      )}
       {error && (
         <InlineNotice variant="error">
           <Info />

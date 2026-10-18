@@ -617,15 +617,32 @@ mod tests {
     const KEY: &str = "APPA_OPENAPPA_RS_TEST_JEV_KEY";
     const JEV: &str = "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"jev.tool-call\"\nbuiltin = \"jev\"\nranks = [\"suspicious\", \"trusted\"]\naudiences = [\"self\", \"internal\"]\nmarks = []\n[externals.jev]\ntoken_env = \"APPA_OPENAPPA_RS_TEST_JEV_KEY\"\n";
 
-    fn runtime() -> Arc<Runtime> {
+    #[derive(Clone)]
+    struct TestRuntime {
+        runtime: Arc<Runtime>,
+        store: Arc<LogStore>,
+    }
+
+    impl std::ops::Deref for TestRuntime {
+        type Target = Arc<Runtime>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.runtime
+        }
+    }
+
+    fn runtime() -> TestRuntime {
         on_store(Arc::new(LogStore::open(Backend::Memory).unwrap()))
     }
 
     /// A runtime over `store`: two of them over one store are two processes sharing
     /// one database.
-    fn on_store(store: Arc<LogStore>) -> Arc<Runtime> {
+    fn on_store(store: Arc<LogStore>) -> TestRuntime {
         let config = crate::policy::compile("[policy]\nversion = 2\n", |_| None).unwrap();
-        Arc::new(crate::policy::open(config, store).unwrap())
+        TestRuntime {
+            runtime: Arc::new(crate::policy::open(config, store.clone()).unwrap()),
+            store,
+        }
     }
 
     /// Runs `future` to completion on a runtime of its own, as a dispatch would.
@@ -649,7 +666,7 @@ mod tests {
     /// deployment rather than reusing the one held.
     fn prepares(
         deployments: &Deployments,
-        runtime: &Arc<Runtime>,
+        runtime: &TestRuntime,
         organization: &str,
         policy: &HostedPolicy,
     ) -> bool {
@@ -663,18 +680,15 @@ mod tests {
 
     fn serve(
         deployments: &Deployments,
-        runtime: &Arc<Runtime>,
+        runtime: &TestRuntime,
         organization: &str,
         policy: &HostedPolicy,
     ) -> Result<PublishedDeployment, String> {
-        // No test policy names a stored composition, so this store is never read.
-        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
-        block_on(deployments.deployment(runtime, &store, organization, policy, false)).map_err(
-            |error| match error {
+        block_on(deployments.deployment(runtime, &runtime.store, organization, policy, false))
+            .map_err(|error| match error {
                 DeploymentError::Superseded => "superseded".to_owned(),
                 DeploymentError::Failed(reason) => reason,
-            },
-        )
+            })
     }
 
     #[test]
@@ -722,7 +736,7 @@ mod tests {
                             deployments
                                 .pinned(
                                     &runtime,
-                                    &Arc::new(LogStore::open(Backend::Memory).unwrap()),
+                                    &runtime.store,
                                     "org-a",
                                     &policy(JEV, Some("one")),
                                     false,
@@ -811,7 +825,7 @@ mod tests {
 
     fn revision(
         deployments: &Deployments,
-        runtime: &Arc<Runtime>,
+        runtime: &TestRuntime,
         organization: &str,
         policy: &HostedPolicy,
     ) -> u64 {

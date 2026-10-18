@@ -64355,7 +64355,7 @@ export type SearchMcpRegistryData = {
          */
         catalogIds?: Array<string>;
         /**
-         * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier.
+         * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.
          */
         rankTiers?: Array<Array<string>>;
     };
@@ -64600,7 +64600,7 @@ export type SearchMcpRegistryIdsData = {
          */
         catalogIds?: Array<string>;
         /**
-         * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier.
+         * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.
          */
         rankTiers?: Array<Array<string>>;
     };

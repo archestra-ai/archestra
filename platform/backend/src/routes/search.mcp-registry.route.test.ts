@@ -251,6 +251,26 @@ describe("MCP registry list routes", () => {
       ]);
     });
 
+    test("refuses an unknown sort, a page size out of range and an oversized body", async () => {
+      const post = (payload: Record<string, unknown>) =>
+        ctx.app.inject({
+          method: "POST",
+          url: "/api/internal_mcp_catalog/registry/search",
+          payload: { limit: 10, offset: 0, ...payload },
+        });
+
+      expect((await post({ sortBy: "popularity" })).statusCode).toBe(400);
+      expect((await post({ limit: 0 })).statusCode).toBe(400);
+      expect((await post({ limit: -1 })).statusCode).toBe(400);
+      expect((await post({ offset: -1 })).statusCode).toBe(400);
+      expect(
+        (await post({ labels: { key: ["x".repeat(257)] } })).statusCode,
+      ).toBe(400);
+      // About 14,000 ids: over the body limit before any parsing.
+      const ids = Array.from({ length: 14_000 }, () => crypto.randomUUID());
+      expect((await post({ rankTiers: [ids] })).statusCode).toBe(413);
+    });
+
     test("refuses more label keys than one query should join", async () => {
       const labels = Object.fromEntries(
         Array.from({ length: 51 }, (_, i) => [`key-${i}`, ["value"]]),
@@ -757,6 +777,48 @@ describe("MCP registry list routes", () => {
       });
     });
 
+    test("applies the same filters as the page", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      for (const [name, category] of [
+        ["dev-one", "dev"],
+        ["dev-two", "dev"],
+        ["ops-one", "ops"],
+      ] as const) {
+        const item = await makeItem(makeInternalMcpCatalog, name);
+        await McpCatalogLabelModel.syncCatalogLabels(item.id, [
+          { key: "category", value: category },
+        ]);
+        await makeMcpServer({
+          catalogId: item.id,
+          ownerId: ctx.user.id,
+          scope: "org",
+        });
+      }
+      const filters = {
+        search: "one",
+        labels: { category: ["dev"] },
+        installState: "installed",
+        access: ["mine"],
+        sortBy: "name",
+        sortDirection: "asc",
+      };
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog/registry/search/ids",
+        payload: filters,
+      });
+
+      expect(
+        (response.json() as { data: Array<{ name: string }> }).data.map(
+          (row) => row.name,
+        ),
+      ).toEqual(["dev-one"]);
+      expect(names(await search(filters))).toEqual(["dev-one"]);
+    });
+
     test("caps the answer at the bulk limit and says so", async () => {
       const matching = Array.from({ length: MAX_BULK_IDS + 1 }, (_, i) => ({
         id: crypto.randomUUID(),
@@ -1223,6 +1285,23 @@ describe("MCP registry list routes", () => {
 
       expect(names(page)).toEqual(["second", "first"]);
       expect(page.attentionTiers).toBeUndefined();
+    });
+
+    test("keeps one direction for the attention and issue age orders", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const first = await makeItem(makeInternalMcpCatalog, "first");
+      const second = await makeItem(makeInternalMcpCatalog, "second");
+      const rankTiers = [[second.id], [first.id]];
+
+      // The most urgent item comes first either way, as the sort menu offers.
+      for (const sortBy of ["attention", "issueAge"]) {
+        for (const sortDirection of ["asc", "desc"]) {
+          expect(
+            names(await search({ sortBy, sortDirection, rankTiers })),
+          ).toEqual(["second", "first"]);
+        }
+      }
     });
 
     test("orders tiers by number, past ten tiers too", async ({

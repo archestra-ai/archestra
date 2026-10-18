@@ -248365,7 +248365,8 @@
                       "maxItems": 100,
                       "type": "array",
                       "items": {
-                        "type": "string"
+                        "type": "string",
+                        "maxLength": 256
                       }
                     }
                   },
@@ -248415,7 +248416,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "maxLength": 256
                     }
                   },
                   "authorServiceAccountIds": {
@@ -248447,7 +248449,7 @@
                     }
                   },
                   "rankTiers": {
-                    "description": "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier.",
+                    "description": "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.",
                     "maxItems": 1000,
                     "type": "array",
                     "items": {
@@ -249441,7 +249443,8 @@
                       "maxItems": 100,
                       "type": "array",
                       "items": {
-                        "type": "string"
+                        "type": "string",
+                        "maxLength": 256
                       }
                     }
                   },
@@ -249491,7 +249494,8 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "maxLength": 256
                     }
                   },
                   "authorServiceAccountIds": {
@@ -249523,7 +249527,7 @@
                     }
                   },
                   "rankTiers": {
-                    "description": "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier.",
+                    "description": "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.",
                     "maxItems": 1000,
                     "type": "array",
                     "items": {

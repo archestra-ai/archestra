@@ -192,7 +192,7 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
   search: z.string().trim().max(256).optional(),
   // Each key is one more EXISTS in the query.
   labels: z
-    .record(z.string(), z.array(z.string()).max(100))
+    .record(z.string().max(256), z.array(z.string().max(256)).max(100))
     .refine((labels) => Object.keys(labels).length <= MAX_REGISTRY_LABEL_KEYS, {
       message: `At most ${MAX_REGISTRY_LABEL_KEYS} label keys`,
     })
@@ -207,7 +207,8 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
     .describe(
       "Items in these environments. An empty list matches nothing; omit it for every environment.",
     ),
-  authorIds: z.array(z.string().min(1)).max(500).optional(),
+  // User ids are not UUIDs (the auth library makes its own), so only a length.
+  authorIds: z.array(z.string().min(1).max(256)).max(500).optional(),
   authorServiceAccountIds: z
     .array(z.string().uuid())
     .max(500)
@@ -233,7 +234,7 @@ const McpRegistryQueryBodySchema = createSortingQuerySchema(
     .max(1_000)
     .optional()
     .describe(
-      "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier.",
+      "Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.",
     ),
 });
 
@@ -3592,4 +3593,8 @@ function withoutEmptyFields<T extends Record<string, unknown>>(
 
 /** Catalog ids one registry list request may name across all its filters. */
 const MAX_REGISTRY_QUERY_IDS = 10_000;
-const REGISTRY_QUERY_BODY_LIMIT_BYTES = 2 * 1024 * 1024;
+/**
+ * 10,000 ids are about 390 KB of JSON. The limit also bounds what validation
+ * parses before the combined id check (about 13,000 UUIDs).
+ */
+const REGISTRY_QUERY_BODY_LIMIT_BYTES = 512 * 1024;

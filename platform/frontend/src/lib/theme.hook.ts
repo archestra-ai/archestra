@@ -101,7 +101,7 @@ export function useOrgTheme() {
   };
 }
 
-const applyThemeOnUI = (themeId: OrganizationTheme) => {
+export const applyThemeOnUI = (themeId: OrganizationTheme) => {
   const root = document.documentElement;
   const themeClasses = Array.from(root.classList).filter((cls) =>
     cls.startsWith("theme-"),

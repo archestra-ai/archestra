@@ -140,6 +140,7 @@ function renderSettings() {
   const view = render(tree());
   return {
     client,
+    unmount: view.unmount,
     navigate(section: string) {
       vi.mocked(usePathname).mockReturnValue(`/settings/appearance/${section}`);
       view.rerender(tree());
@@ -150,7 +151,7 @@ function renderSettings() {
 const save = () => screen.getByRole("button", { name: "Save" });
 
 describe("Appearance settings", () => {
-  it("keeps drafts across pages and saves only changed settings without previewing the theme", async () => {
+  it("keeps drafts across pages and saves only changed settings", async () => {
     const user = userEvent.setup();
     const view = renderSettings();
     await user.type(
@@ -193,6 +194,23 @@ describe("Appearance settings", () => {
       title: "Appearance",
       description: "Name, logos, and colors for your organization.",
     });
+  });
+
+  it("previews the picked palette until it is saved, canceled, or left", async () => {
+    const user = userEvent.setup();
+    const view = renderSettings();
+    const html = document.documentElement;
+    await user.click(await screen.findByRole("button", { name: "Claude" }));
+    expect(html).toHaveClass("theme-claude");
+    expect(html).not.toHaveClass("theme-modern-minimal");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(html).toHaveClass("theme-modern-minimal");
+    expect(html).not.toHaveClass("theme-claude");
+    await user.click(screen.getByRole("button", { name: "Claude" }));
+    view.unmount();
+    expect(html).toHaveClass("theme-modern-minimal");
+    expect(html).not.toHaveClass("theme-claude");
+    expect(patches).toEqual([]);
   });
 
   it("preserves a dirty field across refetches and discards to the latest server values", async () => {

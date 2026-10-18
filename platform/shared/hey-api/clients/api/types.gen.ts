@@ -64359,6 +64359,18 @@ export type SearchMcpRegistryData = {
          */
         catalogIds?: Array<string>;
         /**
+         * Also list the built-in MCP server entry.
+         */
+        includeBuiltIn?: boolean;
+        /**
+         * With environmentIds: also match items in the Default environment (no environment).
+         */
+        includeDefaultEnvironment?: boolean;
+        /**
+         * Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.
+         */
+        includeApps?: boolean;
+        /**
          * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.
          */
         rankTiers?: Array<Array<string>>;
@@ -64466,6 +64478,9 @@ export type SearchMcpRegistryResponses = {
             providesSkills?: boolean;
             catalogReinstallRequired: boolean;
             dynamicConnectionMcpServerId: string | null;
+            appId?: string | null;
+            appEnabled?: boolean | null;
+            docsUrl: string | null;
             icon: string | null;
             iconUrl: string | null;
             alertMutes: Array<{
@@ -64611,6 +64626,18 @@ export type SearchMcpRegistryIdsData = {
          * Only these items. An empty list matches nothing; omit it for every item.
          */
         catalogIds?: Array<string>;
+        /**
+         * Also list the built-in MCP server entry.
+         */
+        includeBuiltIn?: boolean;
+        /**
+         * With environmentIds: also match items in the Default environment (no environment).
+         */
+        includeDefaultEnvironment?: boolean;
+        /**
+         * Also list app backing entries (with appId and appEnabled). Needs app:read; ignored without it.
+         */
+        includeApps?: boolean;
         /**
          * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.
          */
@@ -65139,7 +65166,7 @@ export type GetInternalMcpCatalogItemData = {
     };
     query?: {
         /**
-         * Only an item the registry lists: 404 for hidden runtime variants (default false).
+         * Answer 404 for hidden runtime variants (Playwright per-environment rows); app backings are still returned. Default false.
          */
         listedOnly?: boolean;
     };
@@ -81131,6 +81158,10 @@ export type GetMcpServersData = {
          * Only installs of these catalog items (comma-separated, at most 100).
          */
         catalogIds?: Array<string>;
+        /**
+         * Only installs of catalog items whose name, slugified as in tool names (lowercase, spaces as _, other characters dropped), is this.
+         */
+        catalogSlug?: string;
         /**
          * Include each listed install's assigned agents. Defaults to false, which returns an empty `assignedAgents` for every install. The lookup covers every install in the response, so narrow the list with `catalogId` when you need only some. GET /api/mcp_server/{id} returns the agents of one install.
          */

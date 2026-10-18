@@ -424,7 +424,7 @@ curl -X POST "${a2aEndpoint}" \\
           title="OAuth clients"
           description="Applications that call this agent as themselves, or on behalf of a signed-in user."
         >
-          <McpOauthManagement resourceId={agent.id} resourceKind="agent" />
+          <McpOauthManagement resourceId={agent.id} />
         </SettingsSection>
 
         <SettingsSection

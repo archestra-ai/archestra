@@ -1,6 +1,9 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { and, eq, inArray } from "drizzle-orm";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { ProjectPinModel } from "@/models";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
@@ -8,7 +11,9 @@ import type { ProjectVisibility, User } from "@/types";
 
 /** Names of the projects returned by GET /api/projects, in response order. */
 function names(json: string): string[] {
-  return (JSON.parse(json) as Array<{ name: string }>).map((p) => p.name);
+  return (JSON.parse(json) as { data: Array<{ name: string }> }).data.map(
+    (p) => p.name,
+  );
 }
 
 /**
@@ -81,12 +86,16 @@ describe("GET /api/projects (scope + search)", () => {
 
     const response = await list("?labels=stage%3Aready");
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject([
+    expect(response.json().data).toMatchObject([
       {
         name: "ready-project",
         labels: [{ key: "stage", value: "ready" }],
       },
     ]);
+    expect((await list("?labels=stage%3Amissing")).json()).toMatchObject({
+      data: [],
+      pagination: { total: 0 },
+    });
 
     expect(
       (
@@ -121,7 +130,8 @@ describe("GET /api/projects (scope + search)", () => {
     expect(names((await list("?scope=org")).body)).toEqual(["org-one"]);
 
     // The owner's team-shared project carries its team name(s) for the badge.
-    const teamItems = JSON.parse((await list("?scope=team")).body) as Array<{
+    const teamItems = JSON.parse((await list("?scope=team")).body)
+      .data as Array<{
       name: string;
       shareTeamNames: string[] | null;
     }>;
@@ -166,7 +176,7 @@ describe("GET /api/projects (scope + search)", () => {
     // personal with no owner filter → every private project. The admin role's
     // Full grant on every project is real read access, so another member's
     // private project reads as "shared", not read-only oversight.
-    const all = JSON.parse((await list("?scope=personal")).body) as Array<{
+    const all = JSON.parse((await list("?scope=personal")).body).data as Array<{
       name: string;
       viewerRole: string;
     }>;
@@ -330,7 +340,7 @@ describe("GET /api/projects (scope + search)", () => {
     // admin role's Full grant on every project (viewerRole "shared"), and as
     // someone who may manage it they still get the team name(s) for the pill
     // tooltip.
-    const items = JSON.parse((await list("?scope=team")).body) as Array<{
+    const items = JSON.parse((await list("?scope=team")).body).data as Array<{
       name: string;
       viewerRole: string;
       shareTeamNames: string[] | null;
@@ -358,6 +368,280 @@ describe("GET /api/projects (scope + search)", () => {
     expect(
       names((await list(`?scope=personal&authorIds=${other.id}`)).body),
     ).toEqual(["viewer-private"]);
+  });
+
+  /** Every page of a listing, walked with the given page size. */
+  const walk = async (query: string, limit: number) => {
+    const pages: { names: string[]; pagination: Record<string, unknown> }[] =
+      [];
+    for (let offset = 0; ; offset += limit) {
+      const response = await list(
+        `?${query}${query ? "&" : ""}limit=${limit}&offset=${offset}`,
+      );
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      pages.push({ names: names(response.body), pagination: body.pagination });
+      if (!body.pagination.hasNext) return pages;
+    }
+  };
+
+  test("pages are disjoint, cover every match, and keep owner-first order even when timestamps tie", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const other = await makeUser({ email: "paging-other@test.com" });
+    await makeMember(other.id, organizationId, {});
+    const own = await Promise.all(
+      ["own-a", "own-b", "own-c", "own-d"].map((name) => create(viewer, name)),
+    );
+    const shared = await Promise.all(
+      ["shared-a", "shared-b", "shared-c"].map((name) => create(other, name)),
+    );
+    for (const project of shared)
+      await share(other, project.id, "organization");
+    // Identical timestamps leave only the id to order by.
+    await db
+      .update(schema.projectsTable)
+      .set({ createdAt: new Date("2026-01-01T00:00:00Z") })
+      .where(
+        inArray(
+          schema.projectsTable.id,
+          [...own, ...shared].map((p) => p.id),
+        ),
+      );
+
+    const pages = await walk("", 3);
+    expect(pages.map((p) => p.pagination)).toEqual([
+      {
+        currentPage: 1,
+        limit: 3,
+        total: 7,
+        totalPages: 3,
+        hasNext: true,
+        hasPrev: false,
+      },
+      {
+        currentPage: 2,
+        limit: 3,
+        total: 7,
+        totalPages: 3,
+        hasNext: true,
+        hasPrev: true,
+      },
+      {
+        currentPage: 3,
+        limit: 3,
+        total: 7,
+        totalPages: 3,
+        hasNext: false,
+        hasPrev: true,
+      },
+    ]);
+    const byId = (rows: { id: string; name: string }[]) =>
+      [...rows].sort((a, b) => (a.id < b.id ? -1 : 1)).map((p) => p.name);
+    expect(pages.flatMap((p) => p.names)).toEqual([
+      ...byId(own),
+      ...byId(shared),
+    ]);
+    // The same request gives the same page every time.
+    expect((await walk("", 3)).flatMap((p) => p.names)).toEqual(
+      pages.flatMap((p) => p.names),
+    );
+  });
+
+  test("pinned=true lists only the caller's pins, pinned=false the rest, and both page with filters", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const other = await makeUser({ email: "pinned-other@test.com" });
+    await makeMember(other.id, organizationId, {});
+    const created = [];
+    for (const name of [
+      "report-1",
+      "report-2",
+      "report-3",
+      "notes-1",
+      "notes-2",
+    ]) {
+      created.push(await create(viewer, name));
+    }
+    const sharedReport = await create(other, "report-shared");
+    await share(other, sharedReport.id, "organization");
+    for (const project of [created[0], created[3], sharedReport]) {
+      await ProjectPinModel.pin({ userId: viewer.id, projectId: project.id });
+    }
+    // Another member's pin is not the caller's.
+    await ProjectPinModel.pin({ userId: other.id, projectId: created[1].id });
+
+    const pinned = await list("?pinned=true&limit=100");
+    expect(names(pinned.body).sort()).toEqual([
+      "notes-1",
+      "report-1",
+      "report-shared",
+    ]);
+    expect(
+      pinned.json().data.every((p: { pinnedAt: string | null }) => p.pinnedAt),
+    ).toBe(true);
+
+    const unpinned = await list("?pinned=false&limit=100");
+    expect(names(unpinned.body).sort()).toEqual([
+      "notes-2",
+      "report-2",
+      "report-3",
+    ]);
+    expect(unpinned.json().pagination.total).toBe(3);
+
+    // Filters narrow before the page is cut: the total counts matches only.
+    const pages = await walk("pinned=false&search=report", 1);
+    expect(pages.flatMap((p) => p.names).sort()).toEqual([
+      "report-2",
+      "report-3",
+    ]);
+    expect(pages[0].pagination.total).toBe(2);
+    expect(
+      names((await list("?pinned=true&search=report")).body).sort(),
+    ).toEqual(["report-1", "report-shared"]);
+  });
+
+  test("pinned=true drops a pin on a project the caller can no longer read", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const other = await makeUser({ email: "unshared-other@test.com" });
+    await makeMember(other.id, organizationId, {});
+    const project = await create(other, "was-shared");
+    await share(other, project.id, "organization");
+    await ProjectPinModel.pin({ userId: viewer.id, projectId: project.id });
+    expect(names((await list("?pinned=true")).body)).toEqual(["was-shared"]);
+
+    await shareForTest({
+      resource: "project",
+      scope: project.id,
+      organizationId,
+      visibility: null,
+    });
+    const after = await list("?pinned=true");
+    expect(after.json()).toMatchObject({ data: [], pagination: { total: 0 } });
+  });
+
+  test("a page carries icons, counts and badge recipients for its own rows", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, viewer.id, {
+      name: "Paging Team",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: viewer.id,
+      name: "with-icon",
+      description: null,
+      icon: "data:image/png;base64,AAAA",
+    });
+    await share(viewer, project.id, "team", [team.id]);
+
+    const response = await list("?limit=1");
+    expect(response.json().data).toEqual([
+      expect.objectContaining({
+        name: "with-icon",
+        icon: "data:image/png;base64,AAAA",
+        visibility: "team",
+        shareTeamNames: ["Paging Team"],
+        conversationCount: 0,
+      }),
+    ]);
+  });
+
+  test("the deleted slice pages newest first for a project admin", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const admin = await makeUser({ email: "trash-admin@test.com" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    for (const name of ["gone-1", "gone-2", "gone-3"]) {
+      const project = await create(viewer, name);
+      await db
+        .update(schema.projectsTable)
+        .set({ createdAt: new Date(`2026-01-0${name.at(-1)}T00:00:00Z`) })
+        .where(inArray(schema.projectsTable.id, [project.id]));
+      await projectService.delete({
+        id: project.id,
+        organizationId,
+        userId: viewer.id,
+      });
+    }
+    await create(viewer, "still-active");
+    actingUser = admin;
+
+    const pages = await walk("status=deleted", 2);
+    expect(pages.map((p) => p.names)).toEqual([
+      ["gone-3", "gone-2"],
+      ["gone-1"],
+    ]);
+    expect(pages[0].pagination).toMatchObject({ total: 3, totalPages: 2 });
+  });
+
+  test("an overseer's own project stays in the All view without an owner grant", async () => {
+    const own = await create(viewer, "own-ungranted");
+    await create(viewer, "own-granted");
+    // Strip every grant from the project's own policy, the owner's included.
+    await db
+      .update(schema.resourcePermissionPoliciesTable)
+      .set({ grants: [] })
+      .where(
+        and(
+          eq(schema.resourcePermissionPoliciesTable.resource, "project"),
+          eq(schema.resourcePermissionPoliciesTable.scope, own.id),
+        ),
+      );
+
+    const all = await projectService.list({
+      organizationId,
+      userId: viewer.id,
+      isProjectAdmin: true,
+    });
+    expect(all.data.map((p) => [p.name, p.viewerRole]).sort()).toEqual([
+      ["own-granted", "owner"],
+      ["own-ungranted", "owner"],
+    ]);
+    expect(all.total).toBe(2);
+  });
+
+  test("teamIds narrows before paging", async ({ makeTeam }) => {
+    const teamA = await makeTeam(organizationId, viewer.id, { name: "Pg A" });
+    const teamB = await makeTeam(organizationId, viewer.id, { name: "Pg B" });
+    for (const [name, team] of [
+      ["a-1", teamA],
+      ["a-2", teamA],
+      ["a-3", teamA],
+      ["b-1", teamB],
+    ] as const) {
+      const project = await create(viewer, name);
+      await share(viewer, project.id, "team", [team.id]);
+    }
+
+    const pages = await walk(`scope=team&teamIds=${teamA.id}`, 2);
+    expect(pages.map((p) => p.names.length)).toEqual([2, 1]);
+    expect(pages.flatMap((p) => p.names).sort()).toEqual(["a-1", "a-2", "a-3"]);
+    expect(pages[0].pagination.total).toBe(3);
+  });
+
+  test("with no pins, pinned=true is empty and pinned=false is everything", async () => {
+    await create(viewer, "unpinned-1");
+    await create(viewer, "unpinned-2");
+
+    expect((await list("?pinned=true")).json()).toMatchObject({
+      data: [],
+      pagination: { total: 0 },
+    });
+    expect(names((await list("?pinned=false")).body).sort()).toEqual([
+      "unpinned-1",
+      "unpinned-2",
+    ]);
+  });
+
+  test("rejects a pinned value other than true or false", async () => {
+    expect((await list("?pinned=yes")).statusCode).toBe(400);
+    expect((await list("?pinned=1")).statusCode).toBe(400);
   });
 
   test("search matches name and description (case-insensitive)", async () => {

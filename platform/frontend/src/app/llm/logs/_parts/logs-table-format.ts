@@ -1,8 +1,10 @@
-import type {
-  archestraApiTypes,
-  InteractionSource,
-  SupportedProvider,
+import {
+  type archestraApiTypes,
+  INTERACTION_SOURCE_DISPLAY,
+  type InteractionSource,
+  type SupportedProvider,
 } from "@archestra/shared";
+import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 
 // Pure formatting for the LLM logs table cells. Nothing here renders; the cell
 // components in this folder do.
@@ -10,6 +12,27 @@ import type {
 /** One row of the LLM logs table: a session, or a lone interaction. */
 export type LogSession =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
+
+// ============================================================================
+// Session titles
+// ============================================================================
+
+/**
+ * The best one-line title for a session: a client-generated title, the app
+ * chat's name, then the last user message. Coding clients wrap mid-turn user
+ * messages in harness markup (`<system-reminder>`, `<pasted_content>`, "The
+ * user sent a new message while you were working:"), which says nothing
+ * about the session, so it is stripped from the preview.
+ */
+export function sessionTitleOf(session: {
+  claudeCodeTitle?: string | null;
+  conversationTitle?: string | null;
+  lastUserMessagePreview?: string | null;
+}): string | null {
+  if (session.claudeCodeTitle) return session.claudeCodeTitle;
+  if (session.conversationTitle) return session.conversationTitle;
+  return cleanMessagePreview(session.lastUserMessagePreview);
+}
 
 // ============================================================================
 // Models
@@ -113,9 +136,21 @@ export function formatUsageCost(value: number): string {
   return `$${formatCompactNumber(value)}`;
 }
 
-export function formatCompactNumber(value: number): string {
-  return compactNumberFormatter.format(value);
+/**
+ * One request's dollars. A single request routinely costs a fraction of a
+ * cent, where {@link formatUsageCost}'s "<$0.01" would make every row look
+ * the same, so small amounts keep two significant figures ($0.005, $0.061)
+ * instead of the six decimals of the exact figure.
+ */
+export function formatRequestCost(value: number): string {
+  if (value === 0) return "$0";
+  if (value < 0.0001) return "<$0.0001";
+  if (value < 0.1) return `$${Number(value.toPrecision(2))}`;
+  if (value < 1000) return `$${value.toFixed(2)}`;
+  return `$${formatCompactNumber(value)}`;
 }
+
+export { formatCompactNumber };
 
 /** Wall-clock span between a session's first and last request. */
 export function formatSessionSpan(
@@ -172,6 +207,23 @@ export function identiconHue(seed: string): number {
   return 18 + (Math.abs(hash) % 12) * 30;
 }
 
+export function sourceLabel(source: InteractionSource): string {
+  return INTERACTION_SOURCE_DISPLAY[source]?.label ?? source;
+}
+
+/** Each source that wrote to a session, once. */
+export function uniqueSources(session: {
+  sources?: (InteractionSource | null)[] | null;
+}): InteractionSource[] {
+  return Array.from(
+    new Set(
+      (session.sources ?? []).filter((source): source is InteractionSource =>
+        Boolean(source),
+      ),
+    ),
+  );
+}
+
 export function isKnowledgeSource(
   source: InteractionSource | null | undefined,
 ): source is KnowledgeSource {
@@ -200,11 +252,6 @@ const KNOWLEDGE_TASK_TITLES: Record<KnowledgeSource, string> = {
   "knowledge:contextual-retrieval": "Adding context to chunks",
   "knowledge:ocr": "Reading scanned pages",
 };
-
-const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
 
 const SIZE_PATTERN = /^\d+(\.\d+)?[bmk]$/i;
 
@@ -303,4 +350,15 @@ function formatWord(part: string): string {
 
 function capitalize(part: string): string {
   return part.charAt(0).toUpperCase() + part.slice(1);
+}
+
+function cleanMessagePreview(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const cleaned = text
+    .replace(/<system-reminder>[\s\S]*?(<\/system-reminder>|$)/g, " ")
+    .replace(/<\/?pasted_content\b[^>]*>/g, " ")
+    .replace(/^\s*The user sent a new message while you were working:/, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || null;
 }

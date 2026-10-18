@@ -370,8 +370,12 @@ export function useConversations({
     queryKey: ["conversations", search, limit],
     queryFn: async () => {
       const trimmedSearch = search?.trim();
+      // List rows never show the artifact or todo list.
       const { data, error } = await getChatConversations({
-        query: trimmedSearch ? { search: trimmedSearch } : { limit },
+        query: {
+          includeArtifacts: false,
+          ...(trimmedSearch ? { search: trimmedSearch } : { limit }),
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];

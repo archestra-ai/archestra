@@ -22,6 +22,7 @@ import type { OpenAppaSession } from "@/openappa/service";
 import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { makeReturnLabelReview } from "@/test/openappa-return-label-review";
 import type { Agent } from "@/types";
 import {
   type ArchestraContext,
@@ -473,6 +474,58 @@ describe("chat tool execution", () => {
       selected: ["Approve"],
     });
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+  });
+
+  test.each([
+    "Approve",
+    "Deny",
+  ] as const)("a return-label review carries the complete launch to the MCP form and records %s", async (choice) => {
+    const offerId = "offer-return-label-form";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    const review = makeReturnLabelReview(offerId);
+    await stageHitlReview({ session, review });
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async (request) => {
+          expect(request.message).toContain(review.tool);
+          expect(request.message).toContain(
+            JSON.parse(review.arguments).agent_id,
+          );
+          expect(request.message).toContain(
+            JSON.parse(review.arguments).message,
+          );
+          expect(request.message).not.toContain("may run. Submit false");
+          expect(request.requestedSchema).toMatchObject({
+            properties: { choice: { enum: ["Approve", "Deny"] } },
+          });
+          return {
+            status: "answered",
+            result: { action: "accept", content: { choice } },
+          };
+        },
+      },
+    };
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Model-authored copy must not replace the review",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        trajectory: trajectory(),
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: [choice],
+    });
+    expect(await consumeHitlRuling({ session, offerId })).toBe(
+      choice === "Approve" ? "approve" : "deny",
+    );
   });
 
   test("accepts the proxy's rewritten review call", async () => {

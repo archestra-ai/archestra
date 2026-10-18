@@ -69,12 +69,14 @@ export function QueryChip<T extends string>({
   options,
   onChange,
   tone,
+  className,
 }: {
   label: string;
   value: T;
   options: { id: T; label: string; disabled?: boolean; hint?: string }[];
   onChange: (v: T) => void;
   tone?: "caution";
+  className?: string;
 }) {
   const current = options.find((o) => o.id === value);
   const enabled = options.filter((o) => !o.disabled);
@@ -88,10 +90,15 @@ export function QueryChip<T extends string>({
             "group inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md border bg-background px-2.5 text-sm transition-colors hover:bg-accent dark:bg-input/30 dark:hover:bg-input/50",
             tone === "caution" &&
               "border-amber-500/50 bg-amber-500/5 dark:bg-amber-500/10",
+            className,
           )}
         >
-          <span className="text-muted-foreground text-xs">{label}</span>
-          <span className="truncate font-medium">{current?.label}</span>
+          <span className="shrink-0 text-muted-foreground text-xs">
+            {label}
+          </span>
+          <span className="grow truncate text-left font-medium">
+            {current?.label}
+          </span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
         </UnstyledButton>
       </DropdownMenuTrigger>
@@ -591,7 +598,7 @@ export function SummaryTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[850px] text-sm">
+      <table className="w-full min-w-[600px] text-sm sm:min-w-[850px]">
         <thead>
           <tr className="border-b text-muted-foreground text-xs">
             {head("label", dimLabel, false)}
@@ -631,7 +638,14 @@ export function SummaryTable({
                     focused && "bg-muted/60 hover:bg-muted/60",
                   )}
                 >
-                  <td className="min-w-72 max-w-sm px-3 py-2">
+                  {/* Pinned on phones so the label stays beside the scrolled metrics. */}
+                  <td
+                    className={cn(
+                      "min-w-40 max-w-sm px-3 py-2 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:max-w-44 max-sm:bg-card sm:min-w-72",
+                      focused &&
+                        "max-sm:bg-[color-mix(in_oklch,var(--muted)_60%,var(--card))]",
+                    )}
+                  >
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       {r.children.length > 0 ? (
                         <UnstyledButton
@@ -735,7 +749,7 @@ export function SummaryTable({
                 {isOpen &&
                   r.children.slice(0, 12).map((c) => (
                     <tr key={c.key} className="border-b bg-muted/20 text-xs">
-                      <td className="max-w-0 py-1.5 pr-3 pl-12">
+                      <td className="max-w-0 py-1.5 pr-3 pl-12 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-card">
                         <span className="block truncate text-muted-foreground">
                           {c.label}
                         </span>
@@ -813,7 +827,7 @@ export function PivotTable({
       <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
         <thead>
           <tr className="text-muted-foreground">
-            <th className="sticky left-0 z-10 min-w-40 max-w-56 border-b bg-card px-3 py-2 text-left font-medium">
+            <th className="sticky left-0 z-10 min-w-28 max-w-56 border-b bg-card px-3 py-2 text-left font-medium sm:min-w-40">
               {dimLabel}
             </th>
             {cols.map((c) => (
@@ -825,7 +839,7 @@ export function PivotTable({
                 {c.label}
               </th>
             ))}
-            <th className="sticky right-0 z-10 border-b border-l bg-card px-3 py-2 text-right font-medium">
+            <th className="border-b border-l bg-card px-3 py-2 text-right font-medium sm:sticky sm:right-0 sm:z-10">
               Total
             </th>
           </tr>
@@ -843,14 +857,14 @@ export function PivotTable({
                   focus.has(r.key) && "bg-muted",
                 )}
               >
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div className="flex min-w-0 max-w-36 items-center gap-2 sm:max-w-none sm:flex-wrap">
                   <span
                     className="size-2 shrink-0 rounded-[2px]"
                     style={{ background: colorAt(i) }}
                   />
                   <span
                     title={r.label}
-                    className="min-w-0 flex-1 whitespace-normal break-words font-medium"
+                    className="min-w-0 flex-1 truncate font-medium sm:whitespace-normal sm:break-words"
                   >
                     {r.label}
                   </span>
@@ -872,7 +886,7 @@ export function PivotTable({
                   </span>
                 </td>
               ))}
-              <td className="sticky right-0 z-10 border-b border-l bg-card px-3 py-1.5 text-right font-mono font-medium tabular-nums group-hover:bg-muted">
+              <td className="border-b border-l bg-card px-3 py-1.5 text-right font-mono font-medium tabular-nums group-hover:bg-muted sm:sticky sm:right-0 sm:z-10">
                 {formatValue(metric, r.total)}
               </td>
             </tr>
@@ -891,7 +905,7 @@ export function PivotTable({
                 {formatCell(metric, v)}
               </td>
             ))}
-            <td className="sticky right-0 z-10 border-l bg-card px-3 py-2 text-right font-mono font-medium text-foreground tabular-nums">
+            <td className="border-l bg-card px-3 py-2 text-right font-mono font-medium text-foreground tabular-nums sm:sticky sm:right-0 sm:z-10">
               {formatValue(metric, cube.total)}
             </td>
           </tr>
@@ -1038,7 +1052,11 @@ function SortHead({
     </UnstyledButton>
   );
   if (!right) {
-    return <th className="px-3 py-2 text-left font-medium">{btn}</th>;
+    return (
+      <th className="px-3 py-2 text-left font-medium max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-card">
+        {btn}
+      </th>
+    );
   }
   return <th className="px-3 py-2 text-right font-medium">{btn}</th>;
 }
@@ -1053,6 +1071,42 @@ function Tag({ text }: { text: string }) {
 
 function RowGroup({ children }: { children: ReactNode }) {
   return <>{children}</>;
+}
+
+/**
+ * Saved-view pills. One swipeable row on phones (bleeding to the page gutter),
+ * wrapping from `sm` up.
+ */
+export function ViewPills({
+  label,
+  items,
+}: {
+  label: string;
+  items: { id: string; label: string; active: boolean; onSelect: () => void }[];
+}) {
+  return (
+    <nav
+      aria-label={label}
+      className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
+    >
+      {items.map((it) => (
+        <UnstyledButton
+          key={it.id}
+          type="button"
+          aria-pressed={it.active}
+          onClick={it.onSelect}
+          className={cn(
+            "h-7 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs transition-colors",
+            it.active
+              ? "border-foreground bg-foreground text-background"
+              : "bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground dark:bg-input/30",
+          )}
+        >
+          {it.label}
+        </UnstyledButton>
+      ))}
+    </nav>
+  );
 }
 
 export function Segmented<T extends string>({

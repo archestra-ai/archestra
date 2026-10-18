@@ -15,6 +15,8 @@ vi.mock("@/lib/virtual-api-keys.query", () => ({
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: vi.fn(),
   useModelsWithApiKeys: vi.fn(),
+  // The key pickers' per-key model counts.
+  useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/components/virtual-key-connection-base-url", () => ({
   useConnectionBaseUrl: () => "https://proxy.example.com",

@@ -438,6 +438,54 @@ describe("GET /api/agent-tools", () => {
     expect(body.data.length).toBeGreaterThan(0);
   });
 
+  test("includeToolDetails=false leaves out tool schemas but keeps the assignment", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      description: "Reads the ledger",
+      parameters: { type: "object", properties: { year: { type: "number" } } },
+    });
+    await makeAgentTool(agent.id, tool.id, {
+      credentialResolutionMode: "dynamic",
+    });
+
+    const get = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agent-tools?agentId=${agent.id}&skipPagination=true${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    };
+
+    const full = await get("");
+    expect(full.data[0].tool).toMatchObject({
+      description: "Reads the ledger",
+      parameters: { properties: { year: { type: "number" } } },
+    });
+
+    const slim = await get("&includeToolDetails=false");
+    expect(slim.pagination.total).toBe(1);
+    expect(slim.data).toHaveLength(1);
+    expect(slim.data[0]).toMatchObject({
+      credentialResolutionMode: "dynamic",
+      agent: { id: agent.id },
+      tool: {
+        id: tool.id,
+        name: tool.name,
+        catalogId: catalog.id,
+        description: null,
+        parameters: {},
+      },
+    });
+  });
+
   test("excludeArchestraTools filters out archestra tools", async ({
     makeAgent,
     makeTool,

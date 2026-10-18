@@ -14,9 +14,12 @@ import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { accessGrants, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import AgentModel from "./agent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
+import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentToolModel from "./agent-tool";
+import AgentUsageModel from "./agent-usage";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import ModelModel from "./model";
@@ -1323,6 +1326,170 @@ describe("AgentModel", () => {
       expect(names.data.every((agent) => agent.tools.length === 0)).toBe(true);
     });
 
+    test("sorts by Tools as the column counts them, leaving out subagents and an unavailable knowledge tool", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeKnowledgeBase,
+      makeMember,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      const subagents = await Promise.all(
+        [1, 2, 3, 4].map((n) =>
+          makeAgent({
+            organizationId: org.id,
+            name: `Sorted subagent ${n}`,
+            agentType: "agent",
+          }),
+        ),
+      );
+      const gateway = (name: string) =>
+        makeAgent({ organizationId: org.id, name, agentType: "mcp_gateway" });
+      // Raw assignments / shown Tools: delegating 6 / 2, without sources
+      // 4 / 3, with sources 4 / 4, plain 5 / 5.
+      const delegating = await gateway("Sorted delegating");
+      const withoutSources = await gateway("Sorted without sources");
+      const withSources = await gateway("Sorted with sources");
+      const plain = await gateway("Sorted plain");
+      // Made after the agents: the knowledge search tool is a creation
+      // default, which an agent made later would already carry.
+      const knowledgeTool = await makeTool({
+        name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+        parameters: {},
+      });
+      const assign = async (agentId: string, toolCount: number) => {
+        for (let i = 0; i < toolCount; i++) {
+          await makeAgentTool(agentId, (await makeTool()).id);
+        }
+      };
+      await assign(delegating.id, 2);
+      for (const target of subagents) {
+        await AgentToolModel.assignDelegation({
+          agentId: delegating.id,
+          targetAgentId: target.id,
+        });
+      }
+      for (const agent of [withoutSources, withSources]) {
+        await assign(agent.id, 3);
+        await makeAgentTool(agent.id, knowledgeTool.id);
+      }
+      await AgentKnowledgeBaseModel.assign(
+        withSources.id,
+        (await makeKnowledgeBase(org.id)).id,
+      );
+      await assign(plain.id, 5);
+      const sorted = async (sortDirection: "asc" | "desc") =>
+        (
+          await AgentModel.findAllPaginated(
+            { limit: 20, offset: 0 },
+            { sortBy: "toolsCount", sortDirection },
+            {
+              name: "Sorted ",
+              agentTypes: ["mcp_gateway"],
+              includeTools: false,
+            },
+            admin.id,
+            true,
+          )
+        ).data.map(({ name, toolsCount }) => [name, toolsCount]);
+
+      const descending = [
+        ["Sorted plain", 5],
+        ["Sorted with sources", 4],
+        ["Sorted without sources", 3],
+        ["Sorted delegating", 2],
+      ];
+      expect(await sorted("desc")).toEqual(descending);
+      expect(await sorted("asc")).toEqual([...descending].reverse());
+    });
+
+    test("counts tools and subagents as the tools show them, with or without the tools", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeKnowledgeBase,
+      makeMember,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      const subagent = await makeAgent({
+        organizationId: org.id,
+        name: "Counted subagent",
+        agentType: "agent",
+      });
+      // Same tools and subagent on both; only one has knowledge sources.
+      const [withoutSources, withSources] = await Promise.all(
+        ["Counted A", "Counted B"].map((name) =>
+          makeAgent({ organizationId: org.id, name, agentType: "mcp_gateway" }),
+        ),
+      );
+      // Made after the agents: the knowledge search tool is a creation
+      // default, which an agent made later would already carry.
+      const knowledgeTool = await makeTool({
+        name: TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+        parameters: {},
+      });
+      const tools = [await makeTool(), await makeTool()];
+      for (const agent of [withoutSources, withSources]) {
+        for (const tool of [...tools, knowledgeTool]) {
+          await makeAgentTool(agent.id, tool.id);
+        }
+        await AgentToolModel.assignDelegation({
+          agentId: agent.id,
+          targetAgentId: subagent.id,
+        });
+      }
+      const knowledgeBase = await makeKnowledgeBase(org.id);
+      await AgentKnowledgeBaseModel.assign(withSources.id, knowledgeBase.id);
+      const page = (includeTools?: boolean) =>
+        AgentModel.findAllPaginated(
+          { limit: 20, offset: 0 },
+          { sortBy: "name", sortDirection: "asc" },
+          { name: "Counted ", agentTypes: ["mcp_gateway"], includeTools },
+          admin.id,
+          true,
+        );
+
+      const full = await page();
+      const counted = await page(false);
+
+      expect(
+        full.data.map(({ name, toolsCount, subagentsCount }) => ({
+          name,
+          toolsCount,
+          subagentsCount,
+        })),
+      ).toEqual([
+        { name: "Counted A", toolsCount: 2, subagentsCount: 1 },
+        { name: "Counted B", toolsCount: 3, subagentsCount: 1 },
+      ]);
+      for (const agent of full.data) {
+        expect(agent.toolsCount).toBe(
+          agent.tools.filter((tool) => !tool.delegateToAgentId).length,
+        );
+        expect(agent.subagentsCount).toBe(
+          agent.tools.filter((tool) => tool.delegateToAgentId).length,
+        );
+      }
+      expect(
+        counted.data.map(({ toolsCount, subagentsCount, tools }) => ({
+          toolsCount,
+          subagentsCount,
+          tools,
+        })),
+      ).toEqual([
+        { toolsCount: 2, subagentsCount: 1, tools: [] },
+        { toolsCount: 3, subagentsCount: 1, tools: [] },
+      ]);
+    });
+
     test("pagination with different sort options returns correct agent count", async ({
       makeAdmin,
       makeOrganization,
@@ -1428,7 +1595,7 @@ describe("AgentModel", () => {
       expect(resultByTeam.data).toHaveLength(4);
     });
 
-    test("populates lastUsedAt from the MCP tool-call log and sorts by it", async ({
+    test("stamps lastUsedAt from McpToolCallModel.create and sorts by it", async ({
       makeAdmin,
       makeAgent,
       makeOrganization,
@@ -1478,6 +1645,8 @@ describe("AgentModel", () => {
         toolResult: null,
         createdAt: newer,
       });
+      // The stamp runs as background work after each insert.
+      await drainBackgroundWork();
 
       const result = await AgentModel.findAllPaginated(
         { limit: 10, offset: 0 },
@@ -3829,16 +3998,19 @@ describe("AgentModel", () => {
   describe("lastUsedAt", () => {
     const at = (isoDay: string) => new Date(`2026-08-${isoDay}T00:00:00.000Z`);
 
-    const seedMcpCall = (agentId: string, createdAt: Date) =>
-      db.insert(schema.mcpToolCallsTable).values({
+    // Rows inserted directly, then stamped the way the log writers do.
+    const seedMcpCall = async (agentId: string, createdAt: Date) => {
+      await db.insert(schema.mcpToolCallsTable).values({
         agentId,
         mcpServerName: "test-server",
         method: "tools/call",
         createdAt,
       });
+      await AgentUsageModel.recordUse({ agentId, usedAt: createdAt });
+    };
 
-    const seedInteraction = (profileId: string, createdAt: Date) =>
-      db.insert(schema.interactionsTable).values({
+    const seedInteraction = async (profileId: string, createdAt: Date) => {
+      await db.insert(schema.interactionsTable).values({
         profileId,
         request: {
           model: "claude-sonnet-5",
@@ -3851,6 +4023,11 @@ describe("AgentModel", () => {
         type: "anthropic:messages",
         createdAt,
       });
+      await AgentUsageModel.recordUse({
+        agentId: profileId,
+        usedAt: createdAt,
+      });
+    };
 
     const lastUsedOf = async (name: string) => {
       const result = await AgentModel.findAllPaginated({
@@ -3937,6 +4114,31 @@ describe("AgentModel", () => {
       expect(await lastUsedOf("Second")).toEqual(at("21"));
       expect(await lastUsedOf("Tied")).toEqual(at("07"));
       expect(await lastUsedOf("Idle")).toBeNull();
+    });
+
+    test("reads the stored value, not the logs", async ({ makeAgent }) => {
+      const stamped = await makeAgent({ name: "Stamped, no logs" });
+      const logged = await makeAgent({ name: "Logs, no stamp" });
+      await AgentUsageModel.recordUse({
+        agentId: stamped.id,
+        usedAt: at("09"),
+      });
+      // Log rows alone, as after a retention purge or before a stamp lands,
+      // no longer drive the reported value.
+      await db.insert(schema.mcpToolCallsTable).values({
+        agentId: logged.id,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        createdAt: at("10"),
+      });
+
+      expect(await lastUsedOf("Stamped, no logs")).toEqual(at("09"));
+      expect(await lastUsedOf("Logs, no stamp")).toBeNull();
+      const sorted = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        { sortBy: "lastUsedAt", sortDirection: "desc" },
+      );
+      expect(sorted.data[0]?.name).toBe("Stamped, no logs");
     });
 
     test("sorts by the same value the rows report", async ({ makeAgent }) => {

@@ -196,14 +196,22 @@ describe("AuditLogTable", () => {
     renderTable();
 
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(screen.getByText("Agent updated")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Success" })).toBeInTheDocument();
+    expect(screen.getByText("ada@example.com")).toBeInTheDocument();
+    expect(screen.getByText("New name")).toBeInTheDocument();
+    expect(screen.getByText("Updated")).toBeInTheDocument();
     expect(screen.getByText("Agent")).toBeInTheDocument();
     expect(
-      screen.getByRole("columnheader", { name: "Resource" }),
+      screen.getByRole("button", {
+        name: "Success: Agent updated by Ada Lovelace",
+      }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Time/ })).toBeNull();
-    expect(screen.queryByRole("columnheader", { name: "Where" })).toBeNull();
+    for (const header of ["Event", "Actor", "Request", "Time"]) {
+      expect(
+        screen.getByRole("columnheader", { name: header }),
+      ).toBeInTheDocument();
+    }
+    expect(screen.getByText("PATCH")).toBeInTheDocument();
+    expect(screen.getByText("200")).toBeInTheDocument();
     expect(screen.queryByText("10.0.0.1")).toBeNull();
   });
 
@@ -214,7 +222,9 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    expect(screen.getByText("Agent created")).toBeInTheDocument();
+    // The resource type is already on the line, so the verb carries only the
+    // action.
+    expect(screen.getByText("Created")).toBeInTheDocument();
     expect(screen.queryByText("agent.created")).not.toBeInTheDocument();
   });
 
@@ -225,18 +235,21 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    expect(screen.getByText("Agent restored")).toBeInTheDocument();
+    expect(screen.getByText("Restored")).toBeInTheDocument();
     expect(screen.queryByText("Unknown create")).not.toBeInTheDocument();
   });
 
-  it("activity shows the correct result for each outcome", () => {
+  it("names a denied outcome on the row; success stays quiet", () => {
     mockUseAuditLogs.mockReturnValue(
       withRows([makeEvent({ outcome: "denied" })]),
     );
 
     renderTable();
 
-    expect(screen.getByRole("img", { name: "Denied" })).toBeInTheDocument();
+    expect(screen.getByText("Denied")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Denied: Agent updated/ }),
+    ).toBeInTheDocument();
   });
 
   it("falls back to 'Deleted user' when the actor is null", () => {

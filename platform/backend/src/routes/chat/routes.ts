@@ -143,7 +143,6 @@ import {
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationCompactionSchema,
-  SelectConversationListItemSchema,
   SelectConversationSchema,
   ThinkingEffortSchema,
   type UpdateConversation,
@@ -2383,15 +2382,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversations,
         description:
-          "List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50. List rows omit the artifact and todo list, which the single-conversation read carries.",
+          "List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50.",
         tags: ["Chat"],
         querystring: z.object({
           search: z.string().optional(),
-          limit: z.coerce.number().int().min(1).max(250).default(50),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(250)
+            .optional()
+            .describe(
+              "Recent conversations to return when not searching (default 250). Pinned ones are always added.",
+            ),
+          includeArtifacts: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Include each chat's artifact and todo list (default true). False returns them as null for lightweight lists.",
+            ),
         }),
         response: constructResponseSchema(
           z.array(
-            SelectConversationListItemSchema.extend({
+            SelectConversationSchema.extend({
               scheduledRun: SelectScheduleTriggerRunSchema.pick({
                 id: true,
                 triggerId: true,
@@ -2407,12 +2420,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { search, limit } = request.query;
+      const { search, limit, includeArtifacts } = request.query;
       const conversations = await ConversationModel.findAll(
         request.user.id,
         request.organizationId,
         search,
-        { limit },
+        { limit, includeArtifacts },
       );
       const runs = await ScheduleTriggerRunModel.findByChatConversationIds({
         organizationId: request.organizationId,

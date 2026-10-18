@@ -226,12 +226,18 @@ export function ChatSidebarSection({
   const recentUnpinnedRuns = runs.filter((run) => !run.pinnedAt);
 
   // /api/projects requires project:read; skip the fetch for roles without it
-  // so the sidebar doesn't 403 (and toast) on every chat page.
-  const { data: projectsData } = useProjects({
+  // so the sidebar doesn't 403 (and toast) on every chat page. Only pinned
+  // projects are asked for: the sidebar shows none of the others.
+  const { data: pinnedProjectsData } = useProjects({
+    pinned: true,
+    limit: 100,
+    offset: 0,
     enabled: canReadProjects === true,
   });
   const pinProjectMutation = usePinProject();
-  const pinnedProjects = (projectsData ?? []).filter((p) => p.pinnedAt);
+  const pinnedProjects = (pinnedProjectsData?.data ?? []).filter(
+    (p) => p.pinnedAt,
+  );
   // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
   // useApps skips the request for roles without app:read. Only pinned apps
   // are asked for: the full list is far larger and the sidebar shows none of it.
@@ -783,7 +789,6 @@ export function ChatSidebarSection({
                 {canReadProjects === true && (
                   <ConversationProjectActions
                     projectId={run.projectId}
-                    projects={projectsData ?? []}
                     isPending={
                       updateRunMutation.isPending ||
                       createProjectMutation.isPending

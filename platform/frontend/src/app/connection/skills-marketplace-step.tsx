@@ -791,7 +791,7 @@ function useTotalSkillCount() {
     queryKey: ["skills", "total-count"],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getSkills({
-        query: { limit: 1, offset: 0 },
+        query: { limit: 1, offset: 0, includeContent: false },
       });
       if (error) {
         handleApiError(error);

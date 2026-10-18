@@ -226,6 +226,13 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
           providerApiKeyId: z.string().uuid().optional(),
           grantType: LlmOauthClientGrantTypeSchema.optional(),
+          applicableTo: z
+            .string()
+            .uuid()
+            .optional()
+            .describe(
+              "Only clients that can reach this agent or MCP gateway: authorization-code clients, and client-credentials clients that list it, with the target's protocol (MCP for a gateway, A2A for an agent).",
+            ),
           labels: z
             .string()
             .optional()
@@ -249,6 +256,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         capabilities: query.capability ? [query.capability] : undefined,
         providerApiKeyId: query.providerApiKeyId,
         grantType: query.grantType,
+        applicableTo: query.applicableTo,
         labels: parseLabelsParam(query.labels),
         viewer: { userId: user.id },
         access: await ResourcePermissionSubjectModel.resolveAccessFilter({

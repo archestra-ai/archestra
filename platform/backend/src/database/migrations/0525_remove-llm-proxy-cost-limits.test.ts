@@ -36,7 +36,10 @@ test("removes active and retired proxy budgets and their usage while preserving 
       model: ["test-model"],
       labels: [{ key: "budget", value: "legacy" }],
     });
-    expect(await LimitModel.getModelUsageBreakdown(limit.id)).toHaveLength(1);
+    expect(
+      (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+        [],
+    ).toHaveLength(1);
     expect(await LimitLabelModel.getLabelsFor(limit.id)).toHaveLength(1);
     proxyLimits.push(limit);
   }
@@ -61,13 +64,19 @@ test("removes active and retired proxy budgets and their usage while preserving 
 
   for (const limit of proxyLimits) {
     expect(await LimitModel.findById(limit.id)).toBeNull();
-    expect(await LimitModel.getModelUsageBreakdown(limit.id)).toEqual([]);
+    expect(
+      (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+        [],
+    ).toEqual([]);
     expect(await LimitLabelModel.getLabelsFor(limit.id)).toEqual([]);
   }
   for (const limit of preserved) {
     expect(await LimitModel.findById(limit.id)).toMatchObject({
       limitValue: 200,
     });
-    expect(await LimitModel.getModelUsageBreakdown(limit.id)).toHaveLength(1);
+    expect(
+      (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+        [],
+    ).toHaveLength(1);
   }
 });

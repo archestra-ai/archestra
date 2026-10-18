@@ -790,14 +790,29 @@ function KnowledgeSettingsContent() {
       : "disabled";
 
   const { data: embeddingModels } = useEmbeddingModels(embeddingChatApiKeyId);
-  const {
-    data: modelsWithApiKeys,
-    isLoadingError: isModelsWithApiKeysLoadError,
-    refetch: refetchModelsWithApiKeys,
-  } = useModelsWithApiKeys({ toastOnError: false });
+  // Embedding models only, to find the keys that can embed.
+  const embeddingCatalog = useModelsWithApiKeys({
+    toastOnError: false,
+    embedding: true,
+    includeAssignments: false,
+  });
+  // The selected key's models, to describe the selected model.
+  const selectedKeyCatalog = useModelsWithApiKeys({
+    toastOnError: false,
+    enabled: !!embeddingChatApiKeyId,
+    apiKeyIds: embeddingChatApiKeyId ? [embeddingChatApiKeyId] : undefined,
+    includeAssignments: false,
+  });
+  const isModelsWithApiKeysLoadError =
+    embeddingCatalog.isLoadingError || selectedKeyCatalog.isLoadingError;
+  const refetchModelsWithApiKeys = () => {
+    embeddingCatalog.refetch();
+    if (embeddingChatApiKeyId) selectedKeyCatalog.refetch();
+  };
+  const embeddingModelsWithApiKeys = embeddingCatalog.data;
   const embeddingCapableKeyIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const model of modelsWithApiKeys ?? []) {
+    for (const model of embeddingModelsWithApiKeys ?? []) {
       if (model.embeddingDimensions == null) continue;
       for (const key of model.apiKeys) {
         // Dimensioned models are not sufficient on their own: `ollama-native`
@@ -813,7 +828,7 @@ function KnowledgeSettingsContent() {
       }
     }
     return ids;
-  }, [modelsWithApiKeys]);
+  }, [embeddingModelsWithApiKeys]);
   // OCR can only run on transports verified to forward PDF file parts.
   const ocrCapableKeyIds = useMemo(() => {
     const ids = new Set<string>();
@@ -838,7 +853,7 @@ function KnowledgeSettingsContent() {
     [embeddingModels, embeddingModel],
   );
   const selectedEmbeddingCatalogModel =
-    modelsWithApiKeys?.find(
+    selectedKeyCatalog.data?.find(
       (model) =>
         model.modelId === embeddingModel &&
         model.apiKeys.some((apiKey) => apiKey.id === embeddingChatApiKeyId),

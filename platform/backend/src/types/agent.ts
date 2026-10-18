@@ -191,6 +191,13 @@ const selectExtendedFields = {
   passthroughHeaders: z.array(z.string()).nullable(),
   runtime: AgentRuntimeSchema.nullable(),
   activationSkillMode: AgentActivationSkillModeSchema,
+  /**
+   * When anything last ran through this agent: the later of its newest MCP
+   * request (any JSON-RPC method) and its newest LLM call. Null when neither
+   * ever happened. Optional, as it was before the column existed, so agent
+   * objects built in code without it still fit.
+   */
+  lastUsedAt: z.date().nullable().optional(),
 };
 
 const insertExtendedFields = {
@@ -355,13 +362,6 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * rows.
    */
   activationSkillsCount: z.number().int().nonnegative().optional(),
-  /**
-   * Timestamp of the most recent MCP request (any JSON-RPC method) routed
-   * through this agent, from the mcp_tool_calls log. Null when nothing was
-   * ever routed through it. Populated on paginated list reads; absent on
-   * other responses.
-   */
-  lastUsedAt: z.date().nullable().optional(),
 });
 
 /** Bootstrap identity and model references; selected-agent details load separately. */
@@ -452,6 +452,18 @@ export type AgentOptionFilters = z.infer<typeof AgentOptionFiltersSchema>;
 /** Paginated Agents-surface row with the current user's pin marker. */
 export const AgentListItemSchema = SelectAgentSchema.extend({
   pinnedAt: z.date().nullable(),
+  toolsCount: z
+    .number()
+    .int()
+    .describe(
+      "Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.",
+    ),
+  subagentsCount: z
+    .number()
+    .int()
+    .describe(
+      "Agents this agent delegates to. Always present, even when `tools` is not requested.",
+    ),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -496,6 +508,8 @@ export const InsertAgentSchemaBase = createInsertSchema(
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).
     latestVersion: true,
+    // Stamped by AgentUsageModel when the agent is used; never client-settable.
+    lastUsedAt: true,
   });
 
 // Full schema with validation refinement
@@ -560,6 +574,8 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).
     latestVersion: true,
+    // Stamped by AgentUsageModel when the agent is used; never client-settable.
+    lastUsedAt: true,
   });
 
 // Full schema with validation refinement

@@ -41,7 +41,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -219,14 +219,10 @@ export function AgentChatAppsEditor({
     isPending: agentNamesPending,
     isLoadingError: agentNamesLoadingError,
     refetch: refetchAgentNames,
-  } = useAgentOptions({
+  } = useAgentOptionsByIds({
     // This resolves existing assignments, including built-in agents.
-    filters: {
-      agentType: "agent",
-      excludeBuiltIn: false,
-      ids: foreignAgentIds,
-    },
-    enabled: foreignAgentIds.length > 0,
+    ids: foreignAgentIds,
+    filters: { agentType: "agent", excludeBuiltIn: false },
   });
   const agentNames = new Map(agents.map((item) => [item.id, item.name]));
   const agentReferences = new Map(

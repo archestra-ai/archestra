@@ -1,4 +1,4 @@
-import { and, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, count, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentKnowledgeBase } from "@/types";
@@ -210,6 +210,38 @@ class AgentKnowledgeBaseModel {
       map.set(row.knowledgeBaseId, list);
     }
     return map;
+  }
+
+  /** Live org agents assigned to each KB, in one grouped query. */
+  static async countAgentsForKnowledgeBases(params: {
+    knowledgeBaseIds: string[];
+    organizationId: string;
+  }): Promise<Map<string, number>> {
+    if (params.knowledgeBaseIds.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
+        count: count(),
+      })
+      .from(schema.agentKnowledgeBasesTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentKnowledgeBasesTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          inArray(
+            schema.agentKnowledgeBasesTable.knowledgeBaseId,
+            params.knowledgeBaseIds,
+          ),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .groupBy(schema.agentKnowledgeBasesTable.knowledgeBaseId);
+
+    return new Map(rows.map((row) => [row.knowledgeBaseId, row.count]));
   }
 }
 

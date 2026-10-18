@@ -50,12 +50,13 @@ const agentServer = setupServer(
     const ids = [...query.getAll("ids"), ...query.getAll("ids[]")].flatMap(
       (value) => value.split(","),
     );
-    return HttpResponse.json(
-      [
+    return HttpResponse.json({
+      data: [
         { id: "a1", name: "Marketing" },
         { id: "a2", name: "Coding" },
       ].filter((agent) => ids.includes(agent.id)),
-    );
+      pagination: { limit: 1000, hasNext: false, nextCursor: null },
+    });
   }),
   http.get("http://localhost:9000/api/agents/options/page", () =>
     HttpResponse.json({

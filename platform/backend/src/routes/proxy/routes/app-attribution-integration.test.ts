@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
@@ -149,6 +150,7 @@ describe("app-runtime interaction attribution (integration)", () => {
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
+        ...internalCallHeader(),
         ...OPENAI_HEADERS,
         ...credential,
         [APP_ID_HEADER]: ownedApp.id,

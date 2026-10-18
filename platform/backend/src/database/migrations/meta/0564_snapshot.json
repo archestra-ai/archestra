@@ -1,5 +1,5 @@
 {
-  "id": "79093df6-3c8e-41c3-afc2-f2a8b5c703a5",
+  "id": "cf9ca4a0-39ce-458f-89ea-717b4dbb7e93",
   "prevId": "8b632ba4-6d42-43a1-b85e-7b93d367dc54",
   "version": "7",
   "dialect": "postgresql",
@@ -14919,12 +14919,6 @@
           "notNull": true,
           "default": false
         },
-        "credential_kind": {
-          "name": "credential_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_by_service_account_id": {
           "name": "created_by_service_account_id",
           "type": "uuid",
@@ -16422,6 +16416,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "llm_tool_call_id": {
+          "name": "llm_tool_call_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
         "auth_method": {
           "name": "auth_method",
           "type": "varchar(50)",
@@ -16511,6 +16517,50 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mcp_tool_calls_session_created_at_idx": {
+          "name": "mcp_tool_calls_session_created_at_idx",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mcp_tool_calls\".\"session_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mcp_tool_calls_run_id_idx": {
+          "name": "mcp_tool_calls_run_id_idx",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mcp_tool_calls\".\"run_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

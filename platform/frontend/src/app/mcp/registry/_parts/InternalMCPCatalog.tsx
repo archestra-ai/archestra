@@ -144,13 +144,7 @@ import {
 import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 import { useCatalogInstall } from "./use-catalog-install";
 
-export function InternalMCPCatalog({
-  initialData,
-  installedServers: initialInstalledServers,
-}: {
-  initialData?: CatalogItem[];
-  installedServers?: InstalledServer[];
-}) {
+export function InternalMCPCatalog() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -163,9 +157,7 @@ export function InternalMCPCatalog({
     data: catalogItems,
     isPending: isCatalogPending,
     isFetching: isCatalogFetching,
-  } = useInternalMcpCatalog({
-    initialData,
-  });
+  } = useInternalMcpCatalog();
   const { data: accessIds } = useInternalMcpCatalogAccessIds({
     access:
       ownershipFilters.access.length < RESOURCE_ACCESS_RELATIONS.length
@@ -176,9 +168,8 @@ export function InternalMCPCatalog({
   });
   // Without per-install agents: building them for every install is what kept
   // this page from loading. Every list on this page asks for the same compact
-  // shape, so they share this one request and its server-rendered data.
+  // shape, so they share this one request.
   const { data: installedServers } = useMcpServers({
-    initialData: initialInstalledServers,
     includeAssignedAgents: false,
   });
   useMcpInstallationStatusCacheSync();

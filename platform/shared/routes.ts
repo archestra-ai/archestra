@@ -581,6 +581,8 @@ export const RouteId = {
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
+  GetLlmModelIdsByKey: "getLlmModelIdsByKey",
+  GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
   BulkUpdateModels: "bulkUpdateModels",
 

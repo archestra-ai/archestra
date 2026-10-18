@@ -19,6 +19,10 @@ const mockHasKnowledgeBaseToolCall = vi.hoisted(() =>
 const mockChatSession = vi.hoisted(() => ({
   current: null as MockChatSession | null,
 }));
+const mockIconSources = vi.hoisted(() => ({
+  agentTools: [] as { name: string; catalogId: string | null }[],
+  catalogItems: [] as { id: string; name: string; icon: string | null }[],
+}));
 
 vi.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => (
@@ -248,8 +252,11 @@ vi.mock("@/components/chat/knowledge-graph-citations", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 
+vi.mock("@/lib/agent.query", () => ({
+  useProfile: () => ({ data: { tools: mockIconSources.agentTools } }),
+}));
+
 vi.mock("@/lib/chat/chat.query", () => ({
-  useProfileToolsWithIds: () => ({ data: [] }),
   useCancelChatMcpTask: () => ({ mutateAsync: vi.fn() }),
   // Read once for the whole transcript, to decide whether an attachment chip
   // offers "Save to knowledge". An ordinary (unencrypted) chat here.
@@ -264,7 +271,7 @@ vi.mock("@/lib/chat/chat-message.query", () => ({
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
-  useInternalMcpCatalog: () => ({ data: [] }),
+  useInternalMcpCatalog: () => ({ data: mockIconSources.catalogItems }),
 }));
 
 const { mockUseMcpInstallOrchestrator } = vi.hoisted(() => ({
@@ -317,6 +324,46 @@ describe("ChatMessages", () => {
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
     mockHasKnowledgeBaseToolCall.mockReturnValue(false);
     mockChatSession.current = null;
+    mockIconSources.agentTools = [];
+    mockIconSources.catalogItems = [];
+  });
+
+  it("shows an assigned tool's catalog icon from the agent's tool list", () => {
+    // The tool's name prefix does not match its catalog's name, so only the
+    // agent's own tool list can link the call to the catalog.
+    mockIconSources.agentTools = [
+      { name: "ledger_tools__sum_rows", catalogId: "catalog-finance" },
+    ];
+    mockIconSources.catalogItems = [
+      { id: "catalog-finance", name: "Finance", icon: "🧾" },
+    ];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        agentId="agent-1"
+        messages={
+          [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              parts: [
+                {
+                  type: "tool-ledger_tools__sum_rows",
+                  toolCallId: "call-1",
+                  state: "output-available",
+                  input: {},
+                  output: { total: 3 },
+                },
+              ],
+            },
+          ] as UIMessage[]
+        }
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("🧾")).toBeInTheDocument();
   });
 
   it("renders external MCP Skill attribution from message metadata", () => {

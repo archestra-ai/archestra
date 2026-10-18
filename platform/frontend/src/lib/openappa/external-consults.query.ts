@@ -18,7 +18,7 @@ export type ExternalConsult = ConsultsResponse["data"][number];
 export type ExternalConsultOutcome = ExternalConsult["outcome"];
 export type ExternalConsultFilters = Pick<
   ConsultsQuery,
-  "externalName" | "outcome" | "sessionId" | "from" | "to"
+  "search" | "outcome" | "from" | "to"
 >;
 
 export function useExternalConsults({

@@ -7,7 +7,8 @@ import { type PinnedTile, PinnedTiles } from "@/components/pinned-tiles";
 import { Button } from "@/components/ui/button";
 import { ProjectActionsMenu } from "./projects-table";
 
-type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
+type ProjectListItem =
+  archestraApiTypes.GetProjectsResponses["200"]["data"][number];
 
 /**
  * The projects the viewer pinned, as tiles above the table. Each opens the

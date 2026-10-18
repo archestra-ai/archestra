@@ -31,7 +31,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import config from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -65,11 +65,9 @@ export function ConnectionSettingsForm() {
   const defaultInstructions = defaultRuntimeHandoffInstructions(appName);
 
   const [gatewayId, setGatewayId] = useState<string | null>(null);
-  const { data: mcpGateways } = useAgentOptions({
-    filters: {
-      agentTypes: ["profile", "mcp_gateway"],
-      ids: gatewayId ? [gatewayId] : [],
-    },
+  const { data: mcpGateways } = useAgentOptionsByIds({
+    ids: gatewayId ? [gatewayId] : [],
+    filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
   const [defaultClientId, setDefaultClientId] = useState<string | null>(null);
   // UI stores the set of visible clients/providers; null in DB = show all.

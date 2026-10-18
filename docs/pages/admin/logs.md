@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: See every model request, tool call, and admin change, and choose who can read them and how long they stay
 order: 5
-lastUpdated: 2026-10-16
+lastUpdated: 2026-10-17
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,7 +26,7 @@ Open **Logs** in the sidebar to answer questions such as:
 | **Guardrails consult** | Request to a service used by [Guardrails](/docs/agents/guardrails): service, tool, outcome | The service request and reply |
 | **Agent connections** | Calls grouped by user, agent, or gateway; setup and disconnect events under **Recent activity** | Drill into a group to see which agents and gateways it used |
 
-Open an **LLM Proxy** session or the **MCP Gateway** tab to see request latency; open a request for its **Latency** fact. This measures request processing time before saving the log, including the full stream for LLM requests. Older records may have no timing.
+Open an **LLM Proxy** session to see every request and the MCP tool calls it triggered on one timeline; select a row for its timing, tokens, cost, conversation, and raw request and response. A tool call opened from the **MCP Gateway** tab shows where it sat in its session, or nearby calls from the same caller when it is not linked to one. Timing measures request processing before the log is saved, including the full stream for LLM requests. Older records may have no timing.
 
 In **Agent connections**, choose a view or group calls with **Show** and **by**, then select a bar or row to drill down. Call counts follow the selected date range; **Active users** always reflects the last 30 days. **User connections** includes users with no calls and lets you expand their configured agents.
 

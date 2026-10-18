@@ -301,7 +301,7 @@ function createQueryClient(
     defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
   });
   queryClient.setQueryData(
-    ["scoped-capabilities"],
+    ["auth", "scopedCapabilities"],
     permissions === teamViewerPermissions
       ? []
       : ["read", "update", "delete"].map((action) => ({

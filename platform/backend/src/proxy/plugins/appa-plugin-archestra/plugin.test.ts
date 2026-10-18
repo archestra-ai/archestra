@@ -47,6 +47,7 @@ import {
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { makeReturnLabelReview } from "@/test/openappa-return-label-review";
 import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
@@ -3420,6 +3421,60 @@ describe("asking through the client's own question tool", () => {
       },
     });
   }
+
+  test("a return-label review with a long launch message supports Inspect then Allow", async () => {
+    const offerId = "offer-return-label-inspect";
+    const { plugin, context, trusted, askCard, answer } =
+      inspectableClaudeReview({
+        sessionId: "user:user|return-label-inspect",
+        offerId,
+      });
+    const review = makeReturnLabelReview(offerId);
+    await stageHitlReview({ session: trusted.session, review });
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+    try {
+      await plugin.onSessionInit(context);
+      const first = await askCard();
+      expect(first.card.question).toBe("Run archestra__start_run?");
+      expect(first.card.options.map((option) => option.label)).toEqual([
+        "Allow",
+        "Deny",
+        "Inspect",
+      ]);
+      expect(first.card.options[0].preview).toContain("4,080 characters");
+      expect(first.reviewDetails).toBeUndefined();
+      expect(first.card.options[0].preview).not.toContain(
+        JSON.parse(review.arguments).message,
+      );
+      await answer(first.answerId, first.card.question, "Inspect");
+      expect(
+        await peekHitlRuling({ session: trusted.session, offerId }),
+      ).toBeUndefined();
+      const inspected = await askCard();
+      expect(inspected.reviewDetails).toContain(
+        JSON.parse(review.arguments).message,
+      );
+      expect(inspected.reviewDetails).toContain("attention: human-approval");
+      const approved = await answer(
+        inspected.answerId,
+        inspected.card.question,
+        "Allow",
+      );
+      expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
+      expect(
+        await consumeHitlRuling({ session: trusted.session, offerId }),
+      ).toBe("approve");
+    } finally {
+      evaluateToolCalls.mockRestore();
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
 
   test("a concurrent review replacement never downgrades to a plain approval card", async () => {
     const { plugin, context, trusted } = inspectableClaudeReview({

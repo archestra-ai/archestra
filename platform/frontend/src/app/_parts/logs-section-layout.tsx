@@ -9,6 +9,10 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  CompactFilterExtrasProvider,
+  useCompactFilters,
+} from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { useLogsLayoutConfig } from "@/lib/audit-log/use-logs-layout-config";
 
@@ -40,25 +44,33 @@ export function LogsSectionLayout({
   const config = useLogsLayoutConfig();
   const [actionButton, setActionButton] = useState<ReactNode>(null);
   const contextValue = useMemo(() => ({ setActionButton }), []);
+  const compact = useCompactFilters();
 
   if (pathname !== listPath) return <>{children}</>;
 
   return (
     <LogsActionContext.Provider value={contextValue}>
-      <PageLayout
-        {...config}
-        description={description ?? config.description}
-        actionButton={actionButton}
-      >
-        {children}
-      </PageLayout>
+      {/* On compact screens the time range joins the page's filter popover,
+          next to the filters it narrows alongside. */}
+      <CompactFilterExtrasProvider extras={compact ? actionButton : null}>
+        {({ claimed }) => (
+          <PageLayout
+            {...config}
+            description={description ?? config.description}
+            actionButton={claimed ? null : actionButton}
+          >
+            {children}
+          </PageLayout>
+        )}
+      </CompactFilterExtrasProvider>
     </LogsActionContext.Provider>
   );
 }
 
 /**
  * Puts `action` in the Logs header's top-right corner while the calling page
- * is shown — where every log page keeps its time range.
+ * is shown — where every log page keeps its time range. On compact screens it
+ * moves into the page's filter popover instead, when the page has one.
  */
 export function useLogsHeaderAction(action: ReactNode) {
   const { setActionButton } = useContext(LogsActionContext);

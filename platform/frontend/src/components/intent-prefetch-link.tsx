@@ -1,5 +1,6 @@
 "use client";
 
+import type { PrefetchOptions } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ComponentProps } from "react";
@@ -18,17 +19,30 @@ export function IntentPrefetchLink({
   onMouseEnter,
   onTouchStart,
   onPrefetch,
+  fullPrefetch = false,
   ...props
 }: Omit<ComponentProps<typeof Link>, "prefetch"> & {
   /** Runs after the route prefetch, with the same URL. */
   onPrefetch?: (href: string) => void;
+  /**
+   * Prefetch the whole page, not just its shared layout. A dynamic route with
+   * no loading boundary otherwise prefetches nothing of its own, so its
+   * JavaScript is only requested after the click.
+   */
+  fullPrefetch?: boolean;
 }) {
   const router = useRouter();
 
   const prefetch = () => {
     const prefetchHref = getPrefetchHref(href);
     if (!prefetchHref) return;
-    router.prefetch(prefetchHref);
+    if (fullPrefetch) {
+      router.prefetch(prefetchHref, {
+        kind: "full" as PrefetchOptions["kind"],
+      });
+    } else {
+      router.prefetch(prefetchHref);
+    }
     onPrefetch?.(prefetchHref);
   };
 

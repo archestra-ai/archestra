@@ -52,23 +52,35 @@ export function useTeams(params?: {
       ...(name || labels ? [{ name, labels }] : []),
     ],
     queryFn: async () => {
-      const { data, error } = await getTeams({
-        query: {
-          limit: 100,
-          offset: 0,
-          ...(params?.includeRelations === false
-            ? { includeRelations: false }
-            : {}),
-          ...(params?.includeMembers === false
-            ? { includeMembers: false }
-            : {}),
-          ...(mine ? { mine: true } : {}),
-          ...(name ? { name } : {}),
-          ...(labels ? { labels } : {}),
-        },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data?.data ?? [];
+      const teams: Team[] = [];
+      // The viewer's own teams decide who may re-authenticate a team
+      // connection, the same rule the server ranks with over every direct
+      // membership, so that list is read to the end. Other lists keep their
+      // first page.
+      for (let offset = 0; ; offset += TEAMS_PAGE_SIZE) {
+        const { data, error } = await getTeams({
+          query: {
+            limit: TEAMS_PAGE_SIZE,
+            offset,
+            ...(params?.includeRelations === false
+              ? { includeRelations: false }
+              : {}),
+            ...(params?.includeMembers === false
+              ? { includeMembers: false }
+              : {}),
+            ...(mine ? { mine: true } : {}),
+            ...(name ? { name } : {}),
+            ...(labels ? { labels } : {}),
+          },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        const page = data?.data ?? [];
+        teams.push(...page);
+        const total = data?.pagination?.total ?? teams.length;
+        if (!mine || page.length < TEAMS_PAGE_SIZE || teams.length >= total) {
+          return teams;
+        }
+      }
     },
     initialData: params?.initialData as Team[] | undefined,
     enabled: params?.enabled,
@@ -229,3 +241,6 @@ export function useTeamsWithVaultFolders(params?: { enabled?: boolean }) {
 }
 
 // SPDX-SnippetEnd
+
+/** The most teams one request returns (the API's page limit). */
+const TEAMS_PAGE_SIZE = 100;

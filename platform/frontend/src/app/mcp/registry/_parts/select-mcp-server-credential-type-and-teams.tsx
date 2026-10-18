@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
@@ -86,8 +86,11 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // picks a new one, so the scope is locked to the existing value rather than
   // disabled because the scope is "already installed".
   const lockToExistingScope = isReinstall || isReauth;
+  // Only this item's installs: the checks below never look at another.
   const { data: installedServers } = useMcpServers({
     includeAssignedAgents: false,
+    catalogId,
+    enabled: !!catalogId,
   });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -115,17 +118,11 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // otherwise steer a genuine write-holder to personal via the self-heal below
   // and never switch back once the check loads.
   //
-  // The item is resolved from the (cached) catalog list by id rather than
-  // taken as a prop, so every caller that passes `catalogId` is gated — a prop
-  // is easy for a caller to forget, silently skipping the gate.
-  const { data: catalogItems } = useInternalMcpCatalog();
-  const catalogItem = useMemo(
-    () =>
-      catalogId
-        ? (catalogItems?.find((item) => item.id === catalogId) ?? null)
-        : null,
-    [catalogItems, catalogId],
-  );
+  // The item is loaded by id rather than taken as a prop, so every caller
+  // that passes `catalogId` is gated — a prop is easy for a caller to forget,
+  // silently skipping the gate.
+  const { data: catalogItemById } = useInternalMcpCatalogItem(catalogId);
+  const catalogItem = catalogId ? (catalogItemById ?? null) : null;
   const { canModify: canModifyCatalog, isLoading: isCanModifyLoading } =
     useCanModifyCatalogItem(catalogItem);
   const blockTeamForCatalogAccess =

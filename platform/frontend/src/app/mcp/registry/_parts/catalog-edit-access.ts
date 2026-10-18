@@ -12,7 +12,7 @@ type CatalogItem =
 
 /** Use the same object-specific authorization decision as the catalog API. */
 export function useCanModifyCatalogItem(
-  catalog: CatalogItem | null | undefined,
+  catalog: Pick<CatalogItem, "id" | "effectiveActions"> | null | undefined,
 ): { canModify: boolean; isLoading: boolean } {
   return {
     canModify:

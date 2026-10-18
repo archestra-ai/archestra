@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   inArray,
   isNotNull,
   isNull,
@@ -17,6 +18,7 @@ import {
   notInArray,
   or,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
@@ -94,6 +96,30 @@ export const MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS =
 export const MCP_DEMAND_HEARTBEAT_INTERVAL_MS =
   config.orchestrator.mcpIdleHibernation.demandHeartbeatIntervalMs;
 // SPDX-SnippetEnd
+
+/** Whose install visibility the registry's install questions are asked for. */
+export type RegistryInstallViewer = {
+  userId: string;
+  /** May manage every shared install (`isMcpInstallationAdmin`). */
+  isMcpServerAdmin: boolean;
+  /** The predefined Admin role, the only one that sees personal installs of others. */
+  isPredefinedAdmin: boolean;
+  /**
+   * `mcpServerInstallation:read`. Without it the viewer sees no installs, so
+   * every install question answers "none" (as GET /api/mcp_server's 403 does).
+   */
+  canReadInstalls: boolean;
+};
+
+export type RegistryInstallRow = {
+  id: string;
+  name: string;
+  catalogId: string;
+  scope: ResourceVisibilityScope;
+  ownerId: string | null;
+  createdAt: Date;
+  usable: boolean;
+};
 
 /**
  * Data-access layer for `mcp_server` — an installation of an
@@ -480,20 +506,15 @@ class McpServerModel {
       conditions.push(catalogBelongsToOrganization);
     }
 
-    if (!isPredefinedAdmin && isMcpServerAdmin) {
-      const sharedOrOwnedInstall = or(
-        ne(schema.mcpServersTable.scope, "personal"),
-        eq(schema.mcpServersTable.ownerId, userId),
-      );
-      if (sharedOrOwnedInstall) conditions.push(sharedOrOwnedInstall);
-    } else if (!isPredefinedAdmin) {
-      const accessibleMcpServerIds =
-        await McpServerModel.getUserAccessibleMcpServerIds(userId);
-      if (accessibleMcpServerIds.length === 0) return [];
-      conditions.push(
-        inArray(schema.mcpServersTable.id, accessibleMcpServerIds),
-      );
-    }
+    // The same visibility as the registry's issue index, so every local
+    // install the browser classifies has a status in the feed.
+    const visible = McpServerModel.visibleToViewerCondition({
+      userId,
+      isMcpServerAdmin,
+      isPredefinedAdmin,
+      canReadInstalls: true,
+    });
+    if (visible) conditions.push(visible);
 
     const rows = await db
       .select({ id: schema.mcpServersTable.id })
@@ -528,6 +549,8 @@ class McpServerModel {
      */
     filters?: {
       catalogId?: string;
+      /** Installs of any of these catalog items (the registry's visible page). */
+      catalogIds?: string[];
       /**
        * Attach per-install agent usage (`assignedAgents`). Off unless asked:
        * it looks up the agents of every listed install, and only the server
@@ -579,6 +602,12 @@ class McpServerModel {
     if (filters?.catalogId) {
       conditions.push(eq(schema.mcpServersTable.catalogId, filters.catalogId));
     }
+    if (filters?.catalogIds) {
+      if (filters.catalogIds.length === 0) return [];
+      conditions.push(
+        inArray(schema.mcpServersTable.catalogId, filters.catalogIds),
+      );
+    }
 
     if (filters?.excludeServerTypes?.length) {
       conditions.push(
@@ -614,6 +643,17 @@ class McpServerModel {
         eq(schema.mcpServersTable.ownerId, userId),
       );
       if (sharedOrOwnedInstall) conditions.push(sharedOrOwnedInstall);
+    } else if (userId && !isPredefinedAdmin && filters?.catalogIds) {
+      // A bounded page of catalog items (the registry): the same visibility as
+      // below, as one condition in this query instead of three id lists read
+      // first — one of them every org-scoped install in the organization.
+      const visible = McpServerModel.visibleToViewerCondition({
+        userId,
+        isMcpServerAdmin: false,
+        isPredefinedAdmin: false,
+        canReadInstalls: true,
+      });
+      if (visible) conditions.push(visible);
     } else if (userId && !isPredefinedAdmin) {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
@@ -692,6 +732,214 @@ class McpServerModel {
       ...server,
       assignedAgents: assignedAgentsByServer.get(server.id) ?? [],
     }));
+  }
+
+  /**
+   * SQL form of the install visibility {@link findAll} applies to one viewer,
+   * for queries that ask about installs inside a larger statement (the
+   * registry's "installed" filter and sort) instead of listing them.
+   * Undefined when the viewer sees every install.
+   */
+  static visibleToViewerCondition(
+    viewer: RegistryInstallViewer,
+  ): SQL | undefined {
+    const server = schema.mcpServersTable;
+    if (viewer.isPredefinedAdmin) return undefined;
+    if (viewer.isMcpServerAdmin) {
+      return or(
+        ne(server.scope, "personal"),
+        eq(server.ownerId, viewer.userId),
+      );
+    }
+    return or(
+      and(
+        eq(server.scope, "team"),
+        TeamModel.effectiveMembershipCondition({
+          userId: viewer.userId,
+          teamIdColumn: server.teamId,
+        }),
+      ),
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(schema.mcpServerUsersTable)
+          .where(
+            and(
+              eq(schema.mcpServerUsersTable.mcpServerId, server.id),
+              eq(schema.mcpServerUsersTable.userId, viewer.userId),
+            ),
+          ),
+      ),
+      eq(server.scope, "org"),
+    );
+  }
+
+  /**
+   * SQL form of {@link getCredentialUsableServerIds}: the install is one the
+   * user may present the credential of.
+   */
+  static credentialUsableCondition(userId: string): SQL {
+    const server = schema.mcpServersTable;
+    return or(
+      eq(server.ownerId, userId),
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(schema.mcpServerUsersTable)
+          .where(
+            and(
+              eq(schema.mcpServerUsersTable.mcpServerId, server.id),
+              eq(schema.mcpServerUsersTable.userId, userId),
+            ),
+          ),
+      ),
+      and(
+        eq(server.scope, "team"),
+        TeamModel.effectiveMembershipCondition({
+          userId,
+          teamIdColumn: server.teamId,
+        }),
+      ),
+      eq(server.scope, "org"),
+    ) as SQL;
+  }
+
+  /**
+   * True for a catalog item (correlated on `catalogIdColumn`) that has any
+   * install the viewer can see — a row a registry bulk action can select.
+   */
+  static visibleInstallExistsCondition(params: {
+    viewer: RegistryInstallViewer;
+    catalogIdColumn: SQLWrapper;
+  }): SQL {
+    if (!params.viewer.canReadInstalls) return sql`false`;
+    const server = schema.mcpServersTable;
+    return exists(
+      db
+        .select({ one: sql`1` })
+        .from(server)
+        .where(
+          and(
+            sql`${server.catalogId} = ${params.catalogIdColumn}`,
+            notDeleted(server),
+            ne(server.serverType, "app"),
+            McpServerModel.visibleToViewerCondition(params.viewer),
+          ),
+        ),
+    );
+  }
+
+  /**
+   * True for a catalog item (correlated on `catalogIdColumn`) that has an
+   * install the viewer can both see and use: the registry's "installed for
+   * me" rule as an `EXISTS`, so filtering and ordering by it stay in SQL.
+   */
+  static installedForViewerCondition(params: {
+    viewer: RegistryInstallViewer;
+    catalogIdColumn: SQLWrapper;
+  }): SQL {
+    if (!params.viewer.canReadInstalls) return sql`false`;
+    const server = schema.mcpServersTable;
+    return exists(
+      db
+        .select({ one: sql`1` })
+        .from(server)
+        .where(
+          and(
+            sql`${server.catalogId} = ${params.catalogIdColumn}`,
+            notDeleted(server),
+            ne(server.serverType, "app"),
+            McpServerModel.visibleToViewerCondition(params.viewer),
+            McpServerModel.credentialUsableCondition(params.viewer.userId),
+          ),
+        ),
+    );
+  }
+
+  /**
+   * The installs of `catalogIds` the viewer can see, reduced to what the
+   * registry list needs to summarize them per catalog item: how many there
+   * are, whether one is usable by the viewer, and which one stands in for the
+   * item (the same priority the registry's cards use).
+   */
+  static async findRegistryInstallRows(params: {
+    viewer: RegistryInstallViewer;
+    catalogIds: string[];
+  }): Promise<RegistryInstallRow[]> {
+    if (params.catalogIds.length === 0 || !params.viewer.canReadInstalls) {
+      return [];
+    }
+    const server = schema.mcpServersTable;
+    const rows = await db
+      .select({
+        id: server.id,
+        name: server.name,
+        catalogId: server.catalogId,
+        scope: server.scope,
+        ownerId: server.ownerId,
+        createdAt: server.createdAt,
+        usable: sql<boolean>`${McpServerModel.credentialUsableCondition(params.viewer.userId)}`,
+      })
+      .from(server)
+      .where(
+        and(
+          inArray(server.catalogId, params.catalogIds),
+          notDeleted(server),
+          ne(server.serverType, "app"),
+          McpServerModel.visibleToViewerCondition(params.viewer),
+        ),
+      )
+      .orderBy(asc(server.createdAt), asc(server.id));
+    return rows.filter(
+      (row): row is RegistryInstallRow => row.catalogId !== null,
+    );
+  }
+
+  /**
+   * Every install the viewer can see, reduced to the fields the issue rule
+   * (`computeMcpServerIssues` in the frontend) reads. Feeds the registry's
+   * slim issue index, which the sidebar count reads on every page, so it
+   * carries no configuration, users or agents.
+   */
+  static async findIssueIndexRows(params: {
+    viewer: RegistryInstallViewer;
+    organizationId: string;
+  }) {
+    if (!params.viewer.canReadInstalls) return [];
+    const server = schema.mcpServersTable;
+    const catalog = schema.internalMcpCatalogTable;
+    return db
+      .select({
+        id: server.id,
+        catalogId: server.catalogId,
+        ownerId: server.ownerId,
+        scope: server.scope,
+        teamId: server.teamId,
+        localInstallationStatus: server.localInstallationStatus,
+        localInstallationError: server.localInstallationError,
+        oauthRefreshError: server.oauthRefreshError,
+        oauthRefreshErrorMessage: server.oauthRefreshErrorMessage,
+        oauthRefreshErrorDescription: server.oauthRefreshErrorDescription,
+        oauthRefreshFailedAt: server.oauthRefreshFailedAt,
+        updatedAt: server.updatedAt,
+        canUseCredential: sql<boolean>`${McpServerModel.credentialUsableCondition(params.viewer.userId)}`,
+      })
+      .from(server)
+      .leftJoin(catalog, eq(server.catalogId, catalog.id))
+      .where(
+        and(
+          notDeleted(server),
+          ne(server.serverType, "app"),
+          // The column is NOT NULL today; the guard keeps a future nullable
+          // catalog link from slipping past the organization check below.
+          isNotNull(server.catalogId),
+          or(
+            isNull(catalog.organizationId),
+            eq(catalog.organizationId, params.organizationId),
+          ),
+          McpServerModel.visibleToViewerCondition(params.viewer),
+        ),
+      );
   }
 
   /**

@@ -99,7 +99,7 @@ export function McpServerIssueNotice({
   className,
   onTargetsCompleted,
 }: {
-  item: CatalogItem;
+  item: Pick<CatalogItem, "id" | "name">;
   issues: McpServerIssue[];
   servers: InstalledServer[];
   /**

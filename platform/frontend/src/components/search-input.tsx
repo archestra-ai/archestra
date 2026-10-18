@@ -39,6 +39,8 @@ type SearchInputProps = {
    * indicator that was supposed to report it.
    */
   isLoading?: boolean;
+  /** Longest term the list's API accepts; the box stops taking input there. */
+  maxLength?: number;
 };
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
@@ -51,6 +53,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       debounceMs = 400,
       className,
       inputClassName,
+      maxLength,
       onSearchChange,
       value,
       syncQueryParams = true,
@@ -178,6 +181,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           placeholder={computedPlaceholder}
           className={cn("pl-9", inputClassName ?? "w-full")}
           debounceMs={debounceMs}
+          maxLength={maxLength}
         />
       </div>
     );

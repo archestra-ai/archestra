@@ -277,18 +277,13 @@ export function DecisionIcon({
 
 function DecisionLine({ consult }: { consult: MockConsult }) {
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span
-        className={cn(
-          "shrink-0 rounded-sm px-1 text-[10px] leading-4 font-medium",
-          DECISION_TONE[consult.decision].chip,
-        )}
-      >
-        {DECISION_TONE[consult.decision].label}
-      </span>
-      <span className="truncate text-muted-foreground" title={consult.answer}>
-        {consult.answer}
-      </span>
+    <span
+      className={cn(
+        "inline-flex h-4 items-center rounded-sm px-1 text-[10px] leading-none font-medium",
+        DECISION_TONE[consult.decision].chip,
+      )}
+    >
+      {DECISION_TONE[consult.decision].label}
     </span>
   );
 }

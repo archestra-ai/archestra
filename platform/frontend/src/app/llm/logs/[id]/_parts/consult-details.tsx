@@ -5,6 +5,12 @@ import type { ReactNode } from "react";
 import { ConsultPayloads } from "@/app/consults/logs/_components/consult-detail-sheet";
 import type { ConsultView } from "@/app/consults/logs/_components/consult-details";
 import { ConsultOutcomeBadge } from "@/app/consults/logs/_components/consult-outcome-badge";
+import {
+  CONSULT_BACKEND_TERMS,
+  CONSULT_ROLE_TERMS,
+  consultAnswerSummary,
+  GuardrailTerm,
+} from "@/app/consults/logs/_components/guardrail-terms";
 import { PaneHeader } from "@/components/log-detail/pane-header";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils/date-time";
@@ -42,6 +48,11 @@ export function ConsultDetails({
   onBack: (() => void) | null;
 }) {
   const { consult } = view;
+  const summary = consultAnswerSummary(consult);
+  // OpenAPPA scopes the client's session id by caller: `<caller>|<session>`.
+  const clientSession = consult.sessionId?.slice(
+    consult.sessionId.indexOf("|") + 1,
+  );
   return (
     <section
       aria-label="Guardrail consult details"
@@ -85,15 +96,39 @@ export function ConsultDetails({
                 <ConsultOutcomeBadge outcome={consult.outcome} />
               </span>
             </div>
-            {verdict ? <div className="mt-2 text-xs">{verdict}</div> : null}
+            {verdict || summary ? (
+              <div className="mt-2 flex min-w-0 items-start gap-1.5 text-xs">
+                {verdict ? <span className="shrink-0">{verdict}</span> : null}
+                {summary ? (
+                  <span className="min-w-0 text-muted-foreground">
+                    {summary}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </OverviewSection>
 
           <OverviewSection title="Check">
             <dl className={OVERVIEW_GRID}>
               <OverviewCell label="Role">
-                {ROLE_LABELS[consult.role] ?? consult.role}
+                <GuardrailTerm
+                  label={
+                    CONSULT_ROLE_TERMS[consult.role]?.label ?? consult.role
+                  }
+                  explanation={CONSULT_ROLE_TERMS[consult.role]?.explanation}
+                />
               </OverviewCell>
-              <OverviewCell label="Backend">{consult.backend}</OverviewCell>
+              <OverviewCell label="Backend">
+                <GuardrailTerm
+                  label={
+                    CONSULT_BACKEND_TERMS[consult.backend]?.label ??
+                    consult.backend
+                  }
+                  explanation={
+                    CONSULT_BACKEND_TERMS[consult.backend]?.explanation
+                  }
+                />
+              </OverviewCell>
               {toolName ? (
                 <OverviewCell label="Tool" className="col-span-2">
                   <span className="font-mono">{toolName}</span>
@@ -128,7 +163,7 @@ export function ConsultDetails({
             <dl className="grid gap-y-1.5">
               <OverviewCell label="Session">
                 <span className="font-mono" title={consult.sessionId ?? ""}>
-                  {consult.sessionId ?? "—"}
+                  {clientSession ?? "—"}
                 </span>
               </OverviewCell>
               <OverviewCell label="Call">
@@ -159,13 +194,6 @@ export function ConsultDetails({
 // ============================================================================
 // Internal helpers
 // ============================================================================
-
-const ROLE_LABELS: Record<string, string> = {
-  authority: "Authority",
-  annotator: "Annotator",
-  sanitizer: "Sanitizer",
-  audience_source: "Audience source",
-};
 
 function formatConsultDuration(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`;

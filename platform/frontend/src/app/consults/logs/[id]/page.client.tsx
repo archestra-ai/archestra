@@ -97,7 +97,9 @@ function ConsultDetail({ id }: { id: string }) {
       title={
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono">{consult.externalName}</span>
-          <ConsultOutcomeBadge outcome={consult.outcome} />
+          <span className="flex translate-y-px">
+            <ConsultOutcomeBadge outcome={consult.outcome} />
+          </span>
         </span>
       }
       documentTitle={consult.externalName}

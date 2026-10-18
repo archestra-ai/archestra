@@ -56886,6 +56886,7 @@ export type GetInteractionSessionsResponses = {
             models: Array<string>;
             profileId: string | null;
             profileName: string | null;
+            profileAgentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             externalAgentIds: Array<string>;
             externalAgentIdLabels: Array<string | null>;
             authMethods: Array<'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown'>;

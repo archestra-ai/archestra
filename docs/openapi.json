@@ -211712,6 +211712,16 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "profileAgentType": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
                           "externalAgentIds": {
                             "type": "array",
                             "items": {
@@ -211837,6 +211847,7 @@
                           "models",
                           "profileId",
                           "profileName",
+                          "profileAgentType",
                           "externalAgentIds",
                           "externalAgentIdLabels",
                           "authMethods",

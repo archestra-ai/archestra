@@ -283,15 +283,16 @@ export function RequestWaterfall({
           <div
             className={cn(
               // Sticks within the list's own scroll box, above the markers.
-              "sticky top-0 z-[15] grid h-8 border-b bg-muted text-[11px] text-muted-foreground",
+              "sticky top-0 z-[15] grid h-8 border-b bg-muted text-[11px] font-medium text-muted-foreground",
               grid,
             )}
           >
-            <div className="flex items-center pl-4">Name</div>
-            <div className={cn(WIDE_ONLY, "items-center px-2")}>
-              {layout === "tools" ? "Server" : "Model"}
+            <div className="flex items-center gap-1.5 pl-4">
+              <span>Name</span>
+              <span className="hidden font-normal text-muted-foreground/60 lg:inline">
+                {layout === "tools" ? "server, time" : "model, time"}
+              </span>
             </div>
-            <div className={cn(WIDE_ONLY, "items-center px-2")}>Time</div>
             <div className="relative mx-2 lg:mx-3">
               {/* A phone's track is too narrow for tick labels. */}
               <span className="flex h-full items-center lg:hidden">
@@ -358,8 +359,6 @@ export function RequestWaterfall({
                 )}
               >
                 <div />
-                <div className="hidden lg:block" />
-                <div className="hidden lg:block" />
                 <div className="relative mx-2 lg:mx-3">
                   {timeline.ticks.map((tick) => (
                     <span
@@ -502,13 +501,15 @@ export function McpCallChip({ method }: { method: string }) {
  */
 type Layout = "trace" | "tools";
 
-// Phones keep Name, a compact track and the last figure; the Model/Server,
-// Time and Tokens cells are display:none there, so they take no grid track.
+// The Name cell carries two lines (name; model or server · clock time), so
+// there are no separate Model and Time columns and the track takes their
+// width. Phones keep Name, a compact track and the last figure; Tokens is
+// display:none there, so it takes no grid track.
 const GRIDS: Record<Layout, string> = {
   trace:
-    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(190px,1.25fr)_148px_64px_minmax(260px,2.6fr)_108px_84px]",
+    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_104px_84px]",
   tools:
-    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(190px,1.25fr)_148px_64px_minmax(260px,2.6fr)_84px]",
+    "grid-cols-[minmax(0,1fr)_80px_68px] lg:grid-cols-[minmax(232px,296px)_minmax(360px,1fr)_84px]",
 };
 const WIDE_ONLY = "hidden lg:flex";
 /** The sticky column header, which a row scrolled to the top must clear. */
@@ -677,7 +678,7 @@ function RowShell({
         onDoubleClick={onOpen}
         aria-label={label}
         className={cn(
-          "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/50 text-left text-xs outline-none lg:h-8",
+          "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",
           grid,
           selected
             ? "bg-primary/[0.07] shadow-[inset_2px_0_0_var(--color-primary)]"
@@ -686,48 +687,50 @@ function RowShell({
           "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset",
         )}
       >
-        {/* Name; phones fold the detail line under it */}
-        <span className="flex min-w-0 items-center gap-2 pr-2 pl-4">
+        {/* Name over its detail line: model or server, then the clock
+            time (phones show the latency there instead, having no axis
+            labels). One rail in the kind's colour spans both lines. */}
+        <span className="flex min-w-0 items-center gap-2 pr-3 pl-4">
           <span
-            className={cn("h-4 w-[3px] shrink-0 rounded-full", style.bar)}
+            className={cn(
+              "h-[26px] w-[3px] shrink-0 rounded-full",
+              style.bar,
+              !selected && span.kind === "auxiliary" && "opacity-70",
+            )}
             aria-hidden="true"
           />
           {span.kind !== "main" ? (
             <CornerDownRight
-              className="size-3 shrink-0 text-muted-foreground/60"
+              className="-mr-0.5 size-3 shrink-0 self-start mt-[3px] text-muted-foreground/50"
               aria-hidden="true"
             />
           ) : null}
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="flex min-w-0 items-center gap-2">{name}</span>
-            <span className="flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground tabular-nums lg:hidden">
+          <span className="flex min-w-0 flex-1 flex-col gap-px">
+            <span className="flex min-w-0 items-center gap-1.5 leading-[18px]">
+              {name}
+            </span>
+            <span
+              className={cn(
+                "flex min-w-0 items-center gap-1 text-[11px] leading-4 tabular-nums",
+                selected ? "text-foreground/70" : "text-muted-foreground",
+              )}
+            >
               {detail}
+              <span
+                aria-hidden="true"
+                className="shrink-0 text-muted-foreground/40"
+              >
+                ·
+              </span>
+              <span className="shrink-0 text-muted-foreground/80 max-lg:hidden">
+                {time}
+              </span>
               {/* The tools layout's last column is the duration already. */}
-              <span className="shrink-0">
-                &nbsp;· {tools ? time : (latency?.text ?? "—")}
+              <span className="shrink-0 lg:hidden">
+                {tools ? time : (latency?.text ?? "—")}
               </span>
             </span>
           </span>
-        </span>
-
-        {/* Model, or the server a tool call went to */}
-        <span
-          className={cn(
-            WIDE_ONLY,
-            "min-w-0 items-center gap-1.5 px-2 text-muted-foreground",
-          )}
-        >
-          {detail}
-        </span>
-
-        {/* Time */}
-        <span
-          className={cn(
-            WIDE_ONLY,
-            "items-center px-2 text-muted-foreground tabular-nums",
-          )}
-        >
-          {time}
         </span>
 
         {/* Track */}
@@ -853,11 +856,14 @@ function RequestRow({
                   ? origin.provider
                   : (origin?.name ?? modelName)
               }
-              size={16}
+              size={13}
               ring={false}
             />
           </span>
-          <span className="truncate" title={row.model ?? undefined}>
+          <span
+            className="min-w-0 truncate lg:ml-0.5"
+            title={row.model ?? undefined}
+          >
             {modelName}
           </span>
         </>
@@ -881,18 +887,26 @@ function RequestRow({
         </>
       }
       cost={
-        <>
+        // On a plan the figure is list price, never billed: dimmed with a
+        // hollow mark, which fits the column where a chip did not.
+        <span
+          className={cn(
+            "inline-flex items-center gap-1",
+            onPlan ? "text-muted-foreground" : "font-medium",
+          )}
+          title={onPlan ? "On plan: list price, not billed" : undefined}
+        >
           {onPlan ? (
-            <span className="hidden rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium text-muted-foreground lg:inline">
-              Plan
-            </span>
+            <>
+              <span
+                aria-hidden="true"
+                className="size-1.5 shrink-0 rounded-full ring-1 ring-muted-foreground/70 ring-inset"
+              />
+              <span className="sr-only">On plan,</span>
+            </>
           ) : null}
-          <span
-            className={cn("font-medium", onPlan && "text-muted-foreground")}
-          >
-            {formatRequestCost(Number(row.cost ?? 0))}
-          </span>
-        </>
+          {formatRequestCost(Number(row.cost ?? 0))}
+        </span>
       }
     />
   );
@@ -941,10 +955,10 @@ function ToolCallRow({
             <McpCatalogIcon
               icon={display?.icon}
               catalogId={display?.catalogId}
-              size={14}
+              size={12}
             />
           </span>
-          <span className="truncate">{server}</span>
+          <span className="min-w-0 truncate lg:ml-0.5">{server}</span>
         </>
       }
       time={formatDate({ date: call.createdAt, dateFormat: "HH:mm:ss" })}
@@ -975,18 +989,13 @@ function WaterfallSkeleton({ layout }: { layout: Layout }) {
         <div
           key={x}
           className={cn(
-            "grid h-11 items-center border-b border-border/50 lg:h-8",
+            "grid h-11 items-center border-b border-border/40 lg:h-10",
             GRIDS[layout],
           )}
         >
-          <div className="min-w-0 px-4">
+          <div className="flex min-w-0 flex-col gap-1.5 px-4">
             <Skeleton className="h-3 w-32 max-w-full" />
-          </div>
-          <div className="hidden px-2 lg:block">
-            <Skeleton className="h-3 w-20" />
-          </div>
-          <div className="hidden px-2 lg:block">
-            <Skeleton className="h-3 w-12" />
+            <Skeleton className="h-2 w-24 max-w-full opacity-60" />
           </div>
           <div className="relative mx-2 h-full lg:mx-3">
             <Skeleton

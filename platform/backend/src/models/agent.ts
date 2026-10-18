@@ -4962,6 +4962,8 @@ class AgentModel {
           // exclusions are copied can only leave a fail-closed (assigned-tools-
           // only) clone, never one wide open in Auto mode with no exclusions.
           accessAllTools: false,
+          // Keep subagents in Manual mode until their exclusions are copied.
+          accessAllSubagents: false,
           // Skill policy rules are copied below. Start closed so a partial
           // clone can never transiently widen a Manual source to All.
           activationSkillMode: "manual",
@@ -4993,6 +4995,15 @@ class AgentModel {
         sourceAgent.id,
       );
       await AgentExcludedToolModel.replaceForAgent(created.id, excludedToolIds);
+
+      const excludedSubagentIds =
+        await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+          sourceAgent.id,
+        );
+      await AgentExcludedSubagentModel.replaceForAgent(
+        created.id,
+        excludedSubagentIds,
+      );
 
       // Same for Auto-mode knowledge-source exclusions: the clone copies the
       // source's knowledge assignments verbatim above, so a source that had
@@ -5041,6 +5052,10 @@ class AgentModel {
           { skipExclusionPrefill: true },
         );
       }
+      if (sourceAgent.accessAllSubagents) {
+        await AgentModel.update(created.id, { accessAllSubagents: true });
+      }
+
       if (sourceAgent.accessAllSubagents) {
         await AgentModel.update(created.id, { accessAllSubagents: true });
       }

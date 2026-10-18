@@ -6337,10 +6337,10 @@ function grantedAgentIdsCondition(params: {
     ),
     sql`, `,
   )}]::jsonb[]`;
-  // The granted ids are read once into an array that the agents scans take
-  // as an index condition, instead of walking the organization or joining
-  // the misestimated grant set; each candidate then gets the exact grant
-  // probe for its own type.
+  // Read the allowed IDs once so the query can find agents by ID. This set
+  // can include both agent and gateway policies. The check below must still
+  // match each row's resource: a policy for another resource with the same
+  // ID must not give access.
   return and(
     inArray(table.agentType, params.types),
     sql`${table.id} = ANY(ARRAY(

@@ -185,6 +185,46 @@ describe("bounded agent options", () => {
     ).toEqual([]);
   });
 
+  test("a policy for another resource does not authorize an agent or gateway", async ({
+    makeMember,
+    makeAgent,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    const owner = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
+    const hidden = await Promise.all(
+      (["agent", "mcp_gateway"] as const).map((agentType) =>
+        makeAgent({
+          organizationId: ctx.organizationId,
+          authorId: owner.id,
+          agentType,
+          access: "personal",
+        }),
+      ),
+    );
+    for (const agent of hidden) {
+      await ResourcePermissionPolicyModel.replace({
+        organizationId: ctx.organizationId,
+        resource: agent.agentType === "agent" ? "mcpGateway" : "agent",
+        scope: agent.id,
+        revision: 0,
+        grants: [
+          { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+        ],
+      });
+    }
+    const hiddenIds = hidden.map((agent) => agent.id);
+    const query = "?excludeBuiltIn=true&agentTypes=agent,mcp_gateway";
+    for (const path of ["/api/agents/options", "/api/agents/options/page"]) {
+      const page = await get(`${path}${query}`);
+      const ids = page.data.map((agent: AgentOption) => agent.id);
+      for (const id of hiddenIds) expect(ids).not.toContain(id);
+    }
+    const ids: string[] = await get(`/api/agents/options/ids${query}`);
+    for (const id of hiddenIds) expect(ids).not.toContain(id);
+  });
+
   test("searches picker identity/team text or descriptions literally before limiting", async ({
     makeMember,
     makeAgent,

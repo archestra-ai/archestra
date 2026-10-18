@@ -921,10 +921,6 @@ class TeamModel {
   }
 
   /**
-   * Get all team IDs a user can access through direct membership. Membership
-   * in a child team inherits resource access from every ancestor team.
-   */
-  /**
    * A caller's teams for authorization, in one statement: the
    * organization's teams they belong to with ancestors, with names and roles
    * (role sources, as {@link effectiveMembershipCondition}), and every team id
@@ -979,6 +975,10 @@ class TeamModel {
     };
   }
 
+  /**
+   * Get all team IDs a user can access through direct membership. Membership
+   * in a child team inherits resource access from every ancestor team.
+   */
   static async getUserTeamIds(userId: string): Promise<string[]> {
     logger.debug({ userId }, "TeamModel.getUserTeamIds: fetching team IDs");
     const teamMemberships = await db

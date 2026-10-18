@@ -148,6 +148,27 @@ class OpenappaExternalConsultModel {
     if (filters.sessionId)
       conditions.push(eq(table.sessionId, filters.sessionId));
     if (filters.callerId) conditions.push(eq(table.callerId, filters.callerId));
+    if (filters.llmSessionId) {
+      // The LLM session id is the client's own session id, the part after
+      // the caller scope in OpenAPPA's session id. Matching it to session
+      // families (indexed on that suffix) and then consults by root brings
+      // in every trajectory of the session, sub-agents included.
+      const sessions = schema.openappaSessionsTable;
+      conditions.push(
+        inArray(
+          table.root,
+          db
+            .select({ root: sessions.root })
+            .from(sessions)
+            .where(
+              and(
+                eq(sessions.organizationId, params.organizationId),
+                sql`substr(${sessions.sessionId}, strpos(${sessions.sessionId}, '|') + 1) = ${filters.llmSessionId}`,
+              ),
+            ),
+        ),
+      );
+    }
     // Neither column is indexed: like the exact filters above, this narrows
     // the newest-first walk of the (organization, created_at) index row by row.
     const search = buildTokenizedSearchFilter({
@@ -186,6 +207,8 @@ export interface ExternalConsultFilters {
   root?: string;
   sessionId?: string;
   callerId?: string;
+  /** The LLM session (client session id) the consults were raised in. */
+  llmSessionId?: string;
   /** Case-insensitive substring of the external's name or the session ID. */
   search?: string;
 }

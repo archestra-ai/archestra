@@ -41,6 +41,7 @@ import {
 import { LLM_LOG_FOCUS_PARAM } from "@/lib/interactions/llm-log-links";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
 import { RequestDetails } from "./_parts/request-details";
+import { ArenaWaterfall } from "./_parts/__arena__"; // design-arena: do not commit
 import { RequestWaterfall } from "./_parts/request-waterfall";
 import { SessionFacts } from "./_parts/session-facts";
 import {
@@ -344,7 +345,7 @@ export default function SessionDetailPage({
             aria-label="Requests and request details"
             className="isolate overflow-clip rounded-lg border bg-card shadow-[0_1px_2px_0_rgb(0_0_0/0.03)] lg:overflow-hidden"
           >
-            <RequestWaterfall
+            <ArenaWaterfall
               timeline={timeline}
               loading={interactionsLoading}
               profileName={profileName}

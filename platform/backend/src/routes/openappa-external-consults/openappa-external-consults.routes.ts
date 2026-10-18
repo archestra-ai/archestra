@@ -38,6 +38,13 @@ const QuerySchema = z
       .describe("Recorded on or before this time (ISO 8601)"),
     root: z.string().min(1).optional(),
     sessionId: z.string().min(1).optional(),
+    llmSessionId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "An LLM session ID, as on the LLM logs page: consults from every trajectory of that session, sub-agents included",
+      ),
     search: z
       .string()
       .min(1)

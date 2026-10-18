@@ -19,6 +19,11 @@ class RequestScope {
     this.storage.enterWith(params.memoize ? new Map() : null);
   }
 
+  /** Whether the current request can reuse a combined caller lookup. */
+  isMemoizing(): boolean {
+    return Boolean(this.storage.getStore());
+  }
+
   /** `load()` once per request and key, or every time outside a read scope. */
   memo<T>(key: string, load: () => Promise<T>): Promise<T> {
     const cache = this.storage.getStore();

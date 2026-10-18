@@ -3995,8 +3995,15 @@
     {
       "idx": 570,
       "version": "7",
-      "when": 1792296954088,
-      "tag": "0570_calm_hellfire_club",
+      "when": 1792306450351,
+      "tag": "0570_roster_option_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 571,
+      "version": "7",
+      "when": 1792313217263,
+      "tag": "0571_calm_hellfire_club",
       "breakpoints": true
     }
   ]

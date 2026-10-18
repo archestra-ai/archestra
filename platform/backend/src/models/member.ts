@@ -12,6 +12,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { requestScope } from "@/auth/request-scope";
 import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import db, { schema, type Transaction } from "@/database";
 import {
@@ -103,18 +104,37 @@ class MemberModel {
    * (e.g. by an auto-accepted invitation), so it wins.
    */
   static async getByUserId(userId: string, organizationId: string) {
-    const [member] = await db
-      .select()
-      .from(schema.membersTable)
-      .where(
-        and(
-          eq(schema.membersTable.userId, userId),
-          eq(schema.membersTable.organizationId, organizationId),
-        ),
-      )
-      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
-      .limit(1);
-    return member;
+    // A read request's auth, permission and grant lookups all start here;
+    // its scope reads the row once. Each caller gets its own copy.
+    const member = await requestScope.memo(
+      `member\0${organizationId}\0${userId}`,
+      async () => {
+        const [row] = await db
+          .select()
+          .from(schema.membersTable)
+          .where(
+            and(
+              eq(schema.membersTable.userId, userId),
+              eq(schema.membersTable.organizationId, organizationId),
+            ),
+          )
+          .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
+          .limit(1);
+        return row;
+      },
+    );
+    return member && { ...member };
+  }
+
+  /**
+   * Hand {@link getByUserId} a member row this read request already read, the
+   * one it would return for the row's user and organization.
+   */
+  static remember(member: typeof schema.membersTable.$inferSelect): void {
+    void requestScope.memo(
+      `member\0${member.organizationId}\0${member.userId}`,
+      async () => member,
+    );
   }
 
   /**

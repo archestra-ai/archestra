@@ -3215,6 +3215,13 @@ const AgentOptionsListQuerySchema = AgentOptionsQuerySchema.extend({
   cursor: z.string().optional(),
 });
 
+/** Types whose `*` read grant lets a roster skip per-row read probes. */
+const WILDCARD_READ_CANDIDATE_TYPES: AgentType[] = [
+  "agent",
+  "profile",
+  "mcp_gateway",
+];
+
 type AgentRosterRequest = {
   query: z.infer<typeof AgentRosterQuerySchema>;
   userId: string;
@@ -3269,6 +3276,9 @@ async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
     authorization: {
       organizationId,
       baseReadTypes: checker.getAgentTypesWithPermission("read"),
+      wildcardReadTypes: WILDCARD_READ_CANDIDATE_TYPES.filter((agentType) =>
+        checker.allowsScoped({ agentType, agentId: "*", action: "read" }),
+      ),
     },
     // agentTypes takes precedence over agentType
     agentType: agentTypes || permittedTypes ? undefined : agentType,

@@ -6,6 +6,7 @@ import {
 import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
+import { requestScope } from "@/auth/request-scope";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -296,10 +297,7 @@ export class Authnz {
       logger.trace("[Authnz] Attempting session-based authentication");
       // Reads the short-lived cookie cache when present (see session.cookieCache
       // in better-auth config), falling back to the session table on a miss.
-      const { response: session } = await betterAuth.api.getSession({
-        headers,
-        returnHeaders: true,
-      });
+      const { response: session } = await this.getSession(request);
 
       if (session) {
         logger.trace(
@@ -504,6 +502,14 @@ export class Authnz {
     };
   };
 
+  private getSession = (request: FastifyRequest) =>
+    requestScope.memo("session", () =>
+      betterAuth.api.getSession({
+        headers: new Headers(request.headers as HeadersInit),
+        returnHeaders: true,
+      }),
+    );
+
   private populateUserInfo = async (
     request: FastifyRequest,
     reply: FastifyReply,
@@ -520,7 +526,7 @@ export class Authnz {
         // short TTL would lapse between those calls and most API requests would
         // still hit the session table.
         const { response: session, headers: authHeaders } =
-          await betterAuth.api.getSession({ headers, returnHeaders: true });
+          await this.getSession(request);
         this.forwardSessionCookies(reply, authHeaders);
 
         if (session?.user?.id) {

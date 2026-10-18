@@ -292,6 +292,22 @@ const agentsTable = softDeletablePgTable(
     index("agents_org_created_at_live_idx")
       .on(table.organizationId, table.createdAt, table.id)
       .where(sql`${table.deletedAt} IS NULL`),
+    // Selector select-all walks live agents newest first; the type and
+    // built-in flag let it read the index alone.
+    index("agents_org_created_at_type_live_idx")
+      .on(
+        table.organizationId,
+        table.createdAt,
+        table.id,
+        table.agentType,
+        table.builtIn,
+      )
+      .where(sql`${table.deletedAt} IS NULL`),
+    // Pickers and the chat roster order by name byte-wise (COLLATE "C"),
+    // which the name index above, in the database collation, cannot serve.
+    index("agents_org_name_c_live_idx")
+      .on(table.organizationId, sql`${table.name} COLLATE "C"`, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
     // The Agents page's trash view lists deleted agents newest first.
     index("agents_org_created_at_deleted_idx")
       .on(table.organizationId, table.createdAt, table.id)

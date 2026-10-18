@@ -936,6 +936,14 @@ export default class ResourcePermissionPolicyModel {
     excludeUserIds?: Map<string, string | null>;
     /** Undefined loads policies; an empty array deliberately represents none. */
     policies?: ObjectPolicy[];
+    /**
+     * The recipient rows, when the caller read them with the policies;
+     * undefined loads them. Rows not named by a read grant are ignored.
+     */
+    recipients?: {
+      teams: Array<{ id: string; name: string }>;
+      users: Array<{ id: string; name: string; email: string }>;
+    };
   }): Promise<Map<string, ReadRecipientDetails>> {
     const recipients =
       await ResourcePermissionPolicyModel.findReadRecipients(params);
@@ -945,24 +953,29 @@ export default class ResourcePermissionPolicyModel {
     const userIds = [
       ...new Set([...recipients.values()].flatMap((entry) => entry.userIds)),
     ];
-    const [teams, users] = await Promise.all([
-      teamIds.length === 0
-        ? []
-        : db
-            .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
-            .from(schema.teamsTable)
-            .where(idArrayCondition(schema.teamsTable.id, teamIds)),
-      userIds.length === 0
-        ? []
-        : db
-            .select({
-              id: schema.usersTable.id,
-              name: schema.usersTable.name,
-              email: schema.usersTable.email,
-            })
-            .from(schema.usersTable)
-            .where(idArrayCondition(schema.usersTable.id, userIds)),
-    ]);
+    const [teams, users] = params.recipients
+      ? [params.recipients.teams, params.recipients.users]
+      : await Promise.all([
+          teamIds.length === 0
+            ? []
+            : db
+                .select({
+                  id: schema.teamsTable.id,
+                  name: schema.teamsTable.name,
+                })
+                .from(schema.teamsTable)
+                .where(idArrayCondition(schema.teamsTable.id, teamIds)),
+          userIds.length === 0
+            ? []
+            : db
+                .select({
+                  id: schema.usersTable.id,
+                  name: schema.usersTable.name,
+                  email: schema.usersTable.email,
+                })
+                .from(schema.usersTable)
+                .where(idArrayCondition(schema.usersTable.id, userIds)),
+        ]);
     const teamById = new Map(teams.map((team) => [team.id, team]));
     const userById = new Map(users.map((user) => [user.id, user]));
     return new Map(

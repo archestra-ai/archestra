@@ -530,6 +530,59 @@ describe("authPlugin integration", () => {
     });
   });
 
+  describe("request-local session reads", () => {
+    test.for([
+      "GET",
+      "HEAD",
+      "POST",
+    ] as const)("%s preserves refreshed cookies and reads again on the next request", async (method, {
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        response: {
+          user: { id: user.id },
+          session: { activeOrganizationId: org.id },
+        },
+        headers: new Headers({
+          "set-cookie": "session_data=refreshed; HttpOnly",
+        }),
+      } as unknown as Session);
+      mockHasPermission.mockResolvedValue({ success: true, error: null });
+      const app = createFastifyInstance();
+      await app.register(authPlugin);
+      app.route({
+        method,
+        url: "/api/agents",
+        schema: { operationId: "getAgents" },
+        handler: async (request) => ({ userId: request.user.id }),
+      });
+      try {
+        mockBetterAuth.api.getSession.mockClear();
+        const response = await app.inject({ method, url: "/api/agents" });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.headers["set-cookie"]).toContain(
+          "session_data=refreshed; HttpOnly",
+        );
+        expect(mockBetterAuth.api.getSession).toHaveBeenCalledTimes(
+          method === "POST" ? 2 : 1,
+        );
+        mockBetterAuth.api.getSession.mockResolvedValue(sessionResult(null));
+        const revoked = await app.inject({ method, url: "/api/agents" });
+        expect(revoked.statusCode, revoked.body).toBe(401);
+        expect(mockBetterAuth.api.getSession).toHaveBeenCalledTimes(
+          method === "POST" ? 3 : 2,
+        );
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
   describe("plugin registration", () => {
     test("should register decorators and hooks", () => {
       const mockApp = {

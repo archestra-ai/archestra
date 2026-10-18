@@ -43,7 +43,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { type AnyPgColumn, unionAll } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, alias, unionAll } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -117,7 +117,15 @@ import ToolModel from "./tool";
 
 type AgentRosterOptions = {
   agentType?: AgentType;
-  authorization?: { organizationId: string; baseReadTypes: AgentType[] };
+  authorization?: {
+    organizationId: string;
+    baseReadTypes: AgentType[];
+    /**
+     * Types the caller reads through a `*` grant in this organization, so
+     * every live row of theirs is readable without a per-row probe.
+     */
+    wildcardReadTypes?: AgentType[];
+  };
   agentTypes?: AgentType[];
   excludeBuiltIn?: boolean;
   scope?: AgentScope;
@@ -1015,7 +1023,7 @@ class AgentModel {
     });
   }
 
-  /** Search all permitted chat choices without materializing the full roster. */
+  /** Search all permitted chat choices in one statement, without materializing the full roster. */
   static async findChatRosterPage(params: {
     userId: string;
     isAgentAdmin: boolean;
@@ -1059,31 +1067,32 @@ class AgentModel {
         ? or(ilike(table.name, pattern), ilike(table.description, pattern))
         : undefined,
     );
-    const page = await AgentModel.findRosterPageIds({
+    const sortBy = params.filters.sortBy ?? "chat";
+    if (sortBy === "chat" && params.options.authorization) {
+      // Each phase of the chat order implies the author-or-shared condition.
+      return AgentModel.findChatOrderedRosterPage({
+        where: and(
+          base,
+          eq(table.builtIn, false),
+          pattern
+            ? or(ilike(table.name, pattern), ilike(table.description, pattern))
+            : undefined,
+        ),
+        organizationId: params.options.authorization.organizationId,
+        userId: params.userId,
+        pagination: params.pagination,
+      });
+    }
+    const page = AgentModel.rosterPage({
       where,
-      sortBy: params.filters.sortBy ?? "chat",
+      sortBy,
       pagination: params.pagination,
     });
-    const rows = await AgentModel.findChatRosterRows(
-      and(
-        base,
-        idArrayCondition(
-          table.id,
-          page.data.map((row) => row.id),
-        ),
-      ),
-    );
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    return {
-      data: page.data.flatMap((row) => {
-        const agent = byId.get(row.id);
-        return agent ? [agent] : [];
-      }),
-      pagination: page.pagination,
-    };
+    const rows = await AgentModel.findChatRosterRows(where, page);
+    return createCursorPaginatedResult(rows, params.pagination, page.position);
   }
 
-  /** Authorize and bound selector rows before loading any presentation relations. */
+  /** Authorize, page and present selector rows in one statement. */
   static async findOptionsPage(params: {
     userId: string;
     isAgentAdmin: boolean;
@@ -1091,30 +1100,14 @@ class AgentModel {
     filters: AgentOptionFilters;
     pagination: CursorQuery;
   }) {
-    const { where, rosterWhere } = await AgentModel.buildOptionWhere(params);
-    const table = schema.agentsTable;
-    const page = await AgentModel.findRosterPageIds({
+    const { where } = await AgentModel.buildOptionWhere(params);
+    const page = AgentModel.rosterPage({
       where,
       sortBy: params.filters.sortBy,
       pagination: params.pagination,
     });
-    const options = await AgentModel.findOptionRows(
-      and(
-        rosterWhere,
-        idArrayCondition(
-          table.id,
-          page.data.map((row) => row.id),
-        ),
-      ),
-    );
-    const byId = new Map(options.map((option) => [option.id, option]));
-    return {
-      data: page.data.flatMap((row) => {
-        const option = byId.get(row.id);
-        return option ? [option] : [];
-      }),
-      pagination: page.pagination,
-    };
+    const rows = await AgentModel.findOptionRows(where, page);
+    return createCursorPaginatedResult(rows, params.pagination, page.position);
   }
 
   /** Complete IDs for an explicit select-all action, without hydrating metadata. */
@@ -1166,7 +1159,7 @@ class AgentModel {
     const isChatView = options?.view === "chat";
     const isOptionsView = options?.view === "options";
     const isCompactView = isChatView || isOptionsView;
-    if (isOptionsView) return AgentModel.findOptionRows(where);
+    if (isOptionsView) return AgentModel.findUnpagedOptionRows(where);
     const rows = isCompactView
       ? await db
           .select(CHAT_AGENT_ROW_COLUMNS)
@@ -5415,6 +5408,17 @@ class AgentModel {
           organizationId: options?.authorization?.organizationId,
         })
       : [];
+    // An authorized read of live rows needs its read grant once. The fence,
+    // the base-type read, the oversight filter and the non-admin semi-join
+    // each restate that grant (base read types never include LLM proxies),
+    // and every restatement is a probe PostgreSQL plans again.
+    if (userId && options?.authorization && options.status !== "deleted") {
+      return AgentModel.buildAuthorizedLiveRosterWhere({
+        isAgentAdmin,
+        options: { ...options, authorization: options.authorization },
+        principals,
+      });
+    }
     // Build where conditions
     const whereConditions: SQL[] = [
       getAgentStatusCondition(options?.status ?? "active"),
@@ -5495,23 +5499,232 @@ class AgentModel {
 
     return and(...whereConditions);
   }
+  /**
+   * {@link buildRosterWhere} for an authorized read of live rows, with one
+   * read-grant condition. Rows of types the caller reads at `*` need no
+   * probe at all.
+   */
+  private static buildAuthorizedLiveRosterWhere(params: {
+    isAgentAdmin?: boolean;
+    options: AgentRosterOptions & {
+      authorization: NonNullable<AgentRosterOptions["authorization"]>;
+    };
+    principals: GrantPrincipal[];
+  }): SQL | undefined {
+    const { isAgentAdmin, options, principals } = params;
+    const table = schema.agentsTable;
+    const { organizationId, wildcardReadTypes = [] } = options.authorization;
+    const probedTypes = GRANTED_AGENT_TYPES.filter(
+      (type) => !wildcardReadTypes.includes(type),
+    );
+    const readable =
+      probedTypes.length === 0
+        ? inArray(table.agentType, GRANTED_AGENT_TYPES)
+        : or(
+            wildcardReadTypes.length > 0
+              ? inArray(table.agentType, wildcardReadTypes)
+              : undefined,
+            grantedAgentIdsCondition({
+              principals,
+              organizationId,
+              types: probedTypes,
+            }),
+          );
+    const conditions: (SQL | undefined)[] = [
+      notDeleted(table),
+      eq(table.organizationId, organizationId),
+      readable,
+    ];
+    if (options.agentTypes && options.agentTypes.length > 0) {
+      conditions.push(inArray(table.agentType, options.agentTypes));
+    } else if (options.agentType !== undefined) {
+      conditions.push(eq(table.agentType, options.agentType));
+    }
+    if (options.onlyEnforcingMissingCredentials) {
+      conditions.push(ne(table.missingCredentialBehavior, "allow"));
+    }
+    const isChatView = options.view === "chat";
+    if (options.excludeBuiltIn || !isAgentAdmin || isChatView) {
+      const builtInName = sql<string>`coalesce(${table.builtInAgentConfig}->>'name', '')`;
+      const visibleAgents = [eq(table.builtIn, false)];
+      if (isChatView && enterpriseTier.isOpenappaActive()) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
+      }
+      conditions.push(or(...visibleAgents));
+    }
+    if (options.scope) conditions.push(agentAudienceIs(options.scope));
+    // excludeOtherPersonalAgents keeps rows the caller reads by grant, and
+    // every row here is one, so it narrows nothing; nor does the non-admin
+    // semi-join, whose condition each row already meets.
+    if (options.ids !== undefined) {
+      conditions.push(idArrayCondition(table.id, options.ids));
+    }
+    return and(...conditions);
+  }
   // SPDX-SnippetEnd
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * The chat order (the caller's own, then team-shared, then
+   * organization-shared agents, each by name) as one statement of three
+   * phases. Each phase returns at most limit + 1 rows, but its plan can sort
+   * authorized candidates before applying that limit. The final merge sorts
+   * only the bounded phase outputs. Same rows and cursors as
+   * {@link rosterPage}'s chat order.
+   */
+  private static async findChatOrderedRosterPage(params: {
+    where: SQL | undefined;
+    organizationId: string;
+    userId: string;
+    pagination: CursorQuery;
+  }) {
+    const table = schema.agentsTable;
+    const cursor = decodeCursor(params.pagination.cursor);
+    let position: { rank: number; name: string; id: string } | undefined;
+    if (
+      cursor &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        cursor.id,
+      )
+    ) {
+      try {
+        const parsed = ChatRosterCursorPositionSchema.safeParse(
+          JSON.parse(cursor.value),
+        );
+        if (parsed.success) position = { ...parsed.data, id: cursor.id };
+      } catch {
+        /* An invalid cursor restarts the page. */
+      }
+    }
+    // The rank sharedAudience gives an agent's own policy: 2 when it grants
+    // read to the organization or a role, 1 to a team, 0 otherwise. The
+    // shared agents are read once, from the policies, and every phase reads
+    // that set. Only a canonical uuid scope can equal an id's text, so the
+    // set holds ids that drive the agents primary key.
+    const readers = (types: string[]) =>
+      sql`ARRAY[${sql.join(
+        types.map(
+          (type) =>
+            sql`${JSON.stringify([{ subject: { type }, actions: ["read"] }])}`,
+        ),
+        sql`, `,
+      )}]::jsonb[]`;
+    const policy = alias(
+      schema.resourcePermissionPoliciesTable,
+      "chat_shared_policy",
+    );
+    const shared = db.$with("chat_shared").as(
+      db
+        .select({
+          id: sql<string>`${policy.scope}::uuid`.as("id"),
+          organizationShared:
+            sql<boolean>`${policy.grants} @> ANY(${readers(["organization", "role"])})`.as(
+              "organization_shared",
+            ),
+        })
+        .from(policy)
+        .where(
+          and(
+            eq(policy.organizationId, params.organizationId),
+            eq(policy.resource, "agent"),
+            sql`${policy.scope} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`,
+            sql`${policy.grants} @> ANY(${readers(["organization", "role", "team"])})`,
+          ),
+        ),
+    );
+    const ranks = [
+      and(
+        eq(table.authorId, params.userId),
+        sql`NOT (${table.id} = ANY(ARRAY(SELECT id FROM chat_shared)))`,
+      ),
+      sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE NOT organization_shared))`,
+      sql`${table.id} = ANY(ARRAY(SELECT id FROM chat_shared WHERE organization_shared))`,
+    ];
+    const limit = params.pagination.limit + 1;
+    const phases = ranks.flatMap((membership, rank) => {
+      if (position && rank < position.rank) return [];
+      const boundary =
+        position && rank === position.rank
+          ? sql`(${table.name} COLLATE "C", ${table.id}) > (${position.name} COLLATE "C", ${position.id}::uuid)`
+          : undefined;
+      return [
+        db
+          .select({
+            ...CHAT_ROSTER_PHASE_COLUMNS,
+            policies: objectPoliciesColumn().as("policies"),
+            chatRank: sql<number>`${rank}::int`.as("chat_rank"),
+            cursorValue: sql<string>`${table.createdAt}::text`.as(
+              "cursor_value",
+            ),
+          })
+          .from(table)
+          .where(and(params.where, membership, boundary))
+          .orderBy(asc(sql`${table.name} COLLATE "C"`), asc(table.id))
+          .limit(limit),
+      ];
+    });
+    if (phases.length === 0) {
+      return createCursorPaginatedResult([], params.pagination, () => ({
+        id: "",
+        value: "",
+      }));
+    }
+    const [first, ...rest] = phases;
+    const merged = (
+      rest.length > 0 ? unionAll(first, ...(rest as [typeof first])) : first
+    ).as("chat_page");
+    const rows = await db
+      .with(shared)
+      .select()
+      .from(merged)
+      .orderBy(
+        asc(merged.chatRank),
+        asc(sql`${merged.name} COLLATE "C"`),
+        asc(merged.id),
+      )
+      .limit(limit);
+    const agents = rows.map(({ policies: _, ...agent }) => agent);
+    await AgentModel.populateGrantedScope(
+      agents,
+      rows.flatMap((row) => row.policies),
+    );
+    return createCursorPaginatedResult(agents, params.pagination, (row) => ({
+      id: row.id,
+      value: JSON.stringify({ rank: row.chatRank, name: row.name }),
+    }));
+  }
+  // SPDX-SnippetEnd
+
+  /** Chat roster rows and their object policies in one statement. */
   private static async findChatRosterRows(
     where: SQL | undefined,
+    page?: RosterPage,
   ): Promise<ChatAgentRoster[]> {
-    const agents = await db
-      .select(CHAT_ROSTER_COLUMNS)
-      .from(schema.agentsTable)
-      .where(where);
-    await AgentModel.populateGrantedScope(agents);
+    const rows = await AgentModel.selectRosterRows({
+      columns: { ...CHAT_ROSTER_COLUMNS, policies: objectPoliciesColumn() },
+      where,
+      page,
+    });
+    const agents = rows.map(({ policies: _, ...agent }) => agent);
+    await AgentModel.populateGrantedScope(
+      agents,
+      rows.flatMap((row) => row.policies),
+    );
     return agents;
   }
 
-  private static async findRosterPageIds(params: {
+  /**
+   * One cursor page's bound, order and limit. The page is read by the same
+   * statement that projects and enriches its rows, so each row is authorized
+   * once and an empty page costs nothing more.
+   */
+  private static rosterPage(params: {
     where: SQL | undefined;
     sortBy?: "name" | "createdAt" | "chat";
     pagination: CursorQuery;
-  }) {
+  }): RosterPage {
     const table = schema.agentsTable;
     const cursor = decodeCursor(params.pagination.cursor);
     const nameOrder = params.sortBy === "name";
@@ -5551,31 +5764,56 @@ class AgentModel {
           ? sql`(${table.name} COLLATE "C", ${table.id}) > (${validCursor.value} COLLATE "C", ${validCursor.id}::uuid)`
           : sql`(${table.createdAt}, ${table.id}) < (${validCursor.value}::timestamp, ${validCursor.id}::uuid)`
       : undefined;
-    const rows = await db
-      .select({
-        id: table.id,
-        name: table.name,
+    return {
+      boundary,
+      cursorColumns: {
         cursorValue: sql<string>`${table.createdAt}::text`,
         chatRank,
-      })
-      .from(table)
-      .where(and(params.where, boundary))
-      .orderBy(
-        ...(chatOrder
-          ? [asc(chatRank), asc(sql`${table.name} COLLATE "C"`), asc(table.id)]
-          : nameOrder
-            ? [asc(sql`${table.name} COLLATE "C"`), asc(table.id)]
-            : [desc(table.createdAt), desc(table.id)]),
-      )
-      .limit(params.pagination.limit + 1);
-    return createCursorPaginatedResult(rows, params.pagination, (row) => ({
-      id: row.id,
-      value: chatOrder
-        ? JSON.stringify({ rank: row.chatRank, name: row.name })
+      },
+      orderBy: chatOrder
+        ? [asc(chatRank), asc(sql`${table.name} COLLATE "C"`), asc(table.id)]
         : nameOrder
-          ? row.name
-          : row.cursorValue,
-    }));
+          ? [asc(sql`${table.name} COLLATE "C"`), asc(table.id)]
+          : [desc(table.createdAt), desc(table.id)],
+      projectedOrderBy: chatOrder
+        ? [
+            asc(sql`option_page."chatRank"`),
+            asc(sql`option_page.name COLLATE "C"`),
+            asc(sql`option_page.id`),
+          ]
+        : nameOrder
+          ? [asc(sql`option_page.name COLLATE "C"`), asc(sql`option_page.id`)]
+          : [
+              desc(sql`option_page."cursorValue"::timestamp`),
+              desc(sql`option_page.id`),
+            ],
+      limit: params.pagination.limit + 1,
+      position: (row) => ({
+        id: row.id,
+        value: chatOrder
+          ? JSON.stringify({ rank: row.chatRank, name: row.name })
+          : nameOrder
+            ? row.name
+            : (row.cursorValue ?? ""),
+      }),
+    };
+  }
+
+  /** Rows of `columns`, bounded and ordered by `page` when one is given. */
+  private static async selectRosterRows<
+    T extends Record<string, AnyPgColumn | SQL>,
+  >(params: { columns: T; where: SQL | undefined; page?: RosterPage }) {
+    const table = schema.agentsTable;
+    const { page } = params;
+    if (!page) {
+      return db.select(params.columns).from(table).where(params.where);
+    }
+    return db
+      .select({ ...params.columns, ...page.cursorColumns })
+      .from(table)
+      .where(and(params.where, page.boundary))
+      .orderBy(...page.orderBy)
+      .limit(page.limit);
   }
 
   // SPDX-SnippetBegin
@@ -5649,31 +5887,16 @@ class AgentModel {
           break;
       }
     }
-    return { where: and(...filters), rosterWhere };
+    return { where: and(...filters) };
   }
   // SPDX-SnippetEnd
 
-  /** Select only selector fields and hydrate their presentation in batches. */
-  private static async findOptionRows(
+  private static async findUnpagedOptionRows(
     where: SQL | undefined,
   ): Promise<AgentOption[]> {
-    const table = schema.agentsTable;
     const rows = await db
-      .select({
-        id: table.id,
-        name: table.name,
-        slug: table.slug,
-        agentType: table.agentType,
-        icon: CHAT_AGENT_ROW_COLUMNS.icon,
-        scope: table.scope,
-        authorId: table.authorId,
-        isPersonalGateway: table.isPersonalGateway,
-        runtime: table.runtime,
-        description: table.description,
-        organizationId: table.organizationId,
-        createdByServiceAccountId: table.createdByServiceAccountId,
-      })
-      .from(table)
+      .select(OPTION_ROW_COLUMNS)
+      .from(schema.agentsTable)
       .where(where);
     const agents = rows.map((row) => ({
       ...row,
@@ -5683,18 +5906,18 @@ class AgentModel {
       authorEmail: null as string | null,
       createdBy: null as Agent["createdBy"],
     }));
-    const agentIds = agents.map((agent) => agent.id);
+    const ids = agents.map((agent) => agent.id);
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const policies = await ResourcePermissionPolicyModel.findObjectPolicies({
       resources: ["agent", "mcpGateway"],
-      scopes: agentIds,
+      scopes: ids,
     });
     const [recipients] = await Promise.all([
       ResourcePermissionPolicyModel.findReadRecipientDetails({
         resources: ["agent", "mcpGateway"],
-        scopes: agentIds,
+        scopes: ids,
         policies,
         excludeUserIds: new Map(
           agents.map((agent) => [agent.id, agent.authorId]),
@@ -5702,6 +5925,125 @@ class AgentModel {
       }),
       AgentModel.populateGrantedScope(agents, policies),
       AgentModel.populateAuthorNames(agents),
+    ]);
+    for (const agent of agents) {
+      const details = recipients.get(agent.id);
+      agent.teams = (details?.teams ?? []).map(({ id, name }) => ({
+        id,
+        name,
+      }));
+      agent.users = (details?.users ?? []).map(({ id }) => ({ id }));
+    }
+    // SPDX-SnippetEnd
+    return agents;
+  }
+
+  /** One bounded page, with policies and unique creators/recipients read set-wise. */
+  private static async findOptionRows(
+    where: SQL | undefined,
+    page: RosterPage,
+  ): Promise<Array<AgentOption & RosterCursorFields>> {
+    const table = schema.agentsTable;
+    const columns = {
+      ...OPTION_ROW_COLUMNS,
+      ...page.cursorColumns,
+    };
+    const selection = db.select(columns).from(table);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const result = await db.execute<{
+      rows: Awaited<typeof selection>;
+      policies: ObjectPolicy[];
+      users: Array<{ id: string; name: string; email: string }>;
+      teams: Array<{ id: string; name: string }>;
+      accounts: Array<{ id: string; name: string }>;
+    }>(sql`
+      WITH option_page AS MATERIALIZED (
+        SELECT ${sql.join(
+          Object.entries(columns).map(
+            ([name, column]) => sql`${column} AS ${sql.identifier(name)}`,
+          ),
+          sql`, `,
+        )}
+        FROM ${table}
+        WHERE ${and(where, page.boundary) ?? sql`true`}
+        ORDER BY ${sql.join(page.orderBy, sql`, `)} LIMIT ${page.limit}
+      ), page_policies AS MATERIALIZED (
+        SELECT row_policy.organization_id AS "organizationId",
+          row_policy.resource, row_policy.scope, row_policy.grants
+        FROM option_page
+        JOIN resource_permission_policies row_policy
+          ON row_policy.organization_id = option_page."organizationId"
+          AND row_policy.resource IN ('agent', 'mcpGateway')
+          AND row_policy.scope = option_page.id::text
+      ), recipient_ids AS MATERIALIZED (
+        SELECT DISTINCT entry->'subject'->>'type' AS type,
+          entry->'subject'->>'id' AS id
+        FROM page_policies, jsonb_array_elements(grants) entry
+        WHERE (entry->'actions') ? 'read'
+          AND entry->'subject'->>'type' IN ('team', 'user')
+      )
+      SELECT
+        coalesce((SELECT json_agg(option_page ORDER BY ${sql.join(page.projectedOrderBy, sql`, `)}) FROM option_page), '[]'::json) AS rows,
+        coalesce((SELECT json_agg(page_policies) FROM page_policies), '[]'::json) AS policies,
+        coalesce((SELECT json_agg(option_user) FROM (
+          SELECT id, name, email FROM "user"
+          WHERE id = ANY(ARRAY(
+            SELECT "authorId" FROM option_page WHERE "createdByServiceAccountId" IS NULL
+            UNION SELECT id FROM recipient_ids WHERE type = 'user'
+          ))
+        ) option_user), '[]'::json) AS users,
+        coalesce((SELECT json_agg(option_team) FROM (
+          SELECT id, name FROM team
+          WHERE id = ANY(ARRAY(SELECT id FROM recipient_ids WHERE type = 'team'))
+        ) option_team), '[]'::json) AS teams,
+        coalesce((SELECT json_agg(option_account) FROM (
+          SELECT id, name FROM service_accounts
+          WHERE id = ANY(ARRAY(SELECT DISTINCT "createdByServiceAccountId" FROM option_page))
+        ) option_account), '[]'::json) AS accounts
+    `);
+    const { rows, policies, users, teams, accounts } = result.rows[0];
+    const userById = new Map(users.map((user) => [user.id, user]));
+    const accountById = new Map(
+      accounts.map((account) => [account.id, account]),
+    );
+    const agents = rows.map((row) => {
+      const creatorAccount = row.createdByServiceAccountId
+        ? accountById.get(row.createdByServiceAccountId)
+        : undefined;
+      const creatorUser =
+        !row.createdByServiceAccountId && row.authorId
+          ? userById.get(row.authorId)
+          : undefined;
+      const createdBy = creatorAccount
+        ? CreatedByModel.fromServiceAccount(creatorAccount)
+        : creatorUser
+          ? CreatedByModel.fromUser(creatorUser)
+          : null;
+      return {
+        ...row,
+        teams: [] as { id: string; name: string }[],
+        users: [] as AgentOption["users"],
+        authorName: createdBy?.name ?? null,
+        authorEmail: createdBy?.email ?? null,
+        createdBy,
+      };
+    });
+    const [recipients] = await Promise.all([
+      ResourcePermissionPolicyModel.findReadRecipientDetails({
+        resources: ["agent", "mcpGateway"],
+        scopes: agents.map((agent) => agent.id),
+        policies,
+        recipients: {
+          teams,
+          users,
+        },
+        excludeUserIds: new Map(
+          agents.map((agent) => [agent.id, agent.authorId]),
+        ),
+      }),
+      AgentModel.populateGrantedScope(agents, policies),
     ]);
     for (const agent of agents) {
       const details = recipients.get(agent.id);
@@ -5849,6 +6191,21 @@ const CHAT_AGENT_ROW_COLUMNS = {
   end`,
 };
 
+const OPTION_ROW_COLUMNS = {
+  id: schema.agentsTable.id,
+  name: schema.agentsTable.name,
+  slug: schema.agentsTable.slug,
+  agentType: schema.agentsTable.agentType,
+  icon: CHAT_AGENT_ROW_COLUMNS.icon,
+  scope: schema.agentsTable.scope,
+  authorId: schema.agentsTable.authorId,
+  isPersonalGateway: schema.agentsTable.isPersonalGateway,
+  runtime: schema.agentsTable.runtime,
+  description: schema.agentsTable.description,
+  organizationId: schema.agentsTable.organizationId,
+  createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
+};
+
 const CHAT_ROSTER_COLUMNS = {
   id: schema.agentsTable.id,
   organizationId: schema.agentsTable.organizationId,
@@ -5863,6 +6220,58 @@ const CHAT_ROSTER_COLUMNS = {
   runtime: schema.agentsTable.runtime,
   modelId: schema.agentsTable.modelId,
   llmApiKeyId: schema.agentsTable.llmApiKeyId,
+};
+
+type RosterCursorFields = { cursorValue?: string; chatRank?: number };
+
+type RosterPage = {
+  boundary: SQL | undefined;
+  cursorColumns: { cursorValue: SQL<string>; chatRank: SQL<number> };
+  orderBy: SQL[];
+  // These expressions use findOptionRows' option_page alias.
+  projectedOrderBy: SQL[];
+  limit: number;
+  position: (row: {
+    id: string;
+    name: string;
+    cursorValue?: string;
+    chatRank?: number;
+  }) => { id: string; value: string };
+};
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * The row's own object policies, the input of populateGrantedScope and
+ * findReadRecipients. Object ids are unique across resources, so both agent
+ * resources are read and each id finds its own policy. An agent's policy
+ * lives in the agent's organization, which makes each read a primary-key
+ * probe.
+ */
+function objectPoliciesColumn() {
+  return sql<ObjectPolicy[]>`(
+    SELECT coalesce(json_agg(json_build_object(
+      'organizationId', row_policy.organization_id,
+      'resource', row_policy.resource,
+      'scope', row_policy.scope,
+      'grants', row_policy.grants)), '[]'::json)
+    FROM resource_permission_policies row_policy
+    WHERE row_policy.organization_id = ${qualified(schema.agentsTable.organizationId)}
+      AND row_policy.resource IN ('agent', 'mcpGateway')
+      AND row_policy.scope = ${qualified(schema.agentsTable.id)}::text
+  )`;
+}
+
+// SPDX-SnippetEnd
+
+/** The agent types that have a grant namespace: everything but LLM proxies. */
+const GRANTED_AGENT_TYPES: AgentType[] = ["agent", "profile", "mcp_gateway"];
+
+/** {@link CHAT_ROSTER_COLUMNS} with the computed icon named, for a subquery. */
+const CHAT_ROSTER_PHASE_COLUMNS = {
+  ...CHAT_ROSTER_COLUMNS,
+  icon: CHAT_AGENT_ROW_COLUMNS.icon.as("icon"),
 };
 
 function explicitAgentReadCondition(principals: GrantPrincipal[]) {
@@ -5892,6 +6301,68 @@ function explicitAgentReadCondition(principals: GrantPrincipal[]) {
       }),
     ),
   );
+  // SPDX-SnippetEnd
+}
+
+/**
+ * {@link explicitAgentReadCondition} for rows of one organization whose types
+ * the caller reads at `*` in none of `types` (the permission checker answered
+ * that from the same grants, so the `*` probe is false here). The objects
+ * granted to the caller are read once by their grants and joined by primary
+ * key, instead of probing a policy for every row of the organization. Only a
+ * canonical uuid scope can equal an id's text.
+ */
+function grantedAgentIdsCondition(params: {
+  principals: GrantPrincipal[];
+  organizationId: string;
+  types: AgentType[];
+}): SQL {
+  const table = schema.agentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const subjects = params.principals
+    .filter((principal) => principal.organizationId === params.organizationId)
+    .flatMap((principal) => principal.subjects);
+  if (subjects.length === 0 || params.types.length === 0) return sql`false`;
+  const resources = [
+    ...new Set(
+      params.types.map((type) =>
+        type === "mcp_gateway" ? "mcpGateway" : "agent",
+      ),
+    ),
+  ];
+  const candidates = sql`ARRAY[${sql.join(
+    subjects.map(
+      (subject) => sql`${JSON.stringify([{ subject, actions: ["read"] }])}`,
+    ),
+    sql`, `,
+  )}]::jsonb[]`;
+  // Read the allowed IDs once so the query can find agents by ID. This set
+  // can include both agent and gateway policies. The check below must still
+  // match each row's resource: a policy for another resource with the same
+  // ID must not give access.
+  return and(
+    inArray(table.agentType, params.types),
+    sql`${table.id} = ANY(ARRAY(
+      SELECT granted_policy.scope::uuid
+      FROM resource_permission_policies granted_policy
+      WHERE granted_policy.organization_id = ${params.organizationId}
+        AND granted_policy.resource IN (${sql.join(
+          resources.map((resource) => sql`${resource}`),
+          sql`, `,
+        )})
+        AND granted_policy.scope ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND granted_policy.grants @> ANY(${candidates})
+    ))`,
+    sql`EXISTS (
+      SELECT 1 FROM resource_permission_policies row_grant
+      WHERE row_grant.organization_id = ${params.organizationId}
+        AND row_grant.resource = CASE WHEN ${table.agentType} = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END
+        AND row_grant.scope = ${table.id}::text
+        AND row_grant.grants @> ANY(${candidates})
+    )`,
+  ) as SQL;
   // SPDX-SnippetEnd
 }
 
@@ -6344,6 +6815,37 @@ function optionSearchCondition(filters: AgentOptionFilters): SQL {
       ilike(table.name, pattern),
       ilike(table.description, pattern),
     ) as SQL;
+  // The searched text joins the fields with single spaces, so a term without
+  // a space matches it exactly when it matches one field. Each field is then
+  // its own condition: the name per row, and the people, accounts and teams
+  // whose names match as sets read once, instead of joining and grouping
+  // every agent's text before filtering.
+  if (!(filters.search ?? "").includes(" ")) {
+    return or(
+      ilike(table.name, pattern),
+      and(
+        isNull(table.createdByServiceAccountId),
+        sql`${table.authorId} IN (
+          SELECT search_owner.id FROM "user" search_owner
+          WHERE search_owner.email ILIKE ${pattern} OR search_owner.name ILIKE ${pattern}
+        )`,
+      ),
+      sql`${table.createdByServiceAccountId} IN (
+        SELECT search_account.id FROM service_accounts search_account
+        WHERE search_account.name ILIKE ${pattern}
+      )`,
+      sql`${table.id}::text IN (
+        SELECT search_policy.scope FROM resource_permission_policies search_policy
+        WHERE search_policy.resource IN ('agent', 'mcpGateway')
+          AND search_policy.grants @> ANY(ARRAY(
+            SELECT jsonb_build_array(jsonb_build_object(
+              'subject', jsonb_build_object('type', 'team', 'id', search_team.id),
+              'actions', jsonb_build_array('read')))
+            FROM team search_team WHERE search_team.name ILIKE ${pattern}
+          ))
+      )`,
+    ) as SQL;
+  }
   const teamGrant =
     ResourcePermissionPolicyModel.teamReadGrantCondition(sql`search_entry`);
   return sql`${table.id} IN (

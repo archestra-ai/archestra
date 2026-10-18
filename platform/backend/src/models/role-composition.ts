@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { Permissions, Resource } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
+import { requestScope } from "@/auth/request-scope";
 import db, { schema } from "@/database";
 import MemberModel from "./member";
 import OrganizationRoleModel from "./organization-role";
@@ -54,47 +55,13 @@ export default class RoleCompositionModel {
     userId: string;
     organizationId: string;
   }) {
-    const member = await MemberModel.getByUserId(
-      params.userId,
-      params.organizationId,
+    // Permissions and grant subjects both read a caller's sources; a read
+    // request's scope builds them once. Each caller gets its own copy.
+    const sources = await requestScope.memo(
+      `sources\0${params.organizationId}\0${params.userId}`,
+      () => RoleCompositionModel.loadUserSources(params),
     );
-    if (!member) return [];
-    const teams = await db
-      .select({
-        id: schema.teamsTable.id,
-        name: schema.teamsTable.name,
-        roles: schema.teamsTable.roles,
-      })
-      .from(schema.teamsTable)
-      .where(
-        and(
-          eq(schema.teamsTable.organizationId, params.organizationId),
-          TeamModel.effectiveMembershipCondition({
-            userId: params.userId,
-            teamIdColumn: schema.teamsTable.id,
-          }),
-        ),
-      );
-    const assignments = [
-      ...[...new Set(member.role.split(","))].map((role) => ({
-        role: role.trim(),
-        team: null as { id: string; name: string } | null,
-      })),
-      ...teams.flatMap((team) =>
-        [...new Set(team.roles)].map((role) => ({
-          role,
-          team: { id: team.id, name: team.name },
-        })),
-      ),
-    ].filter((source) => source.role);
-    const permissions = await OrganizationRoleModel.getPermissionsBatch({
-      identifiers: assignments.map((source) => source.role),
-      organizationId: params.organizationId,
-    });
-    return assignments.map((source) => ({
-      ...source,
-      permissions: permissions[source.role] ?? {},
-    }));
+    return sources.map((source) => ({ ...source }));
   }
 
   static async getUserPermissions(params: {
@@ -116,5 +83,54 @@ export default class RoleCompositionModel {
       }
     }
     return result;
+  }
+  private static async loadUserSources(params: {
+    userId: string;
+    organizationId: string;
+  }) {
+    const member = await MemberModel.getByUserId(
+      params.userId,
+      params.organizationId,
+    );
+    if (!member) return [];
+    // Combined teams only save work when this read request can reuse them.
+    const teams = requestScope.isMemoizing()
+      ? (await TeamModel.getUserTeamContext(params)).sourceTeams
+      : await db
+          .select({
+            id: schema.teamsTable.id,
+            name: schema.teamsTable.name,
+            roles: schema.teamsTable.roles,
+          })
+          .from(schema.teamsTable)
+          .where(
+            and(
+              eq(schema.teamsTable.organizationId, params.organizationId),
+              TeamModel.effectiveMembershipCondition({
+                userId: params.userId,
+                teamIdColumn: schema.teamsTable.id,
+              }),
+            ),
+          );
+    const assignments = [
+      ...[...new Set(member.role.split(","))].map((role) => ({
+        role: role.trim(),
+        team: null as { id: string; name: string } | null,
+      })),
+      ...teams.flatMap((team) =>
+        [...new Set(team.roles)].map((role) => ({
+          role,
+          team: { id: team.id, name: team.name },
+        })),
+      ),
+    ].filter((source) => source.role);
+    const permissions = await OrganizationRoleModel.getPermissionsBatch({
+      identifiers: assignments.map((source) => source.role),
+      organizationId: params.organizationId,
+    });
+    return assignments.map((source) => ({
+      ...source,
+      permissions: permissions[source.role] ?? {},
+    }));
   }
 }

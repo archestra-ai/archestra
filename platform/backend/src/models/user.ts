@@ -12,6 +12,7 @@ import type { UpdateUser } from "@/types";
 import AgentModel from "./agent";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import McpServerModel from "./mcp-server";
+import MemberModel from "./member";
 import RoleCompositionModel from "./role-composition";
 import SkillModel from "./skill";
 
@@ -95,10 +96,11 @@ class UserModel {
    */
   static async getById(id: string) {
     logger.trace("UserModel.getById: fetching user");
-    const [user] = await db
+    const [row] = await db
       .select({
         ...getTableColumns(schema.usersTable),
         organizationId: schema.membersTable.organizationId,
+        membership: getTableColumns(schema.membersTable),
       })
       .from(schema.usersTable)
       .innerJoin(
@@ -108,7 +110,12 @@ class UserModel {
       .where(eq(schema.usersTable.id, id))
       .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
       .limit(1);
-    logger.trace({ found: !!user }, "UserModel.getById: completed");
+    logger.trace({ found: !!row }, "UserModel.getById: completed");
+    if (!row) return row;
+    const { membership, ...user } = row;
+    // The user's first membership is also their first in its organization,
+    // the row MemberModel.getByUserId reads there; a read request keeps it.
+    MemberModel.remember(membership);
     return user;
   }
 

@@ -12,7 +12,11 @@ import { StreamedQueries } from "./streamed-queries";
 export async function StreamedAgentsPage() {
   const streamed = await getServerApiHeaders()
     .then(streamAgentCatalog)
-    .catch(() => null);
+    .catch((error: unknown) => {
+      // The page still works: it loads the catalog in the browser instead.
+      console.error("[Agents] Could not stream the catalog", error);
+      return null;
+    });
   return streamed ? (
     <StreamedQueries state={streamed}>
       <AgentsPage />

@@ -22,7 +22,7 @@
 //! family that follows its line decides at the line's head as it stands
 //! ([`Deployments::frozen`]).
 use appa_eventlog::{DeploymentName, LogStore, PolicyHead};
-use appa_runtime::api::{PreparedDeployment, PublishedDeployment, Runtime};
+use appa_runtime::api::{OpenError, PreparedDeployment, PublishedDeployment, Runtime};
 use sha2::{Digest, Sha256};
 use std::{
     cell::RefCell,
@@ -467,16 +467,19 @@ fn prepare(
         .prepare_deployment(config)
         .map_err(|error| error.to_string())?;
     let line = DeploymentName::new(organization_id);
+    let head = store.head(&line).map_err(|error| error.to_string())?;
     if let Some(composition) = &policy.composition {
-        let head = store.head(&line).map_err(|error| error.to_string())?;
-        let publishes = head.is_none_or(|head| head.key.as_str() != key);
+        let publishes = head.as_ref().is_none_or(|head| head.key.as_str() != key);
         if publishes && !stored_composition(store, organization_id, composition)? {
             return Err(DeploymentError::Superseded);
         }
     }
     let published = runtime
-        .publish(&line, &prepared)
-        .map_err(|error| error.to_string())?;
+        .publish_if_head(&line, &prepared, head.map(|head| head.revision))
+        .map_err(|error| match error {
+            OpenError::PolicyHeadMoved { .. } => DeploymentError::Superseded,
+            error => DeploymentError::Failed(error.to_string()),
+        })?;
     let pinned = Pinned {
         content: policy.content.as_str().into(),
         answers,

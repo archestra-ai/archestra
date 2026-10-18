@@ -146,11 +146,20 @@ annotator = "jev.tool-call"
   };
   const orgA = `jev-a-${randomUUID()}`;
   const orgB = `jev-b-${randomUUID()}`;
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  t.after(() => db.end());
   assert.deepEqual(await consulted(orgA, 'a-1', 'org-a-key'), ['Bearer org-a-key']);
   assert.deepEqual(await consulted(orgB, 'b-1', 'org-b-key'), ['Bearer org-b-key']);
   assert.deepEqual(await consulted(orgA, 'a-2', 'org-a-key'), ['Bearer org-a-key']);
   assert.deepEqual(await consulted(orgA, 'a-3', 'org-a-rotated'), ['Bearer org-a-rotated']);
   assert.deepEqual(await consulted(orgB, 'b-2', 'org-b-key'), ['Bearer org-b-key']);
+  const revisions = await db.query(
+    'SELECT d.head, (SELECT count(*) FROM openappa_policy_revisions r WHERE r.deployment=d.name) AS revisions FROM openappa_deployments d WHERE d.name=ANY($1)',
+    [[orgA, orgB]],
+  );
+  assert.equal(revisions.rowCount, 2);
+  assert.ok(revisions.rows.every(row => Number(row.head) === 1 && Number(row.revisions) === 1), 'credential rotation rebinds externals without publishing the same policy bytes');
 });
 
 test('a session keeps the root its row records, as one started before roots named their organization does', { skip: !databaseUrl, timeout: 30000 }, async (t) => {

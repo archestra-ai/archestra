@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { createHash, randomUUID } = require('node:crypto');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const { test } = require('node:test');
 const { Client } = require('../../backend/node_modules/pg');
 const native = require('./index.cjs');
@@ -236,6 +236,104 @@ test('a dispatch carrying a policy recomposed since it was read publishes nothin
   assert.equal((await hook(stale, { event: 'session_start' }, read(after, 'saved'))).decision, 'ack');
   await assert.rejects(() => hook(stale, callRead(1), read(after, 'saved')), /not declared in this policy/);
 });
+
+for (const hasHead of [true, false]) {
+  for (const hasComposition of [true, false]) {
+    test(`a stale publisher cannot replace a stricter policy (${hasHead ? 'existing' : 'initial'} head, ${hasComposition ? 'stored' : 'direct'} policy)`, { skip: !databaseUrl }, async (t) => {
+      await native.initializeOpenappa(databaseUrl, 2);
+      const db = new Client({ connectionString: databaseUrl });
+      const gate = new Client({ connectionString: databaseUrl });
+      await db.connect();
+      await gate.connect();
+      const suffix = randomUUID().replaceAll('-', '');
+      const organization = `publication-race-${suffix}`;
+      const marker = `retired_${suffix}`;
+      const trigger = `publication_gate_${suffix}`;
+      const lock = Number.parseInt(suffix.slice(0, 7), 16);
+      const scope = () => ({ organization_id: organization, caller_id: 'user:test', session_id: randomUUID() });
+      const stale = own(allow, marker);
+      const current = own(deny, `current_${suffix}`);
+      const carried = (content, compositionHash) => ({ ...hosted(content), ...(hasComposition ? { compositionHash } : {}) });
+      const hook = async (session, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, event: 'session_start' }), policy));
+      const readHead = async () => (await db.query(
+        'SELECT d.head, p.bytes FROM openappa_deployments d JOIN openappa_policy_revisions r ON r.deployment=d.name AND r.revision=d.head JOIN openappa_policy_files p ON p.hash=r.hash WHERE d.name=$1',
+        [organization],
+      )).rows[0];
+      let child;
+      let completed;
+      let locked = false;
+      t.after(async () => {
+        if (locked) await gate.query('SELECT pg_advisory_unlock($1)', [lock]);
+        if (child && child.exitCode === null) child.kill('SIGKILL');
+        if (completed) await completed.catch(() => {});
+        await db.query(`DROP TRIGGER IF EXISTS ${trigger} ON openappa_policy_files`);
+        await db.query(`DROP FUNCTION IF EXISTS ${trigger}()`);
+        await db.query('DELETE FROM organization WHERE id=$1', [organization]);
+        await gate.end();
+        await db.end();
+      });
+      await db.query('INSERT INTO organization(id, name, slug, created_at) VALUES ($1,$1,$1,now())', [organization]);
+      if (hasHead) assert.equal((await hook(scope(), hosted(own(allow, `baseline_${suffix}`)))).decision, 'ack');
+      await db.query(
+        "INSERT INTO openappa_effective_policies(organization_id, content, content_hash, root_revision, install_fingerprint, compiled_at) VALUES ($1,$2,'stale',1,'test',now())",
+        [organization, stale],
+      );
+      await gate.query('SELECT pg_advisory_lock($1)', [lock]);
+      locked = true;
+      await db.query(`CREATE FUNCTION ${trigger}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF position(convert_to('${marker}','UTF8') in NEW.bytes)>0 THEN PERFORM pg_advisory_lock(${lock}); PERFORM pg_advisory_unlock(${lock}); END IF; RETURN NEW; END $$`);
+      await db.query(`CREATE TRIGGER ${trigger} BEFORE INSERT ON openappa_policy_files FOR EACH ROW EXECUTE FUNCTION ${trigger}()`);
+      const staleSession = scope();
+      child = spawn(process.execPath, ['-e', `
+        const native = require('./index.cjs');
+        (async () => {
+          const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+          await native.initializeOpenappa(input.url, 2);
+          try {
+            console.log(JSON.stringify({ decision: JSON.parse(await native.dispatchHook(JSON.stringify(input.session), input.policy)).decision }));
+          } catch (error) {
+            console.log(JSON.stringify({ error: { code: error.code, message: error.message } }));
+          }
+        })().catch(() => { process.exitCode = 1; });
+      `], { cwd: __dirname, stdio: ['pipe', 'pipe', 'pipe'], timeout: 20000 });
+      let output = '';
+      let stderr = '';
+      child.stdout.on('data', chunk => { output += chunk; });
+      child.stderr.on('data', chunk => { stderr += chunk; });
+      completed = new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('close', code => code === 0 ? resolve() : reject(new Error(`publisher exited ${code}: ${stderr}`)));
+      });
+      completed.catch(() => {});
+      child.stdin.end(JSON.stringify({ url: databaseUrl, session: { ...staleSession, event: 'session_start' }, policy: carried(stale, 'stale') }));
+      const deadline = Date.now() + 10000;
+      let paused = false;
+      while (Date.now() < deadline) {
+        paused = (await db.query("SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=$1::oid AND NOT granted", [lock])).rowCount > 0;
+        if (paused) break;
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      assert.ok(paused, 'stale publisher reached storage after validating its composition');
+      await db.query("UPDATE openappa_effective_policies SET content=$2,content_hash='current',root_revision=2,compiled_at=now() WHERE organization_id=$1", [organization, current]);
+      assert.equal((await hook(scope(), carried(current, 'current'))).decision, 'ack');
+      const strictHead = await readHead();
+      const expectedHead = hasHead ? 2 : 1;
+      assert.equal(Number(strictHead.head), expectedHead);
+      await gate.query('SELECT pg_advisory_unlock($1)', [lock]);
+      locked = false;
+      await completed;
+      assert.deepEqual(JSON.parse(output.trim()).error, POLICY_MOVED);
+      const final = await readHead();
+      assert.equal(Number(final.head), expectedHead, 'stale bytes append no revision');
+      assert.deepEqual(final.bytes, strictHead.bytes, 'the stricter policy is not rolled back');
+      assert.equal(final.bytes.includes(Buffer.from(marker)), false);
+      assert.equal(Number((await db.query('SELECT count(*) AS count FROM openappa_policy_revisions WHERE deployment=$1', [organization])).rows[0].count), expectedHead);
+      assert.equal((await db.query('SELECT 1 FROM openappa_events WHERE root=$1', [rootOf(staleSession)])).rowCount, 0, 'refused publication opens no family');
+      assert.equal((await hook(staleSession, carried(current, 'current'))).decision, 'ack', 'a host reread succeeds normally');
+      assert.deepEqual(inAnotherProcess([{ session: scope(), event: { event: 'session_start' }, policy: current }]), ['ack']);
+      assert.equal(Number((await readHead()).head), expectedHead, 'another process serving the same bytes appends no revision');
+    });
+  }
+}
 
 /**
  * Runs `dispatches` in a process of its own, as another backend replica over the

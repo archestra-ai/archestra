@@ -34,15 +34,59 @@ describe("modules the registry's server components import", () => {
       path.join(import.meta.dirname, "../../..", modulePath),
       "utf8",
     );
-    const imported = [
-      ...source.matchAll(/import\s*\{([^}]*)\}\s*from\s*"react"/g),
-    ].flatMap((match) =>
-      (match[1] ?? "")
-        .split(",")
-        .map((name) => name.replace(/^\s*type\s+/, "").trim())
-        .filter((name) => name && !/^[A-Z]/.test(name)),
-    );
+    const used = reactValuesUsed(source);
 
-    expect(imported.filter((name) => !(name in reactServer))).toEqual([]);
+    expect(used.filter((name) => !(name in reactServer))).toEqual([]);
+  });
+
+  it("finds every way a module can reach a React value", () => {
+    expect(
+      reactValuesUsed(`
+        import React, {
+          useMemo,
+          type ReactNode,
+          useRef as useBox,
+        } from "react";
+        import type { FC } from "react";
+        import * as R from 'react';
+        const a = React.useState(0);
+        const b = R.useId();
+      `).sort(),
+    ).toEqual(["useId", "useMemo", "useRef", "useState"]);
   });
 });
+
+/**
+ * The React values a module uses: named imports (multi-line, after a default
+ * import, aliased), and members read through a default or namespace import.
+ * Type-only imports and capitalised names (types, components) are skipped.
+ */
+function reactValuesUsed(source: string): string[] {
+  const values = new Set<string>();
+  const handles: string[] = [];
+  for (const match of source.matchAll(
+    /import\s+(type\s+)?([^;]*?)\s*from\s*["']react["']/g,
+  )) {
+    if (match[1]) continue;
+    const clause = match[2] ?? "";
+    for (const name of /\{([^}]*)\}/.exec(clause)?.[1]?.split(",") ?? []) {
+      const imported = name
+        .replace(/^\s*type\s+.*$/, "")
+        .split(/\s+as\s+/)[0]
+        ?.trim();
+      if (imported && !/^[A-Z]/.test(imported)) values.add(imported);
+    }
+    const handle = /^(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)/.exec(
+      clause.trim(),
+    )?.[1];
+    if (handle) handles.push(handle);
+  }
+  for (const handle of handles) {
+    for (const match of source.matchAll(
+      new RegExp(`\\b${handle}\\.([a-z][\\w$]*)`, "g"),
+    )) {
+      if (match[1]) values.add(match[1]);
+    }
+  }
+  return [...values];
+}

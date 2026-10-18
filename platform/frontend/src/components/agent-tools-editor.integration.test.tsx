@@ -382,6 +382,57 @@ describe("AgentToolsEditor", () => {
     ).toBe(true);
   });
 
+  it("surfaces a failed read of the record's own servers and recovers on retry", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      ...catalogItem,
+      id: `catalog-${String(i).padStart(2, "0")}`,
+      name: `server-${String(i).padStart(2, "0")}`,
+    }));
+    let byIdRequests = 0;
+    server.use(
+      // The by-id read fails once; the page and later reads answer.
+      http.post(
+        `${API_ORIGIN}/api/internal_mcp_catalog/registry/search`,
+        async ({ request }) => {
+          const body = (await request.clone().json()) as SearchBody;
+          if (!body.catalogIds) return undefined;
+          byIdRequests += 1;
+          return byIdRequests === 1
+            ? HttpResponse.json({ error: { message: "boom" } }, { status: 500 })
+            : undefined;
+        },
+      ),
+      registrySearch(many),
+      http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/tools`, () =>
+        HttpResponse.json([
+          {
+            id: "tool-1",
+            name: "server_79__one",
+            catalogId: "catalog-79",
+            mcpServerId: null,
+            credentialResolutionMode: "dynamic",
+          },
+        ]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/internal_mcp_catalog/:id/tools`,
+        () => new Promise<never>(() => {}),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderEditor();
+
+    expect(
+      await screen.findByText(/couldn't load the MCP server catalog/i),
+    ).toBeTruthy();
+    expect(screen.queryByText(/No tools assigned yet/i)).toBeNull();
+
+    await user.click(await screen.findByTestId("retry-tools-catalog"));
+
+    expect(await screen.findByText("server-79")).toBeTruthy();
+  });
+
   it("waits for the rows of the record's servers before saying it has none", async () => {
     const many = Array.from({ length: 80 }, (_, i) => ({
       ...catalogItem,

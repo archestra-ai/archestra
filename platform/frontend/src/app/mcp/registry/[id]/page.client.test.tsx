@@ -105,6 +105,26 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   ),
 }));
 
+// By-id and issue-index reads answer from the same fixtures the list mocks
+// hold, so the page sees one consistent registry.
+vi.mock("@/lib/mcp/mcp-registry.query", () => {
+  const catalog = () =>
+    (useInternalMcpCatalog()?.data ?? []) as Array<{ id: string }>;
+  return {
+    useInternalMcpCatalogItem: (id: string | null | undefined) => ({
+      data: catalog().find((item) => item.id === id) ?? null,
+    }),
+    useMcpRegistryIssueIndex: () => ({
+      data: {
+        catalogItems: catalog(),
+        servers: useMcpServers()?.data ?? [],
+      },
+    }),
+    fetchInternalMcpCatalogItem: async (_queryClient: unknown, id: string) =>
+      catalog().find((item) => item.id === id) ?? null,
+  };
+});
+
 vi.mock("@/lib/mcp/mcp-server.query", () =>
   stubs(
     [

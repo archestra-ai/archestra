@@ -79,8 +79,13 @@ test.describe("Add Remote MCP Server", () => {
     // Retry the click: a click landing before React attaches the handler is
     // silently lost (same next-dev quirk skill-share.spec works around).
     // Installing is idempotent against the mocked POST, so re-clicking is safe.
+    // Click only while the button is still there: once a click lands, the
+    // step replaces it, and a click waiting for a button that is gone would
+    // spend the whole retry budget while "Connected" is on its way.
     await expect(async () => {
-      await installButton.click();
+      if (await installButton.isVisible()) {
+        await installButton.click({ timeout: 2_000 });
+      }
       await expect(page.getByText("Connected", { exact: true })).toBeVisible({
         timeout: 3_000,
       });

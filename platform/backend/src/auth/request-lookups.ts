@@ -2,6 +2,7 @@ import type { Permissions } from "@archestra/shared";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
+import MemberModel from "@/models/member";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
 } from "@/models/resource-permission-subject";
@@ -19,6 +20,10 @@ export class RequestLookups {
   private permissionSets = new Map<string, Promise<Permissions>>();
   private agents = new Map<string, Promise<GatewayAgent | null>>();
   private agentTeams = new Map<string, Promise<string[]>>();
+  private memberships = new Map<
+    string,
+    ReturnType<typeof MemberModel.getByUserId>
+  >();
 
   /** {@link ResourcePermissionSubjectModel.resolvePrincipal}, memoized. */
   principal(params: {
@@ -37,6 +42,16 @@ export class RequestLookups {
   }): Promise<Permissions> {
     return memoize(this.permissionSets, callerKey(params), () =>
       getPermissionsForUserContext(params),
+    );
+  }
+
+  /** {@link MemberModel.getByUserId}, memoized. */
+  membership(params: {
+    userId: string;
+    organizationId: string;
+  }): ReturnType<typeof MemberModel.getByUserId> {
+    return memoize(this.memberships, callerKey(params), () =>
+      MemberModel.getByUserId(params.userId, params.organizationId),
     );
   }
 

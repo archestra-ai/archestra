@@ -29,7 +29,9 @@ export function McpCatalogIcon({
   fallback: Fallback = Server,
 }: McpCatalogIconProps) {
   const appIconLogo = useAppIconLogo();
-  const imageTone = useImageTone(icon?.startsWith("data:") ? icon : null);
+  const imageTone = useImageTone(
+    icon?.startsWith("data:") || icon?.startsWith("/api/") ? icon : null,
+  );
 
   // All variants are decorative: the icon always sits next to the server's
   // visible name, so it is hidden from assistive technologies.
@@ -55,11 +57,15 @@ export function McpCatalogIcon({
     );
   }
 
-  if (icon.startsWith("data:")) {
+  // Inline data, or a registry list row's link to the item's icon route. The
+  // route needs the viewer's session cookie, so the image is not optimized
+  // (the optimizer would fetch it without one).
+  if (icon.startsWith("data:") || icon.startsWith("/api/")) {
     return (
       <Image
         src={icon}
         alt=""
+        unoptimized
         width={size}
         height={size}
         className={cn(

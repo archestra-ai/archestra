@@ -64315,6 +64315,532 @@ export type CreateInternalMcpCatalogItemResponses = {
 
 export type CreateInternalMcpCatalogItemResponse = CreateInternalMcpCatalogItemResponses[keyof CreateInternalMcpCatalogItemResponses];
 
+export type SearchMcpRegistryData = {
+    body: {
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'createdAt' | 'toolCount' | 'attention' | 'issueAge';
+        sortDirection?: 'asc' | 'desc';
+        search?: string;
+        labels?: {
+            [key: string]: Array<string>;
+        };
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
+        /**
+         * Items in these environments. An empty list matches nothing; omit it for every environment.
+         */
+        environmentIds?: Array<string>;
+        authorIds?: Array<string>;
+        /**
+         * Items created by these service accounts. With authorIds, either matches.
+         */
+        authorServiceAccountIds?: Array<string>;
+        /**
+         * Installed: the caller can see and use an install of the item. Omit for both.
+         */
+        installState?: 'installed' | 'not-installed';
+        /**
+         * Only these items. An empty list matches nothing; omit it for every item.
+         */
+        catalogIds?: Array<string>;
+        /**
+         * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.
+         */
+        rankTiers?: Array<Array<string>>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/internal_mcp_catalog/registry/search';
+};
+
+export type SearchMcpRegistryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SearchMcpRegistryError = SearchMcpRegistryErrors[keyof SearchMcpRegistryErrors];
+
+export type SearchMcpRegistryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            serverType: 'local' | 'remote' | 'builtin' | 'app';
+            multitenant: boolean;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
+            authorName?: string | null;
+            description: string | null;
+            labels: Array<{
+                key: string;
+                value: string;
+            }>;
+            teams: Array<{
+                id: string;
+                name: string;
+                level: 'use' | 'write';
+            }>;
+            environmentId: string | null;
+            toolCount: number;
+            skillCount: number;
+            providesUi?: boolean;
+            providesSkills?: boolean;
+            catalogReinstallRequired: boolean;
+            dynamicConnectionMcpServerId: string | null;
+            icon: string | null;
+            iconUrl: string | null;
+            alertMutes: Array<{
+                catalogId: string;
+                mcpServerId: string | null;
+                issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+                issueFingerprint: string;
+                reason: string;
+                mutedAt: string;
+            }>;
+            effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+            imageApprovalRequired: boolean;
+            bindsCredential: boolean;
+            enterpriseManaged: boolean;
+            install: {
+                visibleCount: number;
+                installedForViewer: boolean;
+                primaryServerId: string | null;
+            };
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        selectableTotal: number;
+        installs: Array<{
+            id: string;
+            name: string;
+            deploymentName: string | null;
+            catalogId: string;
+            serverType: 'local' | 'remote' | 'builtin' | 'app';
+            secretId: string | null;
+            environmentValues: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown>;
+            createdByServiceAccountId: string | null;
+            ownerId: string | null;
+            teamId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            reinstallRequired: boolean;
+            reinstallReason: 'new-input' | 'restart';
+            localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+            localInstallationError: string | null;
+            oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
+            oauthRefreshErrorMessage: string | null;
+            oauthRefreshErrorDescription: string | null;
+            oauthRefreshFailedAt: string | null;
+            lastUsedAt: string | null;
+            hibernationMode: 'inherit' | 'enabled' | 'disabled';
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: string | null;
+            ownerEmail?: string | null;
+            catalogName?: string | null;
+            users?: Array<string>;
+            userDetails?: Array<{
+                userId: string;
+                email: string;
+                createdAt: string;
+            }>;
+            teamDetails?: {
+                teamId: string;
+                name: string;
+                createdAt: string;
+            } | null;
+            assignedAgents?: Array<{
+                id: string;
+                name: string;
+                agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                scope: 'personal' | 'team' | 'org';
+                ownerId: string | null;
+                ownerEmail: string | null;
+                pinned: boolean;
+                accessAllTools?: boolean;
+                organizationId?: string;
+            }>;
+            secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+            alertMutes: Array<{
+                catalogId: string;
+                mcpServerId: string | null;
+                issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+                issueFingerprint: string;
+                reason: string;
+                mutedAt: string;
+            }>;
+            /**
+             * Whether the caller may present this install's stored credential to the upstream — their own connection, or one shared with them. False for another member's personal connection, which the listing still returns to installation admins so they can manage it.
+             */
+            canUseCredential: boolean;
+        }>;
+        attentionTiers?: Array<Array<string>>;
+    };
+};
+
+export type SearchMcpRegistryResponse = SearchMcpRegistryResponses[keyof SearchMcpRegistryResponses];
+
+export type SearchMcpRegistryIdsData = {
+    body: {
+        sortBy?: 'name' | 'createdAt' | 'toolCount' | 'attention' | 'issueAge';
+        sortDirection?: 'asc' | 'desc';
+        search?: string;
+        labels?: {
+            [key: string]: Array<string>;
+        };
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
+        /**
+         * Items in these environments. An empty list matches nothing; omit it for every environment.
+         */
+        environmentIds?: Array<string>;
+        authorIds?: Array<string>;
+        /**
+         * Items created by these service accounts. With authorIds, either matches.
+         */
+        authorServiceAccountIds?: Array<string>;
+        /**
+         * Installed: the caller can see and use an install of the item. Omit for both.
+         */
+        installState?: 'installed' | 'not-installed';
+        /**
+         * Only these items. An empty list matches nothing; omit it for every item.
+         */
+        catalogIds?: Array<string>;
+        /**
+         * Catalog ids ranked by the caller, tier by tier, for the attention and issueAge orders. Unranked items follow the last tier. These two orders always put the first tier first; sortDirection does not apply to them.
+         */
+        rankTiers?: Array<Array<string>>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/internal_mcp_catalog/registry/search/ids';
+};
+
+export type SearchMcpRegistryIdsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SearchMcpRegistryIdsError = SearchMcpRegistryIdsErrors[keyof SearchMcpRegistryIdsErrors];
+
+export type SearchMcpRegistryIdsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            primaryServerId: string;
+        }>;
+        truncated: boolean;
+    };
+};
+
+export type SearchMcpRegistryIdsResponse = SearchMcpRegistryIdsResponses[keyof SearchMcpRegistryIdsResponses];
+
+export type GetMcpRegistryIssueIndexData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/internal_mcp_catalog/registry/issue-index';
+};
+
+export type GetMcpRegistryIssueIndexErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpRegistryIssueIndexError = GetMcpRegistryIssueIndexErrors[keyof GetMcpRegistryIssueIndexErrors];
+
+export type GetMcpRegistryIssueIndexResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        catalogItems: Array<{
+            id: string;
+            name: string;
+            serverType: 'local' | 'remote' | 'builtin' | 'app';
+            multitenant: boolean;
+            dynamicConnectionMcpServerId?: string;
+            environmentId?: string;
+            authorId?: string;
+            createdByServiceAccountId?: string;
+            authorName?: string;
+            alertMutes?: Array<{
+                catalogId: string;
+                mcpServerId: string | null;
+                issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+                issueFingerprint: string;
+                reason: string;
+                mutedAt: string;
+            }>;
+        }>;
+        servers: Array<{
+            id: string;
+            catalogId: string;
+            scope: 'personal' | 'team' | 'org';
+            localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+            updatedAt: string;
+            ownerId?: string;
+            teamId?: string;
+            localInstallationError?: string;
+            oauthRefreshError?: 'refresh_failed' | 'no_refresh_token';
+            oauthRefreshErrorMessage?: string;
+            oauthRefreshErrorDescription?: string;
+            oauthRefreshFailedAt?: string;
+            canUseCredential: boolean;
+            alertMutes?: Array<{
+                catalogId: string;
+                mcpServerId: string | null;
+                issueKind: 'failed-to-start' | 'not-running' | 'needs-reauth';
+                issueFingerprint: string;
+                reason: string;
+                mutedAt: string;
+            }>;
+        }>;
+    };
+};
+
+export type GetMcpRegistryIssueIndexResponse = GetMcpRegistryIssueIndexResponses[keyof GetMcpRegistryIssueIndexResponses];
+
+export type GetInternalMcpCatalogIconData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        /**
+         * Content version; any value.
+         */
+        v?: string;
+    };
+    url: '/api/internal_mcp_catalog/{id}/icon';
+};
+
+export type GetInternalMcpCatalogIconResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type UnmuteMcpCatalogAlertData = {
     body?: never;
     path: {
@@ -64816,6 +65342,12 @@ export type GetInternalMcpCatalogItemResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        toolCount?: number;
+        skillCount?: number;
+        providesUi?: boolean;
+        providesSkills?: boolean;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        imageApprovalRequired?: boolean;
     };
 };
 
@@ -80575,6 +81107,10 @@ export type GetMcpServersData = {
     path?: never;
     query?: {
         catalogId?: string;
+        /**
+         * Only installs of these catalog items (comma-separated, at most 100).
+         */
+        catalogIds?: Array<string>;
         /**
          * Include each listed install's assigned agents. Defaults to false, which returns an empty `assignedAgents` for every install. The lookup covers every install in the response, so narrow the list with `catalogId` when you need only some. GET /api/mcp_server/{id} returns the agents of one install.
          */

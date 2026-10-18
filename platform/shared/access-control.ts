@@ -719,6 +719,11 @@ export const requiredEndpointPermissionsMap: Partial<
     log: ["read"],
   },
   [RouteId.GetInternalMcpCatalog]: {},
+  // Like the full list: the handlers read only what the caller may list.
+  [RouteId.SearchMcpRegistry]: {},
+  [RouteId.SearchMcpRegistryIds]: {},
+  [RouteId.GetMcpRegistryIssueIndex]: {},
+  [RouteId.GetInternalMcpCatalogIcon]: {},
   [RouteId.CreateInternalMcpCatalogItem]: {
     mcpRegistry: ["create"],
   },

@@ -1681,6 +1681,60 @@ describe("websocket MCP deployment statuses", () => {
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(true);
   });
 
+  for (const status of ["initializing", "error"] as const)
+    test(`sends no statuses while the runtime is ${status}, as the server's attention order assumes`, async ({
+      makeOrganization,
+      makeUser,
+      makeMcpServer,
+      makeInternalMcpCatalog,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const catalog = await makeInternalMcpCatalog({
+        serverType: "local",
+        organizationId: org.id,
+      });
+      await makeMcpServer({
+        scope: "team",
+        catalogId: catalog.id,
+        ownerId: user.id,
+        teamId: team.id,
+      });
+      vi.spyOn(McpServerRuntimeManager, "refreshAllStates").mockResolvedValue(
+        undefined,
+      );
+      vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue(
+        { status, mcpServers: {} } as never,
+      );
+      const ws = {
+        readyState: WS.OPEN,
+        send: vi.fn(),
+        close: vi.fn(),
+      } as unknown as WS;
+      service.clientContexts.set(ws, {
+        userId: user.id,
+        organizationId: org.id,
+        userIsMcpServerAdmin: true,
+      });
+
+      await service.handleMessage(
+        { type: "subscribe_mcp_deployment_statuses", payload: {} },
+        ws,
+      );
+      await flushDeferredRefresh();
+
+      // A "not created" for every install would flag every healthy one.
+      const sent = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        ([raw]) => JSON.parse(raw as string),
+      );
+      expect(sent.length).toBeGreaterThan(0);
+      for (const message of sent) {
+        expect(message.payload.statuses).toEqual({});
+      }
+    });
+
   test("filters out remote servers from deployment statuses", async ({
     makeOrganization,
     makeUser,

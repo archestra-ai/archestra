@@ -27,6 +27,11 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { isInstallInProgress } from "@/lib/mcp/install-status";
+import {
+  type McpRegistryIssueIndexWire,
+  mcpRegistryIssueIndexQueryKey,
+  mcpRegistryQueryKey,
+} from "@/lib/mcp/mcp-registry.query";
 import { coverageQueryPrefix } from "@/lib/openappa-policy-views";
 import {
   externalMcpSkillDetailQueryKey,
@@ -160,6 +165,14 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
           });
           return didUpdate ? nextServers : servers;
         });
+        patchIssueIndexServer({
+          queryClient,
+          serverId,
+          patch: {
+            localInstallationStatus: status,
+            localInstallationError: error ?? undefined,
+          },
+        });
 
         if (status === "success" || status === "error") {
           // Refetch the full mcp-servers list: the install row may have
@@ -170,6 +183,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
           // stays visible until a manual refresh.
           void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
           void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+          void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
           void queryClient.invalidateQueries({
             queryKey: ["mcp-servers", serverId, "tools"],
           });
@@ -192,6 +206,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
         void invalidateExternalMcpSkillQueries(queryClient);
         void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
         void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+        void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
         invalidateToolAssignmentQueries(queryClient);
       },
     );
@@ -207,6 +222,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
         });
         void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
         void queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+        void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
         invalidateToolAssignmentQueries(queryClient);
       },
     );
@@ -308,6 +324,7 @@ export function useInstallMcpServer() {
       }
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       if (installedServer) {
         await invalidateExternalMcpSkillQueries(queryClient);
       }
@@ -377,6 +394,7 @@ export function useBulkUninstallMcpServers() {
     onSettled: async () => {
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey }),
         invalidateExternalMcpSkillQueries(queryClient),
       ]);
       invalidateToolAssignmentQueries(queryClient);
@@ -409,6 +427,7 @@ export function useDeleteMcpServer() {
       // Refetch instead of just invalidating to ensure data is fresh
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey }),
         invalidateExternalMcpSkillQueries(queryClient),
       ]);
       // Invalidate all tool assignment queries (tools, agent-tools, chat, etc.)
@@ -462,6 +481,7 @@ export function useReloadMcpServerTools() {
 
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey }),
         invalidateExternalMcpSkillQueries(queryClient),
       ]);
       invalidateToolAssignmentQueries(queryClient);
@@ -561,6 +581,7 @@ export function useMcpServerInstallationStatus(
     queryFn: async () => {
       if (!installingMcpServerId) {
         await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+        void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
         return "success";
       }
       const response = await getMcpServer({
@@ -575,6 +596,7 @@ export function useMcpServerInstallationStatus(
       }
       if (result === "error") {
         await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+        void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
         toast.error("Failed to install server");
       }
       return result;
@@ -623,6 +645,7 @@ export function useMcpServerInstallationStatus(
           toast.success("Successfully installed server");
         } else if (status === "error" && previous !== "error") {
           void queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+          void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
           toast.error("Failed to install server");
         }
       },
@@ -657,6 +680,7 @@ export function useReauthenticateMcpServer() {
         return;
       }
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      void queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey });
       invalidateToolAssignmentQueries(queryClient);
       toast.success(`Successfully re-authenticated ${variables.name}`);
     },
@@ -700,6 +724,7 @@ export function useReinstallMcpServer() {
       // Refetch servers to get updated status (will show "pending" initially)
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey }),
         invalidateExternalMcpSkillQueries(queryClient),
       ]);
       // Invalidate tools queries since tools may have been synced
@@ -789,6 +814,7 @@ export function useDismissMcpServerAlerts() {
       if (succeeded.length === 0) return;
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey }),
         queryClient.refetchQueries({ queryKey: ["mcp-catalog"] }),
       ]);
       toast.success(
@@ -847,6 +873,7 @@ export function useRestoreMcpServerAlerts() {
       if (succeeded.length === 0) return;
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["mcp-servers"] }),
+        queryClient.invalidateQueries({ queryKey: mcpRegistryQueryKey }),
         queryClient.refetchQueries({ queryKey: ["mcp-catalog"] }),
       ]);
       toast.success(
@@ -867,6 +894,11 @@ function alertDisplayName(alert: DismissibleMcpAlert | undefined): string {
 export type McpDeploymentFeedState =
   | "loading"
   | "ready"
+  /**
+   * The socket came back and the feed was asked for again, but its answer has
+   * not arrived: the statuses shown are the ones from before the gap.
+   */
+  | "reconnecting"
   | "disabled"
   | "disconnected";
 
@@ -919,6 +951,7 @@ let deploymentFeed: McpDeploymentStatusFeed = {
   state: "loading",
 };
 let deploymentFeedHasStatuses = false;
+let deploymentFeedAwaitingResubscribe = false;
 let deploymentFeedSocketUnsubscribe: (() => void) | null = null;
 let deploymentFeedConnectionUnsubscribe: (() => void) | null = null;
 let deploymentFeedConnection: DeploymentFeedConnection = "connecting";
@@ -931,6 +964,7 @@ function currentDeploymentFeedState(): McpDeploymentFeedState {
   // has failed there is nothing to wait for, and a backend that never accepts
   // the socket must not read as "loading" forever.
   if (deploymentFeedConnection === "disconnected") return "disconnected";
+  if (deploymentFeedAwaitingResubscribe) return "reconnecting";
   return deploymentFeedHasStatuses ? "ready" : "loading";
 }
 
@@ -958,6 +992,8 @@ function sendDeploymentFeedSubscribe(): void {
 function handleDeploymentFeedConnectionChange(isConnected: boolean): void {
   deploymentFeedConnection = isConnected ? "connected" : "disconnected";
   if (isConnected) {
+    // Statuses from before the gap may be stale until the new answer lands.
+    if (deploymentFeedHasStatuses) deploymentFeedAwaitingResubscribe = true;
     // The backend drops the subscription along with the closed socket, so
     // every new connection has to ask for the feed again.
     sendDeploymentFeedSubscribe();
@@ -973,6 +1009,7 @@ function retainDeploymentFeed(): void {
     "mcp_deployment_statuses",
     (message: McpDeploymentStatusesMessage) => {
       deploymentFeedHasStatuses = true;
+      deploymentFeedAwaitingResubscribe = false;
       publishDeploymentFeed(message.payload.statuses);
     },
   );
@@ -1002,6 +1039,7 @@ function releaseDeploymentFeed(): void {
   deploymentFeedConnectionUnsubscribe?.();
   deploymentFeedConnectionUnsubscribe = null;
   deploymentFeedHasStatuses = false;
+  deploymentFeedAwaitingResubscribe = false;
   deploymentFeedConnection = "connecting";
   deploymentFeedServersSignature = null;
   deploymentFeedUserId = null;
@@ -1054,10 +1092,22 @@ function resetDeploymentFeedForUser(userId: string): void {
  * from the cache rather than fetched: `useMcpDeploymentStatuses` is mounted for
  * the whole session, and a query of its own under the `mcp-servers` key would
  * race the server-rendered data the registry page primes that key with.
+ *
+ * The registry's issue index counts as a server list: it is the one every page
+ * loads (for the sidebar count), so a session that never caches the full list
+ * still re-subscribes when an install appears or goes away.
  */
 function cachedMcpServersSignature(queryClient: QueryClient): string | null {
   const serverIds = new Set<string>();
   let sawServerList = false;
+
+  const index = queryClient.getQueryData<McpRegistryIssueIndexWire>(
+    mcpRegistryIssueIndexQueryKey,
+  );
+  if (index) {
+    sawServerList = true;
+    for (const server of index.servers) serverIds.add(server.id);
+  }
 
   for (const [queryKey, servers] of queryClient.getQueriesData<
     archestraApiTypes.GetMcpServersResponses["200"]
@@ -1214,6 +1264,18 @@ function removeMcpServersFromCache(params: {
 }) {
   const serverIds = new Set(params.serverIds);
   const catalogIds = new Set(params.catalogIds);
+  params.queryClient.setQueryData<McpRegistryIssueIndexWire>(
+    mcpRegistryIssueIndexQueryKey,
+    (index) =>
+      index && {
+        ...index,
+        servers: index.servers.filter(
+          (server) =>
+            !serverIds.has(server.id) &&
+            !(server.catalogId && catalogIds.has(server.catalogId)),
+        ),
+      },
+  );
   params.queryClient.setQueriesData<
     archestraApiTypes.GetMcpServersResponses["200"]
   >({ queryKey: ["mcp-servers"] }, (servers) =>
@@ -1223,5 +1285,28 @@ function removeMcpServersFromCache(params: {
             !serverIds.has(server.id) && !catalogIds.has(server.catalogId),
         )
       : servers,
+  );
+}
+
+function patchIssueIndexServer(params: {
+  queryClient: QueryClient;
+  serverId: string;
+  patch: Partial<McpRegistryIssueIndexWire["servers"][number]>;
+}) {
+  params.queryClient.setQueryData<McpRegistryIssueIndexWire>(
+    mcpRegistryIssueIndexQueryKey,
+    (index) => {
+      if (!index?.servers.some((server) => server.id === params.serverId)) {
+        return index;
+      }
+      return {
+        ...index,
+        servers: index.servers.map((server) =>
+          server.id === params.serverId
+            ? { ...server, ...params.patch }
+            : server,
+        ),
+      };
+    },
   );
 }

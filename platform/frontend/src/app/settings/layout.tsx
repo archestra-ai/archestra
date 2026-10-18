@@ -222,8 +222,10 @@ export default function SettingsLayout({
       >
         {/* The section list sits beside the content rather than as a tab row
             above it: at sixteen entries the row scrolled sideways, so the
-            settings you were not already looking at were off-screen. */}
-        <div className="-mt-4 grid items-start gap-2 lg:mt-0 lg:gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+            settings you were not already looking at were off-screen. Below
+            `lg` the row sits 8px under the header: PageLayout pads the content
+            16px on phones and 24px from `sm`, so the pull-up follows suit. */}
+        <div className="-mt-2 grid items-start gap-2 sm:-mt-4 lg:mt-0 lg:gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
           <div className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:rounded-lg scrollbar-sidebar">
             <SectionNav
               label="Settings sections"

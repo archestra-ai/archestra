@@ -1565,6 +1565,84 @@ describe("GET /api/agents/:agentId/tools", () => {
     );
   });
 
+  test("authorizes from the agent row alone, without hydrating the full agent", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const tool = await makeTool({ name: "listed-tool", catalogId: catalog.id });
+    await makeAgentTool(agent.id, tool.id);
+    // findById joins every tool row and hydrates teams, labels, prompts and
+    // the resolved LLM; this route reads the tools on its own.
+    const findById = vi.spyOn(AgentModel, "findById");
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools?catalogId=${catalog.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().map((t: Tool) => t.id)).toEqual([tool.id]);
+    expect(findById).not.toHaveBeenCalled();
+  });
+
+  test("hides an agent of another organization, on its tools and its delegations", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    // An admin of their own organization: only the organization fence can
+    // keep another organization's agent out.
+    const admin = await makeUser();
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    user = admin;
+    const foreign = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: foreign.id,
+      authorId: admin.id,
+      agentType: "agent",
+      access: "org",
+    });
+
+    for (const url of [
+      `/api/agents/${agent.id}/tools`,
+      `/api/agents/${agent.id}/delegations`,
+    ]) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode, url).toBe(404);
+    }
+  });
+
+  test("hides a team agent from a member outside the team", async ({
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const team = await makeTeam(organizationId, owner.id, { name: "Other" });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      agentType: "agent",
+      access: { teams: [team.id] },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
   test("returns only one catalog's tools when catalogId is given", async ({
     makeAgent,
     makeAgentTool,

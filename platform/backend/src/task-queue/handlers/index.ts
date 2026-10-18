@@ -21,6 +21,7 @@ import { handleContentEncryptionBackfill } from "./content-encryption-backfill-h
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
 import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
+import { handleLlmModelSync } from "./llm-model-sync-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handlePluginGithubSync } from "./plugin-github-sync-handler";
@@ -103,4 +104,5 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     "skill_publication_backfill",
     handleSkillPublicationBackfill,
   );
+  taskQueueService.registerHandler("llm_model_sync", handleLlmModelSync);
 }

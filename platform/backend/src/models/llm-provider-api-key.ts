@@ -1,5 +1,4 @@
 import {
-  credentialRequiresPerUserScope,
   getProvidersWithOptionalApiKey,
   isCredentialLevelSubscriptionProvider,
   isVaultReference,
@@ -20,12 +19,14 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   ne,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
+import { type CacheKeyPrefix, cacheManager } from "@/cache-manager";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
@@ -36,7 +37,9 @@ import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
+  LlmProviderApiKeyForModelSync,
   LlmProviderApiKeyWithScopeInfo,
+  LlmProviderCredentialKind,
   SecretStorageType,
   SecretValue,
   UpdateLlmProviderApiKey,
@@ -121,15 +124,12 @@ class LlmProviderApiKeyModel {
     /** No longer consulted: grants decide, and they resolve teams in SQL. */
     _userTeamIds: string[],
   ): Promise<boolean> {
-    const secret = apiKey.secretId
-      ? await getSecretValueForLlmProviderApiKey(apiKey.secretId)
-      : undefined;
     if (
-      credentialRequiresPerUserScope({
-        provider: apiKey.provider,
-        apiKey: secret,
-      }) &&
-      apiKey.userId !== userId
+      apiKey.userId !== userId &&
+      isPerUserCredential(
+        apiKey.provider,
+        await LlmProviderApiKeyModel.findCredentialKind(apiKey.id),
+      )
     )
       return false;
     const [row] = await db
@@ -165,6 +165,8 @@ class LlmProviderApiKeyModel {
       initialPermissionGrants?: ResourcePermissionGrant[];
       /** Publish to the whole organization; for system callers only. */
       publishToOrganization?: boolean;
+      /** The value being stored, to record its credential kind. */
+      apiKeyValue?: string | null;
     },
   ): Promise<LlmProviderApiKey> {
     return await db.transaction(async (tx) => {
@@ -180,7 +182,12 @@ class LlmProviderApiKeyModel {
         .insert(schema.llmProviderApiKeysTable)
         .values(
           await CreatedByModel.forInsert({
-            data: data,
+            data: {
+              ...data,
+              ...(options && "apiKeyValue" in options
+                ? { credentialKind: credentialKindOf(options.apiKeyValue) }
+                : {}),
+            },
             userIdField: "createdBy",
             transaction: tx,
           }),
@@ -206,6 +213,21 @@ class LlmProviderApiKeyModel {
 
       return apiKey;
     });
+  }
+
+  /**
+   * Record what kind of credential a key now stores. Every route that writes a
+   * key's value calls this with the value it wrote, so later reads never have
+   * to resolve the secret to tell a subscription from an API key.
+   */
+  static async recordCredentialKind(params: {
+    id: string;
+    apiKeyValue: string | null | undefined;
+  }): Promise<void> {
+    await db
+      .update(schema.llmProviderApiKeysTable)
+      .set({ credentialKind: credentialKindOf(params.apiKeyValue) })
+      .where(eq(schema.llmProviderApiKeysTable.id, params.id));
   }
 
   /**
@@ -265,17 +287,24 @@ class LlmProviderApiKeyModel {
       return null;
     }
 
-    const subscriptionKind = await subscriptionKindFromStoredSecret({
-      provider: row.apiKey.provider,
-      secretId: row.apiKey.secretId,
-      secret: row.secret,
-      secretIsVault: row.secretIsVault,
-      secretIsByosVault: row.secretIsByosVault,
-    });
+    const kinds = await resolveCredentialKinds([
+      {
+        id: row.apiKey.id,
+        secretId: row.apiKey.secretId,
+        secret: row.secret,
+        secretIsVault: row.secretIsVault,
+        secretIsByosVault: row.secretIsByosVault,
+        credentialKind: row.apiKey.credentialKind,
+      },
+    ]);
+    const { credentialKind: _credentialKind, ...apiKey } = row.apiKey;
 
     return {
-      ...row.apiKey,
-      subscriptionKind,
+      ...apiKey,
+      subscriptionKind: subscriptionKindOf(
+        apiKey.provider,
+        kinds.get(apiKey.id),
+      ),
     };
   }
 
@@ -406,6 +435,7 @@ class LlmProviderApiKeyModel {
         updatedAt: schema.llmProviderApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
         userName: schema.usersTable.name,
+        credentialKind: schema.llmProviderApiKeysTable.credentialKind,
         secret: schema.secretsTable.secret,
         secretIsVault: schema.secretsTable.isVault,
         secretIsByosVault: schema.secretsTable.isByosVault,
@@ -426,9 +456,15 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    const accessibleKeys = await withoutOthersPerUserCredentials(
-      apiKeys,
-      userId,
+    // The kind is a column, so listing resolves no secrets; only rows written
+    // before it existed are classified (once) here.
+    const credentialKinds = await resolveCredentialKinds(apiKeys);
+    const accessibleKeys = apiKeys.filter((key) =>
+      isListedFor({
+        key,
+        kind: credentialKinds.get(key.id),
+        userId,
+      }),
     );
     const [labelsByKey, displayScopes] = await Promise.all([
       LlmProviderApiKeyLabelModel.getLabelsForMany(
@@ -443,11 +479,13 @@ class LlmProviderApiKeyModel {
     return CreatedByModel.attach(
       await Promise.all(
         accessibleKeys.map(async (key) => ({
-          ...(await toApiKeyWithScopeInfo(
+          ...toApiKeyWithScopeInfo(
             // `scope` from the owner column and grants, not the retired one.
             { ...key, scope: displayScopes.get(key.id) ?? key.scope },
-            options?.includeSubscriptionInfo === true,
-          )),
+            options?.includeSubscriptionInfo === true
+              ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
+              : null,
+          ),
           labels: labelsByKey.get(key.id) ?? [],
         })),
       ),
@@ -468,6 +506,8 @@ class LlmProviderApiKeyModel {
         id: schema.llmProviderApiKeysTable.id,
         provider: schema.llmProviderApiKeysTable.provider,
         userId: schema.llmProviderApiKeysTable.userId,
+        createdBy: schema.llmProviderApiKeysTable.createdBy,
+        credentialKind: schema.llmProviderApiKeysTable.credentialKind,
         secretId: schema.llmProviderApiKeysTable.secretId,
         secret: schema.secretsTable.secret,
         secretIsVault: schema.secretsTable.isVault,
@@ -567,6 +607,7 @@ class LlmProviderApiKeyModel {
         updatedAt: schema.llmProviderApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
         userName: schema.usersTable.name,
+        credentialKind: schema.llmProviderApiKeysTable.credentialKind,
         secret: schema.secretsTable.secret,
         secretIsVault: schema.secretsTable.isVault,
         secretIsByosVault: schema.secretsTable.isByosVault,
@@ -587,9 +628,15 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    const accessibleKeys = await withoutOthersPerUserCredentials(
-      apiKeys,
-      userId,
+    // The kind is a column, so listing resolves no secrets; only rows written
+    // before it existed are classified (once) here.
+    const credentialKinds = await resolveCredentialKinds(apiKeys);
+    const accessibleKeys = apiKeys.filter((key) =>
+      isListedFor({
+        key,
+        kind: credentialKinds.get(key.id),
+        userId,
+      }),
     );
     const [labelsByKey, displayScopes] = await Promise.all([
       LlmProviderApiKeyLabelModel.getLabelsForMany(
@@ -604,11 +651,13 @@ class LlmProviderApiKeyModel {
     return CreatedByModel.attach(
       await Promise.all(
         accessibleKeys.map(async (key) => ({
-          ...(await toApiKeyWithScopeInfo(
+          ...toApiKeyWithScopeInfo(
             // `scope` from the owner column and grants, not the retired one.
             { ...key, scope: displayScopes.get(key.id) ?? key.scope },
-            options?.includeSubscriptionInfo === true,
-          )),
+            options?.includeSubscriptionInfo === true
+              ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
+              : null,
+          ),
           labels: labelsByKey.get(key.id) ?? [],
         })),
       ),
@@ -914,11 +963,6 @@ class LlmProviderApiKeyModel {
   }
 
   /**
-   * The acting user's own personal key for a provider (prefer isPrimary, then
-   * oldest). Self-contained so the per-user-credential guard can call it before
-   * the rest of getCurrentApiKey runs.
-   */
-  /**
    * The label the retired `scope` column carried, derived for display: a key
    * with an owner is `personal`. A shared key (no owner) is `team` when its
    * grants reach teams and not the organization, and `org` otherwise, the
@@ -968,6 +1012,28 @@ class LlmProviderApiKeyModel {
    * to manage it, but it is nobody's to pick as a default credential. A shared
    * key created without grants is not an orphan: it is for administrators.
    */
+  private static async findCredentialKind(
+    id: string,
+  ): Promise<LlmProviderCredentialKind | null> {
+    const [row] = await db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        secretId: schema.llmProviderApiKeysTable.secretId,
+        credentialKind: schema.llmProviderApiKeysTable.credentialKind,
+        secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(eq(schema.llmProviderApiKeysTable.id, id));
+    if (!row) return null;
+    return (await resolveCredentialKinds([row])).get(id) ?? null;
+  }
+
   private static async withoutOrphans<
     T extends { id: string; userId: string | null },
   >(params: { organizationId: string; keys: T[] }): Promise<T[]> {
@@ -1060,6 +1126,11 @@ class LlmProviderApiKeyModel {
   }
   // SPDX-SnippetEnd
 
+  /**
+   * The acting user's own personal key for a provider (prefer isPrimary, then
+   * oldest). Self-contained so the per-user-credential guard can call it before
+   * the rest of getCurrentApiKey runs.
+   */
   private static async findPersonalKey({
     organizationId,
     userId,
@@ -1229,7 +1300,13 @@ class LlmProviderApiKeyModel {
 
       const [updated] = await tx
         .update(schema.llmProviderApiKeysTable)
-        .set(data)
+        .set({
+          ...data,
+          // A different secret may hold a different kind of credential: clear
+          // the record so the next read classifies the new value, unless the
+          // caller records it (recordCredentialKind) after this update.
+          ...(data.secretId !== undefined && { credentialKind: null }),
+        })
         .where(eq(schema.llmProviderApiKeysTable.id, id))
         .returning();
 
@@ -1371,6 +1448,83 @@ class LlmProviderApiKeyModel {
   }
 
   /**
+   * The keys whose models are due for a scheduled sync, across all
+   * organizations, in one statement. A key is due when it can be synced (a
+   * secret, a system key, or a provider that needs no API key — the rule
+   * `getAvailableKeysForUser` applies), its oldest link is at least its
+   * provider's TTL old (or it has no links at all), and no live attempt
+   * marker for it is in the cache table. Never-synced keys come first, then
+   * the oldest syncs.
+   */
+  static async findDueForModelSync(params: {
+    now: Date;
+    ttlMsByProvider: Partial<Record<SupportedProvider, number>>;
+    defaultTtlMs: number;
+    /** Cache key prefix of the attempt markers; each marker ends in the key id. */
+    attemptMarkerPrefix: CacheKeyPrefix;
+    limit: number;
+  }): Promise<LlmProviderApiKeyForModelSync[]> {
+    const { now, ttlMsByProvider, defaultTtlMs, attemptMarkerPrefix, limit } =
+      params;
+    const keys = schema.llmProviderApiKeysTable;
+    const links = schema.llmProviderApiKeyModelsTable;
+    const ttlCases = Object.entries(ttlMsByProvider).map(
+      ([provider, ttlMs]) => sql`WHEN ${provider} THEN ${ttlMs}::bigint`,
+    );
+    const ttlMs =
+      ttlCases.length > 0
+        ? sql`(CASE ${keys.provider} ${sql.join(ttlCases, sql` `)} ELSE ${defaultTtlMs}::bigint END)`
+        : sql`${defaultTtlMs}::bigint`;
+    // The key's least recently synced link, one probe of
+    // api_key_models_api_key_id_synced_at_idx. A link without synced_at
+    // predates the column, sorts first and counts as stale. A key with no
+    // links gets null, which counts as stale too.
+    const oldestSyncedAt = sql<Date | null>`(
+      SELECT coalesce(${links.syncedAt}, to_timestamp(0) AT TIME ZONE 'UTC')
+      FROM ${links}
+      WHERE ${links.apiKeyId} = ${keys.id}
+      ORDER BY ${links.syncedAt} ASC NULLS FIRST
+      LIMIT 1
+    )`;
+    const syncableCondition = or(
+      isNotNull(keys.secretId),
+      eq(keys.isSystem, true),
+      inArray(keys.provider, getConfiguredProvidersWithOptionalApiKey()),
+    );
+
+    return db
+      .select({
+        id: keys.id,
+        organizationId: keys.organizationId,
+        name: keys.name,
+        provider: keys.provider,
+        secretId: keys.secretId,
+        baseUrl: keys.baseUrl,
+        extraHeaders: keys.extraHeaders,
+        isSystem: keys.isSystem,
+      })
+      .from(keys)
+      .where(
+        and(
+          syncableCondition,
+          // synced_at is a UTC timestamp without time zone.
+          sql`coalesce(${oldestSyncedAt} <= (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC') - ${ttlMs} * interval '1 millisecond', true)`,
+          sql`NOT ${cacheManager.liveEntryExists({
+            prefix: attemptMarkerPrefix,
+            id: sql`${keys.id}::text`,
+            now,
+          })}`,
+        ),
+      )
+      .orderBy(
+        sql`${oldestSyncedAt} ASC NULLS FIRST`,
+        asc(keys.createdAt),
+        asc(keys.id),
+      )
+      .limit(limit);
+  }
+
+  /**
    * Get all system LLM provider API keys.
    */
   static async findAllSystemKeys(): Promise<LlmProviderApiKey[]> {
@@ -1433,50 +1587,44 @@ class LlmProviderApiKeyModel {
 
 /**
  * Maps a list-query row (key + joined secret columns) to the response shape,
- * deriving the secret-value metadata (vault reference, subscription marker)
- * and dropping the secret columns.
+ * deriving the vault reference and dropping the secret columns.
  *
- * The secret is decrypted only when its value is actually inspected: BYOS-vault
- * secrets carry the "path#key" reference to surface (the BYOS manager is the
- * only writer of vault references, and it always sets `isByosVault`), and
- * credential-level providers may carry a subscription marker. Vault-backed
- * values are resolved only for explicitly enriched response surfaces and only
- * for those providers; the value never leaves this mapper either way.
+ * The secret is decrypted only for BYOS-vault rows, whose stored value is the
+ * "path#key" reference to surface (the BYOS manager is the only writer of
+ * vault references, and it always sets `isByosVault`). The subscription kind
+ * comes from the recorded credential kind; no secret is read for it.
  */
-async function toApiKeyWithScopeInfo<
+function toApiKeyWithScopeInfo<
   T extends {
     provider: string;
     secretId: string | null;
     secret: SecretValue | null;
     secretIsVault: boolean | null;
     secretIsByosVault: boolean | null;
+    credentialKind: LlmProviderCredentialKind | null;
   },
 >(
   key: T,
-  includeSubscriptionInfo: boolean,
-): Promise<
-  Omit<T, "secret" | "secretIsVault" | "secretIsByosVault"> & {
-    vaultSecretPath: string | null;
-    vaultSecretKey: string | null;
-    secretStorageType: SecretStorageType;
-    subscriptionKind: SubscriptionCredentialKind | null;
-  }
-> {
-  const storedApiKeyValue =
-    isCredentialLevelSubscriptionProvider(key.provider) || key.secretIsByosVault
-      ? decryptApiKeyValue(key.secret)
-      : null;
-  const vaultRef = parseVaultReferenceFromApiKey(storedApiKeyValue);
-  const subscriptionKind = includeSubscriptionInfo
-    ? await subscriptionKindFromStoredSecret({
-        provider: key.provider,
-        secretId: key.secretId,
-        secret: key.secret,
-        secretIsVault: key.secretIsVault,
-        secretIsByosVault: key.secretIsByosVault,
-      })
+  subscriptionKind: SubscriptionCredentialKind | null,
+): Omit<
+  T,
+  "secret" | "secretIsVault" | "secretIsByosVault" | "credentialKind"
+> & {
+  vaultSecretPath: string | null;
+  vaultSecretKey: string | null;
+  secretStorageType: SecretStorageType;
+  subscriptionKind: SubscriptionCredentialKind | null;
+} {
+  const vaultRef = key.secretIsByosVault
+    ? parseVaultReferenceFromApiKey(decryptApiKeyValue(key.secret))
     : null;
-  const { secret: _secret, secretIsVault, secretIsByosVault, ...rest } = key;
+  const {
+    secret: _secret,
+    secretIsVault,
+    secretIsByosVault,
+    credentialKind: _credentialKind,
+    ...rest
+  } = key;
   return {
     ...rest,
     vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
@@ -1490,69 +1638,153 @@ async function toApiKeyWithScopeInfo<
   };
 }
 
-/** Resolve Vault-backed values only for providers whose credential kind needs it. */
-async function subscriptionKindFromStoredSecret(params: {
-  provider: string;
-  secretId: string | null;
-  secret: SecretValue | null;
-  secretIsVault: boolean | null;
-  secretIsByosVault: boolean | null;
-}): Promise<SubscriptionCredentialKind | null> {
-  if (!isCredentialLevelSubscriptionProvider(params.provider)) {
-    return null;
-  }
-
-  let apiKeyValue = decryptApiKeyValue(params.secret);
-  if (
-    params.secretId &&
-    (params.secretIsVault === true || params.secretIsByosVault === true)
-  ) {
-    try {
-      apiKeyValue =
-        (await getSecretValueForLlmProviderApiKey(params.secretId)) ?? null;
-    } catch (error) {
-      logger.warn(
-        { error, secretId: params.secretId },
-        "Failed to resolve Vault-backed LLM provider secret while deriving subscription metadata",
-      );
-      apiKeyValue = null;
-    }
-  }
-  return subscriptionKindFromCredential(apiKeyValue);
+/**
+ * The kind of credential a stored value is: the subscription it encodes, or
+ * `api_key` for anything else. No value at all (a system key, or a provider
+ * whose key is optional) carries no subscription marker, so it is `api_key`.
+ */
+function credentialKindOf(
+  apiKeyValue: string | null | undefined,
+): LlmProviderCredentialKind {
+  return subscriptionKindFromCredential(apiKeyValue) ?? "api_key";
 }
 
 /**
- * Drop other people's keys whose credential works for one person only (a
- * per-user provider, or a subscription credential): those are never shown to
- * anyone but their owner.
+ * Whether only the key's owner may use it: providers whose credential is
+ * always personal, and subscription credentials on any provider. An unknown
+ * kind (a legacy value that could not be read) counts as personal, so a
+ * shared reader never gets a credential that might be somebody's account.
  */
-async function withoutOthersPerUserCredentials<
-  T extends {
-    userId: string | null;
+function isPerUserCredential(
+  provider: SupportedProvider,
+  kind: LlmProviderCredentialKind | null | undefined,
+): boolean {
+  return providerRequiresPerUserCredential(provider) || kind !== "api_key";
+}
+
+/**
+ * Whether a list read shows the key to this user. A per-user credential is
+ * listed for its owner only. When the kind is unknown (a legacy secret that
+ * could not be read this time), a shared key is listed for whoever added it,
+ * so the one person who can fix it still sees it, and hidden from everyone
+ * else until a later read classifies it.
+ */
+function isListedFor(params: {
+  key: {
     provider: SupportedProvider;
+    userId: string | null;
+    createdBy: string | null;
+  };
+  kind: LlmProviderCredentialKind | null | undefined;
+  userId: string;
+}): boolean {
+  const { key, kind, userId } = params;
+  if (key.userId === userId) return true;
+  if (!kind && key.userId === null && key.createdBy === userId) return true;
+  return !isPerUserCredential(key.provider, kind);
+}
+
+/** The subscription a key's credential encodes, for the response. */
+function subscriptionKindOf(
+  provider: string,
+  kind: LlmProviderCredentialKind | null | undefined,
+): SubscriptionCredentialKind | null {
+  if (!isCredentialLevelSubscriptionProvider(provider)) return null;
+  return kind && kind !== "api_key" ? kind : null;
+}
+
+/**
+ * The recorded credential kind of each key. Rows written before the column
+ * existed are classified from their secret once and the result stored, so
+ * the next read resolves nothing. A secret that cannot be read stays
+ * unclassified (and is treated as personal) rather than stored as a guess.
+ */
+async function resolveCredentialKinds(
+  keys: Array<{
+    id: string;
     secretId: string | null;
     secret: SecretValue | null;
     secretIsVault: boolean | null;
     secretIsByosVault: boolean | null;
+    credentialKind: LlmProviderCredentialKind | null;
+  }>,
+): Promise<Map<string, LlmProviderCredentialKind | null>> {
+  const kinds = new Map<string, LlmProviderCredentialKind | null>();
+  await Promise.all(
+    keys.map(async (key) => {
+      if (key.credentialKind) {
+        kinds.set(key.id, key.credentialKind);
+        return;
+      }
+      let value: string | null;
+      try {
+        value =
+          key.secretId && (key.secretIsVault || key.secretIsByosVault)
+            ? ((await getSecretValueForLlmProviderApiKey(key.secretId)) ?? null)
+            : // A secret that cannot be decrypted (for example after a key
+              // rotation) is unreadable, not empty: never store a guess.
+              readApiKeyValue(key.secret);
+      } catch (error) {
+        logger.warn(
+          { error, secretId: key.secretId },
+          "Failed to resolve an LLM provider secret while classifying its credential",
+        );
+        // Nothing is stored for an unreadable secret, so the next read tries
+        // again. A concurrent read that could reach the secret may have stored
+        // the kind meanwhile; use it rather than treating the key as unknown.
+        kinds.set(key.id, await storedCredentialKind(key.id));
+        return;
+      }
+      const kind = credentialKindOf(value);
+      kinds.set(key.id, kind);
+      await db
+        .update(schema.llmProviderApiKeysTable)
+        .set({ credentialKind: kind })
+        .where(
+          and(
+            eq(schema.llmProviderApiKeysTable.id, key.id),
+            isNull(schema.llmProviderApiKeysTable.credentialKind),
+          ),
+        );
+    }),
+  );
+  return kinds;
+}
+
+/** The kind recorded on the key's row, or null while it is unclassified. */
+async function storedCredentialKind(
+  id: string,
+): Promise<LlmProviderCredentialKind | null> {
+  const [row] = await db
+    .select({ credentialKind: schema.llmProviderApiKeysTable.credentialKind })
+    .from(schema.llmProviderApiKeysTable)
+    .where(eq(schema.llmProviderApiKeysTable.id, id));
+  return row?.credentialKind ?? null;
+}
+
+/**
+ * Drop the keys a list read must not show this user: other people's
+ * credentials that work for one person only (see isListedFor). The kind comes
+ * from its column; only rows written before it existed resolve their secret,
+ * once.
+ */
+async function withoutOthersPerUserCredentials<
+  T extends {
+    id: string;
+    provider: SupportedProvider;
+    userId: string | null;
+    createdBy: string | null;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    secretIsByosVault: boolean | null;
+    credentialKind: LlmProviderCredentialKind | null;
   },
 >(keys: T[], userId: string): Promise<T[]> {
-  return (
-    await Promise.all(
-      keys.map(async (key) => {
-        if (key.userId === userId) return key;
-        const apiKey =
-          key.secretId && (key.secretIsVault || key.secretIsByosVault)
-            ? await getSecretValueForLlmProviderApiKey(key.secretId)
-            : decryptApiKeyValue(key.secret);
-        return credentialRequiresPerUserScope({
-          provider: key.provider,
-          apiKey,
-        })
-          ? null
-          : key;
-      }),
-    )
-  ).filter((key) => key !== null);
+  const kinds = await resolveCredentialKinds(keys);
+  return keys.filter((key) =>
+    isListedFor({ key, kind: kinds.get(key.id), userId }),
+  );
 }
 
 /**
@@ -1569,21 +1801,27 @@ async function withoutOthersPerUserCredentials<
  * everyone.
  */
 function decryptApiKeyValue(secret: SecretValue | null): string | null {
-  if (!secret || typeof secret !== "object") return null;
-  let decrypted: SecretValue;
-  if (isEncryptedSecret(secret)) {
-    try {
-      decrypted = decryptSecretValue(secret);
-    } catch (error) {
-      logger.warn(
-        { error },
-        "Failed to decrypt LLM provider API key secret while deriving key metadata; treating the value as unreadable",
-      );
-      return null;
-    }
-  } else {
-    decrypted = secret;
+  try {
+    return readApiKeyValue(secret);
+  } catch (error) {
+    logger.warn(
+      { error },
+      "Failed to decrypt LLM provider API key secret while deriving key metadata; treating the value as unreadable",
+    );
+    return null;
   }
+}
+
+/**
+ * Like {@link decryptApiKeyValue}, but a secret that cannot be decrypted
+ * throws instead of reading as "no value", so a caller can tell the two
+ * apart.
+ */
+function readApiKeyValue(secret: SecretValue | null): string | null {
+  if (!secret || typeof secret !== "object") return null;
+  const decrypted = isEncryptedSecret(secret)
+    ? decryptSecretValue(secret)
+    : secret;
   const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
   return typeof apiKeyValue === "string" ? apiKeyValue : null;
 }

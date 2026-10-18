@@ -62,6 +62,7 @@ import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import {
   type Agent,
+  type AgentAccessContext,
   type AgentActivationSkillMode,
   AgentActivationSkillModeSchema,
   type AgentListItem,
@@ -3169,7 +3170,12 @@ class AgentModel {
     userId: string,
     isAgentAdmin = false,
     principals?: GrantPrincipal[],
+    options?: {
+      /** Only check these agents, rather than list every one the user reaches. */
+      among?: string[];
+    },
   ): Promise<string[]> {
+    if (options?.among?.length === 0) return [];
     const readers =
       principals ??
       (await ResourcePermissionSubjectModel.resolvePrincipals({ userId }));
@@ -3177,6 +3183,7 @@ class AgentModel {
       userId,
       isAgentAdmin,
       principals: readers,
+      among: options?.among,
     });
 
     return rows.map((row) => row.id);
@@ -3314,11 +3321,41 @@ class AgentModel {
   }
 
   /**
+   * The one row a read authorization needs — type (for the type-specific RBAC
+   * check), name, and the access-context columns
+   * {@link AgentTeamModel.userHasAgentAccess} takes — without the tool join and
+   * hydration {@link findById} does. For routes that only authorize the agent
+   * before reading something else about it.
+   */
+  static async findByIdForAccess(
+    id: string,
+  ): Promise<
+    | (AgentAccessContext &
+        Pick<Agent, "agentType" | "name" | "createdByServiceAccountId">)
+    | null
+  > {
+    const [agent] = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        scope: schema.agentsTable.scope,
+        authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
+        agentType: schema.agentsTable.agentType,
+        name: schema.agentsTable.name,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return agent ?? null;
+  }
+
+  /**
    * Batch fetch minimal agent data needed for permission checks.
    * Returns a Map of agentId -> { agentType, scope, authorId, teamIds }.
    * Much lighter than findById (no tool/label/knowledgeBase/connector joins).
-   */
-  /**
+   *
    * Includes `environmentId` so callers can apply the environment fence beside
    * the permission checks, without a second round-trip per target.
    *
@@ -5886,6 +5923,7 @@ function accessibleAgentIdsQuery(params: {
   userId: string;
   isAgentAdmin: boolean;
   principals: GrantPrincipal[];
+  among?: string[];
 }) {
   return db
     .select({ id: schema.agentsTable.id })
@@ -5893,6 +5931,7 @@ function accessibleAgentIdsQuery(params: {
     .where(
       and(
         notDeleted(schema.agentsTable),
+        params.among ? inArray(schema.agentsTable.id, params.among) : undefined,
         or(
           explicitAgentReadCondition(params.principals),
           params.isAgentAdmin ? sql`true` : undefined,

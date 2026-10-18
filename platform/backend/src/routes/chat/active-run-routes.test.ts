@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -60,6 +61,30 @@ describe("chat active-run routes", () => {
     });
 
     expect(response.statusCode).toBe(204);
+  });
+
+  test("authorizes a reconnect without loading the transcript, and refuses another user's chat", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // findAccessibleById reads every message; reconnecting only needs access.
+    const transcriptRead = vi.spyOn(ConversationModel, "findAccessibleById");
+    const own = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversationId}/active-run`,
+    });
+    expect(own.statusCode).toBe(204);
+    expect(transcriptRead).not.toHaveBeenCalled();
+
+    const owner = user;
+    user = await makeUser();
+    await makeMember(user.id, organizationId);
+    const other = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversationId}/active-run`,
+    });
+    user = owner;
+    expect(other.statusCode).toBe(404);
   });
 
   test("duplicate submit returns 409 when the conversation already has a running active run", async () => {

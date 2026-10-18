@@ -1,11 +1,16 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { handleApiError } from "@/lib/utils/api";
 import {
+  conversationsQueryKey,
   invalidateConversationFileQueries,
   mergeUpdatedConversationIntoCache,
   useClearChatErrors,
@@ -19,6 +24,7 @@ import {
   useKeepViewedConversationRead,
   useMarkConversationRead,
   useMemberDefaultModel,
+  useRefreshConversationFilesAfterTurn,
   useResolveChatMcpElicitation,
   useStopChatStream,
   useUpdateConversation,
@@ -92,7 +98,7 @@ describe("useConversations", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const conversations = [makeConversation()];
-    queryClient.setQueryData(["conversations", undefined], conversations);
+    queryClient.setQueryData(conversationsQueryKey(), conversations);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -154,7 +160,7 @@ describe("useConversations", () => {
     expect(archestraApiSdk.getChatConversations).toHaveBeenCalledTimes(1);
   });
 
-  it("asks for list rows without artifacts, with and without a search", async () => {
+  it("asks for the sidebar's recent page without artifacts, and searches without a limit", async () => {
     // The sidebar and the search palette never show a chat's document or
     // todo list, which can be hundreds of kilobytes per row.
     const { rerender } = renderHook(
@@ -166,7 +172,7 @@ describe("useConversations", () => {
     );
     await waitFor(() =>
       expect(archestraApiSdk.getChatConversations).toHaveBeenCalledWith({
-        query: { includeArtifacts: false },
+        query: { includeArtifacts: false, limit: 50 },
       }),
     );
 
@@ -223,6 +229,71 @@ test("polls a scheduled chat until its replay seed arrives, then stops polling",
   }
 });
 
+test("stops polling a scheduled chat that never seeds after about two minutes", async () => {
+  vi.useFakeTimers();
+  const conversation = {
+    ...makeConversation(),
+    origin: "schedule_trigger" as const,
+  };
+  const getConversation = vi.mocked(archestraApiSdk.getChatConversation);
+  getConversation.mockReset();
+  getConversation.mockResolvedValue({
+    data: conversation,
+    error: undefined,
+  } as Awaited<ReturnType<typeof getConversation>>);
+  const { unmount } = renderHook(() => useConversation(conversation.id), {
+    wrapper: createWrapper(),
+  });
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+    });
+    const calls = getConversation.mock.calls.length;
+    // One poll a second, then nothing: the conversation_updated push takes over.
+    expect(calls).toBeGreaterThan(100);
+    expect(calls).toBeLessThanOrEqual(121);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(getConversation).toHaveBeenCalledTimes(calls);
+  } finally {
+    unmount();
+    vi.useRealTimers();
+  }
+});
+
+test("does not poll a scheduled chat while the tab is hidden", async () => {
+  vi.useFakeTimers();
+  const conversation = {
+    ...makeConversation(),
+    origin: "schedule_trigger" as const,
+  };
+  const getConversation = vi.mocked(archestraApiSdk.getChatConversation);
+  getConversation.mockReset();
+  getConversation.mockResolvedValue({
+    data: conversation,
+    error: undefined,
+  } as Awaited<ReturnType<typeof getConversation>>);
+  const { unmount } = renderHook(() => useConversation(conversation.id), {
+    wrapper: createWrapper(),
+  });
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(getConversation).toHaveBeenCalledTimes(1);
+    focusManager.setFocused(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(getConversation).toHaveBeenCalledTimes(1);
+  } finally {
+    focusManager.setFocused(undefined);
+    unmount();
+    vi.useRealTimers();
+  }
+});
+
 describe("useConversation error handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -256,6 +327,51 @@ describe("useConversation error handling", () => {
 
     await waitFor(() => expect(result.current.data).toBeNull());
     expect(mockedHandleApiError).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useConversation caching", () => {
+  it("serves a switch back within 30 s from the cache, and refetches after it", async () => {
+    vi.clearAllMocks();
+    const getConversation = vi.mocked(archestraApiSdk.getChatConversation);
+    getConversation.mockReset();
+    getConversation.mockResolvedValue({
+      data: makeConversation(),
+      error: undefined,
+    } as Awaited<ReturnType<typeof getConversation>>);
+    const wrapper = createWrapper();
+    const mount = (options?: { refetchOnMount?: boolean }) =>
+      renderHook(() => useConversation("conversation-1", options), {
+        wrapper,
+      });
+    const start = new Date("2026-10-01T12:00:00.000Z").getTime();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(start);
+    try {
+      const first = mount();
+      await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+      first.unmount();
+
+      vi.setSystemTime(start + 29_000);
+      const back = mount();
+      await act(async () => {});
+      expect(back.result.current.data?.id).toBe("conversation-1");
+      expect(getConversation).toHaveBeenCalledTimes(1);
+      back.unmount();
+
+      // Stale now. A reader that opts out of mount refetches does not fetch.
+      vi.setSystemTime(start + 31_000);
+      const reader = mount({ refetchOnMount: false });
+      await act(async () => {});
+      expect(getConversation).toHaveBeenCalledTimes(1);
+      reader.unmount();
+
+      const later = mount();
+      await waitFor(() => expect(getConversation).toHaveBeenCalledTimes(2));
+      later.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -302,6 +418,28 @@ describe("useMemberDefaultModel error handling", () => {
       }),
     );
     expect(result.current.isError).toBe(false);
+  });
+});
+
+describe("useMemberDefaultModel caching", () => {
+  it("serves a remount within 30 s from the cache", async () => {
+    vi.clearAllMocks();
+    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue({
+      data: { modelId: "model-1", chatApiKeyId: "key-1" },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getMemberDefaultModel>>);
+    const wrapper = createWrapper();
+
+    const first = renderHook(() => useMemberDefaultModel(), { wrapper });
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    first.unmount();
+    const second = renderHook(() => useMemberDefaultModel(), { wrapper });
+
+    expect(second.result.current.data).toEqual({
+      modelId: "model-1",
+      chatApiKeyId: "key-1",
+    });
+    expect(archestraApiSdk.getMemberDefaultModel).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -586,7 +724,7 @@ describe("conversation read-state hooks", () => {
     });
     // Seeded fresh (staleTime > 0), so useConversations serves it without an
     // immediate refetch — the hooks read this directly.
-    queryClient.setQueryData(["conversations", undefined], seed);
+    queryClient.setQueryData(conversationsQueryKey(), seed);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -615,7 +753,7 @@ describe("conversation read-state hooks", () => {
 
     const list = queryClient.getQueryData<
       Array<{ id: string; unread: boolean }>
-    >(["conversations", undefined]);
+    >(conversationsQueryKey());
     expect(list?.find((c) => c.id === "c1")?.unread).toBe(false);
     expect(list?.find((c) => c.id === "c2")?.unread).toBe(true);
     await waitFor(() =>
@@ -650,6 +788,31 @@ describe("conversation read-state hooks", () => {
     expect(archestraApiSdk.markChatConversationRead).not.toHaveBeenCalled();
   });
 
+  it("useKeepViewedConversationRead follows a list refresh without fetching the list itself", async () => {
+    vi.mocked(usePathname).mockReturnValue("/chat/c1");
+    const { queryClient } = renderWithSeed(
+      () => useKeepViewedConversationRead(),
+      seededList({ id: "c1", unread: false }),
+    );
+    await Promise.resolve();
+    expect(archestraApiSdk.markChatConversationRead).not.toHaveBeenCalled();
+
+    // A conversation_updated refresh lands while the chat is open.
+    act(() => {
+      queryClient.setQueryData(
+        conversationsQueryKey(),
+        seededList({ id: "c1", unread: true }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(archestraApiSdk.markChatConversationRead).toHaveBeenCalledWith({
+        path: { id: "c1" },
+      }),
+    );
+    expect(archestraApiSdk.getChatConversations).not.toHaveBeenCalled();
+  });
+
   it("useKeepViewedConversationRead does not mark read off a conversation route", async () => {
     vi.mocked(usePathname).mockReturnValue("/chat");
     renderWithSeed(
@@ -680,6 +843,84 @@ describe("conversation read-state hooks", () => {
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["conversations"] });
+    // The open conversation is cached as fresh, so the push must mark it stale.
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["conversation", "c1"],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["conversation-files", "c1"],
+    });
+  });
+});
+
+describe("useRefreshConversationFilesAfterTurn", () => {
+  function setup(initial: {
+    conversationId?: string;
+    projectId?: string | null;
+    status: string;
+  }) {
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const hook = renderHook(
+      (props: typeof initial) => useRefreshConversationFilesAfterTurn(props),
+      { wrapper, initialProps: initial },
+    );
+    const refreshedFiles = () =>
+      invalidateSpy.mock.calls.filter(
+        ([filters]) => filters?.queryKey?.[0] === "conversation-files",
+      ).length;
+    return { ...hook, refreshedFiles, invalidateSpy };
+  }
+
+  test("does not refresh when a conversation opens or its project resolves", () => {
+    const { rerender, refreshedFiles } = setup({
+      conversationId: "c1",
+      status: "ready",
+    });
+    rerender({ conversationId: "c1", projectId: "p1", status: "ready" });
+    expect(refreshedFiles()).toBe(0);
+  });
+
+  test("does not refresh when switching to another conversation", () => {
+    const { rerender, refreshedFiles } = setup({
+      conversationId: "c1",
+      status: "ready",
+    });
+    rerender({ conversationId: "c2", status: "ready" });
+    expect(refreshedFiles()).toBe(0);
+  });
+
+  test("refreshes once when a turn ends, including the project's files", () => {
+    const { rerender, refreshedFiles, invalidateSpy } = setup({
+      conversationId: "c1",
+      projectId: "p1",
+      status: "ready",
+    });
+    rerender({ conversationId: "c1", projectId: "p1", status: "submitted" });
+    rerender({ conversationId: "c1", projectId: "p1", status: "streaming" });
+    expect(refreshedFiles()).toBe(0);
+
+    rerender({ conversationId: "c1", projectId: "p1", status: "ready" });
+    expect(refreshedFiles()).toBe(1);
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["projects", "p1", "files"],
+    });
+
+    rerender({ conversationId: "c1", projectId: "p1", status: "ready" });
+    expect(refreshedFiles()).toBe(1);
+  });
+
+  test("a turn that fails to start still refreshes when it settles", () => {
+    const { rerender, refreshedFiles } = setup({
+      conversationId: "c1",
+      status: "ready",
+    });
+    rerender({ conversationId: "c1", status: "submitted" });
+    rerender({ conversationId: "c1", status: "ready" });
+    expect(refreshedFiles()).toBe(1);
   });
 });
 
@@ -699,10 +940,9 @@ describe("useDeleteConversation project-list invalidation", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(
-      ["conversations", undefined],
-      [{ ...makeConversation(), ...conversation }],
-    );
+    queryClient.setQueryData(conversationsQueryKey(), [
+      { ...makeConversation(), ...conversation },
+    ]);
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

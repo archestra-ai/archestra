@@ -1,6 +1,6 @@
 import { TimeInMs } from "@archestra/shared";
 import KeyvPostgres from "@keyv/postgres";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
@@ -21,6 +21,8 @@ export const CacheKey = {
   ClientConnectionRateLimit: "client-connection-rate-limit",
   /** models.dev sync tracking */
   ModelsDevSync: "models-dev-sync",
+  /** Recent scheduled model sync attempt for an LLM provider API key */
+  LlmModelSyncAttempt: "llm-model-sync-attempt",
   /** MCP tools for chat feature */
   ChatMcpTools: "chat-mcp-tools",
   /** Last verified provider tool-token count, bounded to one slot per gateway. */
@@ -227,6 +229,27 @@ class CacheManager {
     });
 
     logger.debug("CacheManager: Started with Keyv PostgreSQL storage");
+  }
+
+  /**
+   * SQL that is true while a live entry is stored under `${prefix}-${id}`,
+   * for queries that must skip rows whose entry has not expired. `id` is a
+   * text SQL expression, usually a column. Entries are JSON text with an
+   * epoch-millisecond `expires`; one without it never expires.
+   *
+   * This reads Keyv's stored envelope (`{"value": ..., "expires": <ms>}`),
+   * the format incrementFixedWindows also writes. If a Keyv upgrade renamed
+   * `expires`, every entry would look live forever. The model sync schedule
+   * tests write their markers through `set` and expect a retry once the TTL
+   * passes, so they fail on such a change.
+   */
+  liveEntryExists(params: { prefix: CacheKeyPrefix; id: SQL; now: Date }): SQL {
+    const { prefix, id, now } = params;
+    return sql`EXISTS (
+      SELECT 1 FROM keyv_cache
+      WHERE keyv_cache.key = ${`keyv:${prefix}-`} || ${id}
+        AND coalesce((keyv_cache.value::jsonb ->> 'expires')::numeric > ${now.getTime()}, true)
+    )`;
   }
 
   /**

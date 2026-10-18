@@ -3984,6 +3984,13 @@
       "when": 1792283699755,
       "tag": "0568_gateway_profile_list_index",
       "breakpoints": true
+    },
+    {
+      "idx": 569,
+      "version": "7",
+      "when": 1792286825952,
+      "tag": "0569_overconfident_dragon_man",
+      "breakpoints": true
     }
   ]
 }

@@ -75,6 +75,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default configRoutes;
 
 export const ConfigResponseSchema = z.strictObject({
+  /** The running platform version, as `/health` reports it. */
+  version: z.string(),
   enterpriseFeatures: z.strictObject({
     core: z.boolean(),
     knowledgeBase: z.boolean(),
@@ -199,6 +201,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
   const tier = enterpriseTier.getState();
 
   return {
+    version: config.api.version,
     enterpriseFeatures: {
       core: tier.coreActive,
       knowledgeBase: tier.knowledgeBaseActive,

@@ -29,6 +29,7 @@ import { useConversationActions } from "@/components/chat/conversation-actions";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { TruncatedText } from "@/components/truncated-text";
@@ -259,14 +260,13 @@ export function ChatSidebarSection({
     }
   }, [editingId, editingRunId]);
 
-  const handleSelectConversation = (id: string) => {
+  // Rows are links: the browser follows them (new tab included), and a hover
+  // or focus warms the route first. Clicking only has to close the mobile
+  // sidebar.
+  const handleConversationLinkClick = () => {
     if (isMobile) {
       setOpenMobile(false);
     }
-    const conversation = conversations.find(
-      (conversation) => conversation.id === id,
-    );
-    router.push(conversationHref(conversation ?? { id }));
   };
 
   const handleStartEdit = (id: string, currentTitle: string | null) => {
@@ -412,16 +412,23 @@ export function ChatSidebarSection({
             )}
           >
             <SidebarMenuButton
-              onClick={() => handleSelectConversation(conv.id)}
+              asChild
               isActive={activeTriggerId === conv.scheduledRun.triggerId}
               title={conv.scheduledRun.scheduleName}
               className="cursor-pointer flex-1 min-w-0"
             >
-              <CalendarClock
-                className="h-3.5 w-3.5 shrink-0"
-                aria-label="Scheduled task"
-              />
-              <span className="truncate">{conv.scheduledRun.scheduleName}</span>
+              <IntentPrefetchLink
+                href={conversationHref(conv)}
+                onClick={handleConversationLinkClick}
+              >
+                <CalendarClock
+                  className="h-3.5 w-3.5 shrink-0"
+                  aria-label="Scheduled task"
+                />
+                <span className="truncate">
+                  {conv.scheduledRun.scheduleName}
+                </span>
+              </IntentPrefetchLink>
             </SidebarMenuButton>
             {conv.projectId && conv.projectName && (
               <ProjectBadgeButton
@@ -527,97 +534,104 @@ export function ChatSidebarSection({
             </div>
           ) : (
             <SidebarMenuButton
-              onClick={() => handleSelectConversation(conv.id)}
+              asChild
               isActive={isCurrentConversation}
               className="cursor-pointer flex-1 justify-between"
             >
-              <span className="flex items-center gap-2 min-w-0 flex-1">
-                {conv.encryptedChat && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <EncryptedChatIcon className="h-3.5 w-3.5" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top">Encrypted chat</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {conv.share && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <UsersRound className="h-3.5 w-3.5 shrink-0 text-primary/80" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {getConversationShareTooltip(conv.share.visibility)}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {(hasRecentlyGeneratedTitle || isRegenerating) && (
-                  <AISparkleIcon isAnimating />
-                )}
-                {isRegenerating ? (
-                  <span
-                    key="regenerating"
-                    className="text-muted-foreground text-sm truncate"
-                  >
-                    Generating...
-                  </span>
-                ) : hasRecentlyGeneratedTitle ? (
-                  <span key="typing" className="truncate">
-                    <TypingText
-                      text={
-                        displayTitle.length > MAX_TITLE_LENGTH
-                          ? `${displayTitle.slice(0, MAX_TITLE_LENGTH)}...`
-                          : displayTitle
-                      }
-                      typingSpeed={35}
-                      showCursor
-                      cursorClassName="bg-primary"
-                    />
-                  </span>
-                ) : (
-                  <TruncatedText
-                    message={displayTitle}
-                    maxLength={MAX_TITLE_LENGTH}
-                    className="truncate"
-                    showTooltip={false}
-                  />
-                )}
-              </span>
-              {/* One fixed slot for both, so the spinner and the smaller dot
-                  share a center line down the list. */}
-              {hasIndicator && (
-                <span
-                  className={cn(
-                    "ml-1 flex size-4 shrink-0 items-center justify-center",
-                    showChatMenu &&
-                      "group-hover/menu-sub-item:ml-7 group-focus-within/menu-sub-item:ml-7",
-                    showChatMenu && isMenuOpen && "ml-7",
+              <IntentPrefetchLink
+                href={conversationHref(conv)}
+                onClick={handleConversationLinkClick}
+              >
+                <span className="flex items-center gap-2 min-w-0 flex-1">
+                  {conv.encryptedChat && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <EncryptedChatIcon className="h-3.5 w-3.5" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          Encrypted chat
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
-                >
-                  {isGenerating ? (
-                    <Loader2
-                      aria-label="Generating"
-                      data-testid={getChatItemGeneratingIndicatorTestId(
-                        conv.id,
-                      )}
-                      className="size-3.5 animate-spin text-muted-foreground"
-                    />
-                  ) : (
+                  {conv.share && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <UsersRound className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {getConversationShareTooltip(conv.share.visibility)}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {(hasRecentlyGeneratedTitle || isRegenerating) && (
+                    <AISparkleIcon isAnimating />
+                  )}
+                  {isRegenerating ? (
                     <span
-                      role="img"
-                      aria-label="New messages"
-                      data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
-                      className={cn(
-                        "size-2 rounded-full",
-                        ATTENTION_DOT_CLASS.attention,
-                      )}
+                      key="regenerating"
+                      className="text-muted-foreground text-sm truncate"
+                    >
+                      Generating...
+                    </span>
+                  ) : hasRecentlyGeneratedTitle ? (
+                    <span key="typing" className="truncate">
+                      <TypingText
+                        text={
+                          displayTitle.length > MAX_TITLE_LENGTH
+                            ? `${displayTitle.slice(0, MAX_TITLE_LENGTH)}...`
+                            : displayTitle
+                        }
+                        typingSpeed={35}
+                        showCursor
+                        cursorClassName="bg-primary"
+                      />
+                    </span>
+                  ) : (
+                    <TruncatedText
+                      message={displayTitle}
+                      maxLength={MAX_TITLE_LENGTH}
+                      className="truncate"
+                      showTooltip={false}
                     />
                   )}
                 </span>
-              )}
+                {/* One fixed slot for both, so the spinner and the smaller dot
+                  share a center line down the list. */}
+                {hasIndicator && (
+                  <span
+                    className={cn(
+                      "ml-1 flex size-4 shrink-0 items-center justify-center",
+                      showChatMenu &&
+                        "group-hover/menu-sub-item:ml-7 group-focus-within/menu-sub-item:ml-7",
+                      showChatMenu && isMenuOpen && "ml-7",
+                    )}
+                  >
+                    {isGenerating ? (
+                      <Loader2
+                        aria-label="Generating"
+                        data-testid={getChatItemGeneratingIndicatorTestId(
+                          conv.id,
+                        )}
+                        className="size-3.5 animate-spin text-muted-foreground"
+                      />
+                    ) : (
+                      <span
+                        role="img"
+                        aria-label="New messages"
+                        data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
+                        className={cn(
+                          "size-2 rounded-full",
+                          ATTENTION_DOT_CLASS.attention,
+                        )}
+                      />
+                    )}
+                  </span>
+                )}
+              </IntentPrefetchLink>
             </SidebarMenuButton>
           )}
           {editingId !== conv.id && conv.projectId && conv.projectName && (

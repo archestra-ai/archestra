@@ -16,6 +16,7 @@ export function makeConfig(
   } = {},
 ): Config {
   return {
+    version: "0.0.0-test",
     enterpriseFeatures: {
       core: false,
       knowledgeBase: false,

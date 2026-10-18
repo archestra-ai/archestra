@@ -26,6 +26,13 @@ const {
   setOAuthTeamIdMock: vi.fn(),
 }));
 
+const { issueIndexQueryMock } = vi.hoisted(() => ({
+  issueIndexQueryMock: vi.fn((params?: { enabled?: boolean }) => ({
+    data:
+      params?.enabled === false ? undefined : { catalogItems: [], servers: [] },
+  })),
+}));
+
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
 }));
@@ -42,9 +49,8 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
           oauthConfig: { clientId: "client-123" },
         }
       : null,
-  useMcpRegistryIssueIndex: () => ({
-    data: { catalogItems: [], servers: [] },
-  }),
+  // Like the real query, nothing is returned while it is disabled.
+  useMcpRegistryIssueIndex: issueIndexQueryMock,
 }));
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
@@ -109,6 +115,20 @@ describe("useMcpInstallOrchestrator", () => {
       authorizationUrl: "https://posthog.example.com/oauth/authorize",
       state: "oauth-state-123",
     });
+  });
+
+  it("loads no issue index while disabled, and a trigger still opens its dialog", async () => {
+    const { result } = renderHook(
+      () => useMcpInstallOrchestrator({ enabled: false }),
+      { wrapper },
+    );
+    expect(issueIndexQueryMock).toHaveBeenLastCalledWith({ enabled: false });
+
+    act(() => {
+      result.current.triggerInstallByCatalogId("catalog-posthog");
+    });
+
+    await waitFor(() => expect(openDialogMock).toHaveBeenCalledTimes(1));
   });
 
   it("starts OAuth immediately for pure OAuth re-authentication", async () => {

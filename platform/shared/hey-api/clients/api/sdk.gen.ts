@@ -295,7 +295,7 @@ export const unpinAgent = <ThrowOnError extends boolean = false>(options: Option
 export const pinAgent = <ThrowOnError extends boolean = false>(options: Options<PinAgentData, ThrowOnError>) => (options.client ?? client).put<PinAgentResponses, PinAgentErrors, ThrowOnError>({ url: '/api/agents/{id}/pin', ...options });
 
 /**
- * Get authorized chat agent identities and model references
+ * Get authorized chat agent identities and model references. With `bootstrap`, the starting roster plus the caller's and the organization's default agents the caller can use.
  *
  * Authentication:
  *
@@ -2648,7 +2648,7 @@ export const stopChatStream = <ThrowOnError extends boolean = false>(options: Op
 export const getActiveChatRun = <ThrowOnError extends boolean = false>(options: Options<GetActiveChatRunData, ThrowOnError>) => (options.client ?? client).get<GetActiveChatRunResponses, GetActiveChatRunErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}/active-run', ...options });
 
 /**
- * List all conversations for current user with agent details. Optionally filter by search query.
+ * List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50.
  *
  * Authentication:
  *

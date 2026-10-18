@@ -2310,7 +2310,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { user, organizationId } = request;
-      const conversation = await ConversationModel.findAccessibleById({
+      // Authorization only: the replay comes from the run, not the transcript.
+      const conversation = await ConversationModel.findAccessibleMetadataById({
         id,
         userId: user.id,
         organizationId,
@@ -2381,10 +2382,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversations,
         description:
-          "List all conversations for current user with agent details. Optionally filter by search query.",
+          "List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50.",
         tags: ["Chat"],
         querystring: z.object({
           search: z.string().optional(),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(250)
+            .default(250)
+            .describe(
+              "Recent conversations to return when not searching. Pinned ones are always added.",
+            ),
           includeArtifacts: z
             .preprocess((val) => val !== "false" && val !== false, z.boolean())
             .optional()
@@ -2410,12 +2420,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { search, includeArtifacts } = request.query;
+      const { search, limit, includeArtifacts } = request.query;
       const conversations = await ConversationModel.findAll(
         request.user.id,
         request.organizationId,
         search,
-        { includeArtifacts },
+        { limit, includeArtifacts },
       );
       const runs = await ScheduleTriggerRunModel.findByChatConversationIds({
         organizationId: request.organizationId,
@@ -2555,7 +2565,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { user, organizationId } = request;
-      const conversation = await findReadableConversationById({
+      // The label lives on the session, so only read access is checked here.
+      const conversation = await findReadableConversationMetadataById({
         conversationId: id,
         userId: user.id,
         organizationId,

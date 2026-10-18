@@ -523,7 +523,6 @@ where
         state.deployments.frozen(
             &state.runtime,
             &state.store,
-            organization_id,
             &line,
             policy,
             agent_yell,
@@ -1401,10 +1400,15 @@ async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<Op
             })
             .map_err(error)?;
         let Some(root) = root else { return Ok(None) };
+        let root = TrajectoryId(root);
+        let policy_revision = match leased.state.store.family_kind(&root).map_err(error)? {
+            Some(FamilyKind::Following(_)) => policy_revision,
+            Some(FamilyKind::Pinned) | None => None,
+        };
         let status = leased
             .state
             .runtime
-            .try_status(&TrajectoryId(root))
+            .try_status(&root)
             .map_err(error)?;
         Ok(Some(OpenappaStatus {
             trust: status.trust,

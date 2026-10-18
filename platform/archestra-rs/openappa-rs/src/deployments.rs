@@ -138,6 +138,12 @@ struct Frozen {
     published: PublishedDeployment,
 }
 
+struct CompiledPolicy {
+    config: appa_runtime::config::Config,
+    variables: Arc<[String]>,
+    answers: [u8; 32],
+}
+
 impl Frozen {
     fn serves(&self, line: &DeploymentName, policy: &HostedPolicy) -> bool {
         self.line == *line
@@ -200,8 +206,8 @@ impl Deployments {
     /// this process forgets its deployment instead of publishing its own bytes over
     /// that head; the host's retry reads the policy again and publishes from that.
     ///
-    /// The head read and the publish are synchronous PostgreSQL round trips, so they
-    /// run on a blocking thread.
+    /// The head and stored revision reads are synchronous PostgreSQL round trips,
+    /// so they run on a blocking thread. Pinning never publishes.
     pub(crate) async fn repin(
         &self,
         runtime: &Arc<Runtime>,
@@ -220,14 +226,13 @@ impl Deployments {
         let line = DeploymentName::new(organization_id);
         let (key, prepared) = (pinned.key.clone(), pinned.prepared.clone());
         let head = tokio::task::spawn_blocking(move || -> Result<_, String> {
-            let head = store.head(&line).map_err(|error| error.to_string())?;
-            if head.is_none_or(|head| head.key.as_str() != &*key) {
+            let Some(head) = store.head(&line).map_err(|error| error.to_string())? else {
+                return Ok(None);
+            };
+            if head.key.as_str() != &*key {
                 return Ok(None);
             }
-            runtime
-                .publish(&line, &prepared)
-                .map(Some)
-                .map_err(|error| error.to_string())
+            pin_existing(&runtime, &line, &prepared, &head).map(Some)
         })
         .await
         .map_err(|error| error.to_string())??;
@@ -271,7 +276,11 @@ impl Deployments {
         }
         let (runtime, policy) = (runtime.clone(), policy.clone());
         let snapshot = tokio::task::spawn_blocking(move || -> Result<Snapshot, String> {
-            let (mut config, variables, answers) = compiled(&policy.content, &policy.credentials)?;
+            let CompiledPolicy {
+                mut config,
+                variables,
+                answers,
+            } = compiled(&policy.content, &policy.credentials)?;
             config.reporting.agent_yell = agent_yell;
             let prepared = runtime
                 .prepare_deployment(config)
@@ -305,12 +314,12 @@ impl Deployments {
         &self,
         runtime: &Arc<Runtime>,
         store: &Arc<LogStore>,
-        organization_id: &str,
         line: &DeploymentName,
         policy: &HostedPolicy,
         agent_yell: bool,
         stale: Option<&PublishedDeployment>,
     ) -> Result<PublishedDeployment, String> {
+        let organization_id = line.as_str();
         {
             let mut frozen = self.frozen.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some(stale) = stale
@@ -336,15 +345,16 @@ impl Deployments {
                 .ok_or_else(|| {
                     format!("deployment {line} has no head for its following families")
                 })?;
-            let (mut config, variables, answers) = frozen_head(&store, &line, &head, &credentials)?;
+            let CompiledPolicy {
+                mut config,
+                variables,
+                answers,
+            } = frozen_head(&store, &line, &head, &credentials)?;
             config.reporting.agent_yell = agent_yell;
             let prepared = runtime
                 .prepare_deployment(config)
                 .map_err(|error| error.to_string())?;
-            // The head already names this file, so publishing writes nothing.
-            let published = runtime
-                .publish(&line, &prepared)
-                .map_err(|error| error.to_string())?;
+            let published = pin_existing(&runtime, &line, &prepared, &head)?;
             Ok(Frozen {
                 line,
                 variables,
@@ -439,7 +449,11 @@ fn prepare(
     policy: &HostedPolicy,
     agent_yell: bool,
 ) -> Result<Pinned, DeploymentError> {
-    let (mut config, variables, answers) = compiled(&policy.content, &policy.credentials)?;
+    let CompiledPolicy {
+        mut config,
+        variables,
+        answers,
+    } = compiled(&policy.content, &policy.credentials)?;
     config.reporting.agent_yell = agent_yell;
     let key = policy_file_key(config.policy_file().bytes());
     let prepared = runtime
@@ -467,12 +481,20 @@ fn prepare(
     Ok(pinned)
 }
 
+fn pin_existing(
+    runtime: &Runtime,
+    line: &DeploymentName,
+    prepared: &PreparedDeployment,
+    head: &PolicyHead,
+) -> Result<PublishedDeployment, String> {
+    runtime
+        .at_revision(line, prepared, head.revision)
+        .map_err(|error| error.to_string())
+}
+
 /// `content` compiled with the credential values it looks up, every variable it
 /// looked up in order, and the digest of their answers.
-fn compiled(
-    content: &str,
-    credentials: &HostCredentials,
-) -> Result<(appa_runtime::config::Config, Arc<[String]>, [u8; 32]), String> {
+fn compiled(content: &str, credentials: &HostCredentials) -> Result<CompiledPolicy, String> {
     let asked = RefCell::new(Vec::<(String, Option<String>)>::new());
     let config = crate::policy::compile(content, |var| {
         let answer = credentials.lookup(var);
@@ -485,11 +507,11 @@ fn compiled(
             .iter()
             .map(|(var, answer)| (var.as_str(), answer.clone())),
     );
-    Ok((
+    Ok(CompiledPolicy {
         config,
-        asked.into_iter().map(|(var, _)| var).collect(),
+        variables: asked.into_iter().map(|(var, _)| var).collect(),
         answers,
-    ))
+    })
 }
 
 /// The configuration the policy file `head` names compiles to with `credentials`.
@@ -501,7 +523,7 @@ fn frozen_head(
     line: &DeploymentName,
     head: &PolicyHead,
     credentials: &HostCredentials,
-) -> Result<(appa_runtime::config::Config, Arc<[String]>, [u8; 32]), String> {
+) -> Result<CompiledPolicy, String> {
     let bytes = store
         .policy_file(line, head.revision)
         .map_err(|error| error.to_string())?;
@@ -512,7 +534,7 @@ fn frozen_head(
         )
     })?;
     let compiled = compiled(text, credentials)?;
-    let key = policy_file_key(compiled.0.policy_file().bytes());
+    let key = policy_file_key(compiled.config.policy_file().bytes());
     if key != head.key.as_str() {
         return Err(format!(
             "the policy file of {line} revision {} does not compile back to the file its head names; retry later",
@@ -575,6 +597,10 @@ fn answers_digest<'a>(answers: impl Iterator<Item = (&'a str, Option<String>)>) 
 mod tests {
     use super::*;
     use appa_eventlog::{Backend, LogStore};
+    use appa_runtime::hooks;
+    use appa_runtime_api::{
+        Actor, HookDecision, HookEvent, ProposedCall, RefusalClass, TrajectoryId,
+    };
 
     const KEY: &str = "APPA_OPENAPPA_RS_TEST_JEV_KEY";
     const JEV: &str = "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"jev.tool-call\"\nbuiltin = \"jev\"\nranks = [\"suspicious\", \"trusted\"]\naudiences = [\"self\", \"internal\"]\nmarks = []\n[externals.jev]\ntoken_env = \"APPA_OPENAPPA_RS_TEST_JEV_KEY\"\n";
@@ -925,36 +951,21 @@ mod tests {
             &edited(JEV, "saved-during-snapshot"),
             Some("rotated-test-key"),
         );
-        let (config, variables, _) =
-            frozen_head(&store, &line, &head, &changed.credentials).unwrap();
+        let CompiledPolicy {
+            config, variables, ..
+        } = frozen_head(&store, &line, &head, &changed.credentials).unwrap();
         assert_eq!(
             policy_file_key(config.policy_file().bytes()),
             head.key.as_str()
         );
         assert!(variables.iter().any(|variable| variable == KEY));
-        let frozen = block_on(deployments.frozen(
-            &runtime,
-            &store,
-            "frozen-org",
-            &line,
-            &changed,
-            false,
-            None,
-        ))
-        .unwrap();
+        let frozen =
+            block_on(deployments.frozen(&runtime, &store, &line, &changed, false, None)).unwrap();
         assert_eq!(frozen.revision(), 1);
         assert_eq!(store.head(&line).unwrap().unwrap(), head);
         assert!(
-            block_on(deployments.frozen(
-                &runtime,
-                &store,
-                "frozen-org",
-                &line,
-                &policy(JEV, None),
-                false,
-                None,
-            ))
-            .is_err()
+            block_on(deployments.frozen(&runtime, &store, &line, &policy(JEV, None), false, None,))
+                .is_err()
         );
     }
 
@@ -972,6 +983,136 @@ mod tests {
         ))
         .unwrap();
         assert!(store.head(&line).unwrap().is_none());
+    }
+
+    #[test]
+    fn read_only_pins_cannot_roll_back_a_live_publish_from_another_process() {
+        const ORGANIZATION: &str = "pin-race-org";
+        const BEFORE: &str =
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"before\"\ndelta = {}\n";
+        const AFTER: &str =
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"after\"\ndelta = {}\n";
+        let temporary = tempfile::tempdir().unwrap();
+        let child_path = std::env::var_os("ARCHESTRA_OPENAPPA_PIN_RACE_STORE");
+        let path = child_path
+            .clone()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| temporary.path().join("race.sqlite"));
+        let store = Arc::new(LogStore::open(Backend::Sqlite { path: path.clone() }).unwrap());
+        let runtime = on_store(store.clone());
+        let deployments = Deployments::default();
+        let line = DeploymentName::new(ORGANIZATION);
+        if child_path.is_some() {
+            let published = block_on(deployments.deployment(
+                &runtime,
+                &store,
+                ORGANIZATION,
+                &policy(AFTER, None),
+                false,
+            ))
+            .ok()
+            .unwrap();
+            assert_eq!(published.revision(), 2);
+            return;
+        }
+        let original = block_on(deployments.deployment(
+            &runtime,
+            &store,
+            ORGANIZATION,
+            &policy(BEFORE, None),
+            false,
+        ))
+        .ok()
+        .unwrap();
+        let root = TrajectoryId("pin-race-root".into());
+        let start = || HookEvent::SessionStart {
+            root: root.clone(),
+            principal: None,
+            address: None,
+            title: None,
+            start: None,
+            launch: None,
+        };
+        assert_eq!(
+            block_on(hooks::handle(&runtime.pinned(&original), start())),
+            HookDecision::Ack
+        );
+        let observed = store.head(&line).unwrap().unwrap();
+        let config = frozen_head(&store, &line, &observed, &HostCredentials::default())
+            .unwrap()
+            .config;
+        let prepared = runtime.prepare_deployment(config).unwrap();
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "deployments::tests::read_only_pins_cannot_roll_back_a_live_publish_from_another_process", "--nocapture"])
+            .env("ARCHESTRA_OPENAPPA_PIN_RACE_STORE", &path)
+            .output().unwrap();
+        assert!(
+            child.status.success(),
+            "{}",
+            String::from_utf8_lossy(&child.stderr)
+        );
+        let advanced = store.head(&line).unwrap().unwrap();
+        assert_eq!(advanced.revision.value(), 2);
+        let opening_facts = store.log(&root).unwrap().facts().len();
+        for source in ["frozen", "repin"] {
+            let stale = pin_existing(&runtime, &line, &prepared, &observed).unwrap();
+            assert_eq!(
+                stale.revision(),
+                1,
+                "{source} pins only the observed revision"
+            );
+            assert_eq!(
+                store.head(&line).unwrap().unwrap(),
+                advanced,
+                "{source} must not publish stale bytes"
+            );
+            let decision = block_on(hooks::handle(
+                &runtime.pinned(&stale),
+                HookEvent::ToolCall {
+                    call_id: Some(format!("stale-{source}")),
+                    actor: Actor {
+                        root: root.clone(),
+                        child: None,
+                    },
+                    call: ProposedCall {
+                        tool: "host/archestra/before".into(),
+                        arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
+                        cwd: None,
+                    },
+                    spawn: None,
+                    prompt: None,
+                    ruling: None,
+                },
+            ));
+            assert!(
+                matches!(
+                    decision,
+                    HookDecision::Refuse {
+                        class: RefusalClass::PolicyMoved,
+                        ..
+                    }
+                ),
+                "{decision:?}"
+            );
+            assert_eq!(store.head(&line).unwrap().unwrap(), advanced);
+            assert_eq!(store.log(&root).unwrap().facts().len(), opening_facts);
+        }
+        let frozen = block_on(deployments.frozen(
+            &runtime,
+            &store,
+            &line,
+            &policy(BEFORE, None),
+            false,
+            None,
+        ))
+        .unwrap();
+        assert_eq!(frozen.revision(), 2);
+        assert!(
+            block_on(deployments.repin(&runtime, &store, ORGANIZATION, &original))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(store.head(&line).unwrap().unwrap(), advanced);
     }
 
     #[test]

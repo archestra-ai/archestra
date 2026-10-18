@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub or GitLab
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-17
+lastUpdated: 2026-10-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -53,11 +53,20 @@ requires = { trust = "trusted", audience = { contains = ["public"] } }
 
 What to know:
 
-- A change reaches every conversation at its next tool call, including running ones. A review still waiting for an answer is withdrawn, and the agent asks again. **Effective** shows the runtime revision in force.
+- Conversations that follow the live policy take a change at their next tool call; pinned conversations keep their snapshot. A review under the earlier revision is withdrawn, and the agent asks again. **Effective** shows the runtime revision in force.
 - A change that fails keeps the last valid policy running. **Effective** shows the error.
 - Changing the policy needs [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). Turning enforcement on or off needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
 For every field, see the [policy reference](https://www.openappa.com/contracts).
+
+### Keep a Policy Snapshot for New Sessions
+
+To stop policy changes from reaching running sessions, without a redeploy, go to **Settings → Guardrails** and set **Policy for new sessions**:
+
+- **New sessions reference the live policy** (the default): new sessions follow policy changes. Existing sessions that follow the live policy take a change at their next tool call.
+- **New sessions keep a policy snapshot**: a new session keeps the policy it opens with until it ends, and a policy change reaches new sessions only. No new policy revision is published, so running sessions keep the revision they have.
+
+When you select the live policy again, following sessions take the next change. A session that opened with a snapshot keeps it. The chat shows **policy snapshot** for such a session. Changing the setting needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
 ## Human Review
 

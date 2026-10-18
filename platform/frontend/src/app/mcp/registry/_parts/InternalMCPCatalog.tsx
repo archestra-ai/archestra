@@ -386,7 +386,7 @@ export function InternalMCPCatalog() {
   // (Next integrates history updates with the router), so the hook sees the
   // param; deleting the reauth param first makes the re-fired effect
   // early-return instead of looping.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: run only on searchParams and issue-index changes; router/pathname are stable and handleDeepLinkReauth is a stable closure
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run only on searchParams and issue-index changes; router/pathname are stable, and handleDeepLinkReauth is recreated each render but only called inline here, so it is not a dependency
   useEffect(() => {
     const reauthCatalogIdParam = searchParams.get(
       MCP_CATALOG_REAUTH_QUERY_PARAM,

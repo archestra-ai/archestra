@@ -39,14 +39,23 @@ describe("prefetchShellSeed", () => {
   beforeEach(() => {
     requestHeaders.clear();
     vi.stubGlobal("fetch", fetchMock);
-    fetchMock.mockReset().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          user: { id: "u1" },
-          session: { userId: "u1", token: "secret-token" },
-        }),
-        { status: 200 },
-      ),
+    // A new response per call: a body reads once, and a test may resolve
+    // the shell for several routes.
+    fetchMock.mockReset().mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            user: { id: "u1" },
+            session: {
+              id: "s1",
+              userId: "u1",
+              activeOrganizationId: "org-1",
+              token: "secret-token",
+              refreshToken: "secret-refresh",
+            },
+          }),
+          { status: 200 },
+        ),
     );
     getBootstrapMock.mockReset().mockResolvedValue({ data: bootstrap });
     getIssueIndexMock.mockReset().mockResolvedValue({ data: index });
@@ -64,23 +73,26 @@ describe("prefetchShellSeed", () => {
     const seed = await prefetchShellSeed();
 
     expect(seed).toEqual({
-      session: { user: { id: "u1" }, session: { userId: "u1" } },
+      session: {
+        user: { id: "u1" },
+        session: { id: "s1", userId: "u1", activeOrganizationId: "org-1" },
+      },
       bootstrap,
       queries: [{ queryKey: mcpRegistryIssueIndexQueryKey, data: index }],
     });
-    expect(JSON.stringify(seed)).not.toContain("secret-token");
+    // A field the app does not read stays out, whatever its name.
+    expect(JSON.stringify(seed)).not.toContain("secret-");
   });
 
-  it("resolves the shell for any page added to the seeded routes, and for no other", async () => {
-    const routes = SHELL_SEED_ROUTES as string[];
-    routes.push("/mcp/gateways");
-    try {
-      requestHeaders.set(SHELL_SEED_HEADER, "/mcp/gateways");
+  it("resolves the shell for every seeded route, and for no other", async () => {
+    // Reads the list as it is, so a page added to it is covered here too.
+    for (const route of SHELL_SEED_ROUTES) {
+      requestHeaders.set(SHELL_SEED_HEADER, route);
       expect(await prefetchShellSeed()).not.toBeNull();
-      requestHeaders.set(SHELL_SEED_HEADER, "/agents");
+    }
+    for (const path of ["/agents", "/mcp/gateways"]) {
+      requestHeaders.set(SHELL_SEED_HEADER, path);
       expect(await prefetchShellSeed()).toBeNull();
-    } finally {
-      routes.pop();
     }
   });
 

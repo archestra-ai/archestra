@@ -182,7 +182,7 @@ describe("bind_guardrails_credential", () => {
     makeCustomRole,
   }) => {
     const policyOnly = await makeCustomRole(organizationId, {
-      permission: { openappaPolicy: ["read", "update"] },
+      permission: { guardrailsPolicy: ["read", "update"] },
     });
     const editor = (await makeUser()).id;
     await makeMember(editor, organizationId, { role: policyOnly.role });

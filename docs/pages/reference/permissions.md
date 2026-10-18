@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "Built-in role grants, available permissions, and LLM API access requirements"
 order: 6
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-18
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -25,7 +25,7 @@ The admin role has **all permissions** on every resource.
 
 Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users
 
-Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, `openappaDiagnostics:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](/docs/admin/access-control#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
+Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](/docs/admin/access-control#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
 
 ### Editor
 
@@ -37,6 +37,7 @@ Full access to core resources, but cannot change organization settings or manage
 | Skills | `read`, `create`, `delete` |
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create` |
+| Guardrails Policy | `read`, `update` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create` |
 | LLM Virtual Keys | `read`, `create` |
@@ -48,8 +49,6 @@ Full access to core resources, but cannot change organization settings or manage
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | Credentials | `read`, `create` |
-| OpenAPPA Policy | `read`, `update` |
-| OpenAPPA Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -120,6 +119,8 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="environment:create"></span>`environment:create` | Create deployment environments |
 | <span id="environment:update"></span>`environment:update` | Modify deployment environments, including the org default environment |
 | <span id="environment:delete"></span>`environment:delete` | Delete deployment environments |
+| <span id="guardrailsPolicy:read"></span>`guardrailsPolicy:read` | View Guardrails policy, batteries, and coverage |
+| <span id="guardrailsPolicy:update"></span>`guardrailsPolicy:update` | Validate and edit Guardrails policy and manage batteries |
 | <span id="identityProvider:read"></span>`identityProvider:read` | View identity provider configurations (SSO) |
 | <span id="identityProvider:create"></span>`identityProvider:create` | Set up new identity providers |
 | <span id="identityProvider:update"></span>`identityProvider:update` | Modify identity provider settings |
@@ -142,8 +143,8 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="llmProxy:update"></span>`llmProxy:update` | Modify LLM Proxy configuration |
 | <span id="llmVirtualKey:read"></span>`llmVirtualKey:read` | Open LLM virtual keys |
 | <span id="llmVirtualKey:create"></span>`llmVirtualKey:create` | Create LLM virtual keys |
-| <span id="log:read"></span>`log:read` | View your own LLM proxy and MCP tool call logs in the active organization |
-| <span id="log:admin"></span>`log:admin` | View every LLM and MCP log in your organization (also requires Read) |
+| <span id="log:read"></span>`log:read` | View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells |
+| <span id="log:admin"></span>`log:admin` | View every LLM, MCP, and Guardrails consult log in your organization (also requires Read) |
 | <span id="mcpGateway:read"></span>`mcpGateway:read` | Open MCP Gateways |
 | <span id="mcpGateway:create"></span>`mcpGateway:create` | Create new MCP gateways |
 | <span id="mcpGateway:delete"></span>`mcpGateway:delete` | Open the trash of deleted MCP gateways |
@@ -160,11 +161,6 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="member:impersonate"></span>`member:impersonate` | Temporarily sign in as another member to see the app with their access (role debugging) |
 | <span id="mcpOauthClient:read"></span><span id="llmOauthClient:read"></span><span id="oauthClient:read"></span>`oauthClient:read` | Open OAuth client registrations |
 | <span id="mcpOauthClient:create"></span><span id="llmOauthClient:create"></span><span id="oauthClient:create"></span>`oauthClient:create` | Create OAuth client registrations |
-| <span id="openappaDiagnostics:read"></span>`openappaDiagnostics:read` | Read all organization yells and your own consult logs |
-| <span id="openappaDiagnostics:update"></span>`openappaDiagnostics:update` | Resolve and reopen organization yells |
-| <span id="openappaDiagnostics:admin"></span>`openappaDiagnostics:admin` | Read consult logs across the organization |
-| <span id="openappaPolicy:read"></span>`openappaPolicy:read` | View OpenAPPA policy, batteries, and coverage |
-| <span id="openappaPolicy:update"></span>`openappaPolicy:update` | Validate and edit OpenAPPA policy and manage batteries |
 | <span id="organizationSettings:read"></span>`organizationSettings:read` | View every organization settings page, including messaging channels |
 | <span id="organizationSettings:update"></span>`organizationSettings:update` | Change organization settings, messaging channels, and site notifications |
 | <span id="plugin:read"></span>`plugin:read` | View plugins and their file metadata |

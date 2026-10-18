@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: See every model request, tool call, and admin change, and choose who can read them and how long they stay
 order: 5
-lastUpdated: 2026-10-17
+lastUpdated: 2026-10-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,8 +44,7 @@ One permission shows your own logs. An admin permission shows everyone's. The au
 
 | Tab | Your own | Everyone's |
 | --- | --- | --- |
-| LLM Proxy, MCP Gateway | [`log:read`](/docs/reference/permissions#log:read) | [`log:admin`](/docs/reference/permissions#log:admin) |
-| Guardrail consults | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) | [`openappaDiagnostics:admin`](/docs/reference/permissions#openappaDiagnostics:admin) |
+| LLM Proxy, MCP Gateway, Guardrail consults | [`log:read`](/docs/reference/permissions#log:read) | [`log:admin`](/docs/reference/permissions#log:admin) |
 | Audit | | [`auditLog:read`](/docs/reference/permissions#auditLog:read) |
 
 Sharing an agent or a gateway with someone does not let them read its logs.

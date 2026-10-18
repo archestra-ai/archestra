@@ -132,7 +132,7 @@ describe("binding a battery credential", () => {
   }) => {
     await connectGithubToken();
     const policyOnly = await makeCustomRole(organizationId, {
-      permission: { openappaPolicy: ["read", "update"] },
+      permission: { guardrailsPolicy: ["read", "update"] },
     });
     actor = await makeUser();
     await makeMember(actor.id, organizationId, { role: policyOnly.role });

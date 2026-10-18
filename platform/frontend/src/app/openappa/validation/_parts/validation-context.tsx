@@ -32,8 +32,10 @@ export function ValidationProvider({ children }: { children: ReactNode }) {
   const sessionQuery = useSession();
   const session = sessionQuery?.data;
   const sessionKey = `${session?.session.id}:${session?.session.activeOrganizationId}`;
-  const { data: canRead } = useHasPermissions({ openappaPolicy: ["read"] });
-  const { data: canWrite } = useHasPermissions({ openappaPolicy: ["update"] });
+  const { data: canRead } = useHasPermissions({ guardrailsPolicy: ["read"] });
+  const { data: canWrite } = useHasPermissions({
+    guardrailsPolicy: ["update"],
+  });
   const source = useOpenAppaPolicyTests(canRead === true);
   if (canRead === false)
     return (

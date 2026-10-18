@@ -151448,7 +151448,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
+        "description": "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -151947,7 +151947,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
+        "description": "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -152461,7 +152461,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
+        "description": "MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -174836,10 +174836,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       },
       "put": {
         "operationId": "updateGuardrailsPolicy",
@@ -175154,10 +175154,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/guardrails-policy/validate": {
@@ -175457,10 +175457,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/health": {
@@ -178530,7 +178530,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get interactions in the active organization with pagination and sorting. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+        "description": "Get interactions in the active organization with pagination and sorting. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -210869,7 +210869,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+        "description": "Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -211475,7 +211475,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+        "description": "Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -212205,7 +212205,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that starts from another session's history and guardrail state. `log:read` covers the caller's own sessions. `log:admin` covers all organization sessions when the client session ID identifies one caller. If multiple callers share that session ID, lineage is ambiguous and the request fails.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization",
+        "description": "Get a session's fork lineage: the session it forks and the sessions forked from it. A fork is a new client session that starts from another session's history and guardrail state. `log:read` covers the caller's own sessions. `log:admin` covers all organization sessions when the client session ID identifies one caller. If multiple callers share that session ID, lineage is ambiguous and the request fails.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells",
         "parameters": [
           {
             "schema": {
@@ -212498,7 +212498,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get external agent IDs from visible logs in the active organization. `log:read` returns identifiers from the caller's attributed rows; `log:admin` returns identifiers from every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns identifiers from rows attributed to the caller. `log:admin` includes identifiers from every row in the active organization.",
+        "description": "Get external agent IDs from visible logs in the active organization. `log:read` returns identifiers from the caller's attributed rows; `log:admin` returns identifiers from every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells\n\n`log:read` returns identifiers from rows attributed to the caller. `log:admin` includes identifiers from every row in the active organization.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -212774,7 +212774,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. `log:read` returns only the caller; `log:admin` returns users from every log in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
+        "description": "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. `log:read` returns only the caller; `log:admin` returns users from every log in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells\n\n`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -213084,7 +213084,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get an interaction in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
+        "description": "Get an interaction in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells\n\n`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -318191,7 +318191,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get MCP tool calls in the active organization with cursor pagination, newest first. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+        "description": "Get MCP tool calls in the active organization with cursor pagination, newest first. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -318756,7 +318756,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get an MCP tool call in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
+        "description": "Get an MCP tool call in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells\n\n`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -343727,10 +343727,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/policy-declarations": {
@@ -344358,10 +344358,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/battery-policy-source": {
@@ -344646,10 +344646,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/effective-policy": {
@@ -345210,10 +345210,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/battery-matches": {
@@ -345615,10 +345615,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/battery-installs": {
@@ -346036,10 +346036,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/battery-installs/{id}": {
@@ -346453,10 +346453,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       },
       "delete": {
         "operationId": "deleteOpenappaBatteryInstall",
@@ -346734,10 +346734,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/battery-includes/{name}": {
@@ -347018,10 +347018,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/credential-bindings/{variable}": {
@@ -347682,10 +347682,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/battery-packages/{name}": {
@@ -348048,10 +348048,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/battery-packages/{contentHash}": {
@@ -348330,10 +348330,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/coverage/entities": {
@@ -348823,10 +348823,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/coverage/tools": {
@@ -349454,10 +349454,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/coverage/summary": {
@@ -349903,10 +349903,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/external-consults": {
@@ -349915,7 +349915,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `openappaDiagnostics:read` returns the consults of the caller's own sessions. `openappaDiagnostics:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs",
+        "description": "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells",
         "parameters": [
           {
             "schema": {
@@ -350485,7 +350485,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaDiagnostics:read"
+            "log:read"
           ]
         }
       }
@@ -356123,10 +356123,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/policy-tests": {
@@ -356442,10 +356442,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       },
       "put": {
         "operationId": "updateOpenAppaPolicyTests",
@@ -356803,10 +356803,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/policy-tests/run": {
@@ -357304,10 +357304,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/policy-tests/runs": {
@@ -357754,10 +357754,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage"
       }
     },
     "/api/openappa/policy-tests/preview": {
@@ -358236,10 +358236,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "guardrailsPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries"
       }
     },
     "/api/openappa/remedies": {
@@ -358248,7 +358248,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The authorities and sanitizers the policy and its included batteries declare, who runs each, what it may lift, and which kinds of block the rules can cause that no wired remedy lifts. `lastConsult` is filled only for a caller with `openappaDiagnostics:admin`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage",
+        "description": "The authorities and sanitizers the policy and its included batteries declare, who runs each, what it may lift, and which kinds of block the rules can cause that no wired remedy lifts. `lastConsult` is filled only for a caller with `log:admin`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -358893,7 +358893,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         }
       }
@@ -358904,7 +358904,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Tool calls the runtime denied on each of the last seven days, by how each ended: approved by an authority, cleaned by a sanitizer, or blocked when neither lifted it. Days are calendar days in `timeZone`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage",
+        "description": "Tool calls the runtime denied on each of the last seven days, by how each ended: approved by an authority, cleaned by a sanitizer, or blocked when neither lifted it. Days are calendar days in `timeZone`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
         "parameters": [
           {
             "schema": {
@@ -359206,7 +359206,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         }
       }
@@ -359217,7 +359217,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The trust levels and audiences the policy works with, the audience sources included batteries declare, and the rules naming each audience. `lastConsult` is filled only for a caller with `openappaDiagnostics:admin`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage",
+        "description": "The trust levels and audiences the policy works with, the audience sources included batteries declare, and the rules naming each audience. `lastConsult` is filled only for a caller with `log:admin`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -359641,7 +359641,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:read"
+            "guardrailsPolicy:read"
           ]
         }
       }
@@ -360105,10 +360105,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaDiagnostics:read"
+            "log:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells"
       }
     },
     "/api/openappa/yells/summary": {
@@ -360377,10 +360377,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaDiagnostics:read"
+            "log:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells"
       }
     },
     "/api/openappa/yells/{id}": {
@@ -360774,10 +360774,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaDiagnostics:read"
+            "log:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells"
       },
       "patch": {
         "operationId": "updateOpenAppaYell",
@@ -361187,11 +361187,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaDiagnostics:read",
-            "openappaDiagnostics:update"
+            "log:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs\n`openappaDiagnostics:update`: Resolve and reopen organization yells"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells"
       }
     },
     "/api/openappa/yells/{id}/archive": {
@@ -361220,10 +361219,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaDiagnostics:read"
+            "log:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaDiagnostics:read`: Read all organization yells and your own consult logs"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells"
       }
     },
     "/v1/openrouter/chat/completions": {

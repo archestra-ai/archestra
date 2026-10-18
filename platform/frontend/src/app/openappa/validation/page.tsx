@@ -384,7 +384,7 @@ function ActionsCell({ row }: ValidationCellProps) {
               ),
             label: "Run",
             tooltip: "Run this validation and record the result",
-            permissions: { openappaPolicy: ["update"] },
+            permissions: { guardrailsPolicy: ["update"] },
             disabled: !suite.runnable,
             disabledTooltip: suite.busy
               ? "Wait for the current run to finish"

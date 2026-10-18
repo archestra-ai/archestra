@@ -35,7 +35,7 @@ Restrictions only add up. A trusted read never restores lost trust, and an appro
 
 ## Turn On Guardrails
 
-You need [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar for anyone with [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) or [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read).
+You need [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar for anyone with [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) or [`log:read`](/docs/reference/permissions#log:read).
 
 1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.

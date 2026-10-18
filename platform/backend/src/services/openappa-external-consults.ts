@@ -12,7 +12,7 @@ import type { ExternalConsult } from "@/types/openappa-external-consults";
 
 /** What one viewer may read of the organization's consults. */
 type ExternalConsultAccess = {
-  /** The one caller whose consults the viewer reads; absent with `openappaDiagnostics:admin`. */
+  /** The one caller whose consults the viewer reads; absent with `log:admin`. */
   callerId: string | undefined;
   canSeeMembers: boolean;
 };
@@ -24,12 +24,7 @@ export async function externalConsultAccess(params: {
   organizationId: string;
 }): Promise<ExternalConsultAccess> {
   const [canSeeAllLogs, canSeeMembers] = await Promise.all([
-    userHasPermission(
-      params.userId,
-      params.organizationId,
-      "openappaDiagnostics",
-      "admin",
-    ),
+    userHasPermission(params.userId, params.organizationId, "log", "admin"),
     userHasPermission(params.userId, params.organizationId, "member", "read"),
   ]);
   return {

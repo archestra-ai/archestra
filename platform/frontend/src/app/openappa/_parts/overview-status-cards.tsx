@@ -60,10 +60,10 @@ export function OverviewStatusCards() {
     organizationSettings: ["read"],
   });
   const { data: canReadPolicy } = useHasPermissions({
-    openappaPolicy: ["read"],
+    guardrailsPolicy: ["read"],
   });
   const { data: canReadYells } = useHasPermissions({
-    openappaDiagnostics: ["read"],
+    log: ["read"],
   });
   if (!canReadSettings && !canReadPolicy && !canReadYells) return null;
   return (
@@ -250,7 +250,7 @@ function ValidationCard() {
             size="sm"
             variant="outline"
             promptKey="writeValidations"
-            permissions={{ openappaPolicy: ["read", "update"] }}
+            permissions={{ guardrailsPolicy: ["read", "update"] }}
           >
             <MessageCircle />
             <span>Write a validation</span>

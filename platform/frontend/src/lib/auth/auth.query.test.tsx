@@ -636,7 +636,7 @@ describe("usePermissionMap", () => {
 
 it("reports only unmet actions while honoring a grant on the requested resource", async () => {
   vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
-    data: { chat: ["read"], openappaDiagnostics: ["read", "admin"] },
+    data: { chat: ["read"], log: ["read", "admin"] },
     error: undefined,
     request: new Request("http://localhost"),
     response: new Response(),
@@ -650,7 +650,7 @@ it("reports only unmet actions while honoring a grant on the requested resource"
         {
           chat: ["read", "create"],
           agent: ["read", "update"],
-          openappaDiagnostics: ["read"],
+          log: ["read"],
         },
         "config-agent",
       ),

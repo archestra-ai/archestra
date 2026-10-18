@@ -55,7 +55,7 @@ What to know:
 
 - Conversations that follow the live policy take a change at their next tool call; pinned conversations keep their snapshot. A review under the earlier revision is withdrawn, and the agent asks again. **Effective** shows the runtime revision in force.
 - A change that fails keeps the last valid policy running. **Effective** shows the error.
-- Changing the policy needs [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). Turning enforcement on or off needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+- Changing the policy needs [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). Turning enforcement on or off needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
 For every field, see the [policy reference](https://www.openappa.com/contracts).
 
@@ -158,7 +158,7 @@ For a concrete policy change, the agent can include a focused regression check a
 
 ## Yells
 
-When a remedy plan makes no sense, an agent keeps getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, the agent reports it with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. See [Reporting](https://www.openappa.com/yell). With **Break the glass** on in **Settings → Guardrails**, a yell also turns Guardrails off for that session, so the agent is no longer stuck. A yell that did this is marked in the list. The **Yells** tab lists the reports for anyone with [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read). The list shows unresolved reports. To see a resolved report or reopen it, set the status filter to **Resolved**. The link keeps the filter, so you can share it. Click **Investigate in chat** to have the agent propose a fix, then **Mark resolved**, which needs [`openappaDiagnostics:update`](/docs/reference/permissions#openappaDiagnostics:update).
+When a remedy plan makes no sense, an agent keeps getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, the agent reports it with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. See [Reporting](https://www.openappa.com/yell). With **Break the glass** on in **Settings → Guardrails**, a yell also turns Guardrails off for that session, so the agent is no longer stuck. A yell that did this is marked in the list. The **Yells** tab lists the reports for anyone with [`log:read`](/docs/reference/permissions#log:read). The list shows unresolved reports. To see a resolved report or reopen it, set the status filter to **Resolved**. The link keeps the filter, so you can share it. Click **Investigate in chat** to have the agent propose a fix, then **Mark resolved**.
 
 An authenticated runtime or client can also report from a session outside enforcement. Its feedback is saved locally without a diagnostic archive, and the session stays outside enforcement.
 

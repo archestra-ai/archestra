@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Braces } from "lucide-react";
-import Link from "next/link";
+import { Braces } from "lucide-react";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { EncryptedChatContentUnavailable } from "@/components/encrypted-chat-content-unavailable";
@@ -14,7 +13,6 @@ import {
 } from "@/components/log-detail/tool-result-view";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { McpToolCallStatusLabel } from "@/components/mcp-tool-call-status";
-import { Button } from "@/components/ui/button";
 import { readMcpToolCall } from "@/lib/mcp-logs/tool-call-content";
 import type { McpServerDisplay } from "@/lib/mcp-logs/use-mcp-server-display";
 import { formatDate } from "@/lib/utils/date-time";
@@ -22,6 +20,8 @@ import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
   BigFigure,
+  OVERVIEW_GRID,
+  OverviewCell,
   OverviewFact,
   OverviewHeader,
   OverviewSection,
@@ -55,7 +55,6 @@ export function ToolCallOverview({
   onStep,
   current = false,
   timing = "session",
-  previews = true,
   footer,
 }: {
   span: ToolCallSpan;
@@ -68,31 +67,13 @@ export function ToolCallOverview({
   onStep: (delta: number) => void;
   current?: boolean;
   timing?: "session" | "excerpt";
-  previews?: boolean;
-  /** Replaces the "Open tool call" link; null drops the footer. */
+  /** Pinned below the facts, such as the MCP page's links row. */
   footer?: ReactNode;
 }) {
   const { call } = span;
   const content = readMcpToolCall(call);
   const name = content.toolName ?? content.method;
   const gapBefore = previous ? span.start - previous.end : null;
-  const footerContent =
-    footer === undefined ? (
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full justify-between"
-        asChild
-      >
-        <Link href={`/mcp/logs/${call.id}`}>
-          <span>Open tool call</span>
-          <ArrowUpRight />
-        </Link>
-      </Button>
-    ) : (
-      footer
-    );
-
   return (
     <aside
       aria-label="Tool call overview"
@@ -174,63 +155,35 @@ export function ToolCallOverview({
           title="Timing"
           aside={<BigFigure value={formatLatency(call.durationMs)} />}
         >
-          <dl>
-            <OverviewFact label="Started">
+          <dl className={OVERVIEW_GRID}>
+            <OverviewCell label="Started">
               {formatDate({
                 date: new Date(span.start).toISOString(),
                 dateFormat: "HH:mm:ss.SSS",
               })}
-            </OverviewFact>
-            <OverviewFact label="Finished">
+            </OverviewCell>
+            <OverviewCell label="Finished">
               {formatDate({ date: call.createdAt, dateFormat: "HH:mm:ss.SSS" })}
-            </OverviewFact>
+            </OverviewCell>
             {timing === "session" ? (
-              <OverviewFact label="Into session">
+              <OverviewCell label="Into session">
                 +{formatElapsed(span.start - origin)}
-              </OverviewFact>
+              </OverviewCell>
             ) : null}
             {timing === "session" || gapBefore !== null ? (
-              <OverviewFact label="After previous">
+              <OverviewCell label="After previous">
                 {gapBefore == null
                   ? "First on page"
                   : gapBefore < 0
                     ? "Overlapped it"
                     : formatElapsed(gapBefore)}
-              </OverviewFact>
+              </OverviewCell>
             ) : null}
           </dl>
         </OverviewSection>
-
-        {previews ? (
-          <>
-            <OverviewSection title="Arguments">
-              <PayloadPreview
-                locked={content.lockedArgs !== null}
-                text={
-                  hasArguments(content.args) ? previewJson(content.args) : null
-                }
-                empty="No arguments recorded"
-              />
-            </OverviewSection>
-
-            <OverviewSection title="Result">
-              <PayloadPreview
-                locked={content.lockedResult !== null}
-                text={
-                  content.outcomeMessage ??
-                  (content.result ? previewResult(content.result) : null)
-                }
-                empty="No result recorded"
-                error={content.status === "error"}
-              />
-            </OverviewSection>
-          </>
-        ) : null}
       </div>
 
-      {footerContent ? (
-        <div className="border-t bg-card/70 p-3">{footerContent}</div>
-      ) : null}
+      {footer ? <div className="border-t bg-card/70 p-3">{footer}</div> : null}
     </aside>
   );
 }
@@ -284,66 +237,4 @@ export function ToolCallPayload({
       </div>
     </section>
   );
-}
-
-// ============================================================================
-// Internal helpers
-// ============================================================================
-
-/** Arguments worth showing: an empty object says no more than none at all. */
-function hasArguments(args: unknown): boolean {
-  if (args === undefined || args === null) return false;
-  return !(
-    typeof args === "object" &&
-    !Array.isArray(args) &&
-    Object.keys(args).length === 0
-  );
-}
-
-function PayloadPreview({
-  locked,
-  text,
-  empty,
-  error,
-}: {
-  locked: boolean;
-  text: string | null;
-  empty: string;
-  error?: boolean;
-}) {
-  if (locked) {
-    return <p className="text-xs text-muted-foreground">Not available</p>;
-  }
-  if (!text) {
-    return <p className="text-xs text-muted-foreground">{empty}</p>;
-  }
-  return (
-    <pre
-      className={cn(
-        "line-clamp-4 rounded-md border bg-background px-2.5 py-2 font-mono text-[11px] leading-4 break-all whitespace-pre-wrap",
-        error && "border-destructive/40 text-destructive",
-      )}
-    >
-      {text}
-    </pre>
-  );
-}
-
-function previewJson(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value, null, 1);
-}
-
-/** A result's first text block before falling back to JSON. */
-function previewResult(result: { content?: unknown }): string {
-  if (Array.isArray(result.content)) {
-    const text = result.content.find(
-      (block): block is { type: "text"; text: string } =>
-        typeof block === "object" &&
-        block !== null &&
-        (block as { type?: unknown }).type === "text" &&
-        typeof (block as { text?: unknown }).text === "string",
-    );
-    if (text) return text.text;
-  }
-  return previewJson(result.content ?? result);
 }

@@ -963,11 +963,6 @@ class LlmProviderApiKeyModel {
   }
 
   /**
-   * The acting user's own personal key for a provider (prefer isPrimary, then
-   * oldest). Self-contained so the per-user-credential guard can call it before
-   * the rest of getCurrentApiKey runs.
-   */
-  /**
    * The label the retired `scope` column carried, derived for display: a key
    * with an owner is `personal`. A shared key (no owner) is `team` when its
    * grants reach teams and not the organization, and `org` otherwise, the
@@ -1131,6 +1126,11 @@ class LlmProviderApiKeyModel {
   }
   // SPDX-SnippetEnd
 
+  /**
+   * The acting user's own personal key for a provider (prefer isPrimary, then
+   * oldest). Self-contained so the per-user-credential guard can call it before
+   * the rest of getCurrentApiKey runs.
+   */
   private static async findPersonalKey({
     organizationId,
     userId,
@@ -1729,8 +1729,9 @@ async function resolveCredentialKinds(
           { error, secretId: key.secretId },
           "Failed to resolve an LLM provider secret while classifying its credential",
         );
-        // A concurrent read that could reach the secret may have stored the
-        // kind meanwhile; use it rather than treating the key as unknown.
+        // Nothing is stored for an unreadable secret, so the next read tries
+        // again. A concurrent read that could reach the secret may have stored
+        // the kind meanwhile; use it rather than treating the key as unknown.
         kinds.set(key.id, await storedCredentialKind(key.id));
         return;
       }

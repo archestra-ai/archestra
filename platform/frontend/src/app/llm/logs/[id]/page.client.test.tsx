@@ -349,8 +349,9 @@ describe("SessionDetailPage", () => {
     expect(
       await screen.findByRole("combobox", { name: "Rows per page" }),
     ).toBeVisible();
-    expect(screen.getByText("Page 1 of 12")).toBeVisible();
-    expect(screen.getByText("1–10 of 120")).toBeVisible();
+    // Fifty rows a page by default.
+    expect(screen.getByText("Page 1 of 3")).toBeVisible();
+    expect(screen.getByText("1–50 of 120")).toBeVisible();
   });
 
   it("hides the cache line when the session used no caching", async () => {
@@ -413,9 +414,9 @@ describe("SessionDetailPage", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "user:abc|ses_chat_1",
     );
-    expect(screen.getByText("Bound by")).toBeVisible();
+    expect(screen.getByText("Grouped by")).toBeVisible();
     expect(screen.getByText("conversation")).toBeVisible();
-    expect(screen.getByText("Origins")).toBeVisible();
+    expect(screen.getByText("Sources")).toBeVisible();
   });
 
   it("labels main-agent and ChatOps rows by profile name while labeling compaction", async () => {
@@ -546,7 +547,7 @@ describe("SessionDetailPage tool calls", () => {
     } as unknown as ReturnType<typeof useInteractionSummaries>);
   });
 
-  it("lays each tool call between the requests around it and opens it from the overview", async () => {
+  it("lays each tool call between the requests around it and opens it on double-click", async () => {
     mockSessionToolCalls([
       sessionToolCall({
         id: "lookup",
@@ -585,10 +586,18 @@ describe("SessionDetailPage tool calls", () => {
       name: "Tool call overview",
     });
     expect(within(overview).getByText("Success")).toBeVisible();
-    expect(within(overview).getByText("OPS-12: Rotate keys")).toBeVisible();
+    // The result shows once, in the payload pane beside the overview.
     expect(
-      within(overview).getByRole("link", { name: "Open tool call" }),
-    ).toHaveAttribute("href", "/mcp/logs/lookup");
+      within(
+        screen.getByRole("region", { name: "Arguments and result" }),
+      ).getByText("OPS-12: Rotate keys"),
+    ).toBeVisible();
+    expect(within(overview).queryByText("OPS-12: Rotate keys")).toBeNull();
+
+    await user.dblClick(rows[1]);
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
+      "/mcp/logs/lookup",
+    );
   });
 
   it("collapses a run_tool dispatch into the tool it ran", async () => {

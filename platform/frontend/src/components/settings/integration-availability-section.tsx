@@ -63,7 +63,13 @@ export function IntegrationAvailabilitySection({
   id?: string;
   disabled?: boolean;
 }) {
-  const { data: organization, isLoadingError, refetch } = useOrganization();
+  const {
+    data: organization,
+    isLoadingError,
+    refetch,
+  } = useOrganization(true, {
+    fresh: true,
+  });
   const updateMutation = useUpdateIntegrationSettings(
     savedMessage,
     `Failed to update ${title}`,

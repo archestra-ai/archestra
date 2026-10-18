@@ -4,6 +4,7 @@ import type { SupportedProvider } from "@archestra/shared";
 import { ArrowRight } from "lucide-react";
 import {
   describeModelOrigin,
+  formatCompactNumber,
   formatRequestCost,
   shortModelName,
   sourceLabel,
@@ -25,6 +26,8 @@ import { cn } from "@/lib/utils/tailwind";
 import {
   BigFigure,
   GhostThread,
+  OVERVIEW_GRID,
+  OverviewCell,
   OverviewFact,
   OverviewHeader,
   OverviewSection,
@@ -132,11 +135,7 @@ export function RequestDetails({
           display={serverDisplayByName.get(span.call.mcpServerName)}
           onStep={onStep}
           timing={excerpt ? "excerpt" : "session"}
-          {...(current && {
-            current: true,
-            previews: false,
-            footer: null,
-          })}
+          current={current}
         />
         <ToolCallPayload call={span.call} outcomeNotice={!current} />
       </section>
@@ -280,26 +279,24 @@ function RequestOverview({
             <span className="truncate text-sm font-semibold">{label}</span>
             <KindChip kind={kind} />
           </div>
-          <div className="mt-3 flex min-w-0 items-center gap-2.5">
+          <div
+            className="mt-2 flex min-w-0 items-center gap-2"
+            title={row.model ?? undefined}
+          >
             <MakerDisc
               provider={provider}
               vendor={vendor}
-              size={32}
+              size={20}
               ring={false}
             />
-            <span className="min-w-0">
-              <span className="block truncate text-sm leading-5 font-medium">
-                {modelName}
-              </span>
-              <span
-                className="block truncate font-mono text-[11px] leading-4 text-muted-foreground"
-                title={row.model ?? undefined}
-              >
-                {vendor} · {row.model ?? "—"}
-              </span>
+            <span className="truncate text-[13px] font-medium">
+              {modelName}
+            </span>
+            <span className="truncate text-xs text-muted-foreground">
+              {vendor}
             </span>
           </div>
-          <dl className="mt-3">
+          <dl className="mt-2">
             {row.source ? (
               <OverviewFact label="Source">
                 <span className="inline-flex min-w-0 items-center gap-1.5 [&_svg]:size-3">
@@ -339,29 +336,29 @@ function RequestOverview({
               }}
             />
           </div>
-          <dl className="mt-2.5">
-            <OverviewFact label="Started">
+          <dl className={cn(OVERVIEW_GRID, "mt-2")}>
+            <OverviewCell label="Started">
               {formatDate({
                 date: new Date(span.start).toISOString(),
                 dateFormat: "HH:mm:ss.SSS",
               })}
-            </OverviewFact>
-            <OverviewFact label="Finished">
+            </OverviewCell>
+            <OverviewCell label="Finished">
               {formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss.SSS" })}
-            </OverviewFact>
+            </OverviewCell>
             {excerpt ? null : (
-              <OverviewFact label="Into session">
+              <OverviewCell label="Into session">
                 +{formatElapsed(span.start - origin)}
-              </OverviewFact>
+              </OverviewCell>
             )}
             {excerpt && gapBefore == null ? null : (
-              <OverviewFact label="Before it">
+              <OverviewCell label="Before it">
                 {gapBefore == null
                   ? "First on page"
                   : gapBefore < 0
                     ? "Overlapped previous"
                     : `${formatElapsed(gapBefore)} idle`}
-              </OverviewFact>
+              </OverviewCell>
             )}
           </dl>
         </OverviewSection>
@@ -383,35 +380,36 @@ function RequestOverview({
                 />
               ))}
           </div>
-          <ul className="mt-2.5 space-y-[3px] text-xs">
+          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             {segments.map((segment) => (
               <li
                 key={segment.key}
                 className={cn(
-                  "flex items-center gap-2",
+                  "flex min-w-0 items-center gap-1.5",
                   segment.value === 0 && "opacity-40",
                 )}
+                title={
+                  tokenTotal > 0
+                    ? `${Math.round((segment.value / tokenTotal) * 100)}% of tokens`
+                    : undefined
+                }
               >
                 <span
                   className={cn("size-2 shrink-0 rounded-[2px]", segment.tone)}
                   aria-hidden="true"
                 />
-                <span className="text-muted-foreground">{segment.label}</span>
-                <span className="ml-auto tabular-nums">
-                  {segment.value.toLocaleString()}
+                <span className="truncate text-muted-foreground">
+                  {segment.label}
                 </span>
-                <span className="w-8 text-right text-[11px] text-muted-foreground/70 tabular-nums">
-                  {tokenTotal > 0
-                    ? `${Math.round((segment.value / tokenTotal) * 100)}%`
-                    : "—"}
+                <span className="ml-auto tabular-nums">
+                  {formatCompactNumber(segment.value)}
                 </span>
               </li>
             ))}
           </ul>
           {cacheShare > 0 ? (
-            <p className="mt-2.5 text-[11px] leading-snug text-muted-foreground">
-              {Math.round(cacheShare * 100)}% of the input came from the prompt
-              cache.
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              {Math.round(cacheShare * 100)}% of input from the prompt cache
             </p>
           ) : null}
         </OverviewSection>
@@ -437,19 +435,14 @@ function RequestOverview({
             </span>
           }
         >
-          <dl>
-            <OverviewFact label="Billing">
+          <dl className={OVERVIEW_GRID}>
+            <OverviewCell label="Billing">
               {onPlan ? "Subscription plan" : "Metered"}
-            </OverviewFact>
-            <OverviewFact label="List price">
+            </OverviewCell>
+            <OverviewCell label="List price">
               <span title={formatCost(cost)}>{formatRequestCost(cost)}</span>
-            </OverviewFact>
-            {onPlan ? (
-              <OverviewFact label="Covered by plan">
-                <span title={formatCost(cost)}>{formatRequestCost(cost)}</span>
-              </OverviewFact>
-            ) : null}
-            <OverviewFact label="Routing">
+            </OverviewCell>
+            <OverviewCell label="Routing">
               {rerouted && row.baselineModel ? (
                 <span className="inline-flex min-w-0 items-center gap-1">
                   <span className="truncate text-muted-foreground">
@@ -464,16 +457,9 @@ function RequestOverview({
               ) : (
                 <span className="text-muted-foreground">As requested</span>
               )}
-            </OverviewFact>
-            {rerouted ? (
-              <OverviewFact label="Baseline price">
-                <span title={formatCost(baseline)}>
-                  {formatRequestCost(baseline)}
-                </span>
-              </OverviewFact>
-            ) : null}
+            </OverviewCell>
             {saved > 0 ? (
-              <OverviewFact label="Saved">
+              <OverviewCell label="Saved">
                 <span
                   className="font-medium text-emerald-700 dark:text-emerald-400"
                   title={formatCost(saved)}
@@ -483,7 +469,13 @@ function RequestOverview({
                     ? ` · ${Math.round((saved / baseline) * 100)}%`
                     : ""}
                 </span>
-              </OverviewFact>
+              </OverviewCell>
+            ) : rerouted ? (
+              <OverviewCell label="Baseline price">
+                <span title={formatCost(baseline)}>
+                  {formatRequestCost(baseline)}
+                </span>
+              </OverviewCell>
             ) : null}
           </dl>
         </OverviewSection>

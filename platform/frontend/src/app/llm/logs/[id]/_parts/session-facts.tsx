@@ -518,13 +518,17 @@ function TrajectoryRow({ t }: { t: Trajectory }) {
         </TrajectoryPair>
       ) : null}
       {t.boundBy ? (
-        <TrajectoryPair label="Bound by">
-          <span className="truncate font-mono">{t.boundBy}</span>
+        <TrajectoryPair
+          label="Grouped by"
+          hint="How these requests were tied into one session: the session id the client sent, and where it was found."
+        >
+          <span className="truncate">{groupingLabel(t.boundBy)}</span>
         </TrajectoryPair>
       ) : null}
       {t.origins.length > 0 ? (
         <TrajectoryPair
-          label={t.origins.length === 1 ? "Origin" : "Origins"}
+          label={t.origins.length === 1 ? "Source" : "Sources"}
+          hint="Every surface that sent requests into this session. Hover an icon for its name."
           className="col-span-2"
         >
           <span className="flex min-w-0 gap-1 overflow-x-auto">
@@ -577,11 +581,14 @@ function TrajectoryRow({ t }: { t: Trajectory }) {
 
 function TrajectoryPair({
   label,
+  hint,
   icon,
   className,
   children,
 }: {
   label: string;
+  /** Explains a label that is not self-evident, on hover. */
+  hint?: string;
   icon?: ReactNode;
   className?: string;
   children: ReactNode;
@@ -590,7 +597,18 @@ function TrajectoryPair({
     <span className={cn("flex min-w-0 items-center gap-1.5", className)}>
       <span className="inline-flex shrink-0 items-center gap-1 text-muted-foreground">
         {icon}
-        <span>{label}</span>
+        {hint ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <UnstyledButton className="cursor-help underline decoration-muted-foreground/40 decoration-dotted underline-offset-4">
+                {label}
+              </UnstyledButton>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64">{hint}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <span>{label}</span>
+        )}
       </span>
       <span className="flex min-w-0 items-center gap-1 text-foreground">
         {children}
@@ -657,3 +675,24 @@ function CacheMeter({ read, write }: { read: number; write: number }) {
     </span>
   );
 }
+
+/** Where the session id came from, in words; the stored value otherwise. */
+function groupingLabel(sessionSource: string): string {
+  return GROUPING_LABELS[sessionSource] ?? sessionSource;
+}
+
+const GROUPING_LABELS: Record<string, string> = {
+  header: "Session header",
+  meta_header: "Meta header",
+  appa_header: "Guardrails header",
+  openwebui_chat: "Open WebUI chat",
+  codex_session: "Codex session",
+  opencode_session: "OpenCode session",
+  kilo_session: "Kilo session",
+  claude_metadata: "Claude session",
+  claude_code_header: "Claude Code session",
+  claude_code: "Claude session",
+  claude_desktop: "Claude session",
+  openai_user: "OpenAI user field",
+  chat: "Chat conversation",
+};

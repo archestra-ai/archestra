@@ -1930,6 +1930,9 @@ describe("InteractionModel", () => {
       // same agent, never the built-in title subagent.
       expect(sessions.data[0].profileId).toBe(chatAgent.id);
       expect(sessions.data[0].profileName).toBe("My Assistant");
+      // The type comes from the same agent, so the header can tell a proxy or
+      // gateway session from an agent's.
+      expect(sessions.data[0].profileAgentType).toBe(chatAgent.agentType);
     });
 
     test("badges the auxiliary chat call as a subagent and the user turn as main in the session detail list", async ({

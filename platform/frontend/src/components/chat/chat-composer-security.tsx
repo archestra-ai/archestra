@@ -34,6 +34,9 @@ export const ChatComposerSecurity = memo(function ChatComposerSecurity({
   // A failed refetch can retain cached data. Never present it as current.
   const status = enabled && deployment?.active && !isError ? data : null;
   if (!encrypted && !status) return <>{children}</>;
+  // A session that keeps the policy it opened with has no revision to name.
+  const snapshot =
+    status?.newSessionPolicy === "snapshot" && status.policyRevision === null;
 
   return (
     <div className="min-w-0">
@@ -50,7 +53,9 @@ export const ChatComposerSecurity = memo(function ChatComposerSecurity({
             aria-label={`Trust: ${status.trust}; audience: ${status.audience}${
               typeof status.policyRevision === "number"
                 ? `; policy revision: ${status.policyRevision}`
-                : ""
+                : snapshot
+                  ? "; policy snapshot"
+                  : ""
             }`}
             className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] leading-4 text-muted-foreground"
           >
@@ -76,6 +81,11 @@ export const ChatComposerSecurity = memo(function ChatComposerSecurity({
                 <span className="font-medium text-foreground">
                   {status.policyRevision}
                 </span>
+              </span>
+            )}
+            {snapshot && (
+              <span className="min-w-0 font-medium text-foreground">
+                policy snapshot
               </span>
             )}
           </output>

@@ -22,6 +22,7 @@ import { getDatabaseConnectionString } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaSessionModel from "@/models/openappa-session";
@@ -725,16 +726,20 @@ async function missingOpeningAnnotator(
  * The organization's effective policy with the credential values the runtime
  * reads for it, or the refusal every dispatch shares.
  *
- * The deployment switch is not read here. Each entry point reads it once at its
+ * The enforcement switch is not read here. Each entry point reads it once at its
  * request boundary, so a turn that began governed finishes under its policy even
- * when the switch turns off mid-request.
+ * when the switch turns off mid-request. The policy for new sessions is read
+ * with every policy read, so a dispatch sees it as it is now, and a dispatch
+ * that cannot read it fails as the policy read does.
  */
 async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const { policy, readable } =
-      await openappaBatteriesService.readForDispatch(organizationId);
+    const [newSessionPolicy, { policy, readable }] = await Promise.all([
+      GuardrailsDeploymentModel.getNewSessionPolicy(),
+      openappaBatteriesService.readForDispatch(organizationId),
+    ]);
     let unreadable: UnreadableCredential[] = [];
     let dispatch: DispatchPolicy | null = null;
     try {
@@ -749,7 +754,11 @@ async function effectivePolicy(
       if (!retainedKeyLost({ unreadable, readable })) throw error;
     }
     if (dispatch && !retainedKeyLost({ unreadable, readable }))
-      return { ...dispatch, compositionHash: policy.contentHash };
+      return {
+        ...dispatch,
+        compositionHash: policy.contentHash,
+        snapshot: newSessionPolicy === "snapshot",
+      };
     // A credential the policy was composed to read is unreadable now. Compose
     // again first, as a fresh read would have: a kept annotator that needed it
     // is dropped, so its sessions are told to start a new conversation instead
@@ -765,6 +774,7 @@ async function effectivePolicy(
         content: expandCommandExecutionPolicyRules(recompiled.content),
       })),
       compositionHash: recompiled.contentHash,
+      snapshot: newSessionPolicy === "snapshot",
     };
   } catch (error) {
     throw openappaFailure(error);

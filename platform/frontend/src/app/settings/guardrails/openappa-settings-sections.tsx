@@ -20,6 +20,7 @@ import {
   useGuardrailsDeployment,
   useUpdateBreakTheGlassEnabled,
   useUpdateGuardrailsDeployment,
+  useUpdateNewSessionPolicy,
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -71,6 +72,67 @@ export function OpenAppaEnforcementSetting() {
           />
         ) : (
           <Skeleton className="h-5 w-9 rounded-full" />
+        )
+      }
+    />
+  );
+}
+
+/**
+ * Which policy a new session decides under: the organization's live policy,
+ * or a snapshot it keeps for life. While the snapshot is selected, no policy
+ * revision is published, so running sessions keep the revision they have.
+ */
+export function OpenAppaNewSessionPolicySetting() {
+  const deployment = useGuardrailsDeployment({ poll: true });
+  const update = useUpdateNewSessionPolicy();
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  return (
+    <SettingsBlock
+      id="new-session-policy"
+      title="Policy for new sessions"
+      description={
+        deployment.data?.newSessionPolicy === "snapshot"
+          ? "A new session keeps the policy it opens with. A policy change applies to new sessions only. No policy revision is published, so running sessions keep the revision they have until you select the live policy again."
+          : "A policy change applies to every session at its next tool call."
+      }
+      control={
+        deployment.data ? (
+          <Select
+            value={deployment.data.newSessionPolicy}
+            disabled={
+              !canManage || !deployment.data.featureEnabled || update.isPending
+            }
+            onValueChange={(value) => {
+              if (value === "live" || value === "snapshot")
+                update.mutate(value);
+            }}
+          >
+            <SelectTrigger
+              aria-label="Policy for new sessions"
+              className="w-full lg:w-80"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              <SelectItem
+                value="live"
+                description="A policy change applies to every session."
+              >
+                New sessions reference the live policy
+              </SelectItem>
+              <SelectItem
+                value="snapshot"
+                description="A policy change applies to new sessions only."
+              >
+                New sessions keep a policy snapshot
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <Skeleton className="h-9 w-80" />
         )
       }
     />

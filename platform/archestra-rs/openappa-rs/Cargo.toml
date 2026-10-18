@@ -11,11 +11,11 @@ crate-type = ["cdylib"]
 [dependencies]
 # OpenAPPA main: the replay-only appa/do_something call (#670), the [aliases]
 # table (#666), void returns for marked spawns (#665), typed refusal classes
-# (#681), and live policy revisions (#677, not yet released).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "0d6c743c069043cc37fee89d7abd05fcb6cf8df1", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "0d6c743c069043cc37fee89d7abd05fcb6cf8df1" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "0d6c743c069043cc37fee89d7abd05fcb6cf8df1", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "0d6c743c069043cc37fee89d7abd05fcb6cf8df1" }
+# (#681), and live policy revisions with snapshot views (#677, not yet released).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "13ffab63ec8ed011e5ca17f0b9b7402ea230b262", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "13ffab63ec8ed011e5ca17f0b9b7402ea230b262" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "13ffab63ec8ed011e5ca17f0b9b7402ea230b262", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "13ffab63ec8ed011e5ca17f0b9b7402ea230b262" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

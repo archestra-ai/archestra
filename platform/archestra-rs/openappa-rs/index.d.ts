@@ -154,6 +154,13 @@ export interface DispatchPolicy {
    * and is refused as retryable; absent, nothing is checked.
    */
   compositionHash?: string
+  /**
+   * Whether new sessions keep a policy snapshot. While it is true nothing is
+   * published: a new family opens pinned to `content` for its whole life, and
+   * a family that follows the organization's line decides at the line's head
+   * as it stands. Absent is false.
+   */
+  snapshot?: boolean
 }
 
 export interface EditedPolicy {

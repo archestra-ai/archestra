@@ -15,7 +15,13 @@
 //! line's head. A process follows a publish it made itself; one another process
 //! made surfaces as a retryable refusal until this process pins the new head
 //! ([`Deployments::repin`]).
-use appa_eventlog::{DeploymentName, LogStore};
+//!
+//! While the host gives new sessions a policy snapshot, nothing is published.
+//! A new or pinned family runs through a snapshot view of the current policy
+//! ([`Deployments::snapshot`]), which opens new families pinned to it, and a
+//! family that follows its line decides at the line's head as it stands
+//! ([`Deployments::frozen`]).
+use appa_eventlog::{DeploymentName, LogStore, PolicyHead};
 use appa_runtime::api::{PreparedDeployment, PublishedDeployment, Runtime};
 use sha2::{Digest, Sha256};
 use std::{
@@ -53,6 +59,9 @@ pub(crate) struct HostedPolicy {
     /// The content hash of the stored composition `content` was read from, when the
     /// host read it from one.
     pub composition: Option<String>,
+    /// Whether new sessions keep a policy snapshot: nothing is published, new
+    /// families open pinned to `content`, and following ones stay at the head.
+    pub snapshot: bool,
 }
 
 /// Why no deployment serves a dispatch.
@@ -98,12 +107,58 @@ impl Pinned {
     }
 }
 
+/// The policy new families of an organization open pinned to while the host gives
+/// new sessions a snapshot: prepared, never published.
+#[derive(Clone)]
+struct Snapshot {
+    content: Arc<str>,
+    variables: Arc<[String]>,
+    answers: [u8; 32],
+    prepared: PreparedDeployment,
+}
+
+impl Snapshot {
+    fn serves(&self, policy: &HostedPolicy) -> bool {
+        *self.content == *policy.content
+            && answers_digest(
+                self.variables
+                    .iter()
+                    .map(|var| (var.as_str(), policy.credentials.lookup(var))),
+            ) == self.answers
+    }
+}
+
+/// A line's head as it stood when the host stopped publishing, compiled from the
+/// policy file the head names with the organization's credential values.
+#[derive(Clone)]
+struct Frozen {
+    line: DeploymentName,
+    variables: Arc<[String]>,
+    answers: [u8; 32],
+    published: PublishedDeployment,
+}
+
+impl Frozen {
+    fn serves(&self, line: &DeploymentName, policy: &HostedPolicy) -> bool {
+        self.line == *line
+            && answers_digest(
+                self.variables
+                    .iter()
+                    .map(|var| (var.as_str(), policy.credentials.lookup(var))),
+            ) == self.answers
+    }
+}
+
 /// The latest deployment of every organization that dispatched, by organization id.
 /// Only an organization's latest policy is served, so an entry is replaced when that
 /// policy or its credentials change, and the map holds one entry per organization.
 #[derive(Default)]
 pub(crate) struct Deployments {
     by_organization: Mutex<HashMap<String, Pinned>>,
+    /// The snapshot each organization's new families open pinned to, by organization.
+    snapshots: Mutex<HashMap<String, Snapshot>>,
+    /// The frozen head each organization's following families decide at, by organization.
+    frozen: Mutex<HashMap<String, Frozen>>,
     /// One preparation at a time per organization: concurrent dispatches that miss
     /// wait for the one preparing and then reuse its deployment.
     preparing: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
@@ -193,6 +248,120 @@ impl Deployments {
         Ok(Some(published))
     }
 
+    /// The deployment an organization's new and pinned families run through while
+    /// the host gives new sessions a policy snapshot: `policy` prepared, and never
+    /// published, so the line's head stays where it is. Held per organization
+    /// until `policy` or a credential it reads changes.
+    pub(crate) async fn snapshot(
+        &self,
+        runtime: &Arc<Runtime>,
+        organization_id: &str,
+        policy: &HostedPolicy,
+        agent_yell: bool,
+    ) -> Result<PreparedDeployment, String> {
+        let held = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(organization_id)
+            .filter(|snapshot| snapshot.serves(policy))
+            .map(|snapshot| snapshot.prepared.clone());
+        if let Some(prepared) = held {
+            return Ok(prepared);
+        }
+        let (runtime, policy) = (runtime.clone(), policy.clone());
+        let snapshot = tokio::task::spawn_blocking(move || -> Result<Snapshot, String> {
+            let (mut config, variables, answers) = compiled(&policy.content, &policy.credentials)?;
+            config.reporting.agent_yell = agent_yell;
+            let prepared = runtime
+                .prepare_deployment(config)
+                .map_err(|error| error.to_string())?;
+            Ok(Snapshot {
+                content: policy.content.as_str().into(),
+                variables,
+                answers,
+                prepared,
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())??;
+        let prepared = snapshot.prepared.clone();
+        self.snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(organization_id.to_owned(), snapshot);
+        Ok(prepared)
+    }
+
+    /// The deployment a family that follows `line` decides at while the host gives
+    /// new sessions a policy snapshot: the line's head as it stands, compiled from
+    /// the policy file that head names with the organization's credential values.
+    /// Pinning it publishes nothing: the head already names its file. `stale` is
+    /// the deployment a dispatch found moved on, which is dropped and read again.
+    ///
+    /// The file must compile back to the key the head names; otherwise nothing
+    /// serves the family and the dispatch fails as retryable.
+    pub(crate) async fn frozen(
+        &self,
+        runtime: &Arc<Runtime>,
+        store: &Arc<LogStore>,
+        organization_id: &str,
+        line: &DeploymentName,
+        policy: &HostedPolicy,
+        agent_yell: bool,
+        stale: Option<&PublishedDeployment>,
+    ) -> Result<PublishedDeployment, String> {
+        {
+            let mut frozen = self.frozen.lock().unwrap_or_else(PoisonError::into_inner);
+            if let Some(stale) = stale
+                && frozen
+                    .get(organization_id)
+                    .is_some_and(|held| held.published.revision() == stale.revision())
+            {
+                frozen.remove(organization_id);
+            }
+            if let Some(held) = frozen
+                .get(organization_id)
+                .filter(|held| held.serves(line, policy))
+            {
+                return Ok(held.published.clone());
+            }
+        }
+        let (runtime, store) = (runtime.clone(), store.clone());
+        let (line, credentials) = (line.clone(), policy.credentials.clone());
+        let frozen = tokio::task::spawn_blocking(move || -> Result<Frozen, String> {
+            let head = store
+                .head(&line)
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| {
+                    format!("deployment {line} has no head for its following families")
+                })?;
+            let (mut config, variables, answers) = frozen_head(&store, &line, &head, &credentials)?;
+            config.reporting.agent_yell = agent_yell;
+            let prepared = runtime
+                .prepare_deployment(config)
+                .map_err(|error| error.to_string())?;
+            // The head already names this file, so publishing writes nothing.
+            let published = runtime
+                .publish(&line, &prepared)
+                .map_err(|error| error.to_string())?;
+            Ok(Frozen {
+                line,
+                variables,
+                answers,
+                published,
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())??;
+        let published = frozen.published.clone();
+        self.frozen
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(organization_id.to_owned(), frozen);
+        Ok(published)
+    }
+
     async fn pinned(
         &self,
         runtime: &Arc<Runtime>,
@@ -270,12 +439,7 @@ fn prepare(
     policy: &HostedPolicy,
     agent_yell: bool,
 ) -> Result<Pinned, DeploymentError> {
-    let asked = RefCell::new(Vec::<(String, Option<String>)>::new());
-    let mut config = crate::policy::compile(&policy.content, |var| {
-        let answer = policy.credentials.lookup(var);
-        asked.borrow_mut().push((var.to_owned(), answer.clone()));
-        answer
-    })?;
+    let (mut config, variables, answers) = compiled(&policy.content, &policy.credentials)?;
     config.reporting.agent_yell = agent_yell;
     let key = policy_file_key(config.policy_file().bytes());
     let prepared = runtime
@@ -292,20 +456,70 @@ fn prepare(
     let published = runtime
         .publish(&line, &prepared)
         .map_err(|error| error.to_string())?;
-    let asked = asked.into_inner();
     let pinned = Pinned {
         content: policy.content.as_str().into(),
-        answers: answers_digest(
-            asked
-                .iter()
-                .map(|(var, answer)| (var.as_str(), answer.clone())),
-        ),
-        variables: asked.into_iter().map(|(var, _)| var).collect(),
+        answers,
+        variables,
         key: key.into(),
         prepared,
         published,
     };
     Ok(pinned)
+}
+
+/// `content` compiled with the credential values it looks up, every variable it
+/// looked up in order, and the digest of their answers.
+fn compiled(
+    content: &str,
+    credentials: &HostCredentials,
+) -> Result<(appa_runtime::config::Config, Arc<[String]>, [u8; 32]), String> {
+    let asked = RefCell::new(Vec::<(String, Option<String>)>::new());
+    let config = crate::policy::compile(content, |var| {
+        let answer = credentials.lookup(var);
+        asked.borrow_mut().push((var.to_owned(), answer.clone()));
+        answer
+    })?;
+    let asked = asked.into_inner();
+    let answers = answers_digest(
+        asked
+            .iter()
+            .map(|(var, answer)| (var.as_str(), answer.clone())),
+    );
+    Ok((
+        config,
+        asked.into_iter().map(|(var, _)| var).collect(),
+        answers,
+    ))
+}
+
+/// The configuration the policy file `head` names compiles to with `credentials`.
+/// A stored file is the composed document the runtime keeps, externals and their
+/// `token_env` names included, so it compiles back to the same file; one that does
+/// not is refused rather than served under another key.
+fn frozen_head(
+    store: &LogStore,
+    line: &DeploymentName,
+    head: &PolicyHead,
+    credentials: &HostCredentials,
+) -> Result<(appa_runtime::config::Config, Arc<[String]>, [u8; 32]), String> {
+    let bytes = store
+        .policy_file(line, head.revision)
+        .map_err(|error| error.to_string())?;
+    let text = std::str::from_utf8(&bytes).map_err(|_| {
+        format!(
+            "the policy file of {line} revision {} is not UTF-8",
+            head.revision
+        )
+    })?;
+    let compiled = compiled(text, credentials)?;
+    let key = policy_file_key(compiled.0.policy_file().bytes());
+    if key != head.key.as_str() {
+        return Err(format!(
+            "the policy file of {line} revision {} does not compile back to the file its head names; retry later",
+            head.revision
+        ));
+    }
+    Ok(compiled)
 }
 
 /// Whether `composition` is the content hash of the organization's stored
@@ -389,6 +603,7 @@ mod tests {
             content: content.to_owned(),
             credentials: HostCredentials::new(key.map(|key| (KEY.to_owned(), key.to_owned()))),
             composition: None,
+            snapshot: false,
         }
     }
 
@@ -688,6 +903,75 @@ mod tests {
                 .value(),
             4
         );
+    }
+
+    #[test]
+    fn frozen_head_preserves_external_bindings_and_accepts_rotated_credentials() {
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        let runtime = on_store(store.clone());
+        let deployments = Deployments::default();
+        let line = DeploymentName::new("frozen-org");
+        let original = policy(JEV, Some("original-test-key"));
+        block_on(deployments.deployment(&runtime, &store, "frozen-org", &original, false))
+            .ok()
+            .unwrap();
+        let head = store.head(&line).unwrap().unwrap();
+        let bytes = store.policy_file(&line, head.revision).unwrap();
+        let stored = std::str::from_utf8(&bytes).unwrap();
+        assert!(stored.contains("[externals.jev]"));
+        assert!(stored.contains(KEY));
+        assert!(!stored.contains("original-test-key"));
+        let changed = policy(
+            &edited(JEV, "saved-during-snapshot"),
+            Some("rotated-test-key"),
+        );
+        let (config, variables, _) =
+            frozen_head(&store, &line, &head, &changed.credentials).unwrap();
+        assert_eq!(
+            policy_file_key(config.policy_file().bytes()),
+            head.key.as_str()
+        );
+        assert!(variables.iter().any(|variable| variable == KEY));
+        let frozen = block_on(deployments.frozen(
+            &runtime,
+            &store,
+            "frozen-org",
+            &line,
+            &changed,
+            false,
+            None,
+        ))
+        .unwrap();
+        assert_eq!(frozen.revision(), 1);
+        assert_eq!(store.head(&line).unwrap().unwrap(), head);
+        assert!(
+            block_on(deployments.frozen(
+                &runtime,
+                &store,
+                "frozen-org",
+                &line,
+                &policy(JEV, None),
+                false,
+                None,
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn snapshot_preparation_does_not_publish_a_revision() {
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        let runtime = on_store(store.clone());
+        let deployments = Deployments::default();
+        let line = DeploymentName::new("snapshot-org");
+        block_on(deployments.snapshot(
+            &runtime,
+            "snapshot-org",
+            &policy(JEV, Some("test-key")),
+            false,
+        ))
+        .unwrap();
+        assert!(store.head(&line).unwrap().is_none());
     }
 
     #[test]

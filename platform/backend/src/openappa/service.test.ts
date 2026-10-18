@@ -3367,6 +3367,7 @@ describe("a policy saved mid-conversation", () => {
     vi.mocked(native.dispatchHook).mock.calls[call]?.[1] as {
       content: string;
       compositionHash?: string;
+      snapshot?: boolean;
     };
   const save = async (params: {
     userId: string;
@@ -3424,6 +3425,43 @@ describe("a policy saved mid-conversation", () => {
     expect(native.dispatchHook).toHaveBeenCalledTimes(2);
     expect(servedPolicy(0).content).toContain('"before"');
     expect(servedPolicy(1).content).toContain('"after"');
+  });
+
+  test("dispatches read snapshot and live changes without restarting the conversation", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    for (const [index, newSessionPolicy] of (
+      ["live", "snapshot", "live"] as const
+    ).entries()) {
+      await GuardrailsDeploymentModel.set({ newSessionPolicy });
+      await evaluateToolCalls(session, [{ ...read, id: `read-${index}` }], {
+        canonicalize: (name) => name,
+      });
+      expect(servedPolicy(index).snapshot).toBe(
+        newSessionPolicy === "snapshot",
+      );
+    }
+  });
+
+  test("a dispatch that cannot read the policy for new sessions fails, never decided", async () => {
+    // The setting decides whether the call may move its session's policy, so
+    // an unread setting must not be taken as live.
+    const get = vi
+      .spyOn(GuardrailsDeploymentModel, "getNewSessionPolicy")
+      .mockRejectedValue(new Error("Connection terminated unexpectedly"));
+    try {
+      const failure = await evaluateToolCalls(session, [read], {
+        canonicalize: (n) => n,
+      }).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(ApiError);
+      expect(failure).toMatchObject({ statusCode: 503 });
+      expect(get).toHaveBeenCalled();
+      expect(native.dispatchHook).not.toHaveBeenCalled();
+    } finally {
+      get.mockRestore();
+    }
   });
 
   test("a policy that keeps moving is a retryable 503, never feedback for the model", async () => {

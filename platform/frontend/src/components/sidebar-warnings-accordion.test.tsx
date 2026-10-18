@@ -23,10 +23,14 @@ vi.mock("@/lib/environment.query", () => ({
 }));
 vi.mock("@/app/openappa/_parts/guardrails-deployment-toggle", () => ({
   GuardrailsDisabledWarning: () => <div>Guardrails disabled row</div>,
+  GuardrailsSnapshotPolicyWarning: () => <div>Policy snapshot row</div>,
 }));
 let guardrailsEnabled = false;
+let newSessionPolicy = "live";
 vi.mock("@/lib/guardrails-deployment.query", () => ({
-  useGuardrailsDeployment: () => ({ data: { enabled: guardrailsEnabled } }),
+  useGuardrailsDeployment: () => ({
+    data: { enabled: guardrailsEnabled, newSessionPolicy },
+  }),
 }));
 vi.mock("next/navigation");
 
@@ -47,15 +51,18 @@ function setup({
   openappaEnabled = false,
   showGuardrailsStatus,
   enforcementEnabled = false,
+  snapshot = false,
 }: {
   enforcementStatus?: EnforcementStatus;
   canUpdateEnvironment?: boolean;
   openappaEnabled?: boolean;
   showGuardrailsStatus?: boolean;
   enforcementEnabled?: boolean;
+  snapshot?: boolean;
 }) {
   vi.mocked(useFeature).mockReturnValue(openappaEnabled);
   guardrailsEnabled = enforcementEnabled;
+  newSessionPolicy = snapshot ? "snapshot" : "live";
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions: Record<string, unknown>) =>
       ({
@@ -264,5 +271,24 @@ describe("SidebarWarningsAccordion guardrails warning row", () => {
     setup({ openappaEnabled: false, showGuardrailsStatus: true });
 
     expect(screen.queryByText("Guardrails disabled row")).toBeNull();
+  });
+
+  it("warns about a policy snapshot in every sidebar mode, since no navigation row carries it", () => {
+    setup({
+      openappaEnabled: true,
+      enforcementEnabled: true,
+      showGuardrailsStatus: false,
+      snapshot: true,
+    });
+
+    expect(screen.getByText("Policy snapshot row")).toBeInTheDocument();
+  });
+
+  it("says nothing about the policy for new sessions while it is live or OpenAPPA is off", () => {
+    setup({ openappaEnabled: true, enforcementEnabled: true });
+    expect(screen.queryByText("Policy snapshot row")).toBeNull();
+
+    setup({ openappaEnabled: false, snapshot: true });
+    expect(screen.queryByText("Policy snapshot row")).toBeNull();
   });
 });

@@ -33,6 +33,7 @@ const server = setupServer(
       trust: params.id === "second" ? "reviewed" : "trusted",
       audience: params.id === "second" ? "internal" : "public",
       policyRevision: null,
+      newSessionPolicy: "live",
     }),
   ),
 );
@@ -111,6 +112,7 @@ it("names the policy revision the session's next call is decided under", async (
         trust: "trusted",
         audience: "public",
         policyRevision: 7,
+        newSessionPolicy: "live",
       }),
     ),
   );
@@ -126,6 +128,39 @@ it("names the policy revision the session's next call is decided under", async (
     name: "Trust: trusted; audience: public; policy revision: 7",
   });
   expect(status).toHaveTextContent("revision:7");
+  view.unmount();
+  client.clear();
+});
+
+it.each([
+  ["a session that keeps a policy snapshot", null, true],
+  ["a session that follows a frozen revision", 4, false],
+])("names the policy of %s while new sessions keep a snapshot", async (_name, policyRevision, snapshot) => {
+  server.use(
+    http.get("/api/chat/conversations/:id/openappa-status", () =>
+      HttpResponse.json({
+        trust: "trusted",
+        audience: "public",
+        policyRevision,
+        newSessionPolicy: "snapshot",
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <ChatComposerSecurity conversationId={`snapshot-${policyRevision}`} />
+    </QueryClientProvider>,
+  );
+  const status = await screen.findByRole("status", {
+    name: snapshot
+      ? "Trust: trusted; audience: public; policy snapshot"
+      : `Trust: trusted; audience: public; policy revision: ${policyRevision}`,
+  });
+  if (snapshot) expect(status).toHaveTextContent("policy snapshot");
+  else expect(status).not.toHaveTextContent("policy snapshot");
   view.unmount();
   client.clear();
 });

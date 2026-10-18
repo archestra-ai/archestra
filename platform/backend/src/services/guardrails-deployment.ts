@@ -7,7 +7,10 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
-import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
+import type {
+  NewSessionPolicy,
+  UnsupportedAppaClientAction,
+} from "@/types/guardrails-policy";
 
 export type GuardrailsV2Activation = "active" | "inactive";
 
@@ -28,12 +31,17 @@ export async function isGuardrailsV2Active(): Promise<boolean> {
   return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
-  const { enabled, unsupportedClientAction, breakTheGlassEnabled } =
-    await GuardrailsDeploymentModel.get();
+  const {
+    enabled,
+    unsupportedClientAction,
+    breakTheGlassEnabled,
+    newSessionPolicy,
+  } = await GuardrailsDeploymentModel.get();
   return {
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
+    newSessionPolicy,
     featureEnabled: enterpriseTier.isOpenappaActive(),
     active: enterpriseTier.isOpenappaActive() && enabled,
   };
@@ -64,6 +72,7 @@ export async function setGuardrailsDeployment(
     enabled?: boolean;
     unsupportedClientAction?: UnsupportedAppaClientAction;
     breakTheGlassEnabled?: boolean;
+    newSessionPolicy?: NewSessionPolicy;
   },
   actor?: { userId: string },
 ) {
@@ -87,9 +96,11 @@ export async function setGuardrailsDeployment(
       before: deploymentSettings(before),
       after: deploymentSettings(after),
     },
-    after.enabled === before.enabled
-      ? "Guardrails deployment settings changed"
-      : `Guardrails enforcement switched ${after.enabled ? "on" : "off"}`,
+    after.enabled !== before.enabled
+      ? `Guardrails enforcement switched ${after.enabled ? "on" : "off"}`
+      : after.newSessionPolicy !== before.newSessionPolicy
+        ? `Guardrails policy for new sessions set to ${after.newSessionPolicy}`
+        : "Guardrails deployment settings changed",
   );
   return after;
 }
@@ -102,6 +113,7 @@ function deploymentSettings(
     active: deployment.active,
     unsupportedClientAction: deployment.unsupportedClientAction,
     breakTheGlassEnabled: deployment.breakTheGlassEnabled,
+    newSessionPolicy: deployment.newSessionPolicy,
   };
 }
 

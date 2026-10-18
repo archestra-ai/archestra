@@ -123,7 +123,10 @@ import {
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { generateConversationTitle } from "@/services/title-generation";
@@ -150,6 +153,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { ConversationFilesResponseSchema } from "@/types/conversation-file";
+import { NewSessionPolicySchema } from "@/types/guardrails-policy";
 import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
 import {
   resolveAgentLlmOrDefault,
@@ -2553,6 +2557,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               trust: z.string(),
               audience: z.string(),
               policyRevision: z.number().int().nullable(),
+              // `snapshot` while new sessions keep the policy they open with.
+              newSessionPolicy: NewSessionPolicySchema,
             })
             .nullable(),
         ),
@@ -2579,7 +2585,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? { organizationId, userId: user.id, audit: access.key }
           : null,
       );
-      if (!(await isGuardrailsV2Active())) return reply.send(null);
+      const deployment = await getGuardrailsDeployment();
+      if (!deployment.active) return reply.send(null);
       // A superyelled conversation is out of OpenAPPA: its label no longer
       // applies.
       if (
@@ -2588,8 +2595,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         )
       )
         return reply.send(null);
+      const status = await getOpenappaStatus({
+        organizationId,
+        sessionId: id,
+      });
       return reply.send(
-        await getOpenappaStatus({ organizationId, sessionId: id }),
+        status && {
+          ...status,
+          newSessionPolicy: deployment.newSessionPolicy,
+        },
       );
     },
   );

@@ -16,15 +16,16 @@ mod policy;
 mod replay;
 
 use appa_eventlog::{
-    Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
-    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError, SessionScope,
+    Backend, DeploymentName, FamilyKind, LogStore, OperationClaim, OperationKey, OperationRequest,
+    ProcessedResultClaim, ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError,
+    SessionScope,
     encryption::{StorageCipher, field_context},
     postgres::{LeasedPostgres, PostgresError},
 };
 use appa_runtime::{
     api::{
-        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PublishedDeployment, RemedyOutcome,
-        RemedyPresentation, RemedyRefusal, Runtime,
+        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PreparedDeployment,
+        PublishedDeployment, RemedyOutcome, RemedyPresentation, RemedyRefusal, Runtime,
     },
     hooks,
 };
@@ -437,15 +438,24 @@ fn is_policy_moved(error: &napi::Error) -> bool {
 /// policy, and `work` runs once more. When the head names another policy, or moves
 /// again, the dispatch fails as retryable and the host's retry reads the policy
 /// again.
+///
+/// While new sessions keep a policy snapshot (`policy.snapshot`), nothing is
+/// published, and the view depends on the family `root` names, read only then: a
+/// new or pinned family runs through the snapshot view of `policy`, and a family
+/// that follows a line runs pinned to that line's head as it stands.
 async fn on_deployment<T, Work>(
     state: &State,
     organization_id: &str,
     policy: &deployments::HostedPolicy,
+    root: impl FnOnce(&State) -> napi::Result<Option<String>>,
     work: impl Fn(State) -> Work,
 ) -> napi::Result<T>
 where
     Work: std::future::Future<Output = napi::Result<T>>,
 {
+    if policy.snapshot {
+        return on_snapshot(state, organization_id, policy, root(state)?, work).await;
+    }
     let deployment = state
         .deployments
         .deployment(
@@ -470,6 +480,61 @@ where
             else {
                 return Err(policy_moved());
             };
+            match work(state.pinned(&head)).await {
+                Err(moved) if is_policy_moved(&moved) => Err(policy_moved()),
+                result => result,
+            }
+        }
+        result => result,
+    }
+}
+
+/// [`on_deployment`] while new sessions keep a policy snapshot.
+async fn on_snapshot<T, Work>(
+    state: &State,
+    organization_id: &str,
+    policy: &deployments::HostedPolicy,
+    root: Option<String>,
+    work: impl Fn(State) -> Work,
+) -> napi::Result<T>
+where
+    Work: std::future::Future<Output = napi::Result<T>>,
+{
+    let agent_yell = state.reporting.is_some();
+    let kind = match root {
+        Some(root) => {
+            let store = state.store.clone();
+            tokio::task::spawn_blocking(move || store.family_kind(&TrajectoryId(root)))
+                .await
+                .map_err(error)?
+                .map_err(error)?
+        }
+        None => None,
+    };
+    let Some(FamilyKind::Following(line)) = kind else {
+        let prepared = state
+            .deployments
+            .snapshot(&state.runtime, organization_id, policy, agent_yell)
+            .await
+            .map_err(error)?;
+        return work(state.snapshot(&DeploymentName::new(organization_id), &prepared)).await;
+    };
+    let frozen = |stale| {
+        state.deployments.frozen(
+            &state.runtime,
+            &state.store,
+            organization_id,
+            &line,
+            policy,
+            agent_yell,
+            stale,
+        )
+    };
+    let head = frozen(None).await.map_err(error)?;
+    match work(state.pinned(&head)).await {
+        // A process that still publishes moved the head on: decide once more at it.
+        Err(moved) if is_policy_moved(&moved) => {
+            let head = frozen(Some(&head)).await.map_err(error)?;
             match work(state.pinned(&head)).await {
                 Err(moved) if is_policy_moved(&moved) => Err(policy_moved()),
                 result => result,
@@ -710,6 +775,11 @@ pub struct DispatchPolicy {
     /// dispatch whose composition is no longer the stored one publishes nothing
     /// and is refused as retryable; absent, nothing is checked.
     pub composition_hash: Option<String>,
+    /// Whether new sessions keep a policy snapshot. While it is true nothing is
+    /// published: a new family opens pinned to `content` for its whole life, and
+    /// a family that follows the organization's line decides at the line's head
+    /// as it stands. Absent is false.
+    pub snapshot: Option<bool>,
 }
 
 #[napi(object)]
@@ -726,6 +796,7 @@ impl From<DispatchPolicy> for deployments::HostedPolicy {
             content: policy.content,
             credentials: deployments::HostCredentials::new(policy.credentials),
             composition: policy.composition_hash,
+            snapshot: policy.snapshot.unwrap_or(false),
         }
     }
 }
@@ -1276,10 +1347,17 @@ pub async fn get_openappa_status(
     let policy: deployments::HostedPolicy = policy.into();
     let result = AssertUnwindSafe(async move {
         let state = initialized().await?.encrypted(encryption)?;
-        on_deployment(&state, &organization_id, &policy, |pinned| {
-            let key = SessionKey::new(&organization_id, &session_id);
-            async move { session_status(pinned, key).await }
-        })
+        let session = SessionKey::new(&organization_id, &session_id);
+        on_deployment(
+            &state,
+            &organization_id,
+            &policy,
+            |state| recorded_root(state, &session),
+            |pinned| {
+                let key = SessionKey::new(&organization_id, &session_id);
+                async move { session_status(pinned, key).await }
+            },
+        )
         .await
     })
     .catch_unwind()
@@ -1288,6 +1366,21 @@ pub async fn get_openappa_status(
         Ok(result) => result,
         Err(_) => Err(error("OpenAPPA panicked while reading status")),
     }
+}
+
+/// The root the session `key` names has recorded, or `None` before it started.
+fn recorded_root(state: &State, key: &SessionKey) -> napi::Result<Option<String>> {
+    let key = key.clone();
+    Sql(&state.store)
+        .with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&key.organization_id, &key.actor],
+                )?
+                .map(|row| row.get::<_, String>(0)))
+        })
+        .map_err(error)
 }
 
 /// The label of the session `key` names, read through `state`'s pinned view.
@@ -1445,10 +1538,16 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
-        on_deployment(&state, &input.organization_id, &policy, |pinned| {
-            let input = input.clone();
-            async move { pinned.dispatch(input).await }
-        })
+        on_deployment(
+            &state,
+            &input.organization_id,
+            &policy,
+            |state| state.dispatch_root(&input).map(Some),
+            |pinned| {
+                let input = input.clone();
+                async move { pinned.dispatch(input).await }
+            },
+        )
         .await
     })
     .catch_unwind()
@@ -2140,6 +2239,16 @@ impl State {
         })
     }
 
+    /// This state with its runtime serving the snapshot view of `prepared` on
+    /// `line`: new families open pinned to it and nothing is published.
+    fn snapshot(&self, line: &DeploymentName, prepared: &PreparedDeployment) -> State {
+        State {
+            runtime: Arc::new(self.runtime.snapshot(line, prepared)),
+            served: None,
+            ..self.clone()
+        }
+    }
+
     /// This state with its runtime pinned to `deployment`: every lease of it, and
     /// every view made of such a lease, serves that deployment.
     fn pinned(&self, deployment: &PublishedDeployment) -> State {
@@ -2171,24 +2280,7 @@ impl State {
     async fn dispatch(&self, input: Input) -> napi::Result<Value> {
         let key = SessionKey::of(&input);
         let sql = Sql(&self.store);
-        let root = if let Some(root) = input.owner_root.clone() {
-            root
-        } else if let Some(parent_id) = &input.parent_id {
-            // A parent is only ever looked up in the child's own organization.
-            let parent = SessionKey::new(&input.organization_id, parent_id);
-            sql.with_client(move |client| {
-                Ok(client
-                    .query_opt(
-                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                        &[&parent.organization_id, &parent.actor],
-                    )?
-                    .map(|row| row.get::<_, String>(0)))
-            })
-            .map_err(error)?
-            .ok_or_else(|| failure(Failure::Binding(BindingFailure::UnstartedParent), "parent session has not started"))?
-        } else {
-            self.session_root(&input, &key)?
-        };
+        let root = self.dispatch_root(&input)?;
         let consults = Arc::new(consults::ConsultBuffer::default());
         let recording = State {
             runtime: Arc::new(self.runtime.recording(consults.clone())),
@@ -2208,6 +2300,35 @@ impl State {
         } else {
             result
         }
+    }
+
+    /// The root of the family `input` belongs to: the owner's for a proxy-stamped
+    /// trajectory, the parent's for a child, else the session's own.
+    fn dispatch_root(&self, input: &Input) -> napi::Result<String> {
+        if let Some(root) = input.owner_root.clone() {
+            return Ok(root);
+        }
+        let Some(parent_id) = &input.parent_id else {
+            return self.session_root(input, &SessionKey::of(input));
+        };
+        // A parent is only ever looked up in the child's own organization.
+        let parent = SessionKey::new(&input.organization_id, parent_id);
+        Sql(&self.store)
+            .with_client(move |client| {
+                Ok(client
+                    .query_opt(
+                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                        &[&parent.organization_id, &parent.actor],
+                    )?
+                    .map(|row| row.get::<_, String>(0)))
+            })
+            .map_err(error)?
+            .ok_or_else(|| {
+                failure(
+                    Failure::Binding(BindingFailure::UnstartedParent),
+                    "parent session has not started",
+                )
+            })
     }
 
     /// The root a top-level session governs: the one its row records once it has

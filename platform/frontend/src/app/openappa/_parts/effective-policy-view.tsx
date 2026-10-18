@@ -4,6 +4,7 @@ import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import {
   useEffectivePolicy,
   usePolicyDeclarations,
@@ -24,6 +25,7 @@ import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 export function EffectivePolicyView() {
   const effective = useEffectivePolicy();
   const declarations = usePolicyDeclarations();
+  const deployment = useGuardrailsDeployment();
   if (effective.isPending)
     return <Skeleton className="h-[65vh] w-full rounded-t-none" />;
   if (effective.isError || !effective.data)
@@ -158,6 +160,12 @@ export function EffectivePolicyView() {
                 dateFormat: "MM/dd HH:mm",
               },
             )} · open conversations follow it`}
+          </span>
+        )}
+        {deployment.data?.newSessionPolicy === "snapshot" && (
+          <span className="block">
+            New sessions keep a policy snapshot: a policy change reaches new
+            sessions only, and no new revision is published
           </span>
         )}
       </div>

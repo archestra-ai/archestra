@@ -72,11 +72,34 @@ test("reads the current status of an accessible protected conversation", async (
     trust: "suspicious",
     audience: "internal",
     policyRevision: 3,
+    newSessionPolicy: "live",
   });
   expect(statusRead).toHaveBeenCalledWith({
     organizationId,
     sessionId: conversationId,
   });
+});
+
+test("reports a policy snapshot for new sessions while it is selected", async () => {
+  statusRead.mockResolvedValue({
+    trust: "trusted",
+    audience: "internal",
+    policyRevision: null,
+  });
+  await GuardrailsDeploymentModel.set({ newSessionPolicy: "snapshot" });
+  const snapshot = await app.inject({ method: "GET", url: statusUrl() });
+  expect(snapshot.statusCode).toBe(200);
+  expect(snapshot.json()).toEqual({
+    trust: "trusted",
+    audience: "internal",
+    policyRevision: null,
+    newSessionPolicy: "snapshot",
+  });
+
+  await GuardrailsDeploymentModel.set({ newSessionPolicy: "live" });
+  expect(
+    (await app.inject({ method: "GET", url: statusUrl() })).json(),
+  ).toMatchObject({ newSessionPolicy: "live" });
 });
 
 test("returns null before a session has opened", async () => {
@@ -154,6 +177,7 @@ test.each([
       trust: "suspicious",
       audience: "internal",
       policyRevision: null,
+      newSessionPolicy: "live",
     });
     expect(statusRead).toHaveBeenCalledOnce();
   } else {

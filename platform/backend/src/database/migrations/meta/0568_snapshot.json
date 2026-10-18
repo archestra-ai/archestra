@@ -1,5 +1,5 @@
 {
-  "id": "81a727d5-5682-4d25-bf1f-cc6d8eb5008b",
+  "id": "69daf002-2a5d-46a1-8a79-7d135ba2ccde",
   "prevId": "78a14322-6998-4e5d-b1a6-cab764a62ddf",
   "version": "7",
   "dialect": "postgresql",
@@ -10396,6 +10396,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "new_session_policy": {
+          "name": "new_session_policy",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'live'"
         }
       },
       "indexes": {},

@@ -133,7 +133,7 @@ Before dispatch, the host compares root revisions and the revision-0 starter has
 
 ### Policy revisions
 
-Every open conversation decides its next call under its organization's current policy revision. Each organization has one OpenAPPA deployment line, named by the organization id. The runtime keeps the line's head in `openappa_deployments` and every revision it published in `openappa_policy_revisions` ([`deployments.rs`](../platform/archestra-rs/openappa-rs/src/deployments.rs)).
+By default, conversations follow their organization's current policy revision. Each organization has one OpenAPPA deployment line, named by the organization id. The runtime keeps the line's head in `openappa_deployments` and every revision it published in `openappa_policy_revisions` ([`deployments.rs`](../platform/archestra-rs/openappa-rs/src/deployments.rs)).
 
 - **Publish.** A dispatch prepares the effective policy it carries and publishes it as the line's head. Bytes the head already names publish nothing, so every pod, a restart, and a credential rotation share one revision. A saved change publishes at the organization's next protected call, on whichever pod serves it.
 - **Pin.** The dispatch runs through a view pinned to that head. A runtime follows a publish its own process made. A publish by another pod makes a pinned view refuse the dispatch, retryably, and nothing is appended. The binding then pins the head when it names the same policy file, and runs the dispatch once more.
@@ -143,15 +143,29 @@ Every open conversation decides its next call under its organization's current p
 - **Display.** The chat status rail shows the revision a conversation's next call is decided under. The Guardrails **Effective** view shows the runtime revision and when it was published.
 - **Earlier releases.** A conversation that the previous Archestra release started keeps that release's behaviour until it ends: it stays on the policy file it opened under, and the retired-annotator 409 still applies to it.
 
+#### Policy snapshots
+
+In **Settings → Guardrails → Policy for new sessions**, select **New sessions keep a policy snapshot** to stop publishing revisions without turning enforcement off. The setting is deployment-wide, defaults to **New sessions reference the live policy**, and is read with each dispatch.
+
+| Family | While snapshot is selected | After selecting live again |
+| --- | --- | --- |
+| Already following its deployment line | Decides at the frozen head, even after a policy save | Follows the next published revision |
+| Opens while snapshot is selected | Opens pinned to the current saved policy; later saves do not change it | Keeps its opening snapshot |
+| Legacy pinned family | Keeps its opening snapshot | Keeps its opening snapshot |
+
+The binding reads the family's opening row to choose the view. New and pinned families use `Runtime::snapshot`; existing following families use the stored head's policy file, compiled with the organization's current credentials. That file retains external annotator bindings and `token_env` names, and must compile back to the head's exact key; a mismatch fails closed rather than publishing different bytes. Credential rotation can rebuild a view without publishing a revision.
+
+Snapshot preparation never creates or advances a deployment head. Pinned families report no `policyRevision`; following families report the frozen head's revision. A live-mode pod can still advance the head during a mixed-mode transition, so the existing bounded policy-moved retry remains necessary.
+
 #### Rolling out and rolling back
 
 A policy published while pods of two releases run can make an old pod's decision a regression for one conversation. Freeze policy edits for the roll:
 
 1. Freeze everything that recomposes: Guardrails saves, Git sync pulls, battery, alias and credential changes. The hourly recompose may run; unchanged inputs publish nothing.
-2. The pre-upgrade migration job creates `openappa_deployments` and `openappa_policy_revisions`. The previous release ignores them. New pods need them before they open a conversation.
+2. The pre-upgrade migration job creates `openappa_deployments` and `openappa_policy_revisions` and adds `guardrails_deployment.new_session_policy` with default `live`. The previous release ignores them. New pods need them before they open a conversation.
 3. Roll the web and worker pods as usual. Expected refusals: none.
 4. Unfreeze. Check that `openappa_deployments` holds one row per organization, that a policy change publishes the next revision and an open conversation's next call decides under it, and that no burst of the 503 above follows.
-5. To roll back, deploy the previous image. The two tables are harmless to it. A conversation that already received a decision under a later revision is refused by the previous release until the next upgrade, which is why edits stay frozen.
+5. To stop further publication, select **New sessions keep a policy snapshot** first. This freezes following families at the head and opens new families pinned; it does not undo a revision already published. Do not casually roll back the image after a head advances: the previous release refuses a conversation that already received a decision under a later revision until the next upgrade. The additive schema can remain in place.
 
 Nothing in Archestra enforces the freeze yet. A follow-up could add a deployment-level "policy edits paused" switch that every recompose trigger reads.
 
@@ -878,6 +892,7 @@ The addon compiles with Archestra's native addons and ships inside the standard 
 | `ARCHESTRA_LLM_PROXY_PLUGINS` | `appa` | Always includes `appa`, independently of beta features. |
 | `guardrails_deployment.enabled` | `false` | Database row switch. Effective immediately without restart. |
 | `guardrails_deployment.unsupported_client_action` | `bypass` | Action for unknown clients (`bypass` or `block`). |
+| `guardrails_deployment.new_session_policy` | `live` | `live` publishes and follows the current policy; `snapshot` freezes the head and pins new families to their opening policy. |
 | `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Legacy name for retained lineage and execution-proof signing. Not used for remedy routing, new question IDs, or display codes. Min 32 chars if explicit. |
 | `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS` | `4` | Max native pool connections (cap 64). Requires restart. |
 | `ARCHESTRA_OPENAPPA_YELL_ENABLED` | `true` | Enables yell diagnostic reporting. |

@@ -33,14 +33,20 @@ export async function syncDueModels(params?: {
 }): Promise<void> {
   // models.dev only enriches metadata: a slow or failing fetch must not hold
   // up the key syncs, so the two run side by side.
-  const [, keySync] = await Promise.allSettled([
+  const [metadataSync, keySync] = await Promise.allSettled([
     modelsDevClient.syncIfNeeded(),
     syncDueApiKeys(params?.maxKeys ?? MAX_KEYS_PER_TICK),
   ]);
   // Per-key failures are handled inside; this is the key lookup itself
-  // failing, which the task queue should record.
+  // failing. Both outcomes fail the tick once the key syncs are done, so the
+  // task queue records them; the periodic task still runs again next interval.
   if (keySync.status === "rejected") {
     throw keySync.reason;
+  }
+  if (metadataSync.status === "rejected") {
+    throw new Error("models.dev metadata sync failed", {
+      cause: metadataSync.reason,
+    });
   }
 }
 

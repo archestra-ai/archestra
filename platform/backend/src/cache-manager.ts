@@ -236,6 +236,12 @@ class CacheManager {
    * for queries that must skip rows whose entry has not expired. `id` is a
    * text SQL expression, usually a column. Entries are JSON text with an
    * epoch-millisecond `expires`; one without it never expires.
+   *
+   * This reads Keyv's stored envelope (`{"value": ..., "expires": <ms>}`),
+   * the format incrementFixedWindows also writes. If a Keyv upgrade renamed
+   * `expires`, every entry would look live forever. The model sync schedule
+   * tests write their markers through `set` and expect a retry once the TTL
+   * passes, so they fail on such a change.
    */
   liveEntryExists(params: { prefix: CacheKeyPrefix; id: SQL; now: Date }): SQL {
     const { prefix, id, now } = params;

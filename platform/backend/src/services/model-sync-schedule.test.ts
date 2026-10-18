@@ -53,7 +53,7 @@ describe("scheduled LLM model sync", () => {
       expect(modelsDev.requests).toBe(1);
     });
 
-    test("a failing models.dev does not stop key syncs and is not retried on the next tick", async ({
+    test("a failing models.dev does not stop key syncs, fails the tick once, and is not retried on the next tick", async ({
       makeLlmProviderApiKey,
     }) => {
       // The retry backoff waits in real time; skip the waits.
@@ -68,7 +68,10 @@ describe("scheduled LLM model sync", () => {
         baseUrl: "http://vllm.test/v1",
       });
 
-      await syncDueModels();
+      // The task queue records the failed tick; the key sync still ran.
+      await expect(syncDueModels()).rejects.toThrow(
+        "models.dev metadata sync failed",
+      );
       const failedRequests = modelsDev.requests;
       expect(failedRequests).toBeGreaterThan(0);
       expect(vllm.hits).toBe(1);

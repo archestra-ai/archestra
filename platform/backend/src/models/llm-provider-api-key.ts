@@ -1475,11 +1475,16 @@ class LlmProviderApiKeyModel {
       ttlCases.length > 0
         ? sql`(CASE ${keys.provider} ${sql.join(ttlCases, sql` `)} ELSE ${defaultTtlMs}::bigint END)`
         : sql`${defaultTtlMs}::bigint`;
-    // A link without synced_at predates the column and counts as stale.
+    // The key's least recently synced link, one probe of
+    // api_key_models_api_key_id_synced_at_idx. A link without synced_at
+    // predates the column, sorts first and counts as stale. A key with no
+    // links gets null, which counts as stale too.
     const oldestSyncedAt = sql<Date | null>`(
-      SELECT min(coalesce(${links.syncedAt}, to_timestamp(0) AT TIME ZONE 'UTC'))
+      SELECT coalesce(${links.syncedAt}, to_timestamp(0) AT TIME ZONE 'UTC')
       FROM ${links}
       WHERE ${links.apiKeyId} = ${keys.id}
+      ORDER BY ${links.syncedAt} ASC NULLS FIRST
+      LIMIT 1
     )`;
     const syncableCondition = or(
       isNotNull(keys.secretId),
@@ -1633,7 +1638,11 @@ function toApiKeyWithScopeInfo<
   };
 }
 
-/** The kind of credential a stored value is. */
+/**
+ * The kind of credential a stored value is: the subscription it encodes, or
+ * `api_key` for anything else. No value at all (a system key, or a provider
+ * whose key is optional) carries no subscription marker, so it is `api_key`.
+ */
 function credentialKindOf(
   apiKeyValue: string | null | undefined,
 ): LlmProviderCredentialKind {
@@ -1718,7 +1727,9 @@ async function resolveCredentialKinds(
           { error, secretId: key.secretId },
           "Failed to resolve an LLM provider secret while classifying its credential",
         );
-        kinds.set(key.id, null);
+        // A concurrent read that could reach the secret may have stored the
+        // kind meanwhile; use it rather than treating the key as unknown.
+        kinds.set(key.id, await storedCredentialKind(key.id));
         return;
       }
       const kind = credentialKindOf(value);
@@ -1735,6 +1746,17 @@ async function resolveCredentialKinds(
     }),
   );
   return kinds;
+}
+
+/** The kind recorded on the key's row, or null while it is unclassified. */
+async function storedCredentialKind(
+  id: string,
+): Promise<LlmProviderCredentialKind | null> {
+  const [row] = await db
+    .select({ credentialKind: schema.llmProviderApiKeysTable.credentialKind })
+    .from(schema.llmProviderApiKeysTable)
+    .where(eq(schema.llmProviderApiKeysTable.id, id));
+  return row?.credentialKind ?? null;
 }
 
 /**

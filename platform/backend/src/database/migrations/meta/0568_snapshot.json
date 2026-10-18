@@ -1,5 +1,5 @@
 {
-  "id": "622e1b49-e4e3-4884-af95-f19fbec658d8",
+  "id": "1e2e0349-e199-4487-a001-082133452b64",
   "prevId": "78a14322-6998-4e5d-b1a6-cab764a62ddf",
   "version": "7",
   "dialect": "postgresql",
@@ -15214,6 +15214,27 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "api_key_models_api_key_id_synced_at_idx": {
+          "name": "api_key_models_api_key_id_synced_at_idx",
+          "columns": [
+            {
+              "expression": "api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "synced_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "first"
             }
           ],
           "isUnique": false,

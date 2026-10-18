@@ -74,6 +74,14 @@ const llmProviderApiKeyModelsTable = pgTable(
     ),
     /** Index for efficient lookups by API key */
     apiKeyIdIdx: index("api_key_models_api_key_id_idx").on(table.apiKeyId),
+    /**
+     * The model sync's "least recently synced link of this key" probe
+     * (never-synced links first).
+     */
+    apiKeyIdSyncedAtIdx: index("api_key_models_api_key_id_synced_at_idx").on(
+      table.apiKeyId,
+      table.syncedAt.asc().nullsFirst(),
+    ),
     /** Index for efficient lookups by model */
     modelIdIdx: index("api_key_models_model_id_idx").on(table.modelId),
   }),

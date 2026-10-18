@@ -167,6 +167,52 @@ describe("LLM provider key credential kind", () => {
     expect(await storedKind(legacy.id)).toBe("api_key");
   });
 
+  test("a key whose secret read fails uses the kind a concurrent read just stored", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const member = await makeUser();
+    await makeMember(creator.id, org.id, { role: "admin" });
+    await makeMember(member.id, org.id, { role: "member" });
+    const secret = await SecretModel.create({
+      name: "vault-backed",
+      secret: { apiKey: "sk-in-vault" },
+      isVault: true,
+    });
+    const legacy = await LlmProviderApiKeyModel.create(
+      {
+        organizationId: org.id,
+        createdBy: creator.id,
+        name: "Shared from Vault",
+        provider: "openai",
+        secretId: secret.id,
+        scope: "org",
+        userId: null,
+        teamId: null,
+      },
+      { publishToOrganization: true },
+    );
+    // While this read waits on Vault, another request classifies the key.
+    vi.spyOn(secretManager(), "getSecret").mockImplementation(async () => {
+      await db
+        .update(schema.llmProviderApiKeysTable)
+        .set({ credentialKind: "api_key" })
+        .where(eq(schema.llmProviderApiKeysTable.id, legacy.id));
+      throw new Error("vault unreachable");
+    });
+
+    const listed = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      org.id,
+      member.id,
+      [],
+    );
+
+    expect(listed.map((key) => key.id)).toEqual([legacy.id]);
+  });
+
   test("pointing a key at another secret clears the recorded kind", async ({
     makeOrganization,
   }) => {

@@ -1,12 +1,12 @@
 "use client";
 
-import posthog, { type PostHogConfig } from "posthog-js";
-import { PostHogProvider } from "posthog-js/react";
+import type { PostHogConfig } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics";
 import { useSession } from "@/lib/auth/auth.query";
 import config, { getTracingHeaderHosts } from "@/lib/config/config";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { posthogClient } from "@/lib/posthog-client";
 
 export function PostHogProviderWrapper({
   children,
@@ -25,10 +25,12 @@ export function PostHogProviderWrapper({
   const userName = session?.user?.name;
 
   const registerInstance = useCallback((instanceId: string) => {
-    posthog.register({
-      instance_id: instanceId,
+    posthogClient.run((posthog) => {
+      posthog.register({
+        instance_id: instanceId,
+      });
+      posthog.group("instance", instanceId);
     });
-    posthog.group("instance", instanceId);
     lastRegisteredInstanceIdRef.current = instanceId;
   }, []);
 
@@ -53,8 +55,12 @@ export function PostHogProviderWrapper({
         api_host: analytics.posthog.host,
         __add_tracing_headers: getTracingHeaderHosts(),
       };
-      posthog.init(analytics.posthog.key, initConfig);
+      // Loads and initializes PostHog once the app is interactive; calls
+      // made until then are queued (see posthogClient).
+      posthogClient.init(analytics.posthog.key, initConfig);
       isPostHogInitializedRef.current = true;
+    } else if (!isPublicConfigLoading && publicConfig && !analytics?.enabled) {
+      posthogClient.disable();
     }
 
     if (
@@ -82,14 +88,14 @@ export function PostHogProviderWrapper({
       // from the session's user id right after a sign-in on this browser
       // (sign-out resets it to an anonymous id). Reloads while signed in keep
       // the identified id, so they don't re-fire the event.
-      const isNewSignIn = posthog.get_distinct_id() !== userId;
-      posthog.identify(userId, {
-        email: userEmail,
-        name: userName || userEmail,
+      posthogClient.run((posthog) => {
+        const isNewSignIn = posthog.get_distinct_id() !== userId;
+        posthog.identify(userId, {
+          email: userEmail,
+          name: userName || userEmail,
+        });
+        if (isNewSignIn) trackEvent("user_authenticated", {});
       });
-      if (isNewSignIn) {
-        trackEvent("user_authenticated", {});
-      }
       hasIdentifiedUserRef.current = true;
       lastIdentifiedUserIdRef.current = userId;
       return;
@@ -99,7 +105,7 @@ export function PostHogProviderWrapper({
 
     if (hasIdentifiedUserRef.current) {
       const instanceId = publicConfig?.analytics?.instanceId;
-      posthog.reset();
+      posthogClient.run((posthog) => posthog.reset());
       if (instanceId) {
         registerInstance(instanceId);
       }
@@ -115,5 +121,5 @@ export function PostHogProviderWrapper({
     userName,
   ]);
 
-  return <PostHogProvider client={posthog}>{children}</PostHogProvider>;
+  return <>{children}</>;
 }

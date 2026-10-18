@@ -1,5 +1,10 @@
 import { E2eTestId } from "@archestra/shared";
-import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../consts";
+import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE,
+  UI_BASE_URL,
+} from "../consts";
 import { expect, test } from "../fixtures";
 import {
   createLlmProviderApiKey,
@@ -29,6 +34,15 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
       // 1. Login and navigate to chat
       await page.goto("about:blank");
       await loginViaApi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+      // The optimistic composer can appear before provider discovery finishes.
+      // Choose the expected first-run state from the account's actual keys,
+      // then require its corresponding UI instead of racing the first frame.
+      const keysResponse = await page.request.get(
+        `${UI_BASE_URL}${LLM_PROVIDER_API_KEYS_AVAILABLE_ROUTE}`,
+      );
+      await expect(keysResponse).toBeOK();
+      const availableKeys = await keysResponse.json();
+      expect(Array.isArray(availableKeys)).toBe(true);
       await page.goto(`${UI_BASE_URL}/chat`);
       await page.waitForLoadState("domcontentloaded");
 
@@ -39,34 +53,8 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
         E2eTestId.QuickstartAddApiKeyButton,
       );
       const chatPrompt = page.getByTestId(E2eTestId.ChatPromptTextarea);
-      const quickstartState = await expect
-        .poll(
-          async () => {
-            if (await addApiKeyButton.isVisible().catch(() => false)) {
-              return "onboarding";
-            }
-
-            if (await chatPrompt.isVisible().catch(() => false)) {
-              return "chat-ready";
-            }
-
-            return null;
-          },
-          {
-            timeout: 20_000,
-            intervals: [500, 1000, 2000, 5000],
-          },
-        )
-        .toBeTruthy()
-        .then(async () => {
-          if (await addApiKeyButton.isVisible().catch(() => false)) {
-            return "onboarding" as const;
-          }
-
-          return "chat-ready" as const;
-        });
-
-      if (quickstartState === "onboarding") {
+      if (availableKeys.length === 0) {
+        await expect(addApiKeyButton).toBeVisible({ timeout: 20_000 });
         await createLlmProviderApiKey(page, {
           name: "Quickstart Key",
           apiKey: "sk-quickstart-test",

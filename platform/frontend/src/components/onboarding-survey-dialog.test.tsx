@@ -30,8 +30,8 @@ vi.mock("@/lib/onboarding/onboarding.query", () => ({
   }),
 }));
 
-vi.mock("posthog-js", () => ({
-  default: { capture: vi.fn() },
+vi.mock("@/lib/posthog-client", () => ({
+  posthogClient: { capture: vi.fn() },
 }));
 
 import { useHasPermissions } from "@/lib/auth/auth.query";

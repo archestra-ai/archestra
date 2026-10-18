@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   extractCatalogIdFromInstallUrl,
   extractIdsFromReauthUrl,
@@ -669,5 +669,29 @@ describe("isInstallAuthResolved", () => {
         connectedCatalogIds: new Set(["cat_1"]),
       }),
     ).toBe(false);
+  });
+});
+
+describe("auth parsers on unrelated text", () => {
+  it("rejects text without the markers before parsing it as JSON", () => {
+    const parse = vi.spyOn(JSON, "parse");
+    const output = JSON.stringify({
+      rows: Array.from({ length: 50 }, (_, i) => ({ i })),
+    });
+
+    expect(parseAuthRequired(output)).toBeNull();
+    expect(parseExpiredAuth(output)).toBeNull();
+    expect(parse).not.toHaveBeenCalled();
+    parse.mockRestore();
+  });
+
+  it("still finds the markers inside a JSON error envelope", () => {
+    const envelope = JSON.stringify({
+      originalError: {
+        message:
+          'Authentication required for "GitHub". To authenticate, visit: https://example.com/connect/github',
+      },
+    });
+    expect(parseAuthRequired(envelope)?.catalogName).toBe("GitHub");
   });
 });

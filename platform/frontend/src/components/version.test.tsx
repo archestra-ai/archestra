@@ -102,12 +102,13 @@ describe("Version", () => {
     expect(mockUseHealth).toHaveBeenCalledWith({ enabled: false });
   });
 
-  it("shows the latest release link by default", () => {
+  it("shows the latest release link by default", async () => {
     const { container } = render(<Version inline />);
 
     expect(container.firstChild).toHaveTextContent("Version: 1.1.32");
+    // The version comparison loads its semver dependency on demand.
     expect(
-      screen.getByRole("link", {
+      await screen.findByRole("link", {
         name: "v1.1.33",
       }),
     ).toHaveAttribute(

@@ -7,20 +7,9 @@ import { useEffect, useRef, useState } from "react";
 import { LoadingState } from "@/components/loading";
 import { authQueryKeys, useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { errorReporting } from "@/lib/error-reporting";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
-
-type ErrorReportingUser = Parameters<
-  typeof import("@sentry/nextjs").setUser
->[0];
-
-const safeSetErrorReportingUser = (user: ErrorReportingUser) => {
-  void import("@sentry/nextjs")
-    .then(({ setUser }) => {
-      setUser(user);
-    })
-    .catch(() => undefined);
-};
 
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
   return (
@@ -49,9 +38,16 @@ const isSpecialAuthPage = (pathname: string) => {
   );
 };
 
-export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
-  children,
-}) => {
+export const WithAuthCheck: React.FC<
+  React.PropsWithChildren<{
+    /**
+     * The document request carried a session cookie (read by the root layout
+     * on the server). Unverified — get-session still decides — but enough to
+     * draw the signed-in app while that request is in flight.
+     */
+    hasSessionCookie?: boolean;
+  }>
+> = ({ children, hasSessionCookie = false }) => {
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -98,14 +94,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   // Set Sentry user context when user is authenticated
   useEffect(() => {
     if (session?.user) {
-      safeSetErrorReportingUser({
+      errorReporting.setUser({
         id: session.user.id,
         email: session.user.email,
         username: session.user.name || session.user.email,
       });
     } else {
       // Clear user context when not authenticated
-      safeSetErrorReportingUser(null);
+      errorReporting.setUser(null);
     }
   }, [session?.user]);
 
@@ -181,7 +177,16 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   // somewhere else either way; the branch below still catches them the moment
   // the session resolves, and now they are interrupted from a form rather than
   // from a spinner.
+  //
+  // A session cookie changes the odds: the visitor is almost certainly signed
+  // in, so the app renders straight away — on the server too, which puts the
+  // shell and the chat composer in the HTML — while get-session runs in
+  // parallel with the page's own queries. If it says there is no user after
+  // all (an expired or revoked cookie), the branch below swaps the app for the
+  // sign-in redirect; 401s fired in the meantime are not toasted (see
+  // sessionConfirmation in handleApiError).
   if (inProgress && !isAuthPage && !isSpecialAuth) {
+    if (hasSessionCookie) return <>{children}</>;
     return <LoadingState label="Loading…" variant="quiet" />;
   }
 

@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { archestraApiTypes } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,6 +38,7 @@ vi.mock("use-stick-to-bottom", () => ({
   useStickToBottomContext: () => ({
     isAtBottom: true,
     scrollToBottom: vi.fn(),
+    stopScroll: vi.fn(),
   }),
 }));
 
@@ -367,6 +368,121 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("🧾")).toBeInTheDocument();
+  });
+
+  it("mounts only the end of a long transcript, and earlier messages on request", async () => {
+    const messages = Array.from({ length: 100 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Turn 99")).toBeInTheDocument();
+    expect(screen.getByText("Turn 70")).toBeInTheDocument();
+    expect(screen.queryByText("Turn 69")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show earlier messages (70 not shown)",
+      }),
+    );
+    expect(await screen.findByText("Turn 40")).toBeInTheDocument();
+    expect(screen.queryByText("Turn 39")).not.toBeInTheDocument();
+    expect(screen.getByText("Turn 99")).toBeInTheDocument();
+  });
+
+  it("opens the window around a deep-linked message", async () => {
+    const messages = Array.from({ length: 100 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState({}, "", "/chat/conv-1#message-m-20");
+    try {
+      render(
+        <ChatMessages
+          conversationId="conv-1"
+          messages={messages}
+          status="ready"
+        />,
+      );
+
+      expect(await screen.findByText("Turn 20")).toBeInTheDocument();
+      // Ten items of context above it.
+      expect(screen.getByText("Turn 10")).toBeInTheDocument();
+      expect(screen.queryByText("Turn 9")).not.toBeInTheDocument();
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
+  it("ignores a malformed message fragment without losing the transcript", () => {
+    const messages = Array.from({ length: 100 }, (_, index) => ({
+      id: `m-${index}`,
+      role: index % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${index}` }],
+    })) as UIMessage[];
+    window.history.replaceState({}, "", "/chat/conv-1#message-%");
+    try {
+      render(
+        <ChatMessages
+          conversationId="conv-1"
+          messages={messages}
+          status="ready"
+        />,
+      );
+
+      expect(screen.getByText("Turn 99")).toBeInTheDocument();
+      expect(screen.queryByText("Turn 69")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "Show earlier messages (70 not shown)",
+        }),
+      ).toBeVisible();
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
+  it("keeps the window's start when new messages arrive", () => {
+    const messages = Array.from({ length: 50 }, (_, i) => ({
+      id: `m-${i}`,
+      role: i % 2 === 0 ? "user" : "assistant",
+      parts: [{ type: "text", text: `Turn ${i}` }],
+    })) as UIMessage[];
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+    const more = [
+      ...messages,
+      {
+        id: "m-50",
+        role: "user",
+        parts: [{ type: "text", text: "Turn 50" }],
+      } as UIMessage,
+    ];
+    rerender(
+      <ChatMessages conversationId="conv-1" messages={more} status="ready" />,
+    );
+
+    expect(screen.getByText("Turn 50")).toBeInTheDocument();
+    // Still mounted: appending does not push the oldest rendered one out.
+    expect(screen.getByText("Turn 20")).toBeInTheDocument();
   });
 
   it("renders external MCP Skill attribution from message metadata", () => {

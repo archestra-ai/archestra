@@ -145,6 +145,7 @@ import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { buildToolIconMap, type ToolIconMap } from "./tool-icon-map";
 import { ToolStatusRow } from "./tool-status-row";
+import { TranscriptWindowEdge, useTranscriptWindow } from "./transcript-window";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -565,6 +566,17 @@ export function ChatMessages({
     [subagentToolCalls],
   );
 
+  const timelineItems = useMemo(
+    () =>
+      buildMessageTimeline({
+        messages,
+        chatErrors,
+        compactions,
+      }),
+    [messages, chatErrors, compactions],
+  );
+  const transcriptWindow = useTranscriptWindow(timelineItems);
+
   if (
     messages.length === 0 &&
     chatErrors.length === 0 &&
@@ -600,11 +612,6 @@ export function ChatMessages({
     const nextMessage = messages[idx + 1];
     return nextMessage.role !== "assistant";
   });
-  const timelineItems = buildMessageTimeline({
-    messages,
-    chatErrors,
-    compactions,
-  });
   const liveErrorMessage = error ? getInlineErrorMessage(error) : null;
   const hasRenderedLiveError =
     !!error &&
@@ -638,7 +645,15 @@ export function ChatMessages({
         />
         <ConversationContent>
           <div className="@container/chat max-w-4xl mx-auto relative pb-8">
+            <TranscriptWindowEdge
+              hiddenCount={transcriptWindow.start}
+              onShowEarlier={transcriptWindow.showEarlier}
+              deepLinkedMessageId={transcriptWindow.deepLinkedMessageId}
+            />
             {timelineItems.map((item, index) => {
+              // Only the end of a long transcript is mounted (see
+              // useTranscriptWindow); earlier items render on scroll-up.
+              if (index < transcriptWindow.start) return null;
               if (item.kind === "chat-error") {
                 return (
                   <InlineChatError
@@ -676,6 +691,8 @@ export function ChatMessages({
               return (
                 <div
                   key={message.id || idx}
+                  // Deep-link target (#message-<id>, see useTranscriptWindow).
+                  id={message.id ? `message-${message.id}` : undefined}
                   className={cn(isDimmed && "opacity-40 transition-opacity")}
                 >
                   {(() => {

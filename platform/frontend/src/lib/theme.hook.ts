@@ -33,7 +33,14 @@ export function useOrgTheme() {
       : null;
 
   const [currentUITheme, setCurrentUITheme] = useState<OrganizationTheme>(
-    themeFromBackend || themeFromLocalStorage || DEFAULT_THEME,
+    () =>
+      themeFromBackend ||
+      // The server renders the organization's theme class on <html> (from its
+      // cached appearance read), so the first paint is already themed; start
+      // from it rather than repaint with an older or default choice.
+      readServerRenderedTheme() ||
+      themeFromLocalStorage ||
+      DEFAULT_THEME,
   );
 
   const saveAppearance = useCallback(
@@ -108,3 +115,13 @@ const applyThemeOnUI = (themeId: OrganizationTheme) => {
 const applyThemeInLocalStorage = (themeId: OrganizationTheme) => {
   localStorage.setItem(THEME_STORAGE_KEY, themeId);
 };
+
+function readServerRenderedTheme(): OrganizationTheme | null {
+  if (typeof document === "undefined") return null;
+  const themeClass = Array.from(document.documentElement.classList).find(
+    (cls) => cls.startsWith("theme-"),
+  );
+  return themeClass
+    ? (themeClass.slice("theme-".length) as OrganizationTheme)
+    : null;
+}

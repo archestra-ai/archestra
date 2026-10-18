@@ -2,6 +2,7 @@
 
 import NextError from "next/error";
 import { useEffect } from "react";
+import { errorReporting } from "@/lib/error-reporting";
 
 export default function GlobalError({
   error,
@@ -9,11 +10,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
 }) {
   useEffect(() => {
-    void import("@sentry/nextjs")
-      .then(({ captureException }) => {
-        captureException(error);
-      })
-      .catch(() => undefined);
+    errorReporting.captureException(error);
   }, [error]);
 
   return (

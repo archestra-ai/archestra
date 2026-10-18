@@ -1,14 +1,13 @@
-import * as Sentry from "@sentry/nextjs";
 import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { errorReporting } from "@/lib/error-reporting";
 import { WithAuthCheck } from "./with-auth-check";
 
-// Mock Sentry
-vi.mock("@sentry/nextjs", () => ({
-  setUser: vi.fn(),
+vi.mock("@/lib/error-reporting", () => ({
+  errorReporting: { setUser: vi.fn(), captureException: vi.fn() },
 }));
 
 // Mock Next.js router and navigation
@@ -347,6 +346,48 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
     });
 
+    it("renders the app at once when the request carried a session cookie", () => {
+      vi.mocked(usePathname).mockReturnValue("/chat");
+
+      render(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    it("swaps the optimistic app for the sign-in redirect when the cookie was stale", async () => {
+      vi.mocked(usePathname).mockReturnValue("/chat");
+      setWindowLocation("/chat");
+      const { rerender } = render(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+      rerender(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(screen.queryByTestId("protected-content")).toBeNull();
+      await waitFor(() =>
+        expect(mockRouterPush).toHaveBeenCalledWith(
+          "/auth/sign-in?redirectTo=%2Fchat",
+        ),
+      );
+    });
+
     it("shows the auth page immediately instead of waiting for the session", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
 
@@ -465,7 +506,7 @@ describe("WithAuthCheck", () => {
       );
 
       await waitFor(() => {
-        expect(Sentry.setUser).toHaveBeenCalledWith({
+        expect(errorReporting.setUser).toHaveBeenCalledWith({
           id: "user123",
           email: "test@example.com",
           username: "Test User",
@@ -496,7 +537,7 @@ describe("WithAuthCheck", () => {
       );
 
       await waitFor(() => {
-        expect(Sentry.setUser).toHaveBeenCalledWith({
+        expect(errorReporting.setUser).toHaveBeenCalledWith({
           id: "user456",
           email: "another@example.com",
           username: "another@example.com",
@@ -519,33 +560,8 @@ describe("WithAuthCheck", () => {
       );
 
       await waitFor(() => {
-        expect(Sentry.setUser).toHaveBeenCalledWith(null);
+        expect(errorReporting.setUser).toHaveBeenCalledWith(null);
       });
-    });
-
-    it("should handle Sentry errors silently", () => {
-      vi.mocked(Sentry.setUser).mockImplementationOnce(() => {
-        throw new Error("Sentry error");
-      });
-
-      vi.mocked(useSession).mockReturnValue({
-        data: {
-          user: { id: "user789", email: "error@example.com" },
-          session: { id: "session789" },
-        },
-        isPending: false,
-      } as unknown as ReturnType<typeof useSession>);
-
-      vi.mocked(usePathname).mockReturnValue("/dashboard");
-
-      // Should not throw
-      expect(() => {
-        render(
-          <WithAuthCheck>
-            <MockChild />
-          </WithAuthCheck>,
-        );
-      }).not.toThrow();
     });
   });
 

@@ -7,6 +7,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { forwardRef, type ReactElement } from "react";
+import { renderToString } from "react-dom/server";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
@@ -1788,6 +1789,30 @@ describe("ArchestraPromptInput", () => {
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(onSubmit).not.toHaveBeenCalled();
     });
+  });
+
+  it("keeps text typed into the server-rendered composer before hydration", () => {
+    // A saved draft is older than what the user just typed.
+    localStorage.setItem(NEW_CHAT_DRAFT_STORAGE_KEY, "an older draft");
+    const ui = (
+      <QueryClientProvider client={queryClient}>
+        <ArchestraPromptInput {...defaultProps} />
+      </QueryClientProvider>
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(ui);
+    document.body.appendChild(container);
+    const textarea = container.querySelector("textarea");
+    if (!textarea) throw new Error("server markup has no textarea");
+    textarea.value = "typed before hydration";
+
+    renderComponent(ui, { container, hydrate: true });
+
+    expect(mockTextInputSetInput).toHaveBeenLastCalledWith(
+      "typed before hydration",
+    );
+    expect(mockTextInputSetInput).not.toHaveBeenCalledWith("an older draft");
+    container.remove();
   });
 
   describe("draft retention on submit", () => {

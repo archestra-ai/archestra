@@ -2,10 +2,16 @@
 
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { lazyComponent } from "@/lib/utils/preloadable-lazy";
+
+// Most pages have no banner; its markdown renderer loads only when one shows.
+const SiteNotificationMarkdown = lazyComponent<{ content: string }>(() =>
+  import("./site-notification-markdown").then(
+    (m) => m.SiteNotificationMarkdown,
+  ),
+);
 
 const STORAGE_PREFIX = "site-notification-dismissed:";
 
@@ -60,7 +66,7 @@ export function SiteNotificationBar({
     <div className="sticky top-0 z-40 border-b border-primary bg-primary text-primary-foreground shadow-sm">
       <div className="flex items-start gap-3 px-6 py-2">
         <div className="flex-1 text-sm [&_a]:font-medium [&_a]:underline [&_a]:underline-offset-2 [&_h1]:my-0 [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:leading-5 [&_h2]:my-0 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:leading-5 [&_p]:my-0 [&_strong]:font-semibold">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+          <SiteNotificationMarkdown content={content} />
         </div>
         <Button
           type="button"

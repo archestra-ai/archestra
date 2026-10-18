@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { cookies } from "next/headers";
 import { PublicEnvScript } from "next-runtime-env";
+import { AppInteractiveMarker } from "./_parts/app-interactive-marker";
 import { AppShell } from "./_parts/app-shell";
 import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
@@ -13,9 +15,13 @@ import "./globals.css";
 import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
+import { hasSessionCookie } from "@/lib/auth/session-cookie.server";
 import { prefetchShellSeed } from "@/lib/auth/shell-seed.server";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
-import { getDeploymentFavicon } from "@/lib/favicon.server";
+import {
+  getCachedDeploymentAppearance,
+  themeClassName,
+} from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
@@ -231,16 +237,19 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [favicon, shellSeed] = await Promise.all([
-    getDeploymentFavicon(),
+  const [{ favicon, theme }, cookieStore, shellSeed] = await Promise.all([
+    getCachedDeploymentAppearance(),
+    cookies(),
     prefetchShellSeed(),
   ]);
+  // Presence only; nothing is fetched for it. See WithAuthCheck.
+  const sessionCookie = hasSessionCookie(cookieStore);
 
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${latoFont.variable} ${geistFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable}`}
+      className={`${latoFont.variable} ${geistFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable} ${themeClassName(theme)}`}
     >
       <head>
         <link rel="describedby" href="/llms.txt" type="text/plain" />
@@ -276,7 +285,7 @@ export default async function RootLayout({
                   <PageTitleProvider>
                     <OrgThemeLoader />
                     <DynamicHead />
-                    <WithAuthCheck>
+                    <WithAuthCheck hasSessionCookie={sessionCookie}>
                       <WebsocketInitializer />
                       <RumTracker />
                       <ListReturnUrlTracker />
@@ -290,6 +299,7 @@ export default async function RootLayout({
             </ChatProvider>
           </ArchestraQueryClientProvider>
         </MswInit>
+        <AppInteractiveMarker />
       </body>
     </html>
   );

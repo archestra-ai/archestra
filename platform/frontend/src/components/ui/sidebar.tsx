@@ -261,6 +261,42 @@ function Sidebar({
   );
 }
 
+/**
+ * The sidebar's frame without its contents, at its exact width and state:
+ * drawn while the real sidebar is still loading, so the page beside it never
+ * moves when it arrives. Nothing on mobile, where the sidebar is a closed sheet.
+ */
+function SidebarPlaceholder({
+  collapsible = "offcanvas",
+}: {
+  collapsible?: "offcanvas" | "icon";
+}) {
+  const { isMobile, state } = useSidebar();
+  if (isMobile) return null;
+  return (
+    <div
+      className="group peer text-sidebar-foreground hidden md:block"
+      data-state={state}
+      data-collapsible={state === "collapsed" ? collapsible : ""}
+      data-variant="sidebar"
+      data-side="left"
+      data-slot="sidebar"
+      aria-hidden="true"
+    >
+      <div
+        data-slot="sidebar-gap"
+        className="relative w-(--sidebar-width) bg-transparent group-data-[collapsible=offcanvas]:w-0 group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
+      />
+      <div
+        data-slot="sidebar-container"
+        className="fixed inset-y-0 left-0 z-10 hidden h-svh w-(--sidebar-width) border-r group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] group-data-[collapsible=icon]:w-(--sidebar-width-icon) md:flex"
+      >
+        <div className="bg-sidebar flex h-full w-full flex-col" />
+      </div>
+    </div>
+  );
+}
+
 function SidebarTrigger({
   className,
   onClick,
@@ -854,6 +890,7 @@ export {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  SidebarPlaceholder,
   SidebarProvider,
   SidebarRail,
   SidebarSeparator,

@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useConversationActions } from "./conversation-actions";
+import {
+  preloadConversationActionParts,
+  useConversationActions,
+} from "./conversation-actions";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/chat",
@@ -50,6 +53,9 @@ beforeEach(() => {
     data: true,
   } as ReturnType<typeof useHasPermissions>);
 });
+
+// The project picker is a lazy chunk; load it so the menu renders in one pass.
+beforeAll(() => preloadConversationActionParts());
 
 describe("useConversationActions", () => {
   it("gives the chat's owner the full list, in menu order", () => {

@@ -13,7 +13,6 @@ import {
   useAppearanceSettings,
   useOrganization,
 } from "@/lib/organization.query";
-import { hasNewerVersion } from "@/lib/utils/version";
 
 interface VersionProps {
   inline?: boolean;
@@ -58,10 +57,23 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   const [shouldHide, setShouldHide] = useState(false);
   const [footerSlot, setFooterSlot] = useState<Element | null>(null);
 
-  const hasNewVersion = useMemo(() => {
-    if (!version || !latestRelease?.tag_name) return false;
-    return hasNewerVersion(version, latestRelease.tag_name);
-  }, [version, latestRelease?.tag_name]);
+  // The comparison needs semver, which loads only once there is a release to
+  // compare against (it is not part of the first load).
+  const [hasNewVersion, setHasNewVersion] = useState(false);
+  const latestTag = latestRelease?.tag_name;
+  useEffect(() => {
+    if (!version || !latestTag) {
+      setHasNewVersion(false);
+      return;
+    }
+    let cancelled = false;
+    void import("@/lib/utils/version").then(({ hasNewerVersion }) => {
+      if (!cancelled) setHasNewVersion(hasNewerVersion(version, latestTag));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [version, latestTag]);
 
   const footerString = useMemo(() => {
     // Wait for version to load before rendering to avoid layout shift

@@ -3,7 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { Info } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -24,6 +24,7 @@ import {
   useSiteNotification,
   useUpdateSiteNotification,
 } from "@/lib/site-notification.query";
+import { applyThemeOnUI } from "@/lib/theme.hook";
 import { useSetSettingsPageHeader } from "../../layout";
 import { AppearanceEditor } from "./appearance-editor";
 import {
@@ -139,6 +140,13 @@ function AppearanceForm({
   const deleteNotification = useDeleteSiteNotification();
   const page =
     APPEARANCE_PAGES.find((item) => item.id === pageId) ?? APPEARANCE_PAGES[0];
+  // Preview the draft palette in this browser while editing. Cancel resets the
+  // draft back to the saved palette; leaving Appearance restores it too.
+  const draftTheme = form.watch("theme");
+  const savedTheme = useRef(organization.theme);
+  savedTheme.current = organization.theme;
+  useEffect(() => applyThemeOnUI(draftTheme), [draftTheme]);
+  useEffect(() => () => applyThemeOnUI(savedTheme.current), []);
 
   const save = async () => {
     if (!canEdit || saving) return;

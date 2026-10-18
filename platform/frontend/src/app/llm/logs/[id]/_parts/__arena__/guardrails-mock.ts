@@ -70,6 +70,12 @@ export type LabelSegment = LabelState & {
     toolCallKey: string | null;
     consultKey: string | null;
     summary: string;
+    /** Why, in words: which rule applied and what it decided. */
+    explanation: string;
+    /** The policy excerpt (TOML) that produced the change. */
+    rule: string;
+    /** Where the rule lives, e.g. "Organization policy, revision 14". */
+    ruleSource: string;
   } | null;
 };
 
@@ -321,6 +327,15 @@ export function buildGuardrailsMock(
             (c) => c.toolCallKey === internalRead.key && c.role === "annotator",
           )?.key ?? null,
         summary: "Read internal data; audience narrowed to internal",
+        explanation:
+          "The rule for this tool marks what it returns as internal, so everything the agent does after it may only reach people inside the organization.",
+        rule: `[policy.audience]
+internal = ["archestra:members"]
+
+[[policy.tool]]
+name = "mcp/${internalRead.call.mcpServerName}/${readMcpToolCall(internalRead.call).toolName}"
+delta = { audience = ["internal"] }`,
+        ruleSource: "Organization policy · revision 14",
       },
     });
   }
@@ -341,6 +356,17 @@ export function buildGuardrailsMock(
             (c) => c.toolCallKey === external.key && c.role === "annotator",
           )?.key ?? null,
         summary: "Admitted third-party content; trust lowered to suspicious",
+        explanation:
+          "No rule names this tool, so the catch-all annotator asked the default model to judge its result. It found third-party content and answered trust: suspicious (86%).",
+        rule: `[[policy.tool]]
+name = "*"
+annotator = "archestra.undeclared-tool"
+
+[[policy.annotator]]
+name = "archestra.undeclared-tool"
+builtin = "archestra"
+ranks = ["suspicious", "trusted"]`,
+        ruleSource: "Organization policy · revision 14",
       },
     });
   }
@@ -358,6 +384,15 @@ export function buildGuardrailsMock(
         toolCallKey: team.key,
         consultKey: null,
         summary: "Released to #payments; audience is now @payments",
+        explanation:
+          "Posting to a channel releases the session's context to that channel's members, so the audience narrows to the team that can read it.",
+        rule: `[[policy.tool]]
+name = "mcp/slack/post_message"
+annotator = "archestra.audience"
+
+[policy.audience]
+"@payments" = ["archestra:team/payments"]`,
+        ruleSource: "Slack battery · v1.4",
       },
     });
   }
@@ -373,6 +408,11 @@ export function buildGuardrailsMock(
         toolCallKey: null,
         consultKey: null,
         summary: "Guardrails turned off for this session; label reset",
+        explanation:
+          "Break the glass is on for this organization: a yell from the agent turned guardrails off for the rest of the session, which clears the label.",
+        rule: `[policy.deployment]
+break_the_glass = true`,
+        ruleSource: "Organization policy · revision 14",
       },
     });
   }

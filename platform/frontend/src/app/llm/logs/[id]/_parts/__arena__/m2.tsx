@@ -2,7 +2,6 @@
 // design-arena: do not commit
 import {
   AUDIENCE_TONE,
-  type Audience,
   CONSULT_KIND,
   DECISION_TONE,
   type GuardrailsData,
@@ -11,12 +10,11 @@ import {
   type MockConsult,
   ROLE_LABEL,
   TRUST_TONE,
-  type Trust,
 } from "./guardrails-mock";
-import { DecisionIcon } from "./guardrails-arena";
+import { DecisionIcon, DecisionTerm, RoleTerm } from "./guardrails-arena";
 
 import {
-  ArrowRight,
+  ChevronLeft,
   ChevronRight,
   CornerDownRight,
   Eye,
@@ -32,9 +30,10 @@ import {
 import {
   type CSSProperties,
   type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
   type ReactNode,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -176,21 +175,32 @@ export function RequestWaterfall({
   const selected = spans.find((span) => span.key === selectedKey) ?? null;
   const [checksShown, setChecksShown] = useState(true);
 
-  // Every row the list draws, in order: requests and tool calls, each tool
-  // call's checks just above (gates) and below (result checks) it, and a
-  // divider wherever the session's label changed.
+  // Every row the list draws, in order: requests and tool calls, and each
+  // tool call's checks just above (gates) and below (result checks) it.
+  // Label changes add no rows: the gutter carries them.
   const entries = useMemo(
     () => buildEntries({ spans, guardrails, checksShown }),
     [spans, guardrails, checksShown],
   );
-  const steppable = useMemo(
-    () =>
-      entries.filter(
-        (entry): entry is Exclude<Entry, { type: "change" }> =>
-          entry.type !== "change",
-      ),
-    [entries],
+  const steppable = entries;
+  const changes = useMemo(
+    () => (guardrails ? pageChanges({ entries, guardrails }) : []),
+    [entries, guardrails],
   );
+  const { notesByKey, nodesByKey } = useMemo(() => {
+    const notes = new Map<string, LabelChange[]>();
+    const nodes = new Map<
+      string,
+      { top: LabelChange[]; bottom: LabelChange[] }
+    >();
+    for (const change of changes) {
+      notes.set(change.noteKey, [...(notes.get(change.noteKey) ?? []), change]);
+      const node = nodes.get(change.nodeKey) ?? { top: [], bottom: [] };
+      node[change.nodeAt].push(change);
+      nodes.set(change.nodeKey, node);
+    }
+    return { notesByKey: notes, nodesByKey: nodes };
+  }, [changes]);
   const openConsult =
     selectedConsultKey && guardrails
       ? (guardrails.consults.find((c) => c.key === selectedConsultKey) ?? null)
@@ -209,13 +219,52 @@ export function RequestWaterfall({
         : pageConsults({ spans, guardrails }),
     [entries, spans, guardrails],
   );
-  const changesOnPage = entries.filter(
-    (entry): entry is ChangeEntry => entry.type === "change",
-  );
-  const hasGutter = guardrails !== null;
-  const listRef = useRef<HTMLOListElement>(null);
-  const changeRowRefs = useRef(new Map<string, HTMLLIElement>());
+  const labelHere = guardrails
+    ? guardrails.labelAt(
+        openConsult?.start ??
+          selected?.start ??
+          Math.max(0, ...spans.map((span) => span.end)),
+      )
+    : null;
+  const labelHereName = openConsult
+    ? openConsult.externalName
+    : selected
+      ? "selected row"
+      : "end of page";
   const focusKey = consultRowSelected ? selectedConsultKey : selectedKey;
+  // A change selects what caused it: the check whose answer moved the label
+  // (its details are the why), else the tool call, else the first row under
+  // the new label.
+  const activateChange = (change: LabelChange) => {
+    if (change.target.type === "consult") onSelectConsult?.(change.target.key);
+    else onSelect(change.target.key);
+  };
+  const isChangeActive = (change: LabelChange) =>
+    change.target.type === "consult"
+      ? change.target.key === selectedConsultKey
+      : !selectedConsultKey && change.target.key === selectedKey;
+  // Where each row's stripe tile starts, so the stripes run unbroken across
+  // rows of different heights (span rows 44/40px, check rows 28px).
+  const stripeOffsets = useMemo(() => {
+    let sm = 0;
+    let lg = 0;
+    return entries.map((entry) => {
+      const at = { sm: sm % 8, lg: lg % 8 };
+      sm += entry.type === "consult" ? CHECK_ROW_PX : 44;
+      lg += entry.type === "consult" ? CHECK_ROW_PX : 40;
+      return at;
+    });
+  }, [entries]);
+  const gutterFor = (entry: Entry, index: number): GutterProps | null =>
+    entry.gutter
+      ? {
+          label: entry.gutter,
+          stripeAt: stripeOffsets[index] ?? { sm: 0, lg: 0 },
+          nodes: nodesByKey.get(entry.key) ?? null,
+          isChangeActive,
+          onActivateChange: activateChange,
+        }
+      : null;
   const edges = consultRowSelected && openConsult ? openConsult : selected;
   const layout: Layout =
     spans.length > 0 && spans.every((span) => span.type === "tool")
@@ -245,55 +294,6 @@ export function RequestWaterfall({
     }
     return { tokens, billed };
   }, [spans]);
-
-  // The gutter's stripes are drawn per row but anchored to the list's top, so
-  // a run of narrowed rows reads as one continuous stripe, hairlines and
-  // divider rows included. Re-anchored whenever the rows or their heights
-  // change (the rows are taller on phones).
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list || !hasGutter) return;
-    const anchor = () => {
-      const top = list.getBoundingClientRect().top;
-      for (const el of list.querySelectorAll<HTMLElement>(
-        "[data-label-gutter]",
-      )) {
-        el.style.backgroundPosition = `0 ${top - el.getBoundingClientRect().top}px`;
-      }
-    };
-    anchor();
-    const observer = new ResizeObserver(anchor);
-    observer.observe(list);
-    return () => observer.disconnect();
-  }, [entries, hasGutter]);
-
-  // A change pill in the legend: open the check that moved the label, else
-  // select the call that did; a change with neither (a reset) scrolls its
-  // divider into view.
-  const activateChange = (entry: ChangeEntry) => {
-    const cause = entry.segment.cause;
-    if (cause?.consultKey && onSelectConsult) {
-      onSelectConsult(cause.consultKey);
-      return;
-    }
-    const toolKey = cause?.toolCallKey;
-    if (toolKey && spans.some((span) => span.key === toolKey)) {
-      onSelect(toolKey);
-      rowRefs.current.get(toolKey)?.focus({ preventScroll: true });
-      return;
-    }
-    const scroller = scrollerRef.current;
-    const row = changeRowRefs.current.get(entry.key);
-    if (scroller && row) scrollWithin(scroller, row);
-  };
-  const isChangeActive = (entry: ChangeEntry) => {
-    const cause = entry.segment.cause;
-    if (cause?.consultKey) return selectedConsultKey === cause.consultKey;
-    if (cause?.toolCallKey) {
-      return selectedKey === cause.toolCallKey && openConsult === null;
-    }
-    return false;
-  };
 
   // Keep the selection in view inside the list when it changes from outside
   // it (the details pane's stepper, a page change landing on a new default,
@@ -366,8 +366,8 @@ export function RequestWaterfall({
   return (
     <div>
       {/* Phones: the title, the count and the action on one line, the
-          legend on one line below. Wide: one row, the legend and the action
-          at the right end. */}
+          legend below, wrapping onto more lines when it does not fit. Wide:
+          one row, the legend and the action at the right end. */}
       <header className="flex flex-col gap-1.5 border-b px-4 py-2.5 lg:flex-row lg:items-center lg:gap-x-6">
         <div className="flex min-w-0 items-center gap-2 lg:contents">
           <div className="flex min-w-0 flex-1 items-baseline gap-2 lg:flex-none">
@@ -389,7 +389,7 @@ export function RequestWaterfall({
         <div className="flex min-w-0 items-center gap-x-5 lg:ml-auto">
           <ul
             aria-label="Request kinds"
-            className="flex min-w-0 items-center gap-x-4 overflow-hidden text-xs whitespace-nowrap text-muted-foreground lg:flex-wrap lg:gap-y-1"
+            className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs whitespace-nowrap text-muted-foreground"
           >
             {(Object.keys(SPAN_KINDS) as SpanKind[])
               .filter((kind) => !hideEmptyKinds || kindCounts[kind] > 0)
@@ -425,11 +425,13 @@ export function RequestWaterfall({
         </div>
       </header>
       {guardrails ? (
-        <LabelLegend
-          changes={changesOnPage}
-          isActive={isChangeActive}
-          onActivate={activateChange}
-          checks={consultsOnPage}
+        <GuardrailsBar
+          consults={consultsOnPage}
+          changes={changes}
+          activeChange={changes.findIndex(isChangeActive)}
+          onActivateChange={activateChange}
+          label={labelHere}
+          labelName={labelHereName}
           checksShown={checksShown}
           onToggleChecks={() => setChecksShown((shown) => !shown)}
         />
@@ -449,12 +451,7 @@ export function RequestWaterfall({
               grid,
             )}
           >
-            <div
-              className={cn(
-                "flex items-center gap-1.5",
-                hasGutter ? "pl-5" : "pl-4",
-              )}
-            >
+            <div className="flex items-center gap-1.5 pl-4">
               <span>Name</span>
               <span className="hidden font-normal text-muted-foreground/60 lg:inline">
                 {layout === "tools" ? "server, time" : "model, time"}
@@ -563,50 +560,11 @@ export function RequestWaterfall({
               </div>
 
               <ol
-                ref={listRef}
                 className="relative"
                 onKeyDown={onKeyDown}
                 aria-label="Requests"
               >
-                {entries.map((entry) => {
-                  if (entry.type === "change") {
-                    return (
-                      <LabelChangeRow
-                        key={entry.key}
-                        rowRef={(el) => {
-                          if (el) changeRowRefs.current.set(entry.key, el);
-                          else changeRowRefs.current.delete(entry.key);
-                        }}
-                        layout={layout}
-                        segment={entry.segment}
-                        previous={entry.previous}
-                        onSelectToolCall={
-                          entry.segment.cause?.toolCallKey &&
-                          spans.some(
-                            (span) =>
-                              span.key === entry.segment.cause?.toolCallKey,
-                          )
-                            ? () => {
-                                const key = entry.segment.cause?.toolCallKey;
-                                if (!key) return;
-                                onSelect(key);
-                                rowRefs.current
-                                  .get(key)
-                                  ?.focus({ preventScroll: true });
-                              }
-                            : null
-                        }
-                        onSelectConsult={
-                          entry.segment.cause?.consultKey && onSelectConsult
-                            ? () => {
-                                const key = entry.segment.cause?.consultKey;
-                                if (key) onSelectConsult(key);
-                              }
-                            : null
-                        }
-                      />
-                    );
-                  }
+                {entries.map((entry, index) => {
                   if (entry.type === "consult") {
                     const { consult } = entry;
                     const isSelected =
@@ -617,7 +575,9 @@ export function RequestWaterfall({
                         layout={layout}
                         consult={consult}
                         toolSpan={entry.toolSpan}
-                        gutter={entry.gutter}
+                        connector={connectorFor(entries, index)}
+                        gutter={gutterFor(entry, index)}
+                        note={notesByKey.get(entry.key) ?? null}
                         selected={isSelected}
                         buttonRef={(el) => {
                           if (el) rowRefs.current.set(consult.key, el);
@@ -632,7 +592,8 @@ export function RequestWaterfall({
                     layout,
                     selected: span.key === selectedKey && !consultRowSelected,
                     ancestor: span.key === selectedKey && consultRowSelected,
-                    gutter: entry.gutter,
+                    gutter: gutterFor(entry, index),
+                    note: notesByKey.get(entry.key) ?? null,
                     highlighted: span.key === highlightedKey,
                     buttonRef: (el: HTMLButtonElement | null) => {
                       if (el) rowRefs.current.set(span.key, el);
@@ -862,8 +823,10 @@ type RowProps = {
   selected: boolean;
   /** Its check is the selection: the row reads as that check's parent. */
   ancestor?: boolean;
-  /** The label in force at the row's start, for the phone gutter. */
-  gutter?: LabelState | null;
+  /** The label gutter at the row's left edge (and its change nodes). */
+  gutter?: GutterProps | null;
+  /** Label changes this row caused, noted on its detail line. */
+  note?: LabelChange[] | null;
   highlighted: boolean;
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
@@ -878,6 +841,7 @@ function RowShell({
   selected,
   ancestor = false,
   gutter = null,
+  note = null,
   highlighted,
   buttonRef,
   onSelect,
@@ -906,20 +870,21 @@ function RowShell({
   const latencyPlacement = placeLatency(span);
   return (
     <li className="relative">
+      {gutter ? <LabelGutter {...gutter} onSelectRow={onSelect} /> : null}
       <UnstyledButton
         ref={buttonRef}
         tabIndex={selected ? 0 : -1}
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
         onDoubleClick={onOpen}
-        aria-label={label}
+        aria-label={`${label}${gutterWords(gutter, note)}`}
         className={cn(
-          "group relative grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",
+          "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",
           grid,
           selected
             ? cn(
                 "bg-primary/[0.07]",
-                !gutter && "shadow-[inset_2px_0_0_var(--color-primary)]",
+                gutter ? SELECTED_PAST_GUTTER : SELECTED_EDGE,
               )
             : ancestor
               ? "bg-primary/[0.035] hover:bg-primary/[0.06]"
@@ -928,16 +893,10 @@ function RowShell({
           "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset",
         )}
       >
-        <LabelGutter label={gutter} selected={selected} />
         {/* Name over its detail line: model or server, then the clock
             time (phones show the latency there instead, having no axis
             labels). One rail in the kind's colour spans both lines. */}
-        <span
-          className={cn(
-            "flex min-w-0 items-center gap-2 pr-3",
-            gutter ? "pl-5" : "pl-4",
-          )}
-        >
+        <span className="flex min-w-0 items-center gap-2 pr-3 pl-4">
           <span
             className={cn(
               "h-[26px] w-[3px] shrink-0 rounded-full",
@@ -976,6 +935,7 @@ function RowShell({
               <span className="shrink-0 lg:hidden">
                 {tools ? time : (latency?.text ?? "—")}
               </span>
+              {note && note.length > 0 ? <ChangeNote changes={note} /> : null}
             </span>
           </span>
         </span>
@@ -1322,15 +1282,7 @@ type Entry =
       consult: MockConsult;
       toolSpan: TimelineSpan | null;
       gutter: LabelState | null;
-    }
-  | {
-      type: "change";
-      key: string;
-      segment: LabelSegment;
-      previous: LabelState;
     };
-
-type ChangeEntry = Extract<Entry, { type: "change" }>;
 
 function buildEntries({
   spans,
@@ -1377,26 +1329,7 @@ function buildEntries({
     }
   }
 
-  // A change its tool call caused sits right under that call (and its result
-  // checks); any other change sits where it happened in time.
-  const changesAfter = new Map<string, Entry[]>();
   const timed: { at: number; entry: Entry }[] = [];
-  guardrails.labels.forEach((segment, index) => {
-    if (index === 0 || !segment.cause) return;
-    const previous = guardrails.labels[index - 1];
-    const entry: Entry = {
-      type: "change",
-      key: `label-change-${segment.start}`,
-      segment,
-      previous: { trust: previous.trust, audience: previous.audience },
-    };
-    const toolKey = segment.cause.toolCallKey;
-    if (toolKey && spanByKey.has(toolKey)) {
-      changesAfter.set(toolKey, [...(changesAfter.get(toolKey) ?? []), entry]);
-    } else if (segment.start >= pageStart && segment.start <= pageEnd) {
-      timed.push({ at: segment.start, entry });
-    }
-  });
   for (const consult of loose) {
     timed.push({
       at: consult.start,
@@ -1410,7 +1343,7 @@ function buildEntries({
   for (const span of spans) {
     while (next < timed.length && timed[next].at <= span.start) {
       const { entry } = timed[next++];
-      if (entry.type !== "consult" || checksShown) out.push(entry);
+      if (checksShown) out.push(entry);
     }
     const bucket = byTool.get(span.key);
     if (checksShown && bucket) {
@@ -1426,11 +1359,10 @@ function buildEntries({
     if (checksShown && bucket) {
       for (const c of bucket.after) out.push(consultEntry(c, span, labelAt));
     }
-    out.push(...(changesAfter.get(span.key) ?? []));
   }
   for (; next < timed.length; next++) {
     const { entry } = timed[next];
-    if (entry.type !== "consult" || checksShown) out.push(entry);
+    if (checksShown) out.push(entry);
   }
   return out;
 }
@@ -1486,378 +1418,462 @@ function checkedWhat(consult: MockConsult): string {
 }
 
 /**
- * The guardrails strip under the header, one row wherever it fits: the gutter's
- * key on the left, this page's label changes as pills on the right (they
- * scroll sideways, fading at the cut edge), and the checks toggle. Phones put
- * the pills on a second row.
+ * The one-line strip under the header: the page's checks, the check-rows
+ * toggle, the gutter's key, and a stepper through the label changes (each a
+ * dot in the gutter). Phones put the key on a second line.
  */
-function LabelLegend({
+function GuardrailsBar({
+  consults,
   changes,
-  isActive,
-  onActivate,
-  checks,
+  activeChange,
+  onActivateChange,
+  label,
+  labelName,
   checksShown,
   onToggleChecks,
 }: {
-  changes: ChangeEntry[];
-  isActive: (change: ChangeEntry) => boolean;
-  onActivate: (change: ChangeEntry) => void;
-  checks: MockConsult[];
+  consults: MockConsult[];
+  changes: LabelChange[];
+  /** Index of the change whose cause is selected, or -1. */
+  activeChange: number;
+  onActivateChange: (change: LabelChange) => void;
+  label: LabelState | null;
+  labelName: string;
   checksShown: boolean;
   onToggleChecks: () => void;
 }) {
-  const fade = useEdgeFade();
-  const blocked = checks.filter((c) => c.decision === "blocked").length;
+  const blocked = consults.filter((c) => c.decision === "blocked").length;
+  const unanswered = consults.filter((c) => c.outcome !== "answered").length;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/20 px-4 py-1.5 text-[11px] text-muted-foreground sm:flex-nowrap sm:gap-x-4">
-      <ul
-        aria-label="Label gutter key"
-        className="order-1 flex shrink-0 items-center gap-x-2.5 whitespace-nowrap sm:gap-x-3"
-      >
-        <li className="font-medium text-foreground/80">Label</li>
-        <li className="inline-flex items-center gap-1.5">
-          <GutterSwatch label={{ trust: "trusted", audience: "public" }} />
-          Trusted
-        </li>
-        <li className="inline-flex items-center gap-1.5">
-          <GutterSwatch label={{ trust: "suspicious", audience: "public" }} />
-          Suspicious
-        </li>
-        <li
-          className="inline-flex items-center gap-1.5"
-          title="Striped: the audience is narrower than public (internal, a team, or self)"
-        >
-          <GutterSwatch label={null} />
-          <span>
-            Narrowed<span className="max-sm:hidden"> audience</span>
-          </span>
-        </li>
-      </ul>
-
-      <div
-        ref={fade.ref}
-        aria-label="Label changes on this page"
-        role="group"
-        style={fade.style}
-        className={cn(
-          "order-3 -my-1 min-w-0 basis-full overflow-x-auto py-1 [scrollbar-width:none] sm:order-2 sm:flex-1 sm:basis-auto [&::-webkit-scrollbar]:hidden",
-          changes.length === 0 && "max-sm:hidden",
-        )}
-      >
-        <div className="ml-auto flex w-max items-center gap-1">
-          {changes.map((change) => {
-            const words = changeWords(change);
-            const Icon = CHANGE_ICON[change.segment.cause?.kind ?? "reset"];
-            return (
-              <Tooltip key={change.key} delayDuration={200}>
-                <TooltipTrigger asChild>
-                  <UnstyledButton
-                    onClick={() => onActivate(change)}
-                    aria-label={`Label changed: ${words
-                      .map((w) => `${w.field} to ${w.to}`)
-                      .join(", ")}. ${change.segment.cause?.summary ?? ""}`}
-                    className={cn(
-                      PILL_BASE,
-                      changeTone(change),
-                      isActive(change) && "ring-2 ring-primary",
-                    )}
-                  >
-                    <Icon className="size-2.5 shrink-0" aria-hidden="true" />
-                    {words.map((part, index) => (
-                      <span
-                        key={part.field}
-                        className="inline-flex items-center gap-0.5"
-                      >
-                        {index > 0 ? (
-                          <span className="opacity-50">·</span>
-                        ) : null}
-                        <span className="font-medium opacity-80">
-                          {part.field}
-                        </span>
-                        <span aria-hidden="true">→</span>
-                        <span>{part.to}</span>
-                      </span>
-                    ))}
-                  </UnstyledButton>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-xs">
-                  <p className="font-medium">
-                    {change.segment.cause?.summary ?? "Label changed"}
-                  </p>
-                  <p className="opacity-80">{changeHint(change)}</p>
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </div>
-      </div>
-
-      {checks.length > 0 ? (
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <UnstyledButton
-              aria-pressed={checksShown}
-              onClick={onToggleChecks}
-              aria-label={`${checksShown ? "Hide" : "Show"} ${checks.length} guardrail ${checks.length === 1 ? "check" : "checks"}${blocked > 0 ? `, ${blocked} blocked` : ""}`}
-              className="order-2 -my-1 ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 font-medium text-foreground/80 tabular-nums outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 sm:order-3 sm:ml-0"
-            >
-              {checksShown ? (
-                <Eye className="size-3.5" aria-hidden="true" />
-              ) : (
-                <EyeOff className="size-3.5" aria-hidden="true" />
-              )}
-              <span className={cn(!checksShown && "line-through opacity-70")}>
-                {checks.length}
-                <span className="max-sm:hidden">
-                  {checks.length === 1 ? " check" : " checks"}
-                </span>
-              </span>
-              {blocked > 0 ? (
-                <span className="inline-flex items-center gap-0.5 text-rose-700 dark:text-rose-300">
-                  <ShieldX className="size-3" aria-hidden="true" />
-                  {blocked}
-                  <span className="max-sm:hidden"> blocked</span>
-                </span>
-              ) : null}
-            </UnstyledButton>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b bg-muted/20 px-4 py-1 text-[11px] text-muted-foreground">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex h-7 cursor-default items-center gap-1.5 tabular-nums lg:h-6">
+            <Shield
+              className="size-3.5 text-foreground/70"
+              aria-hidden="true"
+            />
             <span>
-              {checksShown ? "Hide" : "Show"} the guardrail check rows
+              <span className="font-medium text-foreground/90">
+                {consults.length}
+              </span>{" "}
+              {consults.length === 1 ? "check" : "checks"}
             </span>
-          </TooltipContent>
-        </Tooltip>
+            {blocked > 0 ? (
+              <span className="inline-flex items-center gap-0.5 font-medium text-rose-700 dark:text-rose-300">
+                <ShieldX className="size-3" aria-hidden="true" />
+                {blocked}
+                <span className="max-sm:sr-only"> blocked</span>
+              </span>
+            ) : null}
+            {unanswered > 0 ? (
+              <span className="inline-flex items-center gap-0.5 text-amber-700 dark:text-amber-300">
+                <ShieldAlert className="size-3" aria-hidden="true" />
+                {unanswered}
+                <span className="max-sm:sr-only"> unanswered</span>
+              </span>
+            ) : null}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs">
+          Guardrail checks on this page, each a row beside the tool call it
+          guarded. Click one to open its details below.
+        </TooltipContent>
+      </Tooltip>
+      <UnstyledButton
+        aria-pressed={checksShown}
+        aria-label={checksShown ? "Hide check rows" : "Show check rows"}
+        title={checksShown ? "Hide check rows" : "Show check rows"}
+        onClick={onToggleChecks}
+        className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border bg-card px-1.5 font-medium text-foreground/85 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 max-sm:w-7 max-sm:justify-center lg:h-6"
+      >
+        {checksShown ? (
+          <Eye className="size-3.5" aria-hidden="true" />
+        ) : (
+          <EyeOff className="size-3.5" aria-hidden="true" />
+        )}
+        <span className="max-sm:hidden">Checks</span>
+      </UnstyledButton>
+      <GutterKey />
+      {label ? (
+        <span
+          className="hidden min-w-0 items-center gap-1.5 xl:ml-auto xl:inline-flex"
+          title={`Label at ${labelName}`}
+        >
+          <span>Here</span>
+          <GutterSwatch label={label} />
+          <span className={cn("font-medium", TRUST_TONE[label.trust].text)}>
+            {TRUST_TONE[label.trust].label}
+          </span>
+          <span aria-hidden="true" className="text-muted-foreground/50">
+            ·
+          </span>
+          <span
+            className={cn("font-medium", AUDIENCE_TONE[label.audience].text)}
+          >
+            {AUDIENCE_TONE[label.audience].label}
+          </span>
+        </span>
+      ) : null}
+      {changes.length > 0 ? (
+        <ChangeStepper
+          changes={changes}
+          active={activeChange}
+          onActivate={onActivateChange}
+        />
       ) : null}
     </div>
   );
 }
 
-/**
- * The session label as an 8px gutter down every row's left edge: filled by
- * trust, striped when the audience is narrowed. The stripes are anchored to
- * the list (see the layout effect above), so a narrowed run is one stripe.
- * The hover and tap target is 16px; a tap opens the tooltip on touch, and a
- * mouse click still falls through to the row.
- */
-function LabelGutter({
-  label,
-  selected = false,
-  change,
-  bleed = false,
+/** "‹ 2/3 changes ›": steps through the label changes, selecting each cause. */
+function ChangeStepper({
+  changes,
+  active,
+  onActivate,
 }: {
-  label: LabelState | null;
-  selected?: boolean;
-  /** On a divider row: what changed there, for the tooltip. */
-  change?: string;
-  /** Cover the row's own borders too (the divider rows have them). */
-  bleed?: boolean;
+  changes: LabelChange[];
+  active: number;
+  onActivate: (change: LabelChange) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const touch = useRef(false);
-  if (!label) return null;
-  const trust = TRUST_TONE[label.trust];
-  const audience = AUDIENCE_TONE[label.audience];
-  const narrowed = label.audience !== "public";
+  const step = (delta: number) => {
+    const from = active < 0 ? (delta > 0 ? -1 : 0) : active;
+    onActivate(changes[(from + delta + changes.length) % changes.length]);
+  };
+  const arrow =
+    "flex w-7 shrink-0 cursor-pointer items-center justify-center outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset lg:w-6";
   return (
-    <>
-      <Tooltip open={open} onOpenChange={setOpen} delayDuration={350}>
+    <span className="ml-auto inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border bg-card text-foreground/85 xl:ml-0 lg:h-6">
+      <UnstyledButton
+        aria-label="Previous label change"
+        onClick={() => step(-1)}
+        className={arrow}
+      >
+        <ChevronLeft className="size-3.5" aria-hidden="true" />
+      </UnstyledButton>
+      <Tooltip>
         <TooltipTrigger asChild>
-          <span
-            onPointerDown={(event) => {
-              touch.current = event.pointerType !== "mouse";
-            }}
-            onClick={(event) => {
-              if (!touch.current) return;
-              // Keep Radix from closing it again; the row still selects.
-              event.preventDefault();
-              setOpen(true);
-            }}
-            className={cn(
-              "absolute left-0 z-[2] w-4",
-              bleed ? "-inset-y-px" : "top-0 -bottom-px",
-            )}
+          <UnstyledButton
+            onClick={() => onActivate(changes[Math.max(0, active)])}
+            aria-label={`${changes.length} label ${changes.length === 1 ? "change" : "changes"}${active >= 0 ? `, ${active + 1} selected: ${changeWords(changes[active])}` : ""}. Select its cause.`}
+            className="inline-flex cursor-pointer items-center gap-1 border-x px-1.5 font-medium whitespace-nowrap tabular-nums outline-none transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset"
           >
             <span
               aria-hidden="true"
-              className="absolute inset-y-0 left-0 w-2 bg-card"
-            >
-              <span
-                data-label-gutter=""
-                className={cn("absolute inset-0", GUTTER_FILL[label.trust])}
-                style={narrowed ? STRIPE_STYLE : undefined}
-              />
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                active >= 0 ? "bg-primary" : "bg-foreground/40",
+              )}
+            />
+            <span>
+              {active >= 0 ? (
+                <>
+                  {active + 1}
+                  <span className="text-muted-foreground">
+                    /{changes.length}
+                  </span>
+                </>
+              ) : (
+                changes.length
+              )}{" "}
+              <span className="max-lg:hidden">label </span>
+              {changes.length === 1 ? "change" : "changes"}
             </span>
-          </span>
+          </UnstyledButton>
         </TooltipTrigger>
-        <TooltipContent side="right" className="max-w-xs">
-          {change ? <p className="font-medium">Changed: {change}</p> : null}
-          <p>
-            <span className="opacity-70">Label </span>
-            <span className="font-medium">{trust.label}</span>
-            <span className="opacity-50"> · </span>
-            <span className="font-medium">{audience.label}</span>
-          </p>
-          <p className="opacity-70">
-            {narrowed
-              ? `Audience narrowed to ${audience.label.toLowerCase()}`
-              : "Audience public"}
-            {label.trust === "suspicious" ? (
-              <span> · untrusted content in context</span>
-            ) : null}
+        <TooltipContent side="bottom" align="end" className="max-w-xs">
+          <ol className="space-y-0.5">
+            {changes.map((change, index) => (
+              <li
+                key={change.key}
+                className={cn(index === active ? "font-medium" : "opacity-80")}
+              >
+                {index + 1}. {changeWords(change)}{" "}
+                <span className="opacity-70">· {causeShort(change)}</span>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-1 opacity-70">
+            Each is a dot in the left gutter. Step to select what caused it.
           </p>
         </TooltipContent>
       </Tooltip>
-      {selected ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 -bottom-px left-2 z-[2] w-[2px] bg-primary"
-        />
-      ) : null}
-    </>
+      <UnstyledButton
+        aria-label="Next label change"
+        onClick={() => step(1)}
+        className={arrow}
+      >
+        <ChevronRight className="size-3.5" aria-hidden="true" />
+      </UnstyledButton>
+    </span>
   );
 }
 
-/** The gutter in miniature, for the legend; null draws the stripes alone. */
+/** The gutter's key, in three words; the tooltip says the rest. */
+function GutterKey() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <ul
+          aria-label="Label gutter key: colour is trust, stripes mean the audience is narrowed"
+          className="flex h-6 cursor-default items-center gap-x-2.5 whitespace-nowrap max-md:order-last max-md:basis-full"
+        >
+          <li className="inline-flex items-center gap-1">
+            <GutterSwatch label={{ trust: "trusted", audience: "public" }} />
+            Trusted
+          </li>
+          <li className="inline-flex items-center gap-1">
+            <GutterSwatch label={{ trust: "suspicious", audience: "public" }} />
+            Suspicious
+          </li>
+          <li className="inline-flex items-center gap-1">
+            <GutterSwatch label={null} />
+            Narrowed
+          </li>
+          <li className="hidden items-center gap-1 xl:inline-flex">
+            <span
+              aria-hidden="true"
+              className="size-2 rounded-full bg-foreground/60 ring-2 ring-card"
+            />
+            Change
+          </li>
+        </ul>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs">
+        The left gutter is the session label at each row. Its colour is trust;
+        stripes mean the audience is narrower than public (internal, a team, or
+        self). A dot marks where it changed: hover it for why.
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function GutterSwatch({ label }: { label: LabelState | null }) {
   return (
     <span
       aria-hidden="true"
-      className="relative h-3 w-2 shrink-0 overflow-hidden rounded-[1.5px] bg-card ring-1 ring-border/70"
+      className="relative h-3.5 w-2 shrink-0 overflow-hidden rounded-[2px] bg-card ring-1 ring-border/60"
     >
       <span
         className={cn(
           "absolute inset-0",
           label ? GUTTER_FILL[label.trust] : "bg-muted",
         )}
-        style={label === null ? STRIPE_STYLE : undefined}
       />
+      {!label || label.audience !== "public" ? <Stripes /> : null}
     </span>
   );
 }
 
-/** A horizontal scroller that fades whichever edge has more to show. */
-function useEdgeFade(): {
-  ref: (el: HTMLDivElement | null) => void;
-  style: CSSProperties;
-} {
-  const [el, setEl] = useState<HTMLDivElement | null>(null);
-  const [edges, setEdges] = useState({ start: false, end: false });
-  useEffect(() => {
-    if (!el) return;
-    const update = () => {
-      const start = el.scrollLeft > 1;
-      const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
-      setEdges((prev) =>
-        prev.start === start && prev.end === end ? prev : { start, end },
-      );
-    };
-    update();
-    el.addEventListener("scroll", update, { passive: true });
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    if (el.firstElementChild) observer.observe(el.firstElementChild);
-    return () => {
-      el.removeEventListener("scroll", update);
-      observer.disconnect();
-    };
-  }, [el]);
-  const mask = `linear-gradient(to right, ${edges.start ? "transparent" : "black"} 0, black 20px, black calc(100% - 20px), ${edges.end ? "transparent" : "black"} 100%)`;
-  return {
-    ref: setEl,
-    style:
-      edges.start || edges.end
-        ? { maskImage: mask, WebkitMaskImage: mask }
-        : {},
-  };
-}
-
-function changeWords(change: ChangeEntry): { field: string; to: string }[] {
-  const { segment, previous } = change;
-  if (segment.cause?.kind === "reset") {
-    return [
-      {
-        field: "Reset",
-        to: `${TRUST_TONE[segment.trust].label} · ${AUDIENCE_TONE[segment.audience].label}`,
-      },
-    ];
-  }
-  const words: { field: string; to: string }[] = [];
-  if (previous.trust !== segment.trust) {
-    words.push({ field: "Trust", to: TRUST_TONE[segment.trust].label });
-  }
-  if (previous.audience !== segment.audience) {
-    words.push({
-      field: "Audience",
-      to: AUDIENCE_TONE[segment.audience].label,
-    });
-  }
-  return words;
-}
-
-function changeTone(change: ChangeEntry): string {
-  const { segment, previous } = change;
-  if (segment.cause?.kind === "reset") return RESET_PILL;
-  if (previous.trust !== segment.trust) return TRUST_PILL[segment.trust];
-  if (previous.audience !== segment.audience) {
-    return AUDIENCE_PILL[segment.audience];
-  }
-  return RESET_PILL;
-}
-
-function changeHint(change: ChangeEntry): string {
-  const cause = change.segment.cause;
-  if (cause?.consultKey) {
-    return `From ${cause.toolName ?? "a tool call"}'s result. Click to open the check that set it.`;
-  }
-  if (cause?.toolCallKey) {
-    return `Caused by ${cause.toolName ?? "a tool call"}. Click to select that call.`;
-  }
-  return "No tool call caused this change. Click to scroll to it.";
-}
-
-const GUTTER_FILL: Record<Trust, string> = {
-  trusted: "bg-emerald-500/40 dark:bg-emerald-400/35",
-  suspicious: "bg-rose-500/60 dark:bg-rose-400/55",
-};
 /**
- * A seamless 6px tile of diagonal stripes, so the pattern is continuous across
- * rows of any height once each cell's position is anchored to the list.
+ * Narrowed-audience stripes. One 8px tile, shifted by how far down the list
+ * the row starts (mod 8) so every row's stripes meet the next row's.
  */
-const STRIPE_STYLE: CSSProperties = {
-  backgroundImage:
-    "linear-gradient(135deg, var(--stripe) 22%, transparent 22%, transparent 50%, var(--stripe) 50%, var(--stripe) 72%, transparent 72%)",
-  // Neutral hatching: reads over either trust colour, in either theme.
-  ["--stripe" as string]:
-    "color-mix(in oklab, var(--color-foreground) 42%, transparent)",
-  backgroundSize: "6px 6px",
+function Stripes({ at = { sm: 0, lg: 0 } }: { at?: StripeAt }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute inset-0 [background-position:0_var(--stripe-sm)] [--stripe:rgb(15_23_42/0.42)] lg:[background-position:0_var(--stripe-lg)] dark:[--stripe:rgb(241_245_249/0.5)]"
+      style={
+        {
+          ...STRIPE_STYLE,
+          "--stripe-sm": `-${at.sm}px`,
+          "--stripe-lg": `-${at.lg}px`,
+        } as CSSProperties
+      }
+    />
+  );
+}
+
+type StripeAt = { sm: number; lg: number };
+
+type GutterProps = {
+  label: LabelState;
+  /** The row's offset into the stripe tile; see `Stripes`. */
+  stripeAt: StripeAt;
+  /** Change dots on this row's top or bottom edge. */
+  nodes: { top: LabelChange[]; bottom: LabelChange[] } | null;
+  isChangeActive: (change: LabelChange) => boolean;
+  onActivateChange: (change: LabelChange) => void;
 };
-const PILL_BASE =
-  "relative inline-flex h-5 shrink-0 cursor-pointer items-center gap-1 rounded-full px-1.5 text-[10px] leading-4 font-semibold whitespace-nowrap ring-1 ring-inset transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring";
-const TRUST_PILL: Record<Trust, string> = {
-  suspicious:
-    "bg-rose-500/15 text-rose-700 ring-rose-500/40 hover:bg-rose-500/25 dark:text-rose-300",
-  trusted:
-    "bg-emerald-500/15 text-emerald-700 ring-emerald-500/40 hover:bg-emerald-500/25 dark:text-emerald-300",
-};
-const AUDIENCE_PILL: Record<Audience, string> = {
-  public:
-    "bg-sky-500/15 text-sky-700 ring-sky-500/40 hover:bg-sky-500/25 dark:text-sky-300",
-  internal:
-    "bg-indigo-500/15 text-indigo-700 ring-indigo-500/40 hover:bg-indigo-500/25 dark:text-indigo-300",
-  "@payments":
-    "bg-violet-500/15 text-violet-700 ring-violet-500/40 hover:bg-violet-500/25 dark:text-violet-300",
-  self: "bg-fuchsia-500/15 text-fuchsia-700 ring-fuchsia-500/40 hover:bg-fuchsia-500/25 dark:text-fuchsia-300",
-};
-const RESET_PILL = "bg-muted text-foreground/80 ring-border hover:bg-muted/70";
-const CHANGE_ICON: Record<
-  NonNullable<LabelSegment["cause"]>["kind"],
-  typeof ShieldAlert
-> = {
-  admitted: ShieldAlert,
-  narrowed: Lock,
-  released: Send,
-  reset: RotateCcw,
-};
+
+/**
+ * The row's 8px label gutter: filled by trust, striped when the audience is
+ * narrowed, with a 16px hover/tap target for its tooltip and a dot on the
+ * edge where the label changed.
+ */
+function LabelGutter({
+  label,
+  stripeAt,
+  nodes,
+  isChangeActive,
+  onActivateChange,
+  onSelectRow,
+}: GutterProps & { onSelectRow: () => void }) {
+  const [open, setOpen] = useState(false);
+  const narrowed = label.audience !== "public";
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-card"
+      >
+        <span className={cn("absolute inset-0", GUTTER_FILL[label.trust])} />
+        {narrowed ? <Stripes at={stripeAt} /> : null}
+      </span>
+      <Tooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <span
+            aria-hidden="true"
+            // A tap selects the row and keeps the tooltip open: touch has no
+            // hover, and the trigger would close it on click and on leave.
+            onClick={(event: MouseEvent<HTMLSpanElement>) => {
+              event.preventDefault();
+              onSelectRow();
+              setOpen(true);
+            }}
+            onPointerLeave={(event: PointerEvent<HTMLSpanElement>) => {
+              if (event.pointerType === "touch") event.preventDefault();
+            }}
+            className="absolute inset-y-0 left-0 z-[2] w-4 cursor-pointer"
+          />
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-xs">
+          <p>
+            <span className="font-medium">Label</span>{" "}
+            {TRUST_TONE[label.trust].label} ·{" "}
+            {AUDIENCE_TONE[label.audience].label}
+          </p>
+          <p className="opacity-70">
+            {narrowed
+              ? `Striped: audience narrowed to ${AUDIENCE_TONE[label.audience].label.toLowerCase()}`
+              : "Plain: audience is public"}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+      {nodes && nodes.top.length > 0 ? (
+        <ChangeNode
+          at="top"
+          changes={nodes.top}
+          active={nodes.top.some(isChangeActive)}
+          onActivate={onActivateChange}
+        />
+      ) : null}
+      {nodes && nodes.bottom.length > 0 ? (
+        <ChangeNode
+          at="bottom"
+          changes={nodes.bottom}
+          active={nodes.bottom.some(isChangeActive)}
+          onActivate={onActivateChange}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * A label change: a dot on the gutter where the colour or stripes switch.
+ * Solid in the new trust colour when trust moved (or the label reset),
+ * hollow when only the audience did. Clicking selects the cause.
+ */
+function ChangeNode({
+  at,
+  changes,
+  active,
+  onActivate,
+}: {
+  at: "top" | "bottom";
+  changes: LabelChange[];
+  active: boolean;
+  onActivate: (change: LabelChange) => void;
+}) {
+  const last = changes[changes.length - 1];
+  const solid = changes.some((c) => c.trustChanged);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          tabIndex={-1}
+          onClick={() => onActivate(last)}
+          aria-label={`Label changed: ${changes.map(changeWords).join("; ")}. Select its cause.`}
+          className={cn(
+            "group/node absolute left-0 z-[4] flex size-4 cursor-pointer items-center outline-none",
+            at === "top"
+              ? "top-0 -translate-y-1/2"
+              : "bottom-0 translate-y-1/2",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-2.5 rounded-full ring-2 ring-card transition-transform group-hover/node:scale-125",
+              solid
+                ? TRUST_TONE[last.segment.trust].bar
+                : "bg-card shadow-[inset_0_0_0_2px_var(--color-foreground)] opacity-90",
+              active && "outline-2 outline-offset-1 outline-primary",
+            )}
+          />
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent side="right" className="max-w-xs">
+        {changes.map((change) => (
+          <div key={change.key}>
+            <p className="font-medium">{changeWords(change)}</p>
+            <p className="opacity-80">{change.cause.summary}</p>
+          </div>
+        ))}
+        <p className="mt-0.5 opacity-70">Click to select its cause</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** "· 🔒 Audience → Internal" on the cause row's detail line. */
+function ChangeNote({ changes }: { changes: LabelChange[] }) {
+  return (
+    <span className="inline-flex min-w-0 shrink items-center gap-1 overflow-hidden whitespace-nowrap">
+      <span aria-hidden="true" className="shrink-0 text-muted-foreground/40">
+        ·
+      </span>
+      {changes.map((change) => {
+        const Icon = CHANGE_ICON[change.cause.kind];
+        return (
+          <span
+            key={change.key}
+            className="inline-flex shrink-0 items-center gap-1 text-muted-foreground"
+          >
+            <Icon className="size-3 shrink-0 opacity-80" aria-hidden="true" />
+            {change.parts.map((part, index) => (
+              <span key={part.field} className="inline-flex items-center gap-1">
+                {index > 0 ? <span className="opacity-50">,</span> : null}
+                {/* Phones keep the new value; the icon says which kind. */}
+                <span className="max-lg:hidden">{part.field}</span>
+                <span aria-hidden="true" className="opacity-60">
+                  →
+                </span>
+                <span className={cn("font-medium opacity-90", part.tone)}>
+                  {part.to}
+                </span>
+              </span>
+            ))}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/** The row's label in words, and what it changed, for its accessible name. */
+function gutterWords(
+  gutter: GutterProps | null,
+  note: LabelChange[] | null,
+): string {
+  if (!gutter) return "";
+  const here = `, label ${TRUST_TONE[gutter.label.trust].label} ${AUDIENCE_TONE[gutter.label.audience].label}`;
+  return note && note.length > 0
+    ? `${here}, changed the label: ${note.map(changeWords).join("; ")}`
+    : here;
+}
 
 /** A tool call's checks while the toolbar hides them: the worst one's shield and a count. */
 function HiddenChecksBadge({ checks }: { checks: MockConsult[] }) {
@@ -1877,14 +1893,19 @@ function HiddenChecksBadge({ checks }: { checks: MockConsult[] }) {
 }
 
 /**
- * A guardrail check as its own compact row under (or, for a gate, above)
- * its tool call: the whole row opens it in the pane below.
+ * A guardrail check as one short line under (or, for a gate, above) its tool
+ * call: a connector from the tool's rail, the decision icon, then
+ * "write-policy [Allowed] · Authority · before the call" in the name cell,
+ * where the tool's own name starts. Tokens and Cost stay empty; the whole
+ * row opens it in the pane below.
  */
 function ConsultRow({
   layout,
   consult,
   toolSpan,
+  connector,
   gutter,
+  note,
   selected,
   buttonRef,
   onSelect,
@@ -1892,7 +1913,9 @@ function ConsultRow({
   layout: Layout;
   consult: MockConsult;
   toolSpan: TimelineSpan | null;
-  gutter: LabelState | null;
+  connector: Connector | null;
+  gutter: GutterProps | null;
+  note: LabelChange[] | null;
   selected: boolean;
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
@@ -1909,77 +1932,72 @@ function ConsultRow({
   const tools = layout === "tools";
   return (
     <li className="relative">
+      {gutter ? <LabelGutter {...gutter} onSelectRow={onSelect} /> : null}
       <UnstyledButton
         ref={buttonRef}
         tabIndex={selected ? 0 : -1}
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
-        aria-label={`Guardrail check ${consult.externalName}, ${what}: ${decision.text}. Opens its details below.`}
+        aria-label={`Guardrail check ${consult.externalName}, ${ROLE_LABEL[consult.role].toLowerCase()}, ${what}: ${decision.text}, ${duration}${gutterWords(gutter, note)}. Opens its details below.`}
         className={cn(
-          "group relative grid h-9 w-full cursor-pointer scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-8",
+          "group grid h-7 w-full cursor-pointer scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100",
           GRIDS[layout],
           selected
             ? cn(
                 "bg-primary/[0.07]",
-                !gutter && "shadow-[inset_2px_0_0_var(--color-primary)]",
+                gutter ? SELECTED_PAST_GUTTER : SELECTED_EDGE,
               )
             : "bg-muted/25 hover:bg-muted/70",
           "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset",
         )}
       >
-        <LabelGutter label={gutter} selected={selected} />
-        <span
-          className={cn(
-            "flex min-w-0 items-center gap-1.5 pr-3",
-            gutter ? "pl-[34px] lg:pl-[38px]" : "pl-[30px] lg:pl-[34px]",
-          )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn(
-              "w-px shrink-0 self-stretch bg-border",
-              consult.beforeCall ? "mt-2" : "mb-2",
-            )}
-          />
+        {/* 16px in, like every row: the connector runs from under the tool
+            row's rail to the icon, which sits where the tool row's ↳ does,
+            so the check's name starts where the tool's name starts. */}
+        <span className="flex min-w-0 items-center pr-3 pl-4">
+          <CheckConnector connector={connector} selected={selected} />
           <DecisionIcon
             consult={consult}
             className={cn(
-              "ml-1",
               selected && consult.decision !== "blocked" && "text-foreground",
             )}
           />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="flex min-w-0 items-center gap-1.5 leading-4">
-              <span className="truncate font-mono text-[11.5px] font-medium">
-                {consult.externalName}
-              </span>
-              <span
-                className={cn(
-                  "shrink-0 rounded-sm px-1 text-[10px] leading-[14px] font-medium",
-                  CONSULT_KIND.chip,
-                )}
-              >
-                Check
-              </span>
-            </span>
+          <span className="ml-1 flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden whitespace-nowrap">
             <span
               className={cn(
-                "truncate text-[10.5px] leading-[14px]",
+                "min-w-[4.5rem] shrink truncate font-mono text-[11.5px] font-medium",
+                selected ? "text-foreground" : "text-foreground/85",
+              )}
+              title={consult.externalName}
+            >
+              {consult.externalName}
+            </span>
+            <DecisionChip consult={consult} />
+            <span
+              className={cn(
+                "min-w-0 shrink-[4] truncate text-[11px]",
                 selected ? "text-foreground/70" : "text-muted-foreground",
               )}
             >
-              {what}
+              <span aria-hidden="true" className="text-muted-foreground/40">
+                ·
+              </span>{" "}
+              <RoleTerm role={consult.role} />
+              {/* Phones read before/after off the connector's direction. */}
               <span className="max-lg:hidden">
                 {" "}
-                · {ROLE_LABEL[consult.role]}
+                <span aria-hidden="true" className="text-muted-foreground/40">
+                  ·
+                </span>{" "}
+                {consult.beforeCall ? "before the call" : "on the result"}
               </span>
-              <span className="lg:hidden"> · {duration}</span>
             </span>
+            {note && note.length > 0 ? <ChangeNote changes={note} /> : null}
           </span>
           <ChevronRight
             aria-hidden="true"
             className={cn(
-              "size-3.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground group-focus-visible:text-muted-foreground max-lg:hidden",
+              "ml-1 size-3.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground group-focus-visible:text-muted-foreground max-lg:hidden",
               selected && "text-primary/70",
             )}
           />
@@ -2023,217 +2041,256 @@ function ConsultRow({
           </span>
         </span>
 
-        {tools ? null : (
-          <span
-            className={cn(
-              WIDE_ONLY,
-              "items-center justify-end px-3 text-[10.5px] text-muted-foreground",
-            )}
-          >
-            {ROLE_LABEL[consult.role]}
-          </span>
-        )}
-
-        <span
-          className={cn(
-            "flex items-center justify-end pr-4 text-[11.5px] font-medium",
-            decision.tone,
-          )}
-        >
-          {decision.text}
-        </span>
+        {/* Tokens and Cost: a check has neither. */}
+        {tools ? null : <span className={WIDE_ONLY} />}
+        <span />
       </UnstyledButton>
     </li>
   );
 }
 
+/** A check row's height, both widths; the stripe offsets count on it. */
+const CHECK_ROW_PX = 28;
+
 /**
- * Where the session's label changed: what changed, in words, and what caused
- * it. The row selects the tool call that caused it; "See check" opens the
- * check whose answer moved it.
+ * How a check row joins its tool call's rail: a gate above the call runs
+ * down into it (┌), a result check below hangs from it (└), and a check
+ * between two others of the same call passes through (├).
  */
-function LabelChangeRow({
-  rowRef,
-  layout,
-  segment,
-  previous,
-  onSelectToolCall,
-  onSelectConsult,
+type Connector = { up: boolean; down: boolean };
+
+function connectorFor(entries: Entry[], index: number): Connector | null {
+  const entry = entries[index];
+  if (entry.type !== "consult" || !entry.toolSpan) return null;
+  const toolKey = entry.toolSpan.key;
+  const joins = (other: Entry | undefined) =>
+    other !== undefined &&
+    (other.type === "span"
+      ? other.span.key === toolKey
+      : other.toolSpan?.key === toolKey);
+  return { up: joins(entries[index - 1]), down: joins(entries[index + 1]) };
+}
+
+function CheckConnector({
+  connector,
+  selected,
 }: {
-  rowRef: (el: HTMLLIElement | null) => void;
-  layout: Layout;
-  segment: LabelSegment;
-  previous: LabelState;
-  onSelectToolCall: (() => void) | null;
-  onSelectConsult: (() => void) | null;
+  connector: Connector | null;
+  selected: boolean;
 }) {
-  const changes: {
-    dimension: "Trust" | "Audience";
-    from: Trust | Audience;
-    to: Trust | Audience;
-  }[] = [];
-  if (previous.trust !== segment.trust) {
-    changes.push({
-      dimension: "Trust",
-      from: previous.trust,
-      to: segment.trust,
-    });
-  }
-  if (previous.audience !== segment.audience) {
-    changes.push({
-      dimension: "Audience",
-      from: previous.audience,
-      to: segment.audience,
-    });
-  }
-  const cause = segment.cause;
-  const causeText = cause?.toolName
-    ? cause.kind === "reset"
-      ? `reset by ${cause.toolName}`
-      : `after ${cause.toolName}`
-    : "reset";
-  const markerTone = TRUST_TONE[segment.trust];
-  const time = formatDate({
-    date: new Date(segment.start).toISOString(),
-    dateFormat: "HH:mm:ss",
-  });
-  const label = `Label changed: ${changes
-    .map(
-      (c) =>
-        `${c.dimension} ${tone(c.dimension, c.from).label} to ${tone(c.dimension, c.to).label}`,
-    )
-    .join(", ")}. ${cause?.summary ?? ""}`;
-
-  const body = (
-    <>
-      <span className="flex min-w-0 flex-col justify-center gap-0.5 py-1.5 pr-2 pl-5">
-        <span className="flex min-w-0 flex-wrap items-center gap-1">
-          {changes.map((change) => (
-            <span
-              key={change.dimension}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] leading-5",
-                change.dimension === "Trust"
-                  ? TRUST_TONE[change.to as Trust].soft
-                  : "bg-card",
-              )}
-            >
-              <span className="font-medium text-foreground/80">
-                {change.dimension}
-              </span>
-              <span className="text-muted-foreground max-sm:hidden">
-                {tone(change.dimension, change.from).label}
-              </span>
-              <ArrowRight
-                aria-hidden="true"
-                className="size-3 text-muted-foreground max-sm:hidden"
-              />
-              <span
-                className={cn(
-                  "font-semibold",
-                  tone(change.dimension, change.to).text,
-                )}
-              >
-                {tone(change.dimension, change.to).label}
-              </span>
-            </span>
-          ))}
-        </span>
-        <span className="truncate text-[10.5px] leading-[14px] text-muted-foreground lg:hidden">
-          {causeText}
-        </span>
-      </span>
-      <span className="relative mx-2 block lg:mx-3">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "absolute inset-y-1 w-[2px] -translate-x-1/2 rounded-full",
-            markerTone.bar,
-          )}
-          style={{ left: `${segment.x * 100}%` }}
-        />
-        <span
-          className={cn(
-            "absolute top-1/2 hidden max-w-[62%] -translate-y-1/2 truncate text-[11px] text-muted-foreground lg:block",
-          )}
-          style={
-            segment.x < 0.55
-              ? { left: `calc(${segment.x * 100}% + 8px)` }
-              : { right: `calc(${(1 - segment.x) * 100}% + 8px)` }
-          }
-        >
-          <span className="font-mono text-foreground/80">{causeText}</span>
-          {cause ? ` · ${cause.summary}` : null}
-        </span>
-      </span>
-    </>
-  );
-
+  // 11px wide: from the tool rail's centre (16 + 1.5px) to the icon.
   return (
-    <li
-      ref={rowRef}
+    <span
+      aria-hidden="true"
+      className="relative w-[11px] shrink-0 self-stretch"
+    >
+      {connector ? (
+        <>
+          <span
+            className={cn(
+              "absolute left-px w-px",
+              selected ? "bg-primary/50" : "bg-muted-foreground/35",
+              connector.up ? "top-0" : "top-1/2",
+              connector.down ? "bottom-0" : "bottom-1/2",
+            )}
+          />
+          <span
+            className={cn(
+              "absolute top-1/2 right-[3px] left-px h-px",
+              selected ? "bg-primary/50" : "bg-muted-foreground/35",
+            )}
+          />
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+/** The decision as a tinted chip, explained on hover. */
+function DecisionChip({ consult }: { consult: MockConsult }) {
+  const unanswered = consult.outcome !== "answered";
+  return (
+    <span
       className={cn(
-        "relative grid scroll-mt-8 border-y border-dashed border-border bg-card",
-        GRIDS[layout],
+        "inline-flex shrink-0 rounded-sm px-1 text-[10px] leading-4 font-medium",
+        unanswered
+          ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          : DECISION_TONE[consult.decision].chip,
       )}
     >
-      {/* Bleeds over the dashed borders so the gutter never breaks. */}
-      <LabelGutter
-        label={{ trust: segment.trust, audience: segment.audience }}
-        change={changes
-          .map((c) => `${c.dimension} → ${tone(c.dimension, c.to).label}`)
-          .join(", ")}
-        bleed
-      />
-      {onSelectToolCall ? (
-        <UnstyledButton
-          onClick={onSelectToolCall}
-          aria-label={`${label} Selects ${cause?.toolName ?? "the tool call"}.`}
-          className="col-span-2 grid min-h-9 cursor-pointer grid-cols-subgrid text-left text-xs outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset"
-        >
-          {body}
-        </UnstyledButton>
-      ) : (
-        <div
-          role="note"
-          aria-label={label}
-          className="col-span-2 grid min-h-9 grid-cols-subgrid text-xs"
-        >
-          {body}
-        </div>
-      )}
-      <span
-        className={cn(
-          "flex items-center justify-end gap-2 pr-2 text-[11px] text-muted-foreground tabular-nums lg:pr-4",
-          layout === "trace" && "lg:col-span-2",
-        )}
-      >
-        <span className="max-lg:hidden">{time}</span>
-        {onSelectConsult ? (
-          <UnstyledButton
-            onClick={onSelectConsult}
-            aria-label="See the check that changed the label"
-            className="-my-1 inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border bg-card px-1 font-medium lg:h-6 lg:px-1.5 text-foreground/85 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60"
-          >
-            <Shield className="size-3" aria-hidden="true" />
-            <span>
-              <span className="max-lg:hidden">See c</span>
-              <span className="lg:hidden">C</span>heck
+      {unanswered ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help underline decoration-current/40 decoration-dotted underline-offset-[3px]">
+              {decisionWord(consult).text}
             </span>
-          </UnstyledButton>
-        ) : (
-          <span className="lg:hidden">{time}</span>
-        )}
-      </span>
-    </li>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-60">
+            {consult.outcome === "timeout"
+              ? "The check did not answer in time, so the policy's fallback decided the call."
+              : "The check returned an error instead of an answer, so the policy's fallback decided the call."}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DecisionTerm decision={consult.decision} />
+      )}
+    </span>
   );
 }
 
-function tone(
-  dimension: "Trust" | "Audience",
-  value: Trust | Audience,
-): { label: string; text: string } {
-  return dimension === "Trust"
-    ? TRUST_TONE[value as Trust]
-    : AUDIENCE_TONE[value as Audience];
+type LabelChange = {
+  key: string;
+  /** The segment the change starts. */
+  segment: LabelSegment;
+  cause: NonNullable<LabelSegment["cause"]>;
+  /** What changed, in words: Trust → Suspicious, Audience → Internal. */
+  parts: { field: string; to: string; tone: string }[];
+  trustChanged: boolean;
+  /** The row whose detail line notes it: the cause, else the first row under it. */
+  noteKey: string;
+  /** The row whose top (or, past the page's last row, bottom) edge carries the dot. */
+  nodeKey: string;
+  nodeAt: "top" | "bottom";
+  /** What selecting the change selects. */
+  target: { type: "consult" | "span"; key: string };
+};
+
+/**
+ * The label changes this page shows: a dot wherever two rows' labels differ,
+ * and a note on the row that caused each one.
+ */
+function pageChanges({
+  entries,
+  guardrails,
+}: {
+  entries: Entry[];
+  guardrails: GuardrailsData;
+}): LabelChange[] {
+  const { labels } = guardrails;
+  if (entries.length === 0) return [];
+  const drawn = new Map(entries.map((entry) => [entry.key, entry]));
+  const rowFor = (key: string | null) => (key ? drawn.get(key) : undefined);
+  const out: LabelChange[] = [];
+  const add = (index: number, nodeEntry: Entry, nodeAt: "top" | "bottom") => {
+    const segment = labels[index];
+    const { cause } = segment;
+    if (!cause) return;
+    const prev = labels[index - 1];
+    const noteEntry =
+      rowFor(cause.consultKey) ?? rowFor(cause.toolCallKey) ?? nodeEntry;
+    out.push({
+      key: `label-change-${segment.start}`,
+      segment,
+      cause,
+      parts: describeChange(prev, segment),
+      trustChanged: cause.kind === "reset" || prev.trust !== segment.trust,
+      noteKey: noteEntry.key,
+      nodeKey: nodeEntry.key,
+      nodeAt,
+      target: cause.consultKey
+        ? { type: "consult", key: cause.consultKey }
+        : {
+            type: noteEntry.type === "consult" ? "consult" : "span",
+            key: noteEntry.key,
+          },
+    });
+  };
+  const indexes = entries.map((entry) =>
+    segmentIndexAt(
+      labels,
+      entry.type === "span" ? entry.span.start : entry.consult.start,
+    ),
+  );
+  // Rows run in start order but a result check can trail a parallel call:
+  // each change is placed once, at the first row under it.
+  let reached = indexes[0];
+  entries.forEach((entry, i) => {
+    for (let s = reached + 1; s <= indexes[i]; s++) add(s, entry, "top");
+    reached = Math.max(reached, indexes[i]);
+  });
+  // A change after the page's last row still shows under its cause.
+  for (let s = reached + 1; s < labels.length; s++) {
+    const cause = labels[s].cause;
+    const row = cause
+      ? (rowFor(cause.consultKey) ?? rowFor(cause.toolCallKey))
+      : undefined;
+    if (row) add(s, row, "bottom");
+  }
+  return out;
 }
+
+function segmentIndexAt(labels: LabelSegment[], ms: number): number {
+  let hit = 0;
+  for (let i = 0; i < labels.length; i++) {
+    if (labels[i].start <= ms) hit = i;
+    else break;
+  }
+  return hit;
+}
+
+function describeChange(
+  prev: LabelSegment,
+  next: LabelSegment,
+): LabelChange["parts"] {
+  if (next.cause?.kind === "reset") {
+    return [
+      {
+        field: "Reset",
+        to: `${TRUST_TONE[next.trust].label} · ${AUDIENCE_TONE[next.audience].label}`,
+        tone: "text-foreground/80",
+      },
+    ];
+  }
+  const parts: LabelChange["parts"] = [];
+  if (prev.trust !== next.trust) {
+    parts.push({
+      field: "Trust",
+      to: TRUST_TONE[next.trust].label,
+      tone: TRUST_TONE[next.trust].text,
+    });
+  }
+  if (prev.audience !== next.audience) {
+    parts.push({
+      field: "Audience",
+      to: AUDIENCE_TONE[next.audience].label,
+      tone: AUDIENCE_TONE[next.audience].text,
+    });
+  }
+  return parts.length > 0
+    ? parts
+    : [{ field: "Label", to: "set", tone: "text-foreground/80" }];
+}
+
+function changeWords(change: LabelChange): string {
+  return change.parts.map((p) => `${p.field} → ${p.to}`).join(", ");
+}
+
+function causeShort(change: LabelChange): string {
+  const { cause } = change;
+  if (!cause.toolName) return "reset";
+  return cause.kind === "reset"
+    ? `reset by ${cause.toolName}`
+    : `after ${cause.toolName}`;
+}
+
+const SELECTED_EDGE = "shadow-[inset_2px_0_0_var(--color-primary)]";
+/** The selection's edge just right of the 8px gutter, which covers 0–8px. */
+const SELECTED_PAST_GUTTER = "shadow-[inset_10px_0_0_var(--color-primary)]";
+const GUTTER_FILL: Record<LabelState["trust"], string> = {
+  trusted: "bg-emerald-500/40 dark:bg-emerald-400/35",
+  suspicious: "bg-rose-500/70 dark:bg-rose-400/65",
+};
+const STRIPE_STYLE = {
+  backgroundImage:
+    "linear-gradient(135deg, var(--stripe) 25%, transparent 25%, transparent 50%, var(--stripe) 50%, var(--stripe) 75%, transparent 75%, transparent)",
+  backgroundSize: "8px 8px",
+};
+const CHANGE_ICON: Record<
+  NonNullable<LabelSegment["cause"]>["kind"],
+  typeof ShieldAlert
+> = {
+  admitted: ShieldAlert,
+  narrowed: Lock,
+  released: Send,
+  reset: RotateCcw,
+};

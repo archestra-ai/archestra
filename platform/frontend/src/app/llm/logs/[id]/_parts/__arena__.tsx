@@ -7,12 +7,11 @@ import {
   useState,
 } from "react";
 import { useGuardrailsArena } from "./__arena__/guardrails-arena";
-import { RequestWaterfall as N1 } from "./__arena__/n1";
-import { RequestWaterfall as N2 } from "./__arena__/n2";
-import { RequestWaterfall as N3 } from "./__arena__/n3";
-import { RequestWaterfall as N4 } from "./__arena__/n4";
-import { RequestWaterfall as V6 } from "./__arena__/v6";
-import { RequestWaterfall as V8 } from "./__arena__/v8";
+import { RequestWaterfall as M1 } from "./__arena__/m1";
+import { RequestWaterfall as M2 } from "./__arena__/m2";
+import { RequestWaterfall as M3 } from "./__arena__/m3";
+import { RequestWaterfall as M4 } from "./__arena__/m4";
+import { RequestWaterfall as C } from "./__arena__/n3";
 import { RequestWaterfall } from "./request-waterfall";
 
 export {
@@ -20,9 +19,9 @@ export {
   GuardrailsArenaProvider,
 } from "./__arena__/guardrails-arena";
 
-const VARIANTS = [N1, N2, N3, N4, V6, V8];
-const LABELS = ["A", "B", "C", "D", "old 6", "old 8"];
-const STORAGE_KEY = "design-arena:guardrails-3";
+const VARIANTS = [M1, M2, M3, M4, C];
+const LABELS = ["C1", "C2", "C3", "C4", "C (prev)"];
+const STORAGE_KEY = "design-arena:guardrails-4";
 
 export function ArenaWaterfall(props: ComponentProps<typeof RequestWaterfall>) {
   const { guardrails, selectedConsultKey, selectConsult, selectSpan } =

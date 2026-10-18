@@ -6228,6 +6228,7 @@ type RosterPage = {
   boundary: SQL | undefined;
   cursorColumns: { cursorValue: SQL<string>; chatRank: SQL<number> };
   orderBy: SQL[];
+  // These expressions use findOptionRows' option_page alias.
   projectedOrderBy: SQL[];
   limit: number;
   position: (row: {

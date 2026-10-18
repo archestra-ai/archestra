@@ -88,6 +88,8 @@ function fulfilledValue(promise: unknown): { value: unknown } | undefined {
   return tracked.status === "fulfilled" ? { value: tracked.value } : undefined;
 }
 
+// The store never changes: `useSyncExternalStore` serves only to tell the
+// hydration render (server snapshot) from later renders (client snapshot).
 function subscribeToNothing() {
   return () => {};
 }

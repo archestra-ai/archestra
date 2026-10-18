@@ -51,7 +51,10 @@ export function pinnedAgentsQuery(filters: CatalogFilters): CatalogQuery {
   };
 }
 
-/** The agents pinned for the viewer, as list rows. */
+/**
+ * The agents pinned for the viewer, as list rows. Unlike the pinned list it
+ * takes no filters: it reads those pins by id, as rows for their tiles' menus.
+ */
 export function automaticPinsQuery(ids: string[] | undefined): CatalogQuery {
   return { limit: 20, offset: 0, ids };
 }

@@ -31,7 +31,10 @@ async function endpoint(t, body) {
     });
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => new Promise((resolve) => server.close(resolve)));
+  t.after(() => new Promise((resolve) => {
+    server.close(resolve);
+    server.closeAllConnections();
+  }));
   return { url: `http://127.0.0.1:${server.address().port}`, authorizations };
 }
 

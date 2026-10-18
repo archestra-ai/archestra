@@ -130851,12 +130851,20 @@
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
+                    },
+                    "newSessionPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "snapshot"
+                      ]
                     }
                   },
                   "required": [
                     "trust",
                     "audience",
-                    "policyRevision"
+                    "policyRevision",
+                    "newSessionPolicy"
                   ],
                   "additionalProperties": false
                 }
@@ -173583,6 +173591,13 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
+                    "newSessionPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "snapshot"
+                      ]
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -173594,6 +173609,7 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
+                    "newSessionPolicy",
                     "featureEnabled",
                     "active"
                   ],
@@ -173866,6 +173882,13 @@
                   },
                   "breakTheGlassEnabled": {
                     "type": "boolean"
+                  },
+                  "newSessionPolicy": {
+                    "type": "string",
+                    "enum": [
+                      "live",
+                      "snapshot"
+                    ]
                   }
                 }
               }
@@ -173893,6 +173916,13 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
+                    "newSessionPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "snapshot"
+                      ]
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -173904,6 +173934,7 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
+                    "newSessionPolicy",
                     "featureEnabled",
                     "active"
                   ],

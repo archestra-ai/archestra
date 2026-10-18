@@ -147,12 +147,14 @@ test('snapshot mode freezes following families, pins new ones, and resumes only 
   assert.deepEqual(await head(), [1]);
   assert.equal((await dispatch(following, callRead(1), after, true)).decision, 'allow_call');
   assert.equal((await status(following, after, true)).policyRevision, 1);
+  assert.deepEqual(JSON.parse(await native.listPeerMessages(JSON.stringify(following), { ...hosted(after), snapshot: true })).notices, []);
   assert.deepEqual(await head(), [1]);
 
   const pinned = scope();
   assert.equal((await dispatch(pinned, { event: 'session_start' }, after, true)).decision, 'ack');
   await assert.rejects(() => dispatch(pinned, callRead(1), after, true), /not declared in this policy/);
-  assert.equal((await status(pinned, after, true)).policyRevision, null);
+  assert.equal((await status(pinned, after, true)).policyRevision ?? null, null);
+  assert.deepEqual(JSON.parse(await native.listPeerMessages(JSON.stringify(pinned), { ...hosted(before), snapshot: true })).notices, []);
   assert.equal((await dispatch(pinned, { ...callRead(1), operation_id: 'call:pinned-different', tool: 'different' }, after, true)).decision, 'allow_call');
   assert.deepEqual(await head(), [1]);
 
@@ -161,7 +163,11 @@ test('snapshot mode freezes following families, pins new ones, and resumes only 
   assert.deepEqual(await head(), [2]);
   assert.equal((await dispatch(following, callRead(3), before, false)).decision, 'allow_call');
   await assert.rejects(() => dispatch(pinned, callRead(2), before, false), /not declared in this policy/);
-  assert.equal((await status(pinned, before, false)).policyRevision, null);
+  assert.equal((await status(pinned, before, false)).policyRevision ?? null, null);
+  assert.deepEqual(await head(), [3]);
+  assert.equal((await status(following, after, true)).policyRevision, 3);
+  assert.equal((await dispatch(following, callRead(4), after, true)).decision, 'allow_call');
+  assert.deepEqual(await head(), [3]);
   const pinnedRows = await db.query('SELECT payload FROM openappa_events WHERE root = $1 AND seq > 0', [rootOf(pinned)]);
   assert.ok(pinnedRows.rowCount > 0);
   assert.ok(pinnedRows.rows.every(row => !row.payload.toString('utf8').includes('"BasisAdvanced"')));
@@ -177,7 +183,7 @@ test('snapshot mode opens a pinned family without creating a deployment head', {
   const dispatch = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), policy));
   assert.equal((await dispatch({ event: 'session_start' })).decision, 'ack');
   assert.equal((await dispatch(callRead(1))).decision, 'allow_call');
-  assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, policy)).policyRevision, null);
+  assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, policy)).policyRevision ?? null, null);
   assert.equal((await db.query('SELECT head FROM openappa_deployments WHERE name = $1', [session.organization_id])).rowCount, 0);
 });
 
@@ -255,6 +261,33 @@ function inAnotherProcess(dispatches) {
   assert.equal(child.status, 0, child.stderr);
   return JSON.parse(child.stdout);
 }
+
+test('a frozen process observes a concurrent live publish without rolling back the head', { skip: !databaseUrl }, async (t) => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  t.after(() => db.end());
+  const organization = `frozen-pods-${randomUUID()}`;
+  const [before, after] = [own(allow, 'frozen-pods'), own(deny, 'frozen-pods')];
+  const scope = () => ({ organization_id: organization, caller_id: 'user:test', session_id: randomUUID() });
+  const dispatch = async (session, event, content, snapshot) => JSON.parse(await native.dispatchHook(
+    JSON.stringify({ ...session, ...event }), { ...hosted(content), snapshot },
+  ));
+  const head = async () => Number((await db.query('SELECT head FROM openappa_deployments WHERE name = $1', [organization])).rows[0].head);
+  const following = scope();
+  assert.equal((await dispatch(following, { event: 'session_start' }, before, false)).decision, 'ack');
+  assert.equal((await dispatch(following, callRead(1), after, true)).decision, 'allow_call');
+  assert.equal(await head(), 1);
+  assert.deepEqual(inAnotherProcess([{ session: scope(), event: { event: 'session_start' }, policy: after }]), ['ack']);
+  assert.equal(await head(), 2);
+  await assert.rejects(() => dispatch(following, callRead(2), before, true), /not declared in this policy/);
+  assert.equal(await head(), 2);
+  const pinned = scope();
+  assert.equal((await dispatch(pinned, { event: 'session_start' }, before, true)).decision, 'ack');
+  assert.equal((await dispatch(pinned, callRead(1), after, true)).decision, 'allow_call');
+  assert.equal((await native.getOpenappaStatus(organization, pinned.session_id, { ...hosted(after), snapshot: true })).policyRevision ?? null, null);
+  assert.deepEqual((await db.query('SELECT revision FROM openappa_policy_revisions WHERE deployment = $1 ORDER BY revision', [organization])).rows.map(row => Number(row.revision)), [1, 2]);
+});
 
 test('a process pinned behind a head another process published re-pins it within the same call', { skip: !databaseUrl, timeout: 60000 }, async (t) => {
   await native.initializeOpenappa(databaseUrl, 2);

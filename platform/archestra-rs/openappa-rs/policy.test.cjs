@@ -173,6 +173,29 @@ test('snapshot mode freezes following families, pins new ones, and resumes only 
   assert.ok(pinnedRows.rows.every(row => !row.payload.toString('utf8').includes('"BasisAdvanced"')));
 });
 
+test('status for a session that never started publishes no policy revision', { skip: !databaseUrl }, async (t) => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const db = new Client({ connectionString: databaseUrl });
+  await db.connect();
+  t.after(() => db.end());
+  for (const hasHead of [false, true]) {
+    const organization = `unstarted-status-${randomUUID()}`;
+    const session = { organization_id: organization, caller_id: 'user:test', session_id: randomUUID() };
+    const before = own(allow, organization);
+    const after = own(deny, organization);
+    if (hasHead) {
+      assert.equal(JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, event: 'session_start' }), hosted(before))).decision, 'ack');
+    }
+    const revisions = async () => (await db.query('SELECT head FROM openappa_deployments WHERE name=$1', [organization])).rows.map(row => Number(row.head));
+    const expected = hasHead ? [1] : [];
+    for (const snapshot of [true, false]) {
+      const missing = randomUUID();
+      assert.equal(await native.getOpenappaStatus(organization, missing, { ...hosted(after), snapshot }) ?? null, null);
+      assert.deepEqual(await revisions(), expected, 'an absent session does not prepare or publish its carried policy');
+    }
+  }
+});
+
 test('snapshot mode opens a pinned family without creating a deployment head', { skip: !databaseUrl }, async (t) => {
   await native.initializeOpenappa(databaseUrl, 2);
   const db = new Client({ connectionString: databaseUrl });

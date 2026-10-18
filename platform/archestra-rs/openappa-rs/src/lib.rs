@@ -1347,11 +1347,16 @@ pub async fn get_openappa_status(
     let result = AssertUnwindSafe(async move {
         let state = initialized().await?.encrypted(encryption)?;
         let session = SessionKey::new(&organization_id, &session_id);
+        let lookup = state.clone();
+        let root = tokio::task::spawn_blocking(move || recorded_root(&lookup, &session))
+            .await
+            .map_err(error)??;
+        let Some(root) = root else { return Ok(None) };
         on_deployment(
             &state,
             &organization_id,
             &policy,
-            |state| recorded_root(state, &session),
+            |_| Ok(Some(root)),
             |pinned| {
                 let key = SessionKey::new(&organization_id, &session_id);
                 async move { session_status(pinned, key).await }

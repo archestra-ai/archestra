@@ -191,6 +191,10 @@ test("snapshot sessions keep their opening policy while live sessions resume fol
       opened.policyRevision as number,
     );
     expect((await status(pinned)).policyRevision).toBeNull();
+    await goToPage(page, `/chat/${pinned}`);
+    await expect(
+      page.getByRole("status", { name: "policy snapshot" }),
+    ).toBeVisible();
   } finally {
     for (const mapping of mappings) {
       await request

@@ -35,8 +35,7 @@ export const ChatComposerSecurity = memo(function ChatComposerSecurity({
   const status = enabled && deployment?.active && !isError ? data : null;
   if (!encrypted && !status) return <>{children}</>;
   // A session that keeps the policy it opened with has no revision to name.
-  const snapshot =
-    status?.newSessionPolicy === "snapshot" && status.policyRevision === null;
+  const snapshot = status?.policyRevision === null;
 
   return (
     <div className="min-w-0">

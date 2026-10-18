@@ -24,7 +24,7 @@ use std::{
 use crate::deployments::HostCredentials;
 
 pub(crate) const ENGINE_VERSION: &str =
-    "4d60f16a6576e7ed71fd0729bc11cd509930f31c:archestra-live-v3";
+    "06bc9cef7166a0de0885a4607508a9fc6e6a0123:archestra-live-v3";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;

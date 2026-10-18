@@ -135,8 +135,17 @@ const server = setupServer(
   ),
   http.get("/api/chat/conversations", () => HttpResponse.json([])),
   http.get("/api/config", () => HttpResponse.json(configSeed)),
+  http.get("/health", () => HttpResponse.json({ version: configSeed.version })),
+  http.get("/ready", () => HttpResponse.json({ status: "ok" })),
   // Everything else the page fetches is irrelevant to rendering cost.
-  http.get(/\/api\//, () => HttpResponse.json(null, { status: 404 })),
+  ...[
+    "/api/:resource",
+    "/api/:resource/:id",
+    "/api/:resource/:id/:action",
+    "/api/:resource/:id/:action/:item",
+  ].map((path) =>
+    http.get(path, () => HttpResponse.json(null, { status: 404 })),
+  ),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));

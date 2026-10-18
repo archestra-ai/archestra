@@ -22,6 +22,7 @@ import { getDatabaseConnectionString } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaSessionModel from "@/models/openappa-session";
@@ -52,6 +53,7 @@ import {
   openappaFailure,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
+import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
@@ -264,15 +266,25 @@ export async function getOpenappaStatus(params: {
   if (!openappaEnabled()) return null;
   try {
     const module = await binding();
-    return await withOpenappaContentEncryption(
-      params.organizationId,
-      params.sessionId,
-      (encryption) =>
-        module.getOpenappaStatus(
+    // Read on the organization's policy line, as a dispatch would decide.
+    const status = await retryWhilePolicyMoved({
+      run: async () => {
+        const policy = await effectivePolicy(params.organizationId);
+        return withOpenappaContentEncryption(
           params.organizationId,
           params.sessionId,
-          encryption,
-        ),
+          (encryption) =>
+            module.getOpenappaStatus(
+              params.organizationId,
+              params.sessionId,
+              policy,
+              encryption,
+            ),
+        );
+      },
+    });
+    return (
+      status && { ...status, policyRevision: status.policyRevision ?? null }
     );
   } catch (error) {
     throw openappaFailure(error);
@@ -625,10 +637,15 @@ async function withRuntime(
   batchPolicy?: DispatchPolicy,
   session?: OpenAppaSession,
 ) {
-  const policy = batchPolicy ?? (await effectivePolicy(organizationId));
+  let policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
     const module = await binding();
-    const rawResult = await call(module, policy);
+    const rawResult = await retryWhilePolicyMoved({
+      run: async (attempt) => {
+        if (attempt > 0) policy = await effectivePolicy(organizationId);
+        return call(module, policy);
+      },
+    });
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
     throw await dispatchFailure({
@@ -709,16 +726,20 @@ async function missingOpeningAnnotator(
  * The organization's effective policy with the credential values the runtime
  * reads for it, or the refusal every dispatch shares.
  *
- * The deployment switch is not read here. Each entry point reads it once at its
+ * The enforcement switch is not read here. Each entry point reads it once at its
  * request boundary, so a turn that began governed finishes under its policy even
- * when the switch turns off mid-request.
+ * when the switch turns off mid-request. The policy for new sessions is read
+ * with every policy read, so a dispatch sees it as it is now, and a dispatch
+ * that cannot read it fails as the policy read does.
  */
 async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const { policy, readable } =
-      await openappaBatteriesService.readForDispatch(organizationId);
+    const [newSessionPolicy, { policy, readable }] = await Promise.all([
+      GuardrailsDeploymentModel.getNewSessionPolicy(),
+      openappaBatteriesService.readForDispatch(organizationId),
+    ]);
     let unreadable: UnreadableCredential[] = [];
     let dispatch: DispatchPolicy | null = null;
     try {
@@ -732,7 +753,12 @@ async function effectivePolicy(
     } catch (error) {
       if (!retainedKeyLost({ unreadable, readable })) throw error;
     }
-    if (dispatch && !retainedKeyLost({ unreadable, readable })) return dispatch;
+    if (dispatch && !retainedKeyLost({ unreadable, readable }))
+      return {
+        ...dispatch,
+        compositionHash: policy.contentHash,
+        snapshot: newSessionPolicy === "snapshot",
+      };
     // A credential the policy was composed to read is unreadable now. Compose
     // again first, as a fresh read would have: a kept annotator that needed it
     // is dropped, so its sessions are told to start a new conversation instead
@@ -742,10 +768,14 @@ async function effectivePolicy(
       "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
     );
     const recompiled = await openappaBatteriesService.recompile(organizationId);
-    return await openappaDeclarations.dispatchPolicy({
-      organizationId,
-      content: expandCommandExecutionPolicyRules(recompiled.content),
-    });
+    return {
+      ...(await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: expandCommandExecutionPolicyRules(recompiled.content),
+      })),
+      compositionHash: recompiled.contentHash,
+      snapshot: newSessionPolicy === "snapshot",
+    };
   } catch (error) {
     throw openappaFailure(error);
   }
@@ -2435,9 +2465,12 @@ async function peerResponse<T>(
   schema: z.ZodType<T>,
 ): Promise<T> {
   try {
-    const policy = await effectivePolicy(session.organization_id);
     const module = await binding();
-    return schema.parse(JSON.parse(await call(module, policy)));
+    const raw = await retryWhilePolicyMoved({
+      run: async () =>
+        call(module, await effectivePolicy(session.organization_id)),
+    });
+    return schema.parse(JSON.parse(raw));
   } catch (error) {
     throw openappaFailure(error);
   }

@@ -19,7 +19,7 @@ assert.deepEqual(
 // Exercise the native async boundary without requiring a database.
 const policy = { content: "[policy]\nversion = 2\n", credentials: {} };
 async function checkNativeBoundary() {
-  await assert.rejects(getOpenappaStatus("org", "session"), /OpenAPPA is not initialized/);
+  await assert.rejects(getOpenappaStatus("org", "session", policy), /OpenAPPA is not initialized/);
   await assert.rejects(dispatchHook("{}", policy), /missing field/);
   const session = { organization_id: "org", caller_id: "user:alice", session_id: "session" };
   await assert.rejects(dispatchHook(JSON.stringify({ ...session, event: "remedy", operation_id: "remedy:1", arguments: { offer_id: "offer" }, unexpected_field: "value" }), policy), /unknown field.*unexpected_field/);

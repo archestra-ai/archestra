@@ -80,8 +80,26 @@ test.for([
     message: "A confusing block",
     withTrajectory: true,
   });
+  // The archive carries whatever runtime events the pinned OpenAPPA records,
+  // including kinds this host has never seen, and is kept byte for byte.
   const archive = gzipSync(
-    JSON.stringify({ message: yell.message, trajectory: [] }),
+    JSON.stringify({
+      message: yell.message,
+      trajectory: [],
+      runtime_events: [
+        {
+          seq: 1,
+          at: "2026-10-17T00:00:00Z",
+          event: {
+            PolicyPublished: {
+              deployment: organizationId,
+              revision: 2,
+              policy_key: "a".repeat(64),
+            },
+          },
+        },
+      ],
+    }),
   );
   const outbound = vi.fn(
     async (_url: string | URL | Request, _init?: RequestInit) =>

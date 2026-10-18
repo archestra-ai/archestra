@@ -13,6 +13,7 @@ import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
+import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenAppaEffectivePolicyModel, {
   type EffectivePolicyValues,
 } from "@/models/openappa-effective-policy";
@@ -361,12 +362,16 @@ class OpenAppaBatteriesService {
   async effectivePolicyView(
     organizationId: string,
   ): Promise<EffectivePolicyView> {
-    const policy = await this.getEffectivePolicy(organizationId);
+    const [policy, servedRevision] = await Promise.all([
+      this.getEffectivePolicy(organizationId),
+      OpenAppaDeploymentModel.head(organizationId),
+    ]);
     const { served: _served, retainedAnnotators, ...row } = policy;
     return {
       ...row,
       composition: compositionView(policy),
       retained: retainedAnnotators && retainedView(retainedAnnotators),
+      servedRevision,
     };
   }
 

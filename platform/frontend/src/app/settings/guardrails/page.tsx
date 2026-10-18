@@ -4,12 +4,14 @@ import {
   OpenAppaBreakTheGlassSetting,
   OpenAppaClientCoverageSetting,
   OpenAppaEnforcementSetting,
+  OpenAppaNewSessionPolicySetting,
 } from "./openappa-settings-sections";
 
 export default function OpenAppaSettingsPage() {
   return (
     <SettingsSectionStack className="max-w-4xl">
       <OpenAppaEnforcementSetting />
+      <OpenAppaNewSessionPolicySetting />
       <OpenAppaBreakTheGlassSetting />
       <OpenAppaClientCoverageSetting />
       <AppaGithubSyncPanel />

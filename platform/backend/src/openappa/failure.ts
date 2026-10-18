@@ -1,6 +1,7 @@
 import { trace } from "@opentelemetry/api";
 import { z } from "zod";
 import { ApiError } from "@/types/api";
+import { isPolicyMoved } from "./policy-moved";
 
 /**
  * The error every OpenAPPA operation throws when it cannot decide safely.
@@ -157,6 +158,7 @@ const RuntimeFailureCode = z.enum([
   "lease_lost",
   "held_elsewhere",
   "unstarted_parent",
+  "policy_moved",
 ]);
 type RuntimeFailureCode = z.infer<typeof RuntimeFailureCode>;
 
@@ -182,6 +184,8 @@ function classify(error: unknown): Failure {
       statusCode: 500,
       detail: `${error.message}. An administrator can rebind it on the ${POLICY_PAGE} page.`,
     };
+  // A runtime whose refusal carries no policy-moved class yet reports it in text.
+  if (isPolicyMoved(error)) return POLICY_MOVED;
   const message = error instanceof Error ? error.message : "";
   if (POLICY_REFUSALS.some((pattern) => pattern.test(message)))
     return {
@@ -230,6 +234,11 @@ function classifyCode(code: RuntimeFailureCode): Failure {
         detail:
           "another request of this session took over this operation. Retry the request.",
       };
+    // The organization's policy changed while this request was decided, and
+    // the backend's own retries did not catch up with it. Nothing was
+    // recorded; the retry decides under the current policy.
+    case "policy_moved":
+      return POLICY_MOVED;
     // A retry sent while the first attempt still runs gets that attempt's answer.
     case "held_elsewhere":
       return {
@@ -259,6 +268,12 @@ function classifyCode(code: RuntimeFailureCode): Failure {
       return code satisfies never;
   }
 }
+
+const POLICY_MOVED: Failure = {
+  statusCode: 503,
+  detail:
+    "the organization's guardrails policy changed while this request was checked. Retry the request.",
+};
 
 const UNAVAILABLE: Failure = {
   statusCode: 503,

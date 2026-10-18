@@ -10,6 +10,7 @@ import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import MemberModel from "@/models/member";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
@@ -3359,6 +3360,129 @@ test("dispatch loads the latest saved policy text from the organization database
   });
   expect(servedTools()).toEqual(["mcp/appa/yell", "probe"]);
 });
+
+describe("a policy saved mid-conversation", () => {
+  const read = { id: "read", name: "read_file", arguments: {} };
+  const servedPolicy = (call: number) =>
+    vi.mocked(native.dispatchHook).mock.calls[call]?.[1] as {
+      content: string;
+      compositionHash?: string;
+      snapshot?: boolean;
+    };
+  const save = async (params: {
+    userId: string;
+    tool: string;
+    revision: number;
+  }) =>
+    GuardrailsPolicyModel.save({
+      organizationId,
+      updatedBy: params.userId,
+      content: `[policy]\nversion = 2\n[[policy.tool]]\nname = "${params.tool}"\ndelta = {}\n`,
+      contentHash: params.tool,
+      expectedRevision: params.revision,
+    });
+
+  test("decides the conversation's next call with the composition it was read from", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    await save({ userId: user.id, tool: "before", revision: 0 });
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    await evaluateToolCalls(session, [read], { canonicalize: (n) => n });
+    await save({ userId: user.id, tool: "after", revision: 1 });
+    await evaluateToolCalls(session, [{ ...read, id: "read-2" }], {
+      canonicalize: (n) => n,
+    });
+
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    const [first, second] = [servedPolicy(0), servedPolicy(1)];
+    expect(first.content).toContain('"before"');
+    expect(second.content).toContain('"after"');
+    expect(second.compositionHash).toBe(stored?.contentHash);
+    expect(first.compositionHash).not.toBe(second.compositionHash);
+  });
+
+  test("a call whose policy moved is retried with the policy read again", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    await save({ userId: user.id, tool: "before", revision: 0 });
+    native.dispatchHook
+      .mockImplementationOnce(async () => {
+        // Saved, and published by another replica, while this call was decided.
+        await save({ userId: user.id, tool: "after", revision: 1 });
+        throw new Error(POLICY_MOVED);
+      })
+      .mockResolvedValueOnce(JSON.stringify({ decision: "allow_call" }));
+
+    const decisions = await evaluateToolCalls(session, [read], {
+      canonicalize: (n) => n,
+    });
+
+    expect(decisions).toEqual([{ kind: "allow" }]);
+    expect(native.dispatchHook).toHaveBeenCalledTimes(2);
+    expect(servedPolicy(0).content).toContain('"before"');
+    expect(servedPolicy(1).content).toContain('"after"');
+  });
+
+  test("dispatches read snapshot and live changes without restarting the conversation", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    for (const [index, newSessionPolicy] of (
+      ["live", "snapshot", "live"] as const
+    ).entries()) {
+      await GuardrailsDeploymentModel.set({ newSessionPolicy });
+      await evaluateToolCalls(session, [{ ...read, id: `read-${index}` }], {
+        canonicalize: (name) => name,
+      });
+      expect(servedPolicy(index).snapshot).toBe(
+        newSessionPolicy === "snapshot",
+      );
+    }
+  });
+
+  test("a dispatch that cannot read the policy for new sessions fails, never decided", async () => {
+    // The setting decides whether the call may move its session's policy, so
+    // an unread setting must not be taken as live.
+    const get = vi
+      .spyOn(GuardrailsDeploymentModel, "getNewSessionPolicy")
+      .mockRejectedValue(new Error("Connection terminated unexpectedly"));
+    try {
+      const failure = await evaluateToolCalls(session, [read], {
+        canonicalize: (n) => n,
+      }).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(ApiError);
+      expect(failure).toMatchObject({ statusCode: 503 });
+      expect(get).toHaveBeenCalled();
+      expect(native.dispatchHook).not.toHaveBeenCalled();
+    } finally {
+      get.mockRestore();
+    }
+  });
+
+  test("a policy that keeps moving is a retryable 503, never feedback for the model", async () => {
+    native.dispatchHook.mockRejectedValue(new Error(POLICY_MOVED));
+
+    const failure = await evaluateToolCalls(session, [read], {
+      canonicalize: (n) => n,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ApiError);
+    expect(failure).toMatchObject({ statusCode: 503, shouldRetry: true });
+    expect((failure as ApiError).retryAfterSeconds).toBeGreaterThan(0);
+    expect((failure as ApiError).message).toContain(
+      "guardrails policy changed while this request was checked",
+    );
+    expect(native.dispatchHook).toHaveBeenCalledTimes(3);
+  });
+});
+
+const POLICY_MOVED =
+  "OpenAPPA published a newer policy revision for this organization; retry the request";
 
 describe("remedy by offer", () => {
   // An external client on the gateway names no session: Claude Code sends

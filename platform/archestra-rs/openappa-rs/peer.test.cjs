@@ -155,7 +155,7 @@ context_control = true
   );
   assert.equal(Number(unstarted.rows[0].count), 0);
   assert.ok(['ack', 'context'].includes((await hook(child, { event: 'session_start' })).decision));
-  const before = await native.getOpenappaStatus(parent.organization_id, parent.session_id);
+  const before = await native.getOpenappaStatus(parent.organization_id, parent.session_id, policy);
 
   const released = await hook(parent, {
     event: 'tool_call',
@@ -280,7 +280,7 @@ context_control = true
   const ambiguous = await admit(child, { sender_session_id: parent.session_id });
   assert.equal(ambiguous.kind, 'unverified');
 
-  const after = await native.getOpenappaStatus(parent.organization_id, parent.session_id);
+  const after = await native.getOpenappaStatus(parent.organization_id, parent.session_id, policy);
   assert.equal(after.trust, before.trust);
   assert.equal(after.audience, before.audience);
 

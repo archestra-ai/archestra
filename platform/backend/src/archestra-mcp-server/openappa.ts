@@ -15,6 +15,7 @@ import config from "@/config";
 import logger from "@/logging";
 import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import OpenAppaDeploymentModel from "@/models/openappa-deployment";
 import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
@@ -596,7 +597,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. While `enforcement.newSessionPolicy` is `snapshot`, a saved policy reaches new sessions only: running sessions keep the policy they decide under now. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       const organizationId = organization(context);
@@ -1175,6 +1176,11 @@ const registry = defineArchestraTools([
         sessionId: stamp.session_id,
         offerId: remedy.offer_id,
       });
+      // A publish while the reviewer decides retires the offer: the answer then
+      // applies to nothing, and the result says why.
+      const headBeforeReview = review
+        ? await OpenAppaDeploymentModel.head(context.organizationId)
+        : null;
 
       let ruling: "approve" | "deny" | undefined;
       let reviewOutcome:
@@ -1350,6 +1356,11 @@ const registry = defineArchestraTools([
         ...(precheckRefusal ? { precheckRefusal } : {}),
       });
       if (!ruling || !byOffer.known) return byOffer.result;
+      if (
+        retiredOffer(byOffer.result) &&
+        (await policyPublishedSince(context.organizationId, headBeforeReview))
+      )
+        return supersededReview(byOffer.result);
       // Display-only: the chat card displays the human ruling.
       // `_meta` does not reach the model; the model reads the ruling from result text.
       const content =
@@ -1985,3 +1996,54 @@ async function yellIdentity(params: {
     "OpenAPPA reporting requires an authenticated session and tool-call identity",
   );
 }
+
+/** Whether the runtime answered an offer that no longer stands. */
+function retiredOffer(result: CallToolResult): boolean {
+  return result.content.some(
+    (block) =>
+      block.type === "text" &&
+      RETIRED_OFFER_TEXTS.some((text) => block.text.includes(text)),
+  );
+}
+
+/** Whether the organization published a policy revision after `before`. */
+async function policyPublishedSince(
+  organizationId: string,
+  before: { revision: number } | null,
+): Promise<boolean> {
+  const after = await OpenAppaDeploymentModel.head(organizationId);
+  return after !== null && after.revision > (before?.revision ?? 0);
+}
+
+/**
+ * A reviewed remedy whose offer a policy publish retired: nothing ran, and
+ * the reviewer's answer was not applied. The model proposes the call again
+ * and the current policy decides it; Chat shows that the policy changed.
+ */
+function supersededReview(result: CallToolResult): CallToolResult {
+  return {
+    ...result,
+    isError: false,
+    content: [
+      ...result.content,
+      {
+        type: "text",
+        text: "[appa] The organization's guardrails policy changed before this review was answered, so the answer was not applied and nothing ran. Propose the call again: the current policy decides it, and asks for a new review if it still needs one.",
+      },
+    ],
+    _meta: { ...result._meta, [MCP_HUMAN_RULING_META_KEY]: "superseded" },
+  };
+}
+
+/**
+ * The runtime's words for an offer that no longer stands. Contract: these are
+ * OpenAPPA's display texts for `RemedyRefusal::UnknownOffer` and for a stale
+ * offer's decline, as of the pinned revision 0d6c743c. Unlike a `Refuse`, which
+ * carries a typed class at this pin, a remedy outcome carries no class, so
+ * these texts are matched; re-check them when the pin moves.
+ */
+const RETIRED_OFFER_TEXTS = [
+  "this offer no longer stands; re-propose the call",
+  "this offer no longer applies; re-propose the call",
+  "no live offer with this id exists",
+];

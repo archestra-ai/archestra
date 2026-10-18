@@ -186,6 +186,33 @@ describe("openappaFailure", () => {
     );
   });
 
+  test("a policy that moved past the dispatch asks the client to retry and is never model feedback", () => {
+    for (const cause of [
+      runtimeFailure(
+        "policy_moved",
+        "OpenAPPA published a newer policy revision for this organization; retry the request",
+      ),
+      // A runtime that does not class the refusal yet reports it in text.
+      new Error(
+        "OpenAPPA published a newer policy revision for this organization; retry the request",
+      ),
+      // The runtime's own refusal, should it reach the host unconverted.
+      new Error(
+        "OpenAPPA processing interrupted: deployment org-1 moved to policy revision 4 while this event was decided; retry it",
+      ),
+    ]) {
+      const failure = openappaFailure(cause);
+
+      expect(failure.statusCode).toBe(503);
+      expect(failure.shouldRetry).toBe(true);
+      expect(failure.retryAfterSeconds).toBeGreaterThan(0);
+      expect(failure.message).toBe(
+        "OpenAPPA could not safely complete this operation: the organization's guardrails policy changed while this request was checked. Retry the request.",
+      );
+      expect(unansweredAnnotationNotice(failure)).toBeNull();
+    }
+  });
+
   test("strips URL credentials and bounds the detail of a refused policy", () => {
     const failure = openappaFailure(
       new Error(

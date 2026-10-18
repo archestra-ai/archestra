@@ -36325,6 +36325,8 @@ export type GetChatOpenappaStatusResponses = {
     200: {
         trust: string;
         audience: string;
+        policyRevision: number | null;
+        newSessionPolicy: 'live' | 'snapshot';
     } | null;
 };
 
@@ -48770,6 +48772,7 @@ export type GetGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        newSessionPolicy: 'live' | 'snapshot';
         featureEnabled: boolean;
         active: boolean;
     };
@@ -48782,6 +48785,7 @@ export type UpdateGuardrailsDeploymentData = {
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
         breakTheGlassEnabled?: boolean;
+        newSessionPolicy?: 'live' | 'snapshot';
     };
     path?: never;
     query?: never;
@@ -48864,6 +48868,7 @@ export type UpdateGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
+        newSessionPolicy: 'live' | 'snapshot';
         featureEnabled: boolean;
         active: boolean;
     };
@@ -90849,6 +90854,10 @@ export type GetOpenappaEffectivePolicyResponses = {
                 name: string;
                 reason: string;
             }>;
+        } | null;
+        servedRevision: {
+            revision: number;
+            publishedAt: string;
         } | null;
     };
 };

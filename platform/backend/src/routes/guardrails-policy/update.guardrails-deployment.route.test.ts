@@ -70,6 +70,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           enabled,
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
+          newSessionPolicy: "live",
           featureEnabled,
           active: enabled && featureEnabled,
         });
@@ -131,6 +132,57 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
     await set(false);
     expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
+  });
+
+  test("administrators can give new sessions a policy snapshot without changing enforcement, and the change is audited", async () => {
+    await set(true);
+    const choose = (newSessionPolicy: string) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload: { newSessionPolicy },
+      });
+
+    const snapshot = await choose("snapshot");
+    expect(snapshot.statusCode, snapshot.body).toBe(200);
+    expect(snapshot.json()).toMatchObject({
+      enabled: true,
+      active: true,
+      newSessionPolicy: "snapshot",
+    });
+    expect(
+      (
+        await app.inject({ method: "GET", url: "/api/guardrails-deployment" })
+      ).json(),
+    ).toMatchObject({ newSessionPolicy: "snapshot" });
+    expect(await GuardrailsDeploymentModel.getNewSessionPolicy()).toBe(
+      "snapshot",
+    );
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          action: "organization.updated",
+          before: expect.objectContaining({ newSessionPolicy: "live" }),
+          after: expect.objectContaining({ newSessionPolicy: "snapshot" }),
+        }),
+      );
+    });
+
+    // Turning enforcement off and on again keeps the setting.
+    await set(false);
+    expect((await set(true)).json()).toMatchObject({
+      newSessionPolicy: "snapshot",
+    });
+    expect((await choose("live")).json()).toMatchObject({
+      enabled: true,
+      newSessionPolicy: "live",
+    });
+    expect((await choose("frozen")).statusCode).toBe(400);
+    expect(await GuardrailsDeploymentModel.getNewSessionPolicy()).toBe("live");
   });
 
   test("rejects an unsupported action without changing the saved setting", async () => {
@@ -199,7 +251,19 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       .where(eq(schema.membersTable.userId, userId));
     expect((await set(true)).statusCode).toBe(403);
     expect((await setUnsupportedClientAction("block")).statusCode).toBe(403);
-    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: "/api/guardrails-deployment",
+          payload: { newSessionPolicy: "snapshot" },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      enabled: false,
+      newSessionPolicy: "live",
+    });
   });
 
   test("members can read the status but not change it", async () => {
@@ -212,7 +276,10 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       url: "/api/guardrails-deployment",
     });
     expect(read.statusCode, read.body).toBe(200);
-    expect(read.json()).toMatchObject({ unsupportedClientAction: "bypass" });
+    expect(read.json()).toMatchObject({
+      unsupportedClientAction: "bypass",
+      newSessionPolicy: "live",
+    });
     expect((await set(true)).statusCode).toBe(403);
   });
 });

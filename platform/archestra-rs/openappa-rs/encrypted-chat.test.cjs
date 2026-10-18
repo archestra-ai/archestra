@@ -43,14 +43,14 @@ test('encrypted trajectories enforce, replay, survive a new process, and contain
   assert.equal(approved.decision, 'ack');
   assert.deepEqual(await hook(session, result, key), approved, 'encrypted processed output replays exactly');
   assert.equal((await hook(session, { event: 'tool_call', operation_id: 'call:send', tool: 'send', arguments: { marker } }, key)).decision, 'deny_call');
-  assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, key)).trust, 'suspicious');
-  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id), /requires its conversation key/);
-  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id, { ...key, key: randomBytes(32) }), /authentication failed/);
+  assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, policy, key)).trust, 'suspicious');
+  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id, policy), /requires its conversation key/);
+  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id, policy, { ...key, key: randomBytes(32) }), /authentication failed/);
   await assert.rejects(hook(session, { ...call, operation_id: 'call:keyless', tool_call_id: 'keyless' }), /requires its conversation key/);
   const child = spawnSync(process.execPath, ['-e', `
     const n=require('./index.cjs');
-    (async()=>{const x=JSON.parse(require('fs').readFileSync(0,'utf8')); await n.initializeOpenappa(x.url,2); const status=await n.getOpenappaStatus(x.session.organization_id,x.session.session_id,{key:Buffer.from(x.key,'base64'),scope:x.scope}); process.stdout.write(JSON.stringify(status));})().catch(e=>{console.error(e.message);process.exitCode=1});
-  `], { cwd: __dirname, input: JSON.stringify({ url: databaseUrl, session, key: key.key.toString('base64'), scope: key.scope }), encoding: 'utf8', timeout: 15000 });
+    (async()=>{const x=JSON.parse(require('fs').readFileSync(0,'utf8')); await n.initializeOpenappa(x.url,2); const status=await n.getOpenappaStatus(x.session.organization_id,x.session.session_id,x.policy,{key:Buffer.from(x.key,'base64'),scope:x.scope}); process.stdout.write(JSON.stringify(status));})().catch(e=>{console.error(e.message);process.exitCode=1});
+  `], { cwd: __dirname, input: JSON.stringify({ url: databaseUrl, session, policy, key: key.key.toString('base64'), scope: key.scope }), encoding: 'utf8', timeout: 15000 });
   assert.equal(child.status, 0, child.stderr);
   assert.equal(JSON.parse(child.stdout).trust, 'suspicious');
 
@@ -79,7 +79,7 @@ test('encrypted trajectories enforce, replay, survive a new process, and contain
   // encrypted view must never reuse an unkeyed/decrypted process cache.
   const saved = events.rows[0].payload; const tampered = Buffer.from(saved); tampered[tampered.length-1] ^= 1;
   await pg.query('UPDATE openappa_events SET payload=$2 WHERE root=$1 AND seq=0', [starts.rows[0].root, tampered]);
-  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id, key), /authentication failed/);
+  await assert.rejects(native.getOpenappaStatus(session.organization_id, session.session_id, policy, key), /authentication failed/);
   await pg.query('UPDATE openappa_events SET payload=$2 WHERE root=$1 AND seq=0', [starts.rows[0].root, saved]);
 });
 

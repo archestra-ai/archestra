@@ -36,8 +36,9 @@ export const STREAMED_QUERY_KEYS = {
  * Starts the default Agents view's catalog queries on the server and returns
  * them dehydrated while they are still in flight, for `StreamedQueries`.
  *
- * Only the viewer's automatic pins are awaited (two fast reads): the list's
- * query key leaves them out, so the server must know them to start the very
+ * Only the viewer's member agents and the organization are awaited (two fast
+ * reads): the viewer's automatic pins come from them, and the list's query
+ * key leaves those pins out, so the server must know them to start the very
  * query the page will read. The catalog requests are never awaited; their
  * promises stream to the browser and resolve there.
  */

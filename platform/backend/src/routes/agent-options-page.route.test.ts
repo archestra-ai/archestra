@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { eq, sql } from "drizzle-orm";
+import { PGlite } from "@electric-sql/pglite";
+import { eq, inArray, sql } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
+import AgentModel from "@/models/agent";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -39,7 +42,7 @@ describe("bounded agent options", () => {
           organizationId: ctx.organizationId,
           authorId: owner.id,
           agentType: "agent",
-          name: `Candidate ${i}`,
+          name: `Candidate ${Math.floor(i / 2)}`,
         }),
       );
     for (const [i, agent] of agents.entries())
@@ -89,6 +92,24 @@ describe("bounded agent options", () => {
     ).toEqual(rows.map((row) => row.id));
     const first = await get(base);
     expect((await get(`${base}&cursor=malformed`)).data).toEqual(first.data);
+    const namedRows = [];
+    cursor = null;
+    do {
+      const page = await get(
+        `${base}&sortBy=name${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+      );
+      namedRows.push(...page.data);
+      cursor = page.pagination.nextCursor;
+    } while (cursor);
+    expect(namedRows.map((row) => row.id)).toEqual(
+      agents
+        .toSorted(
+          (left, right) =>
+            Buffer.compare(Buffer.from(left.name), Buffer.from(right.name)) ||
+            left.id.localeCompare(right.id),
+        )
+        .map((agent) => agent.id),
+    );
   });
 
   test("preserves member fences and reaches shared, organization and owned candidates", async ({
@@ -387,6 +408,271 @@ describe("bounded agent options", () => {
         ).statusCode;
       expect(await status(200), path).toBe(200);
       expect(await status(201), path).toBe(400);
+    }
+  });
+  test("reads a page and its shares, authors and audiences in a fixed number of statements", async ({
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const author = await makeUser({ name: "Page Author" });
+    const reader = await makeUser({ name: "Page Reader" });
+    await makeMember(author.id, ctx.organizationId);
+    await makeMember(reader.id, ctx.organizationId);
+    const team = await makeTeam(ctx.organizationId, ctx.user.id, {
+      name: "Page Team",
+    });
+    for (let i = 0; i < 3; i++) {
+      await makeAgent({
+        organizationId: ctx.organizationId,
+        authorId: author.id,
+        agentType: "agent",
+        name: `Team Shared ${i}`,
+        access: { teams: [team.id], level: "use" },
+      });
+      await makeAgent({
+        organizationId: ctx.organizationId,
+        authorId: author.id,
+        agentType: "agent",
+        name: `User Shared ${i}`,
+        access: { users: [reader.id], preset: "view" },
+      });
+    }
+    const statements = async (url: string) => {
+      const query = vi.spyOn(PGlite.prototype, "query");
+      const response = await ctx.app.inject({ method: "GET", url });
+      const calls = query.mock.calls.length;
+      query.mockRestore();
+      expect(response.statusCode, response.body).toBe(200);
+      return { calls, data: response.json().data };
+    };
+    for (const route of ["options/page", "chat-roster/page"]) {
+      const empty = await statements(
+        `/api/agents/${route}?limit=20&search=no-such-agent`,
+      );
+      const one = await statements(`/api/agents/${route}?limit=1`);
+      const full = await statements(`/api/agents/${route}?limit=20`);
+      expect(empty.data).toEqual([]);
+      expect(one.data).toHaveLength(1);
+      // Chat lists shared agents only; the options page also lists people's.
+      expect(full.data.length).toBeGreaterThanOrEqual(
+        route === "options/page" ? 6 : 3,
+      );
+      // Enriching more rows, or none, adds no statement of its own.
+      expect(one.calls).toBe(empty.calls);
+      expect(full.calls).toBe(empty.calls);
+      if (route === "options/page") {
+        const byName = new Map(
+          full.data.map((option: AgentOption) => [option.name, option]),
+        );
+        expect(byName.get("Team Shared 0")).toMatchObject({
+          authorName: "Page Author",
+          teams: [{ id: team.id, name: "Page Team" }],
+        });
+        expect(byName.get("User Shared 0")).toMatchObject({
+          authorName: "Page Author",
+          users: [{ id: reader.id }],
+        });
+      }
+    }
+  });
+  test("presents creators and read recipients of each page row", async ({
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeUser,
+    makeServiceAccount,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const author = await makeUser({ name: "Row Author" });
+    const reader = await makeUser({ name: "Row Reader" });
+    await makeMember(author.id, ctx.organizationId);
+    await makeMember(reader.id, ctx.organizationId);
+    const team = await makeTeam(ctx.organizationId, ctx.user.id, {
+      name: "Row Team",
+    });
+    const shared = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: author.id,
+      agentType: "agent",
+      name: "Row Shared",
+      access: "personal",
+    });
+    const repeated = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: author.id,
+      agentType: "agent",
+      name: "Row Shared Again",
+      access: "personal",
+    });
+    // One policy that names the author, a team and another person.
+    await db
+      .update(schema.resourcePermissionPoliciesTable)
+      .set({
+        grants: [
+          {
+            subject: { type: "user", id: author.id },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+          { subject: { type: "user", id: reader.id }, actions: ["read"] },
+        ],
+      })
+      .where(
+        inArray(schema.resourcePermissionPoliciesTable.scope, [
+          shared.id,
+          repeated.id,
+        ]),
+      );
+    const make = async (name: string) => {
+      const account = await makeServiceAccount(ctx.organizationId, {
+        name: `${name} Account`,
+      });
+      const agent = await makeAgent({
+        organizationId: ctx.organizationId,
+        agentType: "agent",
+        name,
+      });
+      await db
+        .update(schema.agentsTable)
+        .set({ createdByServiceAccountId: account.id, authorId: null })
+        .where(eq(schema.agentsTable.id, agent.id));
+      return account;
+    };
+    await make("Row Automation");
+    const removed = await make("Row Orphan");
+    await db
+      .delete(schema.serviceAccountsTable)
+      .where(eq(schema.serviceAccountsTable.id, removed.id));
+    const page: AgentOption[] = (
+      await get("/api/agents/options/page?search=Row&limit=20")
+    ).data;
+    const byName = new Map(page.map((option) => [option.name, option]));
+    expect(byName.get("Row Shared")).toMatchObject({
+      authorName: "Row Author",
+      teams: [{ id: team.id, name: "Row Team" }],
+      // The author's own grant is not a share.
+      users: [{ id: reader.id }],
+    });
+    expect(byName.get("Row Automation")).toMatchObject({
+      authorName: "Row Automation Account",
+      authorEmail: null,
+    });
+    expect(byName.get("Row Orphan")).toMatchObject({
+      authorId: null,
+      authorName: null,
+      authorEmail: null,
+    });
+    expect(byName.get("Row Shared Again")).toMatchObject({
+      authorName: "Row Author",
+      teams: [{ id: team.id, name: "Row Team" }],
+      users: [{ id: reader.id }],
+    });
+    const first = await get(
+      "/api/agents/options/page?search=Row%20Shared&sortBy=name&limit=1",
+    );
+    const second = await get(
+      `/api/agents/options/page?search=Row%20Shared&sortBy=name&limit=1&cursor=${encodeURIComponent(first.pagination.nextCursor)}`,
+    );
+    expect(first.data).toEqual([byName.get("Row Shared")]);
+    expect(second.data).toEqual([byName.get("Row Shared Again")]);
+    expect(second.pagination.nextCursor).toBeNull();
+    const legacy = await AgentModel.findAll(ctx.user.id, true, {
+      view: "options",
+    });
+    const sharedOption = byName.get("Row Shared");
+    const repeatedOption = byName.get("Row Shared Again");
+    if (!sharedOption || !repeatedOption)
+      throw new Error("Missing shared options");
+    expect(legacy.find((row) => row.id === shared.id)).toMatchObject(
+      sharedOption,
+    );
+    expect(legacy.find((row) => row.id === repeated.id)).toMatchObject(
+      repeatedOption,
+    );
+  });
+  test("searches names, creators and team recipients alone and across fields", async ({
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const author = await makeUser({
+      name: "Quill Writer",
+      email: "quill.writer@example.test",
+    });
+    await makeMember(author.id, ctx.organizationId);
+    const team = await makeTeam(ctx.organizationId, ctx.user.id, {
+      name: "Heron Squad",
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: author.id,
+      agentType: "agent",
+      name: "Lantern",
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      name: "Compass",
+      access: { teams: [team.id], level: "use" },
+    });
+    const names = async (search: string) =>
+      (
+        await get(
+          `/api/agents/options/page?limit=20&search=${encodeURIComponent(search)}`,
+        )
+      ).data
+        .map((option: AgentOption) => option.name)
+        .sort();
+    expect(await names("antern")).toEqual(["Lantern"]);
+    expect(await names("QUILL.WRITER@")).toEqual(["Lantern"]);
+    expect(await names("writer")).toEqual(["Lantern"]);
+    expect(await names("heron")).toEqual(["Compass"]);
+    // A term with a space can span the searched fields: name, then email.
+    expect(await names("lantern quill.writer")).toEqual(["Lantern"]);
+    expect(await names("compass heron")).toEqual([]);
+  });
+  test("never lists LLM proxies, for an admin or a member", async ({
+    makeMember,
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "llm_proxy",
+      name: "Roster Proxy",
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      authorId: ctx.user.id,
+      name: "Roster Agent",
+    });
+    const member = await makeMember(ctx.user.id, ctx.organizationId, {
+      role: "member",
+    });
+    for (const role of ["member", "admin"]) {
+      await db
+        .update(schema.membersTable)
+        .set({ role })
+        .where(eq(schema.membersTable.id, member.id));
+      const ids: string[] = await get(
+        "/api/agents/options/ids?excludeBuiltIn=false",
+      );
+      const page = await get("/api/agents/options/page?limit=100");
+      const byIds = await get(
+        `/api/agents/options?excludeBuiltIn=false&ids=${proxy.id},${ids[0]}&limit=10`,
+      );
+      expect(ids.length).toBeGreaterThan(0);
+      expect(ids).not.toContain(proxy.id);
+      for (const options of [page.data, byIds.data])
+        expect(
+          options.map((option: AgentOption) => option.agentType),
+        ).not.toContain("llm_proxy");
     }
   });
   test("bounds credential readiness to requested enforcing agents without changing default eligibility", async ({

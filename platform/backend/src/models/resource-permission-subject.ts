@@ -381,8 +381,8 @@ export default class ResourcePermissionSubjectModel {
         params.organizationId,
       );
       if (!member) return [];
-      const [teamIds, sources] = await Promise.all([
-        TeamModel.getUserTeamIds(params.userId),
+      const [{ subjectTeamIds: teamIds }, sources] = await Promise.all([
+        TeamModel.getUserTeamContext(params),
         RoleCompositionModel.getUserSources(params),
       ]);
       subjects.push(

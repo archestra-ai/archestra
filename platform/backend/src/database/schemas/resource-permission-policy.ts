@@ -3,6 +3,7 @@ import type {
   ResourcePermissionGrant,
   ScopedResource,
 } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -47,6 +48,11 @@ const resourcePermissionPoliciesTable = pgTable(
       "gin",
       table.grants.op("jsonb_path_ops"),
     ),
+    // Agent rosters read the agents and gateways granted to a caller; the
+    // organization's other policies (skills, apps, chats) stay out of it.
+    index("resource_permission_policies_agent_grants_idx")
+      .using("gin", table.grants.op("jsonb_path_ops"))
+      .where(sql`${table.resource} IN ('agent', 'mcpGateway')`),
     primaryKey({
       columns: [table.organizationId, table.resource, table.scope],
     }),

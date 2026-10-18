@@ -11,6 +11,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { requestScope } from "@/auth/request-scope";
 import db, { schema, withDbTransaction } from "@/database";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import logger from "@/logging";
@@ -923,6 +924,61 @@ class TeamModel {
    * Get all team IDs a user can access through direct membership. Membership
    * in a child team inherits resource access from every ancestor team.
    */
+  /**
+   * A caller's teams for authorization, in one statement: the
+   * organization's teams they belong to with ancestors, with names and roles
+   * (role sources, as {@link effectiveMembershipCondition}), and every team id
+   * their grants can name (as {@link getUserTeamIds}). A read request's scope
+   * reads them once.
+   */
+  static async getUserTeamContext(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<{
+    sourceTeams: Array<{ id: string; name: string; roles: string[] }>;
+    subjectTeamIds: string[];
+  }> {
+    const context = await requestScope.memo(
+      `teams\0${params.organizationId}\0${params.userId}`,
+      async () => {
+        const result = await db.execute<{
+          source_teams: Array<{ id: string; name: string; roles: string[] }>;
+          subject_team_ids: string[];
+        }>(sql`
+          WITH RECURSIVE subject_teams(team_id, organization_id) AS (
+            SELECT tm.team_id, direct_team.organization_id
+            FROM team_member tm
+            INNER JOIN team direct_team ON direct_team.id = tm.team_id
+            WHERE tm.user_id = ${params.userId}
+            UNION
+            SELECT child_team.parent_team_id, st.organization_id
+            FROM subject_teams st
+            INNER JOIN team child_team
+              ON child_team.id = st.team_id
+              AND child_team.organization_id = st.organization_id
+            WHERE child_team.parent_team_id IS NOT NULL
+          )
+          SELECT
+            (SELECT coalesce(array_agg(DISTINCT team_id), '{}') FROM subject_teams) AS subject_team_ids,
+            (SELECT coalesce(json_agg(json_build_object('id', source_team.id, 'name', source_team.name, 'roles', source_team.roles)), '[]'::json)
+              FROM team source_team
+              WHERE source_team.organization_id = ${params.organizationId}
+                AND ${TeamModel.effectiveMembershipCondition({ userId: params.userId, teamIdColumn: sql`source_team.id` })}
+            ) AS source_teams
+        `);
+        const [row] = result.rows;
+        return {
+          sourceTeams: row?.source_teams ?? [],
+          subjectTeamIds: row?.subject_team_ids ?? [],
+        };
+      },
+    );
+    return {
+      sourceTeams: context.sourceTeams.map((team) => ({ ...team })),
+      subjectTeamIds: [...context.subjectTeamIds],
+    };
+  }
+
   static async getUserTeamIds(userId: string): Promise<string[]> {
     logger.debug({ userId }, "TeamModel.getUserTeamIds: fetching team IDs");
     const teamMemberships = await db

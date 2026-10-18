@@ -8,7 +8,12 @@ import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control
 import { and, eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { getAgentTypePermissionChecker, hasPermission } from "@/auth";
+import {
+  getAgentTypePermissionChecker,
+  hasPermission,
+  userHasPermission,
+} from "@/auth";
+import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -16,7 +21,11 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   AgentExcludedToolModel,
   EnvironmentModel,
+  ExternalMcpSkillUsageEventModel,
+  McpCatalogSkillModel,
   OrganizationModel,
+  PluginModel,
+  PluginSkillUsageEventModel,
   SkillTeamModel,
   ToolModel,
 } from "@/models";
@@ -33,6 +42,7 @@ import {
   test,
 } from "@/test";
 import { ApiError, type InsertSkill, type Skill, type User } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 
 vi.mock("@/auth");
 
@@ -44,6 +54,7 @@ describe("agent skills routes", () => {
   let user: User;
   let organizationId: string;
   let requireMock: Mock;
+  const originalSkillsEnabled = config.mcpGateway.skillsEnabled;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
@@ -100,6 +111,7 @@ describe("agent skills routes", () => {
   });
 
   afterEach(async () => {
+    config.mcpGateway.skillsEnabled = originalSkillsEnabled;
     vi.restoreAllMocks();
     await app.close();
   });
@@ -125,6 +137,76 @@ describe("agent skills routes", () => {
     });
     if (!skill) throw new Error("failed to create test skill");
     return skill;
+  }
+
+  /**
+   * One org-wide plugin skill and one org-scoped MCP skill, each with a
+   * recorded activation, plus spies on both usage summaries. Activation and
+   * count paths must list these skills without aggregating that usage.
+   *
+   * Side effects for the rest of the test: turns `config.mcpGateway.skillsEnabled`
+   * on and makes `userHasPermission` resolve true; `afterEach` restores the
+   * flag and the mocks.
+   */
+  async function seedUsedPluginAndExternalSkills(params: {
+    catalogId: string;
+    mcpServerId: string;
+  }) {
+    config.mcpGateway.skillsEnabled = true;
+    vi.mocked(userHasPermission).mockResolvedValue(true);
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId: user.id,
+      input: {
+        displayName: "Release bundle",
+        description: "Release tooling",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        files: [
+          {
+            path: "skills/release-notes/SKILL.md",
+            content:
+              "---\nname: release-notes\ndescription: Draft release notes.\n---\n# Notes",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+      ...accessGrants("org"),
+    });
+    if (!plugin) throw new Error("failed to create test plugin");
+    await McpCatalogSkillModel.syncCatalog({
+      catalogId: params.catalogId,
+      generation:
+        (await McpCatalogSkillModel.beginRefresh(params.catalogId)) ?? 0,
+      skills: [
+        {
+          uri: "skill://example/triage/SKILL.md",
+          name: "triage",
+          description: "Triage incidents.",
+          frontmatter: { name: "triage", description: "Triage incidents." },
+          resources: null,
+        },
+      ],
+    });
+    PluginSkillUsageEventModel.recordUsage({
+      pluginId: plugin.id,
+      skillPath: "skills/release-notes",
+      userId: user.id,
+    });
+    ExternalMcpSkillUsageEventModel.recordUsage({
+      mcpServerId: params.mcpServerId,
+      uri: "skill://example/triage/SKILL.md",
+      userId: user.id,
+    });
+    await drainBackgroundWork();
+    return {
+      pluginSummaries: vi.spyOn(PluginSkillUsageEventModel, "getSummaries"),
+      externalSummaries: vi.spyOn(
+        ExternalMcpSkillUsageEventModel,
+        "getSummaries",
+      ),
+    };
   }
 
   /**
@@ -491,6 +573,103 @@ describe("agent skills routes", () => {
     expect(counts.get(`Excluded ${suffix}`)).toBe(0);
     expect(batchExclusions).toHaveBeenCalledTimes(1);
     expect(perAgentToolReads).not.toHaveBeenCalled();
+  });
+
+  test("GET activation-skills lists plugin and MCP skills without summarizing their usage", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: user.id,
+    });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      serverType: "remote",
+      scope: "org",
+      ownerId: user.id,
+    });
+    const { pluginSummaries, externalSummaries } =
+      await seedUsedPluginAndExternalSkills({
+        catalogId: catalog.id,
+        mcpServerId: server.id,
+      });
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({
+      agentType: "agent",
+      organizationId,
+      environmentId: null,
+    });
+    await ToolModel.assignSkillToolsToAgent(agent.id, organizationId);
+
+    for (const view of ["eligible", "effective"]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/activation-skills?agentId=${agent.id}&view=${view}`,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        response
+          .json()
+          .data.map(
+            (skill: { reference: { source: string } }) =>
+              skill.reference.source,
+          )
+          .sort(),
+      ).toEqual(["external_mcp", "plugin"]);
+      expect(response.body).not.toContain("usageCount");
+    }
+    expect(pluginSummaries).not.toHaveBeenCalled();
+    expect(externalSummaries).not.toHaveBeenCalled();
+  });
+
+  test("GET agents counts plugin and MCP skills without summarizing their usage", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    await promoteCallerToSkillAdmin();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: user.id,
+    });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      serverType: "remote",
+      scope: "org",
+      ownerId: user.id,
+    });
+    const { pluginSummaries, externalSummaries } =
+      await seedUsedPluginAndExternalSkills({
+        catalogId: catalog.id,
+        mcpServerId: server.id,
+      });
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const agent = await makeAgent({
+      name: `Counted ${suffix}`,
+      agentType: "agent",
+      organizationId,
+      environmentId: null,
+    });
+    await ToolModel.assignSkillToolsToAgent(agent.id, organizationId);
+    await makeSkill({ name: `native-${suffix}` });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents?agentTypes=agent&name=${suffix}&limit=10&offset=0&includeActivationSkillsCount=true`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({ id: agent.id, activationSkillsCount: 3 }),
+    ]);
+    expect(pluginSummaries).not.toHaveBeenCalled();
+    expect(externalSummaries).not.toHaveBeenCalled();
   });
 
   test("GET returns the defaults and PUT round-trips a full replace", async ({

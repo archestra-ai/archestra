@@ -13,7 +13,11 @@ import {
   SKILL_MANIFEST_FILENAME,
   SkillParseError,
 } from "@/skills/parser";
-import type { PluginSkillDetail, PluginSkillListItem } from "@/types";
+import type {
+  PluginSkillCatalogItem,
+  PluginSkillDetail,
+  PluginSkillListItem,
+} from "@/types";
 
 /**
  * Read-only projection of the SKILL.md trees embedded in plugins. Skills are
@@ -21,19 +25,25 @@ import type { PluginSkillDetail, PluginSkillListItem } from "@/types";
  * same in another — so a plugin shipped for a different client or platform
  * can still lend its skills. The projection derives everything from the
  * approved plugin bytes; nothing is stored, and plugin grants decide who
- * sees what.
+ * sees what. Usage summaries aggregate every recorded activation of the
+ * listed skills, so they are opt-in (`includeUsage`): only the Skills page
+ * shows them, and activation and count paths issue no usage query.
  */
-export async function listPluginSkills(params: {
-  organizationId: string;
-  userId?: string;
-  lookups?: RequestLookups;
-}): Promise<PluginSkillListItem[]> {
+export async function listPluginSkills(
+  params: PluginSkillListParams & { includeUsage: true },
+): Promise<PluginSkillListItem[]>;
+export async function listPluginSkills(
+  params: PluginSkillListParams & { includeUsage?: false },
+): Promise<PluginSkillCatalogItem[]>;
+export async function listPluginSkills(
+  params: PluginSkillListParams & { includeUsage?: boolean },
+): Promise<PluginSkillCatalogItem[] | PluginSkillListItem[]> {
   const accessiblePluginIds = await resolvePluginAccess(params);
   const candidates = await PluginModel.findSkillManifestCandidates({
     organizationId: params.organizationId,
     accessiblePluginIds,
   });
-  const items: PluginSkillListItem[] = [];
+  const items: PluginSkillCatalogItem[] = [];
   for (const { plugin, manifests, filePaths } of candidates) {
     const roots = manifests.map((manifest) => skillRootOf(manifest.path));
     for (const manifest of manifests) {
@@ -58,12 +68,10 @@ export async function listPluginSkills(params: {
         compatibility: parsed.compatibility,
         fileCount: resourcePathsOf(filePaths, manifest.path, root, roots)
           .length,
-        usageCount: 0,
-        usageUserCount: 0,
-        lastUsedAt: null,
       });
     }
   }
+  if (!params.includeUsage) return items;
   const usage = await PluginSkillUsageEventModel.getSummaries(
     items.map(({ pluginId, skillPath }) => ({ pluginId, skillPath })),
   );
@@ -161,6 +169,12 @@ export async function getPluginSkill(params: {
 }
 
 // ===== Internal helpers =====
+
+type PluginSkillListParams = {
+  organizationId: string;
+  userId?: string;
+  lookups?: RequestLookups;
+};
 
 /** undefined = plugin admin (all plugins); otherwise the visible id set. */
 async function resolvePluginAccess(params: {

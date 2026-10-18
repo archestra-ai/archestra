@@ -441,12 +441,9 @@ describe("platform_admin predefined role", () => {
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
-    expect(p.openappaDiagnostics).toEqual(["read", "update"]);
     // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (
-        ["log", "auditLog", "member", "openappaDiagnostics"].includes(resource)
-      ) {
+      if (["log", "auditLog", "member"].includes(resource)) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -458,7 +455,6 @@ describe("platform_admin predefined role", () => {
     expect(findUngrantablePermissions(p, adminPermissions)).toEqual(
       expect.arrayContaining([
         "member:impersonate",
-        "openappaDiagnostics:admin",
         "log:admin",
         "auditLog:admin",
       ]),

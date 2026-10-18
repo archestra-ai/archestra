@@ -193,7 +193,7 @@ test("readers can inspect and preview but cannot publish specifications", async 
   const organization = await makeOrganization();
   const user = await makeUser();
   const reader = await makeCustomRole(organization.id, {
-    permission: { openappaPolicy: ["read"] },
+    permission: { guardrailsPolicy: ["read"] },
   });
   await makeMember(user.id, organization.id, { role: reader.role });
   const agent = await makeAgent({ organizationId: organization.id });

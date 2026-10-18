@@ -2322,7 +2322,7 @@ describe("list_guardrails_battery_fits", () => {
     const owner = await makeUser();
     const viewer = await makeUser();
     const reader = await makeCustomRole(org.id, {
-      permission: { ...memberPermissions, openappaPolicy: ["read"] },
+      permission: { ...memberPermissions, guardrailsPolicy: ["read"] },
     });
     await makeMember(owner.id, org.id, { role: reader.role });
     await makeMember(viewer.id, org.id, { role: reader.role });

@@ -579,7 +579,7 @@ describe("inspect_guardrails_server", () => {
   }) => {
     const viewer = await makeUser();
     const role = await makeCustomRole(context.organizationId as string, {
-      permission: { openappaPolicy: ["read"], mcpRegistry: ["read"] },
+      permission: { guardrailsPolicy: ["read"], mcpRegistry: ["read"] },
     });
     await makeMember(viewer.id, context.organizationId as string, {
       role: role.role,
@@ -670,7 +670,7 @@ describe("inspect_guardrails_server", () => {
     const viewer = await makeUser();
     const owner = await makeUser();
     const role = await makeCustomRole(context.organizationId as string, {
-      permission: { openappaPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"] },
     });
     await makeMember(viewer.id, context.organizationId as string, {
       role: role.role,

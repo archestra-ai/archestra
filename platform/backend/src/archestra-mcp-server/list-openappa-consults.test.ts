@@ -58,7 +58,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("returns the helper's own error for the caller's session, without the request or answer", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     const callerId = `user:${context.userId}`;
     await seedConsult({
       organizationId,
@@ -94,7 +94,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("narrows by outcome", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     const callerId = `user:${context.userId}`;
     await seedConsult({ organizationId, callerId, externalName: "worked" });
     await seedConsult({
@@ -111,16 +111,16 @@ describe("list_openappa_consults", () => {
     ]);
   });
 
-  test("another caller's session is readable only with openappaDiagnostics:admin", async () => {
+  test("another caller's session is readable only with log:admin", async () => {
     await seedConsult({
       organizationId,
       callerId: "user:someone-else",
       sessionId: "their-chat",
       diagnostics: HELPER_ERROR,
     });
-    const reader = await callerWith({ openappaDiagnostics: ["read"] });
+    const reader = await callerWith({ log: ["read"] });
     const admin = await callerWith({
-      openappaDiagnostics: ["read", "admin"],
+      log: ["read", "admin"],
     });
 
     const refused = await list(reader, { sessionId: "their-chat" });
@@ -134,9 +134,9 @@ describe("list_openappa_consults", () => {
   });
 
   test("an audience source's diagnostics are withheld from a caller who cannot read members", async () => {
-    const withheld = await callerWith({ openappaDiagnostics: ["read"] });
+    const withheld = await callerWith({ log: ["read"] });
     const allowed = await callerWith({
-      openappaDiagnostics: ["read"],
+      log: ["read"],
       member: ["read"],
     });
     for (const context of [withheld, allowed])
@@ -164,7 +164,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("long diagnostics and raw responses are cut and marked", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     await seedConsult({
       organizationId,
       callerId: `user:${context.userId}`,
@@ -181,7 +181,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("nextCursor reads the older consults past the first page", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     const names = await seedNewestFirst(
       { organizationId, callerId: `user:${context.userId}` },
       55,
@@ -201,7 +201,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("large consults are paged under the result budget without a gap or repeat", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     const names = await seedNewestFirst(
       { organizationId, callerId: `user:${context.userId}` },
       30,
@@ -229,7 +229,7 @@ describe("list_openappa_consults", () => {
   });
 
   test("does not fall back to the session the call runs in", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     await seedConsult({
       organizationId,
       callerId: `user:${context.userId}`,
@@ -247,14 +247,14 @@ describe("list_openappa_consults", () => {
   });
 
   test("does not exist while OpenAPPA is disabled", async () => {
-    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const context = await callerWith({ log: ["read"] });
     config.openappa.enabled = false;
 
     expect(await failure(context)).toMatch(/No tool named/);
   });
 
-  test("refuses a caller without openappaDiagnostics:read", async () => {
-    const context = await callerWith({ openappaPolicy: ["read"] });
+  test("refuses a caller without log:read", async () => {
+    const context = await callerWith({ guardrailsPolicy: ["read"] });
     await seedConsult({
       organizationId,
       callerId: `user:${context.userId}`,

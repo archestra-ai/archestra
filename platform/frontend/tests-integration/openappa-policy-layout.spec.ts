@@ -112,7 +112,7 @@ for (const viewport of [
         body: {
           ...permissions,
           organizationSettings: ["read", "update"],
-          openappaPolicy: ["read", "update"],
+          guardrailsPolicy: ["read", "update"],
           credential: ["read"],
         },
       });

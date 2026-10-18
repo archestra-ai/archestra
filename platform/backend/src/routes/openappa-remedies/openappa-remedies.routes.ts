@@ -23,7 +23,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaRemedies,
         description:
-          "The authorities and sanitizers the policy and its included batteries declare, who runs each, what it may lift, and which kinds of block the rules can cause that no wired remedy lifts. `lastConsult` is filled only for a caller with `openappaDiagnostics:admin`.",
+          "The authorities and sanitizers the policy and its included batteries declare, who runs each, what it may lift, and which kinds of block the rules can cause that no wired remedy lifts. `lastConsult` is filled only for a caller with `log:admin`.",
         tags: ["OpenAPPA"],
         response: constructResponseSchema(RemediesViewSchema),
       },

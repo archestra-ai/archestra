@@ -26,10 +26,9 @@ export const resources = [
   "skill",
   "plugin",
   "app",
+  "guardrailsPolicy",
   "mcpGateway",
   "llmProxy",
-  "openappaPolicy",
-  "openappaDiagnostics",
   "log",
   "identityProvider",
   "mcpRegistry",
@@ -76,11 +75,10 @@ export const resourceLabels: Record<Resource, string> = {
   skill: "Skills",
   plugin: "Plugins",
   app: "Apps",
+  guardrailsPolicy: "Guardrails Policy",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxy",
   log: "LLM & MCP Logs",
-  openappaPolicy: "OpenAPPA Policy",
-  openappaDiagnostics: "OpenAPPA Diagnostics",
   organization: "Organization",
   identityProvider: "Identity Providers",
   member: "Users",
@@ -114,9 +112,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   app: "User-authored MCP Apps — interactive apps with their own data store and tools",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
   llmProxy: "The LLM Proxy endpoint with security policies and observability",
-  openappaPolicy: "OpenAPPA policy, batteries, and coverage",
-  openappaDiagnostics: "Agent yells and OpenAPPA consult logs",
-  log: "LLM proxy and MCP tool-call logs, with separate own and organization-wide visibility",
+  guardrailsPolicy: "Guardrails (OpenAPPA) policy, batteries, and coverage",
+  log: "LLM proxy, MCP tool-call, and Guardrails consult logs, with separate own and organization-wide visibility, plus Guardrails yells",
   chat: "Chat conversations",
   project:
     "Projects — shared collections of chats, schedules, Agent Runtime runs, and files",
@@ -162,7 +159,7 @@ export const internalResources: Resource[] = ["organization", "invitation"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "skill", "plugin", "app"],
+  Agents: ["agent", "skill", "plugin", "app", "guardrailsPolicy"],
   MCP: ["mcpGateway", "mcpRegistry", "mcpServerInstallation"],
   LLM: [
     "llmProxy",
@@ -172,7 +169,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmLimit",
     "llmCost",
   ],
-  OpenAPPA: ["openappaPolicy", "openappaDiagnostics"],
   Other: ["chat", "project", "knowledgeSource", "log", "auditLog"],
   Administration: [
     "accessPolicies",

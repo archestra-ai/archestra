@@ -17,7 +17,7 @@ describe("policy test authorization", () => {
     makeCustomRole,
   }) => {
     const reader = await makeCustomRole(ctx.organizationId, {
-      permission: { openappaPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"] },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
     const read = await ctx.app.inject({

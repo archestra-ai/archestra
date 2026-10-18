@@ -100,12 +100,12 @@ export function useOpenAppaChatLaunch({
     ],
     agent: [...new Set<Action>(["read", ...(permissions?.agent ?? [])])],
     skill: [...new Set<Action>(["read", ...(permissions?.skill ?? [])])],
-    openappaPolicy: [
-      ...new Set<Action>(["read", ...(permissions?.openappaPolicy ?? [])]),
+    guardrailsPolicy: [
+      ...new Set<Action>(["read", ...(permissions?.guardrailsPolicy ?? [])]),
     ],
     ...(target?.kind === "mcp_gateway" ? { mcpGateway: ["read"] } : {}),
     ...(target?.kind === "mcp_server" ? { mcpRegistry: ["read"] } : {}),
-    ...(subject.kind === "yell" ? { openappaDiagnostics: ["read"] } : {}),
+    ...(subject.kind === "yell" ? { log: ["read"] } : {}),
   };
 
   return {

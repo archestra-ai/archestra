@@ -26,7 +26,7 @@ use std::{
 
 /// The credential values the host resolved for one organization's policy, variable →
 /// value. Secrets: nothing here is logged or formatted.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct HostCredentials(BTreeMap<String, String>);
 
 impl HostCredentials {
@@ -46,6 +46,7 @@ impl HostCredentials {
 }
 
 /// An organization's effective policy as one dispatch carries it.
+#[derive(Clone)]
 pub(crate) struct HostedPolicy {
     pub content: String,
     pub credentials: HostCredentials,
@@ -117,10 +118,14 @@ impl Deployments {
     /// organization's stored composition: a dispatch that read the policy before a
     /// save and reaches here after another dispatch published the saved one must not
     /// publish the text from before the save over it.
+    ///
+    /// Preparing, reading the line's head and publishing are synchronous, and the
+    /// head read and the publish are PostgreSQL round trips, so a miss runs them on
+    /// a blocking thread; a hit returns without leaving the async thread.
     pub(crate) async fn deployment(
         &self,
-        runtime: &Runtime,
-        store: &LogStore,
+        runtime: &Arc<Runtime>,
+        store: &Arc<LogStore>,
         organization_id: &str,
         policy: &HostedPolicy,
         agent_yell: bool,
@@ -139,10 +144,13 @@ impl Deployments {
     /// by a process that read the organization's policy after this dispatch did, so
     /// this process forgets its deployment instead of publishing its own bytes over
     /// that head; the host's retry reads the policy again and publishes from that.
-    pub(crate) fn repin(
+    ///
+    /// The head read and the publish are synchronous PostgreSQL round trips, so they
+    /// run on a blocking thread.
+    pub(crate) async fn repin(
         &self,
-        runtime: &Runtime,
-        store: &LogStore,
+        runtime: &Arc<Runtime>,
+        store: &Arc<LogStore>,
         organization_id: &str,
         stale: &PublishedDeployment,
     ) -> Result<Option<PublishedDeployment>, String> {
@@ -153,15 +161,25 @@ impl Deployments {
             // A concurrent dispatch already moved this organization's deployment on.
             return Ok(self.held(organization_id).map(|pinned| pinned.published));
         };
+        let (runtime, store) = (runtime.clone(), store.clone());
         let line = DeploymentName::new(organization_id);
-        let head = store.head(&line).map_err(|error| error.to_string())?;
-        if head.is_none_or(|head| head.key.as_str() != &*pinned.key) {
+        let (key, prepared) = (pinned.key.clone(), pinned.prepared.clone());
+        let head = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let head = store.head(&line).map_err(|error| error.to_string())?;
+            if head.is_none_or(|head| head.key.as_str() != &*key) {
+                return Ok(None);
+            }
+            runtime
+                .publish(&line, &prepared)
+                .map(Some)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| error.to_string())??;
+        let Some(published) = head else {
             self.forget(organization_id, &pinned);
             return Ok(None);
-        }
-        let published = runtime
-            .publish(&line, &pinned.prepared)
-            .map_err(|error| error.to_string())?;
+        };
         self.by_organization
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -177,8 +195,8 @@ impl Deployments {
 
     async fn pinned(
         &self,
-        runtime: &Runtime,
-        store: &LogStore,
+        runtime: &Arc<Runtime>,
+        store: &Arc<LogStore>,
         organization_id: &str,
         policy: &HostedPolicy,
         agent_yell: bool,
@@ -197,41 +215,13 @@ impl Deployments {
         if let Some(pinned) = self.serving(organization_id, policy) {
             return Ok(pinned);
         }
-        let asked = RefCell::new(Vec::<(String, Option<String>)>::new());
-        let mut config = crate::policy::compile(&policy.content, |var| {
-            let answer = policy.credentials.lookup(var);
-            asked.borrow_mut().push((var.to_owned(), answer.clone()));
-            answer
-        })?;
-        config.reporting.agent_yell = agent_yell;
-        let key = policy_file_key(config.policy_file().bytes());
-        let prepared = runtime
-            .prepare_deployment(config)
-            .map_err(|error| error.to_string())?;
-        let line = DeploymentName::new(organization_id);
-        if let Some(composition) = &policy.composition {
-            let head = store.head(&line).map_err(|error| error.to_string())?;
-            let publishes = head.is_none_or(|head| head.key.as_str() != key);
-            if publishes && !stored_composition(store, organization_id, composition)? {
-                return Err(DeploymentError::Superseded);
-            }
-        }
-        let published = runtime
-            .publish(&line, &prepared)
-            .map_err(|error| error.to_string())?;
-        let asked = asked.into_inner();
-        let pinned = Pinned {
-            content: policy.content.as_str().into(),
-            answers: answers_digest(
-                asked
-                    .iter()
-                    .map(|(var, answer)| (var.as_str(), answer.clone())),
-            ),
-            variables: asked.into_iter().map(|(var, _)| var).collect(),
-            key: key.into(),
-            prepared,
-            published,
-        };
+        let (runtime, store) = (runtime.clone(), store.clone());
+        let (organization, policy) = (organization_id.to_owned(), policy.clone());
+        let pinned = tokio::task::spawn_blocking(move || {
+            prepare(&runtime, &store, &organization, &policy, agent_yell)
+        })
+        .await
+        .map_err(|error| DeploymentError::Failed(error.to_string()))??;
         self.by_organization
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -267,6 +257,55 @@ impl Deployments {
             .get(organization_id)
             .cloned()
     }
+}
+
+/// Compiles `policy` with the credential values it looks up, prepares it, and
+/// publishes it as the head of the organization's line. Synchronous: the head read
+/// and the publish are PostgreSQL round trips, so callers run it on a blocking
+/// thread.
+fn prepare(
+    runtime: &Runtime,
+    store: &LogStore,
+    organization_id: &str,
+    policy: &HostedPolicy,
+    agent_yell: bool,
+) -> Result<Pinned, DeploymentError> {
+    let asked = RefCell::new(Vec::<(String, Option<String>)>::new());
+    let mut config = crate::policy::compile(&policy.content, |var| {
+        let answer = policy.credentials.lookup(var);
+        asked.borrow_mut().push((var.to_owned(), answer.clone()));
+        answer
+    })?;
+    config.reporting.agent_yell = agent_yell;
+    let key = policy_file_key(config.policy_file().bytes());
+    let prepared = runtime
+        .prepare_deployment(config)
+        .map_err(|error| error.to_string())?;
+    let line = DeploymentName::new(organization_id);
+    if let Some(composition) = &policy.composition {
+        let head = store.head(&line).map_err(|error| error.to_string())?;
+        let publishes = head.is_none_or(|head| head.key.as_str() != key);
+        if publishes && !stored_composition(store, organization_id, composition)? {
+            return Err(DeploymentError::Superseded);
+        }
+    }
+    let published = runtime
+        .publish(&line, &prepared)
+        .map_err(|error| error.to_string())?;
+    let asked = asked.into_inner();
+    let pinned = Pinned {
+        content: policy.content.as_str().into(),
+        answers: answers_digest(
+            asked
+                .iter()
+                .map(|(var, answer)| (var.as_str(), answer.clone())),
+        ),
+        variables: asked.into_iter().map(|(var, _)| var).collect(),
+        key: key.into(),
+        prepared,
+        published,
+    };
+    Ok(pinned)
 }
 
 /// Whether `composition` is the content hash of the organization's stored
@@ -326,15 +365,23 @@ mod tests {
     const KEY: &str = "APPA_OPENAPPA_RS_TEST_JEV_KEY";
     const JEV: &str = "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"jev.tool-call\"\nbuiltin = \"jev\"\nranks = [\"suspicious\", \"trusted\"]\naudiences = [\"self\", \"internal\"]\nmarks = []\n[externals.jev]\ntoken_env = \"APPA_OPENAPPA_RS_TEST_JEV_KEY\"\n";
 
-    fn runtime() -> Runtime {
+    fn runtime() -> Arc<Runtime> {
         on_store(Arc::new(LogStore::open(Backend::Memory).unwrap()))
     }
 
     /// A runtime over `store`: two of them over one store are two processes sharing
     /// one database.
-    fn on_store(store: Arc<LogStore>) -> Runtime {
+    fn on_store(store: Arc<LogStore>) -> Arc<Runtime> {
         let config = crate::policy::compile("[policy]\nversion = 2\n", |_| None).unwrap();
-        crate::policy::open(config, store).unwrap()
+        Arc::new(crate::policy::open(config, store).unwrap())
+    }
+
+    /// Runs `future` to completion on a runtime of its own, as a dispatch would.
+    fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(future)
     }
 
     fn policy(content: &str, key: Option<&str>) -> HostedPolicy {
@@ -349,7 +396,7 @@ mod tests {
     /// deployment rather than reusing the one held.
     fn prepares(
         deployments: &Deployments,
-        runtime: &Runtime,
+        runtime: &Arc<Runtime>,
         organization: &str,
         policy: &HostedPolicy,
     ) -> bool {
@@ -363,20 +410,18 @@ mod tests {
 
     fn serve(
         deployments: &Deployments,
-        runtime: &Runtime,
+        runtime: &Arc<Runtime>,
         organization: &str,
         policy: &HostedPolicy,
     ) -> Result<PublishedDeployment, String> {
         // No test policy names a stored composition, so this store is never read.
-        let store = LogStore::open(Backend::Memory).unwrap();
-        tokio::runtime::Builder::new_current_thread()
-            .build()
-            .unwrap()
-            .block_on(deployments.deployment(runtime, &store, organization, policy, false))
-            .map_err(|error| match error {
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        block_on(deployments.deployment(runtime, &store, organization, policy, false)).map_err(
+            |error| match error {
                 DeploymentError::Superseded => "superseded".to_owned(),
                 DeploymentError::Failed(reason) => reason,
-            })
+            },
+        )
     }
 
     #[test]
@@ -407,7 +452,7 @@ mod tests {
     #[test]
     fn concurrent_misses_for_one_organization_prepare_once() {
         const DISPATCHES: usize = 8;
-        let runtime = Arc::new(runtime());
+        let runtime = runtime();
         let deployments = Arc::new(Deployments::default());
         let barrier = Arc::new(tokio::sync::Barrier::new(DISPATCHES));
         let served = tokio::runtime::Builder::new_multi_thread()
@@ -424,7 +469,7 @@ mod tests {
                             deployments
                                 .pinned(
                                     &runtime,
-                                    &LogStore::open(Backend::Memory).unwrap(),
+                                    &Arc::new(LogStore::open(Backend::Memory).unwrap()),
                                     "org-a",
                                     &policy(JEV, Some("one")),
                                     false,
@@ -513,7 +558,7 @@ mod tests {
 
     fn revision(
         deployments: &Deployments,
-        runtime: &Runtime,
+        runtime: &Arc<Runtime>,
         organization: &str,
         policy: &HostedPolicy,
     ) -> u64 {
@@ -601,7 +646,9 @@ mod tests {
             2
         );
         assert!(
-            ones.repin(&one, &store, "org-a", &first).unwrap().is_none(),
+            block_on(ones.repin(&one, &store, "org-a", &first))
+                .unwrap()
+                .is_none(),
             "another policy at the head is not published over"
         );
         assert!(
@@ -623,8 +670,7 @@ mod tests {
             revision(&others, &other, "org-a", &policy(&edited, Some("one"))),
             4
         );
-        let head = ones
-            .repin(&one, &store, "org-a", &second)
+        let head = block_on(ones.repin(&one, &store, "org-a", &second))
             .unwrap()
             .expect("the head names this deployment's policy");
         assert_eq!(head.revision(), 4);

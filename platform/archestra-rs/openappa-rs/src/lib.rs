@@ -465,6 +465,7 @@ where
             let Some(head) = state
                 .deployments
                 .repin(&state.runtime, &state.store, organization_id, &deployment)
+                .await
                 .map_err(error)?
             else {
                 return Err(policy_moved());

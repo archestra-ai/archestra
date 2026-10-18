@@ -35296,7 +35296,7 @@ export type GetChatConversationsData = {
     query?: {
         search?: string;
         /**
-         * Recent conversations to return when not searching (default 250). Pinned ones are always added.
+         * Recent conversations to return when not searching. Pinned ones are always added.
          */
         limit?: number;
         /**

@@ -2391,9 +2391,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .int()
             .min(1)
             .max(250)
-            .optional()
+            .default(250)
             .describe(
-              "Recent conversations to return when not searching (default 250). Pinned ones are always added.",
+              "Recent conversations to return when not searching. Pinned ones are always added.",
             ),
           includeArtifacts: z
             .preprocess((val) => val !== "false" && val !== false, z.boolean())

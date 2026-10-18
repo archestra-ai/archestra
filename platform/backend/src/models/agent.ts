@@ -3355,8 +3355,7 @@ class AgentModel {
    * Batch fetch minimal agent data needed for permission checks.
    * Returns a Map of agentId -> { agentType, scope, authorId, teamIds }.
    * Much lighter than findById (no tool/label/knowledgeBase/connector joins).
-   */
-  /**
+   *
    * Includes `environmentId` so callers can apply the environment fence beside
    * the permission checks, without a second round-trip per target.
    *

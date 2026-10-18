@@ -493,8 +493,9 @@ export class ModelsDevClient {
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],
       mistral: ["mistral/"],
-      perplexity: ["perplexity/"],
-      // Not synced from models.dev, which has no Agent API catalog.
+      // Not synced from models.dev (mapProvider skips it), which has no Agent
+      // API catalog.
+      perplexity: [],
       groq: ["groq/"],
       xai: ["xai/"],
       bedrock: ["amazon-bedrock/"],

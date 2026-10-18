@@ -1721,7 +1721,9 @@ async function resolveCredentialKinds(
         value =
           key.secretId && (key.secretIsVault || key.secretIsByosVault)
             ? ((await getSecretValueForLlmProviderApiKey(key.secretId)) ?? null)
-            : decryptApiKeyValue(key.secret);
+            : // A secret that cannot be decrypted (for example after a key
+              // rotation) is unreadable, not empty: never store a guess.
+              readApiKeyValue(key.secret);
       } catch (error) {
         logger.warn(
           { error, secretId: key.secretId },
@@ -1798,21 +1800,27 @@ async function withoutOthersPerUserCredentials<
  * everyone.
  */
 function decryptApiKeyValue(secret: SecretValue | null): string | null {
-  if (!secret || typeof secret !== "object") return null;
-  let decrypted: SecretValue;
-  if (isEncryptedSecret(secret)) {
-    try {
-      decrypted = decryptSecretValue(secret);
-    } catch (error) {
-      logger.warn(
-        { error },
-        "Failed to decrypt LLM provider API key secret while deriving key metadata; treating the value as unreadable",
-      );
-      return null;
-    }
-  } else {
-    decrypted = secret;
+  try {
+    return readApiKeyValue(secret);
+  } catch (error) {
+    logger.warn(
+      { error },
+      "Failed to decrypt LLM provider API key secret while deriving key metadata; treating the value as unreadable",
+    );
+    return null;
   }
+}
+
+/**
+ * Like {@link decryptApiKeyValue}, but a secret that cannot be decrypted
+ * throws instead of reading as "no value", so a caller can tell the two
+ * apart.
+ */
+function readApiKeyValue(secret: SecretValue | null): string | null {
+  if (!secret || typeof secret !== "object") return null;
+  const decrypted = isEncryptedSecret(secret)
+    ? decryptSecretValue(secret)
+    : secret;
   const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
   return typeof apiKeyValue === "string" ? apiKeyValue : null;
 }

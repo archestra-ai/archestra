@@ -53,7 +53,7 @@ describe("scheduled LLM model sync", () => {
       expect(modelsDev.requests).toBe(1);
     });
 
-    test("a failing models.dev does not stop key syncs, fails the tick once, and is not retried on the next tick", async ({
+    test("a failing models.dev does not stop key syncs, fails the tick once, and waits 15 minutes before the next try", async ({
       makeLlmProviderApiKey,
     }) => {
       // The retry backoff waits in real time; skip the waits.
@@ -61,6 +61,9 @@ describe("scheduled LLM model sync", () => {
         modelsDevClient as unknown as { sleep: (ms: number) => Promise<void> },
         "sleep",
       ).mockResolvedValue();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const start = new Date();
+      vi.setSystemTime(start);
       modelsDev.status = 500;
       const vllm = serveModels("vllm.test");
       const apiKey = await makeLlmProviderApiKey(organizationId, null, {
@@ -77,9 +80,40 @@ describe("scheduled LLM model sync", () => {
       expect(vllm.hits).toBe(1);
       expect(await linkedModelCount(apiKey.id)).toBe(2);
 
-      modelsDevClient.clearFetchCache();
+      // The metadata sync itself stays off for 15 minutes. (The vLLM key's own
+      // 5-minute resync still reads the catalog, so count sync attempts.)
+      const attempts = vi.spyOn(
+        modelsDevClient as unknown as { syncWithRetry: () => Promise<number> },
+        "syncWithRetry",
+      );
+      modelsDev.status = 200;
+      vi.setSystemTime(new Date(start.getTime() + 15 * TimeInMs.Minute - 1));
       await syncDueModels();
-      expect(modelsDev.requests).toBe(failedRequests);
+      expect(attempts).not.toHaveBeenCalled();
+
+      vi.setSystemTime(new Date(start.getTime() + 15 * TimeInMs.Minute + 1));
+      await syncDueModels();
+      expect(attempts).toHaveBeenCalledTimes(1);
+      attempts.mockRestore();
+    });
+
+    test("reports both failures when the key lookup and models.dev fail in one tick", async () => {
+      vi.spyOn(
+        modelsDevClient as unknown as { sleep: (ms: number) => Promise<void> },
+        "sleep",
+      ).mockResolvedValue();
+      modelsDev.status = 500;
+      const lookup = vi
+        .spyOn(LlmProviderApiKeyModel, "findDueForModelSync")
+        .mockRejectedValue(new Error("due-key lookup failed"));
+
+      const error = await syncDueModels().catch((reason: unknown) => reason);
+      lookup.mockRestore();
+
+      expect(error).toBeInstanceOf(AggregateError);
+      expect(
+        (error as AggregateError).errors.map((e: Error) => e.message),
+      ).toEqual(["due-key lookup failed", "models.dev metadata sync failed"]);
     });
   });
 

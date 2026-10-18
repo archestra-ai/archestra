@@ -40,8 +40,12 @@ type TimelineItem =
 export function useTranscriptWindow(items: readonly TimelineItem[]): {
   start: number;
   showEarlier: () => void;
+  deepLinkedMessageId: string | null;
 } {
   const [start, setStart] = useState<number | null>(null);
+  const [deepLinkedMessageId, setDeepLinkedMessageId] = useState<string | null>(
+    null,
+  );
   const count = items.length;
   const effectiveStart = Math.min(
     start ?? Math.max(0, count - TRANSCRIPT_INITIAL_WINDOW),
@@ -50,7 +54,6 @@ export function useTranscriptWindow(items: readonly TimelineItem[]): {
 
   // Fix the start the first time there is something to show (a deep link may
   // move it further back).
-  const deepLinkTarget = useRef<string | null>(null);
   useEffect(() => {
     if (start !== null || count === 0) return;
     const target = readDeepLinkedMessageId();
@@ -60,7 +63,7 @@ export function useTranscriptWindow(items: readonly TimelineItem[]): {
         )
       : -1;
     if (targetIndex >= 0) {
-      deepLinkTarget.current = target;
+      setDeepLinkedMessageId(target);
       setStart(
         Math.max(0, Math.min(effectiveStart, targetIndex - DEEP_LINK_CONTEXT)),
       );
@@ -69,22 +72,13 @@ export function useTranscriptWindow(items: readonly TimelineItem[]): {
     }
   }, [start, count, items, effectiveStart]);
 
-  useEffect(() => {
-    const target = deepLinkTarget.current;
-    if (!target || start === null) return;
-    deepLinkTarget.current = null;
-    document.getElementById(`message-${target}`)?.scrollIntoView({
-      block: "start",
-    });
-  }, [start]);
-
   const showEarlier = useCallback(() => {
     setStart((current) =>
       Math.max(0, (current ?? effectiveStart) - TRANSCRIPT_BACKFILL_STEP),
     );
   }, [effectiveStart]);
 
-  return { start: effectiveStart, showEarlier };
+  return { start: effectiveStart, showEarlier, deepLinkedMessageId };
 }
 
 /**
@@ -99,13 +93,23 @@ export function useTranscriptWindow(items: readonly TimelineItem[]): {
 export function TranscriptWindowEdge({
   hiddenCount,
   onShowEarlier,
+  deepLinkedMessageId,
 }: {
   hiddenCount: number;
   onShowEarlier: () => void;
+  deepLinkedMessageId: string | null;
 }) {
-  const { scrollRef } = useStickToBottomContext();
+  const { scrollRef, stopScroll } = useStickToBottomContext();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const anchor = useRef<{ element: Element; top: number } | null>(null);
+
+  useEffect(() => {
+    if (!deepLinkedMessageId) return;
+    stopScroll();
+    document.getElementById(`message-${deepLinkedMessageId}`)?.scrollIntoView({
+      block: "start",
+    });
+  }, [deepLinkedMessageId, stopScroll]);
 
   const showEarlier = useCallback(() => {
     // The first mounted item is what the reader sees at the top; remember

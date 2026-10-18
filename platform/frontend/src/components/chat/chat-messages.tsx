@@ -648,6 +648,7 @@ export function ChatMessages({
             <TranscriptWindowEdge
               hiddenCount={transcriptWindow.start}
               onShowEarlier={transcriptWindow.showEarlier}
+              deepLinkedMessageId={transcriptWindow.deepLinkedMessageId}
             />
             {timelineItems.map((item, index) => {
               // Only the end of a long transcript is mounted (see

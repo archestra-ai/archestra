@@ -38,6 +38,7 @@ vi.mock("use-stick-to-bottom", () => ({
   useStickToBottomContext: () => ({
     isAtBottom: true,
     scrollToBottom: vi.fn(),
+    stopScroll: vi.fn(),
   }),
 }));
 

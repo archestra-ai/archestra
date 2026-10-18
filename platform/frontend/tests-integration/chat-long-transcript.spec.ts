@@ -114,4 +114,7 @@ test("a long conversation opens on its end and mounts earlier messages on scroll
   await expect(
     page.getByRole("button", { name: "Show earlier messages (90 not shown)" }),
   ).toBeVisible();
+  await page.goto(`/chat/${conversation.id}#message-${conversation.id}-m5`);
+  await page.reload();
+  await expect(page.getByText(/^Turn 5\./)).toBeInViewport();
 });

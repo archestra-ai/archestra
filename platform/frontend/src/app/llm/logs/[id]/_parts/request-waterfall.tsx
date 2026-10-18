@@ -897,10 +897,13 @@ function RequestRow({
           title={onPlan ? "On plan: list price, not billed" : undefined}
         >
           {onPlan ? (
-            <span
-              aria-label="On plan"
-              className="size-1.5 shrink-0 rounded-full ring-1 ring-muted-foreground/70 ring-inset"
-            />
+            <>
+              <span
+                aria-hidden="true"
+                className="size-1.5 shrink-0 rounded-full ring-1 ring-muted-foreground/70 ring-inset"
+              />
+              <span className="sr-only">On plan,</span>
+            </>
           ) : null}
           {formatRequestCost(Number(row.cost ?? 0))}
         </span>

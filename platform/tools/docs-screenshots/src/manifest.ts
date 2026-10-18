@@ -622,20 +622,13 @@ export const SHOTS: Shot[] = [
  * - chat and orchestrator shots: conversations and a hibernated MCP server
  */
 
-/**
- * Guardrails as they look with enforcement on. The deployment status is answered
- * in the browser only, so capturing never turns enforcement on for the instance.
- */
 async function showGuardrailsEnforced(page: Page) {
-  await page.route("**/api/guardrails-deployment", async (route) => {
-    if (route.request().method() !== "GET") return route.continue();
-    const response = await route.fetch();
-    const status = await response.json();
-    await route.fulfill({
-      response,
-      json: { ...status, enabled: true, active: true },
-    });
+  const response = await page.request.put("/api/guardrails-deployment", {
+    data: { enabled: true },
+    headers: { Origin: new URL(page.url()).origin },
   });
+  expect(response.ok()).toBe(true);
+  expect(await response.json()).toMatchObject({ enabled: true, active: true });
   await page.reload();
   await page.getByText("Enforcement on", { exact: true }).waitFor();
   await page
@@ -935,4 +928,3 @@ const INCIDENT_COMMAND_CENTER_HTML = `<!DOCTYPE html>
   </div>
 </body>
 </html>`;
-

@@ -72,7 +72,8 @@ if (args[0] === 'debug') {
   console.log(JSON.stringify({models:[{slug:process.env.TEST_MODEL || 'app-model'}]})); process.exit(0);
 }
 if (args[0] === 'mcp' && args[1] === 'add') fs.appendFileSync(path.join(home, 'config.toml'), '\\n[mcp_servers.test_gateway]\\nurl = "https://example.com/v1/mcp/test"\\n');
-if (args[0] === 'plugin' && process.env.FAIL_MARKETPLACE) { console.error('Git clone failed: HTTP 502'); process.exit(22); }
+// Like the real CLI, report the clone URL as given, credential included.
+if (args[0] === 'plugin' && process.env.FAIL_MARKETPLACE) { console.error('Error: git clone ' + args[3] + ' failed with status exit status: 128'); process.exit(22); }
 // Codex 0.162 keeps one source per marketplace name and refuses another one.
 const marketplace = path.join(process.env.HOME, 'marketplace-source');
 if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'remove') {
@@ -85,6 +86,7 @@ if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'add') {
     process.exit(1);
   }
   fs.writeFileSync(marketplace, args[3]);
+  console.log('Added marketplace \`test-skills\` from ' + args[3] + '.');
 }
 `,
   );
@@ -206,6 +208,40 @@ test("a rerun replaces the marketplace an earlier setup registered from another 
     );
   } finally {
     await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test("installer output hides the marketplace credential that Codex echoes from the clone URL", async () => {
+  const cloneUrl =
+    "https://token:archestra_mkt_secret@example.com/skills/marketplace.git";
+  for (const failMarketplace of [false, true]) {
+    const f = await fixture();
+    try {
+      await writeFile(
+        f.script,
+        renderSetupScript({
+          ...ctx,
+          skills: { cloneUrl, marketplaceName: "test-skills", pluginNames: [] },
+        }),
+      );
+      const result = await exec("bash", [f.script], {
+        env: failMarketplace ? { ...f.env, FAIL_MARKETPLACE: "1" } : f.env,
+      }).catch((error) => error);
+      const output = `${result.stdout}${result.stderr}`;
+      expect(output).toContain(
+        failMarketplace
+          ? "git clone https://***@example.com/skills/marketplace.git failed"
+          : "from https://***@example.com/skills/marketplace.git",
+      );
+      expect(output).not.toContain("archestra_mkt_secret");
+      expect(output).not.toContain("HTTP 502");
+      // Codex itself still receives the credential-bearing URL.
+      expect(await readFile(path.join(f.home, "calls"), "utf8")).toContain(
+        `plugin marketplace add ${cloneUrl}\n`,
+      );
+    } finally {
+      await rm(f.home, { recursive: true, force: true });
+    }
   }
 });
 

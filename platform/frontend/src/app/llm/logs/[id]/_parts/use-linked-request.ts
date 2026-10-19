@@ -6,6 +6,7 @@ import {
   useInteractionSummaries,
 } from "@/lib/interactions/interaction.query";
 import type { InteractionSummary } from "./session-timeline";
+import { useSettledOnce } from "./use-session-tool-calls";
 
 /**
  * When the URL names one request (`?request=`), the page of the session it
@@ -35,10 +36,12 @@ export function useLinkedRequest({
 }) {
   const targetOnPage =
     targetRequestId !== null && requests.some((r) => r.id === targetRequestId);
+  // Read alongside the page, not after it: the details pane reads the same
+  // record when the request is on this page, so the read is never wasted.
   const targetQuery = useInteraction({
     interactionId: targetRequestId ?? undefined,
     refetchInterval: null,
-    enabled: targetRequestId !== null && requestsReady && !targetOnPage,
+    enabled: targetRequestId !== null,
   });
   const record = targetQuery.data ?? null;
   // A request of another session is not this page's to show.
@@ -77,7 +80,7 @@ export function useLinkedRequest({
 
   const targetResolved =
     targetRequestId === null ||
-    targetOnPage ||
+    (targetOnPage && requestsReady) ||
     targetQuery.isError ||
     (targetQuery.isSuccess && target === null) ||
     // Settled only on the page it was found on: until the move lands, the
@@ -87,9 +90,13 @@ export function useLinkedRequest({
       located.page === pageIndex &&
       requestsReady);
 
+  const settledFor = useSettledOnce(targetRequestId, targetResolved);
+
   return {
     targetOnPage,
     /** The URL named a request this page cannot show, and looking is over. */
     targetMissing: targetRequestId !== null && targetResolved && !targetOnPage,
+    /** A linked request has been found on its page, or found missing. */
+    ready: targetRequestId === null || settledFor === targetRequestId,
   };
 }

@@ -68,6 +68,7 @@ import {
   type AfterConnectPhase,
   type AfterConnectRun,
 } from "./after-connect";
+import { BrowseDialog } from "./browse-dialog";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -92,7 +93,6 @@ import {
 import {
   AgentSearch,
   approxTokens,
-  BrowseDialog,
   fmt,
   nameOf,
   PromptRow,
@@ -323,7 +323,6 @@ export function ConnectPage() {
         onOpenChange={(v) => !v && setDialog(null)}
         data={data}
         client={client}
-        skills={skillsSorted}
         choices={choices}
       />
       <IncludeDialog

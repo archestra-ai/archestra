@@ -2328,6 +2328,8 @@ class AgentModel {
     // never covers LLM proxies, so the organization's proxy the restriction
     // lets through is dropped by the authorization anyway. One grant
     // predicate then stands for all three, which the planner plans once.
+    // That holds only while the base-read types exclude `llm_proxy`; a list
+    // that may show the proxy keeps the full predicate.
     const readThroughGrant =
       !!userId &&
       restrictToAccessible &&

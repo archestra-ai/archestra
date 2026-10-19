@@ -369,6 +369,10 @@ export function McpCatalogForm({
     const previousAuthMethod = form.getValues("authMethod");
     form.setValue("authMethod", nextAuthMethod, { shouldDirty: true });
 
+    if (nextAuthMethod === "none" && form.getValues("requiresAuth")) {
+      form.setValue("requiresAuth", false, { shouldDirty: true });
+    }
+
     if (
       previousAuthMethod === "auth_header" &&
       nextAuthMethod !== "auth_header"

@@ -15,6 +15,7 @@ import {
 } from "vitest";
 import { Button } from "@/components/ui/button";
 import { McpCatalogForm } from "./mcp-catalog-form";
+import { transformFormToApiData } from "./mcp-catalog-form.utils";
 
 const server = setupServer(
   http.get("http://localhost:9000/api/secrets/type", () =>
@@ -172,7 +173,42 @@ it("preserves a server URL rejection when switching authentication methods", asy
   expect(screen.getByText("This server URL is not allowed")).toBeVisible();
 });
 
-function renderForm() {
+it("edits an entry that declares auth through requiresAuth and authFields", async () => {
+  const { user, onSubmit } = renderForm({
+    id: "catalog-auth-fields",
+    name: "Auth fields server",
+    description: "",
+    icon: null,
+    serverType: "remote",
+    serverUrl: "https://mcp.example.com",
+    requiresAuth: true,
+    authFields: [
+      { name: "X-API-Key", label: "API key", type: "header", required: false },
+    ],
+    oauthConfig: null,
+    enterpriseManagedConfig: null,
+    localConfig: null,
+    deploymentSpecYaml: null,
+    userConfig: null,
+    scope: "org",
+    teams: [],
+    labels: [],
+  });
+
+  expect(
+    await screen.findByRole("button", { name: /^Token header/ }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText("X-API-Key")).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: /^None/ }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+  expect(transformFormToApiData(onSubmit.mock.calls[0][0])).toMatchObject({
+    requiresAuth: false,
+  });
+});
+
+function renderForm(initialValues?: Record<string, unknown>) {
   const user = userEvent.setup();
   const onSubmit = vi.fn();
   const submitRef = { current: null as (() => Promise<void>) | null };
@@ -186,7 +222,8 @@ function renderForm() {
   render(
     <QueryClientProvider client={client}>
       <McpCatalogForm
-        mode="create"
+        mode={initialValues ? "edit" : "create"}
+        initialValues={initialValues as never}
         submitRef={submitRef}
         onSubmit={onSubmit}
         footer={() => <Button type="submit">Save</Button>}

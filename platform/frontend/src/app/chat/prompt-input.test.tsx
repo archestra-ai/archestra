@@ -87,6 +87,13 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+const { mockPreloadResponseMarkdown } = vi.hoisted(() => ({
+  mockPreloadResponseMarkdown: vi.fn(async () => {}),
+}));
+vi.mock("@/components/ai-elements/response", () => ({
+  preloadResponseMarkdown: mockPreloadResponseMarkdown,
+}));
+
 vi.mock("sonner", () => {
   const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
   return { toast, Toaster: () => null };
@@ -976,6 +983,18 @@ describe("ArchestraPromptInput", () => {
           "Generate an epic gif of a lobster shipping code",
         ),
       ).not.toBeInTheDocument();
+    });
+
+    it("starts loading the reply's markdown renderer on the first key press", () => {
+      mockPreloadResponseMarkdown.mockClear();
+      render(<ArchestraPromptInput {...defaultProps} />);
+      expect(mockPreloadResponseMarkdown).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "h",
+      });
+
+      expect(mockPreloadResponseMarkdown).toHaveBeenCalled();
     });
 
     it("should reset slash command selection when the menu reopens", () => {

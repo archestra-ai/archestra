@@ -2637,7 +2637,7 @@ Required RBAC permission: `update` on the MCP registry entry (granted per item)
 | `envFrom[].prefix` | `string` | No | Optional environment variable prefix. |
 | `dockerImage` | `string` | No | [Local] Custom Docker image. |
 | `serviceAccount` | `string` | No | [Local] Kubernetes ServiceAccount name. |
-| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type. |
+| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type. Omit it for remote servers: streamable-http is ignored and stdio is rejected. |
 | `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport. |
 | `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport. |
 | `nodePort` | `number` | No | [Local] Kubernetes NodePort for local development. |
@@ -2701,7 +2701,7 @@ Required RBAC permission: [`mcpRegistry:create`](/docs/reference/permissions#mcp
 | `envFrom[].prefix` | `string` | No | Optional environment variable prefix. |
 | `dockerImage` | `string` | No | [Local] Custom Docker image. |
 | `serviceAccount` | `string` | No | [Local] Kubernetes ServiceAccount name. |
-| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type. |
+| `transportType` | `"stdio" \| "streamable-http"` | No | [Local] Transport type. Omit it for remote servers: streamable-http is ignored and stdio is rejected. |
 | `httpPort` | `number` | No | [Local] HTTP port for streamable-http transport. |
 | `httpPath` | `string` | No | [Local] HTTP path for streamable-http transport. |
 | `nodePort` | `number` | No | [Local] Kubernetes NodePort for local development. |

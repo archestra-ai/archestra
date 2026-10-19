@@ -147,31 +147,6 @@ test("a message to an Agent Runtime agent starts a run in its runtime and report
     .toBe(1);
 });
 
-test("a follow-up in the thread continues the sender's workspace", async () => {
-  const previous = await retainedRun({ state: "idle" });
-  const launch = vi.spyOn(backend, "launch");
-  const continuation = vi
-    .spyOn(backend, "continueRun")
-    .mockRejectedValue(new Error("Runtime transport unavailable"));
-
-  const result = await chatOpsManager.processMessage({
-    message: message("Now open a pull request"),
-    provider,
-  });
-
-  expect(result.success).toBe(true);
-  await expect.poll(() => continuation.mock.calls.length).toBe(1);
-  expect(continuation.mock.calls[0][0].spec.frozenName).toBe(
-    previous.workloadName,
-  );
-  expect(launch).not.toHaveBeenCalled();
-  await expect.poll(() => replies.length).toBe(1);
-  const current = await latestRun();
-  expect(current?.taskId).not.toBe(previous.taskId);
-  expect(replies[0].conversationUrl).toContain(`/chat/runs/${previous.taskId}`);
-  expect(result.agentResponse).toBe("");
-});
-
 test.each([
   "slack",
   "ms-teams",
@@ -231,6 +206,7 @@ test.each([
       },
     ],
   };
+  const launch = vi.spyOn(backend, "launch");
   const continuation = vi
     .spyOn(backend, "continueRun")
     .mockRejectedValue(new Error("Runtime transport unavailable"));
@@ -244,6 +220,9 @@ test.each([
   await expect.poll(() => continuation.mock.calls.length).toBe(1);
   const { spec } = continuation.mock.calls[0][0];
   expect(spec.frozenName).toBe(previous.workloadName);
+  expect(launch).not.toHaveBeenCalled();
+  expect(spec.taskId).not.toBe(previous.taskId);
+  expect(result.agentResponse).toBe("");
   const prompt = JSON.stringify(spec);
   expect(prompt).toContain(incoming.text);
   expect(prompt).not.toContain("You are replying via");
@@ -280,6 +259,7 @@ test.each([
     inputs.find((input) => input.originalName === "latest.txt")?.fileData,
   ).toEqual(currentBytes);
   await expect.poll(() => replies.length).toBe(1);
+  expect(replies[0].conversationUrl).toContain(`/chat/runs/${previous.taskId}`);
 });
 
 test.each([

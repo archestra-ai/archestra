@@ -1,14 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 
-type Anchor = { messageId: string; conversationUrl: string };
-
 export async function sendRuntimeReplyWithAnchor(params: {
   organizationId: string;
   bindingId: string;
   threadId: string;
   providerScope?: string;
-  conversationUrl: string;
   send: (includeAnchor: boolean) => Promise<string>;
 }): Promise<void> {
   const scope = createHash("sha256")
@@ -25,7 +22,7 @@ export async function sendRuntimeReplyWithAnchor(params: {
   const leaseKey: AllowedCacheKey = `${key}-lease`;
   const token = randomUUID();
   const includeAnchor = await cacheManager.withLock(key, async (cache) => {
-    if (await cache.get<Anchor>(key)) return false;
+    if (await cache.get<boolean>(key)) return false;
     if (await cache.get<string>(leaseKey)) {
       throw new Error("The first conversation reply is still being delivered");
     }
@@ -38,9 +35,8 @@ export async function sendRuntimeReplyWithAnchor(params: {
     return;
   }
 
-  let messageId: string;
   try {
-    messageId = await params.send(true);
+    const messageId = await params.send(true);
     if (!messageId) throw new Error("The provider did not confirm the reply");
   } catch (error) {
     await cacheManager.withLock(key, async (cache) => {
@@ -56,11 +52,7 @@ export async function sendRuntimeReplyWithAnchor(params: {
       throw new Error("The conversation reply delivery lease expired");
     }
     // The posted anchor outlives idle timeouts and runtime replacement.
-    await cache.set<Anchor>(
-      key,
-      { messageId, conversationUrl: params.conversationUrl },
-      0,
-    );
+    await cache.set(key, true, 0);
     await cache.delete(leaseKey);
   });
 }

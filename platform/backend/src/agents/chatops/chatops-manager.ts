@@ -9,6 +9,7 @@ import {
 import type { UIMessageChunk } from "ai";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
+import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { agentCredentialSetupUrl } from "@/archestra-mcp-server/helpers";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
@@ -91,7 +92,6 @@ import {
 } from "./channel-activation";
 import { compactChatOpsResponse } from "./chatops-response";
 import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
-import { watchChatOpsTask } from "./chatops-task-watcher";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
@@ -372,7 +372,6 @@ export class ChatOpsManager {
           bindingId: binding.id,
           threadId: params.threadId,
           providerScope: provider.stateScope,
-          conversationUrl,
           send,
         });
       } else {
@@ -2721,16 +2720,10 @@ export class ChatOpsManager {
           ephemeralExecutionPrefix,
         },
       });
-      void watchChatOpsTask({
+      void watchTaskCompletion({
         taskId: task.id,
-        bindingId: binding.id,
-        threadId,
         agentName: agent.name,
-        pinnedAgentId: provider.pinnedAgentId,
-        conversationReference: completionTarget.conversationReference,
-        originatingTaskId: task.id,
-        placeholderActivityId: completionTarget.placeholderActivityId,
-        muteMarkerAtStart,
+        target: completionTarget,
       }).catch((error) => {
         logger.warn(
           { error: errorMessage(error), taskId: task.id },

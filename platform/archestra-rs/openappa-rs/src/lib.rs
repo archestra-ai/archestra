@@ -17,7 +17,7 @@ mod policy;
 mod replay;
 
 use appa_eventlog::{
-    Backend, DeploymentName, FamilyKind, LogStore, OperationClaim, OperationKey, OperationRequest,
+    Backend, FamilyKind, LogStore, OperationClaim, OperationKey, OperationRequest,
     ProcessedResultClaim, ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError,
     SessionScope,
     encryption::{StorageCipher, field_context},
@@ -25,7 +25,7 @@ use appa_eventlog::{
 };
 use appa_runtime::{
     api::{
-        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PreparedDeployment,
+        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs,
         PublishedDeployment, RemedyOutcome, RemedyPresentation, RemedyRefusal, Runtime,
     },
     hooks,
@@ -69,8 +69,8 @@ pub struct ContentEncryption {
 /// runs through a view pinned to the head of its organization's deployment line
 /// (see [`deployments`]), so dispatches run concurrently and none changes what
 /// another serves. Every family decides its next event under its line's head,
-/// whichever revision opened it; a family the previous OpenAPPA version opened
-/// keeps its opening policy until it ends.
+/// whichever revision opened it; a family pinned to the policy it opened under is
+/// refused (see [`legacy_family`]).
 /// No dispatch holds a database connection or a lock while it works: the event
 /// log serializes each read-decide-append step of a family on the family's row,
 /// receipts carry a lease per operation (see [`lease`]), and every write is one
@@ -377,6 +377,9 @@ enum BindingFailure {
     /// Spelled as the runtime's `RefusalClass::PolicyMoved`, so the host reads one
     /// code whichever side reported it.
     PolicyMoved,
+    /// A family pinned to the policy it opened under. Spelled as the runtime's
+    /// `RefusalClass::LegacyFamily` from OpenAPPA 0.36, which takes this check over.
+    LegacyFamily,
 }
 
 fn failure(kind: Failure, message: impl ToString) -> napi::Error {
@@ -411,6 +414,15 @@ fn policy_moved() -> napi::Error {
     )
 }
 
+/// The family the dispatch names opened pinned to a policy snapshot, which no
+/// view serves any more. Not retryable: the conversation starts over.
+fn legacy_family() -> napi::Error {
+    failure(
+        Failure::Binding(BindingFailure::LegacyFamily),
+        "this trajectory family was opened before live policy revisions; open a new one",
+    )
+}
+
 /// Whether a dispatch failed because its deployment line moved past the revision
 /// its view was pinned to: the runtime refuses it as `RefusalClass::PolicyMoved`,
 /// which [`failure`] stamps as the code `policy_moved`. A failure without that
@@ -439,24 +451,15 @@ fn is_policy_moved(error: &napi::Error) -> bool {
 /// policy, and `work` runs once more. When the head names another policy, or moves
 /// again, the dispatch fails as retryable and the host's retry reads the policy
 /// again.
-///
-/// While new sessions keep a policy snapshot (`policy.snapshot`), nothing is
-/// published, and the view depends on the family `root` names, read only then: a
-/// new or pinned family runs through the snapshot view of `policy`, and a family
-/// that follows a line runs pinned to that line's head as it stands.
 async fn on_deployment<T, Work>(
     state: &State,
     organization_id: &str,
     policy: &deployments::HostedPolicy,
-    root: impl FnOnce(&State) -> napi::Result<Option<String>>,
     work: impl Fn(State) -> Work,
 ) -> napi::Result<T>
 where
     Work: std::future::Future<Output = napi::Result<T>>,
 {
-    if policy.snapshot {
-        return on_snapshot(state, organization_id, policy, root(state)?, work).await;
-    }
     let deployment = state
         .deployments
         .deployment(
@@ -481,60 +484,6 @@ where
             else {
                 return Err(policy_moved());
             };
-            match work(state.pinned(&head)).await {
-                Err(moved) if is_policy_moved(&moved) => Err(policy_moved()),
-                result => result,
-            }
-        }
-        result => result,
-    }
-}
-
-/// [`on_deployment`] while new sessions keep a policy snapshot.
-async fn on_snapshot<T, Work>(
-    state: &State,
-    organization_id: &str,
-    policy: &deployments::HostedPolicy,
-    root: Option<String>,
-    work: impl Fn(State) -> Work,
-) -> napi::Result<T>
-where
-    Work: std::future::Future<Output = napi::Result<T>>,
-{
-    let agent_yell = state.reporting.is_some();
-    let kind = match root {
-        Some(root) => {
-            let store = state.store.clone();
-            tokio::task::spawn_blocking(move || store.family_kind(&TrajectoryId(root)))
-                .await
-                .map_err(error)?
-                .map_err(error)?
-        }
-        None => None,
-    };
-    let Some(FamilyKind::Following(line)) = kind else {
-        let prepared = state
-            .deployments
-            .snapshot(&state.runtime, organization_id, policy, agent_yell)
-            .await
-            .map_err(error)?;
-        return work(state.snapshot(&DeploymentName::new(organization_id), &prepared)).await;
-    };
-    let frozen = |stale| {
-        state.deployments.frozen(
-            &state.runtime,
-            &state.store,
-            &line,
-            policy,
-            agent_yell,
-            stale,
-        )
-    };
-    let head = frozen(None).await.map_err(error)?;
-    match work(state.pinned(&head)).await {
-        // A process that still publishes moved the head on: decide once more at it.
-        Err(moved) if is_policy_moved(&moved) => {
-            let head = frozen(Some(&head)).await.map_err(error)?;
             match work(state.pinned(&head)).await {
                 Err(moved) if is_policy_moved(&moved) => Err(policy_moved()),
                 result => result,
@@ -775,11 +724,6 @@ pub struct DispatchPolicy {
     /// dispatch whose composition is no longer the stored one publishes nothing
     /// and is refused as retryable; absent, nothing is checked.
     pub composition_hash: Option<String>,
-    /// Whether new sessions keep a policy snapshot. While it is true nothing is
-    /// published: a new family opens pinned to `content` for its whole life, and
-    /// a family that follows the organization's line decides at the line's head
-    /// as it stands. Absent is false.
-    pub snapshot: Option<bool>,
 }
 
 #[napi(object)]
@@ -787,7 +731,7 @@ pub struct OpenappaStatus {
     pub trust: String,
     pub audience: String,
     /// The organization's policy revision the session's next event is decided under.
-    pub policy_revision: Option<i64>,
+    pub policy_revision: i64,
 }
 
 impl From<DispatchPolicy> for deployments::HostedPolicy {
@@ -796,7 +740,6 @@ impl From<DispatchPolicy> for deployments::HostedPolicy {
             content: policy.content,
             credentials: deployments::HostCredentials::new(policy.credentials),
             composition: policy.composition_hash,
-            snapshot: policy.snapshot.unwrap_or(false),
         }
     }
 }
@@ -1268,60 +1211,35 @@ pub async fn dispatch_hook(
     run(input, policy.into(), encryption).await
 }
 
-/// The policy text the runtime stored when `root` opened. Absent when the root
-/// has no log. This is the opening document, not an error message.
-#[napi(js_name = "readOpenappaOpeningPolicy")]
-pub async fn read_openappa_opening_policy(
-    root: String,
-    encryption: Option<ContentEncryption>,
-) -> napi::Result<Option<String>> {
-    if root.is_empty() || root.len() > 1024 || root.chars().any(char::is_control) {
+/// The kind of family each root opened as, in the order given, for the operator's
+/// preflight count: `following` for one that follows a deployment line, `legacy`
+/// for one pinned to a policy snapshot, `encrypted` for an opening sealed with a
+/// conversation key this read does not hold, and none for a root with no log.
+#[napi(js_name = "openappaRootKinds")]
+pub async fn openappa_root_kinds(roots: Vec<String>) -> napi::Result<Vec<Option<String>>> {
+    if roots
+        .iter()
+        .any(|root| root.is_empty() || root.len() > 1024 || root.chars().any(char::is_control))
+    {
         return Err(error("invalid root identity"));
     }
-    let state = initialized().await?.encrypted(encryption)?;
-    let leased = state.lease().await?;
-    tokio::task::spawn_blocking(move || match leased.state.store.log(&TrajectoryId(root)) {
-        Ok(log) => String::from_utf8(log.policy_file().to_vec())
-            .map(Some)
-            .map_err(|_| error("OpenAPPA opening policy is not UTF-8")),
-        Err(appa_eventlog::ReadError::UnknownRoot { .. }) => Ok(None),
-        Err(read) => Err(error(read)),
+    let leased = initialized().await?.lease().await?;
+    tokio::task::spawn_blocking(move || {
+        roots
+            .into_iter()
+            .map(|root| match leased.state.store.family_kind(&TrajectoryId(root)) {
+                Ok(Some(FamilyKind::Following(_))) => Ok(Some("following".to_owned())),
+                Ok(Some(FamilyKind::Pinned)) => Ok(Some("legacy".to_owned())),
+                Ok(None) => Ok(None),
+                Err(read) if read.to_string().contains("requires its conversation key") => {
+                    Ok(Some("encrypted".to_owned()))
+                }
+                Err(read) => Err(error(read)),
+            })
+            .collect()
     })
     .await
     .map_err(error)?
-}
-
-/// The policy file key each root's first stored batch names, in the order given:
-/// none for a batch that does not open a root this build can read. The host reads
-/// the batches; only this decoding knows how the runtime encodes them.
-#[napi(js_name = "openappaOpeningKeys")]
-pub fn openappa_opening_keys(batches: Vec<napi::bindgen_prelude::Buffer>) -> Vec<Option<String>> {
-    batches
-        .iter()
-        .map(|batch| opening_policy_file_key(batch))
-        .collect()
-}
-
-/// The policy file key a root's first batch names, read the way the event log
-/// encodes it: a bare array of facts, or a host record holding `facts`, whose
-/// first fact is `TrajectoryOpened`. None for anything else.
-fn opening_policy_file_key(payload: &[u8]) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_slice(payload).ok()?;
-    let facts = match &value {
-        serde_json::Value::Array(_) => &value,
-        serde_json::Value::Object(row) => row.get("facts")?,
-        _ => return None,
-    };
-    let key = facts
-        .get(0)?
-        .get("TrajectoryOpened")?
-        .get("policy_file_key")?
-        .as_str()?;
-    (key.len() == 64
-        && key
-            .bytes()
-            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')))
-    .then(|| key.to_owned())
 }
 
 /// Read the current label of a started session without mutating its trajectory.
@@ -1352,12 +1270,14 @@ pub async fn get_openappa_status(
         let root = tokio::task::spawn_blocking(move || recorded_root(&lookup, &session))
             .await
             .map_err(error)??;
-        let Some(root) = root else { return Ok(None) };
+        // An unstarted session has no status, and is no reason to publish.
+        if root.is_none() {
+            return Ok(None);
+        }
         on_deployment(
             &state,
             &organization_id,
             &policy,
-            |_| Ok(Some(root)),
             |pinned| {
                 let key = SessionKey::new(&organization_id, &session_id);
                 async move { session_status(pinned, key).await }
@@ -1392,7 +1312,8 @@ fn recorded_root(state: &State, key: &SessionKey) -> napi::Result<Option<String>
 async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<OpenappaStatus>> {
     let policy_revision = state
         .served
-        .and_then(|revision| i64::try_from(revision).ok());
+        .and_then(|revision| i64::try_from(revision).ok())
+        .ok_or_else(|| error("OpenAPPA status was read outside a pinned deployment"))?;
     let leased = state.lease().await?;
     tokio::task::spawn_blocking(move || {
         let root = Sql(&leased.state.store)
@@ -1407,10 +1328,6 @@ async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<Op
             .map_err(error)?;
         let Some(root) = root else { return Ok(None) };
         let root = TrajectoryId(root);
-        let policy_revision = match leased.state.store.family_kind(&root).map_err(error)? {
-            Some(FamilyKind::Following(_)) => policy_revision,
-            Some(FamilyKind::Pinned) | None => None,
-        };
         let status = leased
             .state
             .runtime
@@ -1548,11 +1465,11 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
+        refuse_legacy_family(&state, state.dispatch_root(&input)?).await?;
         on_deployment(
             &state,
             &input.organization_id,
             &policy,
-            |state| state.dispatch_root(&input).map(Some),
             |pinned| {
                 let input = input.clone();
                 async move { pinned.dispatch(input).await }
@@ -1566,6 +1483,21 @@ async fn run(
         Ok(Ok(value)) => Ok(value.to_string()),
         Ok(Err(error)) => Err(error),
         Err(_) => Err(error("OpenAPPA panicked; operation was not released")),
+    }
+}
+
+/// Refuses a dispatch on a family opened pinned to a policy snapshot. Such a
+/// family has no deployment line to follow, and nothing serves the snapshot any
+/// more. A root with no log opens following its organization's line.
+async fn refuse_legacy_family(state: &State, root: String) -> napi::Result<()> {
+    let store = state.store.clone();
+    let kind = tokio::task::spawn_blocking(move || store.family_kind(&TrajectoryId(root)))
+        .await
+        .map_err(error)?
+        .map_err(error)?;
+    match kind {
+        Some(FamilyKind::Pinned) => Err(legacy_family()),
+        Some(FamilyKind::Following(_)) | None => Ok(()),
     }
 }
 
@@ -2124,30 +2056,6 @@ fn rebind_child(root: &TrajectoryId, stored_actor: String) -> HookEvent {
 }
 
 impl State {
-    /// Retention can read this non-content mapping without a conversation key.
-    /// It cannot derive it later from an encrypted opening event.
-    fn record_encrypted_opening(&self, root: &str, organization_id: &str) -> napi::Result<()> {
-        if !self.store.cipher().is_encrypted() {
-            return Ok(());
-        }
-        let log = self
-            .store
-            .log(&TrajectoryId(root.to_owned()))
-            .map_err(error)?;
-        let first = log
-            .facts()
-            .get(..1)
-            .ok_or_else(|| error("root has no opening event"))?;
-        let payload = serde_json::to_vec(first).map_err(error)?;
-        let policy_file_key = opening_policy_file_key(&payload)
-            .ok_or_else(|| error("root has no opening policy identity"))?;
-        let (root, organization_id) = (root.to_owned(), organization_id.to_owned());
-        Sql(&self.store).with_client(move |client| {
-            client.execute("INSERT INTO openappa_root_openings (root, organization_id, policy_file_key) VALUES ($1,$2,$3) ON CONFLICT (root) DO NOTHING", &[&root, &organization_id, &policy_file_key])?;
-            Ok(())
-        }).map_err(error)
-    }
-
     /// Opens this session's root as a fork of `fork_of`.
     /// Freezes the parent session's policy revision, labels, effects, and
     /// denials into the new root. Returns the parent watermark bounding inherited results.
@@ -2247,16 +2155,6 @@ impl State {
             store,
             ..self.clone()
         })
-    }
-
-    /// This state with its runtime serving the snapshot view of `prepared` on
-    /// `line`: new families open pinned to it and nothing is published.
-    fn snapshot(&self, line: &DeploymentName, prepared: &PreparedDeployment) -> State {
-        State {
-            runtime: Arc::new(self.runtime.snapshot(line, prepared)),
-            served: None,
-            ..self.clone()
-        }
     }
 
     /// This state with its runtime pinned to `deployment`: every lease of it, and
@@ -2531,7 +2429,6 @@ impl State {
             check_session_identity(&stored, &root, &input)?;
         }
 
-        self.record_encrypted_opening(&root, &key.organization_id)?;
         let receipts = lease::Receipts::new(self.store.clone());
         let began = lease::log_end(pg, &root).map_err(error)?;
         let work = self.handle_event(pg, &receipts, input, root.clone(), key, actor);
@@ -5386,51 +5283,6 @@ mod stored_approved_output_tests {
             stored_approved_output(&long, &decision("another text")),
             long
         );
-    }
-}
-
-#[cfg(test)]
-mod opening_key_tests {
-    use super::opening_policy_file_key;
-
-    const KEY: &str = "9f2c0a5b1e7d4c3a8b6f0e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5e4f3";
-
-    #[test]
-    fn reads_the_key_from_a_bare_batch_and_from_a_host_record() {
-        let opened =
-            format!(r#"{{"TrajectoryOpened":{{"trajectory":"r","policy_file_key":"{KEY}"}}}}"#);
-        assert_eq!(
-            opening_policy_file_key(format!("[{opened}]").as_bytes()).as_deref(),
-            Some(KEY)
-        );
-        assert_eq!(
-            opening_policy_file_key(format!(r#"{{"facts":[{opened}],"host":{{}}}}"#).as_bytes())
-                .as_deref(),
-            Some(KEY)
-        );
-    }
-
-    #[test]
-    fn answers_no_key_for_anything_that_does_not_open_a_root() {
-        for payload in [
-            "".to_string(),
-            "[".to_string(),
-            "\"not a batch\"".to_string(),
-            "[]".to_string(),
-            r#"[{"CallRecorded":{}}]"#.to_string(),
-            r#"[{"TrajectoryOpened":{"policy_file_key":"ABCDEF"}}]"#.to_string(),
-            format!(
-                r#"[{{"TrajectoryOpened":{{"policy_file_key":"{}"}}}}]"#,
-                KEY.to_uppercase()
-            ),
-            r#"{"host":{}}"#.to_string(),
-        ] {
-            assert_eq!(
-                opening_policy_file_key(payload.as_bytes()),
-                None,
-                "{payload}"
-            );
-        }
     }
 }
 

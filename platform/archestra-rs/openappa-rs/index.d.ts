@@ -154,13 +154,6 @@ export interface DispatchPolicy {
    * and is refused as retryable; absent, nothing is checked.
    */
   compositionHash?: string
-  /**
-   * Whether new sessions keep a policy snapshot. While it is true nothing is
-   * published: a new family opens pinned to `content` for its whole life, and
-   * a family that follows the organization's line decides at the line's head
-   * as it stands. Absent is false.
-   */
-  snapshot?: boolean
 }
 
 export interface EditedPolicy {
@@ -267,17 +260,18 @@ export interface OfferReviewOutput {
 }
 
 /**
- * The policy file key each root's first stored batch names, in the order given:
- * none for a batch that does not open a root this build can read. The host reads
- * the batches; only this decoding knows how the runtime encodes them.
+ * The kind of family each root opened as, in the order given, for the operator's
+ * preflight count: `following` for one that follows a deployment line, `legacy`
+ * for one pinned to a policy snapshot, `encrypted` for an opening sealed with a
+ * conversation key this read does not hold, and none for a root with no log.
  */
-export declare function openappaOpeningKeys(batches: Array<Buffer>): Array<string | undefined | null>
+export declare function openappaRootKinds(roots: Array<string>): Promise<Array<string | undefined | null>>
 
 export interface OpenappaStatus {
   trust: string
   audience: string
   /** The organization's policy revision the session's next event is decided under. */
-  policyRevision?: number
+  policyRevision: number
 }
 
 /**
@@ -323,12 +317,6 @@ export interface PolicyEditInput {
   /** Absent removes the variable's binding. */
   key?: string
 }
-
-/**
- * The policy text the runtime stored when `root` opened. Absent when the root
- * has no log. This is the opening document, not an error message.
- */
-export declare function readOpenappaOpeningPolicy(root: string, encryption?: ContentEncryption | undefined | null): Promise<string | null>
 
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 

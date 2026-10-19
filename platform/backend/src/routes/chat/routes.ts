@@ -153,7 +153,6 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { ConversationFilesResponseSchema } from "@/types/conversation-file";
-import { NewSessionPolicySchema } from "@/types/guardrails-policy";
 import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
 import {
   resolveAgentLlmOrDefault,
@@ -2570,9 +2569,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .object({
               trust: z.string(),
               audience: z.string(),
-              policyRevision: z.number().int().nullable(),
-              // `snapshot` while new sessions keep the policy they open with.
-              newSessionPolicy: NewSessionPolicySchema,
+              policyRevision: z.number().int(),
             })
             .nullable(),
         ),
@@ -2610,15 +2607,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         )
       )
         return reply.send(null);
-      const status = await getOpenappaStatus({
-        organizationId,
-        sessionId: id,
-      });
       return reply.send(
-        status && {
-          ...status,
-          newSessionPolicy: deployment.newSessionPolicy,
-        },
+        await getOpenappaStatus({
+          organizationId,
+          sessionId: id,
+        }),
       );
     },
   );

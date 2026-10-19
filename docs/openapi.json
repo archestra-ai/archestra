@@ -131251,24 +131251,15 @@
                       "type": "string"
                     },
                     "policyRevision": {
-                      "nullable": true,
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
-                    },
-                    "newSessionPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "live",
-                        "snapshot"
-                      ]
                     }
                   },
                   "required": [
                     "trust",
                     "audience",
-                    "policyRevision",
-                    "newSessionPolicy"
+                    "policyRevision"
                   ],
                   "additionalProperties": false
                 }
@@ -173999,13 +173990,6 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
-                    "newSessionPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "live",
-                        "snapshot"
-                      ]
-                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -174029,7 +174013,6 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
-                    "newSessionPolicy",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -174305,13 +174288,6 @@
                   "breakTheGlassEnabled": {
                     "type": "boolean"
                   },
-                  "newSessionPolicy": {
-                    "type": "string",
-                    "enum": [
-                      "live",
-                      "snapshot"
-                    ]
-                  },
                   "annotatorModelId": {
                     "nullable": true,
                     "type": "string",
@@ -174324,7 +174300,8 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -174350,13 +174327,6 @@
                     "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
-                    "newSessionPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "live",
-                        "snapshot"
-                      ]
-                    },
                     "annotatorModelId": {
                       "nullable": true,
                       "type": "string",
@@ -174380,7 +174350,6 @@
                     "enabled",
                     "unsupportedClientAction",
                     "breakTheGlassEnabled",
-                    "newSessionPolicy",
                     "annotatorModelId",
                     "annotatorLlmApiKeyId",
                     "featureEnabled",
@@ -345266,103 +345235,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "retained": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "horizonDays": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
-                        },
-                        "livenessKnown": {
-                          "type": "boolean"
-                        },
-                        "kept": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string"
-                              },
-                              "binding": {
-                                "type": "string"
-                              },
-                              "liveRoots": {
-                                "type": "integer",
-                                "minimum": -9007199254740991,
-                                "maximum": 9007199254740991
-                              },
-                              "lastActivityAt": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "date-time"
-                              },
-                              "retiresAt": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "date-time"
-                              }
-                            },
-                            "required": [
-                              "name",
-                              "binding",
-                              "liveRoots",
-                              "lastActivityAt",
-                              "retiresAt"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "inactive": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string"
-                              },
-                              "binding": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "name",
-                              "binding"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "dropped": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string"
-                              },
-                              "reason": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "name",
-                              "reason"
-                            ],
-                            "additionalProperties": false
-                          }
-                        }
-                      },
-                      "required": [
-                        "horizonDays",
-                        "livenessKnown",
-                        "kept",
-                        "inactive",
-                        "dropped"
-                      ],
-                      "additionalProperties": false
-                    },
                     "servedRevision": {
                       "nullable": true,
                       "type": "object",
@@ -345394,7 +345266,6 @@
                     "lastError",
                     "lastErrorAt",
                     "composition",
-                    "retained",
                     "servedRevision"
                   ],
                   "additionalProperties": false

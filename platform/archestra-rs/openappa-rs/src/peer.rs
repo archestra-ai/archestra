@@ -74,11 +74,11 @@ async fn execute(
     kind: PeerKind,
 ) -> napi::Result<Value> {
     let state = initialized().await?;
+    super::refuse_legacy_family(&state, acting_root(&Sql(&state.store), &input)?).await?;
     super::on_deployment(
         &state,
         &input.organization_id,
         &policy,
-        |state| acting_root(&Sql(&state.store), &input).map(Some),
         |pinned| execute_pinned(pinned, &input, kind),
     )
     .await

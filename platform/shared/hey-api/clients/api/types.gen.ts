@@ -36431,8 +36431,7 @@ export type GetChatOpenappaStatusResponses = {
     200: {
         trust: string;
         audience: string;
-        policyRevision: number | null;
-        newSessionPolicy: 'live' | 'snapshot';
+        policyRevision: number;
     } | null;
 };
 
@@ -48878,7 +48877,6 @@ export type GetGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
-        newSessionPolicy: 'live' | 'snapshot';
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -48893,7 +48891,6 @@ export type UpdateGuardrailsDeploymentData = {
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
         breakTheGlassEnabled?: boolean;
-        newSessionPolicy?: 'live' | 'snapshot';
         annotatorModelId?: string | null;
         annotatorLlmApiKeyId?: string | null;
     };
@@ -48978,7 +48975,6 @@ export type UpdateGuardrailsDeploymentResponses = {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
-        newSessionPolicy: 'live' | 'snapshot';
         annotatorModelId: string | null;
         annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
@@ -90948,25 +90944,6 @@ export type GetOpenappaEffectivePolicyResponses = {
                 rootRevision: number | null;
             } | null;
         };
-        retained: {
-            horizonDays: number;
-            livenessKnown: boolean;
-            kept: Array<{
-                name: string;
-                binding: string;
-                liveRoots: number;
-                lastActivityAt: string | null;
-                retiresAt: string | null;
-            }>;
-            inactive: Array<{
-                name: string;
-                binding: string;
-            }>;
-            dropped: Array<{
-                name: string;
-                reason: string;
-            }>;
-        } | null;
         servedRevision: {
             revision: number;
             publishedAt: string;

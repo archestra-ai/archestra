@@ -273,7 +273,6 @@ async function storeUnrelatedComposition(organizationId: string) {
       installFingerprint: marker,
       error: null,
       served: null,
-      retainedAnnotators: null,
     },
     expected: await OpenAppaEffectivePolicyModel.find(organizationId),
   });

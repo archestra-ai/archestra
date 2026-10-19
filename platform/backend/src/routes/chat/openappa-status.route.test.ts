@@ -72,7 +72,6 @@ test("reads the current status of an accessible protected conversation", async (
     trust: "suspicious",
     audience: "internal",
     policyRevision: 3,
-    newSessionPolicy: "live",
   });
   expect(statusRead).toHaveBeenCalledWith({
     organizationId,
@@ -80,33 +79,11 @@ test("reads the current status of an accessible protected conversation", async (
   });
 });
 
-test("reports a policy snapshot for new sessions while it is selected", async () => {
-  statusRead.mockResolvedValue({
-    trust: "trusted",
-    audience: "internal",
-    policyRevision: null,
-  });
-  await GuardrailsDeploymentModel.set({ newSessionPolicy: "snapshot" });
-  const snapshot = await app.inject({ method: "GET", url: statusUrl() });
-  expect(snapshot.statusCode).toBe(200);
-  expect(snapshot.json()).toEqual({
-    trust: "trusted",
-    audience: "internal",
-    policyRevision: null,
-    newSessionPolicy: "snapshot",
-  });
-
-  await GuardrailsDeploymentModel.set({ newSessionPolicy: "live" });
-  expect(
-    (await app.inject({ method: "GET", url: statusUrl() })).json(),
-  ).toMatchObject({ newSessionPolicy: "live" });
-});
-
 test("reads the status without loading the transcript", async () => {
   statusRead.mockResolvedValue({
     trust: "trusted",
     audience: "public",
-    policyRevision: null,
+    policyRevision: 1,
   });
   // findAccessibleById reads every message; the status needs only access.
   const transcriptRead = vi.spyOn(ConversationModel, "findAccessibleById");
@@ -169,7 +146,7 @@ test.each([
     expect(
       openappaEncryptedChat(organizationId, conversationId)?.audit.dek,
     ).toEqual(dek);
-    return { trust: "suspicious", audience: "internal", policyRevision: null };
+    return { trust: "suspicious", audience: "internal", policyRevision: 1 };
   });
   const response = await app.inject({
     method: "GET",
@@ -189,8 +166,7 @@ test.each([
     expect(response.json()).toEqual({
       trust: "suspicious",
       audience: "internal",
-      policyRevision: null,
-      newSessionPolicy: "live",
+      policyRevision: 1,
     });
     expect(statusRead).toHaveBeenCalledOnce();
   } else {

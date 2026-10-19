@@ -69,24 +69,6 @@ class OpenAppaSessionModel {
     return row?.parentId ?? null;
   }
 
-  /** The runtime root a started session decides under. Null before its first event. */
-  static async root(params: {
-    organizationId: string;
-    sessionId: string;
-  }): Promise<string | null> {
-    const [row] = await db
-      .select({ root: table.root })
-      .from(table)
-      .where(
-        and(
-          eq(table.actor, openappaActor(params.sessionId)),
-          eq(table.organizationId, params.organizationId),
-        ),
-      )
-      .limit(1);
-    return row?.root ?? null;
-  }
-
   /**
    * The session row a runtime trajectory belongs to: a child's trajectory is
    * its actor, a root session's trajectory is the root itself. Null when no

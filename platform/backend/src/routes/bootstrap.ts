@@ -213,7 +213,7 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const [
         roster,
         apiKeys,
-        canReadAvailableKeys,
+        availableApiKeys,
         models,
         memberDefaultAgentId,
         organization,
@@ -221,23 +221,26 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ] = await Promise.all([
         getChatRosterBootstrap({ userId, organizationId }),
         getVisibleLlmProviderApiKeys({ query: {}, userId, organizationId }),
+        // Read with the other parts, and only for a caller its own endpoint
+        // would answer.
         canCallEndpoint({
           routeId: RouteId.GetAvailableLlmProviderApiKeys,
           userId,
           organizationId,
-        }),
+        }).then((allowed) =>
+          allowed
+            ? getAvailableLlmProviderApiKeys({
+                query: {},
+                userId,
+                organizationId,
+              })
+            : null,
+        ),
         getAvailableLlmModels({ query: {}, userId, organizationId }),
         MemberModel.getDefaultAgentId(userId, organizationId),
         OrganizationModel.getById(organizationId),
         MemberModel.getDefaultModelSelection(userId, organizationId),
       ]);
-      const availableApiKeys = canReadAvailableKeys
-        ? await getAvailableLlmProviderApiKeys({
-            query: {},
-            userId,
-            organizationId,
-          })
-        : null;
 
       const candidates = roster.filter((agent) => !agent.builtIn);
       const byId = (id: string | null | undefined) =>
@@ -317,39 +320,40 @@ async function getNewChatAgentParts(params: {
   organizationId: string;
 }) {
   const { agentId, llmApiKeyId, userId, organizationId } = params;
-  const [detail, delegations, credentialReadiness, browserTools, keyModels] =
-    await Promise.all([
-      getReadableAgent({ id: agentId, userId, organizationId }),
-      getAgentDelegationsForUser({ agentId, userId, organizationId }),
-      getAgentCredentialReadinessForUser({
-        ids: [agentId],
-        userId,
-        organizationId,
-      }),
-      getAgentToolsForUser({
-        agentId,
-        catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
-        userId,
-        organizationId,
-      }),
-      llmApiKeyId
-        ? getAvailableLlmModels({
-            query: { apiKeyId: llmApiKeyId },
-            userId,
-            organizationId,
-          })
-        : null,
-    ]);
-  // The composer asks for the platform's prompts only for an agent without
-  // its own, so they are read in that case alone.
-  const defaultSuggestedPrompts =
-    detail.suggestedPrompts.length === 0
-      ? await getAgentDefaultSuggestedPrompts({
-          id: agentId,
+  const [
+    detail,
+    delegations,
+    credentialReadiness,
+    browserTools,
+    keyModels,
+    platformPrompts,
+  ] = await Promise.all([
+    getReadableAgent({ id: agentId, userId, organizationId }),
+    getAgentDelegationsForUser({ agentId, userId, organizationId }),
+    getAgentCredentialReadinessForUser({
+      ids: [agentId],
+      userId,
+      organizationId,
+    }),
+    getAgentToolsForUser({
+      agentId,
+      catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+      userId,
+      organizationId,
+    }),
+    llmApiKeyId
+      ? getAvailableLlmModels({
+          query: { apiKeyId: llmApiKeyId },
           userId,
           organizationId,
         })
-      : null;
+      : null,
+    getAgentDefaultSuggestedPrompts({ id: agentId, userId, organizationId }),
+  ]);
+  // The composer asks for the platform's prompts only for an agent without
+  // its own: they are read with the other parts and kept in that case alone.
+  const defaultSuggestedPrompts =
+    detail.suggestedPrompts.length === 0 ? platformPrompts : null;
   return {
     id: agentId,
     detail,

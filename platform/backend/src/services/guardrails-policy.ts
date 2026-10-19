@@ -369,6 +369,7 @@ function requireEnabled() {
   if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
+const CODING_BATTERY = "coding";
 const CLAUDE_CODE_BATTERY = "claude-code";
 function noopAnnotatorUrl() {
   return `http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}`;
@@ -380,15 +381,17 @@ function hash(content: string) {
 /**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
- * carry in this deployment, and the bundled `claude-code` battery over the
- * client built-ins this host derives as `host/archestra/<name>`. It reads the
- * organization's members as `internal`, and has the organization's default
- * model label each sandbox command, each shell command the client battery
- * routes to a model, and each tool no rule names.
+ * carry in this deployment, and the bundled `coding` battery over the client
+ * built-ins this host derives as `host/archestra/<name>`: `claude-code` maps it
+ * onto Claude Code's tools, and the root maps it onto the other clients'. It
+ * reads the organization's members as `internal`, and has the organization's
+ * default model label each sandbox command, each shell command the client
+ * batteries route to a model, and each tool no rule names.
  */
 export function initialPolicy(): string {
   return `include = [
   "${bundledEntry(ARCHESTRA_BATTERY)}",
+  "${bundledEntry(CODING_BATTERY)}",
   "${bundledEntry(CLAUDE_CODE_BATTERY)}",
 ]
 
@@ -399,6 +402,19 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 # built-ins of whichever client runs through this deployment.
 [aliases.host]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
+
+# The coding battery's tools under Codex's and OpenCode's spellings.
+[aliases.tool.${CODING_BATTERY}]
+shell = [
+  { name = "host/archestra/exec_command", args = { command = "cmd" } },
+  { name = "host/archestra/shell", args = { command = "command" } },
+  { name = "host/archestra/bash", args = { command = "command" } },
+]
+read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
+search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
+write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
+edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
+fetch_url = [{ name = "host/archestra/webfetch", args = { url = "url" } }]
 
 [policy]
 version = 2
@@ -437,8 +453,8 @@ effects = []
 name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
 annotator = "archestra.run-command"
 
-# The client battery's shell annotators, with the battery's own mandate, asked
-# of the annotator model instead of a local claude process.
+# The client batteries' shell and Monitor annotators, with the batteries' own
+# mandate, asked of the annotator model instead of a local claude process.
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
 builtin = "archestra"
@@ -446,6 +462,10 @@ hint = "\`context.github\` is the deployment's finding about the repository and 
 
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
+builtin = "archestra"
+
+[[policy.annotator]]
+name = "${CLAUDE_CODE_BATTERY}.monitor-requirements"
 builtin = "archestra"
 
 # Labels each call no rule names with the OpenAPPA annotator model (the

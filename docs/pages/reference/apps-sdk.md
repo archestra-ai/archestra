@@ -1,7 +1,7 @@
 ---
 title: Apps SDK Reference
 description: The window.archestra SDK, styling, security model, and authoring tools for MCP Apps
-order: 3
+order: 5
 lastUpdated: 2026-10-13
 ---
 

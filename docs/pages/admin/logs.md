@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: See every model request, tool call, and admin change, and choose who can read them and how long they stay
 order: 5
-lastUpdated: 2026-10-18
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,12 +40,12 @@ Keep the cost and audit trail without storing what people sent. Set [`ARCHESTRA_
 
 ## Who Can Read Them
 
-One permission shows your own logs. An admin permission shows everyone's. The audit log has no "own" view.
+One permission shows your own logs. An admin permission shows everyone's.
 
 | Tab | Your own | Everyone's |
 | --- | --- | --- |
 | LLM Proxy, MCP Gateway, Guardrail consults | [`log:read`](/docs/reference/permissions#log:read) | [`log:admin`](/docs/reference/permissions#log:admin) |
-| Audit | | [`auditLog:read`](/docs/reference/permissions#auditLog:read) |
+| Audit | [`auditLog:read`](/docs/reference/permissions#auditLog:read) | [`auditLog:admin`](/docs/reference/permissions#auditLog:admin) |
 
 Sharing an agent or a gateway with someone does not let them read its logs.
 

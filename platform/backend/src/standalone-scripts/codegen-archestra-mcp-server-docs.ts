@@ -195,7 +195,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
 function generateFrontmatter(lastUpdated: string): string {
   return `---
 title: "Archestra MCP Server"
-description: "Built-in MCP server providing tools for managing Archestra platform resources"
+description: "Every built-in tool an agent uses to manage Archestra, with its inputs and required permission"
 order: 4
 lastUpdated: ${lastUpdated}
 ---`;
@@ -272,7 +272,7 @@ function generateMarkdownBody(): string {
     if (groupAvailabilityNote) {
       section += `${groupAvailabilityNote}\n\n`;
     }
-    section += "| Tool | Description | Required RBAC Permission |\n";
+    section += "| Tool | Description | Permission |\n";
     section += "|------|-------------|--------------------------|\n";
 
     for (const tool of groupTools) {
@@ -318,13 +318,22 @@ Do not edit manually.
 Renaming/deleting this page? Add a redirect in docs/redirects.json.
 -->
 
-The Archestra MCP Server is built into every deployment and needs no installation. Its tools let an agent manage agents, MCP servers, policies, and knowledge, build apps, and run code in the sandbox. Every tool name starts with \`archestra__\`. This page lists tools by their short name.
+Let an agent run Archestra for you: ask it to create an agent, install an MCP server, or build an app, and it calls these tools. The Archestra MCP Server is built into every deployment and acts as the person using the agent, with their permissions. Every tool name starts with \`archestra__\`. This page lists tools by their short name.
 
-## Access
+<span id="access"></span>
 
-In Custom tool mode, assign the tools to the agent or MCP Gateway the client connects through. Auto mode uses [tool discovery](/docs/mcp/gateway#load-tools-when-needed) to reach tools the user can access. New agents include ${preInstalledList}; enabled features add their own default tools. ${formatToolLink("query_knowledge_sources")} appears only when the agent or gateway has at least one [knowledge base or connector](/docs/knowledge) attached.
+## Give an Agent These Tools
 
-Every call is permission-checked. Each tool requires the RBAC permission in the last column of its table. \`tools/list\` shows a user only the tools their role allows; a user without \`knowledgeSource:create\`, for example, does not see ${formatToolLink("create_knowledge_base")}. A tool marked † has an extra condition, described in its entry. [Guardrails](/docs/agents/guardrails) policies apply on top of these permissions.
+Pick these tools like any other MCP server's tools, on an agent's **Tools, Skills & Knowledge** tab or a gateway's **Tools & Knowledge** settings:
+
+- **Manual:** assign the tools you want.
+- **All:** the agent gets every tool the person can use, but built-in tools start out excluded. Remove a tool from the exclusions to allow it.
+
+New agents include ${preInstalledList}. Turning on a feature adds its own default tools. ${formatToolLink("query_knowledge_sources")} appears only when the agent or gateway has a [knowledge base or connector](/docs/knowledge) attached.
+
+## Permissions
+
+Each tool needs the permission in the last column of its table. A person sees only the tools their permissions allow: without \`knowledgeSource:create\`, for example, ${formatToolLink("create_knowledge_base")} is hidden. A tool marked † has an extra condition, described in its entry. [Guardrails](/docs/agents/guardrails) policies apply on top of these permissions.
 
 ## Tools Reference
 
@@ -417,7 +426,7 @@ export function formatToolPermission(
 ): ToolPermissionDisplay {
   const permission = TOOL_PERMISSIONS[toolShortName];
   if (!permission) {
-    return "None (no additional RBAC permission required)";
+    return "None";
   }
 
   // No role holds this action: it is granted on the individual item.

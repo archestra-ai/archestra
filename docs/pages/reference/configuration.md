@@ -1,7 +1,7 @@
 ---
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
-order: 2
+order: 1
 lastUpdated: 2026-10-16
 ---
 

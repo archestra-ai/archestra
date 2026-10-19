@@ -486,7 +486,11 @@ mod tests {
         let step = &response.files[0].steps[1];
         assert_eq!(step.status, Status::Failed);
         assert_eq!(step.actual.as_deref(), Some("deny"));
-        assert!(step.error.as_deref().is_some_and(|text| text.contains("Why:")));
+        assert!(
+            step.error
+                .as_deref()
+                .is_some_and(|text| text.contains("Why:"))
+        );
         assert_eq!(step.reasons.len(), 1, "{:?}", step.reasons);
         assert!(step.reasons[0].contains("trusted"), "{:?}", step.reasons);
     }

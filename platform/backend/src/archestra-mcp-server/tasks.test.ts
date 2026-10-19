@@ -612,7 +612,7 @@ describe("run tools", () => {
       backend: "kubernetes",
       runtimeScope: "test",
     });
-    const key = `user:${actorId}|${run.workloadName}`;
+    const key = run.workloadName;
     await makeInteraction(callingAgent.id, { sessionId: key, userId: actorId });
     const result = await executeArchestraTool(
       TOOL_LIST_AGENT_RUNS_FULL_NAME,
@@ -630,7 +630,7 @@ describe("run tools", () => {
     expect(key).not.toBe(workspace.id);
   });
 
-  test("withholds telemetry keys without matching workspace identity and readable logged requests", async ({
+  test("keeps logged keys after workspace expiry and withholds missing, policy-scoped or unreadable sessions", async ({
     makeInteraction,
     makeOrganization,
     makeAgent,
@@ -640,9 +640,11 @@ describe("run tools", () => {
     const other = await makeUser();
     const foreignOrg = await makeOrganization();
     const foreignAgent = await makeAgent({ organizationId: foreignOrg.id });
+    let expiredTaskId: string | undefined;
+    let expiredKey: string | undefined;
     for (const scenario of [
       "missing-workspace",
-      "wrong-owner",
+      "policy-session",
       "no-logs",
       "other-user",
       "other-organization",
@@ -653,13 +655,17 @@ describe("run tools", () => {
       });
       const run = await AgentRunModel.findByTaskId(task.id);
       if (!run) throw new Error("Run fixture missing");
-      const key = `user:${actorId}|${run.workloadName}`;
+      const key = run.workloadName;
+      if (scenario === "missing-workspace") {
+        expiredTaskId = task.id;
+        expiredKey = key;
+      }
       if (scenario !== "missing-workspace") {
         await AgentWorkspaceModel.create({
           organizationId,
           agentId: callingAgent.id,
           actorKind: "user",
-          actorId: scenario === "wrong-owner" ? other.id : actorId,
+          actorId,
           workloadName: run.workloadName,
           backend: "kubernetes",
           runtimeScope: "test",
@@ -671,7 +677,8 @@ describe("run tools", () => {
         await makeInteraction(
           scenario === "other-organization" ? foreignAgent.id : callingAgent.id,
           {
-            sessionId: key,
+            sessionId:
+              scenario === "policy-session" ? `user:${actorId}|${key}` : key,
             userId: scenario === "other-user" ? other.id : actorId,
           },
         );
@@ -689,13 +696,20 @@ describe("run tools", () => {
     );
     expect(result.isError).toBeFalsy();
     const { runs } = result.structuredContent as {
-      runs: { llm_session_id: string | null }[];
+      runs: { task_id: string; llm_session_id: string | null }[];
     };
     expect(runs).toHaveLength(5);
-    expect(runs.every((item) => item.llm_session_id === null)).toBe(true);
+    expect(
+      runs.find((item) => item.task_id === expiredTaskId)?.llm_session_id,
+    ).toBe(expiredKey);
+    expect(
+      runs
+        .filter((item) => item.task_id !== expiredTaskId)
+        .every((item) => item.llm_session_id === null),
+    ).toBe(true);
   });
 
-  test("an organization runtime uses its workspace principal and requires log admin for another actor's requests", async ({
+  test("an organization runtime uses its telemetry header and requires log admin for another actor's requests", async ({
     makeInteraction,
     makeUser,
     makeMember,
@@ -722,7 +736,7 @@ describe("run tools", () => {
       backend: "kubernetes",
       runtimeScope: "test",
     });
-    const workspace = await AgentWorkspaceModel.create({
+    await AgentWorkspaceModel.create({
       organizationId,
       agentId: callingAgent.id,
       actorKind: "organization",
@@ -733,7 +747,7 @@ describe("run tools", () => {
       lastTaskId: task.id,
       expiresAt: new Date(Date.now() + 3600_000),
     });
-    const key = `agent-workspace:${workspace.id}|${run.workloadName}`;
+    const key = run.workloadName;
     await makeInteraction(callingAgent.id, { sessionId: key });
     const admin = await makeUser();
     await makeMember(admin.id, organizationId, { role: "admin" });

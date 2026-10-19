@@ -54,7 +54,6 @@ import {
   SPAWN_TARGET_MISMATCH,
   UNVERIFIED_RUNTIME_SESSION,
 } from "@/services/agent-runtime/runtime-crossing";
-import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -948,32 +947,24 @@ const registry = defineArchestraTools([
           userHasPermission(actor.id, actor.organizationId, "log", "read"),
           userHasPermission(actor.id, actor.organizationId, "log", "admin"),
         ]);
-        // Use the same persisted identity as runtime launch. Task IDs and
-        // workspace handles are not the telemetry session key.
-        const sessionKeys = rows.map((row) =>
-          row.runtimeWorkspace
-            ? runtimeOpenAppaSession({
-                workspaceId: row.runtimeWorkspace.id,
-                ...row.runtimeWorkspace,
-              }).session_id
-            : null,
-        );
+        // Maintained runtime clients send the persisted workload name as
+        // X-Archestra-Session-Id. The OpenAPPA key adds a caller scope and is
+        // not the key stored on LLM interactions. Never substitute a task ID
+        // or a workspace row's UUID; continued turns keep this header value.
+        const sessionKeys = rows.map((row) => row.workloadName);
         const logged =
           canReadLogs || canReadAllLogs
             ? await InteractionModel.findLoggedSessionIds({
                 organizationId: actor.organizationId,
-                sessionIds: sessionKeys.filter(
-                  (key): key is string => key !== null,
-                ),
+                sessionIds: sessionKeys,
                 ...(canReadAllLogs ? {} : { ownUserId: actor.id }),
               })
             : new Set<string>();
         const hidePrompt = await isGuardrailsV2Active();
         const runs = rows.map((row, index) => ({
-          llm_session_id:
-            sessionKeys[index] && logged.has(sessionKeys[index])
-              ? sessionKeys[index]
-              : null,
+          llm_session_id: logged.has(sessionKeys[index])
+            ? sessionKeys[index]
+            : null,
           task_id: row.taskId,
           title: row.title,
           prompt: hidePrompt ? "" : row.prompt,

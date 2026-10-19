@@ -61,7 +61,7 @@ A specification is a UTF-8 .appa file with an ordered scenario. Every file start
 
 ## Resolve names and contracts once
 
-Scenario tool names must be canonical \`<family>/<namespace>/<tool>\` IDs, even when a policy rule uses a raw client name. The one exception is the replay-only \`appa/do_something\`. For an ordinary Archestra MCP name, \`crm__search_records\` becomes \`mcp/crm/search_records\`. Never put the raw double-underscore name in a scenario.
+Scenario tool names must be canonical \`<family>/<namespace>/<tool>\` IDs, even when a policy rule uses a raw client name. The one exception is the replay-only \`appa/do_something\`, which exists only in scenarios: never write a policy rule for it, because the policy refuses that name. For an ordinary Archestra MCP name, \`crm__search_records\` becomes \`mcp/crm/search_records\`. Never put the raw double-underscore name in a scenario.
 
 Use the installed catalog namespace, not a battery's alias: if \`[aliases.mcp]\` maps \`mail = ["mail_prod"]\`, an installed \`mail_prod__send\` call is \`mcp/mail_prod/send\`, even though its battery rule is \`mcp/mail/send\`. Match it against the effective policy in declaration order: root rules first, then batteries. For native names or names containing additional \`__\` separators, load **Tool names** in \`references/archestra.md\` instead of guessing.
 

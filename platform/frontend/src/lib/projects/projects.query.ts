@@ -20,6 +20,7 @@ import {
   validateUploadFile,
 } from "@/lib/files/file-upload";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { scheduleTriggerKeys } from "@/lib/schedule-trigger.query";
 import {
   getApiErrorMessage,
@@ -69,6 +70,8 @@ export function useProjects(
   const { data: canReadProjects } = useHasPermissions({ project: ["read"] });
   return useQuery({
     queryKey: projectListQueryKey({ limit, offset, ...filters }),
+    // The sidebar's pinned list comes back on refresh with the rest of it.
+    meta: filters.pinned === true ? PERSISTED_QUERY_META : undefined,
     enabled: (enabled ?? true) && !!canReadProjects,
     placeholderData: keepPreviousData,
     queryFn: async () => {

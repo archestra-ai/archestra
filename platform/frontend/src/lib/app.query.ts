@@ -23,6 +23,7 @@ import {
   generateEncryptedChatKey,
   storeEncryptedChatKey,
 } from "@/lib/chat/encrypted-chat";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 
 const {
@@ -110,6 +111,8 @@ export function useApps(
   return useQuery({
     ...appsQueryOptions(params, options?.toastOnError),
     enabled: (options?.enabled ?? true) && !!canReadApps,
+    // The sidebar's pinned list comes back on refresh with the rest of it.
+    meta: params.pinned === true ? PERSISTED_QUERY_META : undefined,
     placeholderData: (previousData) => previousData,
   });
 }

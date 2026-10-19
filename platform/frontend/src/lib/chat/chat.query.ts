@@ -394,6 +394,9 @@ export function useConversations({
     // landed, refocusing or reconnecting still refreshes the unread indicators.
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+    // The sidebar's list (not a search) comes back on refresh, so its rows
+    // show at once; titles are on screen already and the list revalidates.
+    meta: search ? undefined : PERSISTED_QUERY_META,
   });
 }
 

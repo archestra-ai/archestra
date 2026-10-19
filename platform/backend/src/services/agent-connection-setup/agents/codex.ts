@@ -204,8 +204,8 @@ fi`;
     // first; plugins installed from it stay installed.
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 cli codex plugin marketplace remove ${sh(ctx.skills.marketplaceName)} >/dev/null 2>&1 || true
-if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  err "Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error."
+if ! cli_redacted codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+  err "Marketplace registration failed. Review the Git error above. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error."
   exit 1
 fi
 ${installs.join("\n")}`);
@@ -332,8 +332,8 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not deliver plugin — run 'codex p
     // Remove the earlier registration first, as in the bash script.
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 try { codex plugin marketplace remove ${psq(ctx.skills.marketplaceName)} 2>$null | Out-Null } catch { }
-codex plugin marketplace add ${psq(ctx.skills.cloneUrl)}
-if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error.' }
+Invoke-ArchRedacted { codex plugin marketplace add ${psq(ctx.skills.cloneUrl)} }
+if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed. Review the Git error above. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error.' }
 ${pluginInstalls}`);
   }
 

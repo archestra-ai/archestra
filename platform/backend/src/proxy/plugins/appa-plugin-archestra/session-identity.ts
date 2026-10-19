@@ -42,7 +42,11 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
  * When provided, `X-Appa-Parent-ID` overrides any native parent ID.
  */
 export function extractAppaSessionIdentity(params: {
-  family: AppaWireFamily;
+  /**
+   * Undefined for a wire OpenAPPA does not read. The session then comes from
+   * headers only: the client adapters read no body of that wire.
+   */
+  family: AppaWireFamily | undefined;
   body: unknown;
   headers: Readonly<Record<string, string | string[] | undefined>>;
 }): AppaSessionIdentity {
@@ -56,7 +60,7 @@ export function extractAppaSessionIdentity(params: {
   );
   const native = adapter?.extractSessionIdentity?.({
     headers: params.headers,
-    requestBody: params.body,
+    requestBody: params.family ? params.body : undefined,
   });
   if (!native?.sessionId) return generic;
   return {

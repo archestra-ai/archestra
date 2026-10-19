@@ -10,6 +10,10 @@ import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
 import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
+import {
+  type DraftHelperSource,
+  withDraftHelperSources,
+} from "@/openappa/draft-helper-sources";
 import { OpenappaCredentialError } from "@/openappa/failure";
 import {
   githubPolicyTestVersion,
@@ -96,6 +100,29 @@ async function loadPolicyTestCollection(
       version: `disabled:${source.revision}`,
     };
   }
+  // The cached copy is current when it was written for this source revision
+  // and commit, for the same directory. The sync job moves `sourceCommit`
+  // when the repository changes, so until then the cache answers without a
+  // GitHub round trip (one listing plus a request per file) and without the
+  // policy lock that caching takes. Every Guardrails overview load paid both.
+  if (
+    local &&
+    local.sourceRevision === source.revision &&
+    local.sourceCommit === source.sourceCommit &&
+    (local.directory ?? "traces") === directory
+  ) {
+    const files = PolicyTestFilesSchema.parse(local.files);
+    return {
+      ...fallback,
+      files,
+      version: githubPolicyTestVersion({
+        repo: source.repo,
+        commit: source.sourceCommit,
+        directory,
+        files,
+      }),
+    };
+  }
   try {
     const files = PolicyTestFilesSchema.parse(
       await loadAppaGithubPolicyTests({ source, directory, allowEmpty: true }),
@@ -176,16 +203,28 @@ async function replayCredentials(
     throw error;
   }
 }
+type EvaluateParams = {
+  organizationId: string;
+  userId: string | null;
+  files: PolicyTestFile[];
+  sourceVersion: string;
+  directory: string;
+  proposedPolicy?: { content: string; expectedRevision: number };
+};
+
 async function evaluateOpenAppaPolicyTests(
-  params: {
-    organizationId: string;
-    userId: string | null;
-    files: PolicyTestFile[];
-    sourceVersion: string;
-    directory: string;
-    proposedPolicy?: { content: string; expectedRevision: number };
-  },
+  params: EvaluateParams,
   loadedCollection?: PolicyTestCollection,
+) {
+  return withDraftHelperSources((registerDraftHelper) =>
+    evaluateWithDraftHelpers(params, loadedCollection, registerDraftHelper),
+  );
+}
+
+async function evaluateWithDraftHelpers(
+  params: EvaluateParams,
+  loadedCollection: PolicyTestCollection | undefined,
+  registerDraftHelper: (source: DraftHelperSource) => string,
 ) {
   enabled();
   const collection =
@@ -226,6 +265,17 @@ async function evaluateOpenAppaPolicyTests(
         organizationId: params.organizationId,
         resolution: bound.resolution,
       }));
+    // A draft's batteries have no install rows. Only a caller who may change
+    // the policy has their helpers run, with the credentials the draft binds;
+    // anyone else replays them unanswered.
+    const consultsHelpers =
+      params.userId !== null &&
+      (await userHasPermission(
+        params.userId,
+        params.organizationId,
+        "guardrailsPolicy",
+        "update",
+      ));
     const composed =
       bound && deployed
         ? await openappaDeclarations.composeForCheck({
@@ -239,6 +289,23 @@ async function evaluateOpenAppaPolicyTests(
                 deployed,
               }),
             ),
+            ...(consultsHelpers
+              ? {
+                  helperOwner: (entry, battery) =>
+                    registerDraftHelper({
+                      organizationId: params.organizationId,
+                      batteryName: entry.name,
+                      packageHash: entry.packageHash,
+                      target: battery.target?.name ?? null,
+                      credentialBindings: Object.fromEntries(
+                        battery.credentials.flatMap((variable) => {
+                          const key = bound.resolution.credentials[variable];
+                          return key ? [[variable, key]] : [];
+                        }),
+                      ),
+                    }),
+                }
+              : {}),
           })
         : null;
     const content = composed?.content ?? policyContent;

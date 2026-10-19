@@ -38,6 +38,8 @@ export class SlackReplyStream implements ChatOpsReplyStream {
   private sending: Promise<void> = Promise.resolve();
   /** Tool calls shown as task cards, by toolCallId, until they settle. */
   private readonly openTasks = new Map<string, string>();
+  /** Open tool calls paused on a human approval. */
+  private readonly awaitingApproval = new Set<string>();
 
   constructor(private readonly deps: SlackReplyStreamDeps) {}
 
@@ -83,6 +85,11 @@ export class SlackReplyStream implements ChatOpsReplyStream {
           output: "Denied",
         });
         return;
+      case "tool-approval-request":
+        if (this.openTasks.has(chunk.toolCallId)) {
+          this.awaitingApproval.add(chunk.toolCallId);
+        }
+        return;
       default:
         return;
     }
@@ -104,6 +111,7 @@ export class SlackReplyStream implements ChatOpsReplyStream {
     const ts = this.ts;
 
     // Tasks still open when the run settled never ran (an approval pause).
+    const pausedTaskIds = [...this.awaitingApproval];
     const leftoverTasks = this.closeOpenTasks({ status: "pending" });
     const tail = this.textDiverged
       ? null
@@ -125,6 +133,16 @@ export class SlackReplyStream implements ChatOpsReplyStream {
             : {}),
           blocks: this.deps.buildTrailingBlocks(options),
         });
+        if (pausedTaskIds.length > 0) {
+          await updatePausedTasks({
+            client: this.deps.client,
+            channelId: this.deps.channelId,
+            threadTs: this.deps.threadTs,
+            messageTs: ts,
+            taskIds: pausedTaskIds,
+            outcome: "awaiting_approval",
+          });
+        }
         return;
       } catch (error) {
         logger.debug(
@@ -314,6 +332,65 @@ export class SlackReplyStream implements ChatOpsReplyStream {
   }
 }
 
+/**
+ * Rewrite the task cards of a streamed reply that paused on an approval. Slack
+ * turns a task still pending at chat.stopStream into an error ("Something went
+ * wrong"), and a resumed run answers in a new message, so nothing else ever
+ * touches these cards: the pause marks them as waiting for approval, and the
+ * reviewer's decision settles them.
+ *
+ * Best-effort: a reply that cannot be found or edited is left as it is.
+ */
+export async function updatePausedTasks(params: {
+  client: WebClient;
+  channelId: string;
+  threadTs: string;
+  taskIds: string[];
+  outcome: "awaiting_approval" | "approved" | "declined";
+  /** The streamed reply; looked up in the thread by task id when omitted. */
+  messageTs?: string;
+}): Promise<void> {
+  const { client, channelId, threadTs, outcome } = params;
+  const taskIds = new Set(params.taskIds);
+  try {
+    const message = await findPlanMessage({
+      client,
+      channelId,
+      threadTs,
+      taskIds,
+      messageTs: params.messageTs,
+    });
+    if (!message?.ts || !message.blocks) return;
+
+    const status: TaskUpdate["status"] =
+      outcome === "awaiting_approval"
+        ? "pending"
+        : outcome === "approved"
+          ? "complete"
+          : "error";
+    const blocks = (message.blocks as StoredBlock[]).map((block) => {
+      if (block.type !== "plan") return block;
+      const tasks = (block.tasks ?? []).map((task) => ({
+        ...task,
+        type: "task_card",
+        ...(taskIds.has(task.task_id) && { status }),
+      }));
+      return { ...block, title: pausedPlanTitle(tasks, outcome), tasks };
+    });
+    await client.chat.update({
+      channel: channelId,
+      ts: message.ts,
+      text: message.text ?? "",
+      blocks: blocks as SlackBlock[],
+    });
+  } catch (error) {
+    logger.debug(
+      { error: errorMessage(error), channelId, outcome },
+      "[SlackReplyStream] Could not update the tasks of a paused reply",
+    );
+  }
+}
+
 // =============================================================================
 // Internal Helpers
 // =============================================================================
@@ -339,12 +416,36 @@ type SlackBlock = NonNullable<
   Parameters<WebClient["chat"]["stopStream"]>[0]["blocks"]
 >[number];
 
+type SlackThreadMessage = NonNullable<
+  Awaited<ReturnType<WebClient["conversations"]["replies"]>>["messages"]
+>[number];
+
+/** A block as conversations.replies returns it; the SDK types omit `plan`. */
+interface StoredBlock {
+  type: string;
+  tasks?: SlackPlanTask[];
+  [key: string]: unknown;
+}
+
+interface SlackPlanTask {
+  task_id: string;
+  status: TaskUpdate["status"];
+  [key: string]: unknown;
+}
+
 interface TaskUpdate {
   id: string;
   title: string;
   status: "pending" | "in_progress" | "complete" | "error";
   output?: string;
 }
+
+/**
+ * conversations.replies pages (1000 messages each, Slack's maximum) scanned
+ * for a paused reply; one further back is left as it is.
+ */
+const PAUSED_REPLY_MAX_PAGES = 5;
+const SLACK_REPLIES_PAGE_LIMIT = 1000;
 
 /** appendStream is Tier 4 (100+/min); one call per interval stays well under. */
 const FLUSH_INTERVAL_MS = 750;
@@ -407,6 +508,56 @@ function coalesceText(chunks: AnyChunk[]): AnyChunk[] {
     }
   }
   return merged;
+}
+
+/**
+ * The thread message whose plan holds any of these tasks: the given one, or
+ * the latest in the thread.
+ */
+async function findPlanMessage(params: {
+  client: WebClient;
+  channelId: string;
+  threadTs: string;
+  taskIds: Set<string>;
+  messageTs?: string;
+}): Promise<SlackThreadMessage | undefined> {
+  const { client, channelId, threadTs, taskIds, messageTs } = params;
+  const holdsTask = (message: SlackThreadMessage) =>
+    ((message.blocks ?? []) as StoredBlock[]).some(
+      (block) =>
+        block.type === "plan" &&
+        (block.tasks ?? []).some((task) => taskIds.has(task.task_id)),
+    );
+
+  let found: SlackThreadMessage | undefined;
+  let cursor: string | undefined;
+  for (let page = 0; page < PAUSED_REPLY_MAX_PAGES; page++) {
+    const result = await client.conversations.replies({
+      channel: channelId,
+      ts: threadTs,
+      ...(messageTs && { oldest: messageTs, latest: messageTs }),
+      inclusive: true,
+      limit: SLACK_REPLIES_PAGE_LIMIT,
+      cursor,
+    });
+    for (const message of result.messages ?? []) {
+      if (messageTs && message.ts !== messageTs) continue;
+      if (holdsTask(message)) found = message;
+    }
+    cursor = result.response_metadata?.next_cursor || undefined;
+    if (!cursor || messageTs) break;
+  }
+  return found;
+}
+
+function pausedPlanTitle(
+  tasks: SlackPlanTask[],
+  outcome: "awaiting_approval" | "approved" | "declined",
+): string {
+  if (tasks.some((task) => task.status === "pending")) {
+    return "Waiting for approval";
+  }
+  return outcome === "declined" ? "Declined" : "Approved";
 }
 
 function truncate(text: string, limit: number): string {

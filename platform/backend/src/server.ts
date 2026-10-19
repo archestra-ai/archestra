@@ -103,6 +103,7 @@ import {
   recompileAllOnStart,
 } from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
+import guardrailsNoopAnnotatorRoutes from "@/routes/guardrails-policy/guardrails-noop-annotator.routes";
 import { captureClientRuntimeEvidence } from "@/routes/proxy/utils/client-runtime-evidence";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
@@ -385,7 +386,8 @@ export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
 }
 
 /**
- * Register only the routes needed by the worker for A2A / scheduled task execution.
+ * Register only the routes needed by the worker for A2A / scheduled task execution:
+ * the LLM proxy, the MCP gateway, and the APPA runtime's loopback endpoints.
  * These routes are called via localhost by executeA2AMessage and are not exposed
  * externally — the K8s Service only targets platform pods, not worker pods.
  */
@@ -419,6 +421,10 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.zhipuaiProxyRoutes);
   // MCP Gateway (tool listing + tool calls via JSON-RPC)
   fastify.register(routes.mcpGatewayRoutes);
+  // Loopback endpoints the in-process APPA runtime posts to
+  fastify.register(guardrailsNoopAnnotatorRoutes);
+  fastify.register(routes.openappaArchestraAnnotatorRoutes);
+  fastify.register(routes.openappaHelpersRoutes);
 }
 
 /**

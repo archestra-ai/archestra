@@ -1320,6 +1320,25 @@ export default function ChatSessionHook({
     },
     [stop, transport],
   );
+  const sendOrQueueText = useCallback(
+    (text: string) => {
+      const busy =
+        latestStatusRef.current === "submitted" ||
+        latestStatusRef.current === "streaming" ||
+        contextCompaction.isCompacting ||
+        chatMessageQueue.get(conversationId).length > 0;
+      if (busy) {
+        chatMessageQueue.enqueue(conversationId, { text });
+        return;
+      }
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text }],
+        metadata: { createdAt: new Date().toISOString() },
+      });
+    },
+    [contextCompaction.isCompacting, conversationId, sendMessage],
+  );
   const resolveMcpElicitation = useCallback(
     async (response: ElicitationResponse) => {
       const outcome = await resolveMcpElicitationAsync({
@@ -1380,6 +1399,7 @@ export default function ChatSessionHook({
     stallRecoveryExhausted:
       stallRecoveryRef.current.attempts >= MAX_STALL_RECOVERIES,
     sendMessage,
+    sendOrQueueText,
     regenerateUserMessage,
     stop: stopSession,
     status,
@@ -1433,6 +1453,7 @@ export default function ChatSessionHook({
     stableMessages,
     streamActivity,
     sendMessage,
+    sendOrQueueText,
     regenerateUserMessage,
     stopSession,
     status,

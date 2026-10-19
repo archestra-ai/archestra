@@ -143,12 +143,14 @@ const AppListItemBaseSchema = z.object({
   // edited in the MCP registry rather than here — so one filter spans both
   // halves of the mixed listing instead of silently dropping external apps.
   labels: z.array(LabelWithDetailsSchema),
-  // Display icon: an emoji character or a base64 image data URL. For an owned
-  // app it is the app's own icon, for an external one its backing server's
-  // registry icon — both stored on the same catalog column, so one field spans
-  // the mixed listing and the card renders it the same way either side.
-  // Null when none is set (the card falls back to its generic glyph).
+  // Display icon. For an owned app it is the app's own icon, for an external
+  // one its backing server's registry icon — both stored on the same catalog
+  // column, so one pair of fields spans the mixed listing. An emoji comes
+  // inline as `icon`; an image comes as `iconUrl`, a content-versioned link to
+  // an icon route, because inline images made the list hundreds of kilobytes.
+  // Both null when none is set (the card falls back to its generic glyph).
   icon: z.string().nullable(),
+  iconUrl: z.string().nullable(),
   /**
    * Who created the app, in the shape shared by every major object. Always
    * null for an external item: it is somebody's catalog entry, not an app

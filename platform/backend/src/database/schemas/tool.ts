@@ -1,6 +1,7 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   index,
   jsonb,
@@ -19,6 +20,25 @@ import { softDeletablePgTable } from "./soft-deletable-table";
 /** Partial unique index enforcing one row per (catalog_id, name) for built-in Archestra tools. */
 export const ARCHESTRA_TOOL_NAME_UNIQUE_INDEX =
   "tools_archestra_catalog_name_uidx";
+
+/**
+ * A tool's MCP App `ui://` resource URI, or NULL when the tool is not a UI app.
+ * Canonical `_meta.ui.resourceUri` first, then the legacy flat `ui/resourceUri`
+ * key; both must use the `ui://` scheme.
+ *
+ * Defined here because `tools_ui_resource_catalog_idx` is a partial index on
+ * this exact expression: Postgres only uses a partial index when the query's
+ * condition matches its predicate, so the queries and the index must build it
+ * from the same function.
+ */
+export function toolUiResourceUriExpression(
+  meta: AnyPgColumn,
+): SQL<string | null> {
+  return sql<string | null>`coalesce(
+    case when ${meta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${meta}->'_meta'->'ui'->>'resourceUri' end,
+    case when ${meta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${meta}->'_meta'->>'ui/resourceUri' end
+  )`;
+}
 
 const toolsTable = softDeletablePgTable(
   "tools",
@@ -116,6 +136,12 @@ const toolsTable = softDeletablePgTable(
       table.clonedPendingDiscovery,
     ),
     index("tools_deleted_at_idx").on(table.deletedAt),
+    // Only a few dozen of the tens of thousands of tools render an MCP App, and
+    // the apps listing (the sidebar's pinned apps included) looks for exactly
+    // those on every request. Without this, finding them reads every tool row.
+    index("tools_ui_resource_catalog_idx")
+      .on(table.catalogId)
+      .where(sql`${toolUiResourceUriExpression(table.meta)} is not null`),
   ],
 );
 

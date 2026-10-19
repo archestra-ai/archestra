@@ -82,6 +82,19 @@ export function collectAndStripChildReturns(
     readOrReport(options.onRefusal, value, () => rewrite(value, context));
   const rewrite = (value: unknown, context: WalkContext): unknown => {
     if (typeof value === "string") {
+      // OpenCode and Kilo Code acknowledge a background launch in the task's
+      // own framing, and Kilo Code wraps the notice in <task_result>. The
+      // acknowledgement returns nothing, so it stays as the client sent it
+      // and its state still says so. One that carries a return marker is
+      // read as a return.
+      if (
+        options.openCodeBackgroundReturns &&
+        context.nativeResultSite &&
+        isOpenCodeBackgroundLaunch(value) &&
+        !hasMarker(value)
+      ) {
+        return value;
+      }
       if (
         context.nativeResultSite &&
         isOpenCodeBackgroundCompletion(value) &&
@@ -1039,6 +1052,12 @@ function isCompleteTaskResultFraming(value: string): boolean {
     prefix === "" ||
     /^<task\b[^>]*>(?:\s*<summary>[\s\S]*?<\/summary>)?$/.test(prefix);
   return validPrefix && (suffix === "" || suffix === "</task>");
+}
+
+function isOpenCodeBackgroundLaunch(value: string): boolean {
+  return /^\s*<task\b[^>]*\bstate\s*=\s*(["'])(?:running|pending|queued)\1[^>]*>/.test(
+    value,
+  );
 }
 
 function isOpenCodeBackgroundCompletion(value: unknown): value is string {

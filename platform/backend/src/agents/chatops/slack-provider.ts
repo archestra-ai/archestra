@@ -63,7 +63,7 @@ import {
 } from "./constants";
 import { slackAppFactory } from "./slack-app-factory";
 import { slackMessageText } from "./slack-message-text";
-import { SlackReplyStream } from "./slack-reply-stream";
+import { SlackReplyStream, updatePausedTasks } from "./slack-reply-stream";
 import {
   EventDedupMap,
   errorMessage,
@@ -872,6 +872,15 @@ class SlackProvider implements ChatOpsProvider {
       // Replacing the blocks removes the buttons, so no one clicks twice.
       blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
     });
+    if (options.pausedToolCall) {
+      await updatePausedTasks({
+        client: this.client,
+        channelId: options.channelId,
+        threadTs: options.pausedToolCall.threadId,
+        taskIds: [options.pausedToolCall.toolCallId],
+        outcome: options.approved ? "approved" : "declined",
+      });
+    }
   }
 
   async sendAgentSelectionCard(params: {

@@ -25903,6 +25903,7 @@ export type GetAppsResponses = {
                 valueId?: string;
             }>;
             icon: string | null;
+            iconUrl: string | null;
             createdBy: {
                 id: string;
                 type?: 'user' | 'service_account';
@@ -25940,6 +25941,7 @@ export type GetAppsResponses = {
                 valueId?: string;
             }>;
             icon: string | null;
+            iconUrl: string | null;
             createdBy: {
                 id: string;
                 type?: 'user' | 'service_account';
@@ -26259,6 +26261,48 @@ export type GetExternalAppResponses = {
 };
 
 export type GetExternalAppResponse = GetExternalAppResponses[keyof GetExternalAppResponses];
+
+export type GetExternalAppIconData = {
+    body?: never;
+    path: {
+        catalogId: string;
+    };
+    query?: {
+        /**
+         * Content version; any value.
+         */
+        v?: string;
+    };
+    url: '/api/apps/external/{catalogId}/icon';
+};
+
+export type GetExternalAppIconResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetAppIconData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: {
+        /**
+         * Content version; any value.
+         */
+        v?: string;
+    };
+    url: '/api/apps/{appId}/icon';
+};
+
+export type GetAppIconResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type GetAppLabelKeysData = {
     body?: never;

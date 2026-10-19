@@ -24,6 +24,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import {
+  getAgentTypeListPermissionChecker,
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
   isGlobalAdmin,
@@ -33,7 +34,10 @@ import {
 // tests mock `@/auth` wholesale to open up permissions, and these are
 // validation rules (team existence, org ownership, the ≥1-team invariant) that
 // must keep running in those tests rather than silently becoming no-ops.
-import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import type {
+  AgentTypeListPermissionChecker,
+  AgentTypePermissionChecker,
+} from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -343,10 +347,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const effectiveTypes =
         agentTypes || (agentType ? [agentType] : undefined);
 
-      // Single DB query for all permission checks
-      const checker = await getAgentTypePermissionChecker({
+      // A list asks about whole agent types only, so it does not read the
+      // grants of every agent shared with the caller.
+      const checker = await getAgentTypeListPermissionChecker({
         userId: user.id,
         organizationId,
+        // The deleted view asks for delete, every view for read.
+        actions: status === "deleted" ? ["read", "delete"] : ["read"],
       });
 
       const permittedTypes = getPermittedAgentTypesForList({
@@ -2953,7 +2960,7 @@ async function validateConnectorAccess(params: {
 }
 
 function getPermittedAgentTypesForList(params: {
-  checker: AgentTypePermissionChecker;
+  checker: AgentTypePermissionChecker | AgentTypeListPermissionChecker;
   effectiveTypes: AgentType[] | undefined;
   status: "active" | "deleted" | undefined;
 }): AgentType[] | undefined {

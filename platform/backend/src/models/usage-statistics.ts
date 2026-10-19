@@ -25,6 +25,7 @@ import type {
   SkillUsageResponse,
 } from "@/types";
 import { mcpToolCallBelongsToOrganization } from "./log-organization";
+import { MCP_TOOL_CALL_TOOL_NAME as TOOL_NAME } from "./mcp-tool-call-name";
 import StatisticsModel from "./statistics";
 
 /**
@@ -429,15 +430,6 @@ interface UsageScope {
 }
 
 const calls = schema.mcpToolCallsTable;
-
-/**
- * The called tool's name. Rows written before the plaintext column existed fall
- * back to the logged call JSON, which is unreadable (and so null) when the
- * content is encrypted; encrypted-chat rows are never read.
- */
-const TOOL_NAME = sql<
-  string | null
->`COALESCE(${calls.toolName}, CASE WHEN ${calls.encryptedChatConversationId} IS NULL AND jsonb_typeof(${calls.toolCall}) = 'object' THEN ${calls.toolCall}->>'name' END)`;
 
 /** Whether the call's result was an error, with the same JSON fallback. */
 const IS_ERROR = sql`COALESCE(${calls.isError}, CASE WHEN ${calls.encryptedChatConversationId} IS NULL AND jsonb_typeof(${calls.toolResult}) = 'object' THEN ${calls.toolResult}->>'isError' = 'true' END, FALSE)`;

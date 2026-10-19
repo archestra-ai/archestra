@@ -860,6 +860,9 @@ importers:
       react-syntax-highlighter:
         specifier: ^16.1.1
         version: 16.1.1(react@19.2.4)
+      react18-json-view:
+        specifier: ^0.2.10
+        version: 0.2.10(react@19.2.4)
       recharts:
         specifier: 3.8.0
         version: 3.8.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react-is@17.0.2)(react@19.2.4)(redux@5.0.1)
@@ -6909,6 +6912,9 @@ packages:
   cookiejar@2.1.4:
     resolution: {integrity: sha512-LDx6oHrK+PhzLKJU9j5S7/Y3jM/mUHvD/DeI1WQmJn652iPC5Y4TBzC9l+5OMOXlyTTA+SmVUPm0HQUwpD5Jqw==}
 
+  copy-to-clipboard@3.3.3:
+    resolution: {integrity: sha512-2KV8NhB5JqC3ky0r9PMCAZKbUHSwtEo4CwCs0KXgruG43gX5PMqDEBbVU4OUzw2MuAWUfsuFmWvEKG5QRfSnJA==}
+
   core-js-pure@3.49.0:
     resolution: {integrity: sha512-XM4RFka59xATyJv/cS3O3Kml72hQXUeGRuuTmMYFxwzc9/7C8OYTaIR/Ji+Yt8DXzsFLNhat15cE/JP15HrCgw==}
 
@@ -9524,6 +9530,11 @@ packages:
     peerDependencies:
       react: '>= 0.14.0'
 
+  react18-json-view@0.2.10:
+    resolution: {integrity: sha512-rYEbaCG/U4THY1qp1xY14/Kbnp9yY3W6Qm3Rmu+jlCIdxzMS5EcD+wI97kCKRoN3CuJyJU8hqkax5xWfl8A4EA==}
+    peerDependencies:
+      react: '>=16.8.0'
+
   react@19.2.4:
     resolution: {integrity: sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==}
     engines: {node: '>=0.10.0'}
@@ -10190,6 +10201,9 @@ packages:
   toad-cache@3.7.0:
     resolution: {integrity: sha512-/m8M+2BJUpoJdgAHoG+baCwBT+tf2VraSfkBgl0Y00qIWt41DJ8R5B8nsEw0I58YwF5IZH6z24/2TobDKnqSWw==}
     engines: {node: '>=12'}
+
+  toggle-selection@1.0.6:
+    resolution: {integrity: sha512-BiZS+C1OS8g/q2RRbJmy59xpyghNBqrr6k5L/uKBGRsTfxmu3ffiRnd8mlGPUVayg8pvfi5urfnu8TU7DVOkLQ==}
 
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
@@ -17519,6 +17533,10 @@ snapshots:
 
   cookiejar@2.1.4: {}
 
+  copy-to-clipboard@3.3.3:
+    dependencies:
+      toggle-selection: 1.0.6
+
   core-js-pure@3.49.0: {}
 
   core-js@3.49.0: {}
@@ -20566,6 +20584,11 @@ snapshots:
       react: 19.2.4
       refractor: 5.0.0
 
+  react18-json-view@0.2.10(react@19.2.4):
+    dependencies:
+      copy-to-clipboard: 3.3.3
+      react: 19.2.4
+
   react@19.2.4: {}
 
   readable-stream@2.3.8:
@@ -21390,6 +21413,8 @@ snapshots:
       is-number: 7.0.0
 
   toad-cache@3.7.0: {}
+
+  toggle-selection@1.0.6: {}
 
   toidentifier@1.0.1: {}
 

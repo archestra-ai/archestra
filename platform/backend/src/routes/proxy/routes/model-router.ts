@@ -29,6 +29,7 @@ import {
 } from "@/models";
 import AgentTeamModel from "@/models/agent-team";
 import { collectDelegationMarkers } from "@/openappa/delegation";
+import { scrubTranslatedClientWire } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
@@ -75,7 +76,10 @@ import { openaiToConverse } from "../adapters/bedrock-openai-translator";
 import { makeCohereOpenaiAdapterFactory } from "../adapters/cohere-openai";
 import { openaiToCohere } from "../adapters/cohere-openai-translator";
 import { makeGeminiOpenaiAdapterFactory } from "../adapters/gemini-openai";
-import { openaiToGemini } from "../adapters/gemini-openai-translator";
+import {
+  decodeSignedToolCallId,
+  openaiToGemini,
+} from "../adapters/gemini-openai-translator";
 import { makeResponsesFromChatAdapterFactory } from "../adapters/openai-responses-from-chat";
 import {
   type OpenaiResponsesContext,
@@ -254,6 +258,13 @@ const translatedModelRouterProviders = [
   "cohere",
   "gemini",
 ] as const satisfies ReadonlyArray<TranslatedModelRouterProvider>;
+
+/**
+ * Translated providers whose wire OpenAPPA does not read. Anthropic's
+ * Messages wire is one OpenAPPA reads, so it is not here.
+ */
+const unreadTranslatedProviders: ReadonlySet<SupportedProvider> =
+  new Set<TranslatedModelRouterProvider>(["bedrock", "cohere", "gemini"]);
 
 /**
  * Built from the shared list so the connection UI cannot advertise the router
@@ -501,6 +512,12 @@ async function routeChatCompletion(
 
   assertModelServesChatCompletions(resolution);
 
+  scrubClientWireBeforeTranslation({
+    request,
+    provider: resolution.provider,
+    family: "openai:chatCompletions",
+    body: routedBody,
+  });
   const provider = getOpenAiChatProviderForResolution({
     provider: resolution.provider,
     body: routedBody,
@@ -554,6 +571,14 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     request,
     collectDelegationMarkers({ family: "openai:responses", body }),
   );
+  // The translation also joins an OpenCode-family subagent return with the
+  // parts beside it, so returns are read from the client's wire too.
+  scrubClientWireBeforeTranslation({
+    request,
+    provider: resolution.provider,
+    family: "openai:responses",
+    body,
+  });
   const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
     preserveContentParts: resolution.provider === "bedrock",
   });
@@ -731,6 +756,35 @@ function getOpenAiChatProviderForResolution(params: {
     501,
     `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
   );
+}
+
+/**
+ * OpenAPPA reads the client's Responses and Chat Completions wires but not the
+ * Gemini, Bedrock Converse or Cohere wire, so a request translated to one of
+ * those would reach it with no session and no subagent returns it can check.
+ * It scrubs the client's body here instead, before the translation, which
+ * then forwards the scrubbed body.
+ */
+function scrubClientWireBeforeTranslation(params: {
+  request: FastifyRequest;
+  provider: SupportedProvider;
+  family: "openai:responses" | "openai:chatCompletions";
+  body: OpenAi.Types.ChatCompletionsRequest | OpenAi.Types.ResponsesRequest;
+}): void {
+  if (!unreadTranslatedProviders.has(params.provider)) return;
+  scrubTranslatedClientWire({
+    request: params.request,
+    family: params.family,
+    body: params.body,
+    // Gemini's ids carry the call's thought signature on the client's wire
+    // only; the translated body names the call by its own id.
+    ...(params.provider === "gemini"
+      ? {
+          translatedCallId: (callId: string) =>
+            decodeSignedToolCallId(callId).id ?? callId,
+        }
+      : {}),
+  });
 }
 
 function getTranslatedModelRouterProvider(params: {

@@ -555,6 +555,16 @@ class InternalMcpCatalogModel {
    * The stored icon of one catalog item the viewer may list, with the time it
    * last changed. Null when the item is not visible or has no icon.
    */
+  /** A live catalog item's icon, with no visibility check: callers gate access. */
+  static async findIconById(id: string): Promise<string | null> {
+    const catalog = schema.internalMcpCatalogTable;
+    const [row] = await db
+      .select({ icon: catalog.icon })
+      .from(catalog)
+      .where(and(eq(catalog.id, id), notDeleted(catalog)));
+    return row?.icon ?? null;
+  }
+
   static async findIconForViewer(params: {
     id: string;
     options: CatalogListOptions;

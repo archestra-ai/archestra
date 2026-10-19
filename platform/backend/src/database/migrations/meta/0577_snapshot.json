@@ -1,5 +1,5 @@
 {
-  "id": "fd132fc7-612c-42ce-bb3e-1c414d0d1cae",
+  "id": "1a122ddf-9ed5-4219-bcad-19fac665898b",
   "prevId": "d2ffdff1-3beb-4a65-94a1-01da2221e1cd",
   "version": "7",
   "dialect": "postgresql",
@@ -10966,131 +10966,6 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.interaction_session_heads_backfill": {
-      "name": "interaction_session_heads_backfill",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "after_id": {
-          "name": "after_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.interaction_session_heads": {
-      "name": "interaction_session_heads",
-      "schema": "",
-      "columns": {
-        "sessionless": {
-          "name": "sessionless",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "session_key": {
-          "name": "session_key",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_created_at": {
-          "name": "last_created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_interaction_id": {
-          "name": "last_interaction_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "interaction_session_heads_last_idx": {
-          "name": "interaction_session_heads_last_idx",
-          "columns": [
-            {
-              "expression": "last_created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_interaction_id",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "interaction_session_heads_user_last_idx": {
-          "name": "interaction_session_heads_user_last_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_interaction_id",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "interaction_session_heads_sessionless_session_key_pk": {
-          "name": "interaction_session_heads_sessionless_session_key_pk",
-          "columns": [
-            "sessionless",
-            "session_key"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -26997,6 +26872,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tools_ui_resource_catalog_idx": {
+          "name": "tools_ui_resource_catalog_idx",
+          "columns": [
+            {
+              "expression": "catalog_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "coalesce(\n    case when \"tools\".\"meta\"->'_meta'->'ui'->>'resourceUri' like 'ui://%' then \"tools\".\"meta\"->'_meta'->'ui'->>'resourceUri' end,\n    case when \"tools\".\"meta\"->'_meta'->>'ui/resourceUri' like 'ui://%' then \"tools\".\"meta\"->'_meta'->>'ui/resourceUri' end\n  ) is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

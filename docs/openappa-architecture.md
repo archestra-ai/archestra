@@ -589,6 +589,8 @@ A custom adapter implements `AppaClientAdapter` and registers in `APPA_CLIENT_AD
 
 Notice restoration and turn accounting run on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices stay in history.
 
+The Model Router translates a client's Responses or Chat Completions request to Gemini, Bedrock Converse, or Cohere before the proxy handler runs. On those routes, OpenAPPA reads the client's own wire before the translation: the route collects and strips receipts, delegation markers, and child returns from the Responses or Chat Completions body the client sent, and admission reads the client's session from that body and its headers. Responses is read before it becomes Chat Completions, because that translation joins a message's text parts. So these routes keep the client's session, subagent binding, child-return checks, and turn accounting. A refused child return on these routes does not offer the reporting turn, which needs an OpenAPPA wire. On any other route without an OpenAPPA wire, the session comes from the client's headers only.
+
 Deferred tools (`tool_search`), `local_shell`, computer-use tools, and conflicting APPA declarations fail validation immediately.
 
 The A2A [step-context guard](../platform/backend/src/agents/step-context-guard.ts) removes proxy-only fields from calls before writing plain-text summaries. A summary cannot replace signed protocol evidence.
@@ -865,7 +867,7 @@ On resubmission, the runtime replays a committed decision or continues work it d
 
 Completed receipts return saved decisions without re-running the engine. Reusing IDs with modified arguments causes an immediate rejection. The `(root, seq)` key of `openappa_events` rejects a write at a taken position. The runtime keeps each family's decoded log and validated view, so a step reads and validates only the batches written since.
 
-Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, legacy signed offers, and execution frames before forwarding. Azure Responses tool traffic is refused while OpenAPPA is enabled.
+Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, legacy signed offers, and execution frames before forwarding. Model Router routes that translate to Gemini, Bedrock Converse, or Cohere keep the client's session and subagent checks, because the proxy reads them from the client's wire before the translation. Azure Responses tool traffic is refused while OpenAPPA is enabled.
 
 Subscription Responses translated to Chat Completions retain each tool's argument snapshots and deltas until completion. Conflicting identities or argument bytes fail closed. Incomplete generations do not release held tool calls. The translator does not replace malformed arguments with empty objects.
 

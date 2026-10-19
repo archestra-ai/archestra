@@ -243,11 +243,12 @@ export function AppShell({ children }: AppShellProps) {
               >
                 {children}
               </div>
-              {/* The new-chat screen shows its own version line and hides
-                  this one (the `hide-version` class), but only after it
-                  mounts: rendering it there would draw two lines on the
-                  server and drop one as the page starts, moving the
-                  centred composer. */}
+              {/* The new-chat screen shows its own version line under the
+                  composer (`ChatPageContent` in `app/chat/page.client.tsx`)
+                  and hides this one with the `hide-version` body class, but
+                  only after it mounts: rendering it there would draw two
+                  lines on the server and drop one as the page starts,
+                  moving the centred composer. */}
               {pathname !== "/chat" && <Version />}
             </div>
           </main>

@@ -82,7 +82,8 @@ export async function prefetchShellSeed(): Promise<ShellSeed | null> {
 // ===
 
 /**
- * The shell reads the first render shows, each under the key its query uses.
+ * The reads whose data the first render shows, each under the key its query
+ * uses.
  * A read the viewer may not make (a 403) or that fails is left out, and its
  * query loads in the browser as before.
  */

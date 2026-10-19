@@ -12,6 +12,7 @@ import {
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import { llmModelsQueryKey } from "@/lib/llm-models-query-keys";
 import { soleAvailableLlmProviderApiKeyId } from "@/lib/llm-provider-api-keys.query";
 import { inFlightQueryData } from "@/lib/query-in-flight";
 import {
@@ -316,7 +317,3 @@ export function useSyncLlmModels() {
 }
 
 // ===
-
-function llmModelsQueryKey(apiKeyId: string | null) {
-  return ["llm-models", apiKeyId] as const;
-}

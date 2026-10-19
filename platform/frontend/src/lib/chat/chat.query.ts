@@ -15,6 +15,7 @@ import {
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+import { agentCatalogToolsQueryKey } from "@/lib/agent-query-keys";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
@@ -1205,13 +1206,7 @@ export function useHasPlaywrightMcpTools(
   // Only the Playwright catalog's tools: the full list carries every tool's
   // schema and can run to megabytes for a well-equipped agent.
   const toolsQuery = useQuery({
-    queryKey: [
-      "agents",
-      agentId,
-      "tools",
-      "catalog",
-      PLAYWRIGHT_MCP_CATALOG_ID,
-    ],
+    queryKey: agentCatalogToolsQueryKey(agentId, PLAYWRIGHT_MCP_CATALOG_ID),
     queryFn: () =>
       callApi(
         () =>

@@ -596,7 +596,7 @@ function claudeMarketplaceRegistrationBash(
   marketplaceName: string,
   cloneUrl: string,
 ): string {
-  const add = `cli claude plugin marketplace add --scope user ${sh(cloneUrl)}`;
+  const add = `cli_redacted claude plugin marketplace add --scope user ${sh(cloneUrl)}`;
   const remove = `cli claude plugin marketplace remove --scope user ${sh(marketplaceName)}`;
   const registrationFailure = sh(
     `Could not register the "${marketplaceName}" marketplace. Shared skills were not installed.`,
@@ -862,7 +862,7 @@ if ($marketplaceState -eq 'matching') {
     Err ${psq(`Could not replace the "${marketplaceName}" marketplace source. Shared skills were not installed.`)}
     exit 1
   }
-  ${add}
+  Invoke-ArchRedacted { ${add} }
   if ($LASTEXITCODE -ne 0) {
     Err ${psq(`Could not register the "${marketplaceName}" marketplace. Shared skills were not installed.`)}
     exit 1
@@ -877,14 +877,14 @@ try {
   $marketplaceAddOutput += $_.Exception.Message
 }
 if (-not $marketplaceAdded) {
-  Write-Host $marketplaceAddOutput
+  Write-Host (Hide-ArchUrlCredentials $marketplaceAddOutput)
   if ($marketplaceAddOutput -like '*network source differs from the one declared for it in settings*') {
     Say ${psq(`Updating the "${marketplaceName}" marketplace source`)}
     if (-not (Remove-ArchMarketplace)) {
       Err ${psq(`Could not replace the "${marketplaceName}" marketplace source. Shared skills were not installed.`)}
       exit 1
     }
-    claude plugin marketplace add --scope user ${psq(cloneUrl)}
+    Invoke-ArchRedacted { ${add} }
     if ($LASTEXITCODE -ne 0) {
       Err ${psq(`Could not register the "${marketplaceName}" marketplace. Shared skills were not installed.`)}
       exit 1

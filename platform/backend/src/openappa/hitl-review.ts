@@ -487,6 +487,8 @@ export async function getHitlInspectableAskUserArguments(params: {
   offerIds: readonly string[];
   /** Render the complete review text when an inspection is pending. */
   emit?: boolean;
+  /** The card being read was issued with the complete review text above it. */
+  carriedReviewText?: boolean;
 }): Promise<
   | {
       card: HitlAskUserArguments;
@@ -536,11 +538,21 @@ export async function getHitlInspectableAskUserArguments(params: {
     },
   );
   if ("closed" in outcome) return undefined;
-  const { card } = hitlReviewCard({ base, review });
+  const status = outcome.inspection?.status;
   const reviewText =
-    params.emit !== false && outcome.inspection?.status === "pending"
+    params.emit !== false && status === "pending"
       ? renderHitlReviewText(review)
       : undefined;
+  // A card that carries the complete text, or follows its delivery, may offer
+  // Allow even when it cannot show the whole call itself.
+  const { card } = hitlReviewCard({
+    base,
+    review,
+    inspected:
+      status === "delivered" ||
+      (status === "pending" &&
+        (reviewText !== undefined || params.carriedReviewText === true)),
+  });
   return {
     card,
     digest,
@@ -562,8 +574,8 @@ export async function getHitlInspectableAskUserArguments(params: {
  * carries the marker moves a pending inspection to delivered before it is
  * read — the text precedes the card in the same response, so receiving the
  * card is receiving the text. Approve records only for a matching claim with
- * no undelivered inspection outstanding, and only when the card could carry
- * an approval at all; Deny records on any matching card; Inspect marks the
+ * no undelivered inspection outstanding, and only when the card could show
+ * everything an approval accepts or the inspection was delivered; Deny records on any matching card; Inspect marks the
  * review pending (or reports the text already shown). Nothing here retries
  * or grants on a stale claim.
  */
@@ -636,11 +648,15 @@ export async function resolveHitlInspectableAnswer(params: {
       if (params.answer === "approve" && inspection?.status === "pending") {
         return { status: "stale" as const };
       }
-      // Only a card that showed everything an approval accepts offers Allow.
+      // Only a card that showed everything an approval accepts, or one whose
+      // reviewer received this payload's complete review text, offers Allow.
       if (
         params.answer === "approve" &&
-        !hitlReviewCard({ base: buildHitlAskUserCard(staged), review: staged })
-          .approve
+        !hitlReviewCard({
+          base: buildHitlAskUserCard(staged),
+          review: staged,
+          inspected: inspection?.status === "delivered",
+        }).approve
       ) {
         return { status: "stale" as const };
       }

@@ -140,11 +140,18 @@ type DialogView =
 interface InitialAgentSelectorProps {
   currentAgentId: string | null;
   onAgentChange: (agentId: string) => void;
+  /**
+   * The caller is still deciding the agent (its conversation or its default
+   * is loading). The chip holds a placeholder instead of standing in a
+   * guessed agent that would flicker to the real one.
+   */
+  isAgentResolving?: boolean;
 }
 
 export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
   onAgentChange,
+  isAgentResolving: isCallerResolvingAgent = false,
 }: InitialAgentSelectorProps) {
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -257,12 +264,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const currentAgentSummary = useMemo(
     () =>
       allAgents.find((a) => a.id === currentAgentId) ??
-      (currentAgentId
+      (currentAgentId || isCallerResolvingAgent
         ? null
         : (allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
           allAgents.find((a) => !a.builtIn) ??
           null)),
-    [allAgents, currentAgentId],
+    [allAgents, currentAgentId, isCallerResolvingAgent],
   );
   // The roster omits large embedded icons and editing-only fields. Hydrate one
   // record after the composer's first paint, so the response never competes
@@ -276,7 +283,8 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const displayAgentName = displayAgent?.name ?? "Select agent";
   // The composer renders before the chat knows its agent; until the roster
   // answers, the chip holds a placeholder rather than asking for a choice.
-  const isAgentResolving = !displayAgent && isRosterPending;
+  const isAgentResolving =
+    !displayAgent && (isRosterPending || isCallerResolvingAgent);
   const effectiveAgentId = displayAgent?.id ?? currentAgentId;
   // The trigger's server and knowledge icons: wanted on screen, not for
   // typing, so they wait for the page's first requests too.

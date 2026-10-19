@@ -80,7 +80,10 @@ export function AppsTable({
           <AgentNameCell
             name={app.name}
             icon={
-              <AppTypeIcon owned={app.source === "owned"} icon={app.icon} />
+              <AppTypeIcon
+                owned={app.source === "owned"}
+                icon={app.iconUrl ?? app.icon}
+              />
             }
             labels={app.labels}
             description={app.description}

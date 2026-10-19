@@ -954,7 +954,7 @@ export function ChatSidebarSection({
                   registry icon for an external one — matching the app's card on
                   the Apps page, down to the glyph each kind falls back to. */}
               <McpCatalogIcon
-                icon={appItem.icon}
+                icon={appItem.iconUrl ?? appItem.icon}
                 size={14}
                 fallback={appItem.source === "owned" ? AppWindow : undefined}
               />

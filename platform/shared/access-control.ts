@@ -1859,6 +1859,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: {},
   [RouteId.GetExternalApp]: { app: ["read"] },
+  [RouteId.GetExternalAppIcon]: { app: ["read"] },
+  // Like GetApp: the handler serves only an app the caller may view.
+  [RouteId.GetAppIcon]: {},
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: {},
   [RouteId.UpdateApp]: {},

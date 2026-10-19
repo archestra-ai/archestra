@@ -100,5 +100,17 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- /*
+        No fallback to archestra.affinity / archestra.topologySpreadConstraints:
+        those select web pods, and would place workers by where web pods run.
+      */}}
+      {{- with .Values.archestra.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.archestra.worker.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- include "archestra-platform.volumes" . | nindent 6 }}
 {{- end }}

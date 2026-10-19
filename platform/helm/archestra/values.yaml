@@ -92,6 +92,42 @@ archestra:
   #       tolerationSeconds: 300
   tolerations: []
 
+  # Affinity rules for the web pods (the main platform Deployment)
+  # Use this for node affinity or pod (anti-)affinity
+  # Not inherited by worker pods; set archestra.worker.affinity for those
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+  #
+  # Web and worker pods share app.kubernetes.io/instance (the release name) and
+  # differ by app.kubernetes.io/component (web or worker), so select on both
+  # to target one Deployment's pods. Replace "archestra" with your release name.
+  # Example (prefer one web pod per node):
+  #   affinity:
+  #     podAntiAffinity:
+  #       preferredDuringSchedulingIgnoredDuringExecution:
+  #         - weight: 100
+  #           podAffinityTerm:
+  #             topologyKey: kubernetes.io/hostname
+  #             labelSelector:
+  #               matchLabels:
+  #                 app.kubernetes.io/instance: archestra
+  #                 app.kubernetes.io/component: web
+  affinity: {}
+
+  # Topology spread constraints for the web pods
+  # Use this to spread web replicas across availability zones or nodes
+  # Not inherited by worker pods; set archestra.worker.topologySpreadConstraints for those
+  # See: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  # Example (spread web pods evenly across zones; worker pods are not counted):
+  #   topologySpreadConstraints:
+  #     - maxSkew: 1
+  #       topologyKey: topology.kubernetes.io/zone
+  #       whenUnsatisfiable: DoNotSchedule
+  #       labelSelector:
+  #         matchLabels:
+  #           app.kubernetes.io/instance: archestra
+  #           app.kubernetes.io/component: web
+  topologySpreadConstraints: []
+
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
   # Default is RollingUpdate with percentage-based surge/unavailability so larger
@@ -706,6 +742,24 @@ archestra:
     # Tolerations for worker pods
     # If not set, inherits from archestra.tolerations
     tolerations: []
+
+    # Affinity rules for worker pods
+    # Does not inherit from archestra.affinity, whose selectors target web pods
+    # Select worker pods with app.kubernetes.io/component: worker (see archestra.affinity)
+    affinity: {}
+
+    # Topology spread constraints for worker pods
+    # Does not inherit from archestra.topologySpreadConstraints, whose selectors target web pods
+    # Example (spread worker pods evenly across zones; web pods are not counted):
+    #   topologySpreadConstraints:
+    #     - maxSkew: 1
+    #       topologyKey: topology.kubernetes.io/zone
+    #       whenUnsatisfiable: DoNotSchedule
+    #       labelSelector:
+    #         matchLabels:
+    #           app.kubernetes.io/instance: archestra
+    #           app.kubernetes.io/component: worker
+    topologySpreadConstraints: []
 
   # Optional dedicated listener that aliases the publicly-exposable endpoints
   # — currently the MS Teams incoming webhook (/api/webhooks/chatops/ms-teams)

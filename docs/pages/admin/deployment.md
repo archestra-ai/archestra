@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-17
+lastUpdated: 2026-10-19
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -129,6 +129,31 @@ The server caches the most-active list for at most 30 seconds, including load ti
 `archestra.replicaCount` controls web replicas. `archestra.worker.replicaCount` controls separate workers. Enabling `archestra.horizontalPodAutoscaler.enabled` replaces the web replica setting; the default HPA range is 2–10 pods. Worker replicas remain manual. Increase database connection capacity alongside replicas.
 
 Use `archestra.resources` and `archestra.worker.resources` to size pods. Diagnostics storage shared by concurrent pods requires a compatible `ReadWriteMany` volume; check `archestra.diagnostics` in the selected chart's values.
+
+To survive a zone outage, spread replicas across zones with `archestra.topologySpreadConstraints` (web) and `archestra.worker.topologySpreadConstraints` (workers). `archestra.affinity` and `archestra.worker.affinity` take standard Kubernetes affinity rules. Select web pods by `app.kubernetes.io/component: web` and workers by `app.kubernetes.io/component: worker`, so each Deployment spreads on its own and web and worker pods can share a zone:
+
+```yaml
+archestra:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/instance: archestra # your release name
+          app.kubernetes.io/component: web
+  worker:
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: archestra # your release name
+            app.kubernetes.io/component: worker
+```
+
+Workers do not inherit the web affinity or spread settings.
 
 ### Accessing the Platform
 

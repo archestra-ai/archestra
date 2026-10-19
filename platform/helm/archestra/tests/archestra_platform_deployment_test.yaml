@@ -2567,6 +2567,59 @@ tests:
             operator: "Exists"
             effect: "NoSchedule"
 
+  # Affinity and topology spread tests
+  - it: should not have affinity or topologySpreadConstraints by default
+    documentIndex: 1
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity
+      - isNull:
+          path: spec.template.spec.topologySpreadConstraints
+
+  - it: should render affinity and topologySpreadConstraints in the pod spec
+    documentIndex: 1
+    set:
+      archestra.affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: web
+      archestra.topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: RELEASE-NAME
+              app.kubernetes.io/component: web
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey
+          value: kubernetes.io/hostname
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints
+          value:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: RELEASE-NAME
+                  app.kubernetes.io/component: web
+
+  # Topology spread selectors tell web pods apart from worker pods by this
+  # label, so it must stay on the web pod template.
+  - it: should label web pods with the web component
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: web
+
   # Kubernetes environment variable expansion tests
   # These tests ensure that $(VAR_NAME) syntax is preserved for K8s env var expansion
   - it: should handle mix of regular and env-expansion values

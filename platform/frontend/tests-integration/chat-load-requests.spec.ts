@@ -163,20 +163,11 @@ test("one visit loads a conversation and its files once, and switching re-reads 
   expect(requests.count("GET /api/chat/conversations")).toBe(0);
 });
 
-test("a cold new-chat load takes the shell's reads from the bootstrap and repeats no lookup", async ({
+test("a cold new-chat load renders its shell on the server and repeats no lookup", async ({
   page,
   mswControl,
 }) => {
-  const key = makeLlmProviderApiKey({ provider: "openai" });
-  const agent = makeAgent({ llmApiKeyId: null });
-  const model = {
-    dbId: "load-model-1",
-    id: "gpt-load",
-    displayName: "Load model",
-    provider: "openai",
-    isFree: false,
-    isBest: true,
-  };
+  const { key, agent, model } = composerFixture();
   // The bootstrap roster holds the saved agent below, so no lookup by id
   // is needed; a second roster request would show up in the count.
   await mswControl.registerMany([
@@ -207,33 +198,9 @@ test("a cold new-chat load takes the shell's reads from the bootstrap and repeat
   );
 
   await mswControl.registerMany([
-    {
-      method: "get",
-      url: "/api/bootstrap",
-      body: {
-        // The full chat view shows the agent and model chips.
-        permissions: makeUserPermissions({
-          chat: ["read", "create", "update", "delete", "full-view"],
-        }),
-        scopedCapabilities: adminScopedCapabilitiesSeed,
-        organization: organizationSeed,
-        config,
-        publicConfig,
-        appearance: appearanceSettingsSeed,
-        memberDefaultAgent: {
-          defaultAgentId: null,
-          personalChatAgentId: agent.id,
-        },
-        memberDefaultModel: { modelId: model.dbId, chatApiKeyId: key.id },
-      },
-    },
+    bootstrapOverride({ config, publicConfig, agent, model, key }),
   ]);
-  await page.addInitScript((agentId) => {
-    // Without the refresh snapshot the load is a cold one. Cleared as the
-    // next document starts: the first page may still save one as it unloads.
-    sessionStorage.clear();
-    localStorage.setItem("selected-chat-agent", agentId);
-  }, agent.id);
+  await startColdLoad(page, agent.id);
   const requests = countRequests(page);
 
   await page.goto("/chat");
@@ -243,9 +210,15 @@ test("a cold new-chat load takes the shell's reads from the bootstrap and repeat
   ).toContainText("Load model");
   await page.waitForTimeout(1500);
 
-  expect(requests.count("GET /api/bootstrap")).toBe(1);
-  // Answered by the bootstrap.
+  // The server resolved the shell: the session, the bootstrap, the banner
+  // and the sidebar's lists are in the HTML.
   for (const path of [
+    "/api/auth/get-session",
+    "/api/bootstrap",
+    "/api/site-notification",
+    "/api/chat/conversations",
+    "/api/projects",
+    "/api/apps",
     "/api/config/public",
     "/api/organization/appearance-settings",
     "/api/members/default-agent",
@@ -257,10 +230,130 @@ test("a cold new-chat load takes the shell's reads from the bootstrap and repeat
   }
   // Signed in: the footer's version comes with the config.
   expect(requests.count("GET /health")).toBe(0);
-  // The saved agent is in the starting roster.
+  // Without the composer's bundle the composer loads its own reads, once.
   expect(requests.count("GET /api/agents/chat-roster")).toBe(1);
-  // The composer's key and model lists are the page's own: the only key is
-  // already in the usable-key list, and its models are all the models.
   expect(requests.count("GET /api/llm-provider-api-keys/available")).toBe(1);
   expect(requests.count("GET /api/llm-models/available")).toBe(1);
 });
+
+test("a cold new-chat load renders a ready composer from the server's one read", async ({
+  page,
+  mswControl,
+}) => {
+  await page.goto("/chat");
+  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
+  const [config, publicConfig] = await page.evaluate(() =>
+    Promise.all(
+      ["/api/config", "/api/config/public"].map((url) =>
+        fetch(url).then((response) => response.json()),
+      ),
+    ),
+  );
+
+  const { key, agent, model } = composerFixture();
+  await mswControl.registerMany([
+    bootstrapOverride({ config, publicConfig, agent, model, key }),
+    {
+      method: "get",
+      url: "/api/bootstrap/new-chat",
+      body: {
+        roster: [agent],
+        apiKeys: [key],
+        availableApiKeys: [key],
+        models: [model],
+        agent: {
+          id: agent.id,
+          detail: agent,
+          delegations: [],
+          credentialReadiness: [],
+          browserTools: [],
+          defaultSuggestedPrompts: [],
+          keyModels: null,
+        },
+      },
+    },
+  ]);
+  await startColdLoad(page, agent.id);
+  const requests = countRequests(page);
+
+  await page.goto("/chat");
+  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeEditable();
+  await expect(
+    page.getByTestId(E2eTestId.ChatModelSelectorTrigger),
+  ).toContainText("Load model");
+  await page.waitForTimeout(1500);
+
+  // Everything the composer needs to send came with the document.
+  for (const path of [
+    "/api/bootstrap/new-chat",
+    "/api/agents/chat-roster",
+    `/api/agents/${agent.id}`,
+    `/api/agents/${agent.id}/delegations`,
+    `/api/agents/${agent.id}/tools`,
+    `/api/agents/${agent.id}/default-suggested-prompts`,
+    "/api/agents/credential-readiness",
+    "/api/llm-provider-api-keys",
+    "/api/llm-provider-api-keys/available",
+    "/api/llm-models/available",
+  ]) {
+    expect(requests.count(`GET ${path}`), path).toBe(0);
+  }
+});
+
+function composerFixture() {
+  const key = makeLlmProviderApiKey({ provider: "openai" });
+  const agent = makeAgent({ llmApiKeyId: null });
+  const model = {
+    dbId: "load-model-1",
+    id: "gpt-load",
+    displayName: "Load model",
+    provider: "openai",
+    isFree: false,
+    isBest: true,
+  };
+  return { key, agent, model };
+}
+
+function bootstrapOverride(params: {
+  config: unknown;
+  publicConfig: unknown;
+  agent: { id: string };
+  model: { dbId: string };
+  key: { id: string };
+}) {
+  return {
+    method: "get" as const,
+    url: "/api/bootstrap",
+    body: {
+      // The full chat view shows the agent and model chips.
+      permissions: makeUserPermissions({
+        chat: ["read", "create", "update", "delete", "full-view"],
+      }),
+      scopedCapabilities: adminScopedCapabilitiesSeed,
+      organization: organizationSeed,
+      config: params.config,
+      publicConfig: params.publicConfig,
+      appearance: appearanceSettingsSeed,
+      memberDefaultAgent: {
+        defaultAgentId: params.agent.id,
+        personalChatAgentId: params.agent.id,
+      },
+      memberDefaultModel: {
+        modelId: params.model.dbId,
+        chatApiKeyId: params.key.id,
+      },
+    },
+  };
+}
+
+async function startColdLoad(page: Page, agentId: string) {
+  await page.addInitScript((id) => {
+    // Without the refresh snapshot the load is a cold one. Cleared as the
+    // next document starts: the first page may still save one as it unloads.
+    sessionStorage.clear();
+    localStorage.setItem("selected-chat-agent", id);
+  }, agentId);
+  // Leave the first page before counting: until the next document commits,
+  // the first one is still live and its deferred reads would be counted.
+  await page.goto("about:blank");
+}

@@ -22,3 +22,21 @@ export function isShellSeedRoute(pathname: string | null | undefined): boolean {
  * client.
  */
 export const SHELL_SEED_HEADER = "x-archestra-shell-seed";
+
+/**
+ * The query string of the marked document, set and removed with
+ * {@link SHELL_SEED_HEADER}. The new-chat screen seeds its composer only when
+ * the URL does not choose the agent itself (see `seedsNewChatComposer`).
+ */
+export const SHELL_SEED_SEARCH_HEADER = "x-archestra-shell-seed-search";
+
+/**
+ * Whether a `/chat` document's composer can be seeded on the server. The
+ * server resolves the starting agent from the member's and the organization's
+ * defaults; a URL that names an agent or a project leaves that choice to the
+ * browser, which loads the composer's data itself.
+ */
+export function seedsNewChatComposer(search: string | null): boolean {
+  const params = new URLSearchParams(search ?? "");
+  return !params.has("agentId") && !params.has("project");
+}

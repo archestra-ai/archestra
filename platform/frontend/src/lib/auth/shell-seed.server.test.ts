@@ -14,6 +14,7 @@ const { requestHeaders, getBootstrapMock, getIssueIndexMock, fetchMock, sdk } =
       getApps: vi.fn(),
       getDefaultCredentialsStatus: vi.fn(),
       getK8sCapabilities: vi.fn(),
+      getNewChatBootstrap: vi.fn(),
     },
   }));
 
@@ -41,6 +42,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
 import { appsQueryKey, SIDEBAR_PINNED_APPS_QUERY } from "@/lib/app.query";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { conversationsQueryKey } from "@/lib/chat/conversations-query-key";
+import { newChatSeedQueries } from "@/lib/chat/new-chat-seed";
 import { environmentKeys } from "@/lib/environment.query";
 import { mcpRegistryIssueIndexQueryKey } from "@/lib/mcp/mcp-registry.query";
 import {
@@ -48,7 +50,11 @@ import {
   SIDEBAR_PINNED_PROJECTS_QUERY,
 } from "@/lib/projects/projects.query";
 import { siteNotificationKeys } from "@/lib/site-notification.query";
-import { SHELL_SEED_HEADER, SHELL_SEED_ROUTES } from "./shell-seed";
+import {
+  SHELL_SEED_HEADER,
+  SHELL_SEED_ROUTES,
+  SHELL_SEED_SEARCH_HEADER,
+} from "./shell-seed";
 import { prefetchShellSeed } from "./shell-seed.server";
 
 const bootstrap = { permissions: { mcpRegistry: ["read"] } };
@@ -58,6 +64,13 @@ const conversations = [{ id: "c1", title: "First" }];
 const projects = { data: [{ id: "p1", pinnedAt: "2026-01-01" }] };
 const apps = { data: [{ id: "a1", pinnedAt: "2026-01-01" }] };
 const capabilities = { networkPolicy: { enforcementStatus: "unknown" } };
+const newChat = {
+  roster: [{ id: "agent-1" }],
+  apiKeys: [],
+  availableApiKeys: [],
+  models: [],
+  agent: null,
+};
 
 // What every seeded route's shell carries, under its query's key.
 const shellQueries = [
@@ -110,6 +123,7 @@ describe("prefetchShellSeed", () => {
     sdk.getK8sCapabilities
       .mockReset()
       .mockResolvedValue({ data: capabilities });
+    sdk.getNewChatBootstrap.mockReset().mockResolvedValue({ data: newChat });
   });
 
   it("resolves nothing for documents the proxy did not mark", async () => {
@@ -138,20 +152,35 @@ describe("prefetchShellSeed", () => {
     expect(JSON.stringify(seed)).not.toContain("secret-");
   });
 
-  it("seeds the new-chat screen's shell: banner, sidebar and warnings", async () => {
+  it("seeds the new-chat screen's shell and its composer from one read", async () => {
     requestHeaders.set(SHELL_SEED_HEADER, "/chat");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, "");
 
     const seed = await prefetchShellSeed();
 
     // The banner is in the HTML, so the browser sends no request for it
-    // before the shell is ready.
-    expect(seed?.queries).toEqual(shellQueries);
+    // before the shell is ready; the composer's parts come with it.
+    expect(seed?.queries).toEqual([
+      ...shellQueries,
+      ...newChatSeedQueries(newChat as never),
+    ]);
+    expect(sdk.getNewChatBootstrap).toHaveBeenCalledTimes(1);
     expect(getIssueIndexMock).not.toHaveBeenCalled();
     expect(sdk.getChatConversations).toHaveBeenCalledWith(
       expect.objectContaining({
         query: { includeArtifacts: false, limit: conversationsQueryKey()[2] },
       }),
     );
+  });
+
+  it("leaves the composer to the browser when the URL chooses the agent", async () => {
+    for (const search of ["?agentId=agent-2", "?project=project-1"]) {
+      requestHeaders.set(SHELL_SEED_HEADER, "/chat");
+      requestHeaders.set(SHELL_SEED_SEARCH_HEADER, search);
+
+      expect((await prefetchShellSeed())?.queries).toEqual(shellQueries);
+    }
+    expect(sdk.getNewChatBootstrap).not.toHaveBeenCalled();
   });
 
   it("leaves out a read the viewer may not make, so its query loads as before", async () => {

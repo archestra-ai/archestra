@@ -2,8 +2,14 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { headers } from "next/headers";
 import { appsQueryKey, SIDEBAR_PINNED_APPS_QUERY } from "@/lib/app.query";
 import { authQueryKeys } from "@/lib/auth/auth.query";
-import { isShellSeedRoute, SHELL_SEED_HEADER } from "@/lib/auth/shell-seed";
+import {
+  isShellSeedRoute,
+  SHELL_SEED_HEADER,
+  SHELL_SEED_SEARCH_HEADER,
+  seedsNewChatComposer,
+} from "@/lib/auth/shell-seed";
 import { conversationsQueryKey } from "@/lib/chat/conversations-query-key";
+import { newChatSeedQueries } from "@/lib/chat/new-chat-seed";
 import { getBackendBaseUrl } from "@/lib/config/config";
 import { environmentKeys } from "@/lib/environment.query";
 import { mcpRegistryIssueIndexQueryKey } from "@/lib/mcp/mcp-registry.query";
@@ -39,8 +45,10 @@ export type ShellSeed = {
  * fields the app reads: the token never lands in the HTML.
  */
 export async function prefetchShellSeed(): Promise<ShellSeed | null> {
-  const route = (await headers()).get(SHELL_SEED_HEADER);
+  const requestHeaders = await headers();
+  const route = requestHeaders.get(SHELL_SEED_HEADER);
   if (!isShellSeedRoute(route)) return null;
+  const search = requestHeaders.get(SHELL_SEED_SEARCH_HEADER);
   try {
     const apiHeaders = await getServerApiHeaders();
     const [session, bootstrap, queries] = await withServerSeedDeadline(
@@ -56,7 +64,7 @@ export async function prefetchShellSeed(): Promise<ShellSeed | null> {
               : null,
           ),
           archestraApiSdk.getBootstrap({ headers: apiHeaders, signal }),
-          readShellQueries({ route, headers: apiHeaders, signal }),
+          readShellQueries({ route, search, headers: apiHeaders, signal }),
         ]),
     );
     if (!bootstrap.data) return null;
@@ -80,6 +88,7 @@ export async function prefetchShellSeed(): Promise<ShellSeed | null> {
  */
 async function readShellQueries(params: {
   route: string | null;
+  search: string | null;
   headers: Record<string, string>;
   signal: AbortSignal;
 }): Promise<ShellSeed["queries"]> {
@@ -128,7 +137,28 @@ async function readShellQueries(params: {
       ),
     );
   }
-  return (await Promise.all(reads)).filter((entry) => entry !== null);
+  // The new-chat composer: one read for everything it needs to send.
+  const composer =
+    params.route === "/chat" && seedsNewChatComposer(params.search)
+      ? readNewChatComposer(options)
+      : Promise.resolve([]);
+  const [shell, composerQueries] = await Promise.all([
+    Promise.all(reads),
+    composer,
+  ]);
+  return [...shell.filter((entry) => entry !== null), ...composerQueries];
+}
+
+async function readNewChatComposer(options: {
+  headers: Record<string, string>;
+  signal: AbortSignal;
+}): Promise<ShellSeed["queries"]> {
+  try {
+    const { data, error } = await archestraApiSdk.getNewChatBootstrap(options);
+    return error || !data ? [] : newChatSeedQueries(data);
+  } catch {
+    return [];
+  }
 }
 
 async function seedRead<T>(

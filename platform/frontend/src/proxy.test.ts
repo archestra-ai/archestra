@@ -72,6 +72,33 @@ describe("proxy", () => {
       (response.headers.get("x-middleware-override-headers") ?? "").split(",");
     const documentLoad = { "sec-fetch-dest": "document" };
 
+    it("hands on the query string of a marked document, and of no other", () => {
+      const marked = proxy(
+        createMockRequest({ url: "/chat?agentId=a1", headers: documentLoad }),
+      );
+      expect(
+        new Headers(
+          Object.fromEntries(
+            handedOn(marked).map((name) => [
+              name,
+              marked.headers.get(`x-middleware-request-${name}`) ?? "",
+            ]),
+          ),
+        ).get("x-archestra-shell-seed-search"),
+      ).toBe("?agentId=a1");
+
+      const unmarked = proxy(
+        createMockRequest({
+          url: "/agents?x=1",
+          headers: {
+            ...documentLoad,
+            "x-archestra-shell-seed-search": "?forged=1",
+          },
+        }),
+      );
+      expect(handedOn(unmarked)).not.toContain("x-archestra-shell-seed-search");
+    });
+
     it("marks a document load of the registry list", () => {
       expect(
         forwarded(

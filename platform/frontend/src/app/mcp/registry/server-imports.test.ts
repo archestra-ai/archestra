@@ -18,6 +18,7 @@ const SERVER_IMPORTED_MODULES = [
   "lib/app.query.ts",
   "lib/auth/auth.query.ts",
   "lib/chat/conversations-query-key.ts",
+  "lib/chat/new-chat-seed.ts",
   "lib/environment.query.ts",
   "lib/projects/projects.query.ts",
   "lib/site-notification.query.ts",

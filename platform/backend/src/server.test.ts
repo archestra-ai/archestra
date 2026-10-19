@@ -24,14 +24,21 @@ vi.mock("@sentry/node", async (importOriginal) => {
   };
 });
 
+import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import config from "@/config";
 import OrganizationModel from "@/models/organization";
 // Import after mock setup
 import healthRoutes from "@/routes/health";
 import {
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
+import {
   buildSandboxFrameAncestors,
   createFastifyInstance,
   registerApiRoutes,
+  registerWorkerRoutes,
 } from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
@@ -1187,5 +1194,45 @@ describe("buildSandboxFrameAncestors", () => {
         sandboxDomain: null,
       }),
     ).toBe("https://archestra.example.com");
+  });
+});
+
+describe("registerWorkerRoutes", () => {
+  // Scheduled and A2A runs execute on workers, where the in-process APPA
+  // runtime posts its annotators and helper consults to this server.
+  test("serves the APPA runtime's loopback endpoints", async () => {
+    const originalEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    const app = createFastifyInstance();
+    try {
+      await app.register(authPlugin);
+      await registerWorkerRoutes(app);
+
+      const noop = await app.inject({
+        method: "POST",
+        url: GUARDRAILS_NOOP_ANNOTATOR_PATH,
+        payload: {
+          version: 1,
+          kind: "annotation",
+          name: "noop",
+          artifact: { args: { name: "unlisted_tool", arguments: {} } },
+          declaration: {},
+        },
+      });
+      expect(noop.statusCode, noop.body).toBe(200);
+
+      // Without the per-process bridge bearer: the route is mounted and
+      // turns the caller away itself.
+      for (const url of [
+        OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+        `${OPENAPPA_HELPERS_PREFIX}/${crypto.randomUUID()}/helper`,
+      ]) {
+        const response = await app.inject({ method: "POST", url, payload: {} });
+        expect(response.statusCode, `${url}: ${response.body}`).toBe(401);
+      }
+    } finally {
+      config.openappa.enabled = originalEnabled;
+      await app.close();
+    }
   });
 });

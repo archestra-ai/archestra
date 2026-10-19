@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import {
   Braces,
+  Download,
   MessageSquareText,
   ShieldAlert,
   TriangleAlert,
@@ -30,6 +31,7 @@ import { useInteraction } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { GhostThread, OverviewFact } from "./overview-parts";
+import { PayloadTree } from "./payload-tree";
 import { type RequestSpan, SPAN_KINDS } from "./session-timeline";
 
 /**
@@ -329,6 +331,11 @@ function RequestView({ record }: { record: InteractionRecord }) {
       <Payload
         title="Request"
         value={shown}
+        fileName={
+          forwarded && processed !== null
+            ? `request-sent-to-model-${record.id}`
+            : `request-${record.id}`
+        }
         meta={
           forwarded && processed !== null
             ? "After policy updates, as sent to the model"
@@ -392,23 +399,33 @@ function ResponseView({ record }: { record: InteractionRecord }) {
           </InlineNoticeText>
         </InlineNotice>
       ) : null}
-      <Payload title="Response" value={response} />
+      <Payload
+        title="Response"
+        value={response}
+        fileName={`response-${record.id}`}
+      />
     </div>
   );
 }
 
-/** One payload as JSON, or the reason it is not there. */
+/** One payload as a tree or raw JSON, or the reason it is not there. */
 function Payload({
   title,
   value,
+  fileName,
   meta = null,
   actions,
 }: {
   title: string;
   value: unknown;
+  /** The download's name, without the extension. */
+  fileName: string;
   meta?: string | null;
   actions?: ReactNode;
 }) {
+  const [layout, setLayout] = useState<PayloadLayout>("tree");
+  const json = useMemo(() => JSON.stringify(value, null, 2) ?? "", [value]);
+
   if (isEncryptedChatUnavailableContent(value)) {
     return (
       <PayloadSection title={title} actions={actions}>
@@ -423,17 +440,79 @@ function Payload({
       actions={
         <>
           {actions}
-          <CopyButton text={JSON.stringify(value, null, 2)} size={12} />
+          <fieldset
+            aria-label="Payload layout"
+            className="inline-flex rounded-md border bg-muted/40 p-px"
+          >
+            <VersionButton
+              pressed={layout === "tree"}
+              onClick={() => setLayout("tree")}
+            >
+              Tree
+            </VersionButton>
+            <VersionButton
+              pressed={layout === "raw"}
+              onClick={() => setLayout("raw")}
+            >
+              Raw
+            </VersionButton>
+          </fieldset>
+          <CopyButton text={json} size={12} />
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Download ${title.toLowerCase()} JSON`}
+            title="Download JSON"
+            onClick={() => downloadJson(json, fileName)}
+          >
+            <Download className="size-3" />
+          </Button>
         </>
       }
     >
-      <JsonCodeBlock
-        value={value}
-        variant="pane"
-        maxHeightClassName="max-h-[640px] overflow-auto"
-      />
+      {layout === "tree" ? (
+        // Keyed by the payload, so switching between the original and the
+        // forwarded request opens the new one fresh instead of keeping the
+        // folds of the old one.
+        <PayloadTree key={fileName} value={value} />
+      ) : json.length > RAW_HIGHLIGHT_LIMIT ? (
+        // Highlighting tokenizes the whole text up front, about three
+        // seconds a megabyte; plain text lays out in a fraction of that.
+        <pre className="max-h-[640px] overflow-auto rounded-lg border bg-background px-3 py-2 font-mono text-xs leading-5 break-all whitespace-pre-wrap">
+          {json}
+        </pre>
+      ) : (
+        <JsonCodeBlock
+          value={value}
+          variant="pane"
+          maxHeightClassName="max-h-[640px] overflow-auto"
+        />
+      )}
     </PayloadSection>
   );
+}
+
+type PayloadLayout = "tree" | "raw";
+
+/** Above this many characters the raw view drops syntax highlighting. */
+const RAW_HIGHLIGHT_LIMIT = 100_000;
+
+function downloadJson(json: string, fileName: string) {
+  const url = URL.createObjectURL(
+    new Blob([json], { type: "application/json" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${fileName}.json`;
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  // Revoked on a delay: the browser reads the blob after the click, and
+  // revoking at once can truncate a large file.
+  setTimeout(() => {
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, 10_000);
 }
 
 function VersionButton({

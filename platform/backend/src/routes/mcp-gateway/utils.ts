@@ -333,6 +333,12 @@ export async function buildAgentMcpToolList(params: {
 }> {
   const { agent, tokenAuth } = params;
   const agentId = agent.id;
+  // The principal tools/call executes as: a service account (bare or behind an
+  // OAuth client) acts under its synthetic user id. Every caller-scoped part of
+  // this list must use it too, or the list hides what the call would allow.
+  const callerUserId = tokenAuth?.serviceAccountId
+    ? serviceAccountUserId(tokenAuth.serviceAccountId)
+    : tokenAuth?.userId;
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
   const archestraTools = getArchestraMcpTools();
@@ -362,9 +368,7 @@ export async function buildAgentMcpToolList(params: {
   const fetchedMcpTools = await filterToolsByCallerCatalogAccess(
     agentMcpTools,
     {
-      userId: tokenAuth?.serviceAccountId
-        ? serviceAccountUserId(tokenAuth.serviceAccountId)
-        : tokenAuth?.userId,
+      userId: callerUserId,
       organizationId: agent.organizationId,
       lookups: params.lookups,
     },
@@ -493,9 +497,7 @@ export async function buildAgentMcpToolList(params: {
   // Filter Archestra tools based on user RBAC permissions
   const permittedNames = await filterToolNamesByPermission(
     candidateTools.map((t) => t.name),
-    tokenAuth?.serviceAccountId
-      ? serviceAccountUserId(tokenAuth.serviceAccountId)
-      : tokenAuth?.userId,
+    callerUserId,
     tokenAuth?.organizationId,
     params.lookups,
   );
@@ -582,7 +584,7 @@ export async function buildAgentMcpToolList(params: {
         agentId,
         tokenAuth?.organizationId
           ? {
-              userId: tokenAuth.userId,
+              userId: callerUserId,
               organizationId: tokenAuth.organizationId,
             }
           : undefined,
@@ -596,7 +598,7 @@ export async function buildAgentMcpToolList(params: {
               .filter((tool) => tool.builtIn && permittedNames.has(tool.name))
               .map((tool) => tool.name),
             agentId,
-            userId: tokenAuth?.userId,
+            userId: callerUserId,
             organizationId: tokenAuth?.organizationId,
             prefetchedCatalogs: catalogsById,
             lookups: params.lookups,

@@ -952,14 +952,13 @@ const registry = defineArchestraTools([
         // not the key stored on LLM interactions. Never substitute a task ID
         // or a workspace row's UUID; continued turns keep this header value.
         const sessionKeys = rows.map((row) => row.workloadName);
-        const logged =
-          canReadLogs || canReadAllLogs
-            ? await InteractionModel.findLoggedSessionIds({
-                organizationId: actor.organizationId,
-                sessionIds: sessionKeys,
-                ...(canReadAllLogs ? {} : { ownUserId: actor.id }),
-              })
-            : new Set<string>();
+        const logged = canReadLogs
+          ? await InteractionModel.findLoggedSessionIds({
+              organizationId: actor.organizationId,
+              sessionIds: sessionKeys,
+              ...(canReadAllLogs ? {} : { ownUserId: actor.id }),
+            })
+          : new Set<string>();
         const hidePrompt = await isGuardrailsV2Active();
         const runs = rows.map((row, index) => ({
           llm_session_id: logged.has(sessionKeys[index])

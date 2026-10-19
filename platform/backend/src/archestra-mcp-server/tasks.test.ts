@@ -756,7 +756,15 @@ describe("run tools", () => {
       permission: { agent: ["read"] },
     });
     await makeMember(restricted.id, organizationId, { role: role.role });
+    const adminOnly = await makeUser();
+    const adminOnlyRole = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"], log: ["admin"] },
+    });
+    await makeMember(adminOnly.id, organizationId, {
+      role: adminOnlyRole.role,
+    });
     for (const [userId, expected] of [
+      [adminOnly.id, null],
       [actorId, null],
       [restricted.id, null],
       [admin.id, key],

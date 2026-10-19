@@ -1413,23 +1413,29 @@ function sharedWithCallerCondition(params: {
       (subject) => subject.type === "user" || subject.type === "serviceAccount",
     )
     .map((subject) => subject.id);
-  const grants = sql`audience_policy.grants`;
+  // Each test names the policies granting read to the subjects without
+  // reference to the row, so a list reads them once (a hashed subplan)
+  // instead of probing the object's policy for every row it filters.
+  const grantedTo = (subjects: ReadonlyArray<{ type: string; id?: string }>) =>
+    sql<boolean>`(${params.organizationId}, ${params.scopeColumn}::text) IN (
+      SELECT shared_policy.organization_id, shared_policy.scope
+      FROM resource_permission_policies shared_policy
+      WHERE shared_policy.resource = ${params.resource}
+        AND ${readGrantContainment(sql`shared_policy.grants`, subjects)}
+    )`;
   const reaches: SQL[] = [];
-  if (teams.length > 0) reaches.push(readGrantContainment(grants, teams));
+  if (teams.length > 0) reaches.push(grantedTo(teams));
   // A grant to the caller's own id under either self type counts, unless the
   // caller owns the object: that grant is `mine`.
   for (const id of new Set(selfIds))
     reaches.push(
-      sql`(${params.ownerColumn}::text IS DISTINCT FROM ${id} AND ${readGrantContainment(
-        grants,
-        [
-          { type: "user", id },
-          { type: "serviceAccount", id },
-        ],
-      )})`,
+      sql`(${params.ownerColumn}::text IS DISTINCT FROM ${id} AND ${grantedTo([
+        { type: "user", id },
+        { type: "serviceAccount", id },
+      ])})`,
     );
   if (reaches.length === 0) return sql<boolean>`false`;
-  return objectPolicyMatches(params, sql`(${sql.join(reaches, sql` OR `)})`);
+  return sql<boolean>`(${sql.join(reaches, sql` OR `)})`;
 }
 
 /** Subjects whose read grant gives an object the `org` audience. */

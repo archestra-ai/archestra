@@ -59,7 +59,7 @@ describe("useMyAgentRun", () => {
     queryClient.clear();
   });
 
-  it("refreshes the sidebar list when the session's current turn moves", async () => {
+  it("refreshes the sidebar list when the session's current turn moves, not on the first read", async () => {
     vi.useFakeTimers();
     const response = (turn: {
       taskId: string;
@@ -81,15 +81,18 @@ describe("useMyAgentRun", () => {
       wrapper,
     });
 
+    // The first read is not a change: invalidating the lists here used to
+    // cancel and restart their page loads on every run page.
     await act(() => vi.advanceTimersByTimeAsync(0));
-    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(sdk.getMyAgentRun).toHaveBeenCalledTimes(1);
+    expect(invalidate).not.toHaveBeenCalled();
     await act(() => vi.advanceTimersByTimeAsync(4_000));
-    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).not.toHaveBeenCalled();
     sdk.getMyAgentRun.mockResolvedValue(
       response({ ...working, taskId: "task-2" }),
     );
     await act(() => vi.advanceTimersByTimeAsync(2_000));
-    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenCalledTimes(1);
     expect(invalidate).toHaveBeenLastCalledWith({
       queryKey: ["agent-runs", "mine"],
     });
@@ -209,10 +212,10 @@ describe("useMyAgentRuns", () => {
     await act(() => result.current.fetchNextPage());
     await vi.waitFor(() => expect(result.current.data).toHaveLength(2));
     expect(sdk.getMyAgentRuns).toHaveBeenNthCalledWith(1, {
-      query: { limit: 100, offset: 0, sort: "recent" },
+      query: { limit: 20, offset: 0, sort: "recent" },
     });
     expect(sdk.getMyAgentRuns).toHaveBeenNthCalledWith(2, {
-      query: { limit: 100, offset: 100, sort: "recent" },
+      query: { limit: 20, offset: 20, sort: "recent" },
     });
   });
 });

@@ -21,7 +21,9 @@ import {
  * it current. The insert trigger upserts with a `(created_at, id)` comparison,
  * so concurrent inserts into one session cannot regress the head; the delete
  * trigger moves a head back to the newest surviving row when retention
- * removes it.
+ * removes it. There is no update trigger: nothing updates an interaction
+ * row after insert (`session_id`, `created_at` and `user_id` are written
+ * once). If that ever changes, the head table needs an AFTER UPDATE trigger.
  *
  * A sessionless interaction is a session of its own, keyed by its id.
  * `sessionless` keeps that key apart from a client session id that happens to

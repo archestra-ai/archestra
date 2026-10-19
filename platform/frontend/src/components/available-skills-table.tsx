@@ -41,7 +41,7 @@ const columns: ColumnDef<AvailableSkillRow>[] = [
             />
           </div>
           <p
-            className="line-clamp-2 text-xs text-muted-foreground"
+            className="truncate text-xs text-muted-foreground"
             title={skill.description}
           >
             {skill.description}
@@ -97,6 +97,10 @@ export function AvailableSkillsTable({
         onClearFilters={() => onSearchChange("")}
         fixedWidthColumnIds={["scope"]}
         flexibleColumnIds={["name"]}
+        // One column needs no header, and the dialog has no room for a
+        // rows-per-page picker.
+        hideHeader
+        compactPagination
       />
     </div>
   );

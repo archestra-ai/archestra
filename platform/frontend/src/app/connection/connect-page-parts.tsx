@@ -194,6 +194,9 @@ export function BrowseDialog({
     return () => clearTimeout(timer);
   }, [q]);
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const { data: canReadRegistry } = useHasPermissions({
+    mcpRegistry: ["read"],
+  });
   const skillQuery = useSkillsPaginated(
     {
       limit: 100,
@@ -317,29 +320,49 @@ export function BrowseDialog({
                               el.scrollIntoView({ block: "nearest" });
                           }}
                         >
-                          <UnstyledButton
-                            type="button"
-                            onClick={() => setExpanded(isOpen ? null : s.key)}
-                            aria-expanded={isOpen}
-                            className="flex w-full min-w-0 items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-muted/50"
-                          >
-                            <McpCatalogIcon
-                              icon={s.icon}
-                              catalogId={s.catalogId ?? undefined}
-                              size={18}
-                            />
-                            <span className="truncate">{s.name}</span>
-                            <span className="text-xs tabular-nums text-muted-foreground">
-                              {s.toolCount} {plural(s.toolCount, "tool")}
-                              <span>{serverCost(data, s.key)}</span>
-                            </span>
-                            <ChevronDown
-                              className={cn(
-                                "ml-auto size-3.5 text-muted-foreground transition-transform",
-                                isOpen && "rotate-180",
-                              )}
-                            />
-                          </UnstyledButton>
+                          <div className="flex items-center hover:bg-muted/50">
+                            <UnstyledButton
+                              type="button"
+                              onClick={() => setExpanded(isOpen ? null : s.key)}
+                              aria-expanded={isOpen}
+                              className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 text-left text-sm"
+                            >
+                              <McpCatalogIcon
+                                icon={s.icon}
+                                catalogId={s.catalogId ?? undefined}
+                                size={18}
+                              />
+                              <span className="truncate">{s.name}</span>
+                              <span className="text-xs tabular-nums text-muted-foreground">
+                                {s.toolCount} {plural(s.toolCount, "tool")}
+                                <span>{serverCost(data, s.key)}</span>
+                              </span>
+                              <ChevronDown
+                                className={cn(
+                                  "ml-auto size-3.5 text-muted-foreground transition-transform",
+                                  isOpen && "rotate-180",
+                                )}
+                              />
+                            </UnstyledButton>
+                            {s.catalogId && canReadRegistry ? (
+                              <Button
+                                asChild
+                                variant="ghost"
+                                size="icon-xs"
+                                className="mx-2 text-muted-foreground"
+                              >
+                                <Link
+                                  href={`/mcp/registry/${s.catalogId}`}
+                                  aria-label={`Open ${s.name}`}
+                                  title={`Open ${s.name}`}
+                                >
+                                  <ArrowUpRight />
+                                </Link>
+                              </Button>
+                            ) : (
+                              <span className="w-4" />
+                            )}
+                          </div>
                           {isOpen && (
                             <div className="flex flex-wrap gap-1 px-4 pb-3 pl-11">
                               {s.tools.slice(0, 40).map((t) => (
@@ -677,21 +700,6 @@ export function PromptRow({
 }
 
 // === Helpers ===
-
-/**
- * Every agent the picker offers, in its order: the featured tiles, then the
- * Other agents list, with Generic client last.
- */
-export function agentsInPickerOrder(data: ConnectPageData): ConnectClient[] {
-  const featuredIds = new Set(data.featuredClients.map((c) => c.id));
-  const others = data.clients.filter(
-    (c) => !featuredIds.has(c.id) && c.id !== "generic",
-  );
-  if (!data.hasClientOrder)
-    others.sort((a, b) => a.label.localeCompare(b.label));
-  const generic = data.clients.find((c) => c.id === "generic");
-  return [...data.featuredClients, ...others, ...(generic ? [generic] : [])];
-}
 
 export function nameOf(client: ConnectClient) {
   return client.id === "generic" ? "your agent" : client.label;

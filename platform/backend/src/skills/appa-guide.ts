@@ -58,7 +58,7 @@ The first two rows depend on the policy's \`revision\` and \`delivery\`: read th
 | Set up a starting policy, or \`init\`, while the policy is an unsaved local starter (revision 0, local delivery) | \`references/first-policy.md\` |
 | Set up a starting policy, or \`init\`, otherwise | \`references/init.md\` |
 | Add batteries or their credentials; set up or continue Git sync | \`references/first-policy.md\` |
-| Change the policy, import rules from another policy, pick a numbered suggestion, or a maintenance goal such as a health audit, agent protection, or a runtime upgrade | \`references/adjust.md\` |
+| Change the policy, pick a numbered suggestion, or a maintenance goal such as a health audit, agent protection, or a runtime upgrade | \`references/adjust.md\` |
 | Explain how OpenAPPA or Guardrails works; explain the policy or the security label; review coverage, risky tools, batteries, or one target; investigate a yell | \`references/requests.md\` |
 | A general goal on a saved policy, such as "make our agents safe" | **Review** in \`references/requests.md\` |
 | Write, run, or explain validations (\`validate\`), or test a specific case | \`references/validation.md\` |

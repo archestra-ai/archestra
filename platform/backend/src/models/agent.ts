@@ -2190,112 +2190,18 @@ class AgentModel {
     }
 
     // Step 2: everything the list shows for these agents, in two statements
-    // run together: findListEnrichment for the rows and their light aspects,
-    // findListTools for the tools.
-    const includeTools = filters?.includeTools !== false;
-    const [enriched, toolsByAgent] = await Promise.all([
-      AgentModel.findListEnrichment({
-        agentIds: sortedAgentIds,
-        includeTools,
-        userId,
-      }),
-      AgentModel.findListTools({
-        agentIds: sortedAgentIds,
-        includeTools,
-      }),
-    ]);
-    for (const entry of enriched) {
-      entry.tools = toolsByAgent.get(entry.row.id) ?? [];
-      entry.toolCounts ??= countListTools(entry.tools);
-    }
-
-    // Sort in memory to maintain the order from the sorted query
+    // run together (see findEnrichedAgents), kept in the sorted query's order.
+    const agents = await AgentModel.findEnrichedAgents({
+      agentIds: sortedAgentIds,
+      includeTools: filters?.includeTools !== false,
+      userId,
+    });
     const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
-    enriched.sort(
-      (a, b) => (orderMap.get(a.row.id) ?? 0) - (orderMap.get(b.row.id) ?? 0),
+    agents.sort(
+      (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
     );
 
-    const policies = enriched.flatMap((entry) => entry.policies);
-    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
-      resources: ["agent", "mcpGateway"],
-      scopes: sortedAgentIds,
-      policies,
-    });
-    const agents: Agent[] = enriched.map((entry) => {
-      const recipient = recipients.get(entry.row.id);
-      const teamNames = new Map(
-        entry.teams.map((team) => [team.id, team.name]),
-      );
-      const userById = new Map(entry.users.map((user) => [user.id, user]));
-      const provider: SupportedProvider | null =
-        entry.llmKey?.provider ?? entry.model?.provider ?? null;
-      return {
-        ...entry.row,
-        tools: entry.tools,
-        teams: (recipient?.teamIds ?? []).flatMap((id) => {
-          const name = teamNames.get(id);
-          return name === undefined ? [] : [{ id, name }];
-        }),
-        users: (recipient?.userIds ?? []).flatMap((id) => {
-          const user = id === entry.row.authorId ? undefined : userById.get(id);
-          return user ? [user] : [];
-        }),
-        labels: entry.labels,
-        knowledgeBaseIds: entry.knowledgeBaseIds,
-        connectorIds: entry.connectorIds,
-        suggestedPrompts: entry.suggestedPrompts,
-        authorName: entry.creator?.name ?? null,
-        authorEmail: entry.creator?.email ?? null,
-        createdBy: entry.creator ?? null,
-        resolvedLlmProvider: provider,
-        resolvedLlmProviderKeyName: entry.row.llmApiKeyId
-          ? (entry.llmKey?.name ?? null)
-          : null,
-        llmProviderRequiresPerUserCredential: provider
-          ? providerRequiresPerUserCredential(provider)
-          : false,
-        resolvedLlmModelName: entry.row.modelId
-          ? (entry.model?.modelName ?? null)
-          : null,
-      } as Agent;
-    });
-    await AgentModel.populateGrantedScope(agents, policies);
-    const pinnedAtByAgent = new Map(
-      enriched.flatMap((entry) =>
-        entry.pinnedAtMs === null
-          ? []
-          : [[entry.row.id, new Date(entry.pinnedAtMs)] as const],
-      ),
-    );
-    // Subagents are delegation tools, and the knowledge search tool counts
-    // only for an agent with knowledge sources, as in
-    // filterUnavailableKnowledgeTools.
-    const toolCounts = new Map(
-      agents.map((agent, index) => {
-        const counts = enriched[index]?.toolCounts;
-        return [
-          agent.id,
-          {
-            toolsCount:
-              (counts?.tools ?? 0) -
-              (hasKnowledgeSources(agent) ? 0 : (counts?.knowledgeTools ?? 0)),
-            subagentsCount: counts?.subagents ?? 0,
-          },
-        ];
-      }),
-    );
-    AgentModel.filterUnavailableKnowledgeTools(agents);
-
-    return createPaginatedResult(
-      agents.map((agent) => ({
-        ...agent,
-        pinnedAt: pinnedAtByAgent.get(agent.id) ?? null,
-        toolsCount: toolCounts.get(agent.id)?.toolsCount ?? 0,
-        subagentsCount: toolCounts.get(agent.id)?.subagentsCount ?? 0,
-      })),
-      total,
-      pagination,
-    );
+    return createPaginatedResult(agents, total, pagination);
   }
 
   /**
@@ -2614,6 +2520,106 @@ class AgentModel {
       .limit(remaining)
       .offset(Math.max(0, offset - own.length));
     return [...ownPage, ...rest];
+  }
+
+  /**
+   * The given agents as the Agents list shows them, in no particular order:
+   * findListEnrichment and findListTools run together, and the sharing and
+   * audience come from the policies the enrichment read, without another
+   * statement. No tools statement when `includeTools` is false; the counts
+   * are present either way.
+   */
+  private static async findEnrichedAgents(params: {
+    agentIds: string[];
+    includeTools: boolean;
+    userId?: string;
+  }): Promise<AgentListItem[]> {
+    const [enriched, toolsByAgent] = await Promise.all([
+      AgentModel.findListEnrichment(params),
+      AgentModel.findListTools(params),
+    ]);
+    for (const entry of enriched) {
+      entry.tools = toolsByAgent.get(entry.row.id) ?? [];
+      entry.toolCounts ??= countListTools(entry.tools);
+    }
+
+    const policies = enriched.flatMap((entry) => entry.policies);
+    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
+      resources: ["agent", "mcpGateway"],
+      scopes: params.agentIds,
+      policies,
+    });
+    const agents: Agent[] = enriched.map((entry) => {
+      const recipient = recipients.get(entry.row.id);
+      const teamNames = new Map(
+        entry.teams.map((team) => [team.id, team.name]),
+      );
+      const userById = new Map(entry.users.map((user) => [user.id, user]));
+      const provider: SupportedProvider | null =
+        entry.llmKey?.provider ?? entry.model?.provider ?? null;
+      return {
+        ...entry.row,
+        tools: entry.tools,
+        teams: (recipient?.teamIds ?? []).flatMap((id) => {
+          const name = teamNames.get(id);
+          return name === undefined ? [] : [{ id, name }];
+        }),
+        users: (recipient?.userIds ?? []).flatMap((id) => {
+          const user = id === entry.row.authorId ? undefined : userById.get(id);
+          return user ? [user] : [];
+        }),
+        labels: entry.labels,
+        knowledgeBaseIds: entry.knowledgeBaseIds,
+        connectorIds: entry.connectorIds,
+        suggestedPrompts: entry.suggestedPrompts,
+        authorName: entry.creator?.name ?? null,
+        authorEmail: entry.creator?.email ?? null,
+        createdBy: entry.creator ?? null,
+        resolvedLlmProvider: provider,
+        resolvedLlmProviderKeyName: entry.row.llmApiKeyId
+          ? (entry.llmKey?.name ?? null)
+          : null,
+        llmProviderRequiresPerUserCredential: provider
+          ? providerRequiresPerUserCredential(provider)
+          : false,
+        resolvedLlmModelName: entry.row.modelId
+          ? (entry.model?.modelName ?? null)
+          : null,
+      } as Agent;
+    });
+    await AgentModel.populateGrantedScope(agents, policies);
+    const pinnedAtByAgent = new Map(
+      enriched.flatMap((entry) =>
+        entry.pinnedAtMs === null
+          ? []
+          : [[entry.row.id, new Date(entry.pinnedAtMs)] as const],
+      ),
+    );
+    // Subagents are delegation tools, and the knowledge search tool counts
+    // only for an agent with knowledge sources, as in
+    // filterUnavailableKnowledgeTools.
+    const toolCounts = new Map(
+      agents.map((agent, index) => {
+        const counts = enriched[index]?.toolCounts;
+        return [
+          agent.id,
+          {
+            toolsCount:
+              (counts?.tools ?? 0) -
+              (hasKnowledgeSources(agent) ? 0 : (counts?.knowledgeTools ?? 0)),
+            subagentsCount: counts?.subagents ?? 0,
+          },
+        ];
+      }),
+    );
+    AgentModel.filterUnavailableKnowledgeTools(agents);
+
+    return agents.map((agent) => ({
+      ...agent,
+      pinnedAt: pinnedAtByAgent.get(agent.id) ?? null,
+      toolsCount: toolCounts.get(agent.id)?.toolsCount ?? 0,
+      subagentsCount: toolCounts.get(agent.id)?.subagentsCount ?? 0,
+    }));
   }
 
   /**
@@ -4582,14 +4588,18 @@ class AgentModel {
 
   /**
    * Returns the user's personal MCP gateway for the given organization, or null
-   * if none exists.
+   * if none exists. Read as the Agents list reads a row, so it carries the tool
+   * counts: one statement to find it, then the list's enrichment beside its
+   * tools. `includeTools: false` skips the tools statement and the sandbox
+   * check, leaving `tools` empty (not requested) and `sandboxAvailable` absent.
    */
   static async getPersonalMcpGateway(
     userId: string,
     organizationId: string,
-  ): Promise<Agent | null> {
+    options?: { includeTools?: boolean },
+  ): Promise<AgentListItem | null> {
     const [row] = await db
-      .select()
+      .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
       .where(
         and(
@@ -4603,7 +4613,17 @@ class AgentModel {
       .limit(1);
 
     if (!row) return null;
-    return (await AgentModel.findById(row.id, userId, true)) ?? null;
+    const includeTools = options?.includeTools !== false;
+    const [gateway] = await AgentModel.findEnrichedAgents({
+      agentIds: [row.id],
+      includeTools,
+      userId,
+    });
+    if (!gateway) return null;
+    if (includeTools) {
+      await AgentModel.populateSandboxAvailability([gateway], userId);
+    }
+    return gateway;
   }
 
   /** The author of a personal MCP gateway, or undefined if `id` is not one. */
@@ -4634,12 +4654,16 @@ class AgentModel {
   static async ensurePersonalMcpGateway(params: {
     userId: string;
     organizationId: string;
-  }): Promise<Agent> {
+    /** See {@link AgentModel.getPersonalMcpGateway}. */
+    includeTools?: boolean;
+  }): Promise<AgentListItem> {
     const { userId, organizationId } = params;
+    const readOptions = { includeTools: params.includeTools };
 
     const existing = await AgentModel.getPersonalMcpGateway(
       userId,
       organizationId,
+      readOptions,
     );
     if (existing) return existing;
 
@@ -4651,6 +4675,7 @@ class AgentModel {
     const userPart = (userRow && urlSlugify(userRow.name)) || userId;
     const slug = `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`;
 
+    let lostRace: unknown;
     try {
       const gateway = await AgentModel.create(
         {
@@ -4675,8 +4700,6 @@ class AgentModel {
         { userId, organizationId, agentId: gateway.id },
         "Created personal MCP gateway",
       );
-
-      return gateway;
     } catch (error) {
       // Lost a race against a concurrent caller — re-fetch the row that won.
       // Drizzle wraps the pg error, so use the cause-walking helper rather than
@@ -4687,14 +4710,23 @@ class AgentModel {
       ) {
         throw error;
       }
-
-      const winner = await AgentModel.getPersonalMcpGateway(
-        userId,
-        organizationId,
-      );
-      if (!winner) throw error;
-      return winner;
+      lostRace = error;
     }
+
+    // Created here or by the caller that won the race: read it the same way
+    // as an existing one.
+    const gateway = await AgentModel.getPersonalMcpGateway(
+      userId,
+      organizationId,
+      readOptions,
+    );
+    if (!gateway) {
+      throw (
+        lostRace ??
+        new Error(`Failed to read the personal MCP gateway for user ${userId}`)
+      );
+    }
+    return gateway;
   }
 
   /**

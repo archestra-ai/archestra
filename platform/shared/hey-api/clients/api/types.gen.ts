@@ -16434,7 +16434,12 @@ export type GetAgentCredentialReadinessResponse = GetAgentCredentialReadinessRes
 export type GetDefaultMcpGatewayData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Attach the gateway's assigned tools. Defaults to true. Pass false when you need only the gateway or its `toolsCount` and `subagentsCount`, which are always present: the tool refs make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned', and `sandboxAvailable` is absent.
+         */
+        includeTools?: boolean;
+    };
     url: '/api/mcp-gateways/default';
 };
 
@@ -16637,6 +16642,14 @@ export type GetDefaultMcpGatewayResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
+        /**
+         * Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.
+         */
+        toolsCount: number;
+        /**
+         * Agents this agent delegates to. Always present, even when `tools` is not requested.
+         */
+        subagentsCount: number;
     };
 };
 

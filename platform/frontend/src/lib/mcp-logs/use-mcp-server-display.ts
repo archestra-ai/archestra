@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { useMemo } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 
 export type McpServerDisplay = {
@@ -19,44 +19,52 @@ export type McpServerDisplay = {
  * Tool-call rows store the installed server's deployment name. This joins it
  * to the catalog metadata the registry already uses, so a log can show the
  * human-readable name and its icon without changing the logs API.
+ *
+ * The join reads the registry's issue index, which every page already loads
+ * for the sidebar count, so the logs pages add no request for it. The full
+ * install list (owner, team, status) is loaded only when a caller asks for
+ * `installations`: the MCP logs filter needs it once it opens, nothing else
+ * on the logs pages does.
  */
-export function useMcpServerDisplayByName() {
-  const serversQuery = useMcpServers({ includeAssignedAgents: false });
+export function useMcpServerDisplayByName(options?: {
+  installations?: boolean;
+}) {
+  const installationsQuery = useMcpServers({
+    includeAssignedAgents: false,
+    enabled: options?.installations === true,
+  });
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  // Names and icons only: the registry's directory, not the full catalog.
-  const { data: catalogItems } = useMcpCatalogDirectory({
+  const { data: issueIndex } = useMcpRegistryIssueIndex({
     enabled: canReadMcpRegistry === true,
   });
-  const servers = serversQuery.data;
 
   const displayByName = useMemo(() => {
     const catalogById = new Map(
-      catalogItems?.map((item) => [item.id, item]) ?? [],
+      issueIndex?.catalogItems.map((item) => [item.id, item]) ?? [],
     );
     const map = new Map<string, McpServerDisplay>();
-    for (const server of servers ?? []) {
+    for (const server of issueIndex?.servers ?? []) {
       const catalog = catalogById.get(server.catalogId);
       map.set(server.name, {
-        name: server.catalogName ?? catalog?.name ?? server.name,
-        icon: catalog?.icon ?? null,
+        name: catalog?.name ?? server.name,
+        icon: catalog?.iconUrl ?? catalog?.icon ?? null,
         catalogId: server.catalogId,
       });
     }
     // The built-in server has no installed row; point its calls at its
     // catalog entry so they show the platform's own logo.
     if (!map.has(ARCHESTRA_MCP_SERVER_NAME)) {
+      const builtIn = catalogById.get(ARCHESTRA_MCP_CATALOG_ID);
       map.set(ARCHESTRA_MCP_SERVER_NAME, {
-        name:
-          catalogById.get(ARCHESTRA_MCP_CATALOG_ID)?.name ??
-          ARCHESTRA_MCP_SERVER_NAME,
-        icon: catalogById.get(ARCHESTRA_MCP_CATALOG_ID)?.icon ?? null,
+        name: builtIn?.name ?? ARCHESTRA_MCP_SERVER_NAME,
+        icon: builtIn?.iconUrl ?? builtIn?.icon ?? null,
         catalogId: ARCHESTRA_MCP_CATALOG_ID,
       });
     }
     return map;
-  }, [catalogItems, servers]);
+  }, [issueIndex]);
 
-  return { servers, displayByName };
+  return { servers: installationsQuery.data, displayByName };
 }

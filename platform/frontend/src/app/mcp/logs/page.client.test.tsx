@@ -1,10 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render as rtlRender, screen, within } from "@testing-library/react";
+import {
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
 import McpGatewayLogsPage from "./page.client";
@@ -72,7 +77,7 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
 }));
 vi.mock("@/lib/mcp/mcp-registry.query", () => ({
-  useMcpCatalogDirectory: vi.fn(),
+  useMcpRegistryIssueIndex: vi.fn(),
 }));
 vi.mock("@/lib/mcp/mcp-server.query", () => ({ useMcpServers: vi.fn() }));
 vi.mock("@/lib/mcp/mcp-tool-call.query", async (importOriginal) => ({
@@ -99,6 +104,16 @@ const orgGateway = {
 
 const push = vi.fn();
 
+// The registry's issue index as the display hook reads it: install names and
+// their catalog items. Tests set these before rendering.
+let registryServers: Array<{ name: string; catalogId: string }> = [];
+let registryCatalogItems: Array<{
+  id: string;
+  name: string;
+  icon?: string;
+  iconUrl?: string;
+}> = [];
+
 // role="combobox" takes no accessible name from its contents, so the trigger is
 // addressed by the label it renders.
 async function openGatewayFilter(user: ReturnType<typeof userEvent.setup>) {
@@ -123,9 +138,17 @@ describe("McpGatewayLogsPage filters", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useMcpCatalogDirectory).mockReturnValue({
-      data: [],
-    } as unknown as ReturnType<typeof useMcpCatalogDirectory>);
+    registryServers = [];
+    registryCatalogItems = [];
+    vi.mocked(useMcpRegistryIssueIndex).mockImplementation(
+      () =>
+        ({
+          data: {
+            servers: registryServers,
+            catalogItems: registryCatalogItems,
+          },
+        }) as unknown as ReturnType<typeof useMcpRegistryIssueIndex>,
+    );
     vi.mocked(useMcpToolCalls).mockReturnValue({
       data: {
         data: [],
@@ -232,15 +255,23 @@ describe("McpGatewayLogsPage filters", () => {
         },
       ],
     } as unknown as ReturnType<typeof useMcpServers>);
-    vi.mocked(useMcpCatalogDirectory).mockReturnValue({
-      data: [
-        {
-          id: "document-search-catalog",
-          name: "Document Search",
-          icon: "📚",
-        },
-      ],
-    } as unknown as ReturnType<typeof useMcpCatalogDirectory>);
+    registryServers = [
+      {
+        name: "document-search-installation-a1b2c3",
+        catalogId: "document-search-catalog",
+      },
+      {
+        name: "document-search-installation-d4e5f6",
+        catalogId: "document-search-catalog",
+      },
+    ];
+    registryCatalogItems = [
+      {
+        id: "document-search-catalog",
+        name: "Document Search",
+        icon: "📚",
+      },
+    ];
     const user = userEvent.setup();
     render(<McpGatewayLogsPage />);
 
@@ -280,6 +311,15 @@ describe("McpGatewayLogsPage filters", () => {
         },
       ],
     } as unknown as ReturnType<typeof useMcpServers>);
+    registryServers = [
+      {
+        name: "shared-search-installation",
+        catalogId: "document-search-catalog",
+      },
+    ];
+    registryCatalogItems = [
+      { id: "document-search-catalog", name: "Document Search", icon: "📚" },
+    ];
     const user = userEvent.setup();
     render(<McpGatewayLogsPage />);
 
@@ -289,6 +329,30 @@ describe("McpGatewayLogsPage filters", () => {
 
     expect(screen.getByText("Organization installation")).toBeVisible();
     expect(screen.queryByText("shared-search-installation")).toBeNull();
+  });
+
+  // The install list only labels the filter's options; the page's own rows
+  // read names and icons from the registry's issue index, which every page
+  // already holds.
+  it("loads the install list only once the server filter opens", async () => {
+    const user = userEvent.setup();
+    render(<McpGatewayLogsPage />);
+
+    expect(vi.mocked(useMcpServers)).toHaveBeenLastCalledWith({
+      includeAssignedAgents: false,
+      enabled: false,
+    });
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Filter by MCP server" }),
+    );
+
+    await waitFor(() =>
+      expect(vi.mocked(useMcpServers)).toHaveBeenLastCalledWith({
+        includeAssignedAgents: false,
+        enabled: true,
+      }),
+    );
   });
 
   describe("call rows", () => {
@@ -302,15 +366,19 @@ describe("McpGatewayLogsPage filters", () => {
           },
         ],
       } as unknown as ReturnType<typeof useMcpServers>);
-      vi.mocked(useMcpCatalogDirectory).mockReturnValue({
-        data: [
-          {
-            id: "document-search-catalog",
-            name: "Document Search",
-            icon: "📚",
-          },
-        ],
-      } as unknown as ReturnType<typeof useMcpCatalogDirectory>);
+      registryServers = [
+        {
+          name: "document-search-deployment",
+          catalogId: "document-search-catalog",
+        },
+      ];
+      registryCatalogItems = [
+        {
+          id: "document-search-catalog",
+          name: "Document Search",
+          icon: "📚",
+        },
+      ];
     });
 
     it("shows the call, its gateway, credential, duration and time", () => {

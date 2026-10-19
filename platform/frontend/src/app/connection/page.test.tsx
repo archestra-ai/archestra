@@ -378,6 +378,31 @@ describe("ConnectPage gateway footprint", () => {
     expect(within(dialog).queryByText(/16\.9K tokens/)).toBeNull();
   });
 
+  it("links each server name to its registry page and expands its tools from the rest of the row", async () => {
+    api.use(http.get(previewUrl, () => HttpResponse.json(listed(1200))));
+    show();
+    await requestToolCounts();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    await userEvent.click(
+      await within(summary).findByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("link", { name: "Example server" }),
+    ).toHaveAttribute("href", "/mcp/registry/catalog-1");
+    const expand = within(dialog).getByRole("button", {
+      name: "Show tools for Example server",
+    });
+    await userEvent.click(expand);
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Hide tools for Example server",
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("shows an empty gateway instead of retaining catalog counts", async () => {
     api.use(
       http.get(previewUrl, () =>

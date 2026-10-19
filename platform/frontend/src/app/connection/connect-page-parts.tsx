@@ -320,19 +320,31 @@ export function BrowseDialog({
                               el.scrollIntoView({ block: "nearest" });
                           }}
                         >
-                          <div className="flex items-center hover:bg-muted/50">
+                          {/* The name opens the server's page; the rest of
+                              the row shows its tools. */}
+                          <div className="flex items-center gap-3 pl-4 text-sm hover:bg-muted/50">
+                            <McpCatalogIcon
+                              icon={s.icon}
+                              catalogId={s.catalogId ?? undefined}
+                              size={18}
+                            />
+                            {s.catalogId && canReadRegistry ? (
+                              <Link
+                                href={`/mcp/registry/${s.catalogId}`}
+                                className="truncate underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
+                              >
+                                {s.name}
+                              </Link>
+                            ) : (
+                              <span className="truncate">{s.name}</span>
+                            )}
                             <UnstyledButton
                               type="button"
                               onClick={() => setExpanded(isOpen ? null : s.key)}
                               aria-expanded={isOpen}
-                              className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 text-left text-sm"
+                              aria-label={`${isOpen ? "Hide" : "Show"} tools for ${s.name}`}
+                              className="flex min-w-0 flex-1 items-center gap-3 self-stretch py-2.5 pr-4 text-left"
                             >
-                              <McpCatalogIcon
-                                icon={s.icon}
-                                catalogId={s.catalogId ?? undefined}
-                                size={18}
-                              />
-                              <span className="truncate">{s.name}</span>
                               <span className="text-xs tabular-nums text-muted-foreground">
                                 {s.toolCount} {plural(s.toolCount, "tool")}
                                 <span>{serverCost(data, s.key)}</span>
@@ -344,24 +356,6 @@ export function BrowseDialog({
                                 )}
                               />
                             </UnstyledButton>
-                            {s.catalogId && canReadRegistry ? (
-                              <Button
-                                asChild
-                                variant="ghost"
-                                size="icon-xs"
-                                className="mx-2 text-muted-foreground"
-                              >
-                                <Link
-                                  href={`/mcp/registry/${s.catalogId}`}
-                                  aria-label={`Open ${s.name}`}
-                                  title={`Open ${s.name}`}
-                                >
-                                  <ArrowUpRight />
-                                </Link>
-                              </Button>
-                            ) : (
-                              <span className="w-4" />
-                            )}
                           </div>
                           {isOpen && (
                             <div className="flex flex-wrap gap-1 px-4 pb-3 pl-11">

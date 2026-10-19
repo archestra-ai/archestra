@@ -4,7 +4,6 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
@@ -19,7 +18,6 @@ import {
   type PolicyResolution,
 } from "@/openappa/declarations";
 import type { Rebinding } from "@/openappa/retired-annotators";
-import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { CredentialAccess } from "@/services/credential-access";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
@@ -370,9 +368,6 @@ function requireEnabled() {
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
 const CLAUDE_CODE_BATTERY = "claude-code";
-function noopAnnotatorUrl() {
-  return `http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}`;
-}
 function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
@@ -417,11 +412,6 @@ on = ["tool_output"]
 
 [policy.sanitizer.permits]
 trust = { from = "suspicious", to = "trusted" }
-
-# The earlier default's catch-all, kept declared so conversations opened under
-# it are still served.
-[[policy.annotator]]
-name = "noop"
 
 # Labels each sandbox command (run_command) with the annotator model,
 # through the LLM proxy.
@@ -495,8 +485,5 @@ timeout_ms = 20000
 
 [externals.authorities.hitl]
 builtin = "hitl"
-
-[externals.annotators.noop]
-url = "${noopAnnotatorUrl()}"
 `;
 }

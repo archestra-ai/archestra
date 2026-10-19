@@ -4051,8 +4051,15 @@
     {
       "idx": 578,
       "version": "7",
-      "when": 1792436834285,
-      "tag": "0578_remove_seeded_openappa_plugin",
+      "when": 1792438322806,
+      "tag": "0578_interaction_session_heads",
+      "breakpoints": true
+    },
+    {
+      "idx": 579,
+      "version": "7",
+      "when": 1792452235075,
+      "tag": "0579_remove_seeded_openappa_plugin",
       "breakpoints": true
     }
   ]

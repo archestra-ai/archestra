@@ -5,7 +5,7 @@ import db, { schema } from "@/database";
 import { expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0578_remove_seeded_openappa_plugin.sql"),
+  path.join(__dirname, "0579_remove_seeded_openappa_plugin.sql"),
   "utf8",
 );
 

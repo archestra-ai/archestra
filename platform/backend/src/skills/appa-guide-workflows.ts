@@ -104,6 +104,8 @@ Start from the operator's requested outcome, not a full tool rescan. Approval an
 7. For a targeted behavior change, offer a validation for it as **When to offer one** in \`references/validation.md\` says.
 
 When the operator asks why a call was blocked, follow **Explain a block** in the policy-writing rules first.
+
+When the operator imports rules from another deployment or an older policy, do not copy them verbatim: review every \`blocked\` mark and \`requires\` against the current batteries and **Cover the remaining tools** in the policy-writing rules, and drop rules a battery already covers unless the operator asked for that override.
 `;
 
 /** `references/requests.md`: Explain, review and yell investigation. */

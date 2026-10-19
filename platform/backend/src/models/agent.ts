@@ -2315,9 +2315,28 @@ class AgentModel {
             filters?.authorization?.organizationId ?? filters?.organizationId,
         })
       : [];
+    // The default active All view remains restricted to rows the caller can
+    // reach, even for admins. Explicit scopes and the deleted view retain the
+    // existing oversight behavior.
+    const isDefaultActiveAllView =
+      filters?.scope === undefined &&
+      (filters?.status ?? "active") !== "deleted";
+    const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
+    // With the authorization below and the accessible restriction both
+    // applying, the fence, the authorization and the restriction together
+    // mean "not deleted and readable through a grant": a role's base read
+    // never covers LLM proxies, so the organization's proxy the restriction
+    // lets through is dropped by the authorization anyway. One grant
+    // predicate then stands for all three, which the planner plans once.
+    const readThroughGrant =
+      !!userId &&
+      restrictToAccessible &&
+      !!filters?.authorization &&
+      filters.status !== "deleted" &&
+      !filters.authorization.baseReadTypes.includes("llm_proxy");
     const whereConditions: SQL[] = [
       getAgentStatusCondition(filters?.status ?? "active"),
-      ...(userId ? [agentListFence(principals)] : []),
+      ...(userId && !readThroughGrant ? [agentListFence(principals)] : []),
     ];
 
     if (filters?.organizationId) {
@@ -2331,6 +2350,13 @@ class AgentModel {
         eq(schema.agentsTable.organizationId, organizationId),
       );
       if (!userId) whereConditions.push(sql<boolean>`false`);
+      else if (readThroughGrant)
+        whereConditions.push(
+          and(
+            notDeleted(schema.agentsTable),
+            explicitAgentReadCondition(principals),
+          ) as SQL,
+        );
       else if (filters.status !== "deleted")
         whereConditions.push(
           or(
@@ -2487,14 +2513,7 @@ class AgentModel {
       }
     }
 
-    // The default active All view remains restricted to rows the caller can
-    // reach, even for admins. Explicit scopes and the deleted view retain the
-    // existing oversight behavior.
-    const isDefaultActiveAllView =
-      filters?.scope === undefined &&
-      (filters?.status ?? "active") !== "deleted";
-    const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
-    if (userId && restrictToAccessible) {
+    if (userId && restrictToAccessible && !readThroughGrant) {
       whereConditions.push(
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

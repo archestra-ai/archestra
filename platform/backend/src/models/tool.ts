@@ -47,7 +47,10 @@ import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata"
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
+import {
+  ARCHESTRA_TOOL_NAME_UNIQUE_INDEX,
+  toolUiResourceUriExpression,
+} from "@/database/schemas/tool";
 import { restore, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
@@ -4074,17 +4077,12 @@ function extractArchestraBuiltInShortName(toolName: string): string | null {
 
 /**
  * SQL expression resolving a tool's MCP App `ui://` resource URI, or NULL when
- * the tool is not a UI app. Canonical `_meta.ui.resourceUri` first, then the
- * legacy flat `ui/resourceUri` key; both must use the `ui://` scheme. Shared by
- * the external-apps listing and the catalog list's `providesUi` flag so the two
- * never drift.
+ * the tool is not a UI app. Shared by the external-apps listing and the catalog
+ * list's `providesUi` flag so the two never drift; `is not null` on it is served
+ * by the `tools_ui_resource_catalog_idx` partial index.
  */
 export function toolUiResourceUriSql(): SQL<string | null> {
-  const meta = schema.toolsTable.meta;
-  return sql<string | null>`coalesce(
-    case when ${meta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${meta}->'_meta'->'ui'->>'resourceUri' end,
-    case when ${meta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${meta}->'_meta'->>'ui/resourceUri' end
-  )`;
+  return toolUiResourceUriExpression(schema.toolsTable.meta);
 }
 
 /** Identical catalog fences for coverage page candidates and hydrated inventory. */

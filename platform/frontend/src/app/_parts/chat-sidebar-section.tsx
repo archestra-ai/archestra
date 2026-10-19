@@ -228,12 +228,13 @@ export function ChatSidebarSection({
   // /api/projects requires project:read; skip the fetch for roles without it
   // so the sidebar doesn't 403 (and toast) on every chat page. Only pinned
   // projects are asked for: the sidebar shows none of the others.
-  const { data: pinnedProjectsData } = useProjects({
-    pinned: true,
-    limit: 100,
-    offset: 0,
-    enabled: canReadProjects === true,
-  });
+  const { data: pinnedProjectsData, isLoading: pinnedProjectsLoading } =
+    useProjects({
+      pinned: true,
+      limit: 100,
+      offset: 0,
+      enabled: canReadProjects === true,
+    });
   const pinProjectMutation = usePinProject();
   const pinnedProjects = (pinnedProjectsData?.data ?? []).filter(
     (p) => p.pinnedAt,
@@ -241,7 +242,11 @@ export function ChatSidebarSection({
   // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
   // useApps skips the request for roles without app:read. Only pinned apps
   // are asked for: the full list is far larger and the sidebar shows none of it.
-  const { data: appsData } = useApps({ limit: 100, offset: 0, pinned: true });
+  const { data: appsData, isLoading: pinnedAppsLoading } = useApps({
+    limit: 100,
+    offset: 0,
+    pinned: true,
+  });
   const pinAppMutation = usePinApp();
   const openAppMutation = useOpenAppInChat();
   const openExternalAppMutation = useOpenExternalAppInChat();
@@ -252,6 +257,15 @@ export function ChatSidebarSection({
     apps: pinnedApps,
     runs,
   });
+  // The Pinned list merges four sources and sorts them by pin time, so drawing
+  // it before every source has answered makes rows pop in and reshuffle as the
+  // slower ones land. The list keeps its skeleton until all of them have.
+  const listLoading =
+    isLoading ||
+    runsLoading ||
+    pinnedRunsQuery.isLoading ||
+    pinnedProjectsLoading ||
+    pinnedAppsLoading;
 
   useEffect(() => {
     if ((editingId || editingRunId) && inputRef.current) {
@@ -990,8 +1004,7 @@ export function ChatSidebarSection({
   };
 
   if (
-    !isLoading &&
-    !runsLoading &&
+    !listLoading &&
     conversations.length === 0 &&
     runs.length === 0 &&
     pinnedProjects.length === 0 &&
@@ -1028,7 +1041,7 @@ export function ChatSidebarSection({
 
   return (
     <>
-      {isLoading || runsLoading ? (
+      {listLoading ? (
         <ChatListSkeleton subClass={subClass} />
       ) : (
         <ChatListFadeIn fadeIn={fadeIn}>

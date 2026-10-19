@@ -585,14 +585,7 @@ function BatteryDialog({
           )}
         </span>
       }
-      description={
-        <span
-          className="line-clamp-1"
-          title={summary?.description ?? undefined}
-        >
-          {summary?.description}
-        </span>
-      }
+      description={summary?.description}
       bodyClassName="space-y-6"
       footer={<DialogCancelButton>Close</DialogCancelButton>}
     >
@@ -919,7 +912,9 @@ function CredentialsSection({
       title="Credentials"
       description={
         bindable
-          ? "Which saved credential fills each key this battery's helpers read."
+          ? credentials.length === 1
+            ? "This battery needs an API token. Choose a saved credential for it."
+            : "This battery needs API tokens. Choose a saved credential for each one."
           : "Changing a key takes permission to update guardrails and credentials."
       }
       action={

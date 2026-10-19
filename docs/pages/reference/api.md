@@ -44,9 +44,9 @@ Click your name in the sidebar, go to **API Keys**, and click **Create API Key**
 
 Add `includeTools=false` to read agents without their tools. The tools are most of the response, because each one carries its name and description. These endpoints include them by default:
 
-- `GET /api/agents`
-- `GET /api/agent-catalog`
-- `GET /api/mcp-gateways/default`
+- [`GET /api/agents`](/docs/reference/api#/Agents/getAgents)
+- [`GET /api/agent-catalog`](/docs/reference/api#/Agents/getAgentCatalog)
+- [`GET /api/mcp-gateways/default`](/docs/reference/api#/MCP%20Gateway/getDefaultMcpGateway)
 
 ```bash
 curl -H "Authorization: arch_..." "https://archestra.example.com/api/agents?includeTools=false"

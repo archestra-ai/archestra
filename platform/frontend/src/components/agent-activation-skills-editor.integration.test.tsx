@@ -180,11 +180,9 @@ describe("AgentActivationSkillsEditor", () => {
         name: "Skills this agent can load",
       }),
     ).toBeVisible();
-    expect(
-      within(dialog).queryByRole("columnheader", { name: "Visibility" }),
-    ).toBeNull();
-    expect(within(dialog).queryByText("incident-response")).toBeNull();
-    expect(within(dialog).getByText("Research Server")).toBeVisible();
+    const list = within(dialog).getByRole("list", { name: "Skills" });
+    expect(within(list).queryByText("incident-response")).toBeNull();
+    expect(within(list).getByText("Research Server · MCP")).toBeVisible();
   });
 
   it("distinguishes same-named skill-library choices by scope and exact identity", async () => {

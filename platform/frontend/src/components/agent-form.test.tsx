@@ -2575,9 +2575,9 @@ describe("AgentForm published skills", () => {
       within(section).getByRole("button", { name: "View 1 Skill" }),
     );
 
-    const table = screen.getByRole("table");
-    expect(within(table).queryByText("first-skill")).toBeNull();
-    expect(within(table).getByText("second-skill")).toBeVisible();
+    const list = screen.getByRole("list", { name: "Skills" });
+    expect(within(list).queryByText("first-skill")).toBeNull();
+    expect(within(list).getByText("second-skill")).toBeVisible();
   });
 
   it("writes neither skill set when the save changed nothing about them", async () => {

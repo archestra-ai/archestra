@@ -34466,6 +34466,54 @@ export type GetBootstrapResponses = {
                 [key: string]: string | null;
             };
         };
+        publicConfig: {
+            disableBasicAuth: boolean;
+            disableInvitations: boolean;
+            disableImpersonation: boolean;
+            devAutoLoginEnabled: boolean;
+            maintenanceMode: string | null;
+            siteNotificationMessage: string | null;
+            enterpriseCoreActive: boolean;
+            analytics: {
+                enabled: boolean;
+                instanceId: string | null;
+                posthog: {
+                    key: string;
+                    host: string;
+                };
+            };
+            rum: {
+                enabled: boolean;
+                sampleRate: number;
+            };
+        };
+        appearance: {
+            theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+            customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+            logo: string | null;
+            logoDark: string | null;
+            favicon: string | null;
+            iconLogo: string | null;
+            iconLogoDark: string | null;
+            appName: string | null;
+            ogDescription: string | null;
+            footerText: string | null;
+            chatLinks: Array<{
+                label: string;
+                url: string;
+            }> | null;
+            chatErrorSupportMessage: string | null;
+            slimChatErrorUi: boolean;
+            animateChatPlaceholders: boolean;
+        };
+        memberDefaultAgent: {
+            defaultAgentId: string | null;
+            personalChatAgentId: string | null;
+        };
+        memberDefaultModel: {
+            modelId: string | null;
+            chatApiKeyId: string | null;
+        };
     };
 };
 

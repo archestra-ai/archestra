@@ -19,6 +19,7 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
@@ -1041,7 +1042,13 @@ type MemberAgents = {
 /** One read for both of the member's agents, shared by the hooks above. */
 const memberAgentsQuery = {
   queryKey: memberDefaultAgentQueryKey,
-  queryFn: async (): Promise<MemberAgents> => {
+  queryFn: async ({
+    client,
+  }: {
+    client: QueryClient;
+  }): Promise<MemberAgents> => {
+    const seed = await awaitBootstrapSeed(client);
+    if (seed?.memberDefaultAgent) return seed.memberDefaultAgent;
     const { data, error } = await getMemberDefaultAgent();
     throwOnApiError(error, { toastOnError: false });
     return {
@@ -1049,6 +1056,11 @@ const memberAgentsQuery = {
       personalChatAgentId: data?.personalChatAgentId ?? null,
     };
   },
+  // Kept like the organization and permissions the bootstrap seeds alongside
+  // it: restored on refresh and fresh for as long, so reopening the new-chat
+  // page does not ask again. Agent mutations still invalidate it.
+  staleTime: 5 * 60 * 1000,
+  meta: PERSISTED_QUERY_META,
 };
 
 function findCachedChatAgent(client: QueryClient, id: string) {

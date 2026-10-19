@@ -309,7 +309,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
   };
 }
 
-const PublicConfigResponseSchema = z.strictObject({
+export const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),
   disableInvitations: z.boolean(),
   disableImpersonation: z.boolean(),
@@ -344,7 +344,7 @@ let cachedAnalyticsInstanceId: string | null = null;
 let pendingAnalyticsInstanceId: Promise<string | null> | null = null;
 let hasLoggedAnalyticsInstanceIdError = false;
 
-async function getPublicConfigResponse(): Promise<
+export async function getPublicConfigResponse(): Promise<
   z.infer<typeof PublicConfigResponseSchema>
 > {
   return {

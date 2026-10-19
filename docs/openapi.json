@@ -122364,7 +122364,7 @@
         "tags": [
           "Config"
         ],
-        "description": "Get the signed-in user's permissions, organization, and platform config in one request\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get the signed-in user's permissions, organization, platform config, appearance settings, and chat defaults in one request\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -123551,13 +123551,280 @@
                         "providerBaseUrls"
                       ],
                       "additionalProperties": false
+                    },
+                    "publicConfig": {
+                      "type": "object",
+                      "properties": {
+                        "disableBasicAuth": {
+                          "type": "boolean"
+                        },
+                        "disableInvitations": {
+                          "type": "boolean"
+                        },
+                        "disableImpersonation": {
+                          "type": "boolean"
+                        },
+                        "devAutoLoginEnabled": {
+                          "type": "boolean"
+                        },
+                        "maintenanceMode": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "siteNotificationMessage": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "enterpriseCoreActive": {
+                          "type": "boolean"
+                        },
+                        "analytics": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "instanceId": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "posthog": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "host": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "host"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "instanceId",
+                            "posthog"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "rum": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "sampleRate": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "sampleRate"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "disableBasicAuth",
+                        "disableInvitations",
+                        "disableImpersonation",
+                        "devAutoLoginEnabled",
+                        "maintenanceMode",
+                        "siteNotificationMessage",
+                        "enterpriseCoreActive",
+                        "analytics",
+                        "rum"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "appearance": {
+                      "type": "object",
+                      "properties": {
+                        "theme": {
+                          "type": "string",
+                          "enum": [
+                            "modern-minimal",
+                            "clean-slate",
+                            "mono",
+                            "twitter",
+                            "tangerine",
+                            "bubblegum",
+                            "caffeine",
+                            "amber-minimal",
+                            "cosmic-night",
+                            "doom-64",
+                            "mocha-mousse",
+                            "nature",
+                            "sunset-horizon",
+                            "neo-brutalism",
+                            "vercel",
+                            "claude",
+                            "vintage-paper",
+                            "boxy-minimalistic",
+                            "catppuccin",
+                            "solarized-dark",
+                            "gruvbox-dark",
+                            "dracula-dark",
+                            "monokai-dark",
+                            "moonlight-dark"
+                          ]
+                        },
+                        "customFont": {
+                          "type": "string",
+                          "enum": [
+                            "lato",
+                            "inter",
+                            "open-sans",
+                            "roboto",
+                            "source-sans-pro",
+                            "jetbrains-mono"
+                          ]
+                        },
+                        "logo": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "logoDark": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "favicon": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "iconLogo": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "iconLogoDark": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "appName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ogDescription": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "footerText": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "chatLinks": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 25
+                              },
+                              "url": {
+                                "type": "string",
+                                "maxLength": 2000
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "url"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "chatErrorSupportMessage": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "slimChatErrorUi": {
+                          "type": "boolean"
+                        },
+                        "animateChatPlaceholders": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "theme",
+                        "customFont",
+                        "logo",
+                        "logoDark",
+                        "favicon",
+                        "iconLogo",
+                        "iconLogoDark",
+                        "appName",
+                        "ogDescription",
+                        "footerText",
+                        "chatLinks",
+                        "chatErrorSupportMessage",
+                        "slimChatErrorUi",
+                        "animateChatPlaceholders"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "memberDefaultAgent": {
+                      "type": "object",
+                      "properties": {
+                        "defaultAgentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "personalChatAgentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "defaultAgentId",
+                        "personalChatAgentId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "memberDefaultModel": {
+                      "type": "object",
+                      "properties": {
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "chatApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "modelId",
+                        "chatApiKeyId"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "permissions",
                     "scopedCapabilities",
                     "organization",
-                    "config"
+                    "config",
+                    "publicConfig",
+                    "appearance",
+                    "memberDefaultAgent",
+                    "memberDefaultModel"
                   ],
                   "additionalProperties": false
                 }

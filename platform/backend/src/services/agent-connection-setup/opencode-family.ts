@@ -14,6 +14,8 @@ export interface OpenCodeFamilyClient extends OpenCodeFamilyDescriptor {
   schemaUrl: string;
   /** Environment variable the client reads inline config from. */
   inlineConfigEnv: string;
+  /** Environment variable that overrides where the client caches models.dev. */
+  modelsPathEnv: string;
   /**
    * OpenCode 2 changed its plugin API, so its setup reads the installed major
    * version. Kilo Code is numbered 7.x but keeps OpenCode 1's API at every
@@ -27,6 +29,7 @@ export const OPENCODE_CLIENT: OpenCodeFamilyClient = {
   clientId: "opencode",
   schemaUrl: "https://opencode.ai/config.json",
   inlineConfigEnv: "OPENCODE_CONFIG_CONTENT",
+  modelsPathEnv: "OPENCODE_MODELS_PATH",
   versionedPluginApi: true,
 };
 
@@ -35,5 +38,6 @@ export const KILO_CLIENT: OpenCodeFamilyClient = {
   clientId: "kilo",
   schemaUrl: "https://app.kilo.ai/config.json",
   inlineConfigEnv: "KILO_CONFIG_CONTENT",
+  modelsPathEnv: "KILO_MODELS_PATH",
   versionedPluginApi: false,
 };

@@ -391,7 +391,10 @@ export function useDefaultMcpGateway(params?: {
   return useQuery({
     queryKey: ["mcp-gateways", "default"],
     queryFn: async () => {
-      const { data, error } = await getDefaultMcpGateway();
+      // Callers read the gateway's identity and tool count, never its tools.
+      const { data, error } = await getDefaultMcpGateway({
+        query: { includeTools: false },
+      });
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },

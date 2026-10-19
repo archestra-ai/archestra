@@ -373,7 +373,7 @@ export const getAgentOptionIds = <ThrowOnError extends boolean = false>(options?
 export const getAgentCredentialReadiness = <ThrowOnError extends boolean = false>(options?: Options<GetAgentCredentialReadinessData, ThrowOnError>) => (options?.client ?? client).get<GetAgentCredentialReadinessResponses, GetAgentCredentialReadinessErrors, ThrowOnError>({ url: '/api/agents/credential-readiness', ...options });
 
 /**
- * Get default MCP Gateway
+ * Get the caller's personal MCP Gateway, creating it on first use.
  *
  * Authentication:
  *

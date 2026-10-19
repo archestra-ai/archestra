@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  type ReactEventHandler,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 /**
  * How a transparent logo reads against the page: `dark` marks (a black
@@ -10,30 +17,64 @@ import { useEffect, useState } from "react";
 export type ImageTone = "dark" | "light" | null;
 
 const SAMPLE_SIZE = 32;
-const toneCache = new Map<string, Promise<ImageTone>>();
+const toneCache = new Map<string, ImageTone>();
 
-export function useImageTone(src: string | null | undefined): ImageTone {
+export interface ImageToneHandle {
+  tone: ImageTone;
+  /** Attach to the rendered image so it can be sampled once it has loaded. */
+  ref: RefObject<HTMLImageElement | null>;
+  onLoad: ReactEventHandler<HTMLImageElement>;
+}
+
+/**
+ * Samples the tone from the image the component renders. An earlier version
+ * loaded the source a second time through `new Image()`, and because the
+ * rendered element carries a different URL (next/image adds the deployment
+ * id, or routes through the optimizer), every icon was fetched twice.
+ *
+ * `src` is the component's own key for the cache; the pixels come from the
+ * rendered element, whatever URL it ended up loading.
+ */
+export function useImageTone(src: string | null | undefined): ImageToneHandle {
   const [tone, setTone] = useState<{ src: string; tone: ImageTone } | null>(
     null,
+  );
+  const ref = useRef<HTMLImageElement | null>(null);
+
+  const sample = useCallback(
+    (image: HTMLImageElement) => {
+      if (!src) return;
+      let detected = toneCache.get(src);
+      if (detected === undefined) {
+        detected = sampleTone(image);
+        toneCache.set(src, detected);
+      }
+      setTone({ src, tone: detected });
+    },
+    [src],
   );
 
   useEffect(() => {
     if (!src) return;
-    let active = true;
-    let pending = toneCache.get(src);
-    if (!pending) {
-      pending = detectImageTone(src);
-      toneCache.set(src, pending);
+    const cached = toneCache.get(src);
+    if (cached !== undefined) {
+      setTone({ src, tone: cached });
+      return;
     }
-    pending.then((detected) => {
-      if (active) setTone({ src, tone: detected });
-    });
-    return () => {
-      active = false;
-    };
-  }, [src]);
+    // A server-rendered image can finish loading before React attaches the
+    // load handler; it then never fires, so sample a complete image here.
+    const image = ref.current;
+    if (image?.complete && image.naturalWidth > 0) {
+      sample(image);
+    }
+  }, [src, sample]);
 
-  return tone && tone.src === src ? tone.tone : null;
+  const onLoad = useCallback<ReactEventHandler<HTMLImageElement>>(
+    (event) => sample(event.currentTarget),
+    [sample],
+  );
+
+  return { tone: tone && tone.src === src ? tone.tone : null, ref, onLoad };
 }
 
 /** Tile classes that give a low-contrast logo a backdrop in the theme it would vanish in. */
@@ -46,15 +87,6 @@ export function imageToneClassName(tone: ImageTone): string | undefined {
     default:
       return undefined;
   }
-}
-
-function detectImageTone(src: string): Promise<ImageTone> {
-  return new Promise((resolve) => {
-    const image = new window.Image();
-    image.onload = () => resolve(sampleTone(image));
-    image.onerror = () => resolve(null);
-    image.src = src;
-  });
 }
 
 function sampleTone(image: HTMLImageElement): ImageTone {

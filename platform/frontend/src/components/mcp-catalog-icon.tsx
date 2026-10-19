@@ -29,7 +29,11 @@ export function McpCatalogIcon({
   fallback: Fallback = Server,
 }: McpCatalogIconProps) {
   const appIconLogo = useAppIconLogo();
-  const imageTone = useImageTone(
+  const {
+    tone: imageTone,
+    ref: imageRef,
+    onLoad: onImageLoad,
+  } = useImageTone(
     icon?.startsWith("data:") || icon?.startsWith("/api/") ? icon : null,
   );
 
@@ -63,6 +67,8 @@ export function McpCatalogIcon({
   if (icon.startsWith("data:") || icon.startsWith("/api/")) {
     return (
       <Image
+        ref={imageRef}
+        onLoad={onImageLoad}
         src={icon}
         alt=""
         unoptimized

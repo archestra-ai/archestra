@@ -219,6 +219,11 @@ export interface UpdateApprovalRequestOptions {
   decidedByUserId?: string;
   /** Display name of the reviewer, shown as who decided (Telegram). */
   decidedByName?: string;
+  /**
+   * The paused tool call and its thread, so a streamed reply's task card for
+   * it can be settled too (Slack).
+   */
+  pausedToolCall?: { threadId: string; toolCallId: string };
 }
 
 /**

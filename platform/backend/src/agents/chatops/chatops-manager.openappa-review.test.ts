@@ -199,6 +199,8 @@ test("only the reviewer's Slack click decides the OpenAPPA review", async ({
       expect.objectContaining({
         approved: false,
         decidedByUserId: "U_REVIEWER",
+        // Settles the paused streamed reply's card for the reviewed call.
+        pausedToolCall: { threadId: THREAD, toolCallId: "call-1" },
       }),
     );
 

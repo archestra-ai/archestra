@@ -419,7 +419,7 @@ test("clicking a battery's row opens its dialog", async () => {
   ).toBeVisible();
 });
 
-test("a refused revision keeps the earlier composition's statuses and says which revision stays enforced", async () => {
+test("a refused revision is a policy fact: the table shows no notice and each row keeps its own status", async () => {
   declarations = emptyDeclarations({
     rootRevision: 4,
     batteries: [
@@ -447,20 +447,12 @@ test("a refused revision keeps the earlier composition's statuses and says which
     },
   });
   show();
-  const notice = await screen.findByRole("alert");
-  expect(notice).toHaveTextContent("Revision 4 was refused");
-  expect(notice).toHaveTextContent("Revision 3");
-  expect(notice).toHaveTextContent("stays enforced until a revision composes");
-  expect(notice).toHaveTextContent("line 4: unknown battery");
   const github = await tableRow("github");
-  expect(github).toHaveTextContent("Enforced");
-  expect(github).toHaveTextContent("From revision 3");
-  // The current text would hold it back, so it is not working as it should.
-  expect(github).toHaveTextContent("Now: Needs a credential");
-  // Held by the enforced composition though the text no longer declares it.
-  expect(await tableRow("jev")).toHaveTextContent(
-    "Still enforced from revision 3",
-  );
+  expect(github).toHaveTextContent("Credential not configured");
+  expect(github).not.toHaveTextContent("revision");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  // A battery the text no longer declares and no package carries has no row.
+  expect(screen.queryByText("jev", { exact: true })).not.toBeInTheDocument();
 });
 
 /** The table row of a battery, found by its name cell. */
@@ -473,7 +465,7 @@ async function tableRow(name: string) {
   return row;
 }
 
-test("a refusal with no earlier composition reads every battery as refused and says nothing is enforced", async () => {
+test("a refusal with no earlier composition reads as configured in the table", async () => {
   declarations = emptyDeclarations({
     batteries: [declaredGithub({ status: "active", served: null })],
     lastError: "line 4: unknown battery",
@@ -487,12 +479,10 @@ test("a refusal with no earlier composition reads every battery as refused and s
     },
   });
   show();
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Nothing is enforced",
-  );
-  const row = await entry("github");
-  expect(row).toHaveTextContent("Refused by policy");
-  expect(row).not.toHaveTextContent("Enforced");
+  const row = await tableRow("github");
+  expect(row).toHaveTextContent("Configured");
+  expect(row).not.toHaveTextContent("Refused by policy");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 test("binding a credential writes that variable alone", async () => {
@@ -1301,17 +1291,15 @@ test("search matches battery descriptions and clears the result set", async () =
   ).toBeVisible();
 });
 
-test("the enforcement filter narrows the battery table", async () => {
+test("the status filter narrows the battery table", async () => {
   declarations = emptyDeclarations({
     batteries: [declaredGithub({ status: "active" })],
   });
   show();
   const user = userEvent.setup();
   await screen.findByRole("row", { name: /github GitHub rules/ });
-  await user.click(
-    screen.getByRole("combobox", { name: "Filter by enforcement" }),
-  );
-  await user.click(screen.getByRole("option", { name: "Not enforced" }));
+  await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
+  await user.click(screen.getByRole("option", { name: "Needs attention" }));
   expect(screen.getByText("No batteries match your filters")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(
@@ -1319,16 +1307,20 @@ test("the enforcement filter narrows the battery table", async () => {
   ).toBeVisible();
 });
 
-test("the status filter groups statuses and keeps the group in the URL", async () => {
+test("Needs attention covers every problem status and keeps the group in the URL", async () => {
   declarations = emptyDeclarations({
     batteries: [
       declaredGithub(),
+      { ...declaredGithub({ status: "server_missing" }), name: "bare" },
+      { ...declaredGithub({ status: "naming_conflict" }), name: "twin" },
       { ...declaredGithub({ status: "active" }), name: "live" },
       { ...declaredGithub({ status: "unrouted" }), name: "idle" },
     ],
   });
   batteries = [
     githubBattery([install()]),
+    { ...githubBattery(), name: "bare", description: "Bare rules" },
+    { ...githubBattery(), name: "twin", description: "Twin rules" },
     { ...githubBattery(), name: "live", description: "Live rules" },
     { ...githubBattery(), name: "idle", description: "Idle rules" },
     { ...githubBattery(), name: "docs", description: "Knowledge rules" },
@@ -1336,55 +1328,37 @@ test("the status filter groups statuses and keeps the group in the URL", async (
   show();
   const user = userEvent.setup();
   await screen.findByRole("row", { name: /docs Knowledge rules/ });
-  await user.click(
-    screen.getByRole("combobox", { name: "Filter by enforcement" }),
+  expect(await tableRow("github")).toHaveTextContent(
+    "Credential not configured",
   );
-  await user.click(screen.getByRole("option", { name: "Not enforced" }));
-  expect(url.get("status")).toBe("broken");
-  // A missing credential and an unused battery are both broken.
-  expect(
-    screen.getByRole("row", { name: /github GitHub rules/ }),
-  ).toBeVisible();
-  expect(screen.getByRole("row", { name: /idle Idle rules/ })).toBeVisible();
-  expect(
-    screen.queryByRole("row", { name: /live Live rules/ }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("row", { name: /docs Knowledge rules/ }),
-  ).not.toBeInTheDocument();
+  expect(await tableRow("bare")).toHaveTextContent("Server not configured");
+  expect(await tableRow("twin")).toHaveTextContent("Server conflict");
+  // An organization battery no rule routes to is still configured.
+  expect(await tableRow("idle")).toHaveTextContent("Configured");
+  expect(await tableRow("docs")).toHaveTextContent("Not configured");
+  await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
+  await user.click(screen.getByRole("option", { name: "Needs attention" }));
+  expect(url.get("status")).toBe("attention");
+  for (const name of [/github GitHub rules/, /bare Bare rules/, /twin Twin/])
+    expect(screen.getByRole("row", { name })).toBeVisible();
+  for (const name of [/live Live rules/, /idle Idle rules/, /docs Knowledge/])
+    expect(screen.queryByRole("row", { name })).not.toBeInTheDocument();
 });
 
-test("the available batteries split into the ones that fit a server and the rest", async () => {
-  url = new URLSearchParams("status=fits");
-  declarations = emptyDeclarations();
-  fitting = [{ name: "docs", servers: ["Docs"], tools: 3 }];
-  batteries = [
-    githubBattery(),
-    { ...githubBattery(), name: "docs", description: "Knowledge rules" },
-  ];
+test("a problem status says on hover what it means", async () => {
+  declarations = emptyDeclarations({ batteries: [declaredGithub()] });
   show();
-  const docs = await screen.findByRole("row", { name: /docs Knowledge rules/ });
-  expect(docs).toHaveTextContent("Fits your servers");
-  expect(
-    screen.queryByRole("row", { name: /github GitHub rules/ }),
-  ).not.toBeInTheDocument();
-
   const user = userEvent.setup();
-  await user.click(
-    screen.getByRole("combobox", { name: "Filter by enforcement" }),
+  await user.hover(
+    within(await tableRow("github")).getByText("Credential not configured"),
   );
-  await user.click(screen.getByRole("option", { name: "For other servers" }));
-  expect(url.get("status")).toBe("other");
-  expect(
-    await screen.findByRole("row", { name: /github GitHub rules/ }),
-  ).toHaveTextContent("Not included");
-  expect(
-    screen.queryByRole("row", { name: /docs Knowledge rules/ }),
-  ).not.toBeInTheDocument();
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    "Choose a credential for this battery.",
+  );
 });
 
 test("filters in the URL apply on load, so a reload or a link keeps them", async () => {
-  url = new URLSearchParams("status=active&search=github");
+  url = new URLSearchParams("status=configured&search=github");
   declarations = emptyDeclarations({
     batteries: [declaredGithub({ status: "active" })],
   });
@@ -1400,8 +1374,8 @@ test("filters in the URL apply on load, so a reload or a link keeps them", async
     screen.queryByRole("row", { name: /docs Knowledge rules/ }),
   ).not.toBeInTheDocument();
   expect(
-    screen.getByRole("combobox", { name: "Filter by enforcement" }),
-  ).toHaveTextContent("Enforced");
+    screen.getByRole("combobox", { name: "Filter by status" }),
+  ).toHaveTextContent("Configured");
   expect(screen.getByPlaceholderText(/Search batteries by name/)).toHaveValue(
     "github",
   );

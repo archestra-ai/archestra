@@ -24,6 +24,7 @@ import {
 } from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
+import { getThemeFontPreload } from "@/lib/theme-font.server";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
@@ -43,17 +44,39 @@ const latoFont = localFont({
   preload: false,
 });
 
-// The default theme's font, so most pages need it on first paint.
+// The default theme's font. Not preloaded here: the layout preloads the
+// active theme's font instead (see getThemeFontPreload).
 const geistFont = localFont({
   src: "../fonts/Geist-Variable.woff2",
   variable: "--font-geist",
   weight: "100 900",
   display: "swap",
+  preload: false,
+});
+
+// Inter in two faces: a small latin subset that latin text needs, and the
+// full file, which the browser fetches only for characters outside that
+// range. globals.css joins them into --font-inter.
+const interLatinFont = localFont({
+  src: "../fonts/Inter-Variable-latin.woff2",
+  variable: "--font-inter-latin",
+  weight: "100 900",
+  display: "swap",
+  preload: false,
+  adjustFontFallback: false,
+  // The ranges the subset file holds (fonts/Inter-Variable-latin.woff2).
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+    },
+  ],
 });
 
 const interFont = localFont({
   src: "../fonts/Inter-Variable.woff2",
-  variable: "--font-inter",
+  variable: "--font-inter-full",
   weight: "100 900",
   display: "swap",
   preload: false,
@@ -242,6 +265,7 @@ export default async function RootLayout({
     cookies(),
     prefetchShellSeed(),
   ]);
+  const themeFont = await getThemeFontPreload(theme);
   // Presence only; nothing is fetched for it. See WithAuthCheck.
   const sessionCookie = hasSessionCookie(cookieStore);
 
@@ -249,10 +273,21 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${latoFont.variable} ${geistFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable} ${themeClassName(theme)}`}
+      className={`${latoFont.variable} ${geistFont.variable} ${interLatinFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable} ${themeClassName(theme)}`}
     >
       <head>
         <link rel="describedby" href="/llms.txt" type="text/plain" />
+        {/* The active theme's font: otherwise the browser finds it only
+            once the stylesheet applies, late in the first paint. */}
+        {themeFont && (
+          <link
+            rel="preload"
+            as="font"
+            type="font/woff2"
+            href={themeFont}
+            crossOrigin="anonymous"
+          />
+        )}
         <PublicEnvScript />
         {favicon.version && (
           <link

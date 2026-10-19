@@ -1,4 +1,7 @@
+import { Activity } from "@microsoft/agents-activity";
+import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { useMswServer } from "@/test/msw";
 import type { ChatThreadMessageFile, ThreadFileOutcome } from "@/types";
 import MSTeamsProvider, {
   buildApprovalDecisionCard,
@@ -1135,7 +1138,7 @@ describe("MSTeamsProvider.sendReply", () => {
   async function captureReplyText(
     options: Pick<
       Parameters<MSTeamsProvider["sendReply"]>[0],
-      "footer" | "hint"
+      "footer" | "hint" | "conversationUrl"
     > & { text?: string },
   ): Promise<string> {
     const provider = createProvider();
@@ -1191,6 +1194,18 @@ describe("MSTeamsProvider.sendReply", () => {
     expect(text).toBe('Here is your answer\n\n---\n\n_Reply "mute" to stop_');
   });
 
+  test("renders a labeled conversation link beside the hint above the footer", async () => {
+    const text = await captureReplyText({
+      hint: 'Reply "mute" to stop',
+      conversationUrl: "https://example.com/chat/runs/session",
+      footer: "🤖 Agent",
+    });
+
+    expect(text).toBe(
+      'Here is your answer\n\n---\n\n_Reply "mute" to stop · [Open conversation](https://example.com/chat/runs/session)_\n\n🤖 Agent',
+    );
+  });
+
   test("renders one branding line when the model signed off with the footer itself", async () => {
     const text = await captureReplyText({
       // The model copied the footer off an earlier bot reply in the thread.
@@ -1199,6 +1214,118 @@ describe("MSTeamsProvider.sendReply", () => {
     });
 
     expect(text).toBe("Here is your answer\n\n---\n\n🤖 Agent");
+  });
+});
+
+describe("MSTeamsProvider detached placeholders", () => {
+  const server = useMswServer(
+    http.get(
+      "https://login.microsoftonline.com/:tenant/v2.0/.well-known/openid-configuration",
+      ({ params }) =>
+        HttpResponse.json({
+          authorization_endpoint: `https://login.microsoftonline.com/${params.tenant}/oauth2/v2.0/authorize`,
+          token_endpoint: `https://login.microsoftonline.com/${params.tenant}/oauth2/v2.0/token`,
+          issuer: `https://login.microsoftonline.com/${params.tenant}/v2.0`,
+          jwks_uri: `https://login.microsoftonline.com/${params.tenant}/discovery/v2.0/keys`,
+        }),
+    ),
+    http.post(
+      "https://login.microsoftonline.com/:tenant/oauth2/v2.0/token",
+      () =>
+        HttpResponse.json({
+          token_type: "Bearer",
+          access_token: "connector-token",
+          expires_in: 3600,
+        }),
+    ),
+  );
+
+  async function detachedReply() {
+    const provider = new MSTeamsProvider({
+      enabled: true,
+      appId: "22222222-2222-4222-8222-222222222222",
+      appSecret: "test-secret",
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      graphTenantId: "",
+      graphClientId: "",
+      graphClientSecret: "",
+    });
+    await provider.initialize();
+    const activity = makeActivity({
+      conversation: { id: "chat", conversationType: "channel" },
+    });
+    const message = await provider.parseWebhookNotification(activity, {});
+    if (!message) throw new Error("Expected message");
+    message.metadata = {
+      conversationReference:
+        Activity.fromObject(activity).getConversationReference(),
+      placeholderActivityId: "placeholder",
+    };
+    return { provider, message };
+  }
+
+  test.each([
+    false,
+    true,
+  ])("finishes a detached placeholder with update failure=%s", async (updateFails) => {
+    const requests: Array<{ method: string; body?: unknown }> = [];
+    server.use(
+      http.put(
+        "https://smba.trafficmanager.net/amer/v3/conversations/chat/activities/placeholder",
+        async ({ request }) => {
+          requests.push({ method: "PUT", body: await request.json() });
+          return updateFails
+            ? HttpResponse.json({ error: "missing" }, { status: 404 })
+            : HttpResponse.json({ id: "placeholder" });
+        },
+      ),
+      http.post(
+        "https://smba.trafficmanager.net/amer/v3/conversations/chat/activities/msg-1",
+        async ({ request }) => {
+          requests.push({ method: "POST", body: await request.json() });
+          return HttpResponse.json({ id: "replacement" });
+        },
+      ),
+    );
+    const { provider, message } = await detachedReply();
+
+    const id = await provider.sendReply({
+      originalMessage: message,
+      text: "Finished",
+      conversationUrl: "https://example.com/chat/runs/session",
+    });
+
+    expect(id).toBe(updateFails ? "replacement" : "placeholder");
+    expect(requests.map(({ method }) => method)).toEqual(
+      updateFails ? ["PUT", "POST"] : ["PUT"],
+    );
+    expect(requests.at(-1)?.body).toMatchObject({
+      type: "message",
+      text: "Finished\n\n---\n\n_[Open conversation](https://example.com/chat/runs/session)_",
+    });
+    if (!updateFails) {
+      expect(message.metadata?.placeholderActivityId).toBeUndefined();
+    }
+  });
+
+  test("removes a detached placeholder when the agent stays silent", async () => {
+    const deleted: string[] = [];
+    server.use(
+      http.delete(
+        "https://smba.trafficmanager.net/amer/v3/conversations/chat/activities/:id",
+        ({ params }) => {
+          deleted.push(String(params.id));
+          return new HttpResponse(null, { status: 204 });
+        },
+      ),
+    );
+    const { provider, message } = await detachedReply();
+
+    await provider.clearTypingStatus("chat", "", message.metadata);
+    await provider.clearTypingStatus("chat", "", message.metadata);
+
+    expect(deleted).toEqual(["placeholder"]);
+    expect(message.metadata?.placeholderActivityId).toBeUndefined();
   });
 });
 

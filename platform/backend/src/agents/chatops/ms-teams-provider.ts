@@ -443,13 +443,19 @@ class MSTeamsProvider implements ChatOpsProvider {
     // An even-more-subtle hint (e.g. the one-time mute tip) on its own italic
     // line ABOVE the footer, so the agent footer stays the last line. Italics
     // keep it visually quieter than the footer.
-    if (options.hint) {
-      replyText += `\n\n---\n\n_${options.hint}_`;
+    const hints = [
+      options.hint,
+      options.conversationUrl &&
+        `[Open conversation](${options.conversationUrl})`,
+    ].filter(Boolean);
+    if (hints.length > 0) {
+      replyText += `\n\n---\n\n_${hints.join(" · ")}_`;
     }
     if (options.footer) {
-      replyText += options.hint
-        ? `\n\n${options.footer}`
-        : `\n\n---\n\n${options.footer}`;
+      replyText +=
+        hints.length > 0
+          ? `\n\n${options.footer}`
+          : `\n\n---\n\n${options.footer}`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),
@@ -466,6 +472,7 @@ class MSTeamsProvider implements ChatOpsProvider {
             text: replyText,
           }),
         );
+        delete options.originalMessage.metadata?.placeholderActivityId;
         return placeholderActivityId;
       } catch (error) {
         logger.debug(
@@ -492,6 +499,25 @@ class MSTeamsProvider implements ChatOpsProvider {
         this.config.appId,
         ref,
         async (context) => {
+          if (placeholderActivityId && !(turnContext instanceof TurnContext)) {
+            try {
+              await context.updateActivity(
+                Activity.fromObject({
+                  id: placeholderActivityId,
+                  type: ActivityTypes.Message,
+                  text: replyText,
+                }),
+              );
+              delete options.originalMessage.metadata?.placeholderActivityId;
+              messageId = placeholderActivityId;
+              return;
+            } catch (error) {
+              logger.debug(
+                { error: errorMessage(error) },
+                "[MSTeamsProvider] Failed to update detached placeholder, sending new message",
+              );
+            }
+          }
           const response = await context.sendActivity(replyText);
           messageId = response?.id || "";
         },
@@ -891,6 +917,32 @@ class MSTeamsProvider implements ChatOpsProvider {
         "[MSTeamsProvider] setTypingStatus failed (non-fatal)",
       );
     }
+  }
+
+  async clearTypingStatus(
+    _channelId: string,
+    _threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    const placeholderActivityId = metadata?.placeholderActivityId;
+    if (typeof placeholderActivityId !== "string") return;
+    const turnContext = metadata?.turnContext;
+    if (turnContext instanceof TurnContext) {
+      await turnContext.deleteActivity(placeholderActivityId);
+    } else {
+      const ref = metadata?.conversationReference as
+        | ConversationReference
+        | undefined;
+      if (!this.adapter || !ref) return;
+      await this.adapter.continueConversation(
+        this.config.appId,
+        ref,
+        async (context) => {
+          await context.deleteActivity(placeholderActivityId);
+        },
+      );
+    }
+    delete metadata?.placeholderActivityId;
   }
 
   async processActivity(

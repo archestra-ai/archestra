@@ -6,6 +6,10 @@ export async function watchChatOpsTask(params: {
   threadId: string;
   agentName: string;
   pinnedAgentId?: string;
+  conversationReference?: Record<string, unknown>;
+  originatingTaskId?: string;
+  placeholderActivityId?: string;
+  muteMarkerAtStart?: string | null;
 }): Promise<void> {
   return watchTaskCompletion({
     taskId: params.taskId,
@@ -15,6 +19,18 @@ export async function watchChatOpsTask(params: {
       bindingId: params.bindingId,
       threadId: params.threadId,
       ...(params.pinnedAgentId && { pinnedAgentId: params.pinnedAgentId }),
+      ...(params.conversationReference && {
+        conversationReference: params.conversationReference,
+      }),
+      ...(params.originatingTaskId && {
+        originatingTaskId: params.originatingTaskId,
+      }),
+      ...(params.placeholderActivityId && {
+        placeholderActivityId: params.placeholderActivityId,
+      }),
+      ...(params.muteMarkerAtStart !== undefined && {
+        muteMarkerAtStart: params.muteMarkerAtStart,
+      }),
     },
   });
 }

@@ -78,6 +78,11 @@ export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
      * (not the main Slack app) posts the result.
      */
     pinnedAgentId: z.string().uuid().optional(),
+    conversationReference: z.record(z.string(), z.unknown()).optional(),
+    /** Placeholder and mute state belong to this turn, not later UI continuations. */
+    originatingTaskId: z.string().uuid().optional(),
+    placeholderActivityId: z.string().optional(),
+    muteMarkerAtStart: z.string().nullable().optional(),
   }),
   z.object({
     type: z.literal("email"),

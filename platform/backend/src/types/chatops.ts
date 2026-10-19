@@ -151,6 +151,8 @@ export interface ChatReplyOptions {
    * so the footer stays the reply's last line.
    */
   hint?: string;
+  /** Stable runtime conversation link, rendered separately from the answer. */
+  conversationUrl?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
 }
@@ -505,11 +507,14 @@ export interface ChatOpsProvider {
   ): Promise<void>;
 
   /**
-   * Clear a transient "thinking" indicator without posting a message.
-   * Needed when the agent deliberately stays silent: providers like Slack
-   * only auto-clear the status once a message is posted to the thread.
+   * Explicitly clear processing status or remove an unanswered placeholder.
+   * Metadata carries provider-specific placeholder cleanup state.
    */
-  clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+  clearTypingStatus?(
+    channelId: string,
+    threadTs: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void>;
 
   /**
    * Open a reply stream for this message (optional). The stream posts nothing

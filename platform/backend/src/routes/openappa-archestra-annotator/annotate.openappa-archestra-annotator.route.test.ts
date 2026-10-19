@@ -14,6 +14,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { openappaActor } from "@/openappa/actor";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { OPENAPPA_CONTEXT_HEADER } from "@/openappa/encrypted-chat";
@@ -43,7 +44,9 @@ describe("archestra annotator", () => {
     provider: "openai" | "openrouter";
     modelId: string;
     organizationId?: string;
-  }) => Promise<void>;
+    /** Leave the organization default alone; only create the key and model. */
+    keepDefault?: boolean;
+  }) => Promise<{ keyId: string; modelId: string }>;
 
   beforeEach(
     async ({
@@ -83,10 +86,12 @@ describe("archestra annotator", () => {
         await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
           model.id,
         ]);
-        await db
-          .update(schema.organizationsTable)
-          .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
-          .where(eq(schema.organizationsTable.id, orgId));
+        if (!params.keepDefault)
+          await db
+            .update(schema.organizationsTable)
+            .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
+            .where(eq(schema.organizationsTable.id, orgId));
+        return { keyId: key.id, modelId: model.id };
       };
     },
   );
@@ -189,6 +194,35 @@ describe("archestra annotator", () => {
     expect(body).not.toHaveProperty("max_completion_tokens");
     expect(source).toBe("guardrail:annotator");
     expect(internal).toBe(true);
+  });
+
+  test("answers with the model Guardrails settings pick instead of the organization default", async () => {
+    await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
+    const picked = await useDefaultModel({
+      provider: "openrouter",
+      modelId: "anthropic/claude-sonnet-5",
+      keepDefault: true,
+    });
+    await GuardrailsDeploymentModel.set({
+      annotatorModelId: picked.modelId,
+      annotatorLlmApiKeyId: picked.keyId,
+    });
+    const viaDefault = answerAt(`/v1/openai/${agentId}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
+    );
+    const viaPicked = answerAt(
+      `/v1/openrouter/${agentId}/chat/completions`,
+      () => completion('{"rank":"suspicious"}'),
+    );
+
+    const response = await annotate(bearer());
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ rank: "suspicious" });
+    expect(viaDefault).toHaveLength(0);
+    expect(viaPicked.map(({ body }) => body.model)).toEqual([
+      "anthropic/claude-sonnet-5",
+    ]);
   });
 
   test("falls back to a tagged answer for a model that refuses the format, and stops asking it", async () => {

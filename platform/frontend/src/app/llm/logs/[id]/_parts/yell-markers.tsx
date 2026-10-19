@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils/tailwind";
 import type { TraceYell } from "./guardrails";
 import { OverviewSection } from "./overview-parts";
 
-/** "Yell" or "Superyell", beside the yell call's name. */
+/** "Yell" or "Broke the glass", beside the yell call's name. */
 export function YellChip({ yell }: { yell: TraceYell }) {
   const Icon = yell.superyell ? ShieldOff : Megaphone;
   return (
@@ -40,7 +40,7 @@ export function YellChip({ yell }: { yell: TraceYell }) {
       )}
     >
       <Icon className="size-2.5" aria-hidden="true" />
-      {yell.superyell ? "Superyell" : "Yell"}
+      {yell.superyell ? "Broke the glass" : "Yell"}
     </span>
   );
 }
@@ -121,7 +121,7 @@ export function YellStepper({
     : supers > 0
       ? TONES.super.dot
       : TONES.yell.dot;
-  const counts = `${plain} ${plain === 1 ? "yell" : "yells"}${supers > 0 ? `, ${supers} ${supers === 1 ? "superyell" : "superyells"} that turned guardrails off` : ""}`;
+  const counts = `${plain} ${plain === 1 ? "yell" : "yells"}${supers > 0 ? `, ${supers} broke the glass` : ""}`;
 
   return (
     <span className="inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border bg-card text-foreground/85 lg:h-6">
@@ -181,7 +181,7 @@ export function YellStepper({
                 className={cn(index === active ? "font-medium" : "opacity-80")}
               >
                 <span className="tabular-nums">
-                  {index + 1}. {yell.superyell ? "Superyell" : "Yell"} ·{" "}
+                  {index + 1}. {yell.superyell ? "Broke the glass" : "Yell"} ·{" "}
                   {clock(yell.at)}
                 </span>
                 <span className="block truncate opacity-70">
@@ -220,7 +220,7 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
           aria-hidden="true"
         />
         <span className={cn("font-medium", tone.text)}>
-          {yell.superyell ? "Superyell" : "Yell"}
+          {yell.superyell ? "Broke the glass" : "Yell"}
         </span>
         <span className="text-muted-foreground">
           {yell.superyell ? "· guardrails turned off" : "· feedback to admins"}
@@ -315,8 +315,8 @@ function OffBand({
       <TooltipContent side="right" className="max-w-xs">
         <p className="font-medium">Guardrails off</p>
         <p className="opacity-70">
-          Since the superyell at {clock(at)}: calls were not checked and the
-          label was not tracked.
+          Since the agent broke the glass at {clock(at)}: calls were not checked
+          and the label was not tracked.
         </p>
       </TooltipContent>
     </Tooltip>

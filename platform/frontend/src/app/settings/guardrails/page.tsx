@@ -1,6 +1,7 @@
 import { AppaGithubSyncPanel } from "@/app/openappa/_parts/appa-github-sync-panel";
 import { SettingsSectionStack } from "@/components/settings/settings-block";
 import {
+  OpenAppaAnnotatorModelSetting,
   OpenAppaBreakTheGlassSetting,
   OpenAppaClientCoverageSetting,
   OpenAppaEnforcementSetting,
@@ -13,6 +14,7 @@ export default function OpenAppaSettingsPage() {
       <OpenAppaEnforcementSetting />
       <OpenAppaNewSessionPolicySetting />
       <OpenAppaBreakTheGlassSetting />
+      <OpenAppaAnnotatorModelSetting />
       <OpenAppaClientCoverageSetting />
       <AppaGithubSyncPanel />
     </SettingsSectionStack>

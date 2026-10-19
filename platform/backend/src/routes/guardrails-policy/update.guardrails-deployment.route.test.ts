@@ -9,6 +9,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import {
@@ -71,6 +72,8 @@ describe("Deployment-wide Guardrails v2 switch", () => {
           unsupportedClientAction: "bypass",
           breakTheGlassEnabled: true,
           newSessionPolicy: "live",
+          annotatorModelId: null,
+          annotatorLlmApiKeyId: null,
           featureEnabled,
           active: enabled && featureEnabled,
         });
@@ -183,6 +186,85 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     });
     expect((await choose("frozen")).statusCode).toBe(400);
     expect(await GuardrailsDeploymentModel.getNewSessionPolicy()).toBe("live");
+  });
+
+  test("administrators can pick the annotator model, only as a linked pair of the organization's own, and the change is audited", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const makeKeyWithModel = async (orgId: string, modelId: string) => {
+      const secret = await makeSecret({ secret: { apiKey: "provider-key" } });
+      const key = await makeLlmProviderApiKey(orgId, secret.id, {
+        provider: "openrouter",
+      });
+      const model = await ModelModel.create({
+        externalId: `openrouter/${modelId}`,
+        provider: "openrouter",
+        modelId,
+        contextLength: 128_000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+      return { keyId: key.id, modelId: model.id };
+    };
+    const pick = (
+      annotatorModelId: string | null,
+      annotatorLlmApiKeyId: string | null,
+    ) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/guardrails-deployment",
+        payload: { annotatorModelId, annotatorLlmApiKeyId },
+      });
+    const own = await makeKeyWithModel(
+      organizationId,
+      "anthropic/claude-sonnet-5",
+    );
+    const other = await makeKeyWithModel(organizationId, "openai/gpt-5");
+    const foreign = await makeKeyWithModel(
+      (await makeOrganization()).id,
+      "openai/gpt-5-mini",
+    );
+
+    expect((await pick(own.modelId, null)).statusCode).toBe(400);
+    expect((await pick(own.modelId, other.keyId)).statusCode).toBe(400);
+    expect((await pick(foreign.modelId, foreign.keyId)).statusCode).toBe(404);
+    expect(await GuardrailsDeploymentModel.get()).toMatchObject({
+      annotatorModelId: null,
+      annotatorLlmApiKeyId: null,
+    });
+
+    const saved = await pick(own.modelId, own.keyId);
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({
+      annotatorModelId: own.modelId,
+      annotatorLlmApiKeyId: own.keyId,
+    });
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, organizationId));
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          action: "organization.updated",
+          before: expect.objectContaining({ annotatorModelId: null }),
+          after: expect.objectContaining({ annotatorModelId: own.modelId }),
+        }),
+      );
+    });
+
+    // Both null goes back to the organization's default model.
+    expect((await pick(null, null)).json()).toMatchObject({
+      annotatorModelId: null,
+      annotatorLlmApiKeyId: null,
+    });
   });
 
   test("rejects an unsupported action without changing the saved setting", async () => {

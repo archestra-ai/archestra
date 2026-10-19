@@ -48774,6 +48774,8 @@ export type GetGuardrailsDeploymentResponses = {
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
         newSessionPolicy: 'live' | 'snapshot';
+        annotatorModelId: string | null;
+        annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
         active: boolean;
     };
@@ -48787,6 +48789,8 @@ export type UpdateGuardrailsDeploymentData = {
         unsupportedClientAction?: 'bypass' | 'block';
         breakTheGlassEnabled?: boolean;
         newSessionPolicy?: 'live' | 'snapshot';
+        annotatorModelId?: string | null;
+        annotatorLlmApiKeyId?: string | null;
     };
     path?: never;
     query?: never;
@@ -48870,6 +48874,8 @@ export type UpdateGuardrailsDeploymentResponses = {
         unsupportedClientAction: 'bypass' | 'block';
         breakTheGlassEnabled: boolean;
         newSessionPolicy: 'live' | 'snapshot';
+        annotatorModelId: string | null;
+        annotatorLlmApiKeyId: string | null;
         featureEnabled: boolean;
         active: boolean;
     };

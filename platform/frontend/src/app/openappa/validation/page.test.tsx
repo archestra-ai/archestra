@@ -798,9 +798,11 @@ test("invalid files have honest summary and syntax diagnostics before a run", as
     ),
   );
   showPage();
-  await waitFor(() =>
-    expect(screen.getByText("Invalid tool at line 1")).toBeVisible(),
-  );
+  expect(
+    await openStatusReason(
+      await screen.findByRole("button", { name: "Not run: show why" }),
+    ),
+  ).toHaveTextContent("Invalid tool at line 1");
   fireEvent.click(screen.getByRole("link", { name: scenario.path }));
   expect(await screen.findByText("Invalid tool at line 1")).toBeVisible();
 });
@@ -1082,7 +1084,7 @@ test("status filters keep failures, execution failures and unrun files apart and
         .getByRole("link", { name: "cannot_run.appa" })
         .closest("tr");
       expect(cannotRun).toHaveTextContent("Cannot run");
-      expect(cannotRun).toHaveTextContent("Unknown tool in this policy");
+      expect(cannotRun).not.toHaveTextContent("Unknown tool in this policy");
       for (const other of ["passed", "failed", "not_run"])
         expect(
           screen.queryByRole("link", { name: `${other}.appa` }),
@@ -1163,7 +1165,7 @@ test("each file shows its own most recent run when it is absent from the latest 
       .closest("tr");
     expect(olderRow).toHaveTextContent("Failed");
     expect(olderRow).toHaveTextContent(formatDate({ date: createdAt }));
-    expect(olderRow).toHaveTextContent("Expected deny, received allow");
+    expect(olderRow).not.toHaveTextContent("Expected deny, received allow");
   });
   const newerRow = screen
     .getByRole("link", { name: scenario.path })
@@ -1176,14 +1178,13 @@ test("each file shows its own most recent run when it is absent from the latest 
   expect(lastRun).toHaveTextContent(
     formatDate({ date: run.createdAt, dateFormat: "MM/dd HH:mm" }),
   );
-  await userEvent.click(
+  const why = await openStatusReason(
     within(
       screen
         .getByRole("link", { name: older.path })
         .closest("tr") as HTMLElement,
     ).getByRole("button", { name: "Failed: show why" }),
   );
-  const why = await screen.findByRole("dialog");
   expect(why).toHaveTextContent("Expected deny, received allow");
   expect(why).toHaveTextContent(
     `Manual run · ${formatDate({ date: createdAt, dateFormat: "MM/dd HH:mm" })}`,
@@ -1459,15 +1460,14 @@ test("last-run summary adds up the per-file statuses, so a refused policy passes
   const row = screen.getByRole("link", { name: scenario.path }).closest("tr");
   expect(row).toHaveTextContent("Cannot run");
   expect(row).toHaveTextContent(formatDate({ date: run.createdAt }));
-  expect(row).toHaveTextContent("Missing tool contract");
-  await userEvent.click(
-    within(row as HTMLElement).getByRole("button", {
-      name: "Cannot run: show why",
-    }),
-  );
-  expect(await screen.findByRole("dialog")).toHaveTextContent(
-    "Missing tool contract",
-  );
+  expect(row).not.toHaveTextContent("Missing tool contract");
+  expect(
+    await openStatusReason(
+      within(row as HTMLElement).getByRole("button", {
+        name: "Cannot run: show why",
+      }),
+    ),
+  ).toHaveTextContent("Missing tool contract");
 });
 
 test("an open status explanation stays open when run history refreshes", async () => {
@@ -1487,10 +1487,9 @@ test("an open status explanation stays open when run history refreshes", async (
   let history: unknown[] = [failed];
   server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json(history)));
   showPage(client);
-  await userEvent.click(
+  const why = await openStatusReason(
     await screen.findByRole("button", { name: "Failed: show why" }),
   );
-  const why = await screen.findByRole("dialog");
   expect(why).toHaveTextContent("Expected deny, received allow");
   // An unrelated older run arrives; this file's result is unchanged.
   history = [
@@ -1505,7 +1504,7 @@ test("an open status explanation stays open when run history refreshes", async (
       client.getQueryData<unknown[]>(["openappa-policy-test-runs"]),
     ).toHaveLength(2),
   );
-  expect(screen.getByRole("dialog")).toBe(why);
+  expect(why).toBeInTheDocument();
   expect(why).toBeVisible();
 });
 
@@ -2140,3 +2139,15 @@ test("unavailable automatic runs explain the problem in the summary and saved de
   expect(within(dialog).getByText(message)).toBeVisible();
   expect(within(dialog).getByText("Cannot run")).toBeVisible();
 });
+
+/** Hovers a status badge and returns the reason card it opens. */
+async function openStatusReason(trigger: HTMLElement) {
+  await userEvent.hover(trigger);
+  return waitFor(() => {
+    const card = document.querySelector<HTMLElement>(
+      '[data-slot="hover-card-content"]',
+    );
+    expect(card).not.toBeNull();
+    return card as HTMLElement;
+  });
+}

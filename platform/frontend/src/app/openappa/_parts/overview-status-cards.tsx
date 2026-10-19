@@ -309,6 +309,15 @@ function YellsCard() {
         </span>
       }
       title="Yells"
+      status={
+        deployment.data && (
+          <Status done={deployment.data.breakTheGlassEnabled}>
+            {deployment.data.breakTheGlassEnabled
+              ? "Break the glass on"
+              : "Break the glass off"}
+          </Status>
+        )
+      }
       description="Agent reports of blocks it could not make sense of or get past. Investigate them with the configuration agent."
       action={
         <Button size="sm" variant="outline" asChild>
@@ -323,24 +332,12 @@ function YellsCard() {
           Could not load yells. Retry
         </Button>
       ) : (
-        <div className="space-y-1">
-          <p className="flex items-baseline gap-2">
-            <span className="text-3xl font-semibold tabular-nums">
-              {summary.data?.unresolved ?? "—"}
-            </span>
-            <span className="text-sm text-muted-foreground">unresolved</span>
-          </p>
-          {deployment.data?.breakTheGlassEnabled && summary.data && (
-            <p className="flex items-baseline gap-1.5">
-              <span className="text-lg font-semibold tabular-nums">
-                {summary.data.superyells}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                broke the glass
-              </span>
-            </p>
-          )}
-        </div>
+        <p className="flex items-baseline gap-2">
+          <span className="text-3xl font-semibold tabular-nums">
+            {summary.data?.unresolved ?? "—"}
+          </span>
+          <span className="text-sm text-muted-foreground">unresolved</span>
+        </p>
       )}
     </StatusCard>
   );

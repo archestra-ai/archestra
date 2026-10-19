@@ -8,7 +8,11 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaPolicyFileModel from "@/models/openappa-policy-file";
 import ToolModel from "@/models/tool";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  guardrailsPolicyService,
+  initialPolicy,
+  UNDECLARED_TOOL_ANNOTATOR,
+} from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
 import { helperUrlBase } from "./declarations";
@@ -240,6 +244,43 @@ describe("annotators earlier opening policies declare", () => {
     expect(
       (await guardrailsPolicyService.get(organizationId)).content,
     ).toContain(JUDGE_A);
+  });
+
+  test("sessions opened under the earlier default keep its noop catch-all once the starter is saved", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, userId } = await admin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const earlierDefault =`${initialPolicy().replace(
+      `name = "*"\nannotator = "${UNDECLARED_TOOL_ANNOTATOR}"`,
+      'name = "*"\nannotator = "noop"',
+    )}
+[[policy.annotator]]
+name = "noop"
+
+[externals.annotators.noop]
+url = "${NOOP_URL}"
+`;
+    await declare({ organizationId, userId, content: earlierDefault });
+    await openedUnder(organizationId);
+
+    await declare({ organizationId, userId, content: initialPolicy() });
+
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.lastError).toBeNull();
+    const document = parseToml(effective.content) as {
+      policy: { annotator: { name: string }[] };
+      externals: { annotators: Record<string, unknown> };
+    };
+    expect(document.policy.annotator).toContainEqual({ name: "noop" });
+    expect(document.externals.annotators.noop).toEqual({ url: NOOP_URL });
   });
 
   test("a builtin annotator is kept on its builtin", async ({
@@ -615,6 +656,7 @@ const MANDATE = {
 const JUDGE_A = "https://judge-a.test/annotate";
 const JUDGE_A0 = "https://judge-a0.test/annotate";
 const JUDGE_B = "https://judge-b.test/annotate";
+const NOOP_URL = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop";
 
 /** A root whose one URL-bound annotator `<prefix>.tool-call` judges every tool. */
 function urlJudged(prefix: string, url: string): string {

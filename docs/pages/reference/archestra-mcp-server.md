@@ -3116,7 +3116,11 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 Required RBAC permission: [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read)
 
-This tool takes no arguments.
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `composed` | `boolean \| null` | No | Also return `effective.content`, the composed policy text. Omit it unless you need the included batteries' rules. |
 
 
 #### inspect_guardrails_server

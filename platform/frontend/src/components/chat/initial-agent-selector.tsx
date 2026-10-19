@@ -106,6 +106,7 @@ import {
   type McpCatalogDirectoryItem,
   useMcpCatalogDirectory,
 } from "@/lib/mcp/mcp-registry.query";
+import { useShellReady } from "@/lib/shell-deferral";
 import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -183,14 +184,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const createProfile = useCreateProfile();
   const cloningStartedForRef = useRef<string | null>(null);
 
-  // Loaded after first paint, not on open, so the Pinned group is there the
-  // moment the picker opens instead of popping in once the request lands.
+  // Loaded once the page's first requests settle, not on open, so the Pinned
+  // group is there the moment the picker opens instead of popping in once the
+  // request lands, without queueing in front of what the composer needs.
+  const shellReady = useShellReady();
   const { data: pinnedIds } = usePinnedAgentIds({
-    enabled: open || afterFirstPaint,
+    enabled: open || shellReady,
   });
   const { data: pinnedAgents = [] } = useChatAgentReferences(
     pinnedIds ?? [],
-    open || afterFirstPaint,
+    open || shellReady,
   );
   const allAgents = useMemo(
     () => [
@@ -275,8 +278,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   // answers, the chip holds a placeholder rather than asking for a choice.
   const isAgentResolving = !displayAgent && isRosterPending;
   const effectiveAgentId = displayAgent?.id ?? currentAgentId;
+  // The trigger's server and knowledge icons: wanted on screen, not for
+  // typing, so they wait for the page's first requests too.
   const shouldLoadAgentManagementDetails =
-    open || !!editingAgentId || afterFirstPaint;
+    open || !!editingAgentId || shellReady;
   const installer = useMcpInstallOrchestrator({
     enabled: open || !!editingAgentId,
   });

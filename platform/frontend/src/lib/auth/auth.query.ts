@@ -316,7 +316,8 @@ const bootstrapSeeds = new WeakMap<
  * Await the in-flight bootstrap seed, if any. Resolves to null when there is
  * none or it failed, and the caller fetches its own endpoint.
  *
- * @public — also awaited by the config and organization queries
+ * @public — also awaited by the config, organization, appearance and member
+ * default queries
  */
 export async function awaitBootstrapSeed(
   queryClient: QueryClient,
@@ -326,9 +327,10 @@ export async function awaitBootstrapSeed(
 
 /**
  * Seeds the queries the app shell reads (permissions, scoped capabilities,
- * organization, config) from one `/api/bootstrap` request, fired alongside
- * the session check on a cold load, so those queries are already fresh when
- * the session resolves and enables them, instead of starting a second wave.
+ * organization, config, public config, appearance, and the member's default
+ * agent and model) from one `/api/bootstrap` request, fired alongside the
+ * session check on a cold load, so those queries are already fresh when the
+ * session resolves and enables them, instead of starting a second wave.
  *
  * Best-effort: when signed out or on any failure nothing is seeded and each
  * query fetches its own endpoint as before. The keys are spelled out rather
@@ -364,5 +366,18 @@ function applyBootstrap(
   queryClient.setQueryData(["config"], data.config);
   if (data.organization) {
     queryClient.setQueryData(["organization", "details"], data.organization);
+  }
+  // Checked one by one: a backend from before these parts answers without them.
+  if (data.publicConfig) {
+    queryClient.setQueryData(["public-config"], data.publicConfig);
+  }
+  if (data.appearance) {
+    queryClient.setQueryData(["appearance", "public"], data.appearance);
+  }
+  if (data.memberDefaultAgent) {
+    queryClient.setQueryData(["member-default-agent"], data.memberDefaultAgent);
+  }
+  if (data.memberDefaultModel) {
+    queryClient.setQueryData(["member-default-model"], data.memberDefaultModel);
   }
 }

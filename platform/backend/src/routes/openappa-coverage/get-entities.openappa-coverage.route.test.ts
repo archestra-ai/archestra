@@ -126,7 +126,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     ]);
   });
 
-  test("the default policy covers run_command at the root and search_tools, search_files, and load_skill through the archestra battery, and leaves other built-in tools to the fallback", async ({
+  test("the default policy covers run_command at the root and search_tools, search_files, and load_skill through the archestra battery, and the model catch-all covers the other built-in tools", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -167,7 +167,7 @@ describe("GET /api/openappa/coverage/entities", () => {
       archestra__search_tools: "battery",
       archestra__search_files: "battery",
       archestra__load_skill: "battery",
-      archestra__list_skills: "not_covered",
+      archestra__list_skills: "catchall",
     });
   });
 

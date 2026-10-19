@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { InlineNoticeDetails } from "@/components/ui/inline-notice-details";
 import {
   Table,
   TableBody,
@@ -30,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
@@ -321,11 +323,68 @@ export function ValidationRunOutcome({
   );
 }
 
-export function StepResults({
-  steps,
+type ValidationStep = PolicyTestRun["files"][number]["steps"][number];
+
+/**
+ * Why a file failed, when a call's decision did not match its expectation:
+ * the line and tool, what was expected, what came instead and the reasons.
+ * The engine's full feedback, written for the agent, stays behind a toggle.
+ */
+export function FailedStepNotice({
+  step,
+  onShowLine,
 }: {
-  steps: PolicyTestRun["files"][number]["steps"];
+  step: ValidationStep;
+  /** Moves the editor to the step's line. */
+  onShowLine?: () => void;
 }) {
+  return (
+    <InlineNotice variant="error">
+      <TriangleAlert />
+      <InlineNoticeText className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-x-1.5 font-medium text-destructive">
+          <span>Failed</span>
+          <span aria-hidden>·</span>
+          {onShowLine ? (
+            <UnstyledButton
+              className="font-mono underline underline-offset-2"
+              onClick={onShowLine}
+            >
+              {`Line ${step.line}`}
+            </UnstyledButton>
+          ) : (
+            <span className="font-mono">{`Line ${step.line}`}</span>
+          )}
+          <span aria-hidden>·</span>
+          <span className="font-mono">{step.tool}</span>
+        </div>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+          <dt>Expected</dt>
+          <dd className="font-mono">{step.expected}</dd>
+          <dt>Got</dt>
+          <dd className="font-mono">{step.actual ?? "no decision"}</dd>
+          {!!step.reasons?.length && (
+            <>
+              <dt>Why</dt>
+              <dd>
+                {step.reasons.map((reason) => (
+                  <p key={reason}>{reason}</p>
+                ))}
+              </dd>
+            </>
+          )}
+        </dl>
+      </InlineNoticeText>
+      {step.error && (
+        <InlineNoticeDetails label="full error">
+          {step.error}
+        </InlineNoticeDetails>
+      )}
+    </InlineNotice>
+  );
+}
+
+export function StepResults({ steps }: { steps: ValidationStep[] }) {
   return (
     <Table>
       <TableHeader>
@@ -347,8 +406,28 @@ export function StepResults({
             <TableCell>
               <div className="space-y-1">
                 <ValidationStatusBadge status={step.status} />
-                {step.error && (
-                  <p className="whitespace-pre-wrap text-xs">{step.error}</p>
+                {step.reasons?.length ? (
+                  <>
+                    {step.reasons.map((reason) => (
+                      <p key={reason} className="text-xs">
+                        {reason}
+                      </p>
+                    ))}
+                    {step.error && (
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-muted-foreground">
+                          Show full error
+                        </summary>
+                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px]">
+                          {step.error}
+                        </pre>
+                      </details>
+                    )}
+                  </>
+                ) : (
+                  step.error && (
+                    <p className="whitespace-pre-wrap text-xs">{step.error}</p>
+                  )
                 )}
               </div>
             </TableCell>

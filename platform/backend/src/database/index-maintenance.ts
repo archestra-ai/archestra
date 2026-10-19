@@ -123,6 +123,29 @@ export async function createMcpServerIndexes(
   });
 }
 
+/**
+ * Build the partial index of interactions that still have no session preview:
+ * `interactions (created_at, id) WHERE session_preview IS NULL AND
+ * encrypted_chat_conversation_id IS NULL`. The session-preview backfill walks
+ * it newest first (`InteractionModel.findRowsMissingSessionPreview`).
+ *
+ * Every new row is written with a preview, so the index only ever shrinks. Once
+ * the backfill is done it is empty, and the backfill's periodic check costs one
+ * empty index read instead of a scan of the whole table.
+ *
+ * Built the same way as {@link createAgentToolsIndexes}: concurrently, so
+ * proxy writes to interactions are never blocked.
+ */
+export async function createInteractionsIndexes(
+  options: IndexMaintenanceOptions = {},
+): Promise<Record<string, MaintainedIndexResult>> {
+  return ensureMaintainedIndexes({
+    indexes: INTERACTIONS_INDEXES,
+    lockKey: INTERACTIONS_INDEX_LOCK,
+    options,
+  });
+}
+
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -231,6 +254,16 @@ const MCP_SERVER_INDEXES: readonly MaintainedIndex[] = [
   },
 ];
 const MCP_SERVER_INDEX_LOCK = "index-maintenance:mcp_server";
+const INTERACTIONS_INDEXES: readonly MaintainedIndex[] = [
+  {
+    table: "interactions",
+    name: "interactions_session_preview_missing_idx",
+    columns: ["created_at", "id"],
+    predicate:
+      "((session_preview IS NULL) AND (encrypted_chat_conversation_id IS NULL))",
+  },
+];
+const INTERACTIONS_INDEX_LOCK = "index-maintenance:interactions";
 // The concurrent build and drop wait for every older transaction to finish,
 // and lock_timeout bounds those waits too. A short bound fails the build
 // behind any long transaction and leaves an invalid index that every write

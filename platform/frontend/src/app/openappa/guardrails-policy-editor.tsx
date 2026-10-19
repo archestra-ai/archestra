@@ -283,9 +283,9 @@ function CompositionSummary({
       {notEnforced > 0 && (
         <>
           <span>·</span>
-          {/* Every included battery that is not active is in the Broken group. */}
+          {/* Every included battery with a problem is in the Needs attention group. */}
           <Link
-            href={batteriesHref("broken")}
+            href={batteriesHref("attention")}
             className="inline-flex items-center gap-1 text-destructive underline underline-offset-2 hover:no-underline"
           >
             <TriangleAlert className="size-3.5" />

@@ -127,6 +127,24 @@ tests:
             secretRef:
               name: migration-job-env
 
+  - it: gives wait-for-postgres the same envFrom sources as the migration container
+    set:
+      postgresql.external_database_url: null
+      archestra.envFrom:
+        - secretRef:
+            name: external-db-env
+      archestra.migrationJob.envFrom:
+        - secretRef:
+            name: migration-job-env
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].envFrom
+          value:
+            - secretRef:
+                name: external-db-env
+            - secretRef:
+                name: migration-job-env
+
   - it: preserves shared external database environment sources
     set:
       archestra.database.poolMaxFromEnvFrom: false

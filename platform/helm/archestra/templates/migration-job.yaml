@@ -7,9 +7,9 @@ schema is applied before web and worker Deployments roll. Fresh installs are
 covered by the web pod running migrations on startup plus the worker
 wait-for-migrations init container.
 */}}
-{{- $migrationContext := . -}}
+{{- $migrationContext := merge (dict "initContainerExtraEnvFrom" .Values.archestra.migrationJob.envFrom) . -}}
 {{- if and .Values.postgresql.external_database_url (ne (toString .Values.postgresql.external_database_url) "from_vault") -}}
-{{- $migrationContext = merge (dict "migrationDatabaseSecretNameOverride" (include "archestra-platform.migrationJobAuthSecretName" .)) . -}}
+{{- $migrationContext = merge (dict "migrationDatabaseSecretNameOverride" (include "archestra-platform.migrationJobAuthSecretName" .)) $migrationContext -}}
 {{- end }}
 apiVersion: batch/v1
 kind: Job

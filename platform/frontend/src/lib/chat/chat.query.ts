@@ -24,6 +24,7 @@ import {
   type ConversationFileItem,
   deleteTargetFor,
 } from "@/lib/chat/conversation-files";
+import { conversationsQueryKey } from "@/lib/chat/conversations-query-key";
 import {
   ENCRYPTED_CHAT_KEY_HEADER,
   encryptedChatRequestHeaders,
@@ -143,26 +144,6 @@ const CONVERSATION_STALE_TIME_MS = 30_000;
 /** How often a scheduled chat is polled for its seeded prompt, and how long. */
 const SCHEDULE_SEED_POLL_MS = 1_000;
 const SCHEDULE_SEED_MAX_POLLS = 120;
-
-/**
- * Recent conversations the sidebar loads: it shows up to 15 and the rest go
- * through search, so this leaves a margin without paying for 250 rows.
- */
-const SIDEBAR_CONVERSATION_LIMIT = 50;
-
-/**
- * The cache key of one conversation list read. Mutations update every list
- * through the `["conversations"]` prefix.
- */
-export function conversationsQueryKey({
-  search,
-  limit = SIDEBAR_CONVERSATION_LIMIT,
-}: {
-  search?: string;
-  limit?: number;
-} = {}) {
-  return ["conversations", search, limit] as const;
-}
 
 export function useConversation(
   conversationId?: string,
@@ -378,22 +359,25 @@ export function useBulkDeleteConversationFiles(conversationId?: string) {
 export function useConversations({
   enabled = true,
   search,
-  limit = SIDEBAR_CONVERSATION_LIMIT,
+  limit,
 }: {
   enabled?: boolean;
   search?: string;
   /** Recent conversations to load when not searching; pinned ones always come. */
   limit?: number;
 }) {
+  const queryKey = conversationsQueryKey({ search, limit });
   return useQuery({
-    queryKey: conversationsQueryKey({ search, limit }),
+    queryKey,
     queryFn: async () => {
       const trimmedSearch = search?.trim();
       // List rows never show the artifact or todo list.
       const { data, error } = await getChatConversations({
         query: {
           includeArtifacts: false,
-          ...(trimmedSearch ? { search: trimmedSearch } : { limit }),
+          ...(trimmedSearch
+            ? { search: trimmedSearch }
+            : { limit: queryKey[2] }),
         },
       });
       throwOnApiError(error, { toastOnError: false });

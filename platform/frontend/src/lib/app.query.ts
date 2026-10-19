@@ -85,6 +85,21 @@ export function prefetchApps(queryClient: QueryClient) {
   return queryClient.prefetchQuery(appsQueryOptions(APPS_FIRST_PAGE, false));
 }
 
+/**
+ * The sidebar's read of the pinned apps. The server seeds a full page load of
+ * a shell-seeded route with it, under the same key.
+ */
+export const SIDEBAR_PINNED_APPS_QUERY = {
+  limit: 100,
+  offset: 0,
+  pinned: true,
+} as const satisfies AppsParams;
+
+/** The cache key of one page of the apps list. */
+export function appsQueryKey(params: AppsParams) {
+  return ["apps", "paginated", params] as const;
+}
+
 export function useApps(
   params: AppsParams,
   options?: { enabled?: boolean; toastOnError?: boolean },
@@ -605,7 +620,7 @@ export function useAssignToolToApp() {
 
 function appsQueryOptions(params: AppsParams, toastOnError?: boolean) {
   return queryOptions({
-    queryKey: ["apps", "paginated", params],
+    queryKey: appsQueryKey(params),
     queryFn: async ({ signal }) => {
       const { data, error } = await getApps({ query: params, signal });
       // TanStack aborts this request when its observer disappears (for example,

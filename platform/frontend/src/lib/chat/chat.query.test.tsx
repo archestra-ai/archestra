@@ -8,9 +8,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
+import { conversationsQueryKey } from "@/lib/chat/conversations-query-key";
 import { handleApiError } from "@/lib/utils/api";
 import {
-  conversationsQueryKey,
   invalidateConversationFileQueries,
   mergeUpdatedConversationIntoCache,
   useClearChatErrors,

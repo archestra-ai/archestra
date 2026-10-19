@@ -94,7 +94,14 @@ describe("proxy", () => {
           ),
         ).toBe(route);
       }
-      for (const url of ["/agents", "/mcp/gateways", "/mcp/registry/abc"]) {
+      for (const url of [
+        "/agents",
+        "/mcp/gateways",
+        "/mcp/registry/abc",
+        // A conversation is not the new-chat screen.
+        "/chat/abc",
+        "/chat/new",
+      ]) {
         expect(
           forwarded(proxy(createMockRequest({ url, headers: documentLoad }))),
         ).toBeNull();

@@ -41,7 +41,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
-import { useShellReady } from "@/lib/shell-deferral";
+import { useIsShellSeeded, useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { lazyComponent, preloadableLazy } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
@@ -109,6 +109,9 @@ export function AppShell({ children }: AppShellProps) {
   // Every signed-in user sees the active banner.
   // The banner waits for the page's first data (see useShellReady).
   const shellReady = useShellReady();
+  // A server-seeded page has the banner and the sidebar's data in its HTML,
+  // so both render with the page instead of after it.
+  const shellSeeded = useIsShellSeeded();
   const { data: notification } = useActiveSiteNotification({
     enabled: shellReady && !isAuthPage && !isBrowserPreview && !isAppRuntime,
   });
@@ -186,7 +189,7 @@ export function AppShell({ children }: AppShellProps) {
                 the keyboard tabs forward into the revealed sidebar content
                 instead of skipping to <main> (WCAG 2.4.3). */}
           <NavAwareSidebarCircleToggle />
-          <DeferredSidebar defer={isChat} />
+          <DeferredSidebar defer={isChat && !shellSeeded} />
           <SidebarResizeHandle
             width={sidebarWidth.width}
             onWidthChange={sidebarWidth.setWidth}

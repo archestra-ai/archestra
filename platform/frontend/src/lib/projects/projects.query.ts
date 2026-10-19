@@ -68,11 +68,7 @@ export function useProjects(
   // lacks it (e.g. the sidebar mounts this for everyone) instead of 403ing.
   const { data: canReadProjects } = useHasPermissions({ project: ["read"] });
   return useQuery({
-    queryKey: [
-      "projects",
-      "list",
-      { ...query, limit: limit ?? null, offset: offset ?? null },
-    ],
+    queryKey: projectListQueryKey({ limit, offset, ...filters }),
     enabled: (enabled ?? true) && !!canReadProjects,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -83,6 +79,33 @@ export function useProjects(
       return data;
     },
   });
+}
+
+/**
+ * The sidebar's read of the pinned projects. The server seeds a full page
+ * load of a shell-seeded route with it, under the same key.
+ */
+export const SIDEBAR_PINNED_PROJECTS_QUERY = {
+  pinned: true,
+  limit: 100,
+  offset: 0,
+} as const satisfies ProjectListQuery;
+
+/** The cache key of one page of the projects list. */
+export function projectListQueryKey({
+  limit,
+  offset,
+  ...filters
+}: ProjectListQuery) {
+  return [
+    "projects",
+    "list",
+    {
+      ...normalizeProjectFilters(filters),
+      limit: limit ?? null,
+      offset: offset ?? null,
+    },
+  ] as const;
 }
 
 /** Every project matching the table's filters, not just the page in view. */

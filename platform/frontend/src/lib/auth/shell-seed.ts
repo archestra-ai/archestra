@@ -1,12 +1,15 @@
 /**
- * Pages whose full page loads render their first rows on the server. For a
+ * Pages whose full page loads render their first screen on the server. For a
  * document of one of these, the proxy marks the request and the root layout
- * resolves the signed-in shell (session, bootstrap, issue index) on the
+ * resolves the signed-in shell (session, bootstrap, banner, sidebar) on the
  * server, so the page's gates pass there and its content reaches the HTML.
  * Opting a page in is adding its path here; the page itself still seeds its
  * own data (see the registry's `prefetch-first-page.ts`).
+ *
+ * `/chat` is the new-chat screen. `/chat/new` is not here: it only redirects
+ * to `/chat` in the browser.
  */
-export const SHELL_SEED_ROUTES: readonly string[] = ["/mcp/registry"];
+export const SHELL_SEED_ROUTES: readonly string[] = ["/mcp/registry", "/chat"];
 
 /** Whether a page path renders its first rows on the server. */
 export function isShellSeedRoute(pathname: string | null | undefined): boolean {

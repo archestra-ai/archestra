@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useShellReady } from "./shell-deferral";
+import { markShellSeeded, useShellReady } from "./shell-deferral";
 
 describe("useShellReady", () => {
   let client: QueryClient;
@@ -62,5 +62,34 @@ describe("useShellReady", () => {
     client.setQueryData(["cached"], 1);
     await act(() => vi.advanceTimersByTimeAsync(100));
     expect(result.current).toBe(false);
+  });
+
+  it("releases a server-seeded page once its cache is idle, without waiting for the fallback", async () => {
+    markShellSeeded(client);
+    const { result } = renderHook(() => useShellReady(), { wrapper });
+
+    await act(() => vi.advanceTimersByTimeAsync(100));
+
+    expect(result.current).toBe(true);
+  });
+
+  it("holds a server-seeded page while a request the page started is still fetching", async () => {
+    markShellSeeded(client);
+    let finish = () => {};
+    const pageData = client.fetchQuery({
+      queryKey: ["page-data"],
+      queryFn: () =>
+        new Promise<number>((resolve) => (finish = () => resolve(1))),
+    });
+    const { result } = renderHook(() => useShellReady(), { wrapper });
+    await act(() => vi.advanceTimersByTimeAsync(500));
+    expect(result.current).toBe(false);
+
+    finish();
+    await act(async () => {
+      await pageData;
+      await vi.advanceTimersByTimeAsync(60);
+    });
+    expect(result.current).toBe(true);
   });
 });

@@ -208,8 +208,11 @@ archestra:
     # archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST and grant the
     # platform ServiceAccount pods/exec in that engine's namespace.
 
-  # Additional volumes to mount into the platform and worker pods
+  # Additional volumes to mount into the platform and worker pods, and into the
+  # migration Job (except persistentVolumeClaim volumes, which the Job skips
+  # because it runs while web/worker pods still hold their claims).
   # Useful for mounting credential files such as a Vertex AI service account key
+  # or a database CA bundle
   # Example:
   #   extraVolumes:
   #     - name: vertex-ai-credentials
@@ -220,7 +223,8 @@ archestra:
   #             path: vertex-ai-key.json
   extraVolumes: []
 
-  # Additional volume mounts for the platform and worker containers
+  # Additional volume mounts for the platform and worker containers, and the
+  # migration Job (mounts of skipped persistentVolumeClaim volumes are dropped)
   # Example:
   #   extraVolumeMounts:
   #     - name: vertex-ai-credentials
@@ -361,22 +365,6 @@ archestra:
     envWithValueFrom: []
     # Extra envFrom entries for the migration Job.
     envFrom: []
-    # Extra volumes and mounts for the migration Job. archestra.extraVolumes
-    # and archestra.extraVolumeMounts are not applied here, so repeat any
-    # mount the migration needs, such as a database CA bundle for
-    # TLS-verified connections. Point to the mounted file with
-    # sslrootcert=<path> in the database URL, or with
-    # migrationJob.env.NODE_EXTRA_CA_CERTS:
-    #   extraVolumes:
-    #     - name: db-ca
-    #       secret:
-    #         secretName: db-ca-bundle
-    #   extraVolumeMounts:
-    #     - name: db-ca
-    #       mountPath: /etc/ssl/db
-    #       readOnly: true
-    extraVolumes: []
-    extraVolumeMounts: []
 
   # Verifies that this cluster actually enforces NetworkPolicy, by running the
   # experiment rather than inferring it. After each install/upgrade two throwaway

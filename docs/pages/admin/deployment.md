@@ -84,21 +84,18 @@ archestra:
 
 Provide the same database URL to the migration Job and application. The chart runs migrations before rolling out an upgrade. Keep `archestra.migrationJob.enabled` enabled unless your pipeline applies migrations separately.
 
-To verify the database's TLS certificate, mount the CA bundle and point the URL at it, for example `?sslmode=verify-full&sslrootcert=/etc/ssl/db/ca.pem`. The migration Job does not use `archestra.extraVolumes`, so mount the bundle in both places:
+To verify the database's TLS certificate, mount the CA bundle with `archestra.extraVolumes` and `archestra.extraVolumeMounts` and point the URL at it, for example `?sslmode=verify-full&sslrootcert=/etc/ssl/db/ca.pem`. The web pods, worker pods and migration Job all get these mounts. The migration Job skips `persistentVolumeClaim` volumes, because it runs while the previous pods still hold their claims.
 
 ```yaml
 archestra:
-  extraVolumes: &db-ca-volumes
+  extraVolumes:
     - name: db-ca
       secret:
         secretName: db-ca-bundle
-  extraVolumeMounts: &db-ca-mounts
+  extraVolumeMounts:
     - name: db-ca
       mountPath: /etc/ssl/db
       readOnly: true
-  migrationJob:
-    extraVolumes: *db-ca-volumes
-    extraVolumeMounts: *db-ca-mounts
 ```
 
 For Knowledge Base vector storage, PostgreSQL must have the pgvector extension available and the migration user must be able to create the extension, or an administrator must install it first.

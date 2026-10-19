@@ -11,6 +11,26 @@ wait-for-migrations init container.
 {{- if and .Values.postgresql.external_database_url (ne (toString .Values.postgresql.external_database_url) "from_vault") -}}
 {{- $migrationContext = merge (dict "migrationDatabaseSecretNameOverride" (include "archestra-platform.migrationJobAuthSecretName" .)) . -}}
 {{- end }}
+{{- /*
+Reuse archestra.extraVolumes/extraVolumeMounts (e.g. a database CA bundle), but
+skip PVC-backed volumes and their mounts: this hook runs while web/worker pods
+still hold their claims, so a ReadWriteOnce claim would leave it unschedulable.
+*/}}
+{{- $pvcVolumeNames := list -}}
+{{- $jobExtraVolumes := list -}}
+{{- range .Values.archestra.extraVolumes -}}
+{{- if .persistentVolumeClaim -}}
+{{- $pvcVolumeNames = append $pvcVolumeNames .name -}}
+{{- else -}}
+{{- $jobExtraVolumes = append $jobExtraVolumes . -}}
+{{- end -}}
+{{- end -}}
+{{- $jobExtraVolumeMounts := list -}}
+{{- range .Values.archestra.extraVolumeMounts -}}
+{{- if not (has .name $pvcVolumeNames) -}}
+{{- $jobExtraVolumeMounts = append $jobExtraVolumeMounts . -}}
+{{- end -}}
+{{- end }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -115,20 +135,19 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- /*
-          The migration container mounts only the Vault secrets volume for DB
-          URL injection plus hook-only extra volumes (e.g. a database CA
-          bundle). Shared diagnostics PVCs and archestra.extraVolumes are not
-          mounted here because the hook overlaps running web/worker pods
-          during upgrades.
+          The migration container mounts the Vault secrets volume for DB URL
+          injection plus non-PVC archestra.extraVolumeMounts. Diagnostics and
+          other PVCs stay off because the hook overlaps running web/worker
+          pods during upgrades.
           */}}
-          {{- if or .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.migrationJob.extraVolumeMounts }}
+          {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $jobExtraVolumeMounts }}
           volumeMounts:
             {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
             - name: vault-secrets
               mountPath: /vault/secrets
               readOnly: true
             {{- end }}
-            {{- with .Values.archestra.migrationJob.extraVolumeMounts }}
+            {{- with $jobExtraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- end }}
@@ -140,14 +159,14 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.migrationJob.extraVolumes }}
+      {{- if or .Values.archestra.initContainers.vaultSecrets.enabled $jobExtraVolumes }}
       volumes:
         {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
         - name: vault-secrets
           emptyDir:
             medium: Memory
         {{- end }}
-        {{- with .Values.archestra.migrationJob.extraVolumes }}
+        {{- with $jobExtraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- end }}

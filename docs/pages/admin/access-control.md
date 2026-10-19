@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-18
+lastUpdated: 2026-10-19
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -196,10 +196,8 @@ What to know:
 - Team tokens, organization tokens, and service accounts keep every tool assigned to the agent.
 - [Credential resolution](/docs/mcp/authentication/servers#credential-resolution) picks the connection for a tool the person can use, including a connection pinned to the tool.
 
+<span id="llm-api-permissions"></span>
+
 ## Log Visibility
 
 [`log:read`](/docs/reference/permissions#log:read) shows your LLM, MCP, and Guardrail consult logs, and every Guardrails yell. Add [`log:admin`](/docs/reference/permissions#log:admin) for organization-wide logs. Audit events use [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin). Resource sharing does not determine log visibility.
-
-## LLM API Permissions
-
-The [LLM API permission table](/docs/reference/permissions#llm-api-permissions) lists access requirements for usage exports, costs, and logs, including service-account exports.

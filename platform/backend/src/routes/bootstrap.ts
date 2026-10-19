@@ -192,6 +192,18 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 keyModels: z.array(LlmModelSchema).nullable(),
               })
               .nullable(),
+            /**
+             * `GET /api/llm-models/available?apiKeyId=:chatApiKeyId` for the
+             * member's saved default key, when it is set and is not the
+             * starting agent's key: the composer then picks its model from
+             * that key's list.
+             */
+            memberDefaultKeyModels: z
+              .object({
+                apiKeyId: z.string().uuid(),
+                models: z.array(LlmModelSchema),
+              })
+              .nullable(),
           }),
         ),
       },
@@ -205,6 +217,7 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
         models,
         memberDefaultAgentId,
         organization,
+        memberDefaultModel,
       ] = await Promise.all([
         getChatRosterBootstrap({ userId, organizationId }),
         getVisibleLlmProviderApiKeys({ query: {}, userId, organizationId }),
@@ -216,6 +229,7 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
         getAvailableLlmModels({ query: {}, userId, organizationId }),
         MemberModel.getDefaultAgentId(userId, organizationId),
         OrganizationModel.getById(organizationId),
+        MemberModel.getDefaultModelSelection(userId, organizationId),
       ]);
       const availableApiKeys = canReadAvailableKeys
         ? await getAvailableLlmProviderApiKeys({
@@ -234,19 +248,35 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
         candidates.find((agent) => agent.scope === "personal") ??
         candidates[0];
 
-      return reply.send({
-        roster,
-        apiKeys,
-        availableApiKeys,
-        models,
-        agent: startingAgent
-          ? await getNewChatAgentParts({
+      const memberKeyId = memberDefaultModel.chatApiKeyId;
+      const [agent, memberDefaultKeyModels] = await Promise.all([
+        startingAgent
+          ? getNewChatAgentParts({
               agentId: startingAgent.id,
               llmApiKeyId: startingAgent.llmApiKeyId,
               userId,
               organizationId,
             })
           : null,
+        memberKeyId && memberKeyId !== startingAgent?.llmApiKeyId
+          ? getAvailableLlmModels({
+              query: { apiKeyId: memberKeyId },
+              userId,
+              organizationId,
+            }).then((keyModels) => ({
+              apiKeyId: memberKeyId,
+              models: keyModels,
+            }))
+          : null,
+      ]);
+
+      return reply.send({
+        roster,
+        apiKeys,
+        availableApiKeys,
+        models,
+        agent,
+        memberDefaultKeyModels,
       });
     },
   );

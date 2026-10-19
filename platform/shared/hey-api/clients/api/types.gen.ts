@@ -35034,6 +35034,37 @@ export type GetNewChatBootstrapResponses = {
                 isConnected?: boolean;
             }> | null;
         } | null;
+        memberDefaultKeyModels: {
+            apiKeyId: string;
+            models: Array<{
+                id: string;
+                dbId: string;
+                displayName: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                createdAt?: string;
+                capabilities?: {
+                    contextLength: number | null;
+                    inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                    outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                    supportsToolCalling: boolean | null;
+                    supportsReasoningEffort: boolean | null;
+                    supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    recommendedForAgents: boolean | null;
+                    pricePerMillionInput: string | null;
+                    pricePerMillionOutput: string | null;
+                    isCustomPrice: boolean;
+                    priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    pricePerMillionCacheRead: string | null;
+                    pricePerMillionCacheWrite: string | null;
+                    cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                };
+                isBest?: boolean;
+                isFree: boolean;
+                embeddingDimensions?: EmbeddingDimensions | null;
+                requiresUserConnection?: boolean;
+                isConnected?: boolean;
+            }>;
+        } | null;
     };
 };
 

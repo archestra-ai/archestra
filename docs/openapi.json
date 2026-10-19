@@ -126395,6 +126395,215 @@
                         "keyModels"
                       ],
                       "additionalProperties": false
+                    },
+                    "memberDefaultKeyModels": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "apiKeyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "dbId": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string",
+                                "enum": [
+                                  "openai",
+                                  "gemini",
+                                  "anthropic",
+                                  "bedrock",
+                                  "cohere",
+                                  "cerebras",
+                                  "mistral",
+                                  "perplexity",
+                                  "groq",
+                                  "xai",
+                                  "openrouter",
+                                  "vllm",
+                                  "ollama",
+                                  "ollama-native",
+                                  "zhipuai",
+                                  "deepseek",
+                                  "minimax",
+                                  "kimi",
+                                  "azure",
+                                  "github-copilot",
+                                  "microsoft-365-copilot",
+                                  "archestra",
+                                  "voyage",
+                                  "jev"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string"
+                              },
+                              "capabilities": {
+                                "type": "object",
+                                "properties": {
+                                  "contextLength": {
+                                    "nullable": true,
+                                    "type": "integer",
+                                    "minimum": -2147483648,
+                                    "maximum": 2147483647
+                                  },
+                                  "inputModalities": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "image",
+                                        "audio",
+                                        "video",
+                                        "pdf"
+                                      ]
+                                    }
+                                  },
+                                  "outputModalities": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "image",
+                                        "audio"
+                                      ]
+                                    }
+                                  },
+                                  "supportsToolCalling": {
+                                    "nullable": true,
+                                    "type": "boolean"
+                                  },
+                                  "supportsReasoningEffort": {
+                                    "nullable": true,
+                                    "type": "boolean"
+                                  },
+                                  "supportedEndpoints": {
+                                    "nullable": true,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "/chat/completions",
+                                        "/responses"
+                                      ]
+                                    }
+                                  },
+                                  "recommendedForAgents": {
+                                    "nullable": true,
+                                    "type": "boolean"
+                                  },
+                                  "pricePerMillionInput": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "pricePerMillionOutput": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "isCustomPrice": {
+                                    "type": "boolean"
+                                  },
+                                  "priceSource": {
+                                    "type": "string",
+                                    "enum": [
+                                      "custom",
+                                      "models_dev",
+                                      "aws",
+                                      "derived_multiplier",
+                                      "default"
+                                    ]
+                                  },
+                                  "pricePerMillionCacheRead": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "pricePerMillionCacheWrite": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "cachePriceSource": {
+                                    "nullable": true,
+                                    "type": "string",
+                                    "enum": [
+                                      "custom",
+                                      "models_dev",
+                                      "aws",
+                                      "derived_multiplier",
+                                      "default"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "contextLength",
+                                  "inputModalities",
+                                  "outputModalities",
+                                  "supportsToolCalling",
+                                  "supportsReasoningEffort",
+                                  "recommendedForAgents",
+                                  "pricePerMillionInput",
+                                  "pricePerMillionOutput",
+                                  "isCustomPrice",
+                                  "priceSource",
+                                  "pricePerMillionCacheRead",
+                                  "pricePerMillionCacheWrite",
+                                  "cachePriceSource"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "isBest": {
+                                "type": "boolean"
+                              },
+                              "isFree": {
+                                "type": "boolean"
+                              },
+                              "embeddingDimensions": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/EmbeddingDimensions"
+                                  }
+                                ]
+                              },
+                              "requiresUserConnection": {
+                                "type": "boolean"
+                              },
+                              "isConnected": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "dbId",
+                              "displayName",
+                              "provider",
+                              "isFree"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "apiKeyId",
+                        "models"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -126402,7 +126611,8 @@
                     "apiKeys",
                     "availableApiKeys",
                     "models",
-                    "agent"
+                    "agent",
+                    "memberDefaultKeyModels"
                   ],
                   "additionalProperties": false
                 }

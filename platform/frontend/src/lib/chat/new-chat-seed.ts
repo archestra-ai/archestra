@@ -9,7 +9,8 @@ type NewChatBootstrap = archestraApiTypes.GetNewChatBootstrapResponses["200"];
  * The new-chat composer's queries, filled from one `/api/bootstrap/new-chat`
  * read: the agent roster, the provider keys, the model catalog, and the
  * starting agent's detail, sub-agents, credential readiness, browser tools,
- * default prompts and its key's models. With these in the cache the composer
+ * default prompts and its key's models, and the models of the member's saved
+ * default key. With these in the cache the composer
  * renders ready, and none of its queries asks again while the data is fresh.
  * Each later fetch of these queries is a refresh and goes to its own endpoint.
  *
@@ -35,6 +36,12 @@ export function newChatSeedQueries(
     queries.push({
       queryKey: ["available-llm-provider-api-keys", undefined, undefined],
       data: data.availableApiKeys,
+    });
+  }
+  if (data.memberDefaultKeyModels) {
+    queries.push({
+      queryKey: ["llm-models", data.memberDefaultKeyModels.apiKeyId],
+      data: data.memberDefaultKeyModels.models,
     });
   }
   const agent = data.agent;

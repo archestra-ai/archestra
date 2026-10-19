@@ -125030,6 +125030,11 @@
                     "minimum": 0,
                     "maximum": 2
                   },
+                  "maxSteps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  },
                   "thinkingEffort": {
                     "nullable": true,
                     "type": "string",

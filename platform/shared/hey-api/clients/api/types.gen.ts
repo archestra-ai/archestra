@@ -34855,6 +34855,7 @@ export type StreamChatData = {
         }>;
         trigger?: 'submit-message' | 'regenerate-message';
         temperature?: number;
+        maxSteps?: number;
         thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path?: never;

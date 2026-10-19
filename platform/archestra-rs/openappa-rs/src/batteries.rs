@@ -71,6 +71,11 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
         .iter()
         .filter(|battery| match battery.manifest() {
             Ok(package) => match &package.role {
+                // A battery that needs each person's own token does not list the
+                // multi-user target, and this host runs one shared token.
+                Role::Battery(declared) if !declared.targets.supports(BatteryTarget::MultiUser) => {
+                    false
+                }
                 Role::Battery(declared) => {
                     let document = |path: &str| {
                         battery
@@ -79,7 +84,7 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
                     };
                     let target = declared
                         .targets
-                        .as_ref()
+                        .policies()
                         .and_then(|targets| document(targets.multi_user.policy.as_str()));
                     document(declared.base.as_str()).is_none_or(|base| {
                         serves_this_host(
@@ -170,10 +175,16 @@ pub(crate) fn inspect(files: &[BatteryFile], origin: PackageOrigin) -> Result<Ba
         let document = toml::from_str(&text).map_err(|error| error.to_string())?;
         Ok((text, document))
     };
+    if !battery.targets.supports(BatteryTarget::MultiUser) {
+        return Err(format!(
+            "battery {} does not list the multi-user target, so it needs each person's own token, and this host runs one shared token",
+            package.name
+        ));
+    }
     let (base, document) = policy(battery.base.as_str())?;
     let target = battery
         .targets
-        .as_ref()
+        .policies()
         .map(|targets| policy(targets.multi_user.policy.as_str()))
         .transpose()?;
     let target_document = target.as_ref().map(|(_, document)| document);
@@ -193,7 +204,7 @@ pub(crate) fn inspect(files: &[BatteryFile], origin: PackageOrigin) -> Result<Ba
         Some((policy, target)) => Some(BatteryTargetInfo {
             target_credentials: battery
                 .targets
-                .as_ref()
+                .policies()
                 .map(|targets| targets.multi_user.credentials.clone())
                 .unwrap_or_default(),
             externals: [helper_externals(&target)?, externals.clone()].concat(),
@@ -440,6 +451,21 @@ mod tests {
             .collect();
         assert!(inspect(&files, PackageOrigin::Bundled).is_ok());
         assert!(uploaded(&files).is_err());
+    }
+
+    #[test]
+    fn batteries_that_need_each_persons_own_token_are_not_served() {
+        let served: Vec<&str> = bundled()
+            .expect("bundled batteries validate")
+            .iter()
+            .map(|battery| battery.name.as_str())
+            .collect();
+        for name in ["slack", "google-workspace"] {
+            assert!(!served.contains(&name), "{name} is served");
+        }
+        for name in ["github", "cloudflare", "grain", "archestra"] {
+            assert!(served.contains(&name), "{name} is not served");
+        }
     }
 
     fn uploaded(files: &[BatteryFile]) -> Result<BatteryInfo, String> {

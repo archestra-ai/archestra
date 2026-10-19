@@ -170,6 +170,8 @@ Use `*` to match any sequence of characters, including an empty sequence:
 | `/docs/*` | `/docs/guide.md`, `/docs/setup/install.md` | `/private/guide.md` |
 | `*.md` | `guide.md`, `/docs/guide.md` | `guide.txt` |
 
+`*` also matches `/`, `?` and `#`. Do not put it inside a URL host: `https://*.example.com/*` also matches `https://attacker.test/?x=.example.com/`. End each host with `/` and list each subdomain, as in `https://docs.example.com/*`. OpenAPPA logs a warning at load for a pattern with `*` inside a URL host.
+
 #### Match special characters literally
 
 Some characters have a special meaning in a selector. For example, `*` matches any text, and a comma separates argument conditions.

@@ -80,14 +80,14 @@ describe("guardrails battery matches", () => {
   }) => {
     const byName = await makeInternalMcpCatalog({
       organizationId,
-      name: "Slack bridge",
+      name: "Notion bridge",
       serverUrl: "https://mcp.example.com/chat",
     });
     await openappaBatteriesService.onCatalogToolsChanged(byName.id);
     // Nothing synced yet: the match is offered, the attach is not.
     expect((await matches(byName.id)).json()).toEqual({
       attach: "unsynced",
-      matches: [{ battery: "slack", evidence: "name", install: null }],
+      matches: [{ battery: "notion", evidence: "name", install: null }],
     });
     const plain = await makeInternalMcpCatalog({
       organizationId,

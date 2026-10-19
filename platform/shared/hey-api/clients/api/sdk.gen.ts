@@ -9396,7 +9396,7 @@ export const completeOnboarding = <ThrowOnError extends boolean = false>(options
 export const getOnboardingStatus = <ThrowOnError extends boolean = false>(options?: Options<GetOnboardingStatusData, ThrowOnError>) => (options?.client ?? client).get<GetOnboardingStatusResponses, GetOnboardingStatusErrors, ThrowOnError>({ url: '/api/organization/onboarding-status', ...options });
 
 /**
- * Get which members have completed signup (have an account record)
+ * Get which members have not completed signup (no account record). Pass `userIds` to ask about the members on screen instead of every member.
  *
  * Authentication:
  *

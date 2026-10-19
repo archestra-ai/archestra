@@ -379131,7 +379131,22 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get which members have completed signup (have an account record)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get which members have not completed signup (no account record). Pass `userIds` to ask about the members on screen instead of every member.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "userIds",
+            "required": false,
+            "description": "Only these members (comma-separated user IDs), such as the rows of one Users page. Without it, every member of the organization is checked."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",

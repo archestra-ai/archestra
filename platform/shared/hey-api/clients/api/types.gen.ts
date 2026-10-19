@@ -99335,7 +99335,12 @@ export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof Get
 export type GetMemberSignupStatusData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Only these members (comma-separated user IDs), such as the rows of one Users page. Without it, every member of the organization is checked.
+         */
+        userIds?: Array<string>;
+    };
     url: '/api/organization/members/signup-status';
 };
 

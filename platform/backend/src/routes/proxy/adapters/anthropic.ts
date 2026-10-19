@@ -35,6 +35,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   hasImageContent,
@@ -1499,7 +1500,7 @@ export const anthropicAdapterFactory: LLMProvider<
         )
       : undefined;
     const customFetch = observeResponseHeaders(
-      observableFetch,
+      fetchWithAbortSignal(observableFetch, options.abortSignal),
       options.onResponseHeaders,
     );
 

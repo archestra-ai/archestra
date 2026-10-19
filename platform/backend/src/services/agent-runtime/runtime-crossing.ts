@@ -1,4 +1,5 @@
 import type { ArchestraContext } from "@/archestra-mcp-server/types";
+import config from "@/config";
 import logger from "@/logging";
 import {
   type AgentRuntimeCrossingRefusalReason,
@@ -286,8 +287,7 @@ export async function classifyRuntimeCaller(params: {
       kind: "refused",
       reason: reportCrossingRefusal({
         reason: "unparented",
-        message:
-          "This runtime was opened without a parent. Its raw result was not returned.",
+        message: `This run was started outside any Guardrails session, so this conversation cannot read its output or send it input; nothing from the run was returned. A person can read the output on the run page: ${config.frontendBaseUrl}/chat/runs/${params.workspaceId}. To get a run's output here, start a new run from this conversation.`,
         ...report,
       }),
     };

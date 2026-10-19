@@ -36,3 +36,24 @@ export function clientDisconnectSignal(params: {
 
   return controller.signal;
 }
+
+/**
+ * Wraps a fetch so every request it makes also aborts on `signal`, alongside
+ * the caller's own signal. Without a signal the fetch is returned unchanged.
+ */
+export function fetchWithAbortSignal(
+  baseFetch: Fetch | undefined,
+  signal: AbortSignal | undefined,
+): Fetch | undefined {
+  if (!signal) return baseFetch;
+  return (input, init) =>
+    (baseFetch ?? fetch)(input, {
+      ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal,
+    });
+}
+
+type Fetch = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;

@@ -19,6 +19,7 @@ import {
   AgentTeamModel,
   AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
+  MemberModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -546,6 +547,7 @@ describe("run tools", () => {
       runs: [
         {
           task_id: task.id,
+          llm_session_id: null,
           prompt: "Add a character counter.",
           state: "TASK_STATE_WORKING",
           hard_deadline_at: expect.any(String),
@@ -570,6 +572,191 @@ describe("run tools", () => {
         }
       ).runs[0]?.run_url,
     ).toMatch(new RegExp(`/chat/runs/${task.id}$`));
+  });
+
+  test("lists the logged telemetry key shared by continued turns, never a task or workspace handle", async ({
+    makeInteraction,
+  }) => {
+    await MemberModel.updateRole(actorId, organizationId, "editor");
+    const first = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const run = await AgentRunModel.findByTaskId(first.id);
+    if (!run) throw new Error("Run fixture missing");
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      workloadName: run.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      state: "idle",
+      lastTaskId: first.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const next = await A2ATaskModel.create({
+      contextId: first.contextId,
+      agentId: callingAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: next.id,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: run.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    const key = `user:${actorId}|${run.workloadName}`;
+    await makeInteraction(callingAgent.id, { sessionId: key, userId: actorId });
+    const result = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id] },
+      context,
+    );
+    expect(result.isError).toBeFalsy();
+    const { runs } = result.structuredContent as {
+      runs: { task_id: string; llm_session_id: string | null }[];
+    };
+    expect(runs).toHaveLength(2);
+    expect(runs.map((item) => item.llm_session_id)).toEqual([key, key]);
+    expect(key).not.toBe(first.id);
+    expect(key).not.toBe(next.id);
+    expect(key).not.toBe(workspace.id);
+  });
+
+  test("withholds telemetry keys without matching workspace identity and readable logged requests", async ({
+    makeInteraction,
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    await MemberModel.updateRole(actorId, organizationId, "editor");
+    const other = await makeUser();
+    const foreignOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({ organizationId: foreignOrg.id });
+    for (const scenario of [
+      "missing-workspace",
+      "wrong-owner",
+      "no-logs",
+      "other-user",
+      "other-organization",
+    ]) {
+      const task = await seedChatopsTask({
+        actorUserId: actorId,
+        withTarget: false,
+      });
+      const run = await AgentRunModel.findByTaskId(task.id);
+      if (!run) throw new Error("Run fixture missing");
+      const key = `user:${actorId}|${run.workloadName}`;
+      if (scenario !== "missing-workspace") {
+        await AgentWorkspaceModel.create({
+          organizationId,
+          agentId: callingAgent.id,
+          actorKind: "user",
+          actorId: scenario === "wrong-owner" ? other.id : actorId,
+          workloadName: run.workloadName,
+          backend: "kubernetes",
+          runtimeScope: "test",
+          lastTaskId: task.id,
+          expiresAt: new Date(Date.now() + 3600_000),
+        });
+      }
+      if (scenario !== "no-logs") {
+        await makeInteraction(
+          scenario === "other-organization" ? foreignAgent.id : callingAgent.id,
+          {
+            sessionId: key,
+            userId: scenario === "other-user" ? other.id : actorId,
+          },
+        );
+      }
+      // A logged task ID is not proof of the runtime's telemetry identity.
+      await makeInteraction(callingAgent.id, {
+        sessionId: task.id,
+        userId: actorId,
+      });
+    }
+    const result = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id] },
+      context,
+    );
+    expect(result.isError).toBeFalsy();
+    const { runs } = result.structuredContent as {
+      runs: { llm_session_id: string | null }[];
+    };
+    expect(runs).toHaveLength(5);
+    expect(runs.every((item) => item.llm_session_id === null)).toBe(true);
+  });
+
+  test("an organization runtime uses its workspace principal and requires log admin for another actor's requests", async ({
+    makeInteraction,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    await MemberModel.updateRole(actorId, organizationId, "editor");
+    const taskContext = await A2AContextModel.create({
+      actorKind: "organization",
+      actorId: organizationId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: taskContext.id,
+      agentId: callingAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const run = await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: callingAgent.id,
+      actorKind: "organization",
+      actorId: organizationId,
+      actorUserId: null,
+      workloadName: `test-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "organization",
+      actorId: organizationId,
+      workloadName: run.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const key = `agent-workspace:${workspace.id}|${run.workloadName}`;
+    await makeInteraction(callingAgent.id, { sessionId: key });
+    const admin = await makeUser();
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    const restricted = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"] },
+    });
+    await makeMember(restricted.id, organizationId, { role: role.role });
+    for (const [userId, expected] of [
+      [actorId, null],
+      [restricted.id, null],
+      [admin.id, key],
+    ] as const) {
+      const result = await executeArchestraTool(
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        { agent_ids: [callingAgent.id] },
+        { ...context, userId },
+      );
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent).toMatchObject({
+        runs: [{ task_id: task.id, llm_session_id: expected }],
+      });
+    }
   });
 
   test("recovers an older run only from the trusted current thread before limiting", async () => {

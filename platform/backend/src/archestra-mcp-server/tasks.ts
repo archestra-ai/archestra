@@ -18,6 +18,7 @@ import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
+import { userHasPermission } from "@/auth";
 import config, { getAppAssetBaseOrigin } from "@/config";
 import logger from "@/logging";
 import {
@@ -28,6 +29,7 @@ import {
   AgentRunModel,
   AgentTeamModel,
   AgentWorkspaceModel,
+  InteractionModel,
 } from "@/models";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
@@ -52,6 +54,7 @@ import {
   SPAWN_TARGET_MISMATCH,
   UNVERIFIED_RUNTIME_SESSION,
 } from "@/services/agent-runtime/runtime-crossing";
+import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -356,6 +359,12 @@ const ListAgentRunsOutputSchema = z.object({
   runs: z.array(
     z.object({
       task_id: z.string().uuid(),
+      llm_session_id: z
+        .string()
+        .nullable()
+        .describe(
+          "Verified LLM telemetry session key for /llm/logs/:id; URL-encode it as one path segment. Null when no readable logged session is available. This is not a task ID or runtime handle.",
+        ),
       title: z.string(),
       prompt: z.string(),
       state: z.string(),
@@ -935,8 +944,36 @@ const registry = defineArchestraTools([
           limit: args.limit,
           thread,
         });
+        const [canReadLogs, canReadAllLogs] = await Promise.all([
+          userHasPermission(actor.id, actor.organizationId, "log", "read"),
+          userHasPermission(actor.id, actor.organizationId, "log", "admin"),
+        ]);
+        // Use the same persisted identity as runtime launch. Task IDs and
+        // workspace handles are not the telemetry session key.
+        const sessionKeys = rows.map((row) =>
+          row.runtimeWorkspace
+            ? runtimeOpenAppaSession({
+                workspaceId: row.runtimeWorkspace.id,
+                ...row.runtimeWorkspace,
+              }).session_id
+            : null,
+        );
+        const logged =
+          canReadLogs || canReadAllLogs
+            ? await InteractionModel.findLoggedSessionIds({
+                organizationId: actor.organizationId,
+                sessionIds: sessionKeys.filter(
+                  (key): key is string => key !== null,
+                ),
+                ...(canReadAllLogs ? {} : { ownUserId: actor.id }),
+              })
+            : new Set<string>();
         const hidePrompt = await isGuardrailsV2Active();
-        const runs = rows.map((row) => ({
+        const runs = rows.map((row, index) => ({
+          llm_session_id:
+            sessionKeys[index] && logged.has(sessionKeys[index])
+              ? sessionKeys[index]
+              : null,
           task_id: row.taskId,
           title: row.title,
           prompt: hidePrompt ? "" : row.prompt,

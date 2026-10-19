@@ -421,6 +421,13 @@ class AgentRunModel {
         actorKind: schema.agentRunsTable.actorKind,
         actorId: schema.agentRunsTable.actorId,
         actorName: schema.usersTable.name,
+        runtimeWorkspace: {
+          id: schema.agentWorkspacesTable.id,
+          organizationId: schema.agentWorkspacesTable.organizationId,
+          workloadName: schema.agentWorkspacesTable.workloadName,
+          actorKind: schema.agentWorkspacesTable.actorKind,
+          actorId: schema.agentWorkspacesTable.actorId,
+        },
         startedAt: schema.agentRunsTable.startedAt,
         endedAt: schema.agentRunsTable.endedAt,
         state: schema.a2aTasksTable.state,
@@ -448,6 +455,31 @@ class AgentRunModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        and(
+          eq(
+            schema.agentWorkspacesTable.workloadName,
+            schema.agentRunsTable.workloadName,
+          ),
+          eq(
+            schema.agentWorkspacesTable.organizationId,
+            schema.agentRunsTable.organizationId,
+          ),
+          eq(
+            schema.agentWorkspacesTable.agentId,
+            schema.agentRunsTable.agentId,
+          ),
+          eq(
+            schema.agentWorkspacesTable.actorKind,
+            schema.agentRunsTable.actorKind,
+          ),
+          eq(
+            schema.agentWorkspacesTable.actorId,
+            schema.agentRunsTable.actorId,
+          ),
+        ),
       )
       .leftJoin(
         schema.usersTable,

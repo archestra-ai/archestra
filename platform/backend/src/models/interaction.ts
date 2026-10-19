@@ -505,6 +505,7 @@ class InteractionModel {
   static async findLoggedSessionIds(params: {
     organizationId: string;
     sessionIds: string[];
+    ownUserId?: string;
   }): Promise<Set<string>> {
     if (params.sessionIds.length === 0) return new Set();
     const rows = await db
@@ -514,6 +515,9 @@ class InteractionModel {
         and(
           inArray(schema.interactionsTable.sessionId, params.sessionIds),
           interactionBelongsToOrganization(params.organizationId),
+          params.ownUserId
+            ? eq(schema.interactionsTable.userId, params.ownUserId)
+            : undefined,
         ),
       );
     return new Set(

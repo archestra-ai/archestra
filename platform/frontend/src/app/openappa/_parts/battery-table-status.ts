@@ -1,18 +1,15 @@
 import type { PolicyBattery } from "@/lib/openappa-batteries.query";
-import type { BatteryTableStatus, EnforcedStatus } from "./battery-status";
+import type { BatteryTableStatus } from "./battery-status";
 
 /**
- * A battery's table status, from the status the current policy text gives it,
- * unless the enforced composition refuses it: then no rule of it is enforced.
+ * A battery's table status, from the status the current policy text gives it.
  * An entry no package answers (`unavailable`) composes nothing, so it reads as
  * not configured here; the Policy page marks its line.
  */
 export function batteryTableStatus(
   battery: PolicyBattery | null,
-  enforced?: EnforcedStatus,
 ): BatteryTableStatus {
   if (!battery) return "not_configured";
-  if (enforced === "refused") return "refused";
   switch (battery.status) {
     case "missing_credentials":
       return "credential";
@@ -22,10 +19,9 @@ export function batteryTableStatus(
       return "conflict";
     case "unavailable":
       return "not_configured";
-    case "refused":
-      return "refused";
     case "active":
     case "unrouted":
+    case "refused":
       return "configured";
   }
 }
@@ -38,15 +34,12 @@ const ADD_VALUE = "Add the value in Settings › Credentials.";
  */
 export function batteryStatusHint(params: {
   battery: PolicyBattery | null;
-  enforced?: EnforcedStatus;
   catalogName: (catalogId: string) => string;
 }): string | null {
-  const { battery, enforced, catalogName } = params;
+  const { battery, catalogName } = params;
   if (!battery) return null;
   const { credentials, servers } = battery;
-  switch (batteryTableStatus(battery, enforced)) {
-    case "refused":
-      return "The policy was refused, so no rule of this battery is enforced. The Policy page shows the error.";
+  switch (batteryTableStatus(battery)) {
     case "credential": {
       if (credentials.some(({ key }) => key === null))
         return "Choose a credential for this battery. Open the battery and select one under Credentials.";

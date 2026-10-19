@@ -465,7 +465,7 @@ async function tableRow(name: string) {
   return row;
 }
 
-test("a refusal with no earlier composition reads as refused by policy in the table", async () => {
+test("a refusal with no earlier composition reads as configured in the table", async () => {
   declarations = emptyDeclarations({
     batteries: [declaredGithub({ status: "active", served: null })],
     lastError: "line 4: unknown battery",
@@ -480,8 +480,8 @@ test("a refusal with no earlier composition reads as refused by policy in the ta
   });
   show();
   const row = await tableRow("github");
-  expect(row).toHaveTextContent("Refused by policy");
-  expect(row).not.toHaveTextContent("Configured");
+  expect(row).toHaveTextContent("Configured");
+  expect(row).not.toHaveTextContent("Refused by policy");
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 

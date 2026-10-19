@@ -35,11 +35,7 @@ test("each backend status maps to one table status", () => {
   expect(batteryTableStatus(battery({ status: "unrouted" }))).toBe(
     "configured",
   );
-  expect(batteryTableStatus(battery({ status: "refused" }))).toBe("refused");
-  // A refused policy enforces nothing, whatever the text would give it.
-  expect(batteryTableStatus(battery({ status: "active" }), "refused")).toBe(
-    "refused",
-  );
+  expect(batteryTableStatus(battery({ status: "refused" }))).toBe("configured");
   expect(batteryTableStatus(battery({ status: "missing_credentials" }))).toBe(
     "credential",
   );

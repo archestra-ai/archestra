@@ -49,7 +49,7 @@ import { RequestDetails } from "./_parts/request-details";
 import { RequestWaterfall } from "./_parts/request-waterfall";
 import { SessionFacts } from "./_parts/session-facts";
 import {
-  SessionHeaderAvatar,
+  SessionHeaderTitle,
   SessionIdentityLine,
 } from "./_parts/session-header";
 import {
@@ -306,18 +306,17 @@ export default function SessionDetailPage({
       <PageLayout
         denseContent
         title={
-          <span
+          <SessionHeaderTitle
+            session={sessionData}
             title={sessionTitle || "Session"}
-            className="block truncate text-[17px] leading-6 lg:text-xl lg:leading-7"
-          >
-            {sessionTitle || "Session"}
-          </span>
+          />
         }
         documentTitle={sessionTitle || "Session"}
-        icon={<SessionHeaderAvatar session={sessionData} />}
-        iconVariant="custom"
+        stackHeaderOnMobile
         backLink={
-          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+          <span className="flex shrink-0 lg:translate-y-3">
+            <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+          </span>
         }
         description={<SessionIdentityLine session={sessionData} />}
       >

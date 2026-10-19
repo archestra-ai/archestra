@@ -24,22 +24,36 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { describeKey } from "@/components/virtual-key-badge";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
-export function SessionHeaderAvatar({
+/**
+ * The session's title behind its composite avatar. From `lg` the 44px avatar
+ * fronts both header lines, so it hangs below the title row into the
+ * description's gutter; below that it simply leads the title.
+ */
+export function SessionHeaderTitle({
   session,
+  title,
 }: {
   session: LogSession | undefined;
+  title: string;
 }) {
-  const appName = useAppName();
-  if (!session) return <Skeleton className="size-11 rounded-[11px]" />;
-  const { client, primarySource, originLabel } = describeSessionOrigin(session);
   return (
-    <SessionAvatar
-      client={client}
-      source={primarySource}
-      originLabel={originLabel}
-      actor={describeActor(session, appName)}
-      size="lg"
-    />
+    <span className="flex min-w-0 items-center gap-3.5">
+      <span className="shrink-0 lg:relative lg:h-8 lg:w-11">
+        <span className="block lg:absolute lg:top-1.5 lg:left-0">
+          {session ? (
+            <SessionHeaderAvatar session={session} />
+          ) : (
+            <Skeleton className="size-11 rounded-[11px]" />
+          )}
+        </span>
+      </span>
+      <span
+        title={title}
+        className="min-w-0 truncate text-[17px] leading-6 max-lg:self-start lg:text-xl lg:leading-7"
+      >
+        {title}
+      </span>
+    </span>
   );
 }
 
@@ -54,7 +68,11 @@ export function SessionIdentityLine({
 }) {
   const appName = useAppName();
   if (!session) {
-    return <Skeleton className="h-4 w-80 max-w-full" />;
+    return (
+      <div className={IDENTITY_INSET}>
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </div>
+    );
   }
   const { client, primarySource, originLabel } = describeSessionOrigin(session);
   const actor = describeActor(session, appName);
@@ -204,25 +222,56 @@ export function SessionIdentityLine({
   // separator's width and clipped, so the dot that would start a wrapped line
   // is hidden instead of dangling there, and no dot ever ends one.
   return (
-    <div className="-my-0.5 overflow-hidden py-0.5">
-      <div className="-ml-6 flex flex-wrap items-center gap-y-1 text-sm text-muted-foreground">
-        {items.map((item) => (
-          // Each item is one unit: it moves to the next line whole
-          // rather than breaking inside itself.
-          <span
-            key={item.key}
-            className="inline-flex max-w-full min-w-0 items-center whitespace-nowrap"
-          >
+    <div className={IDENTITY_INSET}>
+      <div className="-my-0.5 overflow-hidden py-0.5">
+        <div className="-ml-6 flex flex-wrap items-center gap-y-1 text-sm text-muted-foreground">
+          {items.map((item) => (
+            // Each item is one unit: it moves to the next line whole
+            // rather than breaking inside itself.
             <span
-              aria-hidden="true"
-              className="w-6 shrink-0 text-center text-muted-foreground/50"
+              key={item.key}
+              className="inline-flex max-w-full min-w-0 items-center whitespace-nowrap"
             >
-              ·
+              <span
+                aria-hidden="true"
+                className="w-6 shrink-0 text-center text-muted-foreground/50"
+              >
+                ·
+              </span>
+              {item.node}
             </span>
-            {item.node}
-          </span>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
+  );
+}
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/**
+ * Lines the identity up under the title text: the back arrow and its gap
+ * (32), then the avatar (44) and its gap (14). It rises into the title row's
+ * slack so it reads as the title's second line. Below `lg` the avatar sets
+ * the row's height (44px) and the title sits at its top, so the identity
+ * rises by the rest of the row (20px), plus the header grid's 8px row gap on
+ * phones or the 4px description margin from `sm`. From `lg` the row is 40px
+ * for a 28px line.
+ */
+const IDENTITY_INSET = "pl-[90px] -mt-7 sm:-mt-6 lg:-mt-2.5";
+
+function SessionHeaderAvatar({ session }: { session: LogSession }) {
+  const appName = useAppName();
+  const { client, primarySource, originLabel } = describeSessionOrigin(session);
+  return (
+    <SessionAvatar
+      client={client}
+      source={primarySource}
+      originLabel={originLabel}
+      actor={describeActor(session, appName)}
+      size="lg"
+    />
   );
 }

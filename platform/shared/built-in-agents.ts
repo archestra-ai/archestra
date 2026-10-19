@@ -23,11 +23,11 @@ export const OPENAPPA_CONFIG_SUGGESTED_PROMPTS = [
     prompt: "Explain what OpenAPPA guardrails are.",
   },
   {
-    summaryTitle: "Explain my current policy",
+    summaryTitle: "Explain my policy",
     prompt: "Explain my current OpenAPPA policy in plain language.",
   },
   {
-    summaryTitle: "Review risky tool calls",
+    summaryTitle: "Review risky calls",
     prompt: "Review my OpenAPPA policy for risky tool calls and gaps.",
   },
   {
@@ -35,7 +35,7 @@ export const OPENAPPA_CONFIG_SUGGESTED_PROMPTS = [
     prompt: "Help me change my OpenAPPA policy.",
   },
   {
-    summaryTitle: "Help me validate my policy",
+    summaryTitle: "Validate my policy",
     prompt: "Help me write a validation for my OpenAPPA policy.",
   },
 ] as const;

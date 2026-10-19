@@ -1798,6 +1798,82 @@ tests:
       - failedTemplate:
           errorMessage: "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set."
 
+  - it: should read every auth secret from configured env-var-safe keys in the existing secret
+    documentIndex: 1
+    set:
+      archestra.authSecret.existingSecretName: external-auth-secret
+      archestra.authSecret.existingSecretKey: ARCHESTRA_AUTH_SECRET
+      archestra.authSecret.existingSessionSecretKey: ARCHESTRA_AUTH_SESSION_SECRET
+      archestra.authSecret.existingSecretsEncryptionSecretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+      archestra.authSecret.existingOfferSigningSecretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: ARCHESTRA_AUTH_SECRET
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SESSION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: ARCHESTRA_AUTH_SESSION_SECRET
+                optional: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+                optional: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+                optional: true
+
+  - it: should keep the default session and encryption key names for an existing secret
+    documentIndex: 1
+    set:
+      archestra.authSecret.existingSecretName: external-auth-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SESSION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: session-secret
+                optional: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: secrets-encryption-secret
+                optional: true
+
+  - it: should fail when a session secret key is set without auth secret name
+    set:
+      archestra.authSecret.existingSessionSecretKey: ARCHESTRA_AUTH_SESSION_SECRET
+    asserts:
+      - failedTemplate:
+          errorMessage: "archestra.authSecret.existingSessionSecretKey requires archestra.authSecret.existingSecretName to also be set."
+
   - it: should use secretKeyRef for explicit ARCHESTRA_AUTH_SECRET (sensitive env var)
     documentIndex: 1
     set:

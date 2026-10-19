@@ -133,6 +133,15 @@ archestra:
     existingSecretName: ""
     # Key within existingSecretName containing the auth secret value.
     existingSecretKey: auth-secret
+    # Keys within existingSecretName containing the session-signing,
+    # secret-encryption, and OpenAPPA offer-signing secrets. Only valid with
+    # existingSecretName. Override them to store every value under an
+    # env-var-safe key (for example ARCHESTRA_AUTH_SESSION_SECRET), so the same
+    # Secret can also be loaded through archestra.envFrom without kubelet
+    # warning about invalid environment variable names.
+    existingSessionSecretKey: session-secret
+    existingSecretsEncryptionSecretKey: secrets-encryption-secret
+    existingOfferSigningSecretKey: offer-signing-secret
     # Extra key/value pairs to add to the Helm-managed <release>-auth Secret.
     # This is useful when you want to mount additional secret-backed files from
     # the same Secret via archestra.extraVolumes, without creating a second Secret.

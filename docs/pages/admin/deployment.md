@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-17
+lastUpdated: 2026-10-19
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -58,6 +58,18 @@ archestra:
 ```
 
 The referenced Secret must also contain `session-secret` and `secrets-encryption-secret`. Preserve these keys across upgrades and restores. Use the [key rotation procedure](/docs/admin/security/credentials#database-storage) when changing encryption keys.
+
+To also load the Secret through `archestra.envFrom`, store its values under env-var-safe keys and name them, so pods start without invalid-environment-variable warnings:
+
+```yaml
+archestra:
+  authSecret:
+    existingSecretName: archestra-auth
+    existingSecretKey: ARCHESTRA_AUTH_SECRET
+    existingSessionSecretKey: ARCHESTRA_AUTH_SESSION_SECRET
+    existingSecretsEncryptionSecretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+    existingOfferSigningSecretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+```
 
 ### Database Configuration
 

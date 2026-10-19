@@ -48,8 +48,14 @@ function emittedFontFiles(): Map<string, string> {
       "media",
     );
     for (const file of readdirSync(media)) {
-      const match = /^(.+?)(?:-s)?\.(?:p\.)?[^.]+\.woff2$/.exec(file);
-      if (match?.[1]) files.set(match[1], `/_next/static/media/${file}`);
+      // Only a name the build gives a font (letters, digits, `_`, `-`, `.`)
+      // is kept, and its URL encodes it: nothing read from the file system
+      // reaches the document as it is.
+      const match =
+        /^([A-Za-z0-9_]+?)(?:-s)?\.(?:p\.)?[A-Za-z0-9-]+\.woff2$/.exec(file);
+      if (match?.[1]) {
+        files.set(match[1], `/_next/static/media/${encodeURIComponent(file)}`);
+      }
     }
   } catch {
     // No build output to read (the dev server): nothing is preloaded.

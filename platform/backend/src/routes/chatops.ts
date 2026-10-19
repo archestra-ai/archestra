@@ -10,7 +10,7 @@ import {
 import { ClientSecretCredential } from "@azure/identity";
 import { Activity, ActivityTypes } from "@microsoft/agents-activity";
 import type { TurnContext } from "@microsoft/agents-hosting";
-import { WebClient } from "@slack/web-api";
+import { ErrorCode, WebClient } from "@slack/web-api";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -30,6 +30,7 @@ import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
+  SLACK_CONNECT_TIMEOUT_MS,
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
@@ -3023,9 +3024,9 @@ async function validateSlackCredentials(config: {
 }): Promise<void> {
   if (config.enabled && config.botToken) {
     try {
-      const client = new WebClient(config.botToken);
-      await client.auth.test();
-    } catch {
+      await makeSlackCheckClient(config.botToken).auth.test();
+    } catch (error) {
+      throwIfSlackUnreachable(error, config.connectionMode);
       throw new ApiError(
         400,
         "Invalid Slack credentials — could not authenticate with Slack. Please check your Bot Token.",
@@ -3039,15 +3040,49 @@ async function validateSlackCredentials(config: {
     config.appLevelToken
   ) {
     try {
-      const client = new WebClient(config.appLevelToken);
-      await client.apps.connections.open();
-    } catch {
+      await makeSlackCheckClient(config.appLevelToken).apps.connections.open();
+    } catch (error) {
+      throwIfSlackUnreachable(error, config.connectionMode);
       throw new ApiError(
         400,
         "Invalid Slack App-Level Token — could not open a Socket Mode connection. Please check your App-Level Token.",
       );
     }
   }
+}
+
+/**
+ * A Slack client for a one-off credential check. The SDK's defaults (no
+ * timeout, retries for about 30 minutes) would hang the request when the
+ * network drops traffic to Slack.
+ */
+function makeSlackCheckClient(token: string): WebClient {
+  return new WebClient(token, {
+    timeout: SLACK_CONNECT_TIMEOUT_MS,
+    retryConfig: { retries: 0 },
+  });
+}
+
+/**
+ * Turn a request that never reached Slack (refused, dropped, or timed out)
+ * into an error naming the hosts the platform must reach, instead of
+ * blaming the credentials.
+ */
+function throwIfSlackUnreachable(
+  error: unknown,
+  connectionMode: ChatOpsConnectionMode,
+): void {
+  if ((error as { code?: unknown } | null)?.code !== ErrorCode.RequestError) {
+    return;
+  }
+  const hosts =
+    connectionMode === "socket"
+      ? "slack.com and wss-primary.slack.com"
+      : "slack.com";
+  throw new ApiError(
+    502,
+    `Could not reach slack.com within ${SLACK_CONNECT_TIMEOUT_MS / TimeInMs.Second}s. Check that the platform can reach ${hosts} over HTTPS (port 443).`,
+  );
 }
 
 /** Agents the Slack channels and DMs are assigned to, most used first. */

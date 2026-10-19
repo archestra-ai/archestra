@@ -59,6 +59,7 @@ import {
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
+  SLACK_CONNECT_TIMEOUT_MS,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import { slackAppFactory } from "./slack-app-factory";
@@ -244,6 +245,7 @@ class SlackProvider implements ChatOpsProvider {
           Authorization: `Bearer ${botToken}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
+        signal: AbortSignal.timeout(SLACK_CONNECT_TIMEOUT_MS),
       });
 
       const body = await response.json();
@@ -1746,6 +1748,7 @@ class SlackProvider implements ChatOpsProvider {
           Authorization: `Bearer ${this.config.botToken}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
+        signal: AbortSignal.timeout(SLACK_CONNECT_TIMEOUT_MS),
       });
       if ((await response.json()).ok) {
         this.parseGrantedScopes(response.headers.get("x-oauth-scopes"));
@@ -2123,6 +2126,8 @@ class SlackProvider implements ChatOpsProvider {
     this.socketModeClient = new SocketModeClient({
       appToken,
       autoReconnectEnabled: true,
+      // Bounds each apps.connections.open attempt; the SDK still retries.
+      clientOptions: { timeout: SLACK_CONNECT_TIMEOUT_MS },
     });
 
     // The SocketModeClient dispatches events as follows (see source):
@@ -2209,8 +2214,33 @@ class SlackProvider implements ChatOpsProvider {
       },
     );
 
+    // With auto-reconnect on, start() keeps retrying until it connects, so a
+    // network that drops traffic to Slack would block the caller (saving the
+    // Slack config) forever. Stop waiting after the timeout and let the client
+    // keep retrying in the background.
+    const connection = this.socketModeClient.start();
+    let deadline: NodeJS.Timeout | undefined;
+    const timedOut = new Promise<"timed-out">((resolve) => {
+      deadline = setTimeout(
+        () => resolve("timed-out"),
+        SLACK_CONNECT_TIMEOUT_MS,
+      );
+    });
     try {
-      await this.socketModeClient.start();
+      if ((await Promise.race([connection, timedOut])) === "timed-out") {
+        logger.error(
+          `[SlackProvider] Socket mode did not connect within ${SLACK_CONNECT_TIMEOUT_MS / TimeInMs.Second}s; still retrying in the background. Check that the platform can reach slack.com and wss-primary.slack.com over HTTPS (port 443).`,
+        );
+        connection.then(
+          () => logger.info("[SlackProvider] Socket mode connected"),
+          (error) =>
+            logger.error(
+              { error: errorMessage(error) },
+              "[SlackProvider] Failed to start socket mode",
+            ),
+        );
+        return;
+      }
       logger.info("[SlackProvider] Socket mode connected");
     } catch (error) {
       logger.error(
@@ -2218,6 +2248,8 @@ class SlackProvider implements ChatOpsProvider {
         "[SlackProvider] Failed to start socket mode",
       );
       throw error;
+    } finally {
+      clearTimeout(deadline);
     }
   }
 

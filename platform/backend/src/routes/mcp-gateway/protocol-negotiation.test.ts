@@ -175,6 +175,74 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     );
   });
 
+  test("both handshakes describe the gateway to the model in instructions", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const token = await makeServiceAccountToken({ organizationId: org.id });
+    const described = await makeAgent({
+      organizationId: org.id,
+      description:
+        "  Tools for the support team. Prefer the ticketing tools.\n",
+    });
+    const undescribed = await makeAgent({
+      organizationId: org.id,
+      description: "   ",
+    });
+    const verbose = await makeAgent({
+      organizationId: org.id,
+      description: "a".repeat(5000),
+    });
+
+    async function handshake(agentId: string) {
+      const initialize = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agentId}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: LEGACY_MCP_PROTOCOL_REVISION,
+            capabilities: {},
+            clientInfo: { name: "legacy-client", version: "1.0.0" },
+          },
+          id: 1,
+        },
+      });
+      const discover = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agentId}`,
+        headers: makeMcpHeaders(token.value, {
+          "mcp-protocol-version": STATELESS_MCP_PROTOCOL_REVISION,
+          "mcp-method": "server/discover",
+        }),
+        payload: { jsonrpc: "2.0", method: "server/discover", id: 2 },
+      });
+      expect(initialize.statusCode).toBe(200);
+      expect(discover.statusCode).toBe(200);
+      return [initialize.json().result, discover.json().result];
+    }
+
+    for (const result of await handshake(described.id)) {
+      expect(result.instructions).toBe(
+        "Tools for the support team. Prefer the ticketing tools.",
+      );
+    }
+    // Clients add instructions to every prompt, so a long description is cut.
+    for (const result of await handshake(verbose.id)) {
+      expect(result.instructions).toHaveLength(2000);
+      expect(result.instructions.endsWith("…")).toBe(true);
+    }
+    // Without a description there is nothing to say, so the field is omitted
+    // rather than sent empty.
+    for (const result of await handshake(undescribed.id)) {
+      expect(result).not.toHaveProperty("instructions");
+    }
+  });
+
   test("a routing header that disagrees with the body is rejected", async ({
     makeAgent,
     makeOrganization,

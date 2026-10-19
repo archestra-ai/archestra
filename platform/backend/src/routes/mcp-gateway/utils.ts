@@ -157,6 +157,7 @@ import {
   MAX_INPUT_ROUNDS,
 } from "./mrtr";
 import {
+  buildGatewayInstructions,
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
@@ -729,6 +730,15 @@ export async function createAgentServer(params: {
       name: `archestra-agent-${agentId}`,
       version: config.api.version,
     });
+
+  // Slim lookup: this runs on every stateless gateway request, and the tool
+  // handlers below only read scalar agent config plus labels — never the
+  // tools/teams/knowledge/connector hydration `findById` performs.
+  const agent = params.lookups
+    ? await params.lookups.gatewayAgent(agentId)
+    : await AgentModel.findGatewayAgentById(agentId);
+  if (!agent) throw new Error(`Agent not found: ${agentId}`);
+
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
@@ -741,17 +751,10 @@ export async function createAgentServer(params: {
       // deliberately passes the negotiated revision instead and may advertise
       // `tools.listChanged: true`, backed by `subscriptions/listen`.
       capabilities: buildGatewayServerCapabilities(),
+      instructions: buildGatewayInstructions(agent.description),
     },
   );
   const { server } = mcpServer;
-
-  // Slim lookup: this runs on every stateless gateway request, and the tool
-  // handlers below only read scalar agent config plus labels — never the
-  // tools/teams/knowledge/connector hydration `findById` performs.
-  const agent = params.lookups
-    ? await params.lookups.gatewayAgent(agentId)
-    : await AgentModel.findGatewayAgentById(agentId);
-  if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
   // Fetch the agent's teams and the calling user's teams (with labels) for
   // trace span team attributes.

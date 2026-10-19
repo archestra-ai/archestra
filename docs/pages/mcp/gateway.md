@@ -2,7 +2,7 @@
 title: MCP Gateway
 description: One MCP endpoint that gives a client the tools, knowledge, subagents, and skills you choose
 order: 2
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -79,3 +79,4 @@ Give every MCP client the same [skills](/docs/agents/skills), from one place. Th
 
 - Gateway access is its own grant. A person who can use the gateway can use its shared tools, even if they cannot see the server in MCP Registry.
 - **Custom headers:** to pass headers from the client to the server, such as a tenant ID, list them under **Advanced → Custom headers**. Stdio servers cannot get headers.
+- **Description:** the client gives it to its model as the server's instructions when it connects. Say what the gateway is for and which of its tools to prefer.

@@ -99,6 +99,14 @@ function supportsOneHourCache(
 const MAX_CACHE_BREAKPOINTS = 4;
 
 /**
+ * Whether a Bedrock model accepts explicit Converse `cachePoint` blocks. Shared
+ * by every path that marks Bedrock cache points so they agree on the model set.
+ */
+export function supportsBedrockCachePoint(model: string): boolean {
+  return BEDROCK_PROMPT_CACHE_MODEL.test(model);
+}
+
+/**
  * Adds provider cache breakpoints so the chat request's stable prefix is
  * prompt-cached across turns. Without a breakpoint Anthropic and Bedrock cache
  * nothing, re-billing the full system prompt + tool definitions + history on

@@ -1,3 +1,4 @@
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { HttpResponse, http } from "msw";
@@ -180,6 +181,66 @@ describe("buildContextualHeaders", () => {
     expect(JSON.stringify(requestBody)).toContain(
       '"cache_control":{"type":"ephemeral"}',
     );
+  });
+
+  it.each([
+    ["eu.amazon.nova-2-lite-v1:0", true],
+    ["us.anthropic.claude-haiku-4-5-20251001-v1:0", true],
+    ["amazon.nova-lite-v1:0", false],
+    ["meta.llama3-70b-instruct-v1:0", false],
+  ])("Bedrock %s gets a document cache point: %s", async (modelName, cached) => {
+    mockResolveContextualRetrievalConfig.mockResolvedValue({
+      mode: "chunk",
+      reranker: {
+        kind: "llm",
+        baseUrl: null,
+        llmModel: createAmazonBedrock({
+          baseURL: TEST_BASE_URL,
+          apiKey: "test-key",
+        })(modelName),
+        modelName,
+        provider: "bedrock",
+      },
+    });
+    let requestBody: Record<string, unknown> | undefined;
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/model/:model/converse`,
+        async ({ request }) => {
+          requestBody = (await request.json()) as Record<string, unknown>;
+          const contexts = Array.from(
+            { length: 6 },
+            (_, index) => `Passage ${index} context`,
+          );
+          // The provider answers structured output through a `json` tool on
+          // models without native structured output.
+          const content = requestBody.toolConfig
+            ? [
+                {
+                  toolUse: {
+                    toolUseId: "t1",
+                    name: "json",
+                    input: { contexts },
+                  },
+                },
+              ]
+            : [{ text: JSON.stringify({ contexts }) }];
+          return HttpResponse.json({
+            output: { message: { role: "assistant", content } },
+            stopReason: requestBody.toolConfig ? "tool_use" : "end_turn",
+            usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+          });
+        },
+      ),
+    );
+
+    const headers = await buildContextualHeaders({
+      ...DOCUMENT,
+      chunks: Array.from({ length: 6 }, (_, index) => `Passage ${index}`),
+    });
+
+    expect(headers[0]).toBe("CONTEXT: Passage 0 context\n\n");
+    expect(JSON.stringify(requestBody).includes('"cachePoint"')).toBe(cached);
   });
 
   it("uses one document call for short documents even in per-passage mode", async () => {

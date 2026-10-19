@@ -230,9 +230,11 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
         ) : (
           <span className={cn("shrink-0 font-medium", tone.text)}>Yell</span>
         )}
-        <span className="min-w-0 truncate text-muted-foreground">
-          {yell.superyell ? "· guardrails turned off" : "· feedback to admins"}
-        </span>
+        {yell.superyell ? null : (
+          <span className="min-w-0 truncate text-muted-foreground">
+            · feedback to admins
+          </span>
+        )}
         {/* The time doubles as the permalink to the yell's own page. */}
         <Link
           href={yellHref(yell.id)}
@@ -246,8 +248,8 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
       </div>
       {yell.superyell ? (
         <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-          Sent with break the glass on. Nothing after it was checked, and the
-          label stopped being tracked.
+          Broke the glass: guardrails turned off, so nothing after it was
+          checked and the label stopped being tracked.
         </p>
       ) : null}
       <blockquote className="mt-2 rounded-md border bg-muted/40 px-2.5 py-2 text-xs leading-[18px] break-words whitespace-pre-wrap text-foreground/90">

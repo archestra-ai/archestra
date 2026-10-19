@@ -137,9 +137,11 @@ const {
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
   ),
   saveChannelChangesMock: vi.fn(async () => true),
-  useDelegationTargetAgentsMock: vi.fn((): { data: unknown[] } => ({
-    data: [],
-  })),
+  useDelegationTargetAgentsMock: vi.fn(
+    (): { data: unknown[]; isFetching?: boolean } => ({
+      data: [],
+    }),
+  ),
   useProfileMock: vi.fn(
     (): { data: unknown | null; refetch: ReturnType<typeof vi.fn> } => ({
       data: null,
@@ -1437,6 +1439,56 @@ describe("AgentForm delegation state", () => {
     expect(screen.getByText("1 subagent assigned.")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps assigned subagents on screen while a new pick loads", async () => {
+    const user = userEvent.setup();
+    const newAgent = {
+      ...baseAgent,
+      id: "00000000-0000-4000-8000-000000000003",
+      name: "New Agent",
+    };
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, newAgent],
+    });
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+    await user.click(subagentModeTab("Manual"));
+    expect(
+      screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
+    const option = screen.getByRole("option", { name: /New Agent/ });
+    // The lookup for the grown id list is in flight and only has the rows it
+    // resolved before.
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent],
+      isFetching: true,
+    });
+    await user.click(option);
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByText("2 subagents assigned.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading subagent" }),
+    ).toBeInTheDocument();
+
+    // Once the lookup answers, the pending pill becomes the new agent's.
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, newAgent],
+      isFetching: false,
+    });
+    await user.click(subagentModeTab("All"));
+    await user.click(subagentModeTab("Manual"));
+    expect(
+      screen.queryByRole("status", { name: "Loading subagent" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: `Remove agent ${newAgent.name}` }),
     ).toBeInTheDocument();
   });
 

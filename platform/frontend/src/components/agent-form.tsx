@@ -34,6 +34,7 @@ import {
   ChevronRight,
   Globe,
   InfoIcon,
+  Loader2,
   Plus,
   RotateCcw,
   X,
@@ -146,6 +147,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -440,6 +442,19 @@ function SubagentPill({
   );
 }
 
+// Stands in for a just-picked subagent until its name loads.
+function PendingSubagentPill() {
+  return (
+    <output
+      aria-label="Loading subagent"
+      className="flex h-8 w-32 items-center gap-2 rounded-md border border-dashed px-3 text-xs text-muted-foreground"
+    >
+      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+      <Skeleton className="h-3 flex-1" />
+    </output>
+  );
+}
+
 // Component to display and edit local delegation targets.
 interface SubagentsEditorProps {
   agentId?: string;
@@ -465,25 +480,43 @@ function SubagentsEditor({
   emptyDescription = "Every task is handled here, with nothing handed on.",
 }: SubagentsEditorProps) {
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
-  const { data: availableAgents = [] } = useAgentOptionsByIds({
-    ids: selectedIds.slice(0, 20),
-    enabled: canReadAgents,
-  });
-  const filteredAgents = availableAgents.filter(
-    (agent) => agent.id !== agentId,
-  );
+  const visibleIds = selectedIds.slice(0, 20);
+  // Every pick changes the id list, and so the lookup's key. Without the
+  // previous rows the assigned pills would all vanish until it answers.
+  const { data: availableAgents = [], isFetching: agentsFetching } =
+    useAgentOptionsByIds({
+      ids: visibleIds,
+      enabled: canReadAgents,
+      keepPreviousData: true,
+    });
+  const agentsById = new Map(availableAgents.map((agent) => [agent.id, agent]));
   const handleSelectionChange = (ids: string[]) => {
     const setIds =
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
     setIds(ids);
   };
-
-  const selectedLocalAgents = filteredAgents.filter((agent) =>
-    selectedAgentIds.includes(agent.id),
-  );
-  const excludedLocalAgents = filteredAgents.filter((agent) =>
-    disabledAgentIds.includes(agent.id),
-  );
+  // In pick order, so a new pick holds its place as a loading pill until the
+  // lookup names it, and the pills around it do not move.
+  const pills = visibleIds
+    .filter((id) => id !== agentId && (agentsById.has(id) || agentsFetching))
+    .map((id) => {
+      const agent = agentsById.get(id);
+      if (!agent) return <PendingSubagentPill key={id} />;
+      return (
+        <SubagentPill
+          key={id}
+          agent={agent}
+          isSelected={true}
+          readOnly={readOnly}
+          onToggle={() =>
+            handleSelectionChange(
+              selectedIds.filter((selectedId) => selectedId !== id),
+            )
+          }
+          tone={localMode === "all" ? "exclude" : "delegate"}
+        />
+      );
+    });
   const hasSelectedTargets = selectedAgentIds.length > 0;
 
   return (
@@ -510,46 +543,17 @@ function SubagentsEditor({
         </div>
       ) : null}
 
-      {localMode === "all" && excludedLocalAgents.length > 0 && (
+      {localMode === "all" && pills.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">
             Excluded from all local agents
           </p>
-          <div className="flex flex-wrap gap-2">
-            {excludedLocalAgents.map((agent) => (
-              <SubagentPill
-                key={agent.id}
-                agent={agent}
-                isSelected={true}
-                readOnly={readOnly}
-                onToggle={() =>
-                  onDisabledSelectionChange(
-                    disabledAgentIds.filter((id) => id !== agent.id),
-                  )
-                }
-                tone="exclude"
-              />
-            ))}
-          </div>
+          <div className="flex flex-wrap gap-2">{pills}</div>
         </div>
       )}
 
-      {localMode === "selected" && selectedLocalAgents.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {selectedLocalAgents.map((agent) => (
-            <SubagentPill
-              key={agent.id}
-              agent={agent}
-              isSelected={true}
-              readOnly={readOnly}
-              onToggle={() =>
-                onSelectionChange(
-                  selectedAgentIds.filter((id) => id !== agent.id),
-                )
-              }
-            />
-          ))}
-        </div>
+      {localMode === "selected" && pills.length > 0 && (
+        <div className="flex flex-wrap gap-2">{pills}</div>
       )}
 
       {selectedIds.length > 20 && (

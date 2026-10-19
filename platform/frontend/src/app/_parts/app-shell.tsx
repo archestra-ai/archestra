@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import {
   type CSSProperties,
-  Suspense,
   startTransition,
   useCallback,
   useEffect,
@@ -43,11 +42,12 @@ import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
 import { useIsShellSeeded, useShellReady } from "@/lib/shell-deferral";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
-import { lazyComponent, preloadableLazy } from "@/lib/utils/preloadable-lazy";
+import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";
+import { AppSidebar } from "./sidebar";
 import {
   SidebarResizeHandle,
   useSidebarWidthState,
@@ -243,7 +243,12 @@ export function AppShell({ children }: AppShellProps) {
               >
                 {children}
               </div>
-              <Version />
+              {/* The new-chat screen shows its own version line and hides
+                  this one (the `hide-version` class), but only after it
+                  mounts: rendering it there would draw two lines on the
+                  server and drop one as the page starts, moving the
+                  centred composer. */}
+              {pathname !== "/chat" && <Version />}
             </div>
           </main>
           <Toaster />
@@ -259,13 +264,14 @@ export function AppShell({ children }: AppShellProps) {
 }
 
 /**
- * On chat pages, the sidebar after the page's first commit. Its navigation, conversation
- * list and their queries are not what the visitor came for, so the first
- * render (on the server too) draws its empty frame at the exact width, and
- * the real sidebar replaces it in a transition right after the page —
- * the chat composer — has committed and painted (so its chunk is not
- * evaluated between the composer's commit and its first typeable frame). The
- * frame stays while the chunk loads.
+ * On chat pages the server did not seed, the sidebar after the page's first
+ * commit. Its navigation, conversation list and their queries are not what
+ * the visitor came for, so the first render draws its empty frame at the
+ * exact width, and the real sidebar replaces it in a transition right after
+ * the page (the chat composer) has committed and painted. A seeded page has
+ * the sidebar's data and renders it in the HTML. Its code ships with the
+ * shell: loaded later, it would not be there when the page hydrates, and the
+ * server's sidebar would drop to the frame and back.
  */
 function DeferredSidebar({ defer }: { defer: boolean }) {
   // Only where the composer is the first screen. Elsewhere the sidebar mounts
@@ -275,18 +281,9 @@ function DeferredSidebar({ defer }: { defer: boolean }) {
   useEffect(() => {
     afterNextPaint(() => startTransition(() => setMounted(true)));
   }, []);
-  const placeholder = <SidebarPlaceholder collapsible="icon" />;
-  if (!mounted) return placeholder;
-  return (
-    <Suspense fallback={placeholder}>
-      <appSidebar.Component />
-    </Suspense>
-  );
+  if (!mounted) return <SidebarPlaceholder collapsible="icon" />;
+  return <AppSidebar />;
 }
-
-const appSidebar = preloadableLazy<Record<string, never>>(() =>
-  import("./sidebar").then((m) => ({ default: m.AppSidebar })),
-);
 
 /** Renders its children from the first idle callback after the app is interactive. */
 function AfterIdle({ children }: { children: React.ReactNode }) {

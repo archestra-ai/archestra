@@ -1342,6 +1342,120 @@ describe("GithubConnector", () => {
     });
   });
 
+  describe("repository file types", () => {
+    async function syncWithFileTypes(params: {
+      fileTypes: string[];
+      files: Record<string, string>;
+    }): Promise<ConnectorSyncBatch[]> {
+      mockListForRepo.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: Object.keys(params.files).map((path, index) => ({
+            type: "blob",
+            path,
+            sha: `sha${index}`,
+          })),
+        },
+      });
+      mockGetContent.mockImplementation(async ({ path }: { path: string }) => ({
+        data: {
+          content: Buffer.from(params.files[path], "binary").toString("base64"),
+        },
+      }));
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeRepositoryFiles: true,
+          fileTypes: params.fileTypes,
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+      return batches;
+    }
+
+    function indexedPaths(batches: ConnectorSyncBatch[]): unknown[] {
+      return batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file")
+        .map((d) => d.metadata.filePath);
+    }
+
+    test("matches exact file names at the root and in nested folders", async () => {
+      const batches = await syncWithFileTypes({
+        fileTypes: ["Dockerfile", "Makefile"],
+        files: {
+          Dockerfile: "FROM node:22",
+          "services/api/Dockerfile": "FROM node:22",
+          Makefile: "build:",
+          "docs/README.md": "# Docs",
+          "docs/Dockerfile-guide.md": "# Guide",
+        },
+      });
+
+      expect(indexedPaths(batches)).toEqual([
+        "Dockerfile",
+        "services/api/Dockerfile",
+        "Makefile",
+      ]);
+    });
+
+    test("matches dotless, compound, and glob-style extensions", async () => {
+      const batches = await syncWithFileTypes({
+        fileTypes: ["md", ".tm.hcl", "*.yaml"],
+        files: {
+          "README.md": "# Readme",
+          "infra/stack.tm.hcl": "stack {}",
+          "infra/main.hcl": "resource {}",
+          "deploy/app.yaml": "kind: Deployment",
+          "src/index.ts": "export {};",
+        },
+      });
+
+      expect(indexedPaths(batches)).toEqual([
+        "README.md",
+        "infra/stack.tm.hcl",
+        "deploy/app.yaml",
+      ]);
+    });
+
+    test("indexes every text file for *, skipping binaries", async () => {
+      const batches = await syncWithFileTypes({
+        fileTypes: ["*"],
+        files: {
+          "README.md": "# Readme",
+          "src/index.ts": "export {};",
+          Dockerfile: "FROM node:22",
+          "assets/logo.png": "\x89PNG\r\n\x1a\n\x00\x00",
+          "bin/tool": "\x7fELF\x02\x01\x01\x00\x00\x00",
+        },
+      });
+
+      expect(indexedPaths(batches)).toEqual([
+        "README.md",
+        "src/index.ts",
+        "Dockerfile",
+      ]);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([]);
+      expect(batches.flatMap((b) => b.skipped ?? [])).toEqual([
+        expect.objectContaining({
+          itemId: "bin/tool",
+          sourceId: "my-repo#file:bin/tool",
+        }),
+      ]);
+      expect(mockGetContent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ path: "assets/logo.png" }),
+      );
+    });
+  });
+
   describe("trailing slash normalization", () => {
     test("validates config with trailing slash", async () => {
       const result = await connector.validateConfig({

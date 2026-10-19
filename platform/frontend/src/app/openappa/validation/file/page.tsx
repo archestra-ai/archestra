@@ -1,5 +1,6 @@
 "use client";
 
+import type { OnMount } from "@monaco-editor/react";
 import {
   Download,
   Loader2,
@@ -33,9 +34,11 @@ import {
   usePreviewOpenAppaPolicyTest,
 } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
+import { focusPolicyLine } from "../../_parts/policy-decorations";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
 import {
   latestFileResult,
+  mismatchedStep,
   validationFileStates,
 } from "../../_parts/validation-run-history";
 import { useValidationHistoryGuard } from "../_parts/use-validation-history-guard";
@@ -51,6 +54,7 @@ import {
 } from "../_parts/validation-draft";
 import {
   exportValidationFile,
+  FailedStepNotice,
   StepResults,
   statusLabel,
   ValidationNotices,
@@ -158,6 +162,14 @@ function ValidationFileEditor({ path }: { path: string }) {
       : null;
   const running = suite.runningPath === path;
   const result = previewRun?.files[0] ?? recorded?.latest?.result;
+  // A decision that did not match gets its own card; any other failure
+  // (a refused policy, a run or step that could not run) stays as text.
+  const failedStep = recorded
+    ? recorded.state?.failedStep
+    : result && !result.error
+      ? mismatchedStep(result.steps)
+      : null;
+  const [editor, setEditor] = useState<Parameters<OnMount>[0] | null>(null);
   const busy = suite.busy || previewMutation.isPending;
   const runnable = Boolean(
     file &&
@@ -319,22 +331,34 @@ function ValidationFileEditor({ path }: { path: string }) {
             </div>
           </div>
           {/* Why the file did not pass, above the tall editor so it is seen. */}
-          {result && (recorded ? recorded.state?.error : result.error) && (
-            <InlineNotice
-              variant={
-                (recorded?.state?.status ?? result.status) === "failed"
-                  ? "error"
-                  : "warning"
+          {failedStep ? (
+            <FailedStepNotice
+              step={failedStep}
+              onShowLine={
+                editor
+                  ? () => focusPolicyLine(editor, failedStep.line)
+                  : undefined
               }
-            >
-              <TriangleAlert />
-              <span className="font-medium">
-                {statusLabel(recorded?.state?.status ?? result.status)}
-              </span>
-              <InlineNoticeText className="whitespace-pre-wrap">
-                {recorded ? recorded.state?.error : result.error}
-              </InlineNoticeText>
-            </InlineNotice>
+            />
+          ) : (
+            result &&
+            (recorded ? recorded.state?.error : result.error) && (
+              <InlineNotice
+                variant={
+                  (recorded?.state?.status ?? result.status) === "failed"
+                    ? "error"
+                    : "warning"
+                }
+              >
+                <TriangleAlert />
+                <span className="font-medium">
+                  {statusLabel(recorded?.state?.status ?? result.status)}
+                </span>
+                <InlineNoticeText className="whitespace-pre-wrap">
+                  {recorded ? recorded.state?.error : result.error}
+                </InlineNoticeText>
+              </InlineNotice>
+            )
           )}
           <Card className="overflow-hidden py-0">
             <CardContent className="px-0">
@@ -347,6 +371,7 @@ function ValidationFileEditor({ path }: { path: string }) {
                     language="plaintext"
                     value={field.value}
                     onChange={(value) => field.onChange(value ?? "")}
+                    onMount={setEditor}
                     options={{
                       ...POLICY_EDITOR_OPTIONS,
                       readOnly: !suite.canWrite || busy,

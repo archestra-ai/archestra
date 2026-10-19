@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { GuardrailTerm } from "@/app/consults/logs/_components/guardrail-terms";
 import { useYellInvestigation } from "@/app/openappa/_parts/use-yell-investigation";
+import { yellHref } from "@/app/openappa/_parts/yells-table";
 import {
   Tooltip,
   TooltipContent,
@@ -29,7 +31,7 @@ import { cn } from "@/lib/utils/tailwind";
 import type { TraceYell } from "./guardrails";
 import { OverviewSection } from "./overview-parts";
 
-/** "Yell" or "Broke the glass", beside the yell call's name. */
+/** "Yell" or "Superyell", beside the yell call's name. */
 export function YellChip({ yell }: { yell: TraceYell }) {
   const Icon = yell.superyell ? ShieldOff : Megaphone;
   return (
@@ -40,7 +42,7 @@ export function YellChip({ yell }: { yell: TraceYell }) {
       )}
     >
       <Icon className="size-2.5" aria-hidden="true" />
-      {yell.superyell ? "Broke the glass" : "Yell"}
+      {yell.superyell ? "Superyell" : "Yell"}
     </span>
   );
 }
@@ -121,7 +123,7 @@ export function YellStepper({
     : supers > 0
       ? TONES.super.dot
       : TONES.yell.dot;
-  const counts = `${plain} ${plain === 1 ? "yell" : "yells"}${supers > 0 ? `, ${supers} broke the glass` : ""}`;
+  const counts = `${plain} ${plain === 1 ? "yell" : "yells"}${supers > 0 ? `, ${supers} ${supers === 1 ? "superyell" : "superyells"}` : ""}`;
 
   return (
     <span className="inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border bg-card text-foreground/85 lg:h-6">
@@ -181,7 +183,7 @@ export function YellStepper({
                 className={cn(index === active ? "font-medium" : "opacity-80")}
               >
                 <span className="tabular-nums">
-                  {index + 1}. {yell.superyell ? "Broke the glass" : "Yell"} ·{" "}
+                  {index + 1}. {yell.superyell ? "Superyell" : "Yell"} ·{" "}
                   {clock(yell.at)}
                 </span>
                 <span className="block truncate opacity-70">
@@ -214,23 +216,33 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
   const Icon = yell.superyell ? ShieldOff : Megaphone;
   return (
     <OverviewSection>
-      <div className="flex items-center gap-1.5 text-xs">
+      <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
         <Icon
           className={cn("size-3.5 shrink-0", tone.text)}
           aria-hidden="true"
         />
-        <span className={cn("font-medium", tone.text)}>
-          {yell.superyell ? "Broke the glass" : "Yell"}
-        </span>
-        <span className="text-muted-foreground">
+        {yell.superyell ? (
+          <GuardrailTerm
+            label="Superyell"
+            explanation={SUPERYELL_EXPLANATION}
+            className={cn("shrink-0 font-medium", tone.text)}
+          />
+        ) : (
+          <span className={cn("shrink-0 font-medium", tone.text)}>Yell</span>
+        )}
+        <span className="min-w-0 truncate text-muted-foreground">
           {yell.superyell ? "· guardrails turned off" : "· feedback to admins"}
         </span>
-        <time
-          dateTime={new Date(yell.at).toISOString()}
-          className="ml-auto shrink-0 text-[11px] text-muted-foreground tabular-nums"
+        {/* The time doubles as the permalink to the yell's own page. */}
+        <Link
+          href={yellHref(yell.id)}
+          aria-label={`Open yell from ${clock(yell.at)}`}
+          className="ml-auto shrink-0 rounded-sm text-[11px] text-muted-foreground tabular-nums underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
         >
-          {clock(yell.at)}
-        </time>
+          <time dateTime={new Date(yell.at).toISOString()}>
+            {clock(yell.at)}
+          </time>
+        </Link>
       </div>
       {yell.superyell ? (
         <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
@@ -315,8 +327,8 @@ function OffBand({
       <TooltipContent side="right" className="max-w-xs">
         <p className="font-medium">Guardrails off</p>
         <p className="opacity-70">
-          Since the agent broke the glass at {clock(at)}: calls were not checked
-          and the label was not tracked.
+          Since the agent's superyell at {clock(at)}: calls were not checked and
+          the label was not tracked.
         </p>
       </TooltipContent>
     </Tooltip>
@@ -387,6 +399,9 @@ function clock(ms: number) {
     dateFormat: "HH:mm:ss",
   });
 }
+
+const SUPERYELL_EXPLANATION =
+  "A yell sent while break the glass is on. Besides reporting the problem, it broke the glass: guardrails turned off for the rest of this session.";
 
 const ARROW =
   "flex w-7 shrink-0 cursor-pointer items-center justify-center outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset lg:w-6";

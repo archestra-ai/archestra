@@ -48,6 +48,7 @@ import {
   interactionBelongsToOrganization,
   mcpToolCallBelongsToOrganization,
 } from "./log-organization";
+import { MCP_TOOL_CALL_TOOL_NAME } from "./mcp-tool-call-name";
 
 /**
  * Builds a search condition for MCP tool calls across server name, method,
@@ -423,9 +424,7 @@ class McpToolCallModel {
       .select({
         id: schema.mcpToolCallsTable.id,
         llmToolCallId: schema.mcpToolCallsTable.llmToolCallId,
-        toolName: sql<
-          string | null
-        >`${schema.mcpToolCallsTable.toolCall}->>'name'`,
+        toolName: MCP_TOOL_CALL_TOOL_NAME,
       })
       .from(schema.mcpToolCallsTable)
       .where(
@@ -476,7 +475,7 @@ class McpToolCallModel {
       .where(
         and(
           inArray(table.sessionId, params.sessionIds),
-          sql`${table.toolCall}->>'name' LIKE '%\\_\\_yell'`,
+          sql`${MCP_TOOL_CALL_TOOL_NAME} LIKE '%\\_\\_yell'`,
           mcpToolCallBelongsToOrganization(params.organizationId),
         ),
       )

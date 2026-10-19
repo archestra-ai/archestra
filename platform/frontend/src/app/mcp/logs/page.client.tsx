@@ -186,8 +186,14 @@ function McpToolCallsTable() {
     endDate: dateTimePicker.endDateParam,
   });
 
+  // The install list (owners, teams) only labels the server filter's
+  // options, so it loads once the filter opens, or when a server is already
+  // selected in the URL and the trigger needs its label.
+  const [serverFilterOpened, setServerFilterOpened] = useState(false);
   const { servers: mcpServers, displayByName: serverDisplayByName } =
-    useMcpServerDisplayByName();
+    useMcpServerDisplayByName({
+      installations: serverFilterOpened || mcpServerNameFromUrl !== "all",
+    });
   // Without log:admin the server scopes every listing to the caller's own
   // rows, so a user picker would have nothing to choose between.
   const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
@@ -388,6 +394,9 @@ function McpToolCallsTable() {
             searchPlaceholder="Search MCP servers…"
             emptyMessage="No MCP servers found."
             items={mcpServerOptions}
+            onOpenChange={(open) => {
+              if (open) setServerFilterOpened(true);
+            }}
             pinnedItems={[{ value: "all", label: "All MCP Servers" }]}
             className={filterControlClass({
               active: mcpServerNameFromUrl !== "all",

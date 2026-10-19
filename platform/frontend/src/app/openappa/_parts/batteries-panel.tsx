@@ -223,8 +223,12 @@ export function BatteriesPanel() {
           ...(row.summary?.namespaces ?? []),
         ].some((value) => value.toLowerCase().includes(query))) &&
       (statusFilter === DEFAULT_FILTER_ALL ||
-        BATTERY_TABLE_STATUS[batteryTableStatus(row.included)].group ===
-          statusFilter)
+        BATTERY_TABLE_STATUS[
+          batteryTableStatus(
+            row.included,
+            row.included ? statusOf(row.included) : undefined,
+          )
+        ].group === statusFilter)
     );
   });
   const columns: ColumnDef<BatteryTableRow>[] = [
@@ -249,6 +253,9 @@ export function BatteriesPanel() {
       cell: ({ row }) => (
         <BatteryStatusCell
           battery={row.original.included}
+          enforced={
+            row.original.included ? statusOf(row.original.included) : undefined
+          }
           catalogName={catalogName}
         />
       ),
@@ -388,12 +395,15 @@ type BatteryTableRow = {
 /** A row's status badge; a problem status says on hover what it means. */
 function BatteryStatusCell({
   battery,
+  enforced,
   catalogName,
 }: {
   battery: PolicyBattery | null;
+  /** How the enforced composition holds it: a refused policy enforces nothing. */
+  enforced?: EnforcedStatus;
   catalogName: (catalogId: string) => string;
 }) {
-  const status = batteryTableStatus(battery);
+  const status = batteryTableStatus(battery, enforced);
   const { label, group } = BATTERY_TABLE_STATUS[status];
   if (status === "not_configured")
     return <span className="text-muted-foreground">{label}</span>;
@@ -402,7 +412,7 @@ function BatteryStatusCell({
       {label}
     </Badge>
   );
-  const hint = batteryStatusHint({ battery, catalogName });
+  const hint = batteryStatusHint({ battery, enforced, catalogName });
   if (!hint) return badge;
   return (
     <Tooltip>

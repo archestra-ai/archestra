@@ -24,14 +24,15 @@ export const BATTERY_STATUS = {
 
 /**
  * What the Batteries table says about one battery: whether the policy includes
- * it and, when it does, what it still needs. A refusal or a pending revision is
- * a fact about the policy, not about one battery, so the table never shows it.
+ * it and, when it does, what it still needs, or that a refused policy enforces
+ * none of its rules.
  */
 export type BatteryTableStatus =
   | "configured"
   | "credential"
   | "server"
   | "conflict"
+  | "refused"
   | "not_configured";
 
 export const BATTERY_TABLE_STATUS = {
@@ -39,6 +40,7 @@ export const BATTERY_TABLE_STATUS = {
   credential: { label: "Credential not configured", group: "attention" },
   server: { label: "Server not configured", group: "attention" },
   conflict: { label: "Server conflict", group: "attention" },
+  refused: { label: "Refused by policy", group: "attention" },
   not_configured: { label: "Not configured", group: "not_configured" },
 } as const satisfies Record<
   BatteryTableStatus,

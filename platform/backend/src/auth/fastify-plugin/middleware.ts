@@ -513,7 +513,9 @@ export class Authnz {
     const result = betterAuth.api
       .verifyApiKey({ body: { key: authHeader } })
       .catch((error: unknown) => {
-        logger.trace(
+        // Reached only by real API keys and unknown tokens now, so a miss is
+        // worth a debug line when someone's key stops working.
+        logger.debug(
           { error: error instanceof Error ? error.message : "unknown" },
           "[Authnz] API key verification failed",
         );

@@ -16,9 +16,10 @@ import {
  */
 export type ImageTone = "dark" | "light" | null;
 
-const SAMPLE_SIZE = 32;
-// One entry per distinct icon source for the life of the page. Bounded so a
-// long session over many icons cannot grow it without limit.
+/** Side of the square the image is drawn into before its pixels are read. */
+export const IMAGE_TONE_SAMPLE_SIZE = 32;
+// One entry per distinct icon source for the life of the page, oldest out
+// first once it is full, so a long session over many icons stays bounded.
 const TONE_CACHE_LIMIT = 500;
 const toneCache = new Map<string, ImageTone>();
 
@@ -28,7 +29,10 @@ export function clearImageToneCache(): void {
 }
 
 function rememberTone(src: string, tone: ImageTone): void {
-  if (toneCache.size >= TONE_CACHE_LIMIT) toneCache.clear();
+  if (toneCache.size >= TONE_CACHE_LIMIT) {
+    const oldest = toneCache.keys().next().value;
+    if (oldest !== undefined) toneCache.delete(oldest);
+  }
   toneCache.set(src, tone);
 }
 
@@ -105,12 +109,23 @@ export function imageToneClassName(tone: ImageTone): string | undefined {
 function sampleTone(image: HTMLImageElement): ImageTone {
   try {
     const canvas = document.createElement("canvas");
-    canvas.width = SAMPLE_SIZE;
-    canvas.height = SAMPLE_SIZE;
+    canvas.width = IMAGE_TONE_SAMPLE_SIZE;
+    canvas.height = IMAGE_TONE_SAMPLE_SIZE;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return null;
-    context.drawImage(image, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-    const { data } = context.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+    context.drawImage(
+      image,
+      0,
+      0,
+      IMAGE_TONE_SAMPLE_SIZE,
+      IMAGE_TONE_SAMPLE_SIZE,
+    );
+    const { data } = context.getImageData(
+      0,
+      0,
+      IMAGE_TONE_SAMPLE_SIZE,
+      IMAGE_TONE_SAMPLE_SIZE,
+    );
 
     let weight = 0;
     let luminance = 0;
@@ -128,7 +143,10 @@ function sampleTone(image: HTMLImageElement): ImageTone {
     }
 
     // A logo that fills its own square already has a background.
-    if (weight === 0 || transparentPixels < (SAMPLE_SIZE * SAMPLE_SIZE) / 10) {
+    if (
+      weight === 0 ||
+      transparentPixels < (IMAGE_TONE_SAMPLE_SIZE * IMAGE_TONE_SAMPLE_SIZE) / 10
+    ) {
       return null;
     }
     const average = luminance / weight;

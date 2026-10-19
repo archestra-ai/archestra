@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearImageToneCache, useImageTone } from "./use-image-tone";
-
-const SAMPLE_SIZE = 32;
+import {
+  clearImageToneCache,
+  IMAGE_TONE_SAMPLE_SIZE as SAMPLE_SIZE,
+  useImageTone,
+} from "./use-image-tone";
 
 /** Pixel data: the left half transparent, the right half black. */
 function darkTransparentPixels(): Uint8ClampedArray {

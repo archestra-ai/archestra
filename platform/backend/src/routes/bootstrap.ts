@@ -7,6 +7,7 @@ import {
   RouteId,
   withoutWildcardCoveredGrants,
 } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
@@ -166,7 +167,7 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
             roster: z.array(ChatAgentRosterSchema),
             /** `GET /api/llm-provider-api-keys` */
             apiKeys: z.array(LlmProviderApiKeyWithScopeInfoSchema),
-            /** `GET /api/llm-provider-api-keys/available`, null without `llmProviderApiKey:read` */
+            /** `GET /api/llm-provider-api-keys/available`, null for a caller that endpoint refuses */
             availableApiKeys: z
               .array(LlmProviderApiKeyWithScopeInfoSchema)
               .nullable(),
@@ -207,7 +208,11 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ] = await Promise.all([
         getChatRosterBootstrap({ userId, organizationId }),
         getVisibleLlmProviderApiKeys({ query: {}, userId, organizationId }),
-        userHasPermission(userId, organizationId, "llmProviderApiKey", "read"),
+        canCallEndpoint({
+          routeId: RouteId.GetAvailableLlmProviderApiKeys,
+          userId,
+          organizationId,
+        }),
         getAvailableLlmModels({ query: {}, userId, organizationId }),
         MemberModel.getDefaultAgentId(userId, organizationId),
         OrganizationModel.getById(organizationId),
@@ -250,6 +255,30 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default bootstrapRoutes;
 
 // ===
+
+/**
+ * Whether the caller holds every permission an endpoint's route check asks
+ * for, so a bundled part is left out exactly when its own endpoint would
+ * refuse the caller.
+ */
+async function canCallEndpoint(params: {
+  routeId: keyof typeof requiredEndpointPermissionsMap;
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const required = requiredEndpointPermissionsMap[params.routeId] ?? {};
+  const checks = Object.entries(required).flatMap(([resource, actions]) =>
+    (actions ?? []).map((action) =>
+      userHasPermission(
+        params.userId,
+        params.organizationId,
+        resource as Parameters<typeof userHasPermission>[2],
+        action as Parameters<typeof userHasPermission>[3],
+      ),
+    ),
+  );
+  return (await Promise.all(checks)).every(Boolean);
+}
 
 async function getNewChatAgentParts(params: {
   agentId: string;

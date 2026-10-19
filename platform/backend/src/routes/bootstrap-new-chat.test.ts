@@ -1,4 +1,5 @@
-import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
+import { PLAYWRIGHT_MCP_CATALOG_ID, RouteId } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -176,6 +177,29 @@ describe("new-chat bootstrap route", () => {
       bootstrap.roster.map((agent: { id: string }) => agent.id),
     ).not.toContain(hidden.id);
     expect(bootstrap.agent?.id).not.toBe(hidden.id);
+  });
+
+  test("leaves out the usable keys exactly when their own endpoint refuses the caller", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    // The bundle's gate is the endpoint's own route check.
+    expect(
+      requiredEndpointPermissionsMap[RouteId.GetAvailableLlmProviderApiKeys],
+    ).toEqual({ llmProviderApiKey: ["read"] });
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"], chat: ["read"] },
+    });
+    const withoutKeys = await makeUser();
+    await makeMember(withoutKeys.id, organizationId, { role: role.role });
+
+    const asMember = await get("/api/bootstrap/new-chat");
+    user = withoutKeys;
+    const asRestricted = await get("/api/bootstrap/new-chat");
+
+    expect(asMember.availableApiKeys).toEqual(expect.any(Array));
+    expect(asRestricted.availableApiKeys).toBeNull();
   });
 
   async function get(url: string) {

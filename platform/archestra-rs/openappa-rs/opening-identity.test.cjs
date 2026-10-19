@@ -100,7 +100,6 @@ for (const [version, openedBy] of [
     await assert.rejects(dispatch({ event: 'tool_call', operation_id: 'call:r2', tool: 'read', arguments: {} }), {
       code: 'legacy_family',
     });
-    await assert.rejects(native.listPeerMessages(JSON.stringify(session), hosted(revised)), { code: 'legacy_family' });
     assert.equal(await eventCount(fixture.root), events);
 
     const fresh = { ...session, session_id: randomUUID() };
@@ -113,6 +112,9 @@ for (const [version, openedBy] of [
     );
     const status = await native.getOpenappaStatus(fresh.organization_id, fresh.session_id, hosted(revised));
     assert.equal(typeof status.policyRevision, 'number');
+    // The legacy conversation reports no status: its next call is refused instead.
+    assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, hosted(revised))) ?? null, null);
+    assert.equal(await eventCount(fixture.root), events);
   });
 }
 

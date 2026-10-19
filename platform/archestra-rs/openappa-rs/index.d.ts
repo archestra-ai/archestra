@@ -183,6 +183,8 @@ export declare function getOpenappaReplayEngineVersion(): string
  * Read the current label of a started session without mutating its trajectory.
  * The read runs through a view pinned to the organization's deployment line, as
  * a dispatch does: a family is read on the line it follows.
+ * None before the session started, and for a family opened under the earlier
+ * policy model, whose next event is refused instead.
  */
 export declare function getOpenappaStatus(organizationId: string, sessionId: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
 

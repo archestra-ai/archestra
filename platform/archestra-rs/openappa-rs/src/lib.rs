@@ -17,7 +17,7 @@ mod policy;
 mod replay;
 
 use appa_eventlog::{
-    Backend, FamilyKind, LogStore, OperationClaim, OperationKey, OperationRequest,
+    Backend, LogStore, OperationClaim, OperationKey, OperationRequest,
     ProcessedResultClaim, ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError,
     SessionScope,
     encryption::{StorageCipher, field_context},
@@ -69,8 +69,8 @@ pub struct ContentEncryption {
 /// runs through a view pinned to the head of its organization's deployment line
 /// (see [`deployments`]), so dispatches run concurrently and none changes what
 /// another serves. Every family decides its next event under its line's head,
-/// whichever revision opened it; a family pinned to the policy it opened under is
-/// refused (see [`legacy_family`]).
+/// whichever revision opened it; the runtime refuses a family pinned to the
+/// policy it opened under as `RefusalClass::LegacyFamily`, which is not retryable.
 /// No dispatch holds a database connection or a lock while it works: the event
 /// log serializes each read-decide-append step of a family on the family's row,
 /// receipts carry a lease per operation (see [`lease`]), and every write is one
@@ -377,9 +377,6 @@ enum BindingFailure {
     /// Spelled as the runtime's `RefusalClass::PolicyMoved`, so the host reads one
     /// code whichever side reported it.
     PolicyMoved,
-    /// A family pinned to the policy it opened under. Spelled as the runtime's
-    /// `RefusalClass::LegacyFamily` from OpenAPPA 0.36, which takes this check over.
-    LegacyFamily,
 }
 
 fn failure(kind: Failure, message: impl ToString) -> napi::Error {
@@ -411,15 +408,6 @@ fn policy_moved() -> napi::Error {
     failure(
         Failure::Binding(BindingFailure::PolicyMoved),
         "OpenAPPA published a newer policy revision for this organization; retry the request",
-    )
-}
-
-/// The family the dispatch names opened pinned to a policy snapshot, which no
-/// view serves any more. Not retryable: the conversation starts over.
-fn legacy_family() -> napi::Error {
-    failure(
-        Failure::Binding(BindingFailure::LegacyFamily),
-        "this trajectory family was opened before live policy revisions; open a new one",
     )
 }
 
@@ -1227,10 +1215,10 @@ pub async fn openappa_root_kinds(roots: Vec<String>) -> napi::Result<Vec<Option<
     tokio::task::spawn_blocking(move || {
         roots
             .into_iter()
-            .map(|root| match leased.state.store.family_kind(&TrajectoryId(root)) {
-                Ok(Some(FamilyKind::Following(_))) => Ok(Some("following".to_owned())),
-                Ok(Some(FamilyKind::Pinned)) => Ok(Some("legacy".to_owned())),
-                Ok(None) => Ok(None),
+            .map(|root| match leased.state.store.log(&TrajectoryId(root)) {
+                Ok(_) => Ok(Some("following".to_owned())),
+                Err(appa_eventlog::ReadError::LegacyFamily { .. }) => Ok(Some("legacy".to_owned())),
+                Err(appa_eventlog::ReadError::UnknownRoot { .. }) => Ok(None),
                 Err(read) if read.to_string().contains("requires its conversation key") => {
                     Ok(Some("encrypted".to_owned()))
                 }
@@ -1245,6 +1233,8 @@ pub async fn openappa_root_kinds(roots: Vec<String>) -> napi::Result<Vec<Option<
 /// Read the current label of a started session without mutating its trajectory.
 /// The read runs through a view pinned to the organization's deployment line, as
 /// a dispatch does: a family is read on the line it follows.
+/// None before the session started, and for a family opened under the earlier
+/// policy model, whose next event is refused instead.
 #[napi(js_name = "getOpenappaStatus")]
 pub async fn get_openappa_status(
     organization_id: String,
@@ -1328,11 +1318,15 @@ async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<Op
             .map_err(error)?;
         let Some(root) = root else { return Ok(None) };
         let root = TrajectoryId(root);
-        let status = leased
-            .state
-            .runtime
-            .try_status(&root)
-            .map_err(error)?;
+        let status = match leased.state.runtime.try_status(&root) {
+            Ok(status) => status,
+            // A family opened under the earlier policy model has no label to
+            // report: its next event is refused with `legacy_family`.
+            Err(appa_runtime::api::StatusReadError::Read(
+                appa_eventlog::ReadError::LegacyFamily { .. },
+            )) => return Ok(None),
+            Err(read) => return Err(error(read)),
+        };
         Ok(Some(OpenappaStatus {
             trust: status.trust,
             audience: status.audience,
@@ -1465,7 +1459,6 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
-        refuse_legacy_family(&state, state.dispatch_root(&input)?).await?;
         on_deployment(
             &state,
             &input.organization_id,
@@ -1483,21 +1476,6 @@ async fn run(
         Ok(Ok(value)) => Ok(value.to_string()),
         Ok(Err(error)) => Err(error),
         Err(_) => Err(error("OpenAPPA panicked; operation was not released")),
-    }
-}
-
-/// Refuses a dispatch on a family opened pinned to a policy snapshot. Such a
-/// family has no deployment line to follow, and nothing serves the snapshot any
-/// more. A root with no log opens following its organization's line.
-async fn refuse_legacy_family(state: &State, root: String) -> napi::Result<()> {
-    let store = state.store.clone();
-    let kind = tokio::task::spawn_blocking(move || store.family_kind(&TrajectoryId(root)))
-        .await
-        .map_err(error)?
-        .map_err(error)?;
-    match kind {
-        Some(FamilyKind::Pinned) => Err(legacy_family()),
-        Some(FamilyKind::Following(_)) | None => Ok(()),
     }
 }
 
@@ -5316,6 +5294,18 @@ mod failure_tests {
         assert!(!is_policy_moved(&failure(
             Failure::Refused(RefusalClass::PolicyUnavailable),
             "OpenAPPA processing interrupted: the policy is unavailable"
+        )));
+    }
+
+    /// A family opened under the earlier policy model reaches the host under its
+    /// own code, and no retry loop mistakes it for a moved policy.
+    #[test]
+    fn a_legacy_family_is_its_own_code_and_never_a_moved_policy() {
+        let kind = Failure::Refused(RefusalClass::LegacyFamily);
+        assert_eq!(serde_json::to_value(kind).unwrap(), json!("legacy_family"));
+        assert!(!is_policy_moved(&failure(
+            kind,
+            "this trajectory family was opened before live policy revisions; open a new one"
         )));
     }
 }

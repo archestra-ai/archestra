@@ -1,0 +1,2 @@
+CREATE INDEX "idx_account_user_id" ON "account" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "invitation_organization_id_email_idx" ON "invitation" USING btree ("organization_id","email");

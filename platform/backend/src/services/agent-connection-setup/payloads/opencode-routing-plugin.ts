@@ -46,7 +46,7 @@ function renderedAppName(params: RenderOpenCodeRoutingPluginParams): string {
 export function renderOpenCodeRoutingPlugin(
   params: RenderOpenCodeRoutingPluginParams,
 ): string {
-  const { dir, label } = params.client ?? OPENCODE_CLIENT;
+  const { dir, label, modelsPathEnv } = params.client ?? OPENCODE_CLIENT;
   // The client values go in before the wire-header constant below, so every
   // later line stays covered by its white-label waiver.
   return `import { readFileSync } from "node:fs";
@@ -130,6 +130,21 @@ const readLocalAuth = () => {
   try { return JSON.parse(readFileSync(authPath, "utf8")); } catch { return {}; }
 };
 const localAuth = readLocalAuth();
+// The label the user knows a provider by: the name they configured, else the
+// one in the client's cached models.dev catalog, else its id.
+const clientCatalogPath = process.env[${JSON.stringify(modelsPathEnv)}] || join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), clientDir, "models.json");
+// Read once. A missing or half-written file is retried on the next config
+// load, not once per alias.
+let clientCatalog;
+const clientProviderLabel = (providerId, configured) => {
+  if (typeof configured?.name === "string" && configured.name.trim()) return configured.name;
+  if (clientCatalog === undefined) {
+    try { const parsed = JSON.parse(readFileSync(clientCatalogPath, "utf8")); clientCatalog = parsed && typeof parsed === "object" ? parsed : {}; }
+    catch { clientCatalog = null; }
+  }
+  const name = clientCatalog?.[providerId]?.name;
+  return typeof name === "string" && name.trim() ? name : providerId;
+};
 const openAiOAuth = localAuth.openai?.type === "oauth" ? localAuth.openai : null;
 const googleOAuth = localAuth.google?.type === "oauth" ? localAuth.google : null;
 const currentOpenAiOAuth = () => {
@@ -217,6 +232,7 @@ if (${params.runtime ? "true" : "!globalThis[fetchGuardSymbol]"}) {
 
 export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
   async config(config) {
+    if (clientCatalog === null) clientCatalog = undefined;
     config.provider ??= {};
     const localAuth = readLocalAuth();
     const signedInToOpenAi = localAuth.openai?.type === "oauth";
@@ -253,7 +269,7 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
         if (!definition || !routes[twin]) continue;
         if (!aliasOriginals.has(alias)) aliasOriginals.set(alias, config.provider[alias]);
         const previous = config.provider[alias] ?? {};
-        config.provider[alias] = { ...previous, name: definition.name ?? alias, npm: definition.npm,
+        config.provider[alias] = { ...previous, name: managedAliasName(clientProviderLabel(alias, aliasOriginals.get(alias)), twin), npm: definition.npm,
           options: { baseURL: routes[twin], ...(managedKey ? { apiKey: managedKey } : {}), headers: {} },
           models: { ...(definition.models ?? {}) }, whitelist: Object.keys(definition.models ?? {}),
         };
@@ -470,6 +486,8 @@ const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
 const chatGptBaseUrl = "https://chatgpt.com/backend-api/codex";
 const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
 const managedAliases = new Set();
+// The client's own label for each alias, taken before the first rename.
+const aliasLabels = new Map();
 let managedCredential = "";
 const stripAliasAuth = (headers) => {
   const names = ["authorization", "chatgpt-account-id", "x-goog-api-key", openAiOAuthBridgeHeader];
@@ -536,13 +554,17 @@ export default {
         for (const [alias, twin] of Object.entries(providerTwins)) {
           if (!catalogProviders[twin] || !routes[twin]) continue;
           const record = editor.get(alias);
+          if (!aliasLabels.has(alias)) {
+            const name = record?.provider.name;
+            aliasLabels.set(alias, typeof name === "string" && name.trim() ? name : alias);
+          }
           const key = record?.provider.settings?.apiKey;
           const native = Object.hasOwn(routes, alias) && (record?.sourceConnection ||
             (credentialEnvByProvider[alias] ?? []).some((name) => process.env[name]?.trim()) ||
             (typeof key === "string" && key.trim() && key !== managedKey && !key.startsWith("archestra_")));
           if (native) continue;
           managedAliases.add(alias);
-          const next = apply(alias, catalogProviders[twin], routes[twin], { ...managedHeaders });
+          const next = apply(alias, { ...catalogProviders[twin], name: managedAliasName(aliasLabels.get(alias), twin) }, routes[twin], { ...managedHeaders });
           if (record) { editor.update(alias, (provider) => Object.assign(provider, next.info)); editor.models.set(alias, next.models); }
           else editor.add(next);
           activeRoutes[alias] = routes[twin];
@@ -612,7 +634,10 @@ function catalogSource(params: RenderOpenCodeRoutingPluginParams): string {
   return `const catalogProviders = ${JSON.stringify(providers)};
 const catalogRoutes = ${JSON.stringify(routes)};
 const catalogTwins = ${JSON.stringify(twins)};
-const hasCatalog = ${JSON.stringify(hasCatalog)};`;
+const hasCatalog = ${JSON.stringify(hasCatalog)};
+// Every alias of one catalog provider lists the same models, so its label
+// names both the provider the client knows and the catalog provider behind it.
+const managedAliasName = (label, twin) => label + " via " + (catalogProviders[twin]?.name ?? twin);`;
 }
 
 const OPENCODE_CREDENTIAL_ENV_BY_PROVIDER: Record<string, readonly string[]> = {

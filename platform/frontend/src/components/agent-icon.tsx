@@ -54,9 +54,11 @@ export function AgentIcon({
   fallbackType = "agent",
 }: AgentIconProps) {
   const catalogId = getCatalogAgentId(icon);
-  const imageTone = useImageTone(
-    isAgentImageIcon(icon) && !catalogId ? icon : null,
-  );
+  const {
+    tone: imageTone,
+    ref: imageRef,
+    onLoad: onImageLoad,
+  } = useImageTone(isAgentImageIcon(icon) && !catalogId ? icon : null);
 
   if (!icon) {
     const FallbackIcon =
@@ -98,6 +100,8 @@ export function AgentIcon({
     // padding that arrives after the image loads, cannot resize it.
     return (
       <Image
+        ref={imageRef}
+        onLoad={onImageLoad}
         src={icon}
         alt="Agent icon"
         width={size}

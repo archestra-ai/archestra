@@ -96,6 +96,29 @@ async function loadPolicyTestCollection(
       version: `disabled:${source.revision}`,
     };
   }
+  // The cached copy is current when it was written for this source revision
+  // and commit, for the same directory. The sync job moves `sourceCommit`
+  // when the repository changes, so until then the cache answers without a
+  // GitHub round trip (one listing plus a request per file) and without the
+  // policy lock that caching takes. Every Guardrails overview load paid both.
+  if (
+    local &&
+    local.sourceRevision === source.revision &&
+    local.sourceCommit === source.sourceCommit &&
+    (local.directory ?? "traces") === directory
+  ) {
+    const files = PolicyTestFilesSchema.parse(local.files);
+    return {
+      ...fallback,
+      files,
+      version: githubPolicyTestVersion({
+        repo: source.repo,
+        commit: source.sourceCommit,
+        directory,
+        files,
+      }),
+    };
+  }
   try {
     const files = PolicyTestFilesSchema.parse(
       await loadAppaGithubPolicyTests({ source, directory, allowEmpty: true }),

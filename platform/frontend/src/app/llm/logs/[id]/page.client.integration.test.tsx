@@ -323,6 +323,39 @@ it("shows who sent a request, and the request before and after policy updates", 
   ).not.toBeInTheDocument();
 });
 
+it("sizes a request's branches, clamps a long value, and shows it whole as raw text", async () => {
+  const user = userEvent.setup();
+  serveSession({
+    rows: [summary({ id: "request-0" })],
+    records: {
+      "request-0": makeInteraction({
+        id: "request-0",
+        sessionId: "test-session",
+        request: {
+          model: "gpt-4o",
+          messages: [
+            { role: "user", content: `tool output ${"x".repeat(20_000)}` },
+          ],
+        },
+      }),
+    },
+  });
+
+  await renderPage();
+  await user.click(await screen.findByRole("tab", { name: "Request" }));
+
+  const panel = screen.getByRole("tabpanel", { name: "Request" });
+  const payload = within(panel).getByRole("region", { name: "Request" });
+  const whole = "x".repeat(20_000);
+  expect(await within(payload).findByText("1 item · 19.6 KB")).toBeVisible();
+  expect(within(payload).getByText(/tool output/)).toBeVisible();
+  expect(payload).not.toHaveTextContent(whole);
+
+  await user.click(within(payload).getByRole("button", { name: "Raw" }));
+  expect(await within(payload).findByText(/tool output/)).toBeVisible();
+  expect(payload).toHaveTextContent(whole);
+});
+
 it("shows how a request ended: a provider failure and blocked tool calls", async () => {
   const user = userEvent.setup();
   serveSession({

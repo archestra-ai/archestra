@@ -306,7 +306,11 @@ function MembersTab({
   const updateMemberRole = useUpdateMemberRole();
   const bulkDeleteMembers = useBulkDeleteMembers();
   const removeMember = useRemoveMember();
-  const { data: signupStatus } = useMemberSignupStatus();
+  const pageMemberIds = membersResponse?.data?.map((member) => member.userId);
+  const { data: signupStatus } = useMemberSignupStatus({
+    userIds: pageMemberIds ?? [],
+    enabled: (pageMemberIds?.length ?? 0) > 0,
+  });
   const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
   const deletePendingSignupMember = useDeletePendingSignupMember();
 

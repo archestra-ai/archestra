@@ -61,40 +61,46 @@ export async function generateTaggedText(params: {
     // re-stating the contract under the SAME ceiling just buys the identical
     // truncation twice; re-ask with more room instead. Any other finish reason
     // means the model finished and skipped the tag, which the correction turn
-    // — showing it its own reply — does fix.
+    // — showing it its own reply — does fix. A reply with no visible text
+    // has nothing to show, and providers reject an empty assistant turn, so
+    // it is re-asked instead.
     const roomier =
       first.finishReason === "length" && params.maxOutputTokens !== undefined
         ? params.maxOutputTokens * TRUNCATION_RETRY_FACTOR
         : null;
+    const correctable = roomier === null && first.text.trim() !== "";
     logger.info(
       {
         tag,
         finishReason: first.finishReason,
         textLength: first.text.length,
-        retry: roomier === null ? "correction" : "headroom",
+        retry: correctable
+          ? "correction"
+          : roomier === null
+            ? "reask"
+            : "headroom",
         retryMaxOutputTokens: roomier ?? undefined,
       },
       "generateTaggedText: first attempt missed the tag, retrying",
     );
-    const retried =
-      roomier === null
-        ? await generateText({
-            model,
-            system,
-            messages: [
-              { role: "user", content: prompt },
-              { role: "assistant", content: first.text },
-              { role: "user", content: correctionPrompt(tag) },
-            ],
-            ...options,
-          })
-        : await generateText({
-            model,
-            system,
-            prompt,
-            ...options,
-            maxOutputTokens: roomier,
-          });
+    const retried = correctable
+      ? await generateText({
+          model,
+          system,
+          messages: [
+            { role: "user", content: prompt },
+            { role: "assistant", content: first.text },
+            { role: "user", content: correctionPrompt(tag) },
+          ],
+          ...options,
+        })
+      : await generateText({
+          model,
+          system,
+          prompt,
+          ...options,
+          maxOutputTokens: roomier ?? params.maxOutputTokens,
+        });
     retriedFinishReason = retried.finishReason;
     extracted = extractTaggedText(retried.text, tag);
   }

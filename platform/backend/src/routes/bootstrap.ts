@@ -1,4 +1,5 @@
 import {
+  isPermissionActionGranted,
   ManagedResourceSchema,
   PermissionsSchema,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -10,7 +11,7 @@ import {
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
+import { getPermissionsForUserContext } from "@/auth/utils";
 import { AgentModel, MemberModel, OrganizationModel } from "@/models";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -292,7 +293,8 @@ export default bootstrapRoutes;
 /**
  * Whether the caller holds every permission an endpoint's route check asks
  * for, so a bundled part is left out exactly when its own endpoint would
- * refuse the caller.
+ * refuse the caller. One read of the caller's permissions answers for the
+ * whole map, however many resources and actions it lists.
  */
 async function canCallEndpoint(params: {
   routeId: keyof typeof requiredEndpointPermissionsMap;
@@ -300,18 +302,22 @@ async function canCallEndpoint(params: {
   organizationId: string;
 }): Promise<boolean> {
   const required = requiredEndpointPermissionsMap[params.routeId] ?? {};
-  const checks = Object.entries(required).flatMap(([resource, actions]) =>
-    (actions ?? []).map((action) =>
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        resource as Parameters<typeof userHasPermission>[2],
-        action as Parameters<typeof userHasPermission>[3],
-      ),
+  const granted = await getPermissionsForUserContext({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  return Object.entries(required).every(([resource, actions]) =>
+    (actions ?? []).every((action) =>
+      isPermissionActionGranted({
+        resource: resource as GrantCheck["resource"],
+        grantedActions: granted[resource as keyof typeof granted] ?? [],
+        requiredAction: action as GrantCheck["requiredAction"],
+      }),
     ),
   );
-  return (await Promise.all(checks)).every(Boolean);
 }
+
+type GrantCheck = Parameters<typeof isPermissionActionGranted>[0];
 
 async function getNewChatAgentParts(params: {
   agentId: string;

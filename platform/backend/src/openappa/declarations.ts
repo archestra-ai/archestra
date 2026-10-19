@@ -428,7 +428,8 @@ class OpenAppaDeclarations {
    * only being checked has no derived install row to serve its helpers from. A
    * composition that returns content is a successful validation. The batteries
    * named in `held` compose as the empty battery, as a deployment holding them
-   * back composes them.
+   * back composes them. A replay that consults the helpers passes
+   * `helperOwner`, the install id each battery's endpoints name instead.
    */
   async composeForCheck(params: {
     root: string;
@@ -436,6 +437,7 @@ class OpenAppaDeclarations {
     deployed: DeployedEntries;
     held?: ReadonlySet<string>;
     memberRosters?: Record<string, Record<string, string>>;
+    helperOwner?: (entry: EntryResolution, deployed: DeployedBattery) => string;
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
@@ -447,9 +449,10 @@ class OpenAppaDeclarations {
         deployed: params.deployed,
         helpers: (entry, deployed) => {
           if (params.held?.has(entry.name)) return "stub";
-          return deployed.externals.length > 0
-            ? { urlBase: helperUrlBase(CHECKED_HELPER_OWNER), tokenEnv }
-            : null;
+          if (deployed.externals.length === 0) return null;
+          const owner =
+            params.helperOwner?.(entry, deployed) ?? CHECKED_HELPER_OWNER;
+          return { urlBase: helperUrlBase(owner), tokenEnv };
         },
       }),
     });

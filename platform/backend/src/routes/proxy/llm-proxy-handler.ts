@@ -1529,8 +1529,10 @@ export async function handleLLMProxy<
     let billingMode = credentialBillingMode;
 
     // Create client with observability (each provider handles metrics internally)
+    // A guardrail caller disconnects once it stops waiting for the answer,
+    // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
-      providerName === "microsoft-365-copilot"
+      providerName === "microsoft-365-copilot" || proof.guardrail
         ? clientDisconnectSignal({ request, reply })
         : undefined;
     const client = provider.createClient(apiKey, {

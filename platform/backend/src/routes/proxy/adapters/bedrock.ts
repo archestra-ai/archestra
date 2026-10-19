@@ -1053,6 +1053,11 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
       stopReason: "end_turn",
     };
   }
+
+  /** The response as one text answer, as a governed child's turn ends. */
+  withReplacedText(text: string): BedrockResponse {
+    return this.toRefusalResponse("", text);
+  }
 }
 
 // =============================================================================

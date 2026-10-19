@@ -42,7 +42,7 @@ export function AppPinnedTiles({
       href: tileHref(app),
       icon: (
         <McpCatalogIcon
-          icon={app.icon}
+          icon={app.iconUrl ?? app.icon}
           size={18}
           fallback={app.source === "owned" ? AppWindow : undefined}
         />

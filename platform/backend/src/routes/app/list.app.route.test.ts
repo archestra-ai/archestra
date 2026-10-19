@@ -11,6 +11,11 @@ import {
 } from "@/test";
 import type { AppListItem, User } from "@/types";
 
+// A 1x1 transparent PNG.
+const PNG_ICON_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const PNG_ICON = `data:image/png;base64,${PNG_ICON_BASE64}`;
+
 type AppListResponse = {
   data: AppListItem[];
   pagination: { total: number };
@@ -263,6 +268,115 @@ describe("GET /api/apps", () => {
     expect(items.find((i) => i.id === withIcon.id)?.icon).toBe("🚀");
     // Null rather than absent, so the card can fall back deliberately.
     expect(items.find((i) => i.id === withoutIcon.id)?.icon).toBeNull();
+  });
+
+  test("links an image icon instead of inlining it, and serves it from the link", async ({
+    makeApp,
+  }) => {
+    const owned = await makeApp({
+      organizationId,
+      authorId: user.id,
+      icon: PNG_ICON,
+    });
+
+    const list = await app.inject({ method: "GET", url: "/api/apps" });
+    const item = (list.json() as AppListResponse).data.find(
+      (i) => i.source === "owned" && i.id === owned.id,
+    );
+    expect(item?.icon).toBeNull();
+    expect(item?.iconUrl).toMatch(
+      new RegExp(`^/api/apps/${owned.id}/icon\\?v=`),
+    );
+    expect(list.body).not.toContain(PNG_ICON_BASE64);
+
+    const image = await app.inject({ method: "GET", url: item?.iconUrl ?? "" });
+    expect(image.statusCode).toBe(200);
+    expect(image.headers["content-type"]).toBe("image/png");
+    expect(image.rawPayload).toEqual(Buffer.from(PNG_ICON_BASE64, "base64"));
+
+    // The link is content-versioned, so a revalidation is answered without
+    // the bytes.
+    const revalidated = await app.inject({
+      method: "GET",
+      url: item?.iconUrl ?? "",
+      headers: { "if-none-match": image.headers.etag as string },
+    });
+    expect(revalidated.statusCode).toBe(304);
+  });
+
+  test("does not serve an app's icon to someone who may not view the app", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const personal = await makeApp({
+      organizationId,
+      authorId: user.id,
+      access: "personal",
+      icon: PNG_ICON,
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps/${personal.id}/icon`,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  test("links an external app's image icon to the external app icon route", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Board",
+      icon: PNG_ICON,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show-board",
+      meta: { _meta: { ui: { resourceUri: "ui://board/app.html" } } },
+    });
+
+    const list = await app.inject({ method: "GET", url: "/api/apps" });
+    const item = (list.json() as AppListResponse).data.find(
+      (i) => i.source === "external" && i.catalogId === catalog.id,
+    );
+    expect(item?.icon).toBeNull();
+    expect(item?.iconUrl).toMatch(
+      new RegExp(`^/api/apps/external/${catalog.id}/icon\\?v=`),
+    );
+
+    const image = await app.inject({ method: "GET", url: item?.iconUrl ?? "" });
+    expect(image.statusCode).toBe(200);
+    expect(image.rawPayload).toEqual(Buffer.from(PNG_ICON_BASE64, "base64"));
+  });
+
+  test("serves no icon for a catalog that is not an app", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const plain = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Plain",
+      icon: PNG_ICON,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+    });
+    await makeMcpServer({ catalogId: plain.id, scope: "org" });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps/external/${plain.id}/icon`,
+    });
+    expect(res.statusCode).toBe(404);
   });
 
   test("lists external UI-providing servers alongside owned apps, with trust disclosure", async ({

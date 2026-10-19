@@ -630,6 +630,11 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
       ],
     };
   }
+
+  /** The response as one text answer, as a governed child's turn ends. */
+  withReplacedText(text: string): GeminiResponse {
+    return this.toRefusalResponse("", text);
+  }
 }
 
 // =============================================================================

@@ -194,6 +194,7 @@ export async function prepareOpenappaRequest(params: {
     ...(ingress.childTrajectoryReceipts
       ? { childTrajectoryReceipts: ingress.childTrajectoryReceipts }
       : {}),
+    ...(ingress.clientWire ? { clientWire: ingress.clientWire } : {}),
   });
   context.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
     session: admission.session,

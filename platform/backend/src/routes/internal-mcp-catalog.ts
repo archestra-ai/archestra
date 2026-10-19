@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   calculatePaginationMeta,
   classifyMcpRuntimeAlert,
@@ -135,8 +134,9 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
-  isServableIconDataUrl,
-  SERVABLE_ICON_TYPES,
+  catalogIconUrl,
+  replyWithIconImage,
+  splitListIcon,
 } from "@/utils/servable-icon";
 import {
   broadcastMcpInstallationStatus,
@@ -678,7 +678,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       return reply.send({
         data: items.map((item) => {
-          const imageIcon = item.icon?.startsWith("data:") ?? false;
           return {
             id: item.id,
             name: item.name,
@@ -706,11 +705,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               item.serverType === "app"
                 ? (appEnabledByCatalog.get(item.id) ?? null)
                 : null,
-            icon: imageIcon ? null : (item.icon ?? null),
-            iconUrl:
-              imageIcon && item.icon && isServableIconDataUrl(item.icon)
-                ? registryIconUrl(item.id, item.icon)
-                : null,
+            ...splitListIcon(item.icon ?? null, (version) =>
+              catalogIconUrl(item.id, version),
+            ),
             alertMutes: (alertMutes.get(item.id) ?? []).filter(
               (mute) => mute.mcpServerId === null,
             ),
@@ -826,7 +823,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ...item,
               icon: emojiIcon,
               iconUrl: hasImageIcon
-                ? registryIconUrlForVersion(item.id, `u${updatedAt.getTime()}`)
+                ? catalogIconUrl(item.id, `u${updatedAt.getTime()}`)
                 : null,
             }),
         ),
@@ -855,25 +852,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: request.params.id,
         options,
       });
-      const image = found ? decodeImageDataUrl(found.icon) : null;
-      if (!found || !image) {
-        throw new ApiError(404, "Icon not found");
-      }
-      const etag = `"${iconVersion(found.icon)}"`;
-      // The list links the icon with its content version, so the browser may
-      // keep it; the validator answers a revalidation without the bytes.
-      void reply
-        .header("ETag", etag)
-        .header("Cache-Control", "private, max-age=31536000, immutable")
-        .header("X-Content-Type-Options", "nosniff")
-        .header(
-          "Content-Security-Policy",
-          "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-        );
-      if (request.headers["if-none-match"] === etag) {
-        return reply.code(304).send();
-      }
-      return reply.header("Content-Type", image.mimeType).send(image.bytes);
+      return replyWithIconImage({
+        request,
+        reply,
+        icon: found?.icon ?? null,
+      });
     },
   );
 
@@ -3613,43 +3596,6 @@ function summarizeRegistryInstalls(
       summary,
     ]),
   );
-}
-
-/** A content-versioned link, so a changed icon is a new URL. */
-function registryIconUrl(catalogId: string, icon: string): string {
-  return registryIconUrlForVersion(catalogId, iconVersion(icon));
-}
-
-/**
- * The icon route link for a version token. The issue index versions by the
- * item's update time so it never reads the image bytes; any edit is a new URL.
- */
-function registryIconUrlForVersion(catalogId: string, version: string): string {
-  return `/api/internal_mcp_catalog/${catalogId}/icon?v=${version}`;
-}
-
-function iconVersion(icon: string): string {
-  return createHash("sha256").update(icon).digest("base64url").slice(0, 16);
-}
-
-/** The bytes of an image `data:` URL, or null for anything else. */
-function decodeImageDataUrl(
-  value: string,
-): { mimeType: string; bytes: Buffer } | null {
-  const match = /^data:(image\/[a-z0-9.+-]+)(;base64)?,(.*)$/is.exec(value);
-  if (!match) return null;
-  const [, mimeType, base64, payload] = match;
-  if (!SERVABLE_ICON_TYPES.has(mimeType.toLowerCase())) return null;
-  try {
-    return {
-      mimeType: mimeType.toLowerCase(),
-      bytes: base64
-        ? Buffer.from(payload, "base64")
-        : Buffer.from(decodeURIComponent(payload), "utf8"),
-    };
-  } catch {
-    return null;
-  }
 }
 
 /**

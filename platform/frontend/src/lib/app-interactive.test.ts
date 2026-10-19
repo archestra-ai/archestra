@@ -38,3 +38,19 @@ describe("appInteractive.whenIdle", () => {
     }
   });
 });
+
+describe("afterNextPaint", () => {
+  it("runs in a hidden tab, where animation frames never fire", async () => {
+    const { afterNextPaint } = await import("./app-interactive");
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    try {
+      const callback = vi.fn();
+      afterNextPaint(callback);
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledTimes(1));
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  });
+});

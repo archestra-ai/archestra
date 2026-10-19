@@ -91132,6 +91132,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "iconUrl": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdBy": {
                                 "nullable": true,
                                 "type": "object",
@@ -91257,6 +91261,7 @@
                               "pinnedAt",
                               "labels",
                               "icon",
+                              "iconUrl",
                               "createdBy",
                               "source",
                               "id",
@@ -91337,6 +91342,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "iconUrl": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdBy": {
                                 "nullable": true,
                                 "type": "object",
@@ -91405,6 +91414,7 @@
                               "pinnedAt",
                               "labels",
                               "icon",
+                              "iconUrl",
                               "createdBy",
                               "source",
                               "catalogId",
@@ -92787,6 +92797,87 @@
           "permissions": [
             "app:read"
           ]
+        }
+      }
+    },
+    "/api/apps/external/{catalogId}/icon": {
+      "get": {
+        "operationId": "getExternalAppIcon",
+        "tags": [
+          "Apps"
+        ],
+        "description": "The image icon of an external app's backing server, for the apps list, which links image icons instead of carrying them inline.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "description": "Content version; any value."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "catalogId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "app:read"
+          ]
+        }
+      }
+    },
+    "/api/apps/{appId}/icon": {
+      "get": {
+        "operationId": "getAppIcon",
+        "tags": [
+          "Apps"
+        ],
+        "description": "The image icon of an app the caller may view, for the apps list, which links image icons instead of carrying them inline.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "description": "Content version; any value."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "appId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },

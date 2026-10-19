@@ -165,8 +165,14 @@ describe("caller lookups shared by a read request", () => {
     const first = await makeOrganization();
     const second = await makeOrganization();
     const user = await makeUser();
-    await makeMember(user.id, first.id, { role: "admin" });
-    await makeMember(user.id, second.id, { role: "member" });
+    const joined = new Date();
+    await makeMember(user.id, first.id, { role: "admin", createdAt: joined });
+    // A later join, not just a later call: two calls can land in one
+    // millisecond, and the tie would fall to the random member id.
+    await makeMember(user.id, second.id, {
+      role: "member",
+      createdAt: new Date(joined.getTime() + 1000),
+    });
     const expected = await MemberModel.getByUserId(user.id, first.id);
     const { result, statements } = await inRequest(true, () =>
       countStatements(async () => {

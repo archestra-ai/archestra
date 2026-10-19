@@ -4,6 +4,8 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import UserModel from "@/models/user";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
@@ -36,12 +38,16 @@ export async function getGuardrailsDeployment() {
     unsupportedClientAction,
     breakTheGlassEnabled,
     newSessionPolicy,
+    annotatorModelId,
+    annotatorLlmApiKeyId,
   } = await GuardrailsDeploymentModel.get();
   return {
     enabled,
     unsupportedClientAction,
     breakTheGlassEnabled,
     newSessionPolicy,
+    annotatorModelId,
+    annotatorLlmApiKeyId,
     featureEnabled: enterpriseTier.isOpenappaActive(),
     active: enterpriseTier.isOpenappaActive() && enabled,
   };
@@ -73,9 +79,20 @@ export async function setGuardrailsDeployment(
     unsupportedClientAction?: UnsupportedAppaClientAction;
     breakTheGlassEnabled?: boolean;
     newSessionPolicy?: NewSessionPolicy;
+    annotatorModelId?: string | null;
+    annotatorLlmApiKeyId?: string | null;
   },
-  actor?: { userId: string },
+  actor?: { userId: string; organizationId?: string },
 ) {
+  if (
+    update.annotatorModelId !== undefined ||
+    update.annotatorLlmApiKeyId !== undefined
+  )
+    await assertAnnotatorModelSelection({
+      organizationId: actor?.organizationId,
+      modelId: update.annotatorModelId ?? null,
+      apiKeyId: update.annotatorLlmApiKeyId ?? null,
+    });
   if (update.enabled && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();
     if (refusals.length > 0)
@@ -114,6 +131,8 @@ function deploymentSettings(
     unsupportedClientAction: deployment.unsupportedClientAction,
     breakTheGlassEnabled: deployment.breakTheGlassEnabled,
     newSessionPolicy: deployment.newSessionPolicy,
+    annotatorModelId: deployment.annotatorModelId,
+    annotatorLlmApiKeyId: deployment.annotatorLlmApiKeyId,
   };
 }
 
@@ -176,7 +195,10 @@ export async function turnOnForFirstPolicy(params: {
   if (refusal) return refusal;
   const before = await GuardrailsDeploymentModel.findByIdForAudit();
   try {
-    await setGuardrailsDeployment({ enabled: true }, { userId });
+    await setGuardrailsDeployment(
+      { enabled: true },
+      { userId, organizationId },
+    );
   } catch (error) {
     if (error instanceof ApiError)
       return { enabled: false, turnedOn: false, reason: error.message };
@@ -211,6 +233,33 @@ export async function turnOnForFirstPolicy(params: {
 }
 
 // ===
+
+/**
+ * The annotator model and its key are a pair: both set, the key the
+ * organization's and the model one it serves, or both null for the
+ * organization's default model.
+ */
+async function assertAnnotatorModelSelection(params: {
+  organizationId: string | undefined;
+  modelId: string | null;
+  apiKeyId: string | null;
+}): Promise<void> {
+  const { organizationId, modelId, apiKeyId } = params;
+  if (!modelId && !apiKeyId) return;
+  if (!modelId || !apiKeyId)
+    throw new ApiError(
+      400,
+      "The annotator model and API key must be set together",
+    );
+  const apiKey = await LlmProviderApiKeyModel.findById(apiKeyId);
+  if (!apiKey || apiKey.organizationId !== organizationId)
+    throw new ApiError(404, "API key not found");
+  const linked = (
+    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([apiKey.id])
+  ).some(({ model }) => model.id === modelId);
+  if (!linked)
+    throw new ApiError(400, "The annotator model and API key must be linked");
+}
 
 async function refusedPolicies(): Promise<string[]> {
   const refusals: string[] = [];

@@ -683,7 +683,7 @@ async function makeServiceAccount(
 async function makeMember(
   userId: string,
   organizationId: string,
-  overrides: Partial<Pick<InsertMember, "role">> = {},
+  overrides: Partial<Pick<InsertMember, "role" | "createdAt">> = {},
 ) {
   const [member] = await db
     .insert(schema.membersTable)

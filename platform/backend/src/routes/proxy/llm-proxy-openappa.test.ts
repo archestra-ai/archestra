@@ -1507,6 +1507,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         unsupportedClientAction: "bypass",
         breakTheGlassEnabled: true,
         newSessionPolicy: "live",
+        annotatorModelId: null,
+        annotatorLlmApiKeyId: null,
       });
 
       const response = await post(continuation("msg_made_elsewhere"));
@@ -2575,6 +2577,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             unsupportedClientAction: "bypass",
             breakTheGlassEnabled: true,
             newSessionPolicy: "live",
+            annotatorModelId: null,
+            annotatorLlmApiKeyId: null,
           };
         }
         return realGet();

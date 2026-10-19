@@ -17,6 +17,8 @@ class GuardrailsDeploymentModel {
         unsupportedClientAction: "bypass" as const,
         breakTheGlassEnabled: true,
         newSessionPolicy: "live" as const,
+        annotatorModelId: null,
+        annotatorLlmApiKeyId: null,
       }
     );
   }
@@ -39,6 +41,8 @@ class GuardrailsDeploymentModel {
     unsupportedClientAction?: UnsupportedAppaClientAction;
     breakTheGlassEnabled?: boolean;
     newSessionPolicy?: NewSessionPolicy;
+    annotatorModelId?: string | null;
+    annotatorLlmApiKeyId?: string | null;
   }) {
     await db
       .insert(table)

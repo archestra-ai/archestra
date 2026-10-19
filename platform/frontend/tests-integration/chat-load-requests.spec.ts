@@ -167,18 +167,6 @@ test("a cold new-chat load takes the shell's reads from the bootstrap and repeat
   page,
   mswControl,
 }) => {
-  // The config seeds come from the page's own mock worker: their module
-  // cannot load in the test runner.
-  await page.goto("/chat");
-  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
-  const [config, publicConfig] = await page.evaluate(() =>
-    Promise.all(
-      ["/api/config", "/api/config/public"].map((url) =>
-        fetch(url).then((response) => response.json()),
-      ),
-    ),
-  );
-
   const key = makeLlmProviderApiKey({ provider: "openai" });
   const agent = makeAgent({ llmApiKeyId: null });
   const model = {
@@ -189,6 +177,35 @@ test("a cold new-chat load takes the shell's reads from the bootstrap and repeat
     isFree: false,
     isBest: true,
   };
+  // The bootstrap roster holds the saved agent below, so no lookup by id
+  // is needed; a second roster request would show up in the count.
+  await mswControl.registerMany([
+    { method: "get", url: "/api/agents/chat-roster", body: [agent] },
+    { method: "get", url: `/api/agents/${agent.id}`, body: agent },
+    { method: "get", url: "/api/agents/credential-readiness", body: [] },
+    { method: "get", url: "/api/llm-provider-api-keys", body: [key] },
+    { method: "get", url: "/api/llm-provider-api-keys/available", body: [key] },
+    { method: "get", url: "/api/llm-models/available", body: [model] },
+    {
+      method: "get",
+      url: "/api/members/default-model",
+      body: { modelId: model.dbId, chatApiKeyId: key.id },
+    },
+  ]);
+
+  // The config seeds come from the page's own mock worker: their module
+  // cannot load in the test runner. This first visit reads them under the
+  // same mocks as the measured load below.
+  await page.goto("/chat");
+  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
+  const [config, publicConfig] = await page.evaluate(() =>
+    Promise.all(
+      ["/api/config", "/api/config/public"].map((url) =>
+        fetch(url).then((response) => response.json()),
+      ),
+    ),
+  );
+
   await mswControl.registerMany([
     {
       method: "get",
@@ -210,14 +227,6 @@ test("a cold new-chat load takes the shell's reads from the bootstrap and repeat
         memberDefaultModel: { modelId: model.dbId, chatApiKeyId: key.id },
       },
     },
-    // The bootstrap roster holds the saved agent below, so no lookup by id
-    // is needed; a second roster request would show up in the count.
-    { method: "get", url: "/api/agents/chat-roster", body: [agent] },
-    { method: "get", url: `/api/agents/${agent.id}`, body: agent },
-    { method: "get", url: "/api/agents/credential-readiness", body: [] },
-    { method: "get", url: "/api/llm-provider-api-keys", body: [key] },
-    { method: "get", url: "/api/llm-provider-api-keys/available", body: [key] },
-    { method: "get", url: "/api/llm-models/available", body: [model] },
   ]);
   await page.addInitScript((agentId) => {
     // Without the refresh snapshot the load is a cold one. Cleared as the

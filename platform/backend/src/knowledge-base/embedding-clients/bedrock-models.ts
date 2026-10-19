@@ -9,25 +9,38 @@ import type {
  * will drive) and model discovery (which models it surfaces + how it tags their
  * dimension) read from this list, so they can never drift.
  *
- * AWS publishes NO system inference profiles for embedding models (every
- * cataloged model's card lists Geo/Global inference IDs as "Not supported"),
- * so discovery's `/inference-profiles` call never returns them and its
- * ListFoundationModels fallback filters to TEXT-output models. Every entry is
- * therefore `staticInject: true`: injected into the model list by id, which is
- * exactly how these on-demand models are invoked. The one weakness — being
- * offered in a region/account that lacks the model — is caught by the real
- * embed call in validate-on-save. `findBedrockEmbeddingModel` still tolerates a
- * region-prefixed id, so if AWS ever ships embedding inference profiles the
- * profile path classifies them instead of dropping them (the profile id would
- * then be listed alongside the injected bare id — both are invokable).
+ * AWS publishes no system inference profiles for Titan or Cohere Embed v3
+ * (their model cards list Geo/Global inference IDs as "Not supported"), so
+ * discovery's `/inference-profiles` call never returns them. Those entries are
+ * `staticInject: true`: injected into the model list by id, which is exactly
+ * how these on-demand models are invoked. The one weakness — being offered in
+ * a region/account that lacks the model — is caught by the real embed call in
+ * validate-on-save.
+ *
+ * Cohere Embed v4 is the opposite: it runs in-region in only a few regions and
+ * everywhere else solely through its `us.`/`eu.`/`global.` inference profiles,
+ * so injecting its bare id would offer a model that fails on use. It is
+ * `staticInject: false` and discovered instead — from the profile listing
+ * (`findBedrockEmbeddingModel` tolerates the region prefix) and, where it is
+ * offered on demand, from ListFoundationModels.
  */
 interface BedrockEmbeddingModel {
   /** The foundation-model id (e.g. "amazon.titan-embed-text-v2:0"). */
   modelId: string;
   displayName: string;
   dimensions: SupportedEmbeddingDimension;
-  /** Inject into the model list (true) vs discover from inference profiles (false). */
+  /**
+   * Inject into the model list (true) vs discover from inference profiles and
+   * ListFoundationModels (false).
+   */
   staticInject: boolean;
+  /**
+   * The Cohere request generation, for Cohere models. v3 takes
+   * `truncate: "END"` and embeds images under `input_type: "image"`; v4 takes
+   * `truncate: "LEFT" | "RIGHT"`, has no "image" input type, and accepts
+   * `output_dimension`.
+   */
+  cohereRequest?: "v3" | "v4";
   /**
    * Output dimensions the model accepts on request, or `undefined` when the
    * dimension is fixed and the model rejects the parameter (Titan text v1,
@@ -58,7 +71,8 @@ interface BedrockEmbeddingModel {
    * Live InvokeModel probes confirm JPEG/PNG/WebP/GIF for Titan Multimodal G1
    * and both Cohere Embed v3 models. AWS documentation lists a narrower subset,
    * so this table records observed endpoint behavior rather than pre-filtering
-   * inputs the models actually accept.
+   * inputs the models actually accept. AWS documents the same four formats
+   * for Cohere Embed v4.
    */
   acceptedImageMimeTypes?: readonly string[];
 }
@@ -97,6 +111,16 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     acceptedImageMimeTypes: BEDROCK_MULTIMODAL_IMAGE_MIME_TYPES,
   },
   {
+    modelId: "cohere.embed-v4:0",
+    displayName: "Cohere Embed v4",
+    dimensions: 1536,
+    staticInject: false,
+    onRequestDimensions: [256, 512, 1024, 1536],
+    inputModalities: ["text", "image"],
+    acceptedImageMimeTypes: BEDROCK_MULTIMODAL_IMAGE_MIME_TYPES,
+    cohereRequest: "v4",
+  },
+  {
     modelId: "cohere.embed-english-v3",
     displayName: "Cohere Embed English v3",
     dimensions: 1024,
@@ -104,6 +128,7 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     inputModalities: ["text", "image"],
     maxInputTextChars: 2048,
     acceptedImageMimeTypes: BEDROCK_MULTIMODAL_IMAGE_MIME_TYPES,
+    cohereRequest: "v3",
   },
   {
     modelId: "cohere.embed-multilingual-v3",
@@ -113,6 +138,7 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     inputModalities: ["text", "image"],
     maxInputTextChars: 2048,
     acceptedImageMimeTypes: BEDROCK_MULTIMODAL_IMAGE_MIME_TYPES,
+    cohereRequest: "v3",
   },
 ];
 

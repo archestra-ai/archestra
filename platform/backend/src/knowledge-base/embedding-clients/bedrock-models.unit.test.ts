@@ -39,7 +39,7 @@ describe("findBedrockEmbeddingModel", () => {
         "image/gif",
       ],
     });
-    // AWS publishes no inference profiles for embedding models, so Cohere is
+    // AWS publishes no inference profiles for these, so Cohere v3 is
     // statically injected by its bare on-demand id, exactly like Titan.
     expect(findBedrockEmbeddingModel("cohere.embed-english-v3")).toMatchObject({
       dimensions: 1024,
@@ -78,7 +78,24 @@ describe("findBedrockEmbeddingModel", () => {
       findBedrockEmbeddingModel("anthropic.claude-3-5-sonnet-20240620-v1:0"),
     ).toBeUndefined();
     expect(findBedrockEmbeddingModel("amazon.nova-lite-v1:0")).toBeUndefined();
-    // Cohere Embed v4 is not yet supported — only the v3 models are cataloged.
-    expect(findBedrockEmbeddingModel("cohere.embed-v4:0")).toBeUndefined();
+    expect(findBedrockEmbeddingModel("cohere.rerank-v3-5:0")).toBeUndefined();
+  });
+
+  test("matches Cohere Embed v4 by its id and its inference profiles", () => {
+    for (const id of [
+      "cohere.embed-v4:0",
+      "us.cohere.embed-v4:0",
+      "eu.cohere.embed-v4:0",
+      "global.cohere.embed-v4:0",
+    ]) {
+      expect(findBedrockEmbeddingModel(id), id).toMatchObject({
+        dimensions: 1536,
+        onRequestDimensions: [256, 512, 1024, 1536],
+        inputModalities: ["text", "image"],
+        // Reachable in-region only in a few regions, so it is discovered
+        // rather than injected by its bare id.
+        staticInject: false,
+      });
+    }
   });
 });

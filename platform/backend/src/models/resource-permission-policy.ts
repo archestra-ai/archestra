@@ -499,6 +499,76 @@ export default class ResourcePermissionPolicyModel {
   }
 
   /**
+   * {@link findForSubjects} for a caller that needs the subjects' `*` policies
+   * and only whether each action is held at all: the `*` policies, and the
+   * `resource:action` pairs granted at `*` or on at least one object. One
+   * statement, where findForSubjects reads every object the organization
+   * shares with the subjects. A pair held at `*` is answered by that policy's
+   * key alone; only otherwise is an object looked for, and the look stops at
+   * the first one.
+   */
+  static async findWildcardsAndHeldActions(params: {
+    organizationId: string;
+    subjects: PermissionSubject[];
+    resources: ScopedResource[];
+    actions: ResourcePermissionAction[];
+  }): Promise<{
+    wildcards: ObjectPolicy[];
+    heldActions: Array<`${ScopedResource}:${ResourcePermissionAction}`>;
+  }> {
+    if (params.subjects.length === 0 || params.resources.length === 0)
+      return { wildcards: [], heldActions: [] };
+    const subjectGrants = (actions?: ResourcePermissionAction[]) =>
+      sql`ARRAY[${sql.join(
+        params.subjects.map(
+          (subject) =>
+            sql`${JSON.stringify([actions ? { subject, actions } : { subject }])}`,
+        ),
+        sql`, `,
+      )}]::jsonb[]`;
+    const probes = params.resources.flatMap((resource) =>
+      params.actions.map(
+        (action) => sql`CASE WHEN EXISTS (
+          SELECT 1 FROM resource_permission_policies held_policy
+          WHERE held_policy.organization_id = ${params.organizationId}
+            AND held_policy.resource = ${resource}
+            AND held_policy.scope = '*'
+            AND held_policy.grants @> ANY(${subjectGrants([action])})
+        ) OR EXISTS (
+          SELECT 1 FROM resource_permission_policies object_policy
+          WHERE object_policy.organization_id = ${params.organizationId}
+            AND object_policy.resource = ${resource}
+            AND object_policy.scope ~* ${OBJECT_POLICY_SCOPE_PATTERN}
+            AND object_policy.grants @> ANY(${subjectGrants([action])})
+        ) THEN ${`${resource}:${action}`} END`,
+      ),
+    );
+    const result = await db.execute<{
+      wildcards: ObjectPolicy[];
+      held_actions: Array<`${ScopedResource}:${ResourcePermissionAction}`>;
+    }>(sql`SELECT
+      (SELECT coalesce(json_agg(json_build_object(
+          'organizationId', wildcard_policy.organization_id,
+          'resource', wildcard_policy.resource,
+          'scope', wildcard_policy.scope,
+          'grants', wildcard_policy.grants)), '[]'::json)
+        FROM resource_permission_policies wildcard_policy
+        WHERE wildcard_policy.organization_id = ${params.organizationId}
+          AND wildcard_policy.resource IN (${sql.join(
+            params.resources.map((resource) => sql`${resource}`),
+            sql`, `,
+          )})
+          AND wildcard_policy.scope = '*'
+          AND wildcard_policy.grants @> ANY(${subjectGrants()})) AS wildcards,
+      array_remove(ARRAY[${sql.join(probes, sql`, `)}]::text[], NULL) AS held_actions`);
+    const row = result.rows[0];
+    return {
+      wildcards: row?.wildcards ?? [],
+      heldActions: row?.held_actions ?? [],
+    };
+  }
+
+  /**
    * SQL counterpart of the resolver, applied before list pagination/counts.
    * The caller's subjects are resolved up front, so the predicate is a
    * primary-key probe plus a JSONB containment test per row.
@@ -1406,3 +1476,6 @@ function objectPolicyMatches(
 
 const OBJECT_POLICY_SCOPE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** {@link OBJECT_POLICY_SCOPE} for a case-insensitive `~*` in SQL. */
+const OBJECT_POLICY_SCOPE_PATTERN =
+  "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";

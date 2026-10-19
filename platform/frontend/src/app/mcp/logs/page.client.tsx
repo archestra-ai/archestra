@@ -188,7 +188,9 @@ function McpToolCallsTable() {
 
   // The install list (owners, teams) only labels the server filter's
   // options, so it loads once the filter opens, or when a server is already
-  // selected in the URL and the trigger needs its label.
+  // selected in the URL and the trigger needs its label. The latch stays set
+  // on purpose: closing the filter is no reason to drop a list it will show
+  // again.
   const [serverFilterOpened, setServerFilterOpened] = useState(false);
   const { servers: mcpServers, displayByName: serverDisplayByName } =
     useMcpServerDisplayByName({

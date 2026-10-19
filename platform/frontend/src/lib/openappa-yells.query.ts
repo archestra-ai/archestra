@@ -29,6 +29,19 @@ export function useSessionYells({
 }) {
   return useOpenAppaYells({ status: "all", llmSessionId, limit: 100 }, enabled);
 }
+/** One yell, for its detail page. */
+export function useOpenAppaYell(id: string) {
+  return useQuery({
+    queryKey: ["openappa-yells", "detail", id],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getOpenAppaYell({
+        path: { id },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
 export function useOpenAppaYellsSummary(enabled = true) {
   return useQuery({
     queryKey: ["openappa-yells", "summary"],

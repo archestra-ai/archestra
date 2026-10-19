@@ -102,7 +102,7 @@ test("request_battery_credentials resolves each battery's setup for the card", a
 
   const result = await executeArchestraTool(
     getArchestraToolFullName("request_battery_credentials"),
-    { batteries: ["slack", "github", "slack"] },
+    { batteries: ["linear", "github", "linear"] },
     context,
   );
 
@@ -111,7 +111,7 @@ test("request_battery_credentials resolves each battery's setup for the card", a
     result.structuredContent,
   );
   expect(batteries.map(({ name, title }) => [name, title])).toEqual([
-    ["slack", "Slack"],
+    ["linear", "Linear"],
     ["github", "GitHub"],
   ]);
   for (const battery of batteries) {
@@ -134,7 +134,7 @@ test("request_battery_credentials names a battery it does not know", async ({
 
   const result = await executeArchestraTool(
     getArchestraToolFullName("request_battery_credentials"),
-    { batteries: ["slack", "no-such-battery"] },
+    { batteries: ["linear", "no-such-battery"] },
     {
       agent: { id: "agent", name: "Agent" },
       organizationId: organization.id,
@@ -158,7 +158,7 @@ test("request_battery_credentials needs permission to create credentials", async
 
   const result = await executeArchestraTool(
     getArchestraToolFullName("request_battery_credentials"),
-    { batteries: ["slack"] },
+    { batteries: ["linear"] },
     {
       agent: { id: "agent", name: "Agent" },
       organizationId: organization.id,

@@ -544,15 +544,13 @@ function resolveOnFirstRender<TAgent extends InitialChatAgent>(
       memberDefaultAgentId: params.defaultAgentId,
       canUseSavedAgent: false,
     });
-    const chosenByDefault =
-      !!selection &&
-      [
-        params.projectDefaultAgentId,
-        params.defaultAgentId,
-        params.organization?.defaultAgentId,
-      ].includes(selection.agent.id);
-    // Without a default, a saved pick would outrank the fallback.
-    if (selection && (chosenByDefault || !params.canUseSavedAgent)) {
+    // A default (project, member or organization) outranks a saved pick, so
+    // its choice holds whatever this browser saved; the fallback can be drawn
+    // only where no saved pick could outrank it.
+    if (
+      selection &&
+      (selection.source !== "fallback" || !params.canUseSavedAgent)
+    ) {
       agent = selection.agent;
       fromProjectDefault = selection.fromProjectDefault;
     }

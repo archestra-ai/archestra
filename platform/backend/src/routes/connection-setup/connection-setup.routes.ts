@@ -8,6 +8,7 @@ import {
   providerDisplayNames,
   RouteId,
   resolveMcpClientServerName,
+  resolveRuntimeHandoffInstructions,
   STARTUP_GUARD_FORMAT_VERSION,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -56,10 +57,7 @@ import {
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
 import { managedRuntimeManifest } from "@/services/agent-connection-setup/payloads/managed-runtime";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
-import {
-  getConnectionManagedInstructions,
-  resolveConnectionRuntimeHandoffInstructions,
-} from "@/services/connection-managed-instructions";
+import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
 import {
   connectionSetupReference,
   issueConnectionProxySetupContext,
@@ -1428,11 +1426,10 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
             }
           : null,
       runtimeHandoffInstructions:
-        mcp && setup.mcpGatewayId
-          ? await resolveConnectionRuntimeHandoffInstructions({
-              organization: { ...organization, appName },
-              gatewayId: setup.mcpGatewayId,
-              userId: setup.userId,
+        mcp && organization.connectionRuntimeHandoffEnabled
+          ? resolveRuntimeHandoffInstructions({
+              stored: organization.connectionRuntimeHandoffInstructions,
+              appName,
             })
           : null,
     },

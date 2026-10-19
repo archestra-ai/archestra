@@ -502,13 +502,11 @@ describe("GET /api/connection-setups/script/:token", () => {
   ]) {
     test(`renders current handoff settings for ${clientId} (enabled=${enabled}, instructions=${instructions})`, async ({
       makeAgent,
-      seedAndAssignArchestraTools,
     }) => {
       const gateway = await makeAgent({
         organizationId,
         agentType: "mcp_gateway",
       });
-      await seedAndAssignArchestraTools(gateway.id);
       const { rawToken } = await createSetup({
         clientId,
         platform: "linux",
@@ -1258,33 +1256,8 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.statusCode).toBe(410);
   });
 
-  test("leaves out the handoff hint when the gateway cannot reach the runtime tools", async ({
-    makeAgent,
-  }) => {
-    const prompt = "Offer the cloud runtime.";
-    const gateway = await makeAgent({
-      organizationId,
-      agentType: "mcp_gateway",
-    });
-    await OrganizationModel.patch(organizationId, {
-      connectionRuntimeHandoffEnabled: true,
-      connectionRuntimeHandoffInstructions: prompt,
-    });
-    const { rawToken } = await createSetup({
-      clientId: "claude-code",
-      platform: "linux",
-      baseUrl: "http://localhost:9000/v1",
-      mcpGatewayId: gateway.id,
-    });
-    const response = await fetchScript(rawToken);
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.body).not.toContain(prompt);
-    expect(response.body).toContain("instructions-refresh.py");
-  });
-
   test("an approved installer redemption renders the same gateway URL as a direct setup", async ({
     makeAgent,
-    seedAndAssignArchestraTools,
   }) => {
     const prior = config.openappa;
     const prompt =
@@ -1294,7 +1267,6 @@ describe("GET /api/connection-setups/script/:token", () => {
       agentType: "mcp_gateway",
       name: "Prod Gateway",
     });
-    await seedAndAssignArchestraTools(gateway.id);
     await OrganizationModel.patch(organizationId, {
       connectionRuntimeHandoffEnabled: true,
       connectionRuntimeHandoffInstructions: prompt,

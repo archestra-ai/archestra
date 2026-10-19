@@ -309,15 +309,6 @@ function YellsCard() {
         </span>
       }
       title="Yells"
-      status={
-        deployment.data && (
-          <Status done={deployment.data.breakTheGlassEnabled}>
-            {deployment.data.breakTheGlassEnabled
-              ? "Break the glass on"
-              : "Break the glass off"}
-          </Status>
-        )
-      }
       description="Agent reports of blocks it could not make sense of or get past. Investigate them with the configuration agent."
       action={
         <Button size="sm" variant="outline" asChild>
@@ -332,12 +323,20 @@ function YellsCard() {
           Could not load yells. Retry
         </Button>
       ) : (
-        <p className="flex items-baseline gap-2">
-          <span className="text-3xl font-semibold tabular-nums">
-            {summary.data?.unresolved ?? "—"}
-          </span>
-          <span className="text-sm text-muted-foreground">unresolved</span>
-        </p>
+        <div className="space-y-1">
+          <p className="flex items-baseline gap-2">
+            <span className="text-3xl font-semibold tabular-nums">
+              {summary.data?.unresolved ?? "—"}
+            </span>
+            <span className="text-sm text-muted-foreground">unresolved</span>
+          </p>
+          {deployment.data?.breakTheGlassEnabled && (
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <CircleCheck className="size-3.5 text-amber-600 dark:text-amber-400" />
+              <span>Break the glass on</span>
+            </p>
+          )}
+        </div>
       )}
     </StatusCard>
   );

@@ -1,0 +1,79 @@
+suite: test archestra platform -- kube-dns reader Role/RoleBinding
+templates:
+  - kube-dns-reader-rbac.yaml
+release:
+  name: archestra
+  namespace: platform
+tests:
+  - it: grants the platform ServiceAccount get on the kube-dns Service only
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        isKind:
+          of: Role
+      - documentIndex: 0
+        equal:
+          path: metadata.namespace
+          value: kube-system
+      - documentIndex: 0
+        equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: ["services"]
+              resourceNames: ["kube-dns"]
+              verbs: ["get"]
+      - documentIndex: 1
+        isKind:
+          of: RoleBinding
+      - documentIndex: 1
+        equal:
+          path: metadata.namespace
+          value: kube-system
+      - documentIndex: 1
+        equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: archestra-archestra-platform
+            namespace: platform
+      - documentIndex: 1
+        equal:
+          path: roleRef.name
+          value: archestra-archestra-platform-platform-kube-dns-reader
+
+  # kube-system is shared by every release in the cluster, so the object name
+  # must not collide between two releases of the same name in different
+  # namespaces.
+  - it: names the objects after the release namespace
+    release:
+      namespace: other
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: archestra-archestra-platform-other-kube-dns-reader
+
+  - it: binds a custom ServiceAccount name
+    set:
+      archestra.orchestrator.kubernetes.serviceAccount.name: custom-sa
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: custom-sa
+
+  - it: is omitted when kubeDnsServiceRead is false
+    set:
+      archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: is omitted when rbac.create is false
+    set:
+      archestra.orchestrator.kubernetes.rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0

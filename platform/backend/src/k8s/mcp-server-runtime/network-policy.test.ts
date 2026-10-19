@@ -297,7 +297,7 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
     });
   });
 
-  test("falls back to DNS egress anywhere when the cluster DNS IP is unknown", () => {
+  test("keeps DNS off public addresses when the cluster DNS IP is unknown", () => {
     const manifest = buildManagedAwsApplicationNetworkPolicy({
       name: "mcp-egress-test",
       podSelectorLabels: {
@@ -311,16 +311,27 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
       clusterDnsIps: [],
     });
 
+    // Port 53 to any address would let a restricted pod query (or tunnel
+    // through) a resolver of its choosing. Without a known resolver, DNS stays
+    // limited to the private ranges every in-cluster resolver lives in.
     expect(manifest).toMatchObject({
       metadata: {
         annotations: {
-          "archestra.io/network-policy-cluster-dns": "any",
+          "archestra.io/network-policy-cluster-dns": "private-ranges",
         },
       },
       spec: {
         egress: [
           {
-            to: [{ ipBlock: { cidr: "0.0.0.0/0" } }],
+            to: [
+              { ipBlock: { cidr: "10.0.0.0/8" } },
+              { ipBlock: { cidr: "172.16.0.0/12" } },
+              { ipBlock: { cidr: "192.168.0.0/16" } },
+              { ipBlock: { cidr: "100.64.0.0/10" } },
+              { ipBlock: { cidr: "169.254.0.0/16" } },
+              { ipBlock: { cidr: "fc00::/7" } },
+              { ipBlock: { cidr: "fe80::/10" } },
+            ],
             ports: [
               { protocol: "UDP", port: 53 },
               { protocol: "TCP", port: 53 },
@@ -332,6 +343,47 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
         ],
       },
     });
+  });
+
+  test("never allows DNS to a public address on either policy kind", () => {
+    const effectivePolicy = makeEffectivePolicy({
+      egressMode: "restricted",
+      allowedDomains: ["api.example.com"],
+    });
+    const podSelectorLabels = { app: "mcp-server", "mcp-server-id": "id" };
+    const policies = [
+      buildManagedNetworkPolicy({
+        name: "mcp-egress-test",
+        podSelectorLabels,
+        effectivePolicy,
+      }).spec?.egress ?? [],
+      (
+        buildManagedAwsApplicationNetworkPolicy({
+          name: "mcp-egress-test",
+          podSelectorLabels,
+          effectivePolicy,
+          clusterDnsIps: [],
+        }).spec as { egress: k8s.V1NetworkPolicyEgressRule[] }
+      ).egress,
+      (
+        buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+          name: "mcp-egress-test",
+          podSelectorLabels,
+          labels: { app: "mcp-server" },
+          clusterDnsIps: [],
+        }).spec as { egress: k8s.V1NetworkPolicyEgressRule[] }
+      ).egress,
+    ];
+
+    for (const egress of policies) {
+      const dnsPeers = egress
+        .filter((rule) => rule.ports?.some((port) => Number(port.port) === 53))
+        .flatMap((rule) => rule.to ?? []);
+      expect(dnsPeers.length).toBeGreaterThan(0);
+      for (const peer of dnsPeers) {
+        expect(["0.0.0.0/0", "::/0"]).not.toContain(peer.ipBlock?.cidr);
+      }
+    }
   });
 
   test("uses Cilium only when Cilium is available and domain rules exist", () => {
@@ -775,11 +827,20 @@ describe("MCP egress floor and default-deny baseline builders", () => {
       },
     });
     // A ports-only rule is not honored by the ANP agent, so without a resolved
-    // ClusterIP the DNS rule allows :53 to any IP rather than dropping lookups.
+    // ClusterIP the DNS rule allows :53 to private address space (where the
+    // cluster resolver lives) rather than dropping lookups.
     expect(
       (anp.spec as { egress: Array<Record<string, unknown>> }).egress[0],
     ).toEqual({
-      to: [{ ipBlock: { cidr: "0.0.0.0/0" } }],
+      to: [
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "169.254.0.0/16",
+        "fc00::/7",
+        "fe80::/10",
+      ].map((cidr) => ({ ipBlock: { cidr } })),
       ports: [
         { protocol: "UDP", port: 53 },
         { protocol: "TCP", port: 53 },

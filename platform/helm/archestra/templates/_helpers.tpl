@@ -408,6 +408,10 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
   value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
 {{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.clusterDnsIps (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS")) }}
+- name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS
+  value: {{ join "," .Values.archestra.orchestrator.kubernetes.clusterDnsIps | quote }}
+{{- end }}
 {{- if and .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES")) }}
 - name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
   value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}

@@ -188,7 +188,7 @@ export function buildManagedAwsApplicationNetworkPolicy(params: {
       annotations: {
         ...buildPolicyAnnotations(params.effectivePolicy, "active"),
         "archestra.io/network-policy-cluster-dns":
-          params.clusterDnsIps.join(",") || "any",
+          params.clusterDnsIps.join(",") || "private-ranges",
       },
     },
     spec: {
@@ -375,6 +375,19 @@ export function isAwsApplicationNetworkPolicyProvider(
 
 const BASELINE_POD_SELECTOR_LABELS = { app: "mcp-server" };
 
+// Where the AWS DNS bootstrap rule allows port 53 when the cluster resolver IP
+// is unknown: private and link-local space, which holds every in-cluster or
+// VPC resolver, and no public address.
+const UNRESOLVED_DNS_FALLBACK_CIDRS = [
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+  "100.64.0.0/10",
+  "169.254.0.0/16",
+  "fc00::/7",
+  "fe80::/10",
+];
+
 // Reserved, private, and cloud-metadata ranges the unrestricted floor blocks
 // (spec egress-policy.md LIM-1). 168.63.129.16/32 (Azure platform metadata) is a
 // public IP covered by no range, so it is listed explicitly; the other metadata
@@ -505,8 +518,10 @@ function buildAwsApplicationEgressRules(
 
 /**
  * DNS bootstrap rule for EKS Auto Mode. When the cluster DNS ClusterIP could
- * not be resolved, fall back to allowing port 53 anywhere — restricting DNS
- * to an unknown IP would break every domainNames rule in the policy.
+ * not be resolved, fall back to port 53 on private address space only: EKS
+ * requires the Service CIDR to be RFC1918 (IPv4) or ULA (IPv6), so the cluster
+ * resolver is always reachable, while port 53 to a public host — a direct
+ * channel out of a restricted pod — stays blocked.
  */
 function buildAwsDnsBootstrapEgressRule(
   clusterDnsIps: string[],
@@ -516,7 +531,7 @@ function buildAwsDnsBootstrapEgressRule(
       ? clusterDnsIps.map((ip) => ({
           ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
         }))
-      : [{ ipBlock: { cidr: "0.0.0.0/0" } }];
+      : UNRESOLVED_DNS_FALLBACK_CIDRS.map((cidr) => ({ ipBlock: { cidr } }));
 
   return {
     to,

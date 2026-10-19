@@ -541,6 +541,15 @@ archestra:
       # If not set, defaults to cluster.local
       clusterDomain: ""
 
+      # Cluster resolver IP(s) that MCP server, agent and sandbox egress policies
+      # allow DNS (port 53) to. Leave empty to discover the kube-system/kube-dns
+      # Service (see rbac.kubeDnsServiceRead). Set it when that Service is not the
+      # resolver (NodeLocal DNSCache, custom DNS) or cannot be read.
+      # Example:
+      #   clusterDnsIps:
+      #     - 172.20.0.10
+      clusterDnsIps: []
+
       # Kubeconfig configuration
       # Choose one of the following methods:
 
@@ -596,6 +605,13 @@ archestra:
         # external RBAC supplies a readable Role with that name in every runtime
         # namespace and deletes each Role during release uninstall.
         create: true
+
+        # Grant the platform ServiceAccount `get` on the kube-system/kube-dns
+        # Service (a Role + RoleBinding in kube-system, scoped to that one
+        # object). Egress policies pin DNS to its ClusterIP. Without this read,
+        # and with no clusterDnsIps set, the AWS ApplicationNetworkPolicy DNS rule
+        # falls back to every private range. Requires rbac.create.
+        kubeDnsServiceRead: true
 
         # Kubernetes namespaces backing deployment environments that the platform
         # may deploy MCP servers into. The platform ServiceAccount only gets

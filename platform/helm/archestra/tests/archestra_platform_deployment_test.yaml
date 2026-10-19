@@ -3080,6 +3080,33 @@ tests:
             name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
             value: "staging,prod-ns"
 
+  - it: should inject ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS from clusterDnsIps
+    documentIndex: 1
+    set:
+      archestra.orchestrator.kubernetes.clusterDnsIps:
+        - 172.20.0.10
+        - fd00:ec2::10
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS
+            value: "172.20.0.10,fd00:ec2::10"
+
+  - it: should not inject a duplicate ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS when set via archestra.env
+    documentIndex: 1
+    set:
+      archestra.orchestrator.kubernetes.clusterDnsIps:
+        - 172.20.0.10
+      archestra.env:
+        ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS: 10.100.0.10
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS
+            value: "172.20.0.10"
+
   - it: should not inject ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES when the list is empty
     documentIndex: 1
     asserts:

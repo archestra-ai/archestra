@@ -1,0 +1,37 @@
+{{- /*
+Egress policies pin DNS to the cluster resolver's ClusterIP, which the backend
+reads from the kube-system/kube-dns Service. The platform's other permissions are
+namespace-scoped, so grant that single read in kube-system. The name carries the
+release namespace so two releases in one cluster never share the object.
+*/}}
+{{- if and .Values.archestra.orchestrator.kubernetes.rbac.create .Values.archestra.orchestrator.kubernetes.rbac.kubeDnsServiceRead }}
+{{- $roleName := printf "%s-%s-kube-dns-reader" (include "archestra-platform.fullname" .) .Release.Namespace }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $roleName }}
+  namespace: kube-system
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["services"]
+  resourceNames: ["kube-dns"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $roleName }}
+  namespace: kube-system
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "archestra-platform.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ $roleName }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

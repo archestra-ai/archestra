@@ -913,14 +913,15 @@ export default class K8sDeployment {
     if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
       if (clusterDnsIps.length === 0) {
         // Only the AWS ANP floor degrades here — it falls back to allowing :53 to
-        // any IP. The plain floor still resolves via its selector-based rule.
+        // private address space. The plain floor still resolves via its
+        // selector-based rule.
         logger.warn(
           {
             mcpServerId: this.mcpServer.id,
             networkPolicyName: policyName,
             namespace: this.namespace,
           },
-          "Cluster DNS service IP could not be resolved; unrestricted floor will allow DNS egress to any IP",
+          "Cluster DNS service IP could not be resolved; unrestricted floor will allow DNS egress to private address space only",
         );
       }
 
@@ -1065,7 +1066,7 @@ export default class K8sDeployment {
           networkPolicyName: policyName,
           namespace: this.namespace,
         },
-        "Cluster DNS service IP could not be resolved; ApplicationNetworkPolicy will allow DNS egress to any IP",
+        "Cluster DNS service IP could not be resolved; ApplicationNetworkPolicy will allow DNS egress to private address space only",
       );
     }
 

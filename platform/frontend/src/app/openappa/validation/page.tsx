@@ -2,7 +2,6 @@
 
 import type { CellContext, ColumnDef } from "@tanstack/react-table";
 import {
-  ChevronDown,
   Download,
   Eye,
   Info,
@@ -33,12 +32,12 @@ import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaPageAction } from "../_parts/openappa-page-action";
@@ -319,7 +318,7 @@ function canDeleteValidations(suite: ReturnType<typeof useValidation>) {
 }
 
 function NameCell({ row }: ValidationCellProps) {
-  const { file, name, error } = row.original;
+  const { file, name } = row.original;
   return (
     <div className="max-w-md">
       <RowClickShield>
@@ -331,14 +330,6 @@ function NameCell({ row }: ValidationCellProps) {
           {name}
         </Link>
       </RowClickShield>
-      {error && (
-        <span
-          className="block truncate text-xs text-muted-foreground"
-          title={error}
-        >
-          {error}
-        </span>
-      )}
     </div>
   );
 }
@@ -420,26 +411,23 @@ function ActionsCell({ row }: ValidationCellProps) {
   );
 }
 
-/** A status that did not pass opens its full reason and the run that recorded it. */
+/** Hovering a status that did not pass shows its full reason and the run that recorded it. */
 function StatusCell({ row }: { row: ValidationRow }) {
   const status = row.status ?? "not_run";
-  if (!row.error || status === "passed" || status === "not_run")
+  if (!row.error || status === "passed")
     return <ValidationStatusBadge status={status} />;
   return (
     <RowClickShield>
-      <Popover>
-        <PopoverTrigger asChild>
+      <HoverCard openDelay={150}>
+        <HoverCardTrigger asChild>
           <UnstyledButton
             className="rounded-full"
             aria-label={`${statusLabel(status)}: show why`}
           >
-            <ValidationStatusBadge status={status}>
-              <span>{statusLabel(status)}</span>
-              <ChevronDown />
-            </ValidationStatusBadge>
+            <ValidationStatusBadge status={status} />
           </UnstyledButton>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-[28rem] space-y-3">
+        </HoverCardTrigger>
+        <HoverCardContent align="start" className="w-[28rem] space-y-3">
           <div className="flex items-center gap-2">
             <TriangleAlert
               className={
@@ -467,8 +455,8 @@ function StatusCell({ row }: { row: ValidationRow }) {
           <p className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-3 font-mono text-xs">
             {row.error}
           </p>
-        </PopoverContent>
-      </Popover>
+        </HoverCardContent>
+      </HoverCard>
     </RowClickShield>
   );
 }

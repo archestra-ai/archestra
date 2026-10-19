@@ -166,7 +166,7 @@ function rebindingWarning(rebinding: Rebinding): string {
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
 
-/** The LLM annotator the default policy routes every call no rule names to. */
+/** @public — the LLM annotator the default policy routes every call no rule names to; tests assert it. */
 export const UNDECLARED_TOOL_ANNOTATOR = "archestra.llm-annotator";
 
 export const guardrailsPolicyService = {

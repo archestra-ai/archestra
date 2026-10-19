@@ -421,6 +421,7 @@ class AgentRunModel {
         actorKind: schema.agentRunsTable.actorKind,
         actorId: schema.agentRunsTable.actorId,
         actorName: schema.usersTable.name,
+        workloadName: schema.agentRunsTable.workloadName,
         startedAt: schema.agentRunsTable.startedAt,
         endedAt: schema.agentRunsTable.endedAt,
         state: schema.a2aTasksTable.state,

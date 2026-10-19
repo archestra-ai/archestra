@@ -231,14 +231,6 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
   - Values: an RSA public key of at least 2048 bits, as PEM or base64-encoded PEM. Startup fails on any other value.
   - Set it in its own rollout, after the release is deployed. See [Key Escrow for Encrypted Chats](/docs/admin/security/content-encryption#key-escrow) and [Recovering an Encrypted Chat](/docs/admin/security/content-encryption#recovering-an-encrypted-chat).
 
-- **`ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY`** - Compatibility name for the encrypted-chat recovery public key.
-  - Default: unset
-  - Used only when [`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`](/docs/reference/configuration#ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY) is unset.
-
-- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Compatibility name for the encrypted-chat recovery public key.
-  - Default: unset
-  - Used only when both [`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`](/docs/reference/configuration#ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY) and [`ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY`](/docs/reference/configuration#ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY) are unset.
-
 - **`ARCHESTRA_SECRETS_MANAGER`** - Where Archestra stores secrets such as API keys and tokens.
   - Default: `DB`
   - Values: `DB`, `VAULT`, `READONLY_VAULT`. Both Vault values require an enterprise license.
@@ -939,11 +931,6 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 - **`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`** - Path to the Dagger CLI executable used by the sandbox.
   - Default: unset (uses the bundled or discovered CLI)
-  - Takes precedence over [`ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN).
-
-- **`ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN`** - Compatibility name for the Dagger CLI executable path.
-  - Default: unset
-  - Prefer [`ARCHESTRA_DAGGER_RUNTIME_CLI_BIN`](/docs/reference/configuration#ARCHESTRA_DAGGER_RUNTIME_CLI_BIN).
 
 ## Agent Runtime
 

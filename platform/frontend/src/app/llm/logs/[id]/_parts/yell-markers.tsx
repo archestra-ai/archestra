@@ -246,12 +246,6 @@ export function YellDetails({ yell }: { yell: TraceYell }) {
           </time>
         </Link>
       </div>
-      {yell.superyell ? (
-        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-          Broke the glass: guardrails turned off, so nothing after it was
-          checked and the label stopped being tracked.
-        </p>
-      ) : null}
       <blockquote className="mt-2 rounded-md border bg-muted/40 px-2.5 py-2 text-xs leading-[18px] break-words whitespace-pre-wrap text-foreground/90">
         {yell.message}
       </blockquote>

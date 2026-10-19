@@ -26,6 +26,7 @@ import {
 } from "@/openappa/service";
 import type { TrajectoryStamp } from "@/openappa/trajectory-stamp";
 import {
+  type AppaWireFamily,
   appaWireFamily,
   providerWire,
   restoreTrajectoryStamps,
@@ -63,59 +64,15 @@ export function scrubOpenappaIngress(params: {
     url: request.url,
   });
 
-  let childReturnRefusal: ApiError | undefined;
   const requestWireFamily = appaWireFamily(interactionType);
-  let strippedReceiptCodes: string[] = [];
-  let delegationMarkers: AppaDelegationMarker[] | undefined;
-  let childReturns: CollectedChildReturns | undefined;
-  let childTrajectoryReceipts: AppaChildTrajectoryReceipt[] = [];
-  if (requestWireFamily) {
-    strippedReceiptCodes = stripSessionReceiptsFromRequest({
-      family: requestWireFamily,
-      body,
-    });
-    const opaqueProofs =
-      requestWireFamily === "openai:responses"
-        ? unwrapCompactionCarriersFromRequest(body)
-        : [];
-    childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
-      family: requestWireFamily,
-      body,
-    });
-    childTrajectoryReceipts.push(
-      ...opaqueProofs.flatMap(
-        (proof) => stripChildTrajectoryReceipts(proof).receipts,
-      ),
-    );
-    // A route that translated the wire first collected the markers from the
-    // client's own wire; the translated text may no longer end with them.
-    delegationMarkers =
-      collectedDelegationMarkers(request) ??
-      collectDelegationMarkers({
-        family: requestWireFamily,
-        body,
-      });
-    stripDelegationMarkers({ family: requestWireFamily, body });
-    const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
-      adapter.matches({ headers, requestBody: body }),
-    );
-    const childReturnOptions = {
-      // Kilo Code frames its background tasks as OpenCode does.
-      openCodeBackgroundReturns:
-        !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
-      codexMailboxReturns: nativeClient?.id === "codex",
-      onRefusal: (refusal: ApiError) => {
-        childReturnRefusal ??= refusal;
-      },
-    };
-    try {
-      childReturns = collectAndStripChildReturns(body, childReturnOptions);
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.statusCode !== 400) throw error;
-      childReturnRefusal = error;
-      childReturns = { completions: [] };
-    }
-  }
+  // A Model Router route that translated the client's wire to one OpenAPPA
+  // does not read already scrubbed the client's own wire.
+  const clientWire = requestWireFamily
+    ? undefined
+    : translatedClientWire(request);
+  const scrubbed = requestWireFamily
+    ? scrubFamilyWire({ request, family: requestWireFamily, body })
+    : clientWire?.scrubbed;
   // Restores original provider call IDs before request processing, logging,
   // or plugin rulings: the trajectory stamps first, then any stamp a
   // client copied into text. Neither needs an OpenAPPA session, so no id the
@@ -126,12 +83,66 @@ export function scrubOpenappaIngress(params: {
 
   return {
     clientCompaction,
-    strippedReceiptCodes,
+    strippedReceiptCodes: scrubbed?.strippedReceiptCodes ?? [],
     trajectoryStamps,
-    ...(childReturnRefusal ? { childReturnRefusal } : {}),
-    ...(delegationMarkers ? { delegationMarkers } : {}),
-    ...(childReturns ? { childReturns } : {}),
-    ...(childTrajectoryReceipts.length > 0 ? { childTrajectoryReceipts } : {}),
+    ...(scrubbed?.childReturnRefusal
+      ? { childReturnRefusal: scrubbed.childReturnRefusal }
+      : {}),
+    ...(scrubbed?.delegationMarkers
+      ? { delegationMarkers: scrubbed.delegationMarkers }
+      : {}),
+    ...(scrubbed?.childReturns ? { childReturns: scrubbed.childReturns } : {}),
+    ...(scrubbed && scrubbed.childTrajectoryReceipts.length > 0
+      ? { childTrajectoryReceipts: scrubbed.childTrajectoryReceipts }
+      : {}),
+    ...(clientWire
+      ? { clientWire: { family: clientWire.family, body: clientWire.body } }
+      : {}),
+  };
+}
+
+/**
+ * Scrubs the request a client sent to a Model Router route, on the client's
+ * own wire, before the route translates it to a provider wire that OpenAPPA
+ * does not read (Gemini, Bedrock Converse, Cohere). Removes the same
+ * receipts, markers and child returns that ingress removes from an OpenAPPA
+ * wire, so the translation forwards none of them, and keeps what it collected
+ * for ingress. `translatedCallId` maps a call id of the client's wire to the
+ * id the translated body carries, where the two differ.
+ */
+export function scrubTranslatedClientWire(params: {
+  request: FastifyRequest;
+  family: Extract<
+    AppaWireFamily,
+    "openai:responses" | "openai:chatCompletions"
+  >;
+  body: unknown;
+  translatedCallId?: (callId: string) => string;
+}): void {
+  const { family } = params;
+  const scrubbed = scrubFamilyWire({
+    request: params.request,
+    family,
+    body: params.body,
+  });
+  const { translatedCallId } = params;
+  if (translatedCallId) {
+    scrubbed.childReturns = {
+      completions: scrubbed.childReturns.completions.map((completion) => ({
+        ...completion,
+        ...(completion.spawnCallId
+          ? { spawnCallId: translatedCallId(completion.spawnCallId) }
+          : {}),
+        ...(completion.envelopeId
+          ? { envelopeId: translatedCallId(completion.envelopeId) }
+          : {}),
+      })),
+    };
+  }
+  (params.request as RequestWithClientWire).appaTranslatedClientWire = {
+    family,
+    body: params.body,
+    scrubbed,
   };
 }
 
@@ -165,6 +176,78 @@ export function followAppaSessionHeader(params: {
 
 // ===
 
+/**
+ * Collects and removes the receipts, delegation markers and child returns a
+ * request on an OpenAPPA wire carries.
+ */
+function scrubFamilyWire(params: {
+  request: FastifyRequest;
+  family: AppaWireFamily;
+  body: unknown;
+}): ScrubbedClientWire {
+  const { request, family, body } = params;
+  const headers = request.headers;
+  let childReturnRefusal: ApiError | undefined;
+  const strippedReceiptCodes = stripSessionReceiptsFromRequest({
+    family,
+    body,
+  });
+  const opaqueProofs =
+    family === "openai:responses"
+      ? unwrapCompactionCarriersFromRequest(body)
+      : [];
+  const childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
+    family,
+    body,
+  });
+  childTrajectoryReceipts.push(
+    ...opaqueProofs.flatMap(
+      (proof) => stripChildTrajectoryReceipts(proof).receipts,
+    ),
+  );
+  // A route that translated the wire first collected the markers from the
+  // client's own wire; the translated text may no longer end with them.
+  const delegationMarkers =
+    collectedDelegationMarkers(request) ??
+    collectDelegationMarkers({ family, body });
+  stripDelegationMarkers({ family, body });
+  const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
+    adapter.matches({ headers, requestBody: body }),
+  );
+  const childReturnOptions = {
+    // Kilo Code frames its background tasks as OpenCode does.
+    openCodeBackgroundReturns:
+      !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
+    codexMailboxReturns: nativeClient?.id === "codex",
+    onRefusal: (refusal: ApiError) => {
+      childReturnRefusal ??= refusal;
+    },
+  };
+  let childReturns: CollectedChildReturns;
+  try {
+    childReturns = collectAndStripChildReturns(body, childReturnOptions);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.statusCode !== 400) throw error;
+    childReturnRefusal = error;
+    childReturns = { completions: [] };
+  }
+  return {
+    strippedReceiptCodes,
+    childTrajectoryReceipts,
+    delegationMarkers,
+    childReturns,
+    ...(childReturnRefusal ? { childReturnRefusal } : {}),
+  };
+}
+
+function translatedClientWire(
+  request: FastifyRequest,
+): TranslatedClientWire | undefined {
+  return (request as RequestWithClientWire).appaTranslatedClientWire;
+}
+
+// ===
+
 export type OpenappaIngress = {
   /** Read from the body as the client sent it, before any scrubbing. */
   clientCompaction: boolean;
@@ -174,7 +257,30 @@ export type OpenappaIngress = {
   delegationMarkers?: AppaDelegationMarker[];
   childReturns?: CollectedChildReturns;
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
+  /**
+   * The client's own wire, when a Model Router route translated it to a
+   * provider wire OpenAPPA does not read. The client's session is read here.
+   */
+  clientWire?: { family: AppaWireFamily; body: unknown };
 };
+
+type ScrubbedClientWire = {
+  strippedReceiptCodes: string[];
+  childTrajectoryReceipts: AppaChildTrajectoryReceipt[];
+  delegationMarkers: AppaDelegationMarker[];
+  childReturns: CollectedChildReturns;
+  childReturnRefusal?: ApiError;
+};
+
+type TranslatedClientWire = {
+  family: AppaWireFamily;
+  body: unknown;
+  scrubbed: ScrubbedClientWire;
+};
+
+interface RequestWithClientWire extends FastifyRequest {
+  appaTranslatedClientWire?: TranslatedClientWire;
+}
 
 /**
  * Detects Claude Code compaction summary requests. Claude Code puts the

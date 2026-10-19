@@ -842,6 +842,51 @@ describe("client trajectory identity", () => {
     });
   });
 
+  describe("a wire OpenAPPA does not read", () => {
+    test("reads a client's session from its headers", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: undefined,
+          body: { contents: [] },
+          headers: {
+            "user-agent": "kilo/7.8.12",
+            "x-archestra-agent-id": "kilo",
+            "x-opencode-session": OPENCODE_SESSION,
+          },
+        }),
+      ).toMatchObject({
+        sessionId: OPENCODE_SESSION,
+        provenance: "kilo-hosted-header",
+      });
+      expect(
+        extractAppaSessionIdentity({
+          family: undefined,
+          body: {},
+          headers: { "x-claude-code-session-id": CLAUDE_SESSION },
+        }),
+      ).toMatchObject({ sessionId: CLAUDE_SESSION });
+    });
+
+    test("reads no session from the body", () => {
+      for (const body of [
+        { prompt_cache_key: "cache-key" },
+        { metadata: { session_id: "s-2" } },
+        {
+          metadata: {
+            user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+          },
+        },
+      ])
+        expect(
+          extractAppaSessionIdentity({
+            family: undefined,
+            body,
+            headers: { "user-agent": "claude-cli/2.1.0 (external, cli)" },
+          }).sessionId,
+        ).toBeUndefined();
+    });
+  });
+
   describe("generic clients", () => {
     test("keeps the wire-family fallbacks when no adapter matches", () => {
       expect(

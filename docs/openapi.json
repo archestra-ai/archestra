@@ -357133,6 +357133,12 @@
                                 "error": {
                                   "nullable": true,
                                   "type": "string"
+                                },
+                                "reasons": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 }
                               },
                               "required": [
@@ -357582,6 +357588,12 @@
                                   "error": {
                                     "nullable": true,
                                     "type": "string"
+                                  },
+                                  "reasons": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
                                   }
                                 },
                                 "required": [
@@ -358068,6 +358080,12 @@
                                 "error": {
                                   "nullable": true,
                                   "type": "string"
+                                },
+                                "reasons": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 }
                               },
                               "required": [

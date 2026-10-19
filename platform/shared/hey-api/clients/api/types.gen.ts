@@ -94186,6 +94186,7 @@ export type RunOpenAppaPolicyTestsResponses = {
                 actual: string | null;
                 status: 'passed' | 'failed' | 'cannot_run';
                 error?: string | null;
+                reasons?: Array<string>;
             }>;
         }>;
         validation: {
@@ -94306,6 +94307,7 @@ export type GetOpenAppaPolicyTestRunsResponses = {
                 actual: string | null;
                 status: 'passed' | 'failed' | 'cannot_run';
                 error?: string | null;
+                reasons?: Array<string>;
             }>;
         }>;
         validation: {
@@ -94430,6 +94432,7 @@ export type PreviewOpenAppaPolicyTestResponses = {
                 actual: string | null;
                 status: 'passed' | 'failed' | 'cannot_run';
                 error?: string | null;
+                reasons?: Array<string>;
             }>;
         }>;
         validation: {

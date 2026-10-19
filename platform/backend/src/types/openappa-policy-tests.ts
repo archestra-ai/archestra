@@ -76,6 +76,8 @@ export const PolicyTestResultSchema = z.object({
       actual: z.string().nullable(),
       status: z.enum(["passed", "failed", "cannot_run"]),
       error: z.string().nullable().optional(),
+      /** Why a blocked call was blocked; runs recorded before it have none. */
+      reasons: z.array(z.string()).optional(),
     }),
   ),
 });

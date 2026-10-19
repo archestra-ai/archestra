@@ -172,6 +172,7 @@ class OpenAppaArchestraAnnotator {
       selection.baseUrl,
       request.schema,
     ]);
+    const startedAt = Date.now();
     try {
       const structured = await structuredAnswer({ ...call, formatKey });
       const answer =
@@ -202,11 +203,20 @@ class OpenAppaArchestraAnnotator {
       }
       return { kind: "answered", answer };
     } catch (error) {
-      if (abortSignal.aborted)
+      if (abortSignal.aborted) {
+        logger.warn(
+          {
+            provider: selection.provider,
+            model: selection.modelName,
+            elapsedMs: Date.now() - startedAt,
+          },
+          "OpenAPPA archestra annotator: the runtime stopped waiting for the model call",
+        );
         return {
           kind: "failed",
           reason: "The runtime stopped waiting for the annotation.",
         };
+      }
       const apiError = APICallError.isInstance(error) ? error : null;
       const status = apiError?.statusCode;
       // 429 is the provider's rate limit; 402 is Archestra's token-cost limit.

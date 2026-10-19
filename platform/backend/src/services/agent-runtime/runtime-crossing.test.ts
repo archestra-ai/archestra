@@ -253,7 +253,7 @@ describe("runtime crossing", () => {
         resumeFromTaskId: started.previousTaskId,
         runtimeCrossing: crossing(false, started.organizationId),
       }),
-    ).rejects.toThrow("opened without a parent");
+    ).rejects.toMatchObject({ name: "RuntimeCrossingRefusal" });
     expect(openappa.addressRuntimeChild).not.toHaveBeenCalled();
     expect(backend.continueRun).not.toHaveBeenCalled();
   });

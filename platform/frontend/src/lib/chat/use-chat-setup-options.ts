@@ -134,11 +134,12 @@ export function useChatSetupOptions(params: {
     () => indexReadinessByAgent(readiness),
     [readiness],
   );
-  const activeAgent =
-    allAgents.find((a) => a.id === params.agentId) ??
-    allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
-    allAgents.find((a) => !a.builtIn);
-  const { data: agentDetail } = useProfile(activeAgent?.id);
+  // Only the chosen agent: falling back to another one while the choice
+  // resolves would show that agent's name and tools for a moment.
+  const activeAgent = params.agentId
+    ? allAgents.find((a) => a.id === params.agentId)
+    : undefined;
+  const { data: agentDetail } = useProfile(params.agentId ?? undefined);
   const agentGroups = useMemo(
     () =>
       groupInitialAgents({
@@ -166,7 +167,7 @@ export function useChatSetupOptions(params: {
   // Only the hydrated profile knows the agent's tools; never guess from the
   // roster, which omits them.
   const agentToolsSummary =
-    agentDetail && agentDetail.id === activeAgent?.id
+    agentDetail && agentDetail.id === params.agentId
       ? agentDetail.accessAllTools
         ? "All tools"
         : toolServerCount(agentDetail.tools)

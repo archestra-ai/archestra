@@ -134,14 +134,26 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     routeConversationId,
   } = params;
 
-  const [agentId, setAgentId] = useState<string | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<TAgent | null>(null);
+  // With the data already in the cache on the first render (a page the
+  // server rendered with the composer's data), the starting agent and model
+  // resolve in that render, so the server and the browser draw the final
+  // composer at once. Only a choice that this browser's saved pick cannot
+  // change resolves here; the effect below resolves the rest as before.
+  const [initial] = useState(() => resolveOnFirstRender(params));
+  const [agentId, setAgentId] = useState<string | null>(
+    initial?.agent.id ?? null,
+  );
+  const [selectedAgent, setSelectedAgent] = useState<TAgent | null>(
+    initial?.agent ?? null,
+  );
   // Whether the load-time resolution below has run to a decision. Until it
   // has, the agent picker must not guess: a guess paints one agent and then
-  // swaps to the resolved one.
-  const [hasResolvedAgent, setHasResolvedAgent] = useState(false);
-  const [modelId, setModelId] = useState<string>("");
-  const [apiKeyId, setApiKeyId] = useState<string | null>(null);
+  // swaps to the resolved one. A first-render choice is that decision.
+  const [hasResolvedAgent, setHasResolvedAgent] = useState(!!initial);
+  const [modelId, setModelId] = useState<string>(initial?.model?.modelId ?? "");
+  const [apiKeyId, setApiKeyId] = useState<string | null>(
+    initial?.model?.apiKeyId ?? null,
+  );
   // Carried into the create request on first submit, so a choice made before
   // the conversation exists survives into the row.
   const [thinkingEffort, setThinkingEffort] =
@@ -149,12 +161,21 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 
   // Stores the resolved agent in a ref so the model init effect can read it
   // synchronously.
-  const resolvedAgentRef = useRef<TAgent | null>(null);
+  const resolvedAgentRef = useRef<TAgent | null>(initial?.agent ?? null);
 
   // Track which agentId URL param has been consumed (so we don't re-apply the
   // same one after the user clears the selection, but do apply a new one when
   // navigating from a different agent page).
-  const urlParamsConsumedRef = useRef<string | null>(null);
+  const urlParamsConsumedRef = useRef<string | null>(
+    initial?.fromUrl ? (urlAgentId ?? null) : null,
+  );
+
+  // A first-render choice is saved as the effect's choice would be.
+  useEffect(() => {
+    if (initial && !initial.fromUrl && !initial.fromProjectDefault) {
+      saveAgent(initial.agent.id);
+    }
+  }, [initial]);
 
   const organizationDefaults = useMemo(
     () =>
@@ -278,7 +299,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   // later). Uses modelInitializedRef instead of checking modelId to avoid a
   // race: ModelSelector's auto-select fires before this effect and sets modelId,
   // which would cause an early return and skip the proper priority chain.
-  const modelInitializedRef = useRef(false);
+  const modelInitializedRef = useRef(!!initial?.model);
   useEffect(() => {
     if (!agentId) return;
     if (modelInitializedRef.current) return;
@@ -482,4 +503,83 @@ function resolveUrlModelSelection(params: {
   );
   if (!key) return null;
   return { modelId: model.dbId, apiKeyId: key.id };
+}
+
+/**
+ * The starting agent and model, when the first render already has what the
+ * load effect waits for and the outcome cannot depend on this browser's saved
+ * pick. Null otherwise: the effect then resolves as it always has. The saved
+ * pick lives in localStorage, which the server cannot read, so resolving it
+ * here would render a different composer on the server and in the browser.
+ */
+function resolveOnFirstRender<TAgent extends InitialChatAgent>(
+  params: InitialChatModelStateParams<TAgent>,
+): {
+  agent: TAgent;
+  model: { modelId: string; apiKeyId: string | null } | null;
+  fromUrl: boolean;
+  fromProjectDefault: boolean;
+} | null {
+  if (
+    params.isAgentsLoading ||
+    params.agents.length === 0 ||
+    params.isOrgLoading ||
+    params.isProjectLoading ||
+    params.isApiKeysLoading ||
+    params.isPermissionResolving
+  ) {
+    return null;
+  }
+  let agent: TAgent | undefined;
+  let fromProjectDefault = false;
+  const fromUrl = !!params.urlAgentId;
+  if (params.urlAgentId) {
+    agent = params.agents.find((a) => a.id === params.urlAgentId);
+  } else {
+    const selection = resolveInitialAgentSelection({
+      agents: params.agents,
+      projectDefaultAgentId: params.projectDefaultAgentId,
+      organizationDefaultAgentId: params.organization?.defaultAgentId,
+      savedAgentId: null,
+      memberDefaultAgentId: params.defaultAgentId,
+      canUseSavedAgent: false,
+    });
+    const chosenByDefault =
+      !!selection &&
+      [
+        params.projectDefaultAgentId,
+        params.defaultAgentId,
+        params.organization?.defaultAgentId,
+      ].includes(selection.agent.id);
+    // Without a default, a saved pick would outrank the fallback.
+    if (selection && (chosenByDefault || !params.canUseSavedAgent)) {
+      agent = selection.agent;
+      fromProjectDefault = selection.fromProjectDefault;
+    }
+  }
+  if (!agent) return null;
+  const resolved = resolveInitialAgentState({
+    agent,
+    modelsByProvider: params.modelsByProvider,
+    chatApiKeys: params.chatApiKeys,
+    organization: params.organization
+      ? {
+          defaultModelId: params.organization.defaultModelId,
+          defaultLlmApiKeyId: params.organization.defaultLlmApiKeyId,
+        }
+      : null,
+    memberDefault: params.memberDefault ?? null,
+  });
+  const model =
+    resolveUrlModelSelection({
+      urlModelId: params.urlModelId,
+      modelsByProvider: params.modelsByProvider,
+      chatApiKeys: params.chatApiKeys,
+    }) ?? resolved;
+  return {
+    agent,
+    model: model ? { modelId: model.modelId, apiKeyId: model.apiKeyId } : null,
+    fromUrl,
+    fromProjectDefault,
+  };
 }

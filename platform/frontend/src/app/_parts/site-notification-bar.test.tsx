@@ -20,6 +20,25 @@ describe("SiteNotificationBar", () => {
     localStorage.clear();
   });
 
+  it("shows the text at once, as plain text, until its markdown renders", async () => {
+    const { container } = render(
+      <SiteNotificationBar
+        content="**Maintenance** tonight, see the [status page](https://example.com/status)"
+        notificationId="markdown"
+      />,
+    );
+
+    // First render: the band already reads right, without markdown marks.
+    expect(container).toHaveTextContent(
+      "Maintenance tonight, see the status page",
+    );
+    expect(container).not.toHaveTextContent("**");
+
+    expect(
+      await screen.findByRole("link", { name: "status page" }),
+    ).toHaveAttribute("href", "https://example.com/status");
+  });
+
   it("dismisses the current notification and persists that choice", async () => {
     const user = userEvent.setup();
 

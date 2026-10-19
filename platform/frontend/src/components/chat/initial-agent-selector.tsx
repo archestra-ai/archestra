@@ -261,15 +261,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     [agentGroups, readinessByAgent],
   );
 
+  // The selected agent only. Until the page resolves which agent the chat
+  // starts on, the chip holds its placeholder: it never shows another agent's
+  // name on the way to the chosen one.
   const currentAgentSummary = useMemo(
-    () =>
-      allAgents.find((a) => a.id === currentAgentId) ??
-      (currentAgentId || isCallerResolvingAgent
-        ? null
-        : (allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
-          allAgents.find((a) => !a.builtIn) ??
-          null)),
-    [allAgents, currentAgentId, isCallerResolvingAgent],
+    () => allAgents.find((a) => a.id === currentAgentId) ?? null,
+    [allAgents, currentAgentId],
   );
   // The roster omits large embedded icons and editing-only fields. Hydrate one
   // record after the composer's first paint, so the response never competes
@@ -284,7 +281,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   // The composer renders before the chat knows its agent; until the roster
   // answers, the chip holds a placeholder rather than asking for a choice.
   const isAgentResolving =
-    !displayAgent && (isRosterPending || isCallerResolvingAgent);
+    !displayAgent &&
+    (isRosterPending ||
+      isCallerResolvingAgent ||
+      (!currentAgentId && allAgents.some((agent) => !agent.builtIn)));
   const effectiveAgentId = displayAgent?.id ?? currentAgentId;
   // The trigger's server and knowledge icons: wanted on screen, not for
   // typing, so they wait for the page's first requests too.

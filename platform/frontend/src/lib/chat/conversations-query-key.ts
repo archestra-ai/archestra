@@ -2,7 +2,7 @@
  * Recent conversations the sidebar loads: it shows up to 15 and the rest go
  * through search, so this leaves a margin without paying for 250 rows.
  */
-const SIDEBAR_CONVERSATION_LIMIT = 50;
+export const SIDEBAR_CONVERSATION_LIMIT = 50;
 
 /**
  * The cache key of one conversation list read. Mutations update every list

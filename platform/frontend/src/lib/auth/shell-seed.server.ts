@@ -8,7 +8,10 @@ import {
   SHELL_SEED_SEARCH_HEADER,
   seedsNewChatComposer,
 } from "@/lib/auth/shell-seed";
-import { conversationsQueryKey } from "@/lib/chat/conversations-query-key";
+import {
+  conversationsQueryKey,
+  SIDEBAR_CONVERSATION_LIMIT,
+} from "@/lib/chat/conversations-query-key";
 import { newChatSeedQueries } from "@/lib/chat/new-chat-seed";
 import { getBackendBaseUrl } from "@/lib/config/config";
 import { environmentKeys } from "@/lib/environment.query";
@@ -94,7 +97,6 @@ async function readShellQueries(params: {
   signal: AbortSignal;
 }): Promise<ShellSeed["queries"]> {
   const options = { headers: params.headers, signal: params.signal };
-  const conversationsKey = conversationsQueryKey();
   const reads: Array<
     Promise<{ queryKey: readonly unknown[]; data: unknown } | null>
   > = [
@@ -103,10 +105,10 @@ async function readShellQueries(params: {
       archestraApiSdk.getSiteNotification(options),
     ),
     seedRead(
-      conversationsKey,
+      conversationsQueryKey(),
       archestraApiSdk.getChatConversations({
         ...options,
-        query: { includeArtifacts: false, limit: conversationsKey[2] },
+        query: { includeArtifacts: false, limit: SIDEBAR_CONVERSATION_LIMIT },
       }),
     ),
     seedRead(

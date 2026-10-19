@@ -9,7 +9,7 @@ lastUpdated: 2026-10-19
 
 Tell us what to build, and we build it. Describe the change in a GitHub issue. If the maintainers agree, they implement it with coding agents.
 
-Archestra takes contributions as human-written issues, not code. Pull requests from forks close automatically. The developer pages in this section are for maintainers, and for anyone who runs Archestra from source.
+Archestra takes contributions as human-written issues, not code. The developer pages in this section are for maintainers, and for anyone who runs Archestra from source.
 
 <span id="opening-an-issue"></span>
 

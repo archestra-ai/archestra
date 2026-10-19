@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub or GitLab
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-18
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -50,6 +50,8 @@ delta = { audience = ["internal"] }
 name = "blog__publish_post"
 requires = { trust = "trusted", audience = { contains = ["public"] } }
 ```
+
+<span id="keep-a-policy-snapshot-for-new-sessions"></span>
 
 What to know:
 

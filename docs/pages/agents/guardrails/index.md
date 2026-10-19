@@ -3,7 +3,7 @@ title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-18
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -380,6 +380,18 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   getRawToolCallEvents(): (string | Uint8Array)[];
 
   /**
+   * The id the client must echo back for the call at `index` of this turn,
+   * when it carries more than the call's own id. Gemini packs each call's
+   * thought signature into it. A wrapper that writes its own tool-call
+   * frames from `state.toolCalls` (the Responses-from-chat surface) uses it
+   * so the next request still reaches the provider with that data.
+   */
+  wireToolCallId?(params: {
+    toolCall: { id: string; name: string };
+    index: number;
+  }): string;
+
+  /**
    * Format a complete, self-contained text response as SSE events.
    * Used when replacing the response entirely (e.g., policy refusal).
    * Returns provider-specific events that form a valid complete response.

@@ -19,13 +19,19 @@
  *   envelope the upstream already produced (which named the originals).
  */
 
-type RewrittenToolCall = { id: string; name: string; arguments: string };
+type RewrittenToolCall = {
+  id: string;
+  name: string;
+  arguments: string;
+  /** Written to the client as `call_id` in place of `id` (Gemini's signed id). */
+  wireId?: string;
+};
 
 /** The `function_call` output item as the Responses API renders it. */
 export function responsesFunctionCallItem(toolCall: RewrittenToolCall) {
   return {
     id: `fc_${toolCall.id}`,
-    call_id: toolCall.id,
+    call_id: toolCall.wireId ?? toolCall.id,
     type: "function_call" as const,
     name: toolCall.name,
     arguments: toolCall.arguments,

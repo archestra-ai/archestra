@@ -19,11 +19,13 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useOrganization } from "@/lib/organization.query";
+import { inFlightQueryData } from "@/lib/query-in-flight";
 import {
   BOOTSTRAP_QUERY_RETRY,
   flushPersistedQueryCache,
@@ -827,11 +829,21 @@ export function useChatAgentReferences(
   return useQuery({
     queryKey: ["agents", "chat-roster", "references", stableIds],
     initialData,
-    queryFn: async () => {
-      const rows: archestraApiTypes.GetChatAgentRosterResponses["200"] = [];
-      for (let offset = 0; offset < stableIds.length; offset += 100) {
+    queryFn: async ({ client }) => {
+      // On a cold load the starting roster is requested at the same moment,
+      // and usually holds these ids already (a saved agent, the default):
+      // wait for it and look up only the ids it does not have.
+      const roster =
+        (await inFlightQueryData<
+          archestraApiTypes.GetChatAgentRosterResponses["200"]
+        >(client, chatAgentsQueryKey)) ?? [];
+      const rows = roster.filter((agent) => stableIds.includes(agent.id));
+      const missingIds = stableIds.filter(
+        (id) => !rows.some((agent) => agent.id === id),
+      );
+      for (let offset = 0; offset < missingIds.length; offset += 100) {
         const { data, error } = await getChatAgentRoster({
-          query: { ids: stableIds.slice(offset, offset + 100) },
+          query: { ids: missingIds.slice(offset, offset + 100) },
         });
         throwOnApiError(error, { toastOnError: false });
         rows.push(...(data ?? []));
@@ -1041,7 +1053,13 @@ type MemberAgents = {
 /** One read for both of the member's agents, shared by the hooks above. */
 const memberAgentsQuery = {
   queryKey: memberDefaultAgentQueryKey,
-  queryFn: async (): Promise<MemberAgents> => {
+  queryFn: async ({
+    client,
+  }: {
+    client: QueryClient;
+  }): Promise<MemberAgents> => {
+    const seed = await awaitBootstrapSeed(client);
+    if (seed?.memberDefaultAgent) return seed.memberDefaultAgent;
     const { data, error } = await getMemberDefaultAgent();
     throwOnApiError(error, { toastOnError: false });
     return {
@@ -1049,6 +1067,11 @@ const memberAgentsQuery = {
       personalChatAgentId: data?.personalChatAgentId ?? null,
     };
   },
+  // Kept like the organization and permissions the bootstrap seeds alongside
+  // it: restored on refresh and fresh for as long, so reopening the new-chat
+  // page does not ask again. Agent mutations still invalidate it.
+  staleTime: 5 * 60 * 1000,
+  meta: PERSISTED_QUERY_META,
 };
 
 function findCachedChatAgent(client: QueryClient, id: string) {

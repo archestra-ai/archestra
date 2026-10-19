@@ -2524,7 +2524,7 @@ export const bedrockInvokeStreamWithAgentAndModel = <ThrowOnError extends boolea
 });
 
 /**
- * Get the signed-in user's permissions, organization, and platform config in one request
+ * Get the signed-in user's permissions, organization, platform config, appearance settings, and chat defaults in one request
  *
  * Authentication:
  *

@@ -12,6 +12,8 @@ import {
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import { soleAvailableLlmProviderApiKeyId } from "@/lib/llm-provider-api-keys.query";
+import { inFlightQueryData } from "@/lib/query-in-flight";
 import {
   BOOTSTRAP_QUERY_RETRY,
   PERSISTED_QUERY_META,
@@ -44,9 +46,26 @@ export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
  */
 export function useLlmModels(params?: LlmModelsParams) {
   const apiKeyId = params?.apiKeyId;
+  const client = useQueryClient();
+  // The server lists the models of every key the viewer may use, or of one
+  // of them. When that key is their only one, both answers are the same
+  // list: reuse the full one rather than ask again.
+  const allModels = () =>
+    apiKeyId && soleAvailableLlmProviderApiKeyId(client) === apiKeyId
+      ? client.getQueryState<LlmModel[]>(llmModelsQueryKey(null))
+      : undefined;
   return useQuery({
-    queryKey: ["llm-models", apiKeyId ?? null],
-    queryFn: async (): Promise<LlmModel[]> => {
+    queryKey: llmModelsQueryKey(apiKeyId ?? null),
+    initialData: () => allModels()?.data,
+    initialDataUpdatedAt: () => allModels()?.dataUpdatedAt,
+    queryFn: async ({ client }): Promise<LlmModel[]> => {
+      if (apiKeyId && soleAvailableLlmProviderApiKeyId(client) === apiKeyId) {
+        const listed = await inFlightQueryData<LlmModel[]>(
+          client,
+          llmModelsQueryKey(null),
+        );
+        if (listed) return listed;
+      }
       const { data, error } = await getLlmModels({
         query: apiKeyId ? { apiKeyId } : undefined,
       });
@@ -294,4 +313,10 @@ export function useSyncLlmModels() {
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
     },
   });
+}
+
+// ===
+
+function llmModelsQueryKey(apiKeyId: string | null) {
+  return ["llm-models", apiKeyId] as const;
 }

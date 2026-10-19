@@ -31,7 +31,9 @@ vi.mock("@/agents/chatops/chatops-manager", () => ({
 const { authTestMock } = vi.hoisted(() => ({
   authTestMock: vi.fn(() => Promise.resolve({ ok: true })),
 }));
-vi.mock("@slack/web-api", () => ({
+vi.mock("@slack/web-api", async (importOriginal) => ({
+  ErrorCode: (await importOriginal<typeof import("@slack/web-api")>())
+    .ErrorCode,
   WebClient: class {
     auth = { test: authTestMock };
     tooling = {

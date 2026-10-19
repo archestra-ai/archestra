@@ -10,7 +10,10 @@ import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
 import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
-import { OpenappaCredentialError } from "@/openappa/failure";
+import {
+  OpenappaCredentialError,
+  runtimeFailureCode,
+} from "@/openappa/failure";
 import {
   githubPolicyTestVersion,
   policyTestFilesHash,
@@ -633,10 +636,7 @@ async function executeAutomaticPolicyValidation(
       await retryChangedInputs();
       return;
     }
-    if (
-      error instanceof Error &&
-      error.message === "Too many OpenAPPA replays are running; retry later"
-    )
+    if (runtimeFailureCode(error) === "replay_busy")
       throw new Error("Policy replay is busy; retry validation");
     const message = "Could not run informational policy validation";
     const saved = await recordFailure(message, collection.files);

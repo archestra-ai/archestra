@@ -7,14 +7,18 @@
 use appa_eventlog::LogStore;
 use appa_package::PackageName;
 use appa_runtime::{
-    api::Runtime,
-    config::{ArchestraEndpoint, Config, HostDefaults, HostedBattery, IncludeResolution},
+    api::{OpenError, Runtime},
+    config::{
+        ArchestraEndpoint, Config, ConfigError, HostDefaults, HostedBattery, IncludeResolution,
+    },
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
     time::Duration,
 };
+
+use crate::{BindingFailure, Fault};
 
 /// The consult budget every external of a hosted policy gets. Fixed for v0: the
 /// helper bridge derives its own deadline from it.
@@ -69,14 +73,111 @@ const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 pub(crate) fn compile(
     content: &str,
     lookup: impl Fn(&str) -> Option<String>,
-) -> Result<Config, String> {
-    Config::hosted(content, defaults(), lookup).map_err(|error| error.to_string())
+) -> Result<Config, Fault> {
+    Config::hosted(content, defaults(), lookup)
+        .map_err(|error| Fault::binding(config_failure(&error), error))
 }
 
 /// Open a runtime over `store` under the Archestra adapter.
-pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, String> {
-    Runtime::open_with_store_as(config, store, None, crate::adapter::adapter())
-        .map_err(|error| error.to_string())
+pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, Fault> {
+    Runtime::open_with_store_as(config, store, None, crate::adapter::adapter()).map_err(open_fault)
+}
+
+/// The runtime's refusal to open, prepare or pin a deployment, by who fixes it.
+pub(crate) fn open_fault(error: OpenError) -> Fault {
+    let kind = match &error {
+        OpenError::Config(error) => config_failure(error),
+        OpenError::Modules(_)
+        | OpenError::Policy(_)
+        | OpenError::UnsupportedPolicy(_)
+        | OpenError::ReservedTool(_)
+        | OpenError::ReservedAnnotator(_)
+        | OpenError::NonCanonicalTool { .. }
+        | OpenError::UnboundExternal { .. }
+        | OpenError::UndeclaredExternal { .. }
+        | OpenError::BoundBuiltinAnnotator(_)
+        | OpenError::JevInputs(_)
+        | OpenError::JevTrustRanks(_) => BindingFailure::PolicyRefused,
+        OpenError::LlmNotConfigured(_)
+        | OpenError::ModelKeyMissing { .. }
+        | OpenError::JevNotConfigured(_)
+        | OpenError::ArchestraNotConfigured(_) => BindingFailure::RuntimeMisconfigured,
+        // The binding's adapter or its own use of the runtime, not the policy.
+        OpenError::UnspelledControlTool | OpenError::KeysDeferred => BindingFailure::InvalidInput,
+        OpenError::Damaged(_)
+        | OpenError::Schema(_)
+        | OpenError::Storage(_)
+        | OpenError::Publish(_) => BindingFailure::Storage,
+        OpenError::PolicyHeadMoved { .. } | OpenError::PolicyRevisionMismatch { .. } => {
+            BindingFailure::PolicyMoved
+        }
+    };
+    Fault::binding(kind, error)
+}
+
+/// Who fixes a hosted document that does not compile: the document's author, the
+/// operator of this deployment, or nobody, when its storage failed.
+fn config_failure(error: &ConfigError) -> BindingFailure {
+    match error {
+        ConfigError::CredentialStore { .. }
+        | ConfigError::Unreadable { .. }
+        | ConfigError::UnreadableBatteryManifest { .. } => BindingFailure::Storage,
+        ConfigError::MissingSecret { .. }
+        | ConfigError::LlmNotConfigured { .. }
+        | ConfigError::InvalidBatteryTarget { .. }
+        | ConfigError::InvalidPrincipalSource { .. }
+        | ConfigError::UnrepresentableHostDefault { .. } => BindingFailure::RuntimeMisconfigured,
+        ConfigError::Unparsable { .. }
+        | ConfigError::UnparsablePolicy { .. }
+        | ConfigError::UnrenderablePolicy { .. }
+        | ConfigError::InvalidPolicyVersion
+        | ConfigError::AbsoluteInclude { .. }
+        | ConfigError::TraversingInclude { .. }
+        | ConfigError::DuplicateInclude { .. }
+        | ConfigError::TargetPolicyIncluded { .. }
+        | ConfigError::UnsupportedBatteryTarget { .. }
+        | ConfigError::UnresolvedInclude { .. }
+        | ConfigError::MixedAliasSpellings
+        | ConfigError::UnsupportedToolAliases
+        | ConfigError::IncludedTopLevel { .. }
+        | ConfigError::IncludedPolicyField { .. }
+        | ConfigError::IncludedConfinesForeignTool { .. }
+        | ConfigError::IncludedExternalsField { .. }
+        | ConfigError::SelectorDeclaration { .. }
+        | ConfigError::IncludedVersion { .. }
+        | ConfigError::DuplicateJevProfile { .. }
+        | ConfigError::MissingJevKey
+        | ConfigError::DuplicateExternal { .. }
+        | ConfigError::InvalidComposedMetadata { .. }
+        | ConfigError::InvalidEndpoint { .. }
+        | ConfigError::CleartextEndpoint { .. }
+        | ConfigError::CredentialsInUrl { .. }
+        | ConfigError::ForeignSecretVariable { .. }
+        | ConfigError::ChildCredentialVariable { .. }
+        | ConfigError::CommandCredentialVariable { .. }
+        | ConfigError::TokenEnvList { .. }
+        | ConfigError::ZeroTimeout
+        | ConfigError::ZeroReviewTimeout
+        | ConfigError::ZeroByteCap
+        | ConfigError::ModelLimitTooSmall { .. }
+        | ConfigError::InvalidLlmProvider { .. }
+        | ConfigError::ImplementationChoice { .. }
+        | ConfigError::BuiltinNotAllowed { .. }
+        | ConfigError::BadReaderMapping { .. }
+        | ConfigError::UnknownLookupTarget { .. }
+        | ConfigError::ChainedLookup { .. }
+        | ConfigError::ReadersWithoutLookup { .. }
+        | ConfigError::InvalidBuiltinName { .. }
+        | ConfigError::InvalidCommand { .. }
+        | ConfigError::HostedKey { .. }
+        | ConfigError::HostedCommand { .. }
+        | ConfigError::RootField { .. }
+        | ConfigError::FileRootField { .. }
+        | ConfigError::CredentialVariable { .. }
+        | ConfigError::CredentialValue { .. }
+        | ConfigError::UneditableDocument { .. }
+        | ConfigError::UngrantedBatteryCredential { .. } => BindingFailure::PolicyRefused,
+    }
 }
 
 /// The environment namespace the host keeps for itself: the bearer its helper
@@ -500,9 +601,56 @@ mod tests {
         strip_default_result_cap(&toml::Table::new(), reloaded).unwrap()
     }
 
+    /// A policy that cannot load names who fixes it: its author, the operator of
+    /// this deployment, or nobody, when the store failed.
+    #[test]
+    fn a_policy_load_failure_names_who_fixes_it() {
+        use crate::{BindingFailure, Failure};
+        use appa_eventlog::DeploymentName;
+        let compiled = |content: &str| {
+            super::compile(content, |_| None)
+                .map(drop)
+                .map_err(|fault| fault.kind)
+        };
+        assert_eq!(
+            compiled("[policy]\nversion = \"two\"\n"),
+            Err(Failure::Binding(BindingFailure::PolicyRefused))
+        );
+        let unset = ConfigError::MissingSecret {
+            section: "annotators",
+            name: "check".into(),
+            var: "APPA_CHECK_TOKEN".into(),
+        };
+        for (error, kind) in [
+            (
+                OpenError::Config(unset),
+                BindingFailure::RuntimeMisconfigured,
+            ),
+            (
+                OpenError::JevNotConfigured("judge".into()),
+                BindingFailure::RuntimeMisconfigured,
+            ),
+            (
+                OpenError::ReservedTool("appa".into()),
+                BindingFailure::PolicyRefused,
+            ),
+            (OpenError::Storage("down".into()), BindingFailure::Storage),
+            (
+                OpenError::PolicyHeadMoved {
+                    deployment: DeploymentName::new("org-a"),
+                    head: None,
+                },
+                BindingFailure::PolicyMoved,
+            ),
+        ] {
+            assert_eq!(open_fault(error).kind, Failure::Binding(kind));
+        }
+    }
+
     /// A compilation no organization's values reach, as a composition's is.
     fn compile(content: &str) -> Result<Config, String> {
         super::compile(content, |var| HostCredentials::default().lookup(var))
+            .map_err(|fault| fault.message)
     }
     const GITHUB_ENTRY: &str = "batteries/github/appa.toml";
     const LINEAR_ENTRY: &str = "batteries/linear@sha256-3f9c/appa.toml";

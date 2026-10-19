@@ -17,6 +17,7 @@ import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
+import { OpenappaRootOnlyError } from "./failure";
 import { toolEntries } from "./policy-text";
 import {
   addressRuntimeChild,
@@ -109,10 +110,14 @@ const native = vi.hoisted(() => ({
     errors: [],
   })),
   validateHostedOpenappaPolicy: vi.fn(async () => []),
-  composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
-    content: input.root,
-    errors: [],
-  })),
+  composeOpenappaPolicy: vi.fn(
+    async (input: {
+      root: string;
+    }): Promise<{ content: string | null; errors: string[] }> => ({
+      content: input.root,
+      errors: [],
+    }),
+  ),
 }));
 vi.mock("@archestra/openappa-rs", () => native);
 vi.mock("@/logging");
@@ -3413,7 +3418,7 @@ describe("a policy saved mid-conversation", () => {
       .mockImplementationOnce(async () => {
         // Saved, and published by another replica, while this call was decided.
         await save({ userId: user.id, tool: "after", revision: 1 });
-        throw new Error(POLICY_MOVED);
+        throw policyMoved();
       })
       .mockResolvedValueOnce(JSON.stringify({ decision: "allow_call" }));
 
@@ -3465,7 +3470,7 @@ describe("a policy saved mid-conversation", () => {
   });
 
   test("a policy that keeps moving is a retryable 503, never feedback for the model", async () => {
-    native.dispatchHook.mockRejectedValue(new Error(POLICY_MOVED));
+    native.dispatchHook.mockRejectedValue(policyMoved());
 
     const failure = await evaluateToolCalls(session, [read], {
       canonicalize: (n) => n,
@@ -3481,8 +3486,65 @@ describe("a policy saved mid-conversation", () => {
   });
 });
 
+describe("a dispatch failure on a policy that never composed", () => {
+  const read = { id: "read", name: "read_file", arguments: {} };
+  const refuse = (code: string) => {
+    const error = Object.assign(new Error("native detail"), { code });
+    native.dispatchHook.mockRejectedValue(error);
+    return error;
+  };
+
+  beforeEach(async ({ makeUser }) => {
+    const user = await makeUser();
+    native.composeOpenappaPolicy.mockImplementation(async () => ({
+      content: null,
+      errors: ["battery acme: refused"],
+    }));
+    await GuardrailsPolicyModel.save({
+      organizationId,
+      updatedBy: user.id,
+      content:
+        '[policy]\nversion = 2\ninclude = ["batteries/acme/appa.toml"]\n',
+      contentHash: "root-only",
+      expectedRevision: 0,
+    });
+  });
+  afterEach(() => {
+    native.composeOpenappaPolicy.mockImplementation(
+      async (input: { root: string }) => ({ content: input.root, errors: [] }),
+    );
+  });
+
+  test("a refused policy is explained by the composition that never opened", async () => {
+    refuse("policy_refused");
+
+    const failure = await evaluateToolCalls(session, [read], {
+      canonicalize: (n) => n,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ statusCode: 500, shouldRetry: false });
+    expect((failure as ApiError).cause).toBeInstanceOf(OpenappaRootOnlyError);
+  });
+
+  test("a storage failure is reported as itself, not as the refused policy", async () => {
+    const storage = refuse("storage");
+
+    const failure = await evaluateToolCalls(session, [read], {
+      canonicalize: (n) => n,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ statusCode: 503, shouldRetry: true });
+    expect((failure as ApiError).cause).toBe(storage);
+  });
+});
+
 const POLICY_MOVED =
   "OpenAPPA published a newer policy revision for this organization; retry the request";
+
+/** The binding's report that the policy moved, as its loader hands it over. */
+function policyMoved(): Error {
+  return Object.assign(new Error(POLICY_MOVED), { code: "policy_moved" });
+}
 
 describe("remedy by offer", () => {
   // An external client on the gateway names no session: Claude Code sends

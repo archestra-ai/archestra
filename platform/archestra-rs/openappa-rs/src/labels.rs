@@ -7,7 +7,6 @@
 //! first row of a root is its baseline (`session_start`, before = after).
 //! Dispatches of one family may overlap, so a change is filed under the
 //! dispatch that observed it first; the label sequence itself stays exact.
-use appa_eventlog::postgres::PostgresError;
 
 /// One label: the trust level and the audience, as the runtime names them.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,7 +65,7 @@ fn insert_if_changed(
     pg: &crate::Sql<'_>,
     observation: Observation,
     label: Label,
-) -> Result<(), PostgresError> {
+) -> Result<(), crate::SqlError> {
     pg.with_client(move |client| {
         let last = client
             .query_opt(

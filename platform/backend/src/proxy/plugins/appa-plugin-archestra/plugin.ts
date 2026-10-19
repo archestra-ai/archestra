@@ -5346,6 +5346,7 @@ async function recordInspectableHitlAnswer(params: {
     session,
     offerIds: [offerId],
     emit: false,
+    carriedReviewText: params.carriedReviewText,
   });
   if (!asked) {
     // The review may have closed while the card was out. Then the answer is

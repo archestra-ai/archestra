@@ -1416,11 +1416,18 @@ function sharedWithCallerCondition(params: {
   // Each test names the policies granting read to the subjects without
   // reference to the row, so a list reads them once (a hashed subplan)
   // instead of probing the object's policy for every row it filters.
+  // A literal organization narrows the set the subquery builds; a column
+  // reference is left to the outer tuple, because repeating it inside would
+  // correlate the subquery and bring the per-row probe back.
+  const organizationFilter =
+    typeof params.organizationId === "string"
+      ? sql` AND shared_policy.organization_id = ${params.organizationId}`
+      : sql``;
   const grantedTo = (subjects: ReadonlyArray<{ type: string; id?: string }>) =>
     sql<boolean>`(${params.organizationId}, ${params.scopeColumn}::text) IN (
       SELECT shared_policy.organization_id, shared_policy.scope
       FROM resource_permission_policies shared_policy
-      WHERE shared_policy.resource = ${params.resource}
+      WHERE shared_policy.resource = ${params.resource}${organizationFilter}
         AND ${readGrantContainment(sql`shared_policy.grants`, subjects)}
     )`;
   const reaches: SQL[] = [];

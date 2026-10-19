@@ -154,10 +154,13 @@ export function useMyAgentRun(taskId: string, enabled = true) {
         "agent-runs",
         taskId,
       ]);
+      // Refresh the sidebar lists when a run's state changes. The first read
+      // of a run is not a change: it used to invalidate the lists too, which
+      // cancelled and restarted their in-flight page loads on every run page.
       if (
         data &&
-        (!previous ||
-          previous.taskId !== data.taskId ||
+        previous &&
+        (previous.taskId !== data.taskId ||
           previous.state !== data.state ||
           previous.endedAt !== data.endedAt)
       ) {
@@ -454,4 +457,7 @@ export function useSetMissingAgentRuntimeCredentials(agentId: string) {
   });
 }
 
-const MY_RUNS_PAGE_SIZE = 100;
+// A sidebar page. The sidebar renders every loaded run and offers "load
+// more", so a short first page keeps the 79 KB-per-hundred payload out of
+// every page's request burst; the palette pages further on demand.
+const MY_RUNS_PAGE_SIZE = 20;

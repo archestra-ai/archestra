@@ -2,7 +2,7 @@
 title: "API Reference"
 description: "Authenticate scripts and CI with an API key, then browse every platform endpoint"
 order: 3
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -39,6 +39,21 @@ Click your name in the sidebar, go to **API Keys**, and click **Create API Key**
 - To export organization-wide costs, the role needs [`llmCost:read`](/docs/reference/permissions#llmCost:read). Add [`member:read`](/docs/reference/permissions#member:read) to break costs down by person.
 - To export every log, the role needs [`log:read`](/docs/reference/permissions#log:read) and [`log:admin`](/docs/reference/permissions#log:admin).
 - To rotate a key, create a new one, move your clients to it, and delete the old one. Disabling or deleting the account stops all its keys.
+
+## Leave Out Agent Tools
+
+Add `includeTools=false` to read agents without their tools. The tools are most of the response, because each one carries its name and description. These endpoints include them by default:
+
+- `GET /api/agents`
+- `GET /api/agent-catalog`
+- `GET /api/mcp-gateways/default`
+
+```bash
+curl -H "Authorization: arch_..." "https://archestra.example.com/api/agents?includeTools=false"
+```
+
+- `toolsCount` and `subagentsCount` are always present.
+- With `includeTools=false`, `tools` is an empty array. It means "not requested", not "no tools assigned".
 
 ## Endpoints
 

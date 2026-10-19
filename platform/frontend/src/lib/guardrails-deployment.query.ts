@@ -125,3 +125,28 @@ export function useUpdateBreakTheGlassEnabled() {
     },
   });
 }
+
+/** The model and key OpenAPPA's model annotators answer with; both null is the organization default. */
+export function useUpdateAnnotatorModel() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (selection: {
+      annotatorModelId: string | null;
+      annotatorLlmApiKeyId: string | null;
+    }) => {
+      const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
+        body: selection,
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      client.setQueryData(queryKey, data);
+      client.invalidateQueries({ queryKey });
+      toast.success("Annotator model saved");
+    },
+  });
+}

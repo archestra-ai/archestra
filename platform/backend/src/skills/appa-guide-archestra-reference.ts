@@ -29,21 +29,23 @@ A rule can use the name a client sends or the canonical ID \`<family>/<namespace
 
 ## Default rules
 
-The starting policy routes unlisted tools to a catch-all annotator that asks the organization's default model, which may rank the call \`suspicious\` or ask for \`human-approval\`:
+The starting policy routes unlisted tools to the \`archestra.llm-annotator\` catch-all. It asks the OpenAPPA annotator model, which is the organization's default model unless Guardrails settings pick another. The model may rank the call \`suspicious\` and limit its audience to \`self\` or \`internal\`:
 
 \`\`\`toml
 [[policy.annotator]]
-name = "archestra.undeclared-tool"
+name = "archestra.llm-annotator"
 builtin = "archestra"
 ranks = ["suspicious", "trusted"]
-marks = ["human-approval"]
+audiences = ["self", "internal"]
+marks = []
+effects = []
 
 [[policy.tool]]
 name = "*"
-annotator = "archestra.undeclared-tool"
+annotator = "archestra.llm-annotator"
 \`\`\`
 
-Without a configured default model the catch-all cannot answer, and an unlisted call is refused. To let unlisted tools run without restrictions, route \`*\` to the declared \`noop\` annotator instead, and keep its \`[externals.annotators.noop]\` URL. The starting policy also includes the \`claude-code\` battery for client built-ins, and re-declares its two shell annotators with \`builtin = "archestra"\` so the default model answers them instead of a local \`claude\` process. It declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the organization's default model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
+Without a configured model the catch-all cannot answer, and an unlisted call is refused. To let unlisted tools run without restrictions, route \`*\` to the declared \`noop\` annotator instead, and keep its \`[externals.annotators.noop]\` URL. The starting policy also includes the \`claude-code\` battery for client built-ins, and re-declares its two shell annotators with \`builtin = "archestra"\` so the annotator model answers them instead of a local \`claude\` process. It declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the annotator model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
 
 A rule declares either \`annotator\` or static fields such as \`requires\`, never both. To block \`archestra__run_command\` outright, replace its annotator rule with \`delta = {}\` and \`requires = { attention = ["blocked"] }\`; to block only some commands, put a selector rule with \`requires\` before the annotated rule.
 

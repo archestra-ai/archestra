@@ -159,6 +159,9 @@ describe("initialPolicy", () => {
       expect.objectContaining({
         name: UNDECLARED_TOOL_ANNOTATOR,
         builtin: "archestra",
+        // The model may narrow who reads the result, never ask a person.
+        audiences: ["self", "internal"],
+        marks: [],
       }),
     );
   });

@@ -166,8 +166,8 @@ function rebindingWarning(rebinding: Rebinding): string {
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
 
-/** The model annotator the default policy routes every call no rule names to. */
-export const UNDECLARED_TOOL_ANNOTATOR = "archestra.undeclared-tool";
+/** The LLM annotator the default policy routes every call no rule names to. */
+export const UNDECLARED_TOOL_ANNOTATOR = "archestra.llm-annotator";
 
 export const guardrailsPolicyService = {
   async get(organizationId: string): Promise<GuardrailsPolicy> {
@@ -423,8 +423,8 @@ trust = { from = "suspicious", to = "trusted" }
 [[policy.annotator]]
 name = "noop"
 
-# Labels each sandbox command (run_command) with the organization's
-# default model, through the LLM proxy.
+# Labels each sandbox command (run_command) with the annotator model,
+# through the LLM proxy.
 [[policy.annotator]]
 name = "archestra.run-command"
 builtin = "archestra"
@@ -438,7 +438,7 @@ name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
 annotator = "archestra.run-command"
 
 # The client battery's shell annotators, with the battery's own mandate, asked
-# of the organization's default model instead of a local claude process.
+# of the annotator model instead of a local claude process.
 [[policy.annotator]]
 name = "${CLAUDE_CODE_BATTERY}.bash-repository-requirements"
 builtin = "archestra"
@@ -448,13 +448,16 @@ hint = "\`context.github\` is the deployment's finding about the repository and 
 name = "${CLAUDE_CODE_BATTERY}.bash-requirements"
 builtin = "archestra"
 
-# Labels each call no rule names with the organization's default model.
+# Labels each call no rule names with the OpenAPPA annotator model (the
+# organization's default model unless Guardrails settings pick another).
 [[policy.annotator]]
 name = "${UNDECLARED_TOOL_ANNOTATOR}"
 builtin = "archestra"
-hint = "No rule names this tool. A client built-in runs on the user's machine with the user's access; an MCP tool here has no battery describing it."
 ranks = ["suspicious", "trusted"]
-marks = ["human-approval"]
+audiences = ["self", "internal"]
+marks = []
+effects = []
+hint = "Routine requester-local file/shell operations, diagnostics, edits, builds, tests and client setup need no audience or trust requirement when they do not publish data or perform destructive actions. A network fetch or dependency install alone is not disclosure of trajectory data. Require public audience for actual external sends, internal for organization-only sends. Keep secrets self-only; third-party content stays suspicious. Use supplied context; do not guess destination visibility."
 
 # Questions carry no data: they keep an empty label even if the catch-all
 # below is made stricter. search_tools gets the same from the archestra battery.

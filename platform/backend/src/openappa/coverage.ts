@@ -920,5 +920,7 @@ const CANONICAL_RULE_NAME = /^mcp\/([^/]+)\/(.+)$/;
 /** The catch-all annotators a default policy routes `*` to. */
 const DEFAULT_CATCH_ALL_ANNOTATORS = new Set([
   "noop",
+  // The catch-all's name in starting policies saved before the rename.
+  "archestra.undeclared-tool",
   UNDECLARED_TOOL_ANNOTATOR,
 ]);

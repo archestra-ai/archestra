@@ -17,6 +17,7 @@ import {
 } from "@/clients/llm-client";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import MemberModel from "@/models/member";
 import OpenAppaSessionModel from "@/models/openappa-session";
@@ -70,8 +71,8 @@ type ArchestraAnnotationOutcome =
   | { kind: "failed"; reason: string };
 
 /**
- * Answers the runtime's `builtin = "archestra"` annotator with the
- * organization's default model. The runtime owns the prompt and checks the
+ * Answers the runtime's `builtin = "archestra"` annotator with the model
+ * Guardrails settings pick for annotators, else the organization's default. The runtime owns the prompt and checks the
  * answer against the annotator's mandate; this side only picks the model and
  * returns its structured answer. The call goes through the LLM proxy as the
  * built-in OpenAPPA configuration agent, so limits, logs and cost apply.
@@ -106,10 +107,12 @@ class OpenAppaArchestraAnnotator {
         kind: "unconfigured",
         reason: "The OpenAPPA configuration agent is not provisioned.",
       };
-    // No agent: the annotator always runs on the organization default, never
-    // on a model someone pinned on the configuration agent.
+    // The model Guardrails settings pick for annotators, else the organization
+    // default; never a model someone pinned on the configuration agent.
+    const { annotatorModelId, annotatorLlmApiKeyId } =
+      await GuardrailsDeploymentModel.get();
     const selection = await resolveAgentLlmOrDefault({
-      agent: null,
+      agent: { modelId: annotatorModelId, llmApiKeyId: annotatorLlmApiKeyId },
       organizationId: organization.id,
     });
     if (isApiKeyRequired(selection.provider, selection.apiKey))

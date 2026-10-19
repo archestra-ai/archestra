@@ -23,7 +23,7 @@ The **Tool coverage** chart on **Overview** shows how many of your tools a rule 
 | **Battery rule** | A rule from a [battery](/docs/agents/guardrails/batteries). |
 | **Catch-all rule** | A wildcard rule that classifies the call. |
 | **Not enforced** | A battery covers the tool but cannot run yet. |
-| **No rule** | Nothing restricts the tool. The starting policy's catch-all counts here, because it adds no restrictions. |
+| **No rule** | No rule was written for the tool. The starting policy's catch-all counts here: the annotator model judges each call. |
 
 While a revision is refused, the chart counts the earlier composition the runtime still enforces, and says so under the chart.
 

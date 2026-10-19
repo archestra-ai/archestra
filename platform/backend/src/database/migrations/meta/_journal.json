@@ -4033,6 +4033,13 @@
       "when": 1792417477813,
       "tag": "0575_apikey_key_index",
       "breakpoints": true
+    },
+    {
+      "idx": 576,
+      "version": "7",
+      "when": 1792419527326,
+      "tag": "0576_signup_status_indexes",
+      "breakpoints": true
     }
   ]
 }

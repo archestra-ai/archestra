@@ -24,9 +24,15 @@ import { vi } from "vitest";
  * specifier (vitest-dev/vitest#10145).
  */
 export function authModuleMock() {
+  const getAgentTypePermissionChecker = vi.fn();
   return {
     // ./agent-type-permissions
-    getAgentTypePermissionChecker: vi.fn(),
+    getAgentTypePermissionChecker,
+    // A full checker answers every list question, so lists follow whatever
+    // checker a test configures unless the test overrides this one.
+    getAgentTypeListPermissionChecker: vi.fn((...args: unknown[]) =>
+      getAgentTypePermissionChecker(...args),
+    ),
     hasAnyAgentTypeAdminPermission: vi.fn(),
     hasAnyAgentTypeReadPermission: vi.fn(),
     isAgentTypeAdmin: vi.fn(),

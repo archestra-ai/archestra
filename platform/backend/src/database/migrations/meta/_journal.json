@@ -4054,6 +4054,13 @@
       "when": 1792438322806,
       "tag": "0578_interaction_session_heads",
       "breakpoints": true
+    },
+    {
+      "idx": 579,
+      "version": "7",
+      "when": 1792447071780,
+      "tag": "0579_connect_page_user_indexes",
+      "breakpoints": true
     }
   ]
 }

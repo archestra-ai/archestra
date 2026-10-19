@@ -3763,7 +3763,7 @@ export function ChatPageContent({
                         >
                           <div className="w-full">
                             {newChatAgentId && !isInitialRuntimeMode && (
-                              <div className="mb-3">
+                              <div className="mb-3 empty:hidden">
                                 <AgentConnectionNotice
                                   agentId={newChatAgentId}
                                 />

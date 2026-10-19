@@ -45,6 +45,7 @@ export function PageLayout({
   title,
   documentTitle,
   icon,
+  iconVariant = "tile",
   backLink,
   description,
   status,
@@ -95,12 +96,14 @@ export function PageLayout({
   documentTitle?: string;
   /**
    * The record's own mark (an agent's icon, an MCP server's logo), for a
-   * detail page. Pass the bare glyph at 24px; the header draws the tile around
-   * it. It sits to the left of the title and description as one column, so the
+   * detail page. By default, pass the bare glyph at 24px; the header draws its
+   * tile. It sits to the left of the title and description as one column, so the
    * description lines up under the name rather than under the icon — which is
    * where it lands when the icon is composed into `title` instead.
    */
   icon?: React.ReactNode;
+  /** Render a complete avatar without the default glyph tile or clipping its badges. */
+  iconVariant?: "tile" | "custom";
   /**
    * "Back to <parent>" control for a detail or wizard page — a `PageBackLink`.
    * It sits in the title row, before the title, so the way back reads as part
@@ -254,27 +257,36 @@ export function PageLayout({
                 // the record's own mark: "← [icon] Title".
                 <div className="col-start-1 row-start-1 flex items-center gap-1 self-center">
                   {backLink}
-                  <div
-                    aria-hidden
-                    data-page-icon
-                    className={cn(
-                      "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40",
-                      // The tile owns the glyph size so no page can drift.
-                      // Line icons keep a 2px inner margin, so a 20px raster
-                      // logo reads the same size as a 24px line icon.
-                      "*:size-6! [&>img]:size-5!",
-                      // From `sm` up the description stacks beside the icon,
-                      // so the tile grows to the height of the two lines it
-                      // fronts.
-                      description && "sm:size-12",
-                      // On a phone the arrow and the tile together would
-                      // squeeze the title to a few letters; the tile is only
-                      // decoration, so the title keeps that room instead.
-                      backLink && "hidden sm:flex",
-                    )}
-                  >
-                    {icon}
-                  </div>
+                  {iconVariant === "custom" ? (
+                    <div
+                      data-page-icon
+                      className={cn("shrink-0", backLink && "hidden sm:block")}
+                    >
+                      {icon}
+                    </div>
+                  ) : (
+                    <div
+                      aria-hidden
+                      data-page-icon
+                      className={cn(
+                        "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40",
+                        // The tile owns the glyph size so no page can drift.
+                        // Line icons keep a 2px inner margin, so a 20px raster
+                        // logo reads the same size as a 24px line icon.
+                        "*:size-6! [&>img]:size-5!",
+                        // From `sm` up the description stacks beside the icon,
+                        // so the tile grows to the height of the two lines it
+                        // fronts.
+                        description && "sm:size-12",
+                        // On a phone the arrow and the tile together would
+                        // squeeze the title to a few letters; the tile is only
+                        // decoration, so the title keeps that room instead.
+                        backLink && "hidden sm:flex",
+                      )}
+                    >
+                      {icon}
+                    </div>
+                  )}
                 </div>
               )}
               <div

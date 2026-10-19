@@ -103,6 +103,17 @@ class GeminiOpenaiResponseAdapter
     return geminiResponseToOpenai(inner, this.ctx) as unknown as GeminiResponse;
   }
 
+  withReplacedText(text: string): GeminiResponse {
+    // Replaced in the inner wire shape (which is what gets logged), then
+    // translated for the client as getOriginalResponse does.
+    const inner = this.inner.withReplacedText?.(text);
+    if (!inner) {
+      throw new Error("Wrapped response adapter cannot replace response text");
+    }
+    this.rewrittenInner = inner;
+    return geminiResponseToOpenai(inner, this.ctx) as unknown as GeminiResponse;
+  }
+
   toRefusalResponse(
     refusalMessage: string,
     contentMessage: string,

@@ -59,6 +59,39 @@ test("a background task launch is not a child completion", () => {
   ).toBe(true);
 });
 
+test("reads a background task launch inside a structured result as a launch", () => {
+  const adapter = new AppaKiloAdapter();
+  const launch =
+    '<task id="ses_child" state="running">\n<summary>Background task started</summary>\n</task>';
+  const completed =
+    '<task id="ses_child" state="completed">\n<task_result>done</task_result>\n</task>';
+  const result = (content: unknown) => ({
+    id: "spawn-call",
+    name: "task",
+    isError: false,
+    content,
+  });
+
+  // Gemini carries a tool result as the object the Model Router wraps it in.
+  expect(adapter.isChildCompletionResult(result({ content: launch }))).toBe(
+    false,
+  );
+  expect(
+    adapter.isChildCompletionResult(result([{ type: "text", text: launch }])),
+  ).toBe(false);
+  expect(adapter.isChildCompletionResult(result([{ text: launch }]))).toBe(
+    false,
+  );
+  expect(adapter.isChildCompletionResult(result({ content: completed }))).toBe(
+    true,
+  );
+  expect(
+    adapter.isChildCompletionResult(
+      result([{ type: "text", text: completed }]),
+    ),
+  ).toBe(true);
+});
+
 describe("Kilo Code adapter", () => {
   const kilo = new AppaKiloAdapter();
   const kiloUserAgent =

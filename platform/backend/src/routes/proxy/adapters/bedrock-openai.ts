@@ -119,6 +119,20 @@ class BedrockOpenaiResponseAdapter
     ) as unknown as BedrockResponse;
   }
 
+  withReplacedText(text: string): BedrockResponse {
+    // Replaced in the inner wire shape (which is what gets logged), then
+    // translated for the client as getOriginalResponse does.
+    const inner = this.inner.withReplacedText?.(text);
+    if (!inner) {
+      throw new Error("Wrapped response adapter cannot replace response text");
+    }
+    this.rewrittenInner = inner;
+    return converseResponseToOpenai(
+      inner,
+      this.ctx,
+    ) as unknown as BedrockResponse;
+  }
+
   toRefusalResponse(
     refusalMessage: string,
     contentMessage: string,

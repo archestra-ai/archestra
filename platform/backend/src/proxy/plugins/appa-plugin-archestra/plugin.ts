@@ -411,7 +411,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
                 }),
             })
           : undefined;
-      if (!recovery || !family) throw error;
+      // Off an OpenAPPA wire, the reporting turn cannot run, so the refusal
+      // does not offer it.
+      if (!family) throw withoutReportingRecovery(error);
+      if (!recovery) throw error;
       binding.reportingRecovery = true;
       if (trustedContext) trustedContext.childReturnRefusal = undefined;
       Object.assign(binding.request, {
@@ -2872,6 +2875,27 @@ async function approveChildReturnCarriers(params: {
  */
 class ChildReturnRefusal extends ApiError {}
 
+/**
+ * The refusal without its offer to report the failure, for a request whose
+ * reporting turn cannot run.
+ */
+function withoutReportingRecovery(error: unknown): unknown {
+  if (
+    !(error instanceof ChildReturnRefusal) ||
+    !error.message.includes(CHILD_RETURN_RECOVERY)
+  )
+    return error;
+  const refusal = new ChildReturnRefusal(
+    error.statusCode,
+    error.message.replace(
+      CHILD_RETURN_RECOVERY,
+      CHILD_RETURN_CONTINUE_RECOVERY,
+    ),
+  );
+  refusal.shouldRetry = error.shouldRetry;
+  return refusal;
+}
+
 function isReportingReviewTool(tool: string | undefined): boolean {
   // The native intrinsic is unprefixed; gateway tools have branded names.
   return (
@@ -2909,8 +2933,9 @@ function childReturnRefusal(params: {
   return error;
 }
 
-const CHILD_RETURN_RECOVERY =
-  "You can ask your agent to report this failure, or to report it and turn OpenAPPA off for this session. To continue other work, start a new session, or rewind the conversation to a message you sent before this subagent started.";
+const CHILD_RETURN_CONTINUE_RECOVERY =
+  "To continue other work, start a new session, or rewind the conversation to a message you sent before this subagent started.";
+const CHILD_RETURN_RECOVERY = `You can ask your agent to report this failure, or to report it and turn OpenAPPA off for this session. ${CHILD_RETURN_CONTINUE_RECOVERY}`;
 const FORKED_CHILD_RETURN_RECOVERY =
   "To keep this context, resume the original session. Otherwise, start a new session, or rewind the conversation to a message you sent before this subagent started.";
 const UNRECORDED_CHILD_RETURN =

@@ -376,6 +376,11 @@ class CohereResponseAdapter implements LLMResponseAdapter<CohereResponse> {
       finish_reason: "COMPLETE",
     };
   }
+
+  /** The response as one text answer, as a governed child's turn ends. */
+  withReplacedText(text: string): CohereResponse {
+    return this.toRefusalResponse("", text);
+  }
 }
 
 // =============================================================================

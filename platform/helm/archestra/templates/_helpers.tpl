@@ -260,13 +260,15 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     secretKeyRef:
       name: {{ include "archestra-platform.authSecretName" . }}
-      key: {{ include "archestra-platform.authSecretKey" . }}
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretKey" "default" "auth-secret") }}
 {{- end }}
 
 {{/*
 Inject the session-signing and secret-encryption secrets from the auth Secret
-(Helm-managed or authSecret.existingSecretName) under the fixed session-secret
-and secrets-encryption-secret keys — an external Secret must provide both keys.
+(Helm-managed or authSecret.existingSecretName) — an external Secret must
+provide both keys. The keys default to session-secret and
+secrets-encryption-secret; an external Secret can name them through
+authSecret.existingSessionSecretKey and existingSecretsEncryptionSecretKey.
 An explicit archestra.env value overrides the injection.
 */}}
 {{- $authSecretName := include "archestra-platform.authSecretName" . }}
@@ -275,7 +277,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: session-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSessionSecretKey" "default" "session-secret") }}
       # optional so pods still start when the key is absent (the pre-upgrade
       # migration Job runs before the Secret is updated; config.ts then falls
       # back to ARCHESTRA_AUTH_SECRET).
@@ -286,7 +288,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: secrets-encryption-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretsEncryptionSecretKey" "default" "secrets-encryption-secret") }}
       optional: true
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET") }}
@@ -294,7 +296,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: offer-signing-secret
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingOfferSigningSecretKey" "default" "offer-signing-secret") }}
       # optional so pods still start when the key is absent (pre-upgrade
       # migration Job ordering, or an external Secret without this key;
       # config.ts then falls back to a key derived from the auth secret).
@@ -535,13 +537,19 @@ Hook-only auth secret name for the database migration Job.
 {{- end }}
 
 {{/*
-Auth secret key for the Archestra Platform
+Key within the auth Secret for one of its values. Takes a dict with the root
+context ("root"), the authSecret value naming the key ("value"), and the key
+the Helm-managed Secret uses ("default"). A custom key only makes sense with
+authSecret.existingSecretName, because the Helm-managed Secret always writes
+the default keys.
 */}}
-{{- define "archestra-platform.authSecretKey" -}}
-{{- if and (not .Values.archestra.authSecret.existingSecretName) (ne .Values.archestra.authSecret.existingSecretKey "auth-secret") -}}
-{{- fail "archestra.authSecret.existingSecretKey requires archestra.authSecret.existingSecretName to also be set." -}}
+{{- define "archestra-platform.authSecretKeyFor" -}}
+{{- $authSecret := .root.Values.archestra.authSecret -}}
+{{- $key := default .default (get $authSecret .value) -}}
+{{- if and (not $authSecret.existingSecretName) (ne $key .default) -}}
+{{- fail (printf "archestra.authSecret.%s requires archestra.authSecret.existingSecretName to also be set." .value) -}}
 {{- end -}}
-{{- default "auth-secret" .Values.archestra.authSecret.existingSecretKey -}}
+{{- $key -}}
 {{- end }}
 
 {{/*

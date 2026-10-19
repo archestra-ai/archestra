@@ -314,7 +314,9 @@ export default function SessionDetailPage({
         documentTitle={sessionTitle || "Session"}
         stackHeaderOnMobile
         backLink={
-          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+          <span className="flex shrink-0 lg:translate-y-3">
+            <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+          </span>
         }
         description={<SessionIdentityLine session={sessionData} />}
       >

@@ -53,6 +53,8 @@ BEGIN
      AND head.session_key = COALESCE(removed.session_id, removed.id::text)
      AND head.last_interaction_id = removed.id
   ), survivor AS (
+    -- A sessionless row is its own session, so it has no survivor by design:
+    -- the lateral yields nothing for it and its head is dropped below.
     SELECT gone.sessionless, gone.session_key, latest.id, latest.created_at, latest.user_id
     FROM gone
     LEFT JOIN LATERAL (

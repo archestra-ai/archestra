@@ -178,8 +178,6 @@ test("a cold new-chat load takes the shell's reads from the bootstrap and repeat
       ),
     ),
   );
-  // Without the refresh snapshot the next load is a cold one.
-  await page.evaluate(() => sessionStorage.clear());
 
   const key = makeLlmProviderApiKey({ provider: "openai" });
   const agent = makeAgent({ llmApiKeyId: null });
@@ -222,6 +220,9 @@ test("a cold new-chat load takes the shell's reads from the bootstrap and repeat
     { method: "get", url: "/api/llm-models/available", body: [model] },
   ]);
   await page.addInitScript((agentId) => {
+    // Without the refresh snapshot the load is a cold one. Cleared as the
+    // next document starts: the first page may still save one as it unloads.
+    sessionStorage.clear();
     localStorage.setItem("selected-chat-agent", agentId);
   }, agent.id);
   const requests = countRequests(page);

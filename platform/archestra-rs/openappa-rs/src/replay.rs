@@ -12,7 +12,7 @@
 use appa_runtime::{
     api::{ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Runtime},
     config::{Config, HostDefaults, Implementation},
-    replay::{self, Expect, Got, StepOutcome, Trace, TraceReport, Verdict},
+    replay::{self, Got, StepOutcome, Trace, TraceReport, Verdict},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -313,29 +313,21 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
         .steps
         .into_iter()
         .map(|step| {
-            let expected = step.expect.to_string();
-            let released = matches!(
-                (&step.outcome, &step.expect),
-                (
-                    StepOutcome::Passed {
-                        taken: None | Some(OfferKind::Accept)
-                    },
-                    Expect::Allow
-                ) | (
-                    StepOutcome::Mismatch {
-                        got: Got::Allowed,
-                        ..
-                    },
-                    _
-                )
-            );
+            let expected = step.check.to_string();
+            let released = match &step.outcome {
+                StepOutcome::Passed { got, taken } | StepOutcome::Observed { got, taken } => {
+                    *got == Got::Allowed || matches!(taken, Some(OfferKind::Accept))
+                }
+                StepOutcome::Mismatch { got, .. } => *got == Got::Allowed,
+                StepOutcome::CannotRun(_) => false,
+            };
             let (status, actual, error) = match step.outcome {
-                StepOutcome::Passed { taken } => {
+                StepOutcome::Passed { got, taken } | StepOutcome::Observed { got, taken } => {
                     let actual = match taken {
                         Some(kind) => {
                             Got::Blocked(std::collections::BTreeSet::from([kind])).to_string()
                         }
-                        None => expected.clone(),
+                        None => got.to_string(),
                     };
                     (Status::Passed, Some(actual), None)
                 }

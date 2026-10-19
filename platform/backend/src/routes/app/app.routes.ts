@@ -31,6 +31,7 @@ import {
   AppToolModel,
   AppVersionModel,
   CreatedByModel,
+  InternalMcpCatalogModel,
   lookupCreator,
   McpCatalogLabelModel,
   McpServerModel,
@@ -90,6 +91,12 @@ import {
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { externalAppLabel } from "@/utils/external-app-label";
+import {
+  appIconUrl,
+  externalAppIconUrl,
+  replyWithIconImage,
+  splitListIcon,
+} from "@/utils/servable-icon";
 import {
   BulkDeleteBodySchema,
   BulkOutcomeSchema,
@@ -381,9 +388,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           cspOrigin: "platform-pinned" as const,
           pinnedAt: ownedPins.get(app.id) ?? null,
           labels: app.labels,
-          // The app's own icon (emoji or data URL), so a card can show what the
-          // app is instead of the same generic glyph on every row.
-          icon: app.icon,
+          // The app's own icon, so a card can show what the app is instead of
+          // the same generic glyph on every row.
+          ...splitListIcon(app.icon, (version) => appIconUrl(app.id, version)),
         }))
         .filter((item) => {
           if (query.scope !== undefined && item.scope !== query.scope)
@@ -423,9 +430,11 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
           toolName: catalogApp.toolName,
-          // The server's registry icon (emoji or data URL) so the card can
-          // show which server the app comes from.
-          icon: catalogApp.serverIcon,
+          // The server's registry icon so the card can show which server the
+          // app comes from.
+          ...splitListIcon(catalogApp.serverIcon, (version) =>
+            externalAppIconUrl(catalogApp.catalogId, version),
+          ),
           requiresInput: catalogApp.requiresInput,
           executionModel: "server-scoped" as const,
           cspOrigin: "author-declared" as const,
@@ -495,6 +504,65 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Not found");
       }
       return reply.send(resolved);
+    },
+  );
+
+  fastify.get(
+    "/api/apps/external/:catalogId/icon",
+    {
+      schema: {
+        operationId: RouteId.GetExternalAppIcon,
+        description:
+          "The image icon of an external app's backing server, for the apps list, which links image icons instead of carrying them inline.",
+        tags: ["Apps"],
+        params: z.object({ catalogId: UuidIdSchema }),
+        querystring: z.object({
+          v: z.string().optional().describe("Content version; any value."),
+        }),
+      },
+    },
+    async (request, reply) => {
+      // The same gate as resolving the app itself: a catalog the caller can
+      // reach that provides a UI.
+      const resolved = await McpServerModel.findCatalogAppForCaller({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId: request.params.catalogId,
+      });
+      if (!resolved) {
+        throw new ApiError(404, "Icon not found");
+      }
+      return replyWithIconImage({
+        request,
+        reply,
+        icon: await InternalMcpCatalogModel.findIconById(
+          request.params.catalogId,
+        ),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/apps/:appId/icon",
+    {
+      schema: {
+        operationId: RouteId.GetAppIcon,
+        description:
+          "The image icon of an app the caller may view, for the apps list, which links image icons instead of carrying them inline.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        querystring: z.object({
+          v: z.string().optional().describe("Content version; any value."),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const app = await loadViewableApp({
+        appId: request.params.appId,
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      return replyWithIconImage({ request, reply, icon: app.icon });
     },
   );
 

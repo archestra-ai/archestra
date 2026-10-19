@@ -168,24 +168,7 @@ describe("managed catalog plugin", () => {
     const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-v2-"));
     roots.push(root);
     const revision = path.join(root, "revision");
-    await mkdir(path.join(revision, "node_modules", "@opencode", "plugin"), {
-      recursive: true,
-    });
-    await writeFile(
-      path.join(
-        revision,
-        "node_modules",
-        "@opencode",
-        "plugin",
-        "package.json",
-      ),
-      JSON.stringify({ type: "module" }),
-    );
-    await writeFile(
-      path.join(revision, "node_modules", "@opencode", "plugin", "index.js"),
-      `export const Provider = { ID: { make: (id) => id }, Info: { empty: (id) => ({ id, activation: "auto" }) } };
-export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, limit: { context: 1, output: 1 } }) } };`,
-    );
+    await writeFakeOpenCodePluginSdk(revision);
     const keyPath = path.join(root, "managed.key");
     await writeFile(keyPath, "managed-secret\n", { mode: 0o600 });
     await writeFile(
@@ -558,12 +541,13 @@ const kimiLabels = {
   "kimi-code-plan-cn": "My Kimi plan via Moonshot (Kimi)",
 };
 
+/** The two `@opencode/plugin` SDK constructors the V2 plugin calls. */
 async function writeFakeOpenCodePluginSdk(revision: string) {
   const sdk = path.join(revision, "node_modules", "@opencode", "plugin");
   await mkdir(sdk, { recursive: true });
   await writeFile(
     path.join(sdk, "package.json"),
-    JSON.stringify({ type: "module" }),
+    JSON.stringify({ type: "module", exports: "./index.js" }),
   );
   await writeFile(
     path.join(sdk, "index.js"),
@@ -671,18 +655,7 @@ async function prepareAlias(nativeRouteAllowed: boolean): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-alias-"));
   roots.push(root);
   const revision = path.join(root, "revision");
-  await mkdir(path.join(revision, "node_modules", "@opencode", "plugin"), {
-    recursive: true,
-  });
-  await writeFile(
-    path.join(revision, "node_modules", "@opencode", "plugin", "package.json"),
-    JSON.stringify({ type: "module", exports: "./index.js" }),
-  );
-  await writeFile(
-    path.join(revision, "node_modules", "@opencode", "plugin", "index.js"),
-    `export const Provider = { ID: { make: (id) => id }, Info: { empty: (id) => ({ id, activation: "auto" }) } };
-export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, limit: { context: 1, output: 1 } }) } };`,
-  );
+  await writeFakeOpenCodePluginSdk(revision);
   const keyPath = path.join(root, "managed.key");
   await writeFile(keyPath, "managed-secret\n");
   await writeFile(

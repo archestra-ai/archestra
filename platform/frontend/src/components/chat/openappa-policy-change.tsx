@@ -82,7 +82,7 @@ export function OpenAppaPolicyChange({
       {change.errors?.map((error) => (
         <InlineNotice key={error} variant="error">
           <TriangleAlert />
-          <span className="font-medium">Validation error</span>
+          <span className="font-medium">Policy error</span>
           <InlineNoticeText>{error}</InlineNoticeText>
         </InlineNotice>
       ))}

@@ -1456,7 +1456,7 @@ describe("AgentForm delegation state", () => {
       data: [targetAgent, newAgent],
     });
     render(<AgentForm agentType="agent" agent={baseAgent} />);
-    await user.click(subagentModeTab("Manual"));
+    await user.click(subagentMode("Manual"));
     expect(
       screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
     ).toBeInTheDocument();
@@ -1472,7 +1472,9 @@ describe("AgentForm delegation state", () => {
     await user.click(option);
     await user.keyboard("{Escape}");
 
-    expect(screen.getByText("2 subagents assigned.")).toBeInTheDocument();
+    expect(
+      within(subagentAccess()).getByText("2 assigned"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
     ).toBeInTheDocument();
@@ -1485,8 +1487,8 @@ describe("AgentForm delegation state", () => {
       data: [targetAgent, newAgent],
       isFetching: false,
     });
-    await user.click(subagentModeTab("All"));
-    await user.click(subagentModeTab("Manual"));
+    await user.click(subagentMode("All agents"));
+    await user.click(subagentMode("Manual"));
     expect(
       screen.queryByRole("status", { name: "Loading subagent" }),
     ).not.toBeInTheDocument();

@@ -597,6 +597,10 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# MCP deployment diagnostics read namespace events to explain failing pods.
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
 # Agent image prefetch reads the default ServiceAccount's image pull secrets.
 - apiGroups: [""]
   resources: ["serviceaccounts"]

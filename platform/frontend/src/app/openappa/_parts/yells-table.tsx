@@ -6,17 +6,20 @@ import {
   AppWindow,
   Bot,
   Check,
-  CircleHelp,
   FileArchive,
   KeyRound,
+  Link2,
   Megaphone,
   MessageCircle,
   MessagesSquare,
   RotateCcw,
+  ShieldOff,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
+import { toast } from "sonner";
 import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
@@ -24,6 +27,7 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -37,6 +41,7 @@ import {
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
@@ -47,11 +52,7 @@ import {
   useOpenAppaYells,
   useResolveOpenAppaYell,
 } from "@/lib/openappa-yells.query";
-import {
-  formatCompactRelativeTime,
-  formatDate,
-  formatRelativeTimeFromNow,
-} from "@/lib/utils/date-time";
+import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { useYellInvestigation } from "./use-yell-investigation";
 
@@ -62,6 +63,7 @@ export function YellsTable() {
     searchParams.get("status") === "resolved" ? "resolved" : "unresolved";
   const pagination = useCursorPagination();
   const isMobile = useIsMobile();
+  const router = useRouter();
   const { data: canRead, isPending: permissionsLoading } = useHasPermissions({
     log: ["read"],
   });
@@ -86,7 +88,8 @@ export function YellsTable() {
   const actionsColumn: ColumnDef<OpenAppaYell> = {
     id: "actions",
     header: "Actions",
-    size: 96,
+    // Three actions need their own width; the caller column gives up space.
+    size: 128,
     cell: ({ row }) => (
       <YellRowActions
         yell={row.original}
@@ -110,30 +113,29 @@ export function YellsTable() {
           cell: ({ row }) => {
             const yell = row.original;
             return (
-              <SuperyellEdge yell={yell} className="min-w-0 space-y-1">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Faded yell={yell} className="flex shrink-0">
-                    <KindDot yell={yell} />
-                  </Faded>
-                  <MessageLine yell={yell} />
-                </div>
-                <div className="flex min-w-0 items-center gap-1.5 pl-4 text-xs text-muted-foreground">
+              <div className="min-w-0 space-y-1">
+                <MessageLine yell={yell} />
+                <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                   <Faded
                     yell={yell}
                     className="flex min-w-0 items-center gap-1.5"
                   >
                     <time
                       dateTime={yell.createdAt}
-                      className="shrink-0 font-mono tabular-nums"
+                      className="shrink-0 tabular-nums"
                     >
-                      {formatCompactRelativeTime(yell.createdAt)}
+                      {formatDate({
+                        date: yell.createdAt,
+                        dateFormat: "MMM d · HH:mm",
+                      })}
                     </time>
                     <span aria-hidden="true">·</span>
                     <YellCaller yell={yell} />
                   </Faded>
+                  <BrokeTheGlassMark yell={yell} />
                   <YellSignals yell={yell} />
                 </div>
-              </SuperyellEdge>
+              </div>
             );
           },
         },
@@ -155,7 +157,7 @@ export function YellsTable() {
         {
           id: "caller",
           header: "Reported by",
-          size: 220,
+          size: 188,
           cell: ({ row }) => (
             <Faded yell={row.original} className="text-[13px]">
               <YellCaller yell={row.original} />
@@ -166,7 +168,16 @@ export function YellsTable() {
           id: "signals",
           header: "Signals",
           size: 96,
-          cell: ({ row }) => <YellSignals yell={row.original} />,
+          cell: ({ row }) => (
+            <YellSignals
+              yell={row.original}
+              empty={
+                <span className="text-muted-foreground" title="No signals">
+                  —
+                </span>
+              }
+            />
+          ),
         },
         actionsColumn,
       ];
@@ -247,13 +258,18 @@ export function YellsTable() {
           hasActiveFilters={!!search || status === "resolved"}
           filteredEmptyMessage="No reports match these filters."
           onClearFilters={clearFilters}
+          onRowClick={(yell, event) => {
+            // Signals and actions inside the row act on their own.
+            if ((event.target as HTMLElement).closest("a, button")) return;
+            router.push(yellHref(yell.id));
+          }}
         />
       )}
     </div>
   );
 }
 
-function YellRowActions({
+export function YellRowActions({
   yell,
   canResolve,
   pending,
@@ -293,9 +309,28 @@ function YellRowActions({
               },
             ]
           : []),
+        {
+          icon: <Link2 className="size-4" />,
+          label: "Copy link",
+          onClick: () => copyYellLink(yell.id),
+        },
       ]}
     />
   );
+}
+
+/** The yell's detail page. */
+export function yellHref(id: string) {
+  return `/openappa/yells/${id}`;
+}
+
+async function copyYellLink(id: string) {
+  try {
+    await copyToClipboard(new URL(yellHref(id), window.location.origin).href);
+    toast.success("Link copied");
+  } catch {
+    toast.error("Could not copy the link");
+  }
 }
 
 /**
@@ -303,7 +338,14 @@ function YellRowActions({
  * its investigation chat, its place in the session trace. Only the ones it
  * has, packed together.
  */
-function YellSignals({ yell }: { yell: OpenAppaYell }) {
+export function YellSignals({
+  yell,
+  empty = null,
+}: {
+  yell: OpenAppaYell;
+  /** Shown when the yell left nothing behind. */
+  empty?: ReactNode;
+}) {
   const archive = useOpenAppaYellArchive();
   const traceHref = useYellTraceHref(yell);
   const signals: {
@@ -334,7 +376,7 @@ function YellSignals({ yell }: { yell: OpenAppaYell }) {
       icon: <Activity />,
       href: traceHref,
     });
-  if (signals.length === 0) return null;
+  if (signals.length === 0) return empty;
   const className =
     "inline-flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 [&_svg]:size-3.5";
   return (
@@ -386,23 +428,31 @@ function useYellTraceHref(yell: OpenAppaYell): string | null {
   );
 }
 
-function YellCaller({ yell }: { yell: OpenAppaYell }) {
+export function YellCaller({ yell }: { yell: OpenAppaYell }) {
   if (yell.caller)
     return (
       <CreatedByCell createdBy={yell.caller} showServiceAccountBadge={false} />
     );
   const { callerId, callerApp } = yell;
-  const [Icon, label, known] = callerApp
-    ? [AppWindow, callerApp.name, true]
+  const shape = callerApp
+    ? ([AppWindow, callerApp.name, true] as const)
     : callerId.startsWith("app:")
-      ? [AppWindow, "Deleted app", false]
+      ? ([AppWindow, "Deleted app", false] as const)
       : callerId.startsWith("virtual-key:")
-        ? [KeyRound, "Virtual key", false]
+        ? ([KeyRound, "Virtual key", false] as const)
         : callerId.startsWith("user:service-account:")
-          ? [Bot, "Unknown service account", false]
+          ? ([Bot, "Unknown service account", false] as const)
           : callerId.startsWith("user:")
-            ? [UserRound, "Unknown user", false]
-            : [CircleHelp, "Unattributed caller", false];
+            ? ([UserRound, "Unknown user", false] as const)
+            : null;
+  // No one to name: the same dash as an empty Signals cell.
+  if (!shape)
+    return (
+      <span className="text-muted-foreground" title="Unattributed caller">
+        —
+      </span>
+    );
+  const [Icon, label, known] = shape;
   // The same avatar-and-name shape as a person's cell, so the column reads as
   // one list whatever kind of caller sent the yell.
   return (
@@ -422,82 +472,33 @@ function YellCaller({ yell }: { yell: OpenAppaYell }) {
   );
 }
 
-const SUPERYELL_HINT =
+export const BROKE_THE_GLASS_HINT =
   "Broke the glass: guardrails turned off for this session";
 
-/**
- * Kind dot, clock time and age. One tooltip names the kind and the exact
- * time; an open superyell gets a rose edge on the row's leading border.
- */
+/** The shared log time, then a broke-the-glass mark in a fixed slot. */
 function TimeCell({ yell }: { yell: OpenAppaYell }) {
   return (
-    <SuperyellEdge yell={yell} className="flex items-center whitespace-nowrap">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex cursor-default items-center">
-            <Faded yell={yell} className="flex items-center gap-2.5">
-              <KindDot yell={yell} />
-              <span className="flex items-baseline gap-2">
-                <time
-                  dateTime={yell.createdAt}
-                  className="font-mono text-[13px] tabular-nums text-foreground"
-                >
-                  {formatDate({ date: yell.createdAt, dateFormat: "HH:mm" })}
-                </time>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {formatCompactRelativeTime(yell.createdAt)}
-                </span>
-              </span>
-            </Faded>
-          </span>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-64">
-          <span className="block space-y-0.5 text-left">
-            <span className="block font-medium">
-              {yell.superyell ? "Superyell" : "Yell"}
-              {yell.resolvedAt && (
-                <span className="font-normal opacity-70">
-                  {" "}
-                  · Resolved {formatRelativeTimeFromNow(yell.resolvedAt)}
-                </span>
-              )}
-            </span>
-            {yell.superyell && <span className="block">{SUPERYELL_HINT}</span>}
-            <span className="block font-mono text-[11px] tabular-nums opacity-70">
-              {formatDate({
-                date: yell.createdAt,
-                dateFormat: "MMM d, yyyy HH:mm:ss",
-              })}
-            </span>
-          </span>
-        </TooltipContent>
-      </Tooltip>
-    </SuperyellEdge>
+    <div className="flex items-center gap-2">
+      <Faded yell={yell} className="flex">
+        <LogTime showTooltip={false} timestamp={yell.createdAt} />
+      </Faded>
+      <BrokeTheGlassMark yell={yell} />
+    </div>
   );
 }
 
-/**
- * Amber for a yell, rose with a halo for a superyell. A resolved yell keeps
- * its colour but hollows out, so its kind still reads once it is done.
- */
-function KindDot({ yell }: { yell: OpenAppaYell }) {
+/** A shield-off icon with its explanation on hover; nothing for a plain yell. */
+export function BrokeTheGlassMark({ yell }: { yell: OpenAppaYell }) {
+  if (!yell.superyell) return null;
   return (
-    <span
-      className={cn(
-        "size-2 shrink-0 rounded-full",
-        yell.resolvedAt
-          ? yell.superyell
-            ? "border-[1.5px] border-rose-500/70 dark:border-rose-400/70"
-            : "border-[1.5px] border-amber-500/70 dark:border-amber-400/70"
-          : yell.superyell
-            ? "bg-rose-500 ring-[3px] ring-rose-500/20 dark:bg-rose-400 dark:ring-rose-400/20"
-            : "bg-amber-500 dark:bg-amber-400",
-      )}
-    >
-      <span className="sr-only">
-        {yell.superyell ? `Superyell: ${SUPERYELL_HINT}` : "Yell"}
-      </span>
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex shrink-0 cursor-default text-muted-foreground">
+          <ShieldOff className="size-3.5" aria-label={BROKE_THE_GLASS_HINT} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{BROKE_THE_GLASS_HINT}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -517,31 +518,6 @@ function MessageLine({ yell }: { yell: OpenAppaYell }) {
         </p>
       </TruncatedTooltip>
     </Faded>
-  );
-}
-
-/** The rose edge an open superyell paints on its row's leading border. */
-function SuperyellEdge({
-  yell,
-  className,
-  children,
-}: {
-  yell: OpenAppaYell;
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "relative",
-        yell.superyell &&
-          !yell.resolvedAt &&
-          "before:absolute before:-inset-y-2 before:-left-4 before:w-0.5 before:bg-rose-500 dark:before:bg-rose-400",
-        className,
-      )}
-    >
-      {children}
-    </div>
   );
 }
 

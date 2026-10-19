@@ -72,23 +72,25 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
                     ? "Write a scenario and save it as a validation file."
                     : "Write policy scenarios and check their expected decisions.",
             }
-          : pathname === "/openappa/yells"
-            ? {
-                title: "Yells",
-                description:
-                  "Yells are agent reports of blocks it could not make sense of or get past. Investigate them in chat and mark them resolved once fixed.",
-              }
-            : {
-                title: "Guardrails",
-                description: (
-                  <>
-                    {`${appName} uses OpenAPPA to check tool calls against your policy and keep data visible only to people allowed to see it.`}{" "}
-                    <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
-                      How it works
-                    </ExternalDocsLink>
-                  </>
-                ),
-              };
+          : pathname.startsWith("/openappa/yells/")
+            ? { title: "Yell", description: undefined }
+            : pathname === "/openappa/yells"
+              ? {
+                  title: "Yells",
+                  description:
+                    "Yells are agent reports of blocks it could not make sense of or get past. Investigate them in chat and mark them resolved once fixed.",
+                }
+              : {
+                  title: "Guardrails",
+                  description: (
+                    <>
+                      {`${appName} uses OpenAPPA to check tool calls against your policy and keep data visible only to people allowed to see it.`}{" "}
+                      <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
+                        How it works
+                      </ExternalDocsLink>
+                    </>
+                  ),
+                };
   // Until a policy is saved, the Overview shows only that first step.
   const firstStepOnly = isFresh === true && pathname === "/openappa";
 
@@ -134,7 +136,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         pathname === "/openappa/validation" ? (
           <div ref={setPageActionSlot} />
         ) : firstStepOnly ||
-          pathname === "/openappa/yells" ||
+          pathname.startsWith("/openappa/yells") ||
           pathname === "/openappa/tests" ||
           pathname.startsWith("/openappa/validation") ||
           pathname === "/openappa/policy" ? null : pathname === "/openappa" ? (

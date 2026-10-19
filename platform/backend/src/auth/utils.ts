@@ -329,9 +329,13 @@ async function getServiceAccountFromSyntheticUserId(params: {
   const serviceAccountId = params.userId.slice(
     SERVICE_ACCOUNT_USER_ID_PREFIX.length,
   );
-  const serviceAccount = await ServiceAccountModel.findById(
-    serviceAccountId,
-    params.organizationId,
+  const serviceAccount = await requestScope.memo(
+    `service-account-auth-context:${serviceAccountId}:${params.organizationId}`,
+    () =>
+      ServiceAccountModel.findAuthContext(
+        serviceAccountId,
+        params.organizationId,
+      ),
   );
 
   if (serviceAccount?.disabled) return null;

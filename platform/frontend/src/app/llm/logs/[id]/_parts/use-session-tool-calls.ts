@@ -20,21 +20,22 @@ import type { InteractionSummary } from "./session-timeline";
 export function useSessionToolCalls({
   sessionId,
   requests,
+  newerRequest,
   requestsReady,
   pageIndex,
   pageSize,
-  offset,
   onLocatePage,
   targetToolCallId,
 }: {
   sessionId: string;
   /** This page's requests. */
   requests: InteractionSummary[];
-  /** Whether `requests` is the settled answer for this page. */
+  /** The newest row of the previous page; null on page one. */
+  newerRequest: InteractionSummary | null;
+  /** Whether `requests` and `newerRequest` are the settled answer for this page. */
   requestsReady: boolean;
   pageIndex: number;
   pageSize: number;
-  offset: number;
   /** Moves to the page that holds the linked tool call. */
   onLocatePage: (pageIndex: number) => void;
   /** A tool call the URL points at (`?toolCall=`). */
@@ -51,24 +52,12 @@ export function useSessionToolCalls({
         )
       : null;
 
-  const hasNewerPage = offset > 0;
-  const newerQuery = useInteractionSummaries({
-    sessionId,
-    limit: 1,
-    offset: Math.max(0, offset - 1),
-    sortBy: "createdAt",
-    sortDirection: "desc",
-    enabled: requestsReady && windowStart !== null && hasNewerPage,
-  });
-  const newer = hasNewerPage ? newerQuery.data?.data[0] : undefined;
-  const windowEnd = newer
-    ? new Date(newer.createdAt).getTime() - Math.max(0, newer.durationMs ?? 0)
+  const windowEnd = newerRequest
+    ? new Date(newerRequest.createdAt).getTime() -
+      Math.max(0, newerRequest.durationMs ?? 0)
     : null;
 
-  const windowReady =
-    requestsReady &&
-    windowStart !== null &&
-    (!hasNewerPage || newerQuery.isSuccess);
+  const windowReady = requestsReady && windowStart !== null;
   const toolCallsQuery = useSessionMcpToolCalls({
     sessionId,
     startDate: windowStart !== null ? toIso(windowStart) : undefined,
@@ -90,12 +79,12 @@ export function useSessionToolCalls({
   const targetOnPage =
     targetToolCallId !== null &&
     toolCalls.some((call) => call.id === targetToolCallId);
-  const [locatedFor, setLocatedFor] = useState<string | null>(null);
-  const shouldLocate =
-    target !== null &&
-    toolCallsQuery.isSuccess &&
-    !targetOnPage &&
-    locatedFor !== target.id;
+  // Looked up as soon as the call is known, alongside the page's own reads,
+  // so a link to another page moves there before this one draws.
+  const [located, setLocated] = useState<{ id: string; page: number } | null>(
+    null,
+  );
+  const shouldLocate = target !== null && located?.id !== target.id;
   const newerThanTarget = useInteractionSummaries({
     sessionId,
     startDate: target?.createdAt,
@@ -105,19 +94,53 @@ export function useSessionToolCalls({
   const newerThanTargetCount = shouldLocate
     ? newerThanTarget.data?.pagination.total
     : undefined;
+  // The page's window is the same bound the tool-call read applies, so a call
+  // inside it is this page's without waiting for the calls themselves.
+  const targetAt = target ? new Date(target.createdAt).getTime() : null;
+  const targetInWindow =
+    targetAt !== null &&
+    windowStart !== null &&
+    targetAt >= windowStart &&
+    (windowEnd === null || targetAt <= windowEnd);
   useEffect(() => {
-    if (!target || newerThanTargetCount === undefined) return;
-    setLocatedFor(target.id);
+    if (!target || located?.id === target.id || !requestsReady) return;
+    if (targetInWindow) {
+      setLocated({ id: target.id, page: pageIndex });
+      return;
+    }
+    if (newerThanTargetCount === undefined) return;
     const page = Math.floor(newerThanTargetCount / pageSize);
+    setLocated({ id: target.id, page });
     if (page !== pageIndex) onLocatePage(page);
-  }, [target, newerThanTargetCount, pageSize, pageIndex, onLocatePage]);
+  }, [
+    target,
+    located,
+    requestsReady,
+    targetInWindow,
+    newerThanTargetCount,
+    pageSize,
+    pageIndex,
+    onLocatePage,
+  ]);
 
+  const toolCallsSettled =
+    requestsReady &&
+    (windowStart === null ||
+      toolCallsQuery.isSuccess ||
+      toolCallsQuery.isError);
   const targetResolved =
     targetToolCallId === null ||
-    targetOnPage ||
+    (targetOnPage && toolCallsSettled) ||
     targetQuery.isError ||
     (targetQuery.isSuccess && target === null) ||
-    (target !== null && locatedFor === target.id && toolCallsQuery.isSuccess);
+    // Settled only on the page it was found on: until the move lands, the
+    // previous page's records are still the ones in hand.
+    (target !== null &&
+      located?.id === target.id &&
+      located.page === pageIndex &&
+      toolCallsSettled);
+  // Once settled, paging away from the linked call is the viewer's choice.
+  const settledFor = useSettledOnce(targetToolCallId, targetResolved);
 
   return {
     toolCalls,
@@ -128,12 +151,34 @@ export function useSessionToolCalls({
     targetOnPage,
     /** The URL named a call this page cannot show, and looking is over. */
     targetMissing: targetToolCallId !== null && targetResolved && !targetOnPage,
+    /**
+     * This page's calls are in, and a linked call has been found on its page
+     * (or found missing): what the trace waits for, so it draws once.
+     */
+    ready:
+      toolCallsSettled &&
+      (targetToolCallId === null || settledFor === targetToolCallId),
   };
 }
 
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+/**
+ * The linked id once its lookup has settled, kept after: a later page change
+ * by the viewer must not send the trace back to loading.
+ */
+export function useSettledOnce(
+  id: string | null,
+  settled: boolean,
+): string | null {
+  const [settledFor, setSettledFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (id !== null && settled && settledFor !== id) setSettledFor(id);
+  }, [id, settled, settledFor]);
+  return id !== null && settled ? id : settledFor;
+}
 
 function toIso(ms: number): string {
   return new Date(ms).toISOString();

@@ -365,6 +365,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Optional sampling override; when omitted the provider/model default applies (unchanged
           // behavior). The benchmark harness sets this to pin runs against temperature variance.
           temperature: z.number().min(0).max(2).optional(),
+          // Optional step ceiling that can only lower MAX_AGENT_STEPS. The benchmark harness sets
+          // this so a runaway trajectory stops long before the interactive-chat ceiling.
+          maxSteps: z.number().int().min(1).max(MAX_AGENT_STEPS).optional(),
           // The depth the composer is showing for this turn. Sent with the
           // message so the turn cannot run at a depth the user has replaced but
           // whose PATCH has not landed yet; the stored column is the fallback
@@ -382,6 +385,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           messages,
           trigger,
           temperature,
+          maxSteps,
           thinkingEffort: requestedThinkingEffort,
         },
         user,
@@ -1389,7 +1393,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     }),
                   }),
                   ...(supportsToolCalling && { tools: mcpTools }),
-                  stopWhen: buildChatStopConditions(repeatTracker),
+                  stopWhen: buildChatStopConditions(repeatTracker, maxSteps),
                   abortSignal: chatAbortController.signal,
                   experimental_repairToolCall: createToolCallRepair({
                     toolNames: Object.keys(mcpTools),
@@ -4183,9 +4187,12 @@ export function resolveTitleUserInput(
   );
 }
 
-export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
+export function buildChatStopConditions(
+  repeatTracker: ToolCallRepeatTracker,
+  maxSteps: number = MAX_AGENT_STEPS,
+) {
   return [
-    stepCountIs(MAX_AGENT_STEPS),
+    stepCountIs(Math.min(maxSteps, MAX_AGENT_STEPS)),
     repeatCeilingStopCondition(repeatTracker),
   ];
 }

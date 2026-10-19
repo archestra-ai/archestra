@@ -260,12 +260,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [{ favicon, theme }, cookieStore, shellSeed] = await Promise.all([
-    getCachedDeploymentAppearance(),
-    cookies(),
-    prefetchShellSeed(),
-  ]);
-  const themeFont = await getThemeFontPreload(theme);
+  const [{ favicon, theme, themeFont }, cookieStore, shellSeed] =
+    await Promise.all([
+      getCachedDeploymentAppearance().then(async (appearance) => ({
+        ...appearance,
+        // Looked up as soon as the theme is known, beside the other reads.
+        themeFont: await getThemeFontPreload(appearance.theme),
+      })),
+      cookies(),
+      prefetchShellSeed(),
+    ]);
   // Presence only; nothing is fetched for it. See WithAuthCheck.
   const sessionCookie = hasSessionCookie(cookieStore);
 

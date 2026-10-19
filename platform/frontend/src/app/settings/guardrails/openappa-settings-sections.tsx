@@ -252,8 +252,16 @@ export function OpenAppaAnnotatorModelSetting() {
       description={
         <>
           <span className="block">
-            This model judges tool calls that no policy rule annotates. Unless
-            you pick one, it is the organization's default model.
+            Sets the trust and audience of tool calls your policy has no rule
+            for. For example, a call that reads a secrets file becomes visible
+            only to the person running the session.
+          </span>
+          <span className="mt-2 block">
+            It answers the{" "}
+            <code className="font-mono text-xs">archestra.llm-annotator</code>{" "}
+            annotator, which the starting policy applies to every tool you
+            haven't annotated yourself. Unless you pick a model, it uses the
+            organization's default.
           </span>
           <span className="mt-2 block">
             We recommend a model from the Sonnet or Luna family.

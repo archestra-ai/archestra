@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useImageTone } from "./use-image-tone";
+import { clearImageToneCache, useImageTone } from "./use-image-tone";
 
 const SAMPLE_SIZE = 32;
 
@@ -28,6 +28,7 @@ describe("useImageTone", () => {
   const imageConstructor = vi.fn();
 
   beforeEach(() => {
+    clearImageToneCache();
     drawImage.mockClear();
     getImageData.mockClear();
     imageConstructor.mockClear();

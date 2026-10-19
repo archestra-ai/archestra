@@ -17,7 +17,20 @@ import {
 export type ImageTone = "dark" | "light" | null;
 
 const SAMPLE_SIZE = 32;
+// One entry per distinct icon source for the life of the page. Bounded so a
+// long session over many icons cannot grow it without limit.
+const TONE_CACHE_LIMIT = 500;
 const toneCache = new Map<string, ImageTone>();
+
+/** Forget every sampled tone. For tests that reuse an image source. */
+export function clearImageToneCache(): void {
+  toneCache.clear();
+}
+
+function rememberTone(src: string, tone: ImageTone): void {
+  if (toneCache.size >= TONE_CACHE_LIMIT) toneCache.clear();
+  toneCache.set(src, tone);
+}
 
 export interface ImageToneHandle {
   tone: ImageTone;
@@ -47,7 +60,7 @@ export function useImageTone(src: string | null | undefined): ImageToneHandle {
       let detected = toneCache.get(src);
       if (detected === undefined) {
         detected = sampleTone(image);
-        toneCache.set(src, detected);
+        rememberTone(src, detected);
       }
       setTone({ src, tone: detected });
     },

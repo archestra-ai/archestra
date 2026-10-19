@@ -83,6 +83,11 @@ type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
 
 export type InitialChatModelState = {
   agentId: string | null;
+  /**
+   * No agent yet, but one is still being decided (data loading, or the
+   * resolution effect has not run). Pickers show a placeholder meanwhile.
+   */
+  isAgentResolving: boolean;
   modelId: string;
   apiKeyId: string | null;
   provider: SupportedProvider | undefined;
@@ -131,6 +136,10 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 
   const [agentId, setAgentId] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<TAgent | null>(null);
+  // Whether the load-time resolution below has run to a decision. Until it
+  // has, the agent picker must not guess: a guess paints one agent and then
+  // swaps to the resolved one.
+  const [hasResolvedAgent, setHasResolvedAgent] = useState(false);
   const [modelId, setModelId] = useState<string>("");
   const [apiKeyId, setApiKeyId] = useState<string | null>(null);
   // Carried into the create request on first submit, so a choice made before
@@ -238,6 +247,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
         memberDefaultAgentId: defaultAgentId,
         canUseSavedAgent,
       });
+      setHasResolvedAgent(true);
       if (!selection) return;
 
       applyAgentSelection(selection.agent);
@@ -321,6 +331,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     ) {
       setAgentId(null);
       setSelectedAgent(null);
+      setHasResolvedAgent(false);
       setModelId("");
       setApiKeyId(null);
       modelInitializedRef.current = false;
@@ -438,6 +449,10 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   return {
     selectedAgent,
     agentId,
+    isAgentResolving:
+      !agentId &&
+      !hasResolvedAgent &&
+      (isAgentsLoading === true || agents.length > 0),
     modelId,
     apiKeyId,
     provider,

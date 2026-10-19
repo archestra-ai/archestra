@@ -17,16 +17,15 @@ mod policy;
 mod replay;
 
 use appa_eventlog::{
-    Backend, LogStore, OperationClaim, OperationKey, OperationRequest,
-    ProcessedResultClaim, ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError,
-    SessionScope,
+    Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
+    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError, SessionScope,
     encryption::{StorageCipher, field_context},
     postgres::{LeasedPostgres, PostgresError},
 };
 use appa_runtime::{
     api::{
-        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs,
-        PublishedDeployment, RemedyOutcome, RemedyPresentation, RemedyRefusal, Runtime,
+        EmbeddedPresentationOptions, ExecuteRemedyPlanArgs, PublishedDeployment, RemedyOutcome,
+        RemedyPresentation, RemedyRefusal, Runtime,
     },
     hooks,
 };
@@ -1264,15 +1263,10 @@ pub async fn get_openappa_status(
         if root.is_none() {
             return Ok(None);
         }
-        on_deployment(
-            &state,
-            &organization_id,
-            &policy,
-            |pinned| {
-                let key = SessionKey::new(&organization_id, &session_id);
-                async move { session_status(pinned, key).await }
-            },
-        )
+        on_deployment(&state, &organization_id, &policy, |pinned| {
+            let key = SessionKey::new(&organization_id, &session_id);
+            async move { session_status(pinned, key).await }
+        })
         .await
     })
     .catch_unwind()
@@ -1459,15 +1453,10 @@ async fn run(
 ) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
         let state = initialized().await?.encrypted(encryption)?;
-        on_deployment(
-            &state,
-            &input.organization_id,
-            &policy,
-            |pinned| {
-                let input = input.clone();
-                async move { pinned.dispatch(input).await }
-            },
-        )
+        on_deployment(&state, &input.organization_id, &policy, |pinned| {
+            let input = input.clone();
+            async move { pinned.dispatch(input).await }
+        })
         .await
     })
     .catch_unwind()

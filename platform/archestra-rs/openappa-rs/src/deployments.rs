@@ -824,11 +824,7 @@ mod tests {
         assert_eq!(advanced.revision.value(), 2);
         let opening_facts = store.log(&root).unwrap().facts().len();
         let stale = pin_existing(&runtime, &line, &prepared, &observed).unwrap();
-        assert_eq!(
-            stale.revision(),
-            1,
-            "repin pins only the observed revision"
-        );
+        assert_eq!(stale.revision(), 1, "repin pins only the observed revision");
         assert_eq!(
             store.head(&line).unwrap().unwrap(),
             advanced,

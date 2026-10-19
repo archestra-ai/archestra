@@ -115,15 +115,22 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- /*
-          The migration container only needs the Vault secrets volume for DB URL
-          injection. Avoid mounting shared diagnostics PVCs here because the
-          hook overlaps running web/worker pods during upgrades.
+          The migration container mounts only the Vault secrets volume for DB
+          URL injection plus hook-only extra volumes (e.g. a database CA
+          bundle). Shared diagnostics PVCs and archestra.extraVolumes are not
+          mounted here because the hook overlaps running web/worker pods
+          during upgrades.
           */}}
-          {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+          {{- if or .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.migrationJob.extraVolumeMounts }}
           volumeMounts:
+            {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
             - name: vault-secrets
               mountPath: /vault/secrets
               readOnly: true
+            {{- end }}
+            {{- with .Values.archestra.migrationJob.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
       {{- with .Values.archestra.nodeSelector }}
       nodeSelector:
@@ -133,10 +140,15 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+      {{- if or .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.migrationJob.extraVolumes }}
       volumes:
+        {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
         - name: vault-secrets
           emptyDir:
             medium: Memory
+        {{- end }}
+        {{- with .Values.archestra.migrationJob.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
 {{- end }}

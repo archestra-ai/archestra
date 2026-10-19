@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-17
+lastUpdated: 2026-10-19
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -83,6 +83,23 @@ archestra:
 ```
 
 Provide the same database URL to the migration Job and application. The chart runs migrations before rolling out an upgrade. Keep `archestra.migrationJob.enabled` enabled unless your pipeline applies migrations separately.
+
+To verify the database's TLS certificate, mount the CA bundle and point the URL at it, for example `?sslmode=verify-full&sslrootcert=/etc/ssl/db/ca.pem`. The migration Job does not use `archestra.extraVolumes`, so mount the bundle in both places:
+
+```yaml
+archestra:
+  extraVolumes: &db-ca-volumes
+    - name: db-ca
+      secret:
+        secretName: db-ca-bundle
+  extraVolumeMounts: &db-ca-mounts
+    - name: db-ca
+      mountPath: /etc/ssl/db
+      readOnly: true
+  migrationJob:
+    extraVolumes: *db-ca-volumes
+    extraVolumeMounts: *db-ca-mounts
+```
 
 For Knowledge Base vector storage, PostgreSQL must have the pgvector extension available and the migration user must be able to create the extension, or an administrator must install it first.
 

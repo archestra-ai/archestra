@@ -421,18 +421,10 @@ export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, i
     process.env.HOME = root;
     process.env.XDG_DATA_HOME = path.join(root, "data");
     process.env.XDG_CACHE_HOME = path.join(root, "cache");
-    await mkdir(path.join(root, "cache", "opencode"), { recursive: true });
-    await writeFile(
-      path.join(root, "cache", "opencode", "models.json"),
-      JSON.stringify({
-        moonshotai: { id: "moonshotai", name: "Moonshot AI", models: {} },
-        "kimi-code-plan-global": {
-          id: "kimi-code-plan-global",
-          name: "Kimi For Coding (kimi.ai)",
-          models: {},
-        },
-      }),
-    );
+    const modelsCache = path.join(root, "cache", "opencode", "models.json");
+    await mkdir(path.dirname(modelsCache), { recursive: true });
+    // The client may still be writing its catalog when the plugin loads.
+    await writeFile(modelsCache, '{"moonshotai": {"name": "Moon');
     await mkdir(path.join(root, ".archestra"));
     await writeFile(
       path.join(root, ".archestra", "opencode-primary.key"),
@@ -467,14 +459,34 @@ export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, i
         "kimi-code-plan-cn": { name: "My Kimi plan" },
       } as Record<string, { name?: string }>,
     });
-    await hooks.config(config());
+    const names = (cfg: ReturnType<typeof config>) =>
+      Object.fromEntries(
+        Object.entries(cfg.provider).map(([id, entry]) => [id, entry.name]),
+      );
+    const first = config();
+    await hooks.config(first);
+    expect(names(first)).toEqual({
+      ...kimiLabels,
+      moonshotai: "moonshotai via Moonshot (Kimi)",
+      "kimi-code-plan-global": "kimi-code-plan-global via Moonshot (Kimi)",
+    });
+    await writeFile(
+      modelsCache,
+      JSON.stringify({
+        moonshotai: { id: "moonshotai", name: "Moonshot AI", models: {} },
+        "kimi-code-plan-global": {
+          id: "kimi-code-plan-global",
+          name: "Kimi For Coding (kimi.ai)",
+          models: {},
+        },
+      }),
+    );
     const second = config();
     await hooks.config(second);
-    expect(
-      Object.fromEntries(
-        Object.entries(second.provider).map(([id, entry]) => [id, entry.name]),
-      ),
-    ).toEqual(kimiLabels);
+    expect(names(second)).toEqual(kimiLabels);
+    const third = config();
+    await hooks.config(third);
+    expect(names(third)).toEqual(kimiLabels);
   });
 
   test("V2 gives a managed alias the client's provider label and the catalog provider that serves it", async () => {

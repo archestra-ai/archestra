@@ -133,14 +133,16 @@ const localAuth = readLocalAuth();
 // The label the user knows a provider by: the name they configured, else the
 // one in the client's cached models.dev catalog, else its id.
 const clientCatalogPath = process.env[${JSON.stringify(modelsPathEnv)}] || join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), clientDir, "models.json");
+// Read once. A missing or half-written file is retried on the next config
+// load, not once per alias.
 let clientCatalog;
 const clientProviderLabel = (providerId, configured) => {
   if (typeof configured?.name === "string" && configured.name.trim()) return configured.name;
-  if (!clientCatalog) {
+  if (clientCatalog === undefined) {
     try { const parsed = JSON.parse(readFileSync(clientCatalogPath, "utf8")); clientCatalog = parsed && typeof parsed === "object" ? parsed : {}; }
-    catch { return providerId; }
+    catch { clientCatalog = null; }
   }
-  const name = clientCatalog[providerId]?.name;
+  const name = clientCatalog?.[providerId]?.name;
   return typeof name === "string" && name.trim() ? name : providerId;
 };
 const openAiOAuth = localAuth.openai?.type === "oauth" ? localAuth.openai : null;
@@ -230,6 +232,7 @@ if (${params.runtime ? "true" : "!globalThis[fetchGuardSymbol]"}) {
 
 export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
   async config(config) {
+    if (clientCatalog === null) clientCatalog = undefined;
     config.provider ??= {};
     const localAuth = readLocalAuth();
     const signedInToOpenAi = localAuth.openai?.type === "oauth";

@@ -257,7 +257,7 @@ describe("annotators earlier opening policies declare", () => {
       makeMember,
     });
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-    const earlierDefault =`${initialPolicy().replace(
+    const earlierDefault = `${initialPolicy().replace(
       `name = "*"\nannotator = "${UNDECLARED_TOOL_ANNOTATOR}"`,
       'name = "*"\nannotator = "noop"',
     )}

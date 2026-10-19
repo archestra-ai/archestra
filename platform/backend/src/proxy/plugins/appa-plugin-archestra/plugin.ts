@@ -614,7 +614,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = text;
       },
     });
-    for (const [index, answer] of toolResults.entries()) {
+    for (const [index, answer] of context.toolResults.entries()) {
       if (result.toolResultUpdates[answer.id]?.code !== "unreleased_call")
         continue;
       logger.info(
@@ -625,7 +625,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           thread: trustedContext?.thread ?? "none",
           // 0 for the request's last tool result; above 0 for one the client
           // replays from earlier in its history.
-          laterResults: toolResults.length - 1 - index,
+          laterResults: context.toolResults.length - 1 - index,
         },
         "OpenAPPA has no record of releasing the call this tool result answers",
       );

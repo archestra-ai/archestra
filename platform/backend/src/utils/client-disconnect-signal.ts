@@ -46,11 +46,14 @@ export function fetchWithAbortSignal(
   signal: AbortSignal | undefined,
 ): Fetch | undefined {
   if (!signal) return baseFetch;
-  return (input, init) =>
-    (baseFetch ?? fetch)(input, {
+  return (input, init) => {
+    const own =
+      init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    return (baseFetch ?? fetch)(input, {
       ...init,
-      signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal,
+      signal: own ? AbortSignal.any([own, signal]) : signal,
     });
+  };
 }
 
 type Fetch = (

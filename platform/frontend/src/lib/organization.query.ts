@@ -5,10 +5,15 @@ import {
   type archestraApiTypes,
   PLATFORM_ADMIN_ROLE_NAME,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  QueryClientContext,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { toast } from "sonner";
 import { awaitBootstrapSeed, useSession } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
@@ -333,7 +338,8 @@ export function useOrganization(
   options: { fresh?: boolean } = {},
 ) {
   const session = useSession();
-  const client = useQueryClient();
+  // Read without requiring a provider: only the seed check needs the client.
+  const client = useContext(QueryClientContext);
   const { fresh = false } = options;
 
   return useQuery({
@@ -356,7 +362,8 @@ export function useOrganization(
     // read for this document (a seeded approval page) is that fresh read.
     staleTime: fresh ? 0 : 5 * 60 * 1000,
     refetchOnMount: fresh
-      ? (query) => (isDocumentSeedFresh(client, query) ? false : "always")
+      ? (query) =>
+          client && isDocumentSeedFresh(client, query) ? false : "always"
       : undefined,
     refetchOnWindowFocus: fresh || undefined,
     // Restored on refresh: the shell reads the app name and theme from here,

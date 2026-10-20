@@ -26,6 +26,17 @@ import {
 import { ConnectorIdentityCache } from "../identity-cache";
 
 const BATCH_SIZE = 50;
+/**
+ * Largest file the Contents API returns inline. Bigger files come back with no
+ * content, so they are read through the Git Blobs API instead.
+ */
+const CONTENTS_API_MAX_FILE_BYTES = 1024 * 1024;
+/**
+ * Repository files above this size are skipped rather than fetched: the Git
+ * Blobs API stops at 100 MB, and a text file this large is almost always
+ * generated output or a data dump rather than knowledge worth indexing.
+ */
+const MAX_REPOSITORY_FILE_BYTES = 10 * 1024 * 1024;
 /** Cap for the per-pass login → profile cache: sized so a normal org never evicts. */
 const USER_PROFILE_CACHE_MAX_SIZE = 10_000;
 /**
@@ -423,7 +434,7 @@ export class GithubConnector extends BaseConnector {
       "Fetching repository tree",
     );
 
-    let treeItems: Array<{ path: string; sha: string }>;
+    let treeItems: RepositoryFile[];
     try {
       const treeResponse = await octokit.rest.git.getTree({
         owner: repo.owner,
@@ -444,6 +455,7 @@ export class GithubConnector extends BaseConnector {
         .map((item) => ({
           path: item.path as string,
           sha: item.sha as string,
+          size: item.size,
         }));
 
       // GitHub caps a recursive tree listing; past the cap it returns a partial
@@ -520,9 +532,23 @@ export class GithubConnector extends BaseConnector {
       );
 
       for (const file of batch) {
+        if (file.size !== undefined && file.size > MAX_REPOSITORY_FILE_BYTES) {
+          this.log.warn(
+            { repo: repoFullName, path: file.path, size: file.size },
+            "Repository file exceeds the size limit, skipping",
+          );
+          this.trackSkipped({
+            itemId: file.path,
+            sourceId: githubFileSourceId(repo.name, file.path),
+            name: file.path,
+            reason: `File exceeds ${MAX_REPOSITORY_FILE_BYTES} byte size limit`,
+          });
+          continue;
+        }
+
         await this.rateLimit();
         const content = await this.safeItemFetch({
-          fetch: () => getFileContent(octokit, repo, file.path),
+          fetch: () => getFileContent(octokit, repo, file),
           fallback: null,
           itemId: file.path,
           resource: "file_content",
@@ -537,6 +563,7 @@ export class GithubConnector extends BaseConnector {
       }
 
       const failures = this.flushFailures();
+      const skipped = this.flushSkipped();
       const hasMoreFiles = i + BATCH_SIZE < treeItems.length;
 
       this.log.info(
@@ -547,6 +574,7 @@ export class GithubConnector extends BaseConnector {
           totalBatches,
           documentsIndexed: documents.length,
           failureCount: failures.length,
+          skippedCount: skipped.length,
           hasMore: hasMoreFiles || !isLastGroup,
         },
         "Repository file batch completed",
@@ -555,6 +583,7 @@ export class GithubConnector extends BaseConnector {
       yield {
         documents,
         failures,
+        skipped,
         checkpoint: buildCheckpoint({
           type: "github",
           itemUpdatedAt: null,
@@ -1278,23 +1307,41 @@ function isWithinIndexedPaths(path: string, prefixes: string[]): boolean {
   );
 }
 
+type RepositoryFile = { path: string; sha: string; size?: number };
+
 async function getFileContent(
   octokit: Octokit,
   repo: { owner: string; name: string },
-  path: string,
+  file: RepositoryFile,
 ): Promise<string> {
-  const response = await octokit.rest.repos.getContent({
-    owner: repo.owner,
-    repo: repo.name,
-    path,
-  });
+  if (file.size === undefined || file.size <= CONTENTS_API_MAX_FILE_BYTES) {
+    const response = await octokit.rest.repos.getContent({
+      owner: repo.owner,
+      repo: repo.name,
+      path: file.path,
+    });
 
-  const data = response.data;
-  if (!("content" in data) || !data.content) {
-    throw new Error(`No content returned for ${path}`);
+    const data = response.data;
+    if ("content" in data && data.content) {
+      return Buffer.from(data.content, "base64").toString("utf-8");
+    }
   }
 
-  return Buffer.from(data.content, "base64").toString("utf-8");
+  // Past the Contents API's inline limit GitHub returns the file's metadata
+  // with empty content; the blob itself is readable up to 100 MB.
+  const blob = await octokit.rest.git.getBlob({
+    owner: repo.owner,
+    repo: repo.name,
+    file_sha: file.sha,
+  });
+  if (!blob.data.content) {
+    throw new Error(`No content returned for ${file.path}`);
+  }
+
+  return Buffer.from(
+    blob.data.content,
+    blob.data.encoding === "base64" ? "base64" : "utf-8",
+  ).toString("utf-8");
 }
 
 function repositoryFileToDocument(

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { slackMessageText } from "./slack-message-text";
+import { slackMessageText, slackThreadMessageText } from "./slack-message-text";
 
 describe("Slack composer text recovery", () => {
   test("preserves an existing fallback without adding block text twice", () => {
@@ -103,5 +103,27 @@ describe("Slack composer text recovery", () => {
     ],
   ])("ignores malformed or non-content blocks: %j", (blocks) => {
     expect(slackMessageText({ blocks })).toBe("");
+  });
+});
+
+describe("Slack thread-history text recovery", () => {
+  test("reads an attachment's fallback only when it has no other content", () => {
+    expect(
+      slackThreadMessageText({
+        text: "",
+        attachments: [
+          { fallback: "Disk usage 91% on db-1" },
+          { fallback: "summary", title: "Disk usage", text: "91% on db-1" },
+        ],
+      }),
+    ).toBe("Disk usage 91% on db-1\nDisk usage\n91% on db-1");
+  });
+
+  test("caps recovered attachment text", () => {
+    const text = slackThreadMessageText({
+      attachments: [{ text: "x".repeat(10_000) }],
+    });
+    expect(text.length).toBeLessThan(10_000);
+    expect(text.endsWith("…")).toBe(true);
   });
 });

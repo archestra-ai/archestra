@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useSession } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useConfig } from "@/lib/config/config.query";
 import { useHealth } from "@/lib/config/health.query";
@@ -30,10 +30,14 @@ export const VERSION_SLOT_GENERATION_ATTRIBUTE = "data-version-slot-generation";
 
 export const Version = memo(function Version({ inline = false }: VersionProps) {
   // Signed in, the version comes with the config the shell already loads;
-  // `/health` is only asked on signed-out pages (e.g. sign-in).
-  const isAuthenticated = useIsAuthenticated();
+  // `/health` is only asked on signed-out pages (e.g. sign-in), once the
+  // session check says so: a signed-in page load never asks it.
+  const { data: session, isPending: isSessionPending } = useSession();
+  const isAuthenticated = session?.user != null;
   const { data: appConfig } = useConfig();
-  const { data: health } = useHealth({ enabled: !isAuthenticated });
+  const { data: health } = useHealth({
+    enabled: !isSessionPending && !isAuthenticated,
+  });
   const { data: organization } = useOrganization();
   const { data: appearance } = useAppearanceSettings();
   // SPDX-SnippetBegin

@@ -120,71 +120,14 @@ export const MISSING_CREDENTIAL_TONE: Record<
 type MissingCredentialBehavior =
   archestraApiTypes.GetAgentResponses["200"]["missingCredentialBehavior"];
 
-/**
- * Auto mode as a sentence rather than a count.
- *
- * Auto pins two settings the reader cannot change — progressive tool loading is
- * forced on, and missing connections always asks when a tool needs one — so
- * their rows are not rendered here. What progressive loading buys is the part
- * worth keeping, and it belongs in the one line the mode does get.
- */
-export function excludedToolsSummary(count: number | null): string {
-  const saves = "Saves context by exposing only search_tools and run_tool";
-  // The exclusions editor opens on a server-side pre-fill, so until it has
-  // loaded the reach is not known — better to say nothing about it than to
-  // claim "every tool" and correct it a moment later.
-  if (count === null) return `${saves}.`;
-  if (count === 0) return `${saves}, with access to every tool.`;
-  return `${saves}, with access to every tool except ${count}.`;
-}
-
 /** The same, for the knowledge half of Auto mode. */
 export function excludedSourcesSummary(count: number): string {
   if (count === 0) return "Every knowledge source, with no exceptions.";
   return `Every knowledge source, except ${count}.`;
 }
 
-/**
- * Custom mode's counterpart to {@link excludedToolsSummary}.
- *
- * Empty at zero: the editor draws its own empty state directly below, and a
- * header that says "no tools assigned" over a panel headed "No tools assigned
- * yet" is the same sentence twice.
- */
-export function assignedToolsSummary(count: number): string {
-  if (count === 0) return "";
-  return `${count} tool${count === 1 ? "" : "s"} assigned.`;
-}
-
 /** Auto mode for subagents, as a sentence. */
 export function excludedSubagentsSummary(count: number): string {
   if (count === 0) return "All local agents are subagents.";
   return `All local agents are subagents, except ${count} excluded.`;
-}
-
-/** Custom mode for subagents, as a sentence. Empty at zero, as above. */
-export function assignedSubagentsSummary(count: number): string {
-  if (count === 0) return "";
-  return `${count} subagent${count === 1 ? "" : "s"} assigned.`;
-}
-
-/**
- * Published skills, both modes in one call.
- *
- * One function rather than a ternary in the JSX: a conditional that resolves to
- * bare text is re-parented by Chrome's translator and crashes React
- * (facebook/react#11538), which the repo lints for.
- */
-export function publishedSkillsSummary(params: {
-  publishesAll: boolean;
-  excludedCount: number;
-  assignedCount: number;
-}): string {
-  if (params.publishesAll) {
-    return params.excludedCount === 0
-      ? "Every organization skill in this environment, with no exceptions."
-      : `Every organization skill in this environment, except ${params.excludedCount}.`;
-  }
-  if (params.assignedCount === 0) return "";
-  return `${params.assignedCount} skill${params.assignedCount === 1 ? "" : "s"} published.`;
 }

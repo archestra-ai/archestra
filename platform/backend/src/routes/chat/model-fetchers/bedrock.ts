@@ -224,10 +224,11 @@ function mergeOnDemandFoundationModels(
     .filter((model) => !seen.has(model.modelId as string))
     .filter((model) => (model.modelLifecycle?.status ?? "ACTIVE") === "ACTIVE")
     .filter((model) => model.inferenceTypesSupported?.includes("ON_DEMAND"))
-    // ListFoundationModels carries the authoritative modality, so unlike the
-    // profile path this needs no name-pattern guessing to exclude embedding,
-    // image, and video models.
+    // ListFoundationModels carries the authoritative modality, which excludes
+    // embedding, image, and video models. Rerankers still need the name
+    // patterns: AWS reports their relevance scores as TEXT output.
     .filter((model) => model.outputModalities?.includes("TEXT"))
+    .filter((model) => !isNonChatBedrockModel(model.modelId as string))
     .filter((model) => {
       if (allowedProviders.length === 0) return true;
       return allowedProviders.some((provider) =>
@@ -338,14 +339,13 @@ function mapInferenceProfilesToModels(
 // Bedrock foundation-model families whose output is not chat text — embeddings,
 // rerankers, and image/video generators. They can't serve chat completions, so
 // listing one in the chat model picker lets a user select it and break every
-// message. The inference-profiles endpoint this fetcher uses carries no
-// modality (AWS ListFoundationModels holds the authoritative outputModalities
-// but would cost a second control-plane call per sync), so classify by the
+// message. The inference-profiles endpoint carries no modality, and
+// ListFoundationModels reports rerankers as TEXT output, so classify by the
 // stable model id / underlying foundation-model name. Fails open: an id that
 // matches no pattern is kept, so a new chat family is never hidden.
 const NON_CHAT_BEDROCK_MODEL_PATTERNS: RegExp[] = [
   /embed/i, // cohere.embed, amazon.titan-embed, twelvelabs.marengo-embed
-  /rerank/i, // cohere.rerank
+  /rerank/i, // cohere.rerank, amazon.rerank
   /stable-image|stable-diffusion|sdxl|stability\./i, // Stability image models
   /titan-image|nova-canvas/i, // Amazon image generators
   /nova-reel|luma\./i, // video generators

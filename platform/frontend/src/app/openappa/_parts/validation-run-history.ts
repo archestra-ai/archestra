@@ -13,15 +13,19 @@ type RecordedRun = {
     contentHash: string;
     status: ValidationRunStatus;
     error?: string | null;
-    steps?: {
-      line: number;
-      tool: string;
-      expected: string;
-      actual: string | null;
-      status: ValidationRunStatus;
-      error?: string | null;
-    }[];
+    steps?: RecordedStep[];
   }[];
+};
+
+type RecordedStep = {
+  line: number;
+  tool: string;
+  expected: string;
+  actual: string | null;
+  status: ValidationRunStatus;
+  error?: string | null;
+  /** Why a blocked call was blocked; runs recorded before it have none. */
+  reasons?: string[];
 };
 
 /** One run's outcome: any failure fails it; anything unreplayed means it cannot run. */
@@ -81,6 +85,8 @@ export type ValidationFileState = {
   /** What kind of run recorded the result, e.g. "Single file run". */
   runLabel: string | null;
   error: string | null;
+  /** The step whose decision did not match, when that is what failed the file. */
+  failedStep: RecordedStep | null;
 };
 
 /** The kind of run, as run history names it. */
@@ -119,6 +125,13 @@ export function validationFileStates(
       if (latest) {
         const { run, result } = latest;
         // A refused policy or a failed run decided nothing about the file.
+        const runError = [
+          result.error || run.executionError,
+          ...(run.validation.valid ? [] : (run.validation.errors ?? [])),
+        ]
+          .filter(Boolean)
+          .join("\n");
+        const step = result.steps?.find((item) => item.status !== "passed");
         return [
           file.path,
           {
@@ -128,34 +141,46 @@ export function validationFileStates(
                 : result.status,
             runAt: run.createdAt,
             runLabel: validationRunLabel(run),
-            error:
-              [
-                result.error || run.executionError,
-                ...(run.validation.valid ? [] : (run.validation.errors ?? [])),
-              ]
-                .filter(Boolean)
-                .join("\n") ||
-              stepError(result.steps) ||
-              null,
+            error: runError || (step ? stepSummary(step) : null),
+            failedStep: runError ? null : mismatchedStep(result.steps),
           },
         ];
       }
       return [
         file.path,
-        { status: "not_run", runAt: null, runLabel: null, error: null },
+        {
+          status: "not_run",
+          runAt: null,
+          runLabel: null,
+          error: null,
+          failedStep: null,
+        },
       ];
     }),
   );
 }
 
-/** The first step that did not pass, as a one-line reason. */
-function stepError(steps: RecordedRun["files"][number]["steps"]) {
+/**
+ * The first step that did not pass, in a few lines: what was expected, what
+ * came instead and why. A blocked call's full feedback speaks to the agent
+ * (remedies, delegation advice), so it stays out unless replay could not
+ * decide the step at all.
+ */
+function stepSummary(step: RecordedStep) {
+  const at = `Line ${step.line} · ${step.tool}`;
+  if (step.status === "cannot_run" && step.error) return `${at}: ${step.error}`;
+  return [
+    `${at}: expected ${step.expected}, got ${step.actual ?? "no decision"}`,
+    ...(step.reasons ?? []),
+  ].join("\n");
+}
+
+/** The step a file failed on, when a decision that did not match failed it. */
+export function mismatchedStep<Step extends RecordedStep>(
+  steps: Step[] | undefined,
+): Step | null {
   const step = steps?.find((item) => item.status !== "passed");
-  if (!step) return null;
-  return (
-    step.error ||
-    `Line ${step.line} · ${step.tool}: expected ${step.expected}, got ${step.actual ?? "no decision"}`
-  );
+  return step?.status === "failed" ? step : null;
 }
 
 export type ValidationSuiteSummary = {

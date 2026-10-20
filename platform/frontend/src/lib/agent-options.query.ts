@@ -4,7 +4,11 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
 } from "@archestra/shared";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData as keepPreviousRows,
+  useInfiniteQuery,
+  useQuery,
+} from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export type AgentOptionFilters = Omit<
@@ -66,11 +70,16 @@ export function useAgentOptionsPage({
 /**
  * Names for explicit references, without fetching unrelated agents. Built-in
  * agents resolve too unless `filters.excludeBuiltIn` is true.
+ *
+ * `keepPreviousData` keeps the last resolved rows while a changed id list
+ * loads, for editors whose list grows and shrinks one pick at a time. The
+ * rows can then name ids no longer asked for, so callers filter by id.
  */
 export function useAgentOptionsByIds({
   ids,
   filters,
   enabled = true,
+  keepPreviousData = false,
 }: {
   ids: readonly string[];
   filters?: Omit<
@@ -78,6 +87,7 @@ export function useAgentOptionsByIds({
     "ids" | "limit" | "cursor"
   >;
   enabled?: boolean;
+  keepPreviousData?: boolean;
 }) {
   const uniqueIds = [...new Set(ids)].sort();
   return useQuery({
@@ -122,6 +132,7 @@ export function useAgentOptionsByIds({
       ];
     },
     enabled: enabled && uniqueIds.length > 0,
+    placeholderData: keepPreviousData ? keepPreviousRows : undefined,
   });
 }
 

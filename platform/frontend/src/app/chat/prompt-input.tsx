@@ -285,6 +285,7 @@ const PromptInputContent = ({
   onCompactConversation,
   onOpenFiles,
   selectorAgentId,
+  isSelectorAgentResolving,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1116,6 +1117,7 @@ const PromptInputContent = ({
           maxContextLength={maxContextLength}
           agentLlmApiKeyId={agentLlmApiKeyId}
           selectorAgentId={selectorAgentId}
+          isSelectorAgentResolving={isSelectorAgentResolving}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}
@@ -1365,6 +1367,7 @@ const ArchestraPromptInput = ({
   onCompactConversation,
   onOpenFiles,
   selectorAgentId,
+  isSelectorAgentResolving,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1486,6 +1489,7 @@ const ArchestraPromptInput = ({
           onCompactConversation={onCompactConversation}
           onOpenFiles={onOpenFiles}
           selectorAgentId={selectorAgentId}
+          isSelectorAgentResolving={isSelectorAgentResolving}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}

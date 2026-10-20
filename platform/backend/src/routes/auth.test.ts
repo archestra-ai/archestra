@@ -905,6 +905,35 @@ describe("auth routes", () => {
     }
   });
 
+  test("explains that an expired OAuth consent request must be restarted", async () => {
+    // Real better-auth: its signed-query check is the behavior under test.
+    vi.mocked(betterAuth.handler).mockRestore();
+    const expiredAtSeconds = Math.floor(Date.now() / 1000) - 60;
+    const oauthQuery = new URLSearchParams({
+      response_type: "code",
+      client_id: "test-client",
+      redirect_uri: "http://127.0.0.1:53280/callback",
+      scope: "mcp",
+      code_challenge: "z3m9itT_If5IIoYttJt26gisBUMM2ywTcv9eqqIZvFE",
+      code_challenge_method: "S256",
+      exp: String(expiredAtSeconds),
+      ba_iat: String((expiredAtSeconds - 600) * 1000),
+      sig: "Xh2WFq2Gyw6f7+noAqYrOse947K9QDXU20UwL8w8VNs=",
+    }).toString();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/consent",
+      headers: { origin: config.frontendBaseUrl },
+      payload: { accept: true, scope: "mcp", oauth_query: oauthQuery },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe(
+      "This authorization request has expired. Go back to the application and connect again to start a new request.",
+    );
+  });
+
   describe("x-archestra-client-ip is never forwarded from client input", () => {
     // `resolveAuthClientIp` in better-auth.ts trusts only this single header,
     // so if any auth handler forwards a client-supplied value through to

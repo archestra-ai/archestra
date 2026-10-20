@@ -366,10 +366,11 @@ describe("createFastifyInstance", () => {
       );
 
       const app = createFastifyInstance();
+      const databaseHost = new URL(config.database.url).hostname;
       // Mimic the ORM's per-query wrapper around an underlying DNS failure
       app.get("/test-db-unavailable", async () => {
         throw new Error('Failed query: select "id" from "agents"', {
-          cause: new Error("getaddrinfo EAI_AGAIN db.example.internal"),
+          cause: new Error(`getaddrinfo EAI_AGAIN ${databaseHost}`),
         });
       });
 
@@ -397,6 +398,60 @@ describe("createFastifyInstance", () => {
       });
 
       captureSpy.mockRestore();
+    });
+
+    test.each([
+      [
+        "an MCP error relaying a DNS failure",
+        new Error(
+          "MCP error -32603: request to https://api.example.com/v1 failed, reason: getaddrinfo ENOTFOUND api.example.com",
+        ),
+        "api.example.com",
+      ],
+      [
+        "an SDK wrapping a refused connection",
+        new Error("Connection error.", {
+          cause: Object.assign(
+            new Error("connect ECONNREFUSED 203.0.113.10:443"),
+            {
+              code: "ECONNREFUSED",
+              syscall: "connect",
+              address: "203.0.113.10",
+              port: 443,
+            },
+          ),
+        }),
+        "203.0.113.10:443",
+      ],
+    ])("names the unreachable host instead of blaming the database for %s", async (_kind, thrown, host) => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+      const app = createFastifyInstance();
+      app.get("/test-outbound-unreachable", async () => {
+        throw thrown;
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-outbound-unreachable",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({
+        error: {
+          message: `Could not connect to ${host}. Check that the network egress policy allows this host and that the service is reachable, then retry.`,
+          type: "api_service_unavailable_error",
+        },
+      });
+      expect(captureSpy).not.toHaveBeenCalled();
+
+      captureSpy.mockRestore();
+      await app.close();
     });
 
     test.each([

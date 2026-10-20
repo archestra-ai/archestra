@@ -2,7 +2,7 @@
 title: Subagents
 description: Let an agent delegate work to its own copy, your agents, built-in subagents, or external A2A agents
 order: 5
-lastUpdated: 2026-10-07
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,7 @@ A subagent can be:
 
 What to know:
 
-- **All** mode lets the parent agent use any agent the person can access, including agents created later. To leave one out, click **Exclude a local agent**. External agents are never added this way.
+- **All agents** lets the parent agent use any agent the person can access, including agents created later. To leave one out, click **Exclude a local agent**. External agents are never added this way.
 - External agents are added after the parent agent is created. See [External Agents](/docs/agents/subagents/external).
 - Subagents must share the parent agent's [environment](/docs/admin/environments).
 - Automated runs, with no signed-in person, use only the agents you selected.

@@ -702,10 +702,10 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     container
         .sync()
         .await
-        .map_err(engine)
+        .inspect_err(|err| tracing::warn!(error = %err, "warm base image build failed"))
+        .map_err(|err| warm_base_error(&image, err))
         .map(|id| client.load_container_from_id(id))
         .inspect(|_| tracing::debug!("warm base image ready"))
-        .inspect_err(|err| tracing::warn!(error = %err, "warm base image build failed"))
 }
 
 /// dagger builds one lazily-chained GraphQL query whose response nests one
@@ -1173,6 +1173,58 @@ fn engine(err: DaggerError) -> SandboxError {
     SandboxError::EngineUnreachable {
         fault: classify_engine_fault(&err),
         message: err.to_string(),
+    }
+}
+
+/// classify a warm-base build failure. the engine answering with a pull or
+/// registry-resolution error means it is healthy but cannot fetch `image` (a
+/// blocked registry under restricted egress, or a missing or private image), so
+/// that failure names the image and registry instead of reading as an engine
+/// outage. everything else keeps the engine classification.
+fn warm_base_error(image: &str, err: DaggerError) -> SandboxError {
+    if is_image_pull_failure(image, &err) {
+        return SandboxError::ImagePullFailed {
+            image: image.to_string(),
+            registry: registry_host(image).to_string(),
+        };
+    }
+    engine(err)
+}
+
+/// substrings the engine uses when resolving or fetching an image fails. only
+/// consulted on domain errors from the warm-base build, whose single image
+/// source is the base image.
+const IMAGE_PULL_ERROR_MARKERS: &[&str] = &[
+    "failed to resolve source metadata",
+    "failed to resolve image",
+    "pull access denied",
+    "failed to do request",
+    "failed to fetch",
+];
+
+/// a pull failure is a domain error (the engine answered) that is neither a
+/// failed setup exec nor a stale-attachables timeout, and that mentions the
+/// image or a known pull failure.
+fn is_image_pull_failure(image: &str, err: &DaggerError) -> bool {
+    let DaggerError::Query(GraphQLError::DomainError { message, .. }) = err else {
+        return false;
+    };
+    if exec_exit_code(err).is_some() || classify_engine_fault(err) == EngineFault::StaleAttachables
+    {
+        return false;
+    }
+    message.contains(image)
+        || IMAGE_PULL_ERROR_MARKERS
+            .iter()
+            .any(|marker| message.contains(marker))
+}
+
+/// the registry host of an image reference: its first path component when that
+/// names a host (has a `.` or `:`, or is `localhost`), else Docker Hub.
+fn registry_host(image: &str) -> &str {
+    match image.split_once('/') {
+        Some((first, _)) if first.contains(['.', ':']) || first == "localhost" => first,
+        _ => "docker.io",
     }
 }
 
@@ -1879,6 +1931,92 @@ mod tests {
             from_sdk(err),
             SandboxError::EngineUnreachable { .. }
         ));
+    }
+
+    const IMAGE: &str = "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
+
+    #[test]
+    fn warm_base_error_names_the_image_and_registry_when_the_pull_is_blocked() {
+        // the engine answered, but its registry request was dropped by egress.
+        let err = domain_error(
+            "failed to resolve source metadata for ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim: \
+             failed to do request: Head \"https://ghcr.io/v2/astral-sh/uv/manifests/0.9.17-python3.12-bookworm-slim\": \
+             dial tcp 140.82.112.34:443: i/o timeout",
+            None,
+        );
+        let mapped = warm_base_error(IMAGE, err);
+        assert_eq!(
+            mapped,
+            SandboxError::ImagePullFailed {
+                image: IMAGE.to_string(),
+                registry: "ghcr.io".to_string(),
+            }
+        );
+        assert_eq!(mapped.code(), "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED");
+        let message = mapped.to_string();
+        assert!(message.contains(IMAGE), "{message}");
+        assert!(message.contains("ghcr.io"), "{message}");
+        assert!(message.contains("egress"), "{message}");
+    }
+
+    #[test]
+    fn warm_base_error_recognises_a_denied_pull_without_the_image_ref() {
+        let err = domain_error(
+            "pull access denied, repository does not exist or may require authorization",
+            None,
+        );
+        assert!(matches!(
+            warm_base_error("python:3.12", err),
+            SandboxError::ImagePullFailed { ref registry, .. } if registry == "docker.io"
+        ));
+    }
+
+    #[test]
+    fn warm_base_error_keeps_engine_failures_as_engine_unreachable() {
+        // transport errors never reached the engine, so they are not pull failures
+        // even when the message happens to mention the image.
+        let transport = DaggerError::Query(GraphQLError::HttpError(format!(
+            "connection refused while resolving {IMAGE}"
+        )));
+        assert!(matches!(
+            warm_base_error(IMAGE, transport),
+            SandboxError::EngineUnreachable {
+                fault: EngineFault::Unreachable,
+                ..
+            }
+        ));
+
+        let stale = domain_error(
+            "waiting for client session attachables: context deadline exceeded",
+            None,
+        );
+        assert!(matches!(
+            warm_base_error(IMAGE, stale),
+            SandboxError::EngineUnreachable {
+                fault: EngineFault::StaleAttachables,
+                ..
+            }
+        ));
+
+        // the warm base's setup exec failing is not an image pull failure.
+        let setup = exec_error(100, "process \"sh -c apt-get install\" did not complete");
+        assert!(!matches!(
+            warm_base_error(IMAGE, setup),
+            SandboxError::ImagePullFailed { .. }
+        ));
+    }
+
+    #[test]
+    fn registry_host_follows_the_image_reference_rules() {
+        assert_eq!(registry_host(IMAGE), "ghcr.io");
+        assert_eq!(
+            registry_host("registry.internal:5000/team/base:1"),
+            "registry.internal:5000"
+        );
+        assert_eq!(registry_host("localhost/base"), "localhost");
+        // no registry component means the Docker Hub default.
+        assert_eq!(registry_host("python:3.12"), "docker.io");
+        assert_eq!(registry_host("library/python:3.12"), "docker.io");
     }
 
     #[test]

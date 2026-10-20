@@ -9,7 +9,10 @@ import {
 } from "@/models";
 import { afterEach, describe, expect, test, vi } from "@/test";
 import { asSandboxId } from "@/types";
-import { SandboxRuntimeError } from "../sandbox-runtime/sandbox-runtime-service";
+import {
+  SandboxRuntimeError,
+  sandboxRuntimeService,
+} from "../sandbox-runtime/sandbox-runtime-service";
 import {
   __internals,
   skillSandboxRuntimeService,
@@ -60,6 +63,39 @@ describe("skillSandboxRuntimeService", () => {
         command: "echo hi",
       }),
     ).rejects.toBeInstanceOf(SkillSandboxError);
+  });
+
+  test("runCommand names the blocked base image instead of an engine outage", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/home/sandbox",
+    });
+    const message =
+      'could not pull the sandbox base image "ghcr.io/example/base:1" from ghcr.io. Check that the network egress policy allows ghcr.io and that the image exists.';
+    // Stub only the Dagger runtime boundary; the sandbox row and replay log stay real.
+    config.skillsSandbox.enabled = true;
+    vi.spyOn(sandboxRuntimeService, "isEnabled", "get").mockReturnValue(true);
+    vi.spyOn(sandboxRuntimeService, "runCommand").mockRejectedValue(
+      new SandboxRuntimeError(message, "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED"),
+    );
+
+    const error = await skillSandboxRuntimeService
+      .runCommand({
+        sandboxId: asSandboxId(sandbox.id),
+        caller: { userId: user.id, organizationId: org.id },
+        command: "echo hi",
+      })
+      .catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(SkillSandboxError);
+    expect((error as Error).message).toBe(message);
   });
 
   test("exportArtifact rejects with SkillSandboxError while disabled", async () => {

@@ -16434,7 +16434,12 @@ export type GetAgentCredentialReadinessResponse = GetAgentCredentialReadinessRes
 export type GetDefaultMcpGatewayData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Attach the gateway's assigned tools. Defaults to true. Pass false when you need only the gateway or its `toolsCount` and `subagentsCount`, which are always present: the tool refs make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned', and `sandboxAvailable` is absent.
+         */
+        includeTools?: boolean;
+    };
     url: '/api/mcp-gateways/default';
 };
 
@@ -16637,6 +16642,14 @@ export type GetDefaultMcpGatewayResponses = {
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
         activationSkillsCount?: number;
+        /**
+         * Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested.
+         */
+        toolsCount: number;
+        /**
+         * Agents this agent delegates to. Always present, even when `tools` is not requested.
+         */
+        subagentsCount: number;
     };
 };
 
@@ -34509,6 +34522,54 @@ export type GetBootstrapResponses = {
             providerBaseUrls: {
                 [key: string]: string | null;
             };
+        };
+        publicConfig: {
+            disableBasicAuth: boolean;
+            disableInvitations: boolean;
+            disableImpersonation: boolean;
+            devAutoLoginEnabled: boolean;
+            maintenanceMode: string | null;
+            siteNotificationMessage: string | null;
+            enterpriseCoreActive: boolean;
+            analytics: {
+                enabled: boolean;
+                instanceId: string | null;
+                posthog: {
+                    key: string;
+                    host: string;
+                };
+            };
+            rum: {
+                enabled: boolean;
+                sampleRate: number;
+            };
+        };
+        appearance: {
+            theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+            customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+            logo: string | null;
+            logoDark: string | null;
+            favicon: string | null;
+            iconLogo: string | null;
+            iconLogoDark: string | null;
+            appName: string | null;
+            ogDescription: string | null;
+            footerText: string | null;
+            chatLinks: Array<{
+                label: string;
+                url: string;
+            }> | null;
+            chatErrorSupportMessage: string | null;
+            slimChatErrorUi: boolean;
+            animateChatPlaceholders: boolean;
+        };
+        memberDefaultAgent: {
+            defaultAgentId: string | null;
+            personalChatAgentId: string | null;
+        };
+        memberDefaultModel: {
+            modelId: string | null;
+            chatApiKeyId: string | null;
         };
     };
 };
@@ -94186,6 +94247,7 @@ export type RunOpenAppaPolicyTestsResponses = {
                 actual: string | null;
                 status: 'passed' | 'failed' | 'cannot_run';
                 error?: string | null;
+                reasons?: Array<string>;
             }>;
         }>;
         validation: {
@@ -94306,6 +94368,7 @@ export type GetOpenAppaPolicyTestRunsResponses = {
                 actual: string | null;
                 status: 'passed' | 'failed' | 'cannot_run';
                 error?: string | null;
+                reasons?: Array<string>;
             }>;
         }>;
         validation: {
@@ -94430,6 +94493,7 @@ export type PreviewOpenAppaPolicyTestResponses = {
                 actual: string | null;
                 status: 'passed' | 'failed' | 'cannot_run';
                 error?: string | null;
+                reasons?: Array<string>;
             }>;
         }>;
         validation: {

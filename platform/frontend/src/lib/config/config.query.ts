@@ -33,7 +33,9 @@ export function useConfig() {
 export function usePublicConfig() {
   return useQuery({
     queryKey: ["public-config"],
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.publicConfig) return seed.publicConfig;
       const { data, error } = await archestraApiSdk.getPublicConfig();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;

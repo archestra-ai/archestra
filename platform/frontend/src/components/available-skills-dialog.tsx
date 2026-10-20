@@ -69,13 +69,18 @@ export function AvailableSkillsDialog({
       >
         {label}
       </Button>
-      <DialogContent className="h-[80dvh] max-w-5xl sm:max-w-5xl">
+      {/* Sized to its rows, so a short list is a short dialog. */}
+      <DialogContent className="max-h-[85dvh] max-w-3xl sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Skills available in All mode</DialogTitle>
+          <DialogTitle>
+            {source.kind === "agent"
+              ? "Skills this agent can load"
+              : "Skills this gateway publishes"}
+          </DialogTitle>
           <DialogDescription>
             {source.kind === "agent"
-              ? "This read-only list shows skills available after access, environment, and policy filters."
-              : "This read-only list shows organization skills published by All mode after exclusions."}
+              ? "Every skill the person using it can load, minus your exclusions."
+              : "Every organization skill in its environment, minus your exclusions."}
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">

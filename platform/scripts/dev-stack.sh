@@ -100,6 +100,18 @@ cmd_up() {
   local worktree_dir; worktree_dir="$(cd .. && pwd)"
   local env_file="$platform_dir/.env"
 
+  # The worktree bootstrap links .env to the main checkout's file. The port
+  # rewrite below would write through that link and repoint the main stack,
+  # so give this stack its own copy first.
+  if [ -L "$env_file" ] && [ -f "$env_file" ]; then
+    local env_copy; env_copy="$(mktemp "$platform_dir/.env.XXXXXX")"
+    cp "$env_file" "$env_copy"
+    mv -f "$env_copy" "$env_file"
+    echo "→ Replaced the linked .env with a copy for this stack" >&2
+  elif [ -L "$env_file" ]; then
+    rm -f "$env_file"
+  fi
+
   if [ ! -f "$env_file" ]; then
     # Auto-copy from the main worktree (the original clone, where .git is a
     # directory). `git worktree list --porcelain` is documented to list the

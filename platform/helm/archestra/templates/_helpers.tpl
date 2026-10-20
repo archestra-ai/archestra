@@ -667,6 +667,26 @@ app.kubernetes.io/component: worker
 {{- end }}
 
 {{/*
+Topology spread constraints for one Deployment. archestra.topologySpreadConstraints
+is shared by the web and worker Deployments, so a constraint without a
+labelSelector gets the rendering Deployment's own selector labels: each
+Deployment then spreads its own pods.
+Usage: include "archestra-platform.topologySpreadConstraints" (dict "constraints" .Values.archestra.topologySpreadConstraints "selectorLabels" (include "archestra-platform.selectorLabels" .))
+*/}}
+{{- define "archestra-platform.topologySpreadConstraints" -}}
+{{- $selector := fromYaml .selectorLabels -}}
+{{- $out := list -}}
+{{- range .constraints -}}
+{{- $constraint := deepCopy . -}}
+{{- if not (hasKey $constraint "labelSelector") -}}
+{{- $_ := set $constraint "labelSelector" (dict "matchLabels" $selector) -}}
+{{- end -}}
+{{- $out = append $out $constraint -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end }}
+
+{{/*
 Worker labels
 */}}
 {{- define "archestra-platform.workerLabels" -}}

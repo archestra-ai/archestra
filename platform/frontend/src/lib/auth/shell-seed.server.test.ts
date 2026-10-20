@@ -17,6 +17,7 @@ const { requestHeaders, getBootstrapMock, getIssueIndexMock, fetchMock, sdk } =
       getNewChatBootstrap: vi.fn(),
       getConversationBootstrap: vi.fn(),
       getMyAgentRuns: vi.fn(),
+      getMyAgentRun: vi.fn(),
     },
   }));
 
@@ -41,7 +42,10 @@ vi.mock("@archestra/shared", async (importOriginal) => {
   };
 });
 
-import { myAgentRunsQueryKey } from "@/lib/agent-runs-query-keys";
+import {
+  agentRunQueryKey,
+  myAgentRunsQueryKey,
+} from "@/lib/agent-runs-query-keys";
 import { appsQueryKey, SIDEBAR_PINNED_APPS_QUERY } from "@/lib/app.query";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import {
@@ -71,6 +75,7 @@ const projects = { data: [{ id: "p1", pinnedAt: "2026-01-01" }] };
 const apps = { data: [{ id: "a1", pinnedAt: "2026-01-01" }] };
 const capabilities = { networkPolicy: { enforcementStatus: "unknown" } };
 const CONVERSATION_ID = "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+const RUN_ID = "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c";
 const conversation = {
   id: CONVERSATION_ID,
   encryptedChat: false,
@@ -140,6 +145,9 @@ describe("prefetchShellSeed", () => {
     sdk.getMyAgentRuns.mockReset().mockImplementation(async ({ query }) => ({
       data: { data: [{ taskId: `run-${query.sort}` }], pagination: {} },
     }));
+    sdk.getMyAgentRun
+      .mockReset()
+      .mockResolvedValue({ data: { taskId: RUN_ID, endedAt: "2026-01-01" } });
     sdk.getConversationBootstrap.mockReset().mockResolvedValue({
       data: { conversation, composer: newChat },
     });
@@ -216,6 +224,22 @@ describe("prefetchShellSeed", () => {
       expect.objectContaining({ path: { id: CONVERSATION_ID } }),
     );
     expect(sdk.getNewChatBootstrap).not.toHaveBeenCalled();
+  });
+
+  it("seeds a run page's shell and the run's details", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, `/chat/runs/${RUN_ID}`);
+
+    expect((await prefetchShellSeed())?.queries).toEqual([
+      ...shellQueries,
+      {
+        queryKey: agentRunQueryKey(RUN_ID),
+        data: { taskId: RUN_ID, endedAt: "2026-01-01" },
+      },
+    ]);
+    expect(sdk.getMyAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ path: { taskId: RUN_ID } }),
+    );
+    expect(sdk.getConversationBootstrap).not.toHaveBeenCalled();
   });
 
   it("leaves an encrypted or unreadable conversation to the browser, keeping the shell", async () => {

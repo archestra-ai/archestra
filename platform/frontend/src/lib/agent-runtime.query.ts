@@ -13,6 +13,7 @@ import {
   hasRetainedSessionActivity,
 } from "@/lib/agent-run-activity";
 import {
+  agentRunQueryKey,
   MY_AGENT_RUNS_PAGE_SIZE,
   type MyAgentRunsOptions,
   myAgentRunsPageQuery,
@@ -144,14 +145,13 @@ export function useMyAgentRuns(
 export function useMyAgentRun(taskId: string, enabled = true) {
   const queryClient = useQueryClient();
   return useQuery({
-    queryKey: ["agent-runs", taskId],
+    queryKey: agentRunQueryKey(taskId),
     queryFn: async () => {
       const { data, error } = await getMyAgentRun({ path: { taskId } });
       throwOnApiError(error, { toastOnError: false });
-      const previous = queryClient.getQueryData<typeof data>([
-        "agent-runs",
-        taskId,
-      ]);
+      const previous = queryClient.getQueryData<typeof data>(
+        agentRunQueryKey(taskId),
+      );
       // Refresh the sidebar lists when a run's state changes. The first read
       // of a run is not a change: it used to invalidate the lists too, which
       // cancelled and restarted their in-flight page loads on every run page.

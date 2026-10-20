@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { headers } from "next/headers";
 import {
+  agentRunQueryKey,
   myAgentRunsPageQuery,
   myAgentRunsQueryKey,
   SIDEBAR_PINNED_RUNS,
@@ -13,6 +14,7 @@ import {
   SHELL_SEED_HEADER,
   SHELL_SEED_SEARCH_HEADER,
   seededConversationId,
+  seededRunId,
   seedsNewChatComposer,
 } from "@/lib/auth/shell-seed";
 import {
@@ -152,6 +154,15 @@ async function readShellQueries(params: {
       archestraApiSdk.getK8sCapabilities(options),
     ),
   ];
+  const runId = seededRunId(params.route);
+  if (runId) {
+    reads.push(
+      seedRead(
+        agentRunQueryKey(runId),
+        archestraApiSdk.getMyAgentRun({ ...options, path: { taskId: runId } }),
+      ),
+    );
+  }
   if (params.route === "/mcp/registry") {
     reads.push(
       seedRead(

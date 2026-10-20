@@ -9,6 +9,11 @@ export const MY_AGENT_RUNS_PAGE_SIZE = 20;
 
 export type MyAgentRunsOptions = { pinned?: boolean; search?: string };
 
+/** One run, as its page and the sidebar's selected row read it. */
+export function agentRunQueryKey(taskId: string | undefined) {
+  return ["agent-runs", taskId] as const;
+}
+
 export function myAgentRunsQueryKey(options: MyAgentRunsOptions = {}) {
   return ["agent-runs", "mine", options] as const;
 }

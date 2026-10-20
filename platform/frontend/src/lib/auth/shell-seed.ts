@@ -17,7 +17,8 @@ export function isShellSeedRoute(pathname: string | null | undefined): boolean {
   return (
     !!pathname &&
     (SHELL_SEED_ROUTES.includes(pathname) ||
-      seededConversationId(pathname) !== null)
+      seededConversationId(pathname) !== null ||
+      seededRunId(pathname) !== null)
   );
 }
 
@@ -33,8 +34,20 @@ export function seededConversationId(
   return CONVERSATION_PATH.exec(pathname ?? "")?.[1] ?? null;
 }
 
-const CONVERSATION_PATH =
-  /^\/chat\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+/**
+ * The run an Agent Runtime run path (`/chat/runs/<id>`) opens, or null. Its
+ * document is seeded with the shell and the run's details, so an ended run
+ * renders its page, and its output panel loading, before the history streams.
+ */
+export function seededRunId(
+  pathname: string | null | undefined,
+): string | null {
+  return RUN_PATH.exec(pathname ?? "")?.[1] ?? null;
+}
+
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const CONVERSATION_PATH = new RegExp(`^/chat/(${UUID})$`, "i");
+const RUN_PATH = new RegExp(`^/chat/runs/(${UUID})$`, "i");
 
 /**
  * The request header the proxy sets on such a document load, holding the

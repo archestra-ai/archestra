@@ -1,24 +1,13 @@
 // Import from the leaf `interactions/client` module, not the root barrel: the
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
-// import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
-import attribute,
-which;
-the;
-Playwright;
-integration - test;
-ESM;
-loader;
+// import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
-rejects.import;
-{
-  type ClientFilter
-  ,
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
+import {
+  type ClientFilter,
   ClientFilterSchema,
   clientFilterToAgentIds,
-}
-from;
-("@archestra/shared/interactions/client");
-
+} from "@archestra/shared/interactions/client";
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
 import {
   agentsSeed,

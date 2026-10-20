@@ -40,7 +40,7 @@ export function AgentCell({
     agent?.name ??
     session.profileName ??
     (isKnowledge
-      ? "Knowledge base"
+      ? (session.connectorName ?? "Knowledge base")
       : session.profileId === null
         ? "Deleted LLM proxy"
         : "Unknown agent");
@@ -93,7 +93,7 @@ type AgentKind = "agent" | "proxy" | "knowledge";
 const AGENT_KINDS: Record<AgentKind, { icon: typeof Bot; label: string }> = {
   agent: { icon: Bot, label: "Agent" },
   proxy: { icon: Layers, label: "LLM proxy" },
-  knowledge: { icon: Database, label: "Knowledge base" },
+  knowledge: { icon: Database, label: "Knowledge connector" },
 };
 
 function agentKind({

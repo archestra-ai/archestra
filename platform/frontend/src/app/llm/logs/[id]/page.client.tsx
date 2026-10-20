@@ -49,7 +49,7 @@ import { RequestDetails } from "./_parts/request-details";
 import { RequestWaterfall } from "./_parts/request-waterfall";
 import { SessionFacts } from "./_parts/session-facts";
 import {
-  SessionHeaderTitle,
+  SessionHeaderIcon,
   SessionIdentityLine,
 } from "./_parts/session-header";
 import {
@@ -320,18 +320,18 @@ export default function SessionDetailPage({
     <TooltipProvider delayDuration={150}>
       <PageLayout
         denseContent
+        // Laid out like every other detail page: back arrow, the record's
+        // mark in its tile, then the title over its one-line description.
+        icon={<SessionHeaderIcon session={sessionData} />}
         title={
-          <SessionHeaderTitle
-            session={sessionData}
-            title={sessionTitle || "Session"}
-          />
+          <span className="min-w-0 truncate" title={sessionTitle || "Session"}>
+            {sessionTitle || "Session"}
+          </span>
         }
         documentTitle={sessionTitle || "Session"}
         stackHeaderOnMobile
         backLink={
-          <span className="flex shrink-0 lg:translate-y-3">
-            <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
-          </span>
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
         }
         description={<SessionIdentityLine session={sessionData} />}
       >

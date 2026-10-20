@@ -83,7 +83,6 @@ export function YellsTable() {
   const clearFilters = () => {
     setSearch("");
     updateQueryParams({ status: null });
-    pagination.goNewest();
   };
   const actionsColumn: ColumnDef<OpenAppaYell> = {
     id: "actions",
@@ -222,7 +221,6 @@ export function YellsTable() {
               updateQueryParams({
                 status: value === "resolved" ? value : null,
               });
-              pagination.goNewest();
             }}
           />
         </FilterBar>
@@ -242,16 +240,7 @@ export function YellsTable() {
           getRowId={(row) => row.id}
           isLoading={permissionsLoading || yells.isFetching}
           manualPagination
-          cursorPagination={{
-            pageIndex: pagination.pageIndex,
-            pageSize: pagination.pageSize,
-            canGoNewer: pagination.canGoNewer,
-            hasNext: yells.data?.pagination.hasNext ?? false,
-            onPageSizeChange: pagination.setPageSize,
-            onNewer: pagination.goNewer,
-            onOlder: () =>
-              pagination.goOlder(yells.data?.pagination.nextCursor ?? null),
-          }}
+          cursorPagination={pagination.tableState(yells.data?.pagination)}
           emptyIcon={Megaphone}
           emptyMessage="No unresolved yells"
           emptyDescription="Reports appear here when an agent uses the yell tool."

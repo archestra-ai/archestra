@@ -1,9 +1,15 @@
 "use client";
 
+import { AlignLeft, Braces, List } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   readListedTools,
   readToolResultText,
@@ -125,13 +131,21 @@ export function ToolResultView({
         <>
           <fieldset
             aria-label="Result view"
-            className="inline-flex rounded-md border bg-muted/40 p-px"
+            className="inline-flex h-7 items-center gap-0.5 rounded-md border bg-muted p-px"
           >
-            <ViewButton pressed={!showRaw} onClick={() => setShowRaw(false)}>
-              {readable.label}
+            <ViewButton
+              label={readable.label}
+              pressed={!showRaw}
+              onClick={() => setShowRaw(false)}
+            >
+              {readable.label === "Tools" ? <List /> : <AlignLeft />}
             </ViewButton>
-            <ViewButton pressed={showRaw} onClick={() => setShowRaw(true)}>
-              Raw JSON
+            <ViewButton
+              label="Raw JSON"
+              pressed={showRaw}
+              onClick={() => setShowRaw(true)}
+            >
+              <Braces />
             </ViewButton>
           </fieldset>
           <CopyButton
@@ -178,16 +192,11 @@ function readResult(
             className="divide-y divide-border/60 rounded-lg border bg-background text-xs"
           >
             {tools.map((tool) => (
-              <li key={tool.name} className="px-3 py-1.5">
-                <div className="font-mono font-medium break-all">
-                  {tool.name}
-                </div>
-                {tool.description ? (
-                  <p className="line-clamp-2 text-muted-foreground">
-                    {tool.description}
-                  </p>
-                ) : null}
-              </li>
+              <ListedTool
+                key={tool.name}
+                name={tool.name}
+                description={tool.description}
+              />
             ))}
           </ul>
         ),
@@ -220,28 +229,80 @@ function EmptyNote({ children }: { children: ReactNode }) {
   return <p className="text-xs text-muted-foreground">{children}</p>;
 }
 
+/** The Agents page's view toggle: an icon per view, named by its tooltip. */
 function ViewButton({
+  label,
   pressed,
   onClick,
   children,
 }: {
+  label: string;
   pressed: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
   return (
-    <Button
-      variant="ghost"
-      size="xs"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        "font-normal text-muted-foreground",
-        pressed && "bg-background text-foreground shadow-xs",
-      )}
-    >
-      <span>{children}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={label}
+          aria-pressed={pressed}
+          onClick={onClick}
+          className={cn(
+            "size-6 rounded-sm [&_svg]:size-3.5",
+            pressed
+              ? "bg-raised text-foreground shadow-sm hover:bg-raised hover:text-foreground dark:bg-accent dark:hover:bg-accent"
+              : "text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent",
+          )}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * One listed tool. A long description is clamped to two lines, and the row
+ * opens to the whole of it, since that text is what the model was shown.
+ */
+function ListedTool({
+  name,
+  description,
+}: {
+  name: string;
+  description: string | null | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const long = (description?.length ?? 0) > 140;
+  return (
+    <li className="px-3 py-1.5">
+      <div className="font-mono font-medium break-all">{name}</div>
+      {description ? (
+        <p
+          className={cn(
+            "whitespace-pre-line text-muted-foreground",
+            !open && "line-clamp-2",
+          )}
+        >
+          {description}
+        </p>
+      ) : null}
+      {long ? (
+        <Button
+          variant="link"
+          size="xs"
+          className="h-auto px-0 text-[11px]"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span>{open ? "Show less" : "Show full description"}</span>
+        </Button>
+      ) : null}
+    </li>
   );
 }
 

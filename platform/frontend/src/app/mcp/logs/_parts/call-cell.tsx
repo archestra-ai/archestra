@@ -15,7 +15,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import type { McpToolCallOutcomeStatus } from "@/lib/mcp-logs/tool-call-content";
+import {
+  MCP_TOOL_CALL_STATUS_LABELS,
+  type McpToolCallOutcomeStatus,
+  runToolTargetName,
+} from "@/lib/mcp-logs/tool-call-content";
 import {
   canShowMcpToolCallStatus,
   resolveMcpToolCallStatus,
@@ -42,7 +46,19 @@ export function CallCell({
   const toolName = fullName
     ? parseFullToolName(fullName).toolName || fullName
     : null;
-  const serverName = server?.name ?? (row.mcpServerName || "Platform");
+  // Every dispatch through run_tool is named run_tool; name what it ran.
+  const dispatched = runToolTargetName(
+    toolName,
+    call && "arguments" in call ? call.arguments : undefined,
+  );
+  // Protocol calls (initialize, tools/list) are logged under the gateway's
+  // own pseudo-server; "on mcp-gateway" beside the Gateway column only
+  // repeats it in a third spelling.
+  const isGatewayProtocol =
+    !server && row.mcpServerName === GATEWAY_PROTOCOL_SERVER_NAME;
+  const serverName = isGatewayProtocol
+    ? "the gateway"
+    : (server?.name ?? (row.mcpServerName || "Platform"));
   const status = statusOf(row, method);
   const errorText =
     status === "error" || status === "blocked"
@@ -90,46 +106,15 @@ export function CallCell({
           ) : (
             <span
               className="truncate text-sm leading-5 font-medium"
-              title={fullName ?? undefined}
+              title={
+                dispatched
+                  ? `${fullName} → ${dispatched}`
+                  : (fullName ?? undefined)
+              }
             >
-              {toolName ?? formatMcpMethod(method)}
+              {dispatched ?? toolName ?? formatMcpMethod(method)}
             </span>
           )}
-          {status === "error" ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <UnstyledButton className="shrink-0 cursor-default rounded-sm bg-destructive/10 px-1 text-[10px] leading-4 font-medium tracking-wide text-destructive uppercase">
-                  Failed
-                </UnstyledButton>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs px-2 py-1.5">
-                <div className="mb-0.5 text-muted-foreground">Error</div>
-                <p className="font-mono text-[11px] leading-snug">
-                  {errorText ?? "The tool returned an error."}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          ) : status === "blocked" ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <UnstyledButton className="shrink-0 cursor-default rounded-sm bg-amber-500/10 px-1 text-[10px] leading-4 font-medium tracking-wide text-amber-700 uppercase dark:text-amber-400">
-                  Blocked
-                </UnstyledButton>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs px-2 py-1.5">
-                <div className="mb-0.5 text-muted-foreground">
-                  Blocked by policy
-                </div>
-                <p className="font-mono text-[11px] leading-snug">
-                  {errorText ?? "A policy refused this call."}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          ) : status === "cancelled" ? (
-            <span className="shrink-0 rounded-sm bg-muted px-1 text-[10px] leading-4 font-medium tracking-wide text-muted-foreground uppercase">
-              Cancelled
-            </span>
-          ) : null}
         </div>
         {/* One inline run that truncates as a whole, so a narrow column cuts
             the line short instead of pushing it into the next cell. */}
@@ -138,8 +123,13 @@ export function CallCell({
             className={cn(caller.kind === "person" && "text-foreground/80")}
           >
             {caller.label}
-          </span>{" "}
-          <span className="text-muted-foreground/70">on</span> {serverName}
+          </span>
+          {isGatewayProtocol ? null : (
+            <>
+              {" "}
+              <span className="text-muted-foreground/70">on</span> {serverName}
+            </>
+          )}
           {row.source === "chat" ? (
             <>
               {" "}
@@ -155,6 +145,51 @@ export function CallCell({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Whether the call worked, with the error or refusal on hover. */
+export function StatusCell({ row }: { row: McpToolCallRow }) {
+  const method = row.method || "tools/call";
+  const status = statusOf(row, method);
+  if (status === "unknown") {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const message =
+    status === "error" || status === "blocked"
+      ? errorMessageOf(row.toolResult)
+      : null;
+  const label = (
+    <span className="inline-flex items-center gap-1.5 text-sm leading-5">
+      <span
+        aria-hidden="true"
+        className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT[status])}
+      />
+      <span
+        className={cn(
+          status === "error" && "text-destructive",
+          status === "blocked" && "text-amber-700 dark:text-amber-400",
+          status === "cancelled" && "text-muted-foreground",
+        )}
+      >
+        {MCP_TOOL_CALL_STATUS_LABELS[status]}
+      </span>
+    </span>
+  );
+  if (!message) return label;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton className="cursor-default">{label}</UnstyledButton>
+      </TooltipTrigger>
+      {/* The message's own line breaks set the lines, so a two-line error
+          sizes the box to its longer line instead of wrapping at the cap. */}
+      <TooltipContent className="max-w-md px-2 py-1.5">
+        <p className="font-mono text-[11px] leading-snug break-words whitespace-pre-line">
+          {message}
+        </p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -256,6 +291,19 @@ function formatMcpMethod(method: string) {
   if (method === "tools/call") return "Tool call";
   return method;
 }
+
+/** The pseudo-server name the gateway logs its own protocol calls under. */
+const GATEWAY_PROTOCOL_SERVER_NAME = "mcp-gateway";
+
+const STATUS_DOT: Record<
+  Exclude<McpToolCallOutcomeStatus, "unknown">,
+  string
+> = {
+  success: "bg-emerald-500",
+  error: "bg-destructive",
+  blocked: "bg-amber-500",
+  cancelled: "bg-muted-foreground/50",
+};
 
 function Dot() {
   return (

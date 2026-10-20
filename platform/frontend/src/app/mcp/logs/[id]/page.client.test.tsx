@@ -77,7 +77,7 @@ describe("McpToolCallDetailPage", () => {
     renderPage();
 
     const excerpt = await screen.findByRole("region", {
-      name: "Session excerpt",
+      name: "Around this call in its session",
     });
     expect(
       within(excerpt).getByRole("link", { name: "Open full trace" }),
@@ -85,10 +85,25 @@ describe("McpToolCallDetailPage", () => {
     expect(
       screen.getByRole("link", { name: `Session ${SESSION_ID}` }),
     ).toBeVisible();
-    expect(screen.queryByText("Nearby calls")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Other calls/)).not.toBeInTheDocument();
+  });
+
+  it("leads with the call's own arguments and result", async () => {
+    mockCall({ sessionId: null });
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("region", { name: "Arguments and result" }),
+    ).toBeVisible();
+    // The neighbours wait behind a click, so they are not fetched up front.
+    expect(
+      screen.queryByRole("region", { name: "Other calls around this one" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows an unlinked call among its owner's nearby calls and says why", async () => {
+    const user = userEvent.setup();
     mockCall({ sessionId: null });
     mockNearbyCalls([
       record({ id: "neighbour-1", createdAt: "2026-10-16T10:02:00.000Z" }),
@@ -96,8 +111,11 @@ describe("McpToolCallDetailPage", () => {
 
     renderPage();
 
+    await user.click(
+      await screen.findByRole("button", { name: /Other calls from/ }),
+    );
     expect(
-      await screen.findByRole("region", { name: "Nearby calls" }),
+      await screen.findByRole("region", { name: "Other calls around this one" }),
     ).toBeVisible();
     expect(screen.getByText("Not linked to an LLM session")).toBeVisible();
     expect(
@@ -106,6 +124,7 @@ describe("McpToolCallDetailPage", () => {
   });
 
   it("falls back to nearby calls when the linked session is gone", async () => {
+    const user = userEvent.setup();
     mockCall({ sessionId: SESSION_ID });
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [] },
@@ -114,8 +133,11 @@ describe("McpToolCallDetailPage", () => {
 
     renderPage();
 
+    await user.click(
+      await screen.findByRole("button", { name: /Other calls from/ }),
+    );
     expect(
-      await screen.findByRole("region", { name: "Nearby calls" }),
+      await screen.findByRole("region", { name: "Other calls around this one" }),
     ).toBeVisible();
     expect(screen.getByText("no longer available")).toBeVisible();
     expect(

@@ -217534,6 +217534,10 @@
                               "app:llm_complete",
                               "app:recording_enhancement"
                             ]
+                          },
+                          "userMessagePreview": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -218264,6 +218268,11 @@
                           "claudeCodeTitle": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "connectorName": {
+                            "nullable": true,
+                            "description": "Name of the knowledge-base connector a knowledge:* session ran for, when exactly one connector owns it.",
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -218301,7 +218310,8 @@
                           "lastInteractionType",
                           "contentNotStored",
                           "conversationTitle",
-                          "claudeCodeTitle"
+                          "claudeCodeTitle",
+                          "connectorName"
                         ],
                         "additionalProperties": false
                       }

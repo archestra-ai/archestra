@@ -115,7 +115,9 @@ describe("McpToolCallDetailPage", () => {
       await screen.findByRole("button", { name: /Other calls from/ }),
     );
     expect(
-      await screen.findByRole("region", { name: "Other calls around this one" }),
+      await screen.findByRole("region", {
+        name: "Other calls around this one",
+      }),
     ).toBeVisible();
     expect(screen.getByText("Not linked to an LLM session")).toBeVisible();
     expect(
@@ -137,7 +139,9 @@ describe("McpToolCallDetailPage", () => {
       await screen.findByRole("button", { name: /Other calls from/ }),
     );
     expect(
-      await screen.findByRole("region", { name: "Other calls around this one" }),
+      await screen.findByRole("region", {
+        name: "Other calls around this one",
+      }),
     ).toBeVisible();
     expect(screen.getByText("no longer available")).toBeVisible();
     expect(

@@ -106,7 +106,7 @@ const rootOf = (session) => `archestra:${createHash('sha256').update(`${session.
 test('a root text served alone is refused as a policy', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const session = { organization_id: `policy-test-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
-  const rootOnly = '[policy]\nversion = 2\ninclude = ["batteries/acme/appa.toml"]\n';
+  const rootOnly = 'include = ["batteries/acme/appa.toml"]\n' + allow;
   await assert.rejects(
     native.dispatchHook(JSON.stringify({ ...session, event: 'session_start' }), hosted(rootOnly)),
     { code: 'policy_refused' },

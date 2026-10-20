@@ -1036,9 +1036,9 @@ const startWebServer = async () => {
       // Fire-and-forget index maintenance, all concurrent (non-write-blocking):
       // drop the legacy interactions payload indexes on deployments upgrading
       // from before migration 0116 stopped creating them, and build the
-      // agent_tools and mcp_server lookup indexes and the interactions
-      // session-preview backfill index. Idempotent; errors are logged inside
-      // and retried next boot.
+      // agent_tools, mcp_server and interactions lookup indexes (the
+      // session-preview backfill and passthrough-key indexes). Idempotent;
+      // errors are logged inside and retried next boot.
       void dropLegacyPayloadTrgmIndexes();
       void createAgentToolsIndexes();
       void createMcpServerIndexes();

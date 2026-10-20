@@ -338,7 +338,9 @@ export function useOrganization(
   options: { fresh?: boolean } = {},
 ) {
   const session = useSession();
-  // Read without requiring a provider: only the seed check needs the client.
+  // Read through the context, not useQueryClient(): that hook throws without
+  // a provider, and only the seed check below needs the client, so the hook
+  // keeps working where no provider is mounted.
   const client = useContext(QueryClientContext);
   const { fresh = false } = options;
 

@@ -64,10 +64,11 @@ export function connectionSetupInputsKey(inputs: ConnectionSetupInputs) {
 
 /**
  * A short, stable digest of a payload key: two 32-bit FNV-1a-style hashes
- * with different offsets and multipliers, as 16 hex digits. The server seed hands the page this
- * instead of the key, which lists every selected skill id; both sides compute
- * it from the same key. Synchronous on purpose: the page compares it on its
- * first render.
+ * with different offsets and multipliers, as 16 hex digits. The server seed
+ * hands the page this instead of the key, which lists every selected skill
+ * id; both sides compute it from the same key. Synchronous on purpose: the
+ * page compares it on its first render. It is not a cryptographic hash and
+ * protects nothing: it only tells one page load's payload from another.
  */
 export function connectionSetupKeyDigest(key: string): string {
   let a = 0x811c9dc5;

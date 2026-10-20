@@ -260,11 +260,10 @@ export function OpenAppaAnnotatorModelSetting() {
             It answers the{" "}
             <code className="font-mono text-xs">archestra.llm-annotator</code>{" "}
             annotator, which the starting policy applies to every tool you
-            haven't annotated yourself. Unless you pick a model, it uses the
-            organization's default.
-          </span>
-          <span className="mt-2 block">
-            We recommend a model from the Sonnet or Luna family.
+            haven't annotated yourself. Unless you pick a model, it uses a fast
+            model, such as Claude Haiku or GPT Luna, on the key of the
+            organization's default model, or that default model when the key
+            serves no fast model.
           </span>
         </>
       }

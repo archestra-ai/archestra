@@ -47,6 +47,25 @@ function usage(extra: unknown[] = []) {
   };
 }
 describe("cumulative provider accounting", () => {
+  test("pricing rejects invalid token counts even without normalization", () => {
+    const valid = {
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      cacheWrite1hTokens: 0,
+    };
+    for (const invalid of [
+      { inputTokens: -1 },
+      { outputTokens: 0.5 },
+      { cacheReadTokens: Number.MAX_SAFE_INTEGER + 1 },
+      { cacheWrite1hTokens: 1 },
+    ]) {
+      expect(() => priceTokens({ ...valid, ...invalid }, rates)).toThrow(
+        "Invalid billable token count",
+      );
+    }
+  });
   test("prices each disjoint iteration once, including identical advisor calls and cache TTLs", () => {
     const normalized = normalizeAnthropicUsage(usage(), "executor");
     expect(normalized.billingUsage?.status).toBe("complete");

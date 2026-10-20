@@ -194,7 +194,7 @@ export function primaryBillingUsage(
   };
 }
 
-/** Nonnegative charges only; refunds require a separate ledger operation. */
+/** Parse a nonnegative charge; use formatMoney for signed differences. */
 export function moneyUnits(value: string): bigint {
   return decimal(value, 10);
 }

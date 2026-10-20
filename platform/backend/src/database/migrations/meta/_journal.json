@@ -4075,6 +4075,13 @@
       "when": 1792491071255,
       "tag": "0581_chunk_size_markers",
       "breakpoints": true
+    },
+    {
+      "idx": 582,
+      "version": "7",
+      "when": 1792514792368,
+      "tag": "0582_famous_la_nuit",
+      "breakpoints": true
     }
   ]
 }

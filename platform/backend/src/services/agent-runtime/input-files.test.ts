@@ -53,7 +53,7 @@ describe("Agent run input files", () => {
       "second",
     ]);
     expect(taskWithAgentRunInputs({ task: "Read both.", inputs })).toBe(
-      `Read both.\n\nAttached files are available for this run:\n- /var/run/archestra/attachments/${task.id}/notes.txt\n- /var/run/archestra/attachments/${task.id}/notes (1).txt`,
+      `Read both.\n\nAttached files are available for this run:\n- /var/run/archestra/attachments/${task.id}/notes.txt (text/plain)\n- /var/run/archestra/attachments/${task.id}/notes (1).txt (text/plain)`,
     );
     const followUp = await A2ATaskModel.createForRun({
       contextId: context.id,
@@ -75,6 +75,53 @@ describe("Agent run input files", () => {
       followUpInput.runtimePath,
     );
     expect(followUpInput.fileData.toString("utf8")).toBe("follow-up");
+  });
+
+  test("names an unnamed pasted image by its type so the agent can open it as an image", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      agentType: "agent",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const task = await A2ATaskModel.createForRun({
+      contextId: context.id,
+      agentId: agent.id,
+    });
+
+    const inputs = await persistAgentRunInputs({
+      taskId: task.id,
+      organizationId: organization.id,
+      uploadedByUserId: user.id,
+      attachments: [
+        {
+          name: "thread.txt",
+          contentType: "text/plain",
+          contentBase64: Buffer.from("history").toString("base64"),
+        },
+        {
+          contentType: "image/png",
+          contentBase64: Buffer.from("png-bytes").toString("base64"),
+        },
+        {
+          contentType: "application/x-unknown",
+          contentBase64: Buffer.from("blob").toString("base64"),
+        },
+      ],
+    });
+
+    expect(taskWithAgentRunInputs({ task: "Look.", inputs })).toBe(
+      `Look.\n\nAttached files are available for this run:\n- /var/run/archestra/attachments/${task.id}/thread.txt (text/plain)\n- /var/run/archestra/attachments/${task.id}/attachment-2.png (image/png)\n- /var/run/archestra/attachments/${task.id}/attachment-3 (application/x-unknown)`,
+    );
   });
 
   test("stores inputs from a system-originated task without a user owner", async ({

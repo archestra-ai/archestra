@@ -1,5 +1,6 @@
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { AgentRunInputModel } from "@/models";
+import { extensionFromMime } from "@/skills-sandbox/mime-sniff";
 import type { AgentRunInput } from "@/types";
 import {
   nextAvailableName,
@@ -17,7 +18,9 @@ export async function persistAgentRunInputs(params: {
   const usedNames = new Set<string>();
   return AgentRunInputModel.createMany(
     params.attachments.map((attachment, index) => {
-      const originalName = attachment.name?.trim() || `attachment-${index + 1}`;
+      const originalName =
+        attachment.name?.trim() ||
+        fallbackAttachmentName({ attachment, position: index + 1 });
       const safeName = uniqueRuntimeName({
         originalName,
         usedNames,
@@ -43,13 +46,29 @@ export function taskWithAgentRunInputs(params: {
   inputs: AgentRunInput[];
 }): string | null | undefined {
   if (params.inputs.length === 0) return params.task;
+  // The type rides along so an agent can tell an image from a text file
+  // even when its name says nothing (a pasted screenshot has no filename).
   const paths = params.inputs
-    .map((input) => `- ${input.runtimePath}`)
+    .map((input) => `- ${input.runtimePath} (${input.mimeType})`)
     .join("\n");
   return `${params.task ?? ""}\n\nAttached files are available for this run:\n${paths}`.trim();
 }
 
 // === Internal helpers ===
+
+/**
+ * A name for an attachment that arrived without one, such as an image pasted
+ * into a chat message. The extension matches its type, so tools that pick a
+ * reader by extension open the image as an image.
+ */
+function fallbackAttachmentName(params: {
+  attachment: A2AAttachment;
+  position: number;
+}): string {
+  const extension = extensionFromMime(params.attachment.contentType);
+  const base = `attachment-${params.position}`;
+  return extension ? `${base}.${extension}` : base;
+}
 
 function uniqueRuntimeName(params: {
   originalName: string;

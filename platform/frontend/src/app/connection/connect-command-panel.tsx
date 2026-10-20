@@ -63,7 +63,10 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useClientConnection } from "@/lib/client-connection.query";
-import { connectionSetupSeedQueryKey } from "@/lib/connection-approval-query-keys";
+import {
+  clientConnectionQueryKey,
+  connectionSetupSeedQueryKey,
+} from "@/lib/connection-approval-query-keys";
 import type { ConnectionSetupSeed } from "@/lib/connection-approval-seed";
 import {
   type CreateConnectionSetupBody,
@@ -84,6 +87,10 @@ import {
   type PluginListItem,
   usePlugins,
 } from "@/lib/plugins/plugin.query";
+import {
+  isDocumentSeedFresh,
+  useDocumentSeedFresh,
+} from "@/lib/shell-deferral";
 import { type SkillName, useSkillNames } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
@@ -725,12 +732,32 @@ export function ConnectCommandPanel({
   // `firstConnectionSetupInputs`): Approve is ready at first paint, and the
   // browser prepares nothing while the payload stays the same.
   const queryClient = useQueryClient();
-  const [seededSetup] = useState(() =>
-    connectRequest
-      ? (queryClient.getQueryData<ConnectionSetupSeed>(
-          connectionSetupSeedQueryKey(connectRequest),
-        ) ?? null)
-      : null,
+  // Adopted once, on the first render of the document it was prepared for.
+  // A later mount of this URL prepares a fresh setup: the seeded one may have
+  // expired or been used.
+  const [seededSetup] = useState(() => {
+    if (!connectRequest) return null;
+    const query = queryClient.getQueryCache().find<ConnectionSetupSeed>({
+      queryKey: connectionSetupSeedQueryKey(connectRequest),
+      exact: true,
+    });
+    return isDocumentSeedFresh(queryClient, query)
+      ? (query?.state.data ?? null)
+      : null;
+  });
+  useEffect(() => {
+    if (!connectRequest || !seededSetup) return;
+    queryClient.removeQueries({
+      queryKey: connectionSetupSeedQueryKey(connectRequest),
+      exact: true,
+    });
+  }, [connectRequest, seededSetup, queryClient]);
+  // The approval reads came with the document, so every input of the first
+  // payload is here on the first render and the first preparation can start
+  // at once. Without the seed the lists land one by one; the first
+  // preparation then waits for them to settle, like any later change.
+  const seededApproval = useDocumentSeedFresh(
+    clientConnectionQueryKey(connectRequest ?? ""),
   );
   const seededSetupId =
     seededSetup && seededSetup.keyDigest === connectionSetupKeyDigest(inputsKey)
@@ -744,6 +771,13 @@ export function ConnectCommandPanel({
   // Whether a preparation has started. The first starts at once; later ones
   // wait for the user to stop changing the selection.
   const preparationStartedRef = useRef(false);
+  // The seeded setup stands in for `result` while the page's payload is the
+  // one it was prepared for.
+  const adoptedSetupId =
+    seededSetupId &&
+    (!preparationStartedRef.current || preparedKeyRef.current === inputsKey)
+      ? seededSetupId
+      : null;
 
   const runGeneration = useCallback(
     async (key: string) => {
@@ -797,10 +831,11 @@ export function ConnectCommandPanel({
         preparationStartedRef.current = true;
         void runGeneration(inputsKey);
       },
-      preparationStartedRef.current ? 350 : 0,
+      preparationStartedRef.current || !seededApproval ? 350 : 0,
     );
     return () => clearTimeout(timer);
   }, [
+    seededApproval,
     inputsKey,
     preparationEnabled,
     hasRunnableAnything,
@@ -1118,7 +1153,7 @@ export function ConnectCommandPanel({
         ? selectionProblem
         : failed
           ? "Setup command generation failed"
-          : result
+          : result || adoptedSetupId
             ? "Setup command ready"
             : hasRunnableAnything
               ? "Generating setup command"
@@ -1559,7 +1594,12 @@ export function ConnectCommandPanel({
           >
             {commandStatus}
           </output>
-          <CreditWarningNotice warning={result?.creditWarning} />
+          <CreditWarningNotice
+            warning={
+              result?.creditWarning ??
+              (adoptedSetupId ? seededSetup?.creditWarning : undefined)
+            }
+          />
           {/* Notices about model routing wait for the lists they describe. */}
           {hasRunnableAnything &&
             !choicesLoading &&
@@ -1638,14 +1678,7 @@ export function ConnectCommandPanel({
               <ClientConnectionApproval
                 key={connectRequest}
                 requestId={connectRequest}
-                setupId={
-                  result?.id ??
-                  (seededSetupId &&
-                  (!preparationStartedRef.current ||
-                    preparedKeyRef.current === inputsKey)
-                    ? seededSetupId
-                    : undefined)
-                }
+                setupId={result?.id ?? adoptedSetupId ?? undefined}
                 setupProblem={
                   selectionProblem ??
                   (failureMessage

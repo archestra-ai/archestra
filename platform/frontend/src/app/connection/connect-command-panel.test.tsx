@@ -21,10 +21,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
 import { useConfig, useFeature } from "@/lib/config/config.query";
-import { connectionSetupSeedQueryKey } from "@/lib/connection-approval-query-keys";
+import {
+  clientConnectionQueryKey,
+  connectionSetupSeedQueryKey,
+} from "@/lib/connection-approval-query-keys";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
 import { originFromHeaders } from "@/lib/request-origin";
+import { markShellSeeded } from "@/lib/shell-deferral";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
 import {
@@ -293,7 +297,39 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
-  it("prepares the first setup at once, and a changed selection after the user stops changing it", async () => {
+  it("prepares the first setup at once when the approval reads came with the document", async () => {
+    // This test is about the debounce itself: use the real interval.
+    restoreTimer();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectRequest=demo&platform=macos") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    // The server seeded the request with the document (prefetchShellSeed).
+    markShellSeeded(queryClient);
+    queryClient.setQueryData(clientConnectionQueryKey("demo"), {
+      clientId: "claude-code",
+      platform: "macos",
+      userCode: "ABCD-1234",
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    });
+    render(<ConnectCommandPanel {...renderPanelProps()} />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    // No debounce on the first preparation: every input is already here.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the lists to settle before the first setup of an unseeded load, and after a changed selection", async () => {
     // This test is about the debounce itself: use the real interval.
     restoreTimer();
     const gateways = [
@@ -302,9 +338,11 @@ describe("ConnectCommandPanel", () => {
     ];
     const view = renderPanel({ mcpGateways: gateways });
 
-    // No debounce on the first preparation: its inputs are already complete.
+    // Without the document's seed the lists land one by one: the first
+    // preparation waits for them to settle.
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(createSetupMock).toHaveBeenCalledTimes(1);
+    expect(createSetupMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
 
     view.rerender(
       <ConnectCommandPanel
@@ -2493,9 +2531,11 @@ describe("first approval setup, as the server seed prepares it", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    markShellSeeded(queryClient);
     queryClient.setQueryData(connectionSetupSeedQueryKey(REQUEST_ID), {
       keyDigest: connectionSetupKeyDigest(inputsKey),
       id: "server-setup",
+      creditWarning: { kind: "insufficient_balance", keyName: "Anthropic" },
     });
     render(<ConnectCommandPanel {...renderPanelProps()} />, {
       wrapper: ({ children }) => (
@@ -2507,6 +2547,40 @@ describe("first approval setup, as the server seed prepares it", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(createSetupMock).not.toHaveBeenCalled();
+    // The seeded setup stands in for the page's own: its warning shows and
+    // the status reads ready. It is taken once, so it leaves the cache.
+    expect(screen.getByTestId("connection-credit-warning")).toBeVisible();
+    expect(screen.getByTestId("connect-command-status")).toHaveTextContent(
+      "Setup command ready",
+    );
+    expect(
+      queryClient.getQueryData(connectionSetupSeedQueryKey(REQUEST_ID)),
+    ).toBeUndefined();
+  });
+
+  it("prepares its own setup when the seeded one is not from this document's render", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        `clientId=claude-code&platform=macos&connectRequest=${REQUEST_ID}`,
+      ) as ReturnType<typeof useSearchParams>,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    // A seed left from an earlier document of this URL: not this render's.
+    queryClient.setQueryData(connectionSetupSeedQueryKey(REQUEST_ID), {
+      keyDigest: "0123456789abcdef",
+      id: "old-setup",
+    });
+    render(<ConnectCommandPanel {...renderPanelProps()} />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
   });
 });
 

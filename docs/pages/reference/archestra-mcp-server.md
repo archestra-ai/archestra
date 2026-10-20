@@ -1762,7 +1762,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `task_id` | `string` | Yes |  |
-| `path` | `string` | No | Workspace-relative path of the file in the run's own workspace, for example demo/demo.mp4. Paths are relative to /home/node/workspace. |
+| `path` | `string` | No | The file in the run's own workspace, relative to /home/node/workspace (for example demo/demo.mp4) or absolute under it. |
 | `filename` | `string` | No | Name shown in the thread. Defaults to the last part of path; required with content_base64. |
 | `content_base64` | `string` | No | The file's bytes, base64-encoded, when there is no path. |
 | `comment` | `string` | No |  |

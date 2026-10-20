@@ -1017,10 +1017,11 @@ describe("run tools", () => {
   describe("post_run_file with a workspace path", () => {
     let root: string;
     let upload: ReturnType<typeof vi.spyOn>;
+    let stopServingWorkspace: () => void;
 
     beforeEach(async () => {
       root = await mkdtemp(path.join(tmpdir(), "run-file-"));
-      serveWorkspaceFrom(path.join(root, "workspace"));
+      stopServingWorkspace = serveWorkspaceFrom(path.join(root, "workspace"));
       await mkdir(path.join(root, "workspace"));
       upload = vi
         .spyOn(chatOpsManager, "uploadFileToBindingThread")
@@ -1028,6 +1029,9 @@ describe("run tools", () => {
     });
 
     afterEach(async () => {
+      // This file shares its worker with other files: nothing may outlive it.
+      upload.mockRestore();
+      stopServingWorkspace();
       await rm(root, { recursive: true, force: true });
     });
 
@@ -1107,15 +1111,51 @@ describe("run tools", () => {
           "Pass exactly one of path or content_base64",
         );
       }
+      const unnamed = await postRunFile({
+        task_id: task.id,
+        content_base64: Buffer.from("x").toString("base64"),
+      });
+      expect(JSON.stringify(unnamed.content)).toContain(
+        "Pass filename with content_base64",
+      );
       expect(upload).not.toHaveBeenCalled();
+    });
+
+    test("reads an absolute path under the workspace root and a ./ path", async () => {
+      const task = await seedRuntimeTask();
+      await mkdir(path.join(root, "workspace", "demo"));
+      await writeFile(
+        path.join(root, "workspace", "demo", "demo.mp4"),
+        "video",
+      );
+
+      for (const given of [
+        "/home/node/workspace/demo/demo.mp4",
+        "./demo/demo.mp4",
+      ]) {
+        const result = await postRunFile({ task_id: task.id, path: given });
+        expect(result.isError, given).toBeFalsy();
+      }
+      expect(upload).toHaveBeenCalledTimes(2);
+      for (const [call] of upload.mock.calls) {
+        expect(call).toMatchObject({
+          filename: "demo.mp4",
+          data: Buffer.from("video"),
+        });
+      }
     });
 
     describe("with Guardrails on", () => {
       const PARENT = "user:parent|conversation";
+      const originalOpenappa = config.openappa.enabled;
 
       beforeEach(async () => {
         config.openappa.enabled = true;
         await GuardrailsDeploymentModel.setEnabled(true);
+      });
+
+      afterEach(() => {
+        config.openappa.enabled = originalOpenappa;
       });
 
       test("a bound run's own proofless call is refused until its session is superyelled", async () => {
@@ -1234,8 +1274,9 @@ describe("run tools", () => {
 /**
  * Runs the real in-Pod file helper on this machine against `workspace`, in
  * place of the exec into the Pod. Its path rules are what the tests exercise.
+ * Returns the function that puts the real exec back.
  */
-function serveWorkspaceFrom(workspace: string) {
+function serveWorkspaceFrom(workspace: string): () => void {
   const helper = path.resolve(
     import.meta.dirname,
     "../static/workspace-files.py",
@@ -1244,8 +1285,9 @@ function serveWorkspaceFrom(workspace: string) {
     ...process.env,
     ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT: workspace,
   };
-  vi.spyOn(backend, "runWorkspaceTransferCommand").mockImplementation(
-    async ({ args }) => {
+  const command = vi
+    .spyOn(backend, "runWorkspaceTransferCommand")
+    .mockImplementation(async ({ args }) => {
       const run = spawnSync("python3", [helper, ...args], {
         env,
         encoding: "utf8",
@@ -1254,10 +1296,10 @@ function serveWorkspaceFrom(workspace: string) {
       const reply = JSON.parse(run.stdout);
       if (reply.ok !== true) throw new ApiError(400, reply.error);
       return reply;
-    },
-  );
-  vi.spyOn(backend, "readWorkspaceTransferRange").mockImplementation(
-    async ({ transferId, offset, length }) => {
+    });
+  const range = vi
+    .spyOn(backend, "readWorkspaceTransferRange")
+    .mockImplementation(async ({ transferId, offset, length }) => {
       const child = spawn(
         "python3",
         [helper, "read-range", transferId, String(offset), String(length)],
@@ -1271,6 +1313,9 @@ function serveWorkspaceFrom(workspace: string) {
           ),
         ),
       };
-    },
-  );
+    });
+  return () => {
+    command.mockRestore();
+    range.mockRestore();
+  };
 }

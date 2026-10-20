@@ -416,6 +416,8 @@ const MAX_LISTED_RUNS = 50;
 // fit in one request) and by what a channel thread can reasonably hold. A file
 // read from the workspace by path is held to the same cap.
 const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
+/** Where an Agent Runtime's retained workspace is mounted in its container. */
+const RUN_WORKSPACE_ROOT = "/home/node/workspace";
 const RunFileNameSchema = z
   .string()
   .trim()
@@ -1222,6 +1224,7 @@ const registry = defineArchestraTools([
       "for example — so it renders natively there (Slack plays video uploads inline). Only " +
       "runs delegated from a bound messaging channel have such a thread. " +
       "From inside the run, pass path: the file is read from the run's own workspace, so its bytes never enter the conversation. " +
+      `Copy a file that is outside ${RUN_WORKSPACE_ROOT} into it first. ` +
       "Pass content_base64 only for a small file that is not in the workspace. Exactly one of the two is required. " +
       `Files up to ${MAX_RUN_FILE_BYTES / 1024 / 1024} MB.`,
     schema: z.object({
@@ -1232,7 +1235,7 @@ const registry = defineArchestraTools([
         .max(4096)
         .optional()
         .describe(
-          "Workspace-relative path of the file in the run's own workspace, for example demo/demo.mp4. Paths are relative to /home/node/workspace.",
+          `The file in the run's own workspace, relative to ${RUN_WORKSPACE_ROOT} (for example demo/demo.mp4) or absolute under it.`,
         ),
       filename: RunFileNameSchema.optional().describe(
         "Name shown in the thread. Defaults to the last part of path; required with content_base64.",
@@ -1246,11 +1249,9 @@ const registry = defineArchestraTools([
     }),
     handler: async ({ args, context }) => {
       try {
-        if ((args.path === undefined) === (args.content_base64 === undefined)) {
-          return errorResult(
-            "Pass exactly one of path or content_base64. Prefer path for a file in the run's workspace.",
-          );
-        }
+        // Malformed arguments are refused before any run or Guardrails lookup.
+        const input = runFileInput(args);
+        if ("error" in input) return errorResult(input.error);
         const actor = requireActor(context);
         const task = await requireAccessibleTask({
           taskId: args.task_id,
@@ -1289,7 +1290,10 @@ const registry = defineArchestraTools([
           );
         }
 
-        const file = await runFileToPost({ actor, taskId: task.row.id, args });
+        const file =
+          input.kind === "bytes"
+            ? input
+            : await readRunFile({ actor, taskId: task.row.id, input });
         if ("error" in file) return errorResult(file.error);
         const { filename, data } = file;
 
@@ -1315,48 +1319,95 @@ const registry = defineArchestraTools([
   }),
 ]);
 
+/** Quote a value for a POSIX shell so a path or token cannot break the command
+ * the model is told to run. */
+function shellQuoteArgument(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+export const toolEntries = registry.toolEntries;
+export const tools = registry.tools;
+
+// === Internal helpers ===
+
+type RunFileInput =
+  | { kind: "bytes"; filename: string; data: Buffer }
+  | { kind: "path"; path: string; filename: string };
+
 /**
- * The name and bytes `post_run_file` uploads. A path is read from the run's
- * own workspace through the transfer helper, which refuses traversal,
- * symlinks and anything that is not a regular file. The file is pinned first,
- * so its size is checked before any byte is read and the bytes read are the
- * pinned version's.
+ * Checks `post_run_file`'s arguments without touching the run: exactly one of
+ * path and content_base64, a plain file name, and bytes within the cap.
  */
-async function runFileToPost(params: {
-  actor: A2AActor;
-  taskId: string;
-  args: { path?: string; filename?: string; content_base64?: string };
-}): Promise<{ filename: string; data: Buffer } | { error: string }> {
-  const { args } = params;
-  if (args.path === undefined) {
+function runFileInput(args: {
+  path?: string;
+  filename?: string;
+  content_base64?: string;
+}): RunFileInput | { error: string } {
+  if ((args.path === undefined) === (args.content_base64 === undefined)) {
+    return {
+      error:
+        "Pass exactly one of path or content_base64. Prefer path for a file in the run's workspace.",
+    };
+  }
+  if (args.content_base64 !== undefined) {
     if (!args.filename) {
       return { error: "Pass filename with content_base64." };
     }
-    const data = Buffer.from(args.content_base64 ?? "", "base64");
+    const data = Buffer.from(args.content_base64, "base64");
     if (data.length === 0) {
       return { error: "content_base64 decoded to an empty file." };
     }
-    if (data.length > MAX_RUN_FILE_BYTES)
+    if (data.length > MAX_RUN_FILE_BYTES) {
       return { error: tooLarge(data.length) };
-    return { filename: args.filename, data };
+    }
+    return { kind: "bytes", filename: args.filename, data };
   }
+  const relative = workspaceRelativePath(args.path ?? "");
   const filename = RunFileNameSchema.safeParse(
-    args.filename ?? path.posix.basename(args.path),
+    args.filename ?? path.posix.basename(relative),
   );
   if (!filename.success) {
     return {
-      error: `The file name ${JSON.stringify(path.posix.basename(args.path))} is not a plain file name. Pass filename (letters, digits, dot, dash, underscore, space).`,
+      error: `The file name ${JSON.stringify(path.posix.basename(relative))} is not a plain file name. Pass filename (letters, digits, dot, dash, underscore, space).`,
     };
   }
+  return { kind: "path", path: relative, filename: filename.data };
+}
+
+/**
+ * The model in the run sees its files at absolute paths, so an absolute path
+ * under the workspace root, or one starting with ./, names the same file. The
+ * transfer helper refuses everything else that is not workspace-relative.
+ */
+function workspaceRelativePath(value: string): string {
+  let relative = value.startsWith(`${RUN_WORKSPACE_ROOT}/`)
+    ? value.slice(RUN_WORKSPACE_ROOT.length + 1)
+    : value;
+  while (relative.startsWith("./")) relative = relative.slice(2);
+  return relative;
+}
+
+/**
+ * Reads a file from the run's own workspace through the transfer helper,
+ * which refuses traversal, symlinks and anything that is not a regular file.
+ * The file is pinned first, so its size is checked before any byte is read
+ * and the bytes read are the pinned version's.
+ */
+async function readRunFile(params: {
+  actor: A2AActor;
+  taskId: string;
+  input: Extract<RunFileInput, { kind: "path" }>;
+}): Promise<{ filename: string; data: Buffer } | { error: string }> {
+  const { input } = params;
   const where = { actor: params.actor, taskId: params.taskId };
   try {
     const snapshot = await workspaceTransferTickets.pinFile({
       ...where,
-      path: args.path,
+      path: input.path,
     });
     try {
       if (snapshot.size === 0) {
-        return { error: `${args.path} is empty in the run's workspace.` };
+        return { error: `${input.path} is empty in the run's workspace.` };
       }
       if (snapshot.size > MAX_RUN_FILE_BYTES) {
         return { error: tooLarge(snapshot.size) };
@@ -1365,7 +1416,7 @@ async function runFileToPost(params: {
         ...where,
         snapshot,
       });
-      return { filename: filename.data, data };
+      return { filename: input.filename, data };
     } finally {
       await workspaceTransferTickets
         .discardExport({ ...where, transferId: snapshot.transferId })
@@ -1380,7 +1431,7 @@ async function runFileToPost(params: {
     // The helper's refusals name the path rule that failed, never file bytes.
     if (error instanceof ApiError && error.statusCode < 500) {
       return {
-        error: `Could not read ${args.path} from the run's workspace: ${error.message}`,
+        error: `Could not read ${input.path} from the run's workspace: ${error.message}`,
       };
     }
     throw error;
@@ -1390,17 +1441,6 @@ async function runFileToPost(params: {
 function tooLarge(bytes: number): string {
   return `The file is ${Math.round(bytes / 1024 / 1024)}MB; keep run files under ${Math.round(MAX_RUN_FILE_BYTES / 1024 / 1024)}MB.`;
 }
-
-/** Quote a value for a POSIX shell so a path or token cannot break the command
- * the model is told to run. */
-function shellQuoteArgument(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
-export const toolEntries = registry.toolEntries;
-export const tools = registry.tools;
-
-// === Internal helpers ===
 
 /**
  * The refusal as a prompt: the exact keys still needed, and a deep link into

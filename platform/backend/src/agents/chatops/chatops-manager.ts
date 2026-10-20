@@ -1781,7 +1781,7 @@ export class ChatOpsManager {
       `Current message: ${message.messageId}; sender: ${message.senderId}.`,
       ...(provider.providerId === "slack"
         ? [
-            `For longer work, send concise progress updates to this Slack thread when useful: a meaningful milestone, a change of plan, or a long wait. Use ${archestraMcpBranding.getToolName(TOOL_POST_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable. If needed, discover it through the gateway's tool search. Avoid narrating every action. Your final answer is posted automatically; do not send it with this tool.`,
+            `You can send concise updates to this Slack thread before your turn ends: for meaningful progress, a change of plan, a long wait, or to notify the user that input or approval is needed. Use ${archestraMcpBranding.getToolName(TOOL_POST_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable. If needed, discover it through the gateway's tool search. Sending a message does not end the turn or wait for a reply; collect input and approvals through the available question or approval interface. Avoid narrating every action. Your final answer is posted automatically; do not send it with this tool.`,
           ]
         : []),
       ...(isGroup

@@ -1204,8 +1204,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_POST_RUN_MESSAGE_SHORT_NAME,
     title: "Post Run Message",
     description:
-      "Post a brief progress update to the Slack thread an active Agent Runtime run reports to. " +
-      "Use when there is meaningful progress, a change of plan, or a long wait to explain. " +
+      "Post a brief update to the Slack thread an active Agent Runtime run reports to. " +
+      "Use before the turn ends for meaningful progress, a change of plan, a long wait, or to notify the user that input or approval is needed. " +
+      "Posting does not end the turn or wait for a reply; collect input and approvals through the available question or approval interface. " +
       "Read the current task_id from ARCHESTRA_AGENT_RUNTIME_TASK_ID. " +
       "The final answer is posted automatically; do not repeat it here.",
     schema: z.object({

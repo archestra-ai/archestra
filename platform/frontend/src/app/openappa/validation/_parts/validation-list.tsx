@@ -6,7 +6,6 @@ import {
   CircleDashed,
   CircleX,
   ExternalLink,
-  FileText,
   History,
   Info,
   Loader2,
@@ -253,9 +252,6 @@ export function ValidationList({
                   <TableHead className="h-9 text-xs font-medium text-muted-foreground">
                     Validation
                   </TableHead>
-                  <TableHead className="hidden h-9 w-[140px] text-xs font-medium text-muted-foreground sm:table-cell">
-                    Recent runs
-                  </TableHead>
                   <TableHead className="h-9 w-[76px] text-xs font-medium text-muted-foreground sm:w-24">
                     Last run
                   </TableHead>
@@ -327,30 +323,23 @@ export function ValidationList({
                           </p>
                         )}
                       </TableCell>
-                      <TableCell className="hidden py-3 align-top sm:table-cell">
-                        <RowClickShield className="flex h-5 items-center">
-                          <HistoryDots
-                            dots={row.history}
-                            name={row.name}
-                            openRun={openRun}
-                          />
-                        </RowClickShield>
-                      </TableCell>
                       <TableCell className="py-3 align-top">
-                        <span
-                          className="block h-5 truncate text-xs leading-5 text-muted-foreground tabular-nums"
-                          title={
-                            row.runAt
-                              ? formatDate({ date: row.runAt })
-                              : undefined
-                          }
-                        >
-                          {running
-                            ? "Running…"
-                            : row.runAt
-                              ? formatCompactRelativeTime(row.runAt)
-                              : "Never"}
-                        </span>
+                        {!running && row.runAt && row.runId ? (
+                          <RowClickShield className="flex h-5 items-center">
+                            <UnstyledButton
+                              onClick={() => row.runId && openRun(row.runId)}
+                              title={formatDate({ date: row.runAt })}
+                              aria-label={`${row.name}: last run ${formatCompactRelativeTime(row.runAt)}. Open run`}
+                              className="truncate text-xs leading-5 text-muted-foreground tabular-nums underline-offset-4 hover:text-foreground hover:underline"
+                            >
+                              {formatCompactRelativeTime(row.runAt)}
+                            </UnstyledButton>
+                          </RowClickShield>
+                        ) : (
+                          <span className="block h-5 truncate text-xs leading-5 text-muted-foreground tabular-nums">
+                            {running ? "Running…" : "Never"}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="py-2.5 pr-3 align-top md:pr-3">
                         <RowClickShield
@@ -381,40 +370,29 @@ export function ValidationList({
                               <Play />
                             )}
                           </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                size="icon-xs"
-                                variant="ghost"
-                                aria-label={`More actions for ${row.name}`}
-                              >
-                                <MoreHorizontal />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
-                              <DropdownMenuItem asChild>
-                                <Link href={href}>
-                                  <FileText />
-                                  <span>
-                                    {suite.canWrite ? "Open and edit" : "Open"}
-                                  </span>
-                                </Link>
-                              </DropdownMenuItem>
-                              {requestDelete && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    variant="destructive"
-                                    disabled={!canDelete}
-                                    onSelect={() => requestDelete([row.path])}
-                                  >
-                                    <Trash2 />
-                                    <span>Delete</span>
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {requestDelete && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  aria-label={`More actions for ${row.name}`}
+                                >
+                                  <MoreHorizontal />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  disabled={!canDelete}
+                                  onSelect={() => requestDelete([row.path])}
+                                >
+                                  <Trash2 />
+                                  <span>Delete</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </RowClickShield>
                       </TableCell>
                     </TableRow>
@@ -422,7 +400,7 @@ export function ValidationList({
                 })}
                 {visible.length === 0 && (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={5} className="py-10 text-center">
+                    <TableCell colSpan={4} className="py-10 text-center">
                       <p className="text-sm text-muted-foreground">
                         {needle
                           ? `No validations match “${query.trim()}”.`
@@ -597,54 +575,6 @@ function EmptySuite() {
   );
 }
 
-/** The last runs of one file as dots, oldest left; each opens its run. */
-function HistoryDots({
-  dots,
-  name,
-  openRun,
-}: {
-  dots: Dot[];
-  name: string;
-  openRun: (runId: string) => void;
-}) {
-  const padding = Math.max(0, DOT_COUNT - dots.length);
-  const ordered = [...dots].reverse();
-  return (
-    <div className="flex items-center gap-px">
-      {Array.from({ length: padding }, (_, i) => (
-        <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: static padding
-          key={`pad-${i}`}
-          aria-hidden
-          className="flex size-3 items-center justify-center"
-        >
-          <span className="size-1.5 rounded-full bg-muted-foreground/15" />
-        </span>
-      ))}
-      {ordered.map((dot, i) => {
-        const newest = i === ordered.length - 1;
-        return (
-          <UnstyledButton
-            key={dot.runId}
-            onClick={() => openRun(dot.runId)}
-            aria-label={`${name}: ${statusLabel(dot.status)} at policy revision ${dot.revision}, ${formatDate({ date: dot.at, dateFormat: "MM/dd HH:mm" })}. Open run`}
-            title={`${statusLabel(dot.status)} · rev ${dot.revision} · ${formatDate({ date: dot.at, dateFormat: "MM/dd HH:mm" })}`}
-            className="group/dot flex size-3 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <span
-              className={cn(
-                "rounded-full transition-transform group-hover/dot:scale-150",
-                newest ? "size-2" : "size-1.5",
-                DOT_COLOR[dot.status],
-              )}
-            />
-          </UnstyledButton>
-        );
-      })}
-    </div>
-  );
-}
-
 function StatusGlyph({
   status,
   className,
@@ -668,14 +598,7 @@ function StatusGlyph({
 // ===========================================================================
 
 type FileStatus = "passed" | "failed" | "cannot_run" | "not_run";
-type ResultStatus = "passed" | "failed" | "cannot_run";
 type Step = PolicyTestRun["files"][number]["steps"][number];
-type Dot = {
-  runId: string;
-  at: string;
-  revision: number;
-  status: ResultStatus;
-};
 type Row = {
   path: string;
   name: string;
@@ -686,8 +609,8 @@ type Row = {
   /** Every reason, for the hover title. */
   reasonFull: string | null;
   line: number | null;
-  /** Newest first, up to DOT_COUNT. */
-  history: Dot[];
+  /** The newest run that included this file. */
+  runId: string | null;
 };
 
 function useRows(): Row[] {
@@ -697,24 +620,15 @@ function useRows(): Row[] {
     const states = runs ? validationFileStates(suite.files, runs) : null;
     return suite.files.map((file): Row => {
       const state = states?.get(file.path);
-      const history: Dot[] = [];
+      let runId: string | null = null;
       let failedStep: Step | null = null;
       for (const run of runs ?? []) {
         const result = run.files.find((item) => item.path === file.path);
         if (!result) continue;
-        if (!history.length)
-          failedStep =
-            result.steps.find((step) => step.status !== "passed") ?? null;
-        history.push({
-          runId: run.id,
-          at: run.createdAt,
-          revision: run.policyRevision,
-          status:
-            run.executionError || !run.validation.valid
-              ? "cannot_run"
-              : result.status,
-        });
-        if (history.length === DOT_COUNT) break;
+        runId = run.id;
+        failedStep =
+          result.steps.find((step) => step.status !== "passed") ?? null;
+        break;
       }
       const status: FileStatus = state?.status ?? "not_run";
       const inspection =
@@ -744,7 +658,7 @@ function useRows(): Row[] {
           .filter(Boolean)
           .join("\n"),
         line: step?.line ?? null,
-        history,
+        runId,
       };
     });
   }, [suite.files, runs, suite.summaries]);
@@ -784,8 +698,6 @@ function digest(raw: string) {
 function capitalize(s: string) {
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
-
-const DOT_COUNT = 10;
 
 const STATUS_ORDER: Record<FileStatus, number> = {
   failed: 0,
@@ -827,12 +739,6 @@ const REASON_TONE: Record<FileStatus, string> = {
   failed: "text-red-700/90 dark:text-red-400/90",
   cannot_run: "text-yellow-800/90 dark:text-yellow-300/90",
   not_run: "text-yellow-800/90 dark:text-yellow-300/90",
-};
-
-const DOT_COLOR: Record<ResultStatus, string> = {
-  passed: "bg-green-500/80 dark:bg-green-400/80",
-  failed: "bg-red-500 dark:bg-red-400",
-  cannot_run: "bg-yellow-500 dark:bg-yellow-400",
 };
 
 /**

@@ -15,7 +15,7 @@ export default function ValidationPage() {
     <>
       <ValidationList
         runAll={runner.startRunAll}
-        runFile={suite.runFile}
+        runFile={runner.startRunFile}
         openRun={(runId) => {
           const run = suite.history.data?.find((item) => item.id === runId);
           if (run) runner.openRun(run);

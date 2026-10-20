@@ -1244,12 +1244,10 @@ test("each file shows its own most recent run when it is absent from the latest 
   // The summary adds up both files' newest results, not either run's totals.
   expect(screen.getByRole("button", { name: "1 passing" })).toBeVisible();
   expect(screen.getByRole("button", { name: "1 failing" })).toBeVisible();
-  // The file's own history opens the run that recorded its result.
+  // The file's last run opens the run that recorded its result.
   fireEvent.click(
     within(row(older.path)).getByRole("button", {
-      name: new RegExp(
-        `^older\\.appa: Failed at policy revision 2, ${escapeRegExp(formatDate({ date: createdAt, dateFormat: "MM/dd HH:mm" }))}`,
-      ),
+      name: /^older\.appa: last run .*\. Open run$/,
     }),
   );
   expect(await findRunPanel()).toHaveTextContent(
@@ -1380,14 +1378,11 @@ test.each([
   );
   showPage();
   await screen.findByRole("link", { name: scenario.path });
-  await userEvent.click(
-    screen.getByRole("button", { name: `More actions for ${scenario.path}` }),
-  );
-  expect(await screen.findByRole("menu")).toBeVisible();
   expect(
-    screen.queryByRole("menuitem", { name: "Delete" }),
+    screen.queryByRole("button", {
+      name: `More actions for ${scenario.path}`,
+    }),
   ).not.toBeInTheDocument();
-  await userEvent.keyboard("{Escape}");
   expect(screen.getByRole("button", { name: "Run all" })).toHaveProperty(
     "disabled",
     !canWrite,
@@ -1928,9 +1923,12 @@ test("inventory rows open files while row actions stay independent", async () =>
         sourceVersion: collection.version,
         directory: "traces",
         partial: true,
+        progressToken: expect.any(String),
       },
     ]),
   );
+  // A single run is followed in the runner panel, like Run all.
+  expect(await findRunPanel()).toHaveTextContent("RUN");
   expect(row(scenario.path)).toHaveTextContent("Running");
   expect(row("other.appa")).not.toHaveTextContent("Running");
   finishRun();
@@ -1946,12 +1944,29 @@ test("inventory rows open files while row actions stay independent", async () =>
   });
   expect(currentHref).toBe("/openappa/validation");
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-  await chooseRowAction(scenario.path, "Open and edit");
+});
+
+test("an open runner panel comes back after a page refresh until it is closed", async () => {
+  server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json([run])));
+  const first = showPage();
+  fireEvent.click(await findLastRun());
+  expect(await findRunPanel()).toHaveTextContent("REPLAY");
+  first.unmount();
+
+  const second = showPage();
+  const panel = await findRunPanel();
+  expect(panel).toHaveTextContent("REPLAY");
+  fireEvent.click(within(panel).getByRole("button", { name: "Close panel" }));
+  await waitFor(() =>
+    expect(sessionStorage.getItem("openappa-validation-runner")).toBeNull(),
+  );
+  second.unmount();
+
+  showPage();
+  await screen.findByRole("link", { name: scenario.path });
   expect(
-    await screen.findByRole("textbox", {
-      name: "Policy validation scenario.appa",
-    }),
-  ).toBeVisible();
+    screen.queryByRole("region", { name: "Validation run panel" }),
+  ).not.toBeInTheDocument();
 });
 
 test("failed confirmed deletion retains the file and allows retry", async () => {

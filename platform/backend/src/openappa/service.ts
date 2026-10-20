@@ -28,10 +28,7 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import {
-  expandCommandExecutionPolicyRules,
-  normalizeCommandExecutionArguments,
-} from "@/openappa/command-normalization";
+import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
@@ -745,7 +742,7 @@ async function effectivePolicy(
     try {
       dispatch = await openappaDeclarations.dispatchPolicy({
         organizationId,
-        content: expandCommandExecutionPolicyRules(policy.content),
+        content: policy.content,
         onUnreadable: (found) => {
           unreadable = found;
         },
@@ -771,7 +768,7 @@ async function effectivePolicy(
     return {
       ...(await openappaDeclarations.dispatchPolicy({
         organizationId,
-        content: expandCommandExecutionPolicyRules(recompiled.content),
+        content: recompiled.content,
       })),
       compositionHash: recompiled.contentHash,
       snapshot: newSessionPolicy === "snapshot",

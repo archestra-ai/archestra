@@ -336,8 +336,14 @@ export declare function readPeerMessage(input: string, policy: DispatchPolicy): 
  * Evaluate bounded `.appa` scenarios against the supplied effective policy with the
  * credential values the host resolved for it. Every consult the policy declares is
  * made live, as a dispatch makes it; no tool runs and every trajectory stays in memory.
+ *
+ * `onProgress`, when given, receives each file's progress as JSON while the replay runs:
+ * `{"phase":"file_started","path"}`, then `{"phase":"file_finished", ...}` with that
+ * file's result, before the next file starts. It only observes: calls are queued without
+ * waiting, and the listener must not throw. Events still queued when the replay settles
+ * may arrive after its promise resolves.
  */
-export declare function replayOpenappaPolicy(input: string): Promise<string>
+export declare function replayOpenappaPolicy(input: string, onProgress?: (((arg: string) => void)) | undefined | null): Promise<string>
 
 export interface ReportingOptions {
   endpoint: string

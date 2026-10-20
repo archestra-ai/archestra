@@ -505,6 +505,8 @@ export function ConnectView({
     "idle",
   );
   const startedRef = useRef(false);
+  // Set from a submit until its outcome is handled; see `closeFromForm`.
+  const submittingRef = useRef(false);
 
   // The orchestrator owns which form a catalog needs and its install calls;
   // selecting the catalog here is what fills the inline form below.
@@ -518,11 +520,19 @@ export function ConnectView({
   // the form stays for another try rather than spinning forever.
   useEffect(() => {
     if (attempt === "idle") return;
-    if (serverCount > 0) onConnected();
-    else if (attempt === "settled") setAttempt("idle");
-  }, [attempt, serverCount, onConnected]);
+    if (serverCount > 0) {
+      // The quick-edit renders the same orchestrator's modal dialogs outside
+      // this view, so a form left open here would pop up there.
+      installer.closeInstallForms();
+      onConnected();
+    } else if (attempt === "settled") {
+      submittingRef.current = false;
+      setAttempt("idle");
+    }
+  }, [attempt, serverCount, onConnected, installer]);
 
   const submit = async (install: () => Promise<void>) => {
+    submittingRef.current = true;
     setAttempt("submitted");
     try {
       await install();
@@ -531,11 +541,22 @@ export function ConnectView({
     }
   };
 
+  const cancel = () => {
+    installer.closeInstallForms();
+    onCancel();
+  };
+
+  // The remote form closes itself right after every submit; only a close
+  // outside a submit is the user cancelling.
+  const closeFromForm = () => {
+    if (!submittingRef.current) cancel();
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <QuickEditViewHeader
         backLabel="Add tools"
-        onBack={onCancel}
+        onBack={cancel}
         title={`Connect ${catalog.name}`}
       />
       <Steps
@@ -566,7 +587,7 @@ export function ConnectView({
             <LocalServerInstallDialog
               presentation="inline"
               isOpen
-              onClose={onCancel}
+              onClose={closeFromForm}
               onConfirm={(result) =>
                 submit(() => installer.handleLocalServerInstallConfirm(result))
               }
@@ -578,7 +599,7 @@ export function ConnectView({
           <RemoteServerInstallDialog
             presentation="inline"
             isOpen
-            onClose={onCancel}
+            onClose={closeFromForm}
             onConfirm={(item, result) =>
               submit(() =>
                 installer.handleRemoteServerInstallConfirm(item, result),
@@ -592,7 +613,7 @@ export function ConnectView({
           <NoAuthInstallDialog
             presentation="inline"
             isOpen
-            onClose={onCancel}
+            onClose={closeFromForm}
             onInstall={(result) =>
               submit(() => installer.handleNoAuthConfirm(result))
             }

@@ -6,10 +6,10 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { authQueryKeys } from "@/lib/auth/auth.query";
+import { BrowseDialog } from "./browse-dialog";
 import { CONNECT_CLIENTS } from "./clients";
 import { ALL_INCLUDED } from "./connect-choices";
 import type { ConnectPageData } from "./connect-page-data";
-import { BrowseDialog } from "./connect-page-parts";
 
 const api = setupServer();
 beforeAll(() => {
@@ -25,27 +25,27 @@ afterAll(() => api.close());
 it.each([
   true,
   false,
-])("loads skill pages only on demand and with read permission (%s)", async (canRead) => {
-  const requests: { offset: number; search: string | null }[] = [];
+])("loads skills only on demand and with read permission (%s)", async (canRead) => {
+  const requests: { limit: number; search: string | null }[] = [];
   api.use(
     http.get("http://localhost:9000/api/skills", ({ request }) => {
       const url = new URL(request.url);
-      const offset = Number(url.searchParams.get("offset"));
+      const limit = Number(url.searchParams.get("limit"));
       const search = url.searchParams.get("search");
-      requests.push({ offset, search });
+      requests.push({ limit, search });
       expect(url.searchParams.get("includeContent")).toBe("false");
-      const name = search ? "Faraway skill" : `Page ${offset / 100 + 1} skill`;
+      const names = search
+        ? ["Faraway skill"]
+        : Array.from({ length: limit }, (_, i) => `Skill ${i + 1}`);
       return HttpResponse.json({
-        data: [
-          {
-            id: `skill-${offset}`,
-            name,
-            description: "Useful instructions",
-            scope: "org",
-            usageCount: 0,
-          },
-        ],
-        pagination: { total: search ? 1 : 350, limit: 100, offset },
+        data: names.map((name, i) => ({
+          id: `skill-${i}`,
+          name,
+          description: "Useful instructions",
+          scope: "org",
+          usageCount: 0,
+        })),
+        pagination: { total: search ? 1 : 35, limit, offset: 0 },
       });
     }),
   );
@@ -61,7 +61,7 @@ it.each([
   const data = {
     servers: [],
     skillsEnabled: true,
-    totalSkills: 350,
+    totalSkills: 35,
     partsFor: () => ({ skills: true }),
     pluginsFor: () => [],
   } as unknown as ConnectPageData;
@@ -75,7 +75,6 @@ it.each([
         onOpenChange={() => {}}
         data={data}
         client={CONNECT_CLIENTS[0]}
-        skills={[]}
         choices={ALL_INCLUDED}
       />
     </QueryClientProvider>
@@ -91,15 +90,18 @@ it.each([
     expect(requests).toEqual([]);
     return;
   }
-  expect(await screen.findByText("Page 1 skill")).toBeVisible();
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  expect(requests).toEqual([{ offset: 0, search: null }]);
-  await userEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(await screen.findByText("Page 2 skill")).toBeVisible();
+  // A skill's name opens its page; the dialog itself only lists.
+  expect(await screen.findByRole("link", { name: "Skill 1" })).toHaveAttribute(
+    "href",
+    "/skills/skill-0",
+  );
+  expect(screen.queryByRole("link", { name: "Skill 21" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Show 15 more" }));
+  expect(await screen.findByRole("link", { name: "Skill 35" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: /more$/ })).toBeNull();
   await userEvent.type(screen.getByPlaceholderText("Search skills"), "Faraway");
   expect(await screen.findByText("Faraway skill")).toBeVisible();
   await waitFor(() =>
-    expect(requests.at(-1)).toEqual({ offset: 0, search: "Faraway" }),
+    expect(requests.at(-1)).toEqual({ limit: 20, search: "Faraway" }),
   );
-  expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 });

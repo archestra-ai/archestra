@@ -5,8 +5,8 @@ import {
   useAppearanceSettings,
   useUpdateAppearanceSettings,
 } from "./organization.query";
+import { THEME_STORAGE_KEY } from "./theme-storage";
 
-const THEME_STORAGE_KEY = "archestra-theme";
 const DEFAULT_THEME: OrganizationTheme = DEFAULT_THEME_ID as OrganizationTheme;
 
 export function useOrgTheme() {

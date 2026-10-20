@@ -2,7 +2,7 @@
 title: Skills
 description: Reusable SKILL.md instruction sets that agents load on demand
 order: 3
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -58,7 +58,7 @@ What to know:
 
 By default, an agent can use every skill its user can use. To narrow that:
 
-- Pick skills per agent. On the agent's **Skills** setting, choose **Manual** and select the skills, or keep **All** and exclude some. See [Agents](/docs/agents#skills).
+- Pick skills per agent. On the agent's **Skills** setting, choose **Manual** and select the skills, or keep **All skills** and exclude some. See [Agents](/docs/agents#skills).
 - Limit a skill to environments. On the skill's **Settings** tab, pick its [environments](/docs/admin/environments). Agents in other environments cannot see it.
 
 ## Built-in Skills

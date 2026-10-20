@@ -24,6 +24,7 @@ import {
 } from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
+import { RESTORE_REMEMBERED_THEME_SCRIPT } from "@/lib/theme-storage";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
@@ -269,6 +270,7 @@ export default async function RootLayout({
           data-favicon-version={favicon.version ?? "default"}
         />
         {favicon.version && <script>{ACTIVATE_FAVICON_SCRIPT}</script>}
+        {!theme && <script>{RESTORE_REMEMBERED_THEME_SCRIPT}</script>}
       </head>
       <body className="font-sans antialiased">
         <VisualViewportHeight />

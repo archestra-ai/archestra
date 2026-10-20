@@ -9,6 +9,7 @@ import {
   type LocalMcpInstallationState,
   MCP_DEFAULT_LOG_LINES,
   type McpDeploymentStatusEntry,
+  type OpenAppaValidationProgressMessage,
   type ServerWebSocketMessage,
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
@@ -1818,6 +1819,19 @@ export class WebSocketService {
     );
   }
 
+  /**
+   * Push one validation run's progress to the user who started it, on every
+   * replica: the run's request and that user's socket rarely share a pod.
+   * Fire-and-forget; a file's steps are trimmed to fit one relay message.
+   */
+  sendOpenAppaValidationProgress(params: {
+    userId: string;
+    organizationId: string;
+    payload: OpenAppaValidationProgressMessage["payload"];
+  }): void {
+    this.relayToAllReplicas(fitValidationProgressEvent(params));
+  }
+
   private relayToAllReplicas(event: CrossReplicaEvent): void {
     if (!this.crossReplica) {
       this.deliverToLocalClients(event);
@@ -1859,6 +1873,21 @@ export class WebSocketService {
           error: event.error,
         },
       });
+      return;
+    }
+
+    if (event.kind === "openappa_validation_progress") {
+      const { userId, organizationId, payload } = event;
+      this.sendToClients(
+        { type: "openappa_validation_progress", payload },
+        (client) => {
+          const context = this.clientContexts.get(client);
+          return (
+            context?.userId === userId &&
+            context.organizationId === organizationId
+          );
+        },
+      );
       return;
     }
 
@@ -1990,6 +2019,49 @@ function describeExecFailure(
 const CROSS_REPLICA_CHANNEL = "websocket_mcp_events";
 const MAX_RELAYED_ERROR_LENGTH = 4_000;
 const MAX_RELAYED_IDS_PER_EVENT = 50;
+/** Room left for a relayed event under the hub's 7,900-byte NOTIFY envelope. */
+const MAX_RELAYED_EVENT_BYTES = 7_600;
+const MAX_PROGRESS_ERROR_LENGTH = 2_000;
+const MAX_PROGRESS_STEP_ERROR_LENGTH = 500;
+
+const ValidationStatusSchema = z.enum(["passed", "failed", "cannot_run"]);
+const ValidationProgressPayloadSchema = z.discriminatedUnion("phase", [
+  z.object({
+    token: z.string(),
+    phase: z.literal("started"),
+    paths: z.array(z.string()),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("file_started"),
+    path: z.string(),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("file_finished"),
+    path: z.string(),
+    status: ValidationStatusSchema,
+    assertionCount: z.number(),
+    durationMs: z.number(),
+    error: z.string().nullable().optional(),
+    steps: z.array(
+      z.object({
+        line: z.number(),
+        tool: z.string(),
+        expected: z.string(),
+        actual: z.string().nullable(),
+        status: ValidationStatusSchema,
+        error: z.string().nullable().optional(),
+      }),
+    ),
+  }),
+  z.object({
+    token: z.string(),
+    phase: z.literal("finished"),
+    runId: z.string().nullable(),
+    error: z.string().optional(),
+  }),
+]);
 
 const CrossReplicaEventSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -2004,9 +2076,95 @@ const CrossReplicaEventSchema = z.discriminatedUnion("kind", [
     serverIds: z.array(z.string()),
     catalogIds: z.array(z.string()),
   }),
+  z.object({
+    kind: z.literal("openappa_validation_progress"),
+    userId: z.string(),
+    organizationId: z.string(),
+    payload: ValidationProgressPayloadSchema,
+  }),
 ]);
 
 type CrossReplicaEvent = z.infer<typeof CrossReplicaEventSchema>;
+type ValidationProgressEvent = Extract<
+  CrossReplicaEvent,
+  { kind: "openappa_validation_progress" }
+>;
+
+/**
+ * Bounds a progress event so it always fits one NOTIFY payload, measured as
+ * the hub sends it: JSON-encoded again inside its envelope. Error text is cut
+ * first; then a file's steps are dropped, passed ones before the failing or
+ * unrunnable ones the reader needs. The recorded run keeps every step.
+ */
+function fitValidationProgressEvent(params: {
+  userId: string;
+  organizationId: string;
+  payload: OpenAppaValidationProgressMessage["payload"];
+}): ValidationProgressEvent {
+  const event = { kind: "openappa_validation_progress" as const, ...params };
+  const { payload } = params;
+  switch (payload.phase) {
+    // Paths are short in practice. An event over the NOTIFY limit still
+    // reaches this replica's clients; the hub logs the miss.
+    case "started":
+    case "file_started":
+      return event;
+    case "finished":
+      return payload.error === undefined
+        ? event
+        : {
+            ...event,
+            payload: {
+              ...payload,
+              error: truncate(payload.error, MAX_PROGRESS_ERROR_LENGTH),
+            },
+          };
+  }
+  const fitted = {
+    ...payload,
+    error:
+      payload.error == null
+        ? payload.error
+        : truncate(payload.error, MAX_PROGRESS_ERROR_LENGTH),
+    steps: [] as typeof payload.steps,
+  };
+  let size = relayedSize({ ...event, payload: fitted });
+  const ranked = payload.steps
+    .map((step, index) => ({
+      index,
+      step: {
+        ...step,
+        error:
+          step.error == null
+            ? step.error
+            : truncate(step.error, MAX_PROGRESS_STEP_ERROR_LENGTH),
+      },
+    }))
+    .sort(
+      (a, b) =>
+        Number(a.step.status === "passed") -
+          Number(b.step.status === "passed") || a.index - b.index,
+    );
+  const kept: typeof ranked = [];
+  for (const entry of ranked) {
+    // Inside the envelope a step adds its escaped encoding and a comma.
+    const added = relayedSize(entry.step) - 1;
+    if (size + added > MAX_RELAYED_EVENT_BYTES) continue;
+    size += added;
+    kept.push(entry);
+  }
+  fitted.steps = kept.sort((a, b) => a.index - b.index).map(({ step }) => step);
+  return { ...event, payload: fitted };
+}
+
+/** Bytes `value` takes once encoded as a string inside a fan-out envelope. */
+function relayedSize(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(JSON.stringify(value)));
+}
+
+function truncate(text: string, length: number): string {
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text;
+}
 
 /**
  * Same endpoint choice as the chat and A2A notifiers: polling compatibility

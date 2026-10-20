@@ -259,24 +259,23 @@ export function buildDiscoveryUrls(
 
 /**
  * Discover OAuth authorization server metadata with fallback support
- * Tries multiple discovery URLs like the MCP SDK does
+ * Tries multiple discovery URLs like the MCP SDK does.
+ *
+ * The candidate URLs can resolve to documents for different issuers (e.g. the
+ * RFC 8414 root fallback answering for the host's root issuer), so the first
+ * document whose `issuer` matches the discovery URL wins (RFC 8414 §3.3). When
+ * none matches — the discovery URL is not always an issuer, e.g. a legacy MCP
+ * server URL — the first valid document is used as before.
  */
 async function discoverAuthorizationServerMetadataWithOverrides(
   serverUrl: string,
   overrides?: OAuthDiscoveryOverrides,
-): Promise<{
-  authorization_endpoint: string;
-  token_endpoint: string;
-  registration_endpoint?: string;
-  token_endpoint_auth_methods_supported?: string[];
-  scopes_supported?: string[];
-  /** RFC 8414 issuer identifier. */
-  issuer?: string;
-  /** RFC 9207 Section 2.3 advertisement. */
-  authorization_response_iss_parameter_supported?: boolean;
-}> {
+): Promise<AuthorizationServerMetadata> {
   const discoveryUrl = overrides?.authServerUrl || serverUrl;
   const urls = buildDiscoveryUrls(discoveryUrl, overrides?.wellKnownUrl);
+  let fallback: { url: string; metadata: AuthorizationServerMetadata } | null =
+    null;
+  let lastUrlError: unknown;
 
   for (const url of urls) {
     try {
@@ -297,25 +296,72 @@ async function discoverAuthorizationServerMetadataWithOverrides(
         );
       }
 
-      const metadata = await response.json();
+      const metadata: AuthorizationServerMetadata = await response.json();
 
       // Validate that we got the required fields
-      if (metadata.authorization_endpoint && metadata.token_endpoint) {
+      if (!metadata.authorization_endpoint || !metadata.token_endpoint) {
+        continue;
+      }
+      if (issuerMatchesDiscoveryUrl(metadata.issuer, discoveryUrl)) {
         return metadata;
       }
+      fallback ??= { url, metadata };
     } catch (error) {
-      // If this is the last URL, throw the error
       if (url === urls[urls.length - 1]) {
-        throw new Error(
-          `Authorization server metadata discovery failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
+        lastUrlError = error;
       }
     }
+  }
+
+  if (fallback) {
+    logger.warn(
+      {
+        discoveryUrl,
+        metadataUrl: fallback.url,
+        issuer: fallback.metadata.issuer,
+      },
+      "No authorization server metadata matched the discovery URL issuer; using the first valid document",
+    );
+    return fallback.metadata;
+  }
+
+  if (lastUrlError) {
+    throw new Error(
+      `Authorization server metadata discovery failed: ${lastUrlError instanceof Error ? lastUrlError.message : "Unknown error"}`,
+    );
   }
 
   throw new Error(
     "Authorization server metadata discovery failed: No valid metadata found at any discovery endpoint",
   );
+}
+
+interface AuthorizationServerMetadata {
+  authorization_endpoint: string;
+  token_endpoint: string;
+  registration_endpoint?: string;
+  token_endpoint_auth_methods_supported?: string[];
+  scopes_supported?: string[];
+  /** RFC 8414 issuer identifier. */
+  issuer?: string;
+  /** RFC 9207 Section 2.3 advertisement. */
+  authorization_response_iss_parameter_supported?: boolean;
+}
+
+/**
+ * RFC 8414 §3.3 issuer check, tolerating a single trailing-slash difference
+ * that some providers introduce between their advertised and actual issuer.
+ */
+function issuerMatchesDiscoveryUrl(
+  issuer: unknown,
+  discoveryUrl: string,
+): boolean {
+  if (typeof issuer !== "string" || issuer === "") {
+    return false;
+  }
+  const stripTrailingSlash = (value: string) =>
+    value.endsWith("/") ? value.slice(0, -1) : value;
+  return stripTrailingSlash(issuer) === stripTrailingSlash(discoveryUrl);
 }
 
 interface DiscoveredEndpoints {

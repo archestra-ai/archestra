@@ -16,9 +16,12 @@ import {
   useDecideClientConnection,
 } from "@/lib/client-connection.query";
 import { postConnected } from "@/lib/connect-signal";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { ApprovedHandoff } from "./approved-handoff";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientIcon } from "./client-icon";
 import { CONNECT_CLIENTS } from "./clients";
+import { GatewayLink } from "./gateway-link";
 import { platformLabels, toPlatformOption } from "./platform.utils";
 
 export function ClientConnectionApproval({
@@ -27,8 +30,9 @@ export function ClientConnectionApproval({
   setupProblem,
   clientId,
   platform,
-  gatewaySelected,
-  gatewayName,
+  gateway,
+  mcpServerName,
+  onDecided,
   proxySelected,
   skillsSelected,
 }: {
@@ -41,8 +45,12 @@ export function ClientConnectionApproval({
   setupProblem: string | null;
   clientId: string;
   platform: string;
-  gatewaySelected: boolean;
-  gatewayName: string;
+  /** The gateway whose tools the client gets; null when tools are left out. */
+  gateway: { id: string; name: string } | null;
+  /** The name the client lists the gateway under. */
+  mcpServerName: string;
+  /** Called once the approval or denial is recorded. */
+  onDecided?: () => void;
   proxySelected: boolean;
   skillsSelected: boolean;
 }) {
@@ -51,60 +59,50 @@ export function ClientConnectionApproval({
   const request = useClientConnection(requestId);
   const decision = useDecideClientConnection(requestId);
   const [confirmed, setConfirmed] = useState(false);
+  const gatewaySelected = gateway !== null;
+  const appName = useAppName();
+  const clientSteps =
+    clientId === "cursor" ||
+    (clientId === "claude-desktop" && gatewaySelected) ? (
+      <>
+        {clientId === "cursor" && (
+          <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+            {gatewaySelected && (
+              <li>
+                In Cursor, open Customize → MCPs and authenticate the gateway.
+              </li>
+            )}
+            {skillsSelected && <li>Reload Cursor to see shared skills.</li>}
+            {proxySelected && (
+              <li>
+                Quit and reopen Cursor to load its model settings. Add models
+                under Settings → Models by their provider-qualified id, such as
+                anthropic:&lt;model&gt;.
+              </li>
+            )}
+          </ul>
+        )}
+        {clientId === "claude-desktop" && gatewaySelected && (
+          <ClaudeDesktopGatewaySteps gatewayName={mcpServerName} />
+        )}
+      </>
+    ) : null;
+  const approved = decision.data?.status === "approved";
   if (decision.data)
     return (
       <output className="block space-y-4 p-5 text-sm sm:p-6">
-        {decision.data.status === "approved" ? (
-          <>
-            <InlineNotice variant="success">
-              <Check aria-hidden />
-              <span>
-                Connection approved. Return to your terminal to finish setup.
-              </span>
-            </InlineNotice>
-            {(gatewaySelected || skillsSelected || proxySelected) && (
-              <div className="space-y-1.5 rounded-md border bg-muted/30 p-3">
-                <p className="font-medium">What happens next</p>
-                <p className="text-muted-foreground">
-                  Once setup is complete, start a new {clientLabel} session. It
-                  will have access to:
-                </p>
-                <ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
-                  {gatewaySelected && <li>The tools from {gatewayName}</li>}
-                  {skillsSelected && (
-                    <li>Your organization&apos;s shared skills</li>
-                  )}
-                  {proxySelected && (
-                    <li>Model requests routed through the LLM Proxy</li>
-                  )}
-                </ul>
-                <p className="text-muted-foreground">
-                  Ask {clientLabel} to use them like any other tool or skill.
-                </p>
-              </div>
-            )}
-            {clientId === "cursor" && (
-              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                {gatewaySelected && (
-                  <li>
-                    In Cursor, open Customize → MCPs and authenticate the
-                    gateway.
-                  </li>
-                )}
-                {skillsSelected && <li>Reload Cursor to see shared skills.</li>}
-                {proxySelected && (
-                  <li>
-                    Quit and reopen Cursor to load its model settings. Add
-                    models under Settings → Models by their provider-qualified
-                    id, such as anthropic:&lt;model&gt;.
-                  </li>
-                )}
-              </ul>
-            )}
-            {clientId === "claude-desktop" && gatewaySelected && (
-              <ClaudeDesktopGatewaySteps gatewayName={gatewayName} />
-            )}
-          </>
+        {approved ? (
+          <ApprovedHandoff
+            clientId={clientId}
+            clientLabel={clientLabel}
+            appName={appName}
+            platform={platform}
+            gateway={gateway}
+            mcpServerName={mcpServerName}
+            proxySelected={proxySelected}
+            skillsSelected={skillsSelected}
+            clientSteps={clientSteps}
+          />
         ) : (
           <InlineNotice variant="neutral">
             <span>
@@ -227,6 +225,7 @@ export function ClientConnectionApproval({
                       // Tell the Connect page in another tab to show what's next.
                       onSuccess: (result) => {
                         if (result?.status === "approved") postConnected();
+                        onDecided?.();
                       },
                     },
                   )
@@ -253,7 +252,9 @@ export function ClientConnectionApproval({
           size="sm"
           variant="outline"
           disabled={decision.isPending}
-          onClick={() => decision.mutate({ decision: "deny" })}
+          onClick={() =>
+            decision.mutate({ decision: "deny" }, { onSuccess: onDecided })
+          }
         >
           <span>Deny</span>
         </Button>

@@ -906,6 +906,11 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`. Invalid entries are ignored and logged.
   - Engines without a [network policy](/docs/admin/environments) already block private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges.
 
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR`** - Schedules engines onto a dedicated node pool.
+  - Default: unset (engines use the platform pod's `nodeSelector` and `tolerations`)
+  - Values: comma-separated `key=value` pairs, for example `archestra-sandbox=true`. Each pair also adds a matching `NoSchedule` toleration.
+  - Applies to new engines only. Delete an engine to move it.
+
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands each backend process runs at once.
   - Default: `10`
   - Raise it together with the engine's CPU and memory.

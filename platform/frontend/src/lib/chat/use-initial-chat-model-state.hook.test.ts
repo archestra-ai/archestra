@@ -152,6 +152,42 @@ describe("useInitialChatModelState", () => {
     await waitFor(() => expect(result.current.agentId).toBe("agent-1"));
   });
 
+  it("reports the agent as resolving on every render until one is chosen", async () => {
+    // A picker that sees "no agent, not resolving" falls back to a guess, so
+    // no render may report that before the resolution lands.
+    const renders: Array<{ agentId: string | null; resolving: boolean }> = [];
+    const { result, rerender } = renderHook(
+      (props: typeof baseParams) => {
+        const state = useInitialChatModelState(props);
+        renders.push({
+          agentId: state.agentId,
+          resolving: state.isAgentResolving,
+        });
+        return state;
+      },
+      { initialProps: { ...baseParams, isOrgLoading: true } },
+    );
+
+    rerender({ ...baseParams, isOrgLoading: false });
+    await waitFor(() => expect(result.current.agentId).toBe("agent-1"));
+
+    expect(result.current.isAgentResolving).toBe(false);
+    expect(renders.filter((r) => r.agentId === null)).not.toHaveLength(0);
+    expect(
+      renders.filter((r) => r.agentId === null && !r.resolving),
+    ).toHaveLength(0);
+  });
+
+  it("does not report resolving when there is no agent to choose", async () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({ ...baseParams, agents: [] }),
+    );
+
+    await Promise.resolve();
+    expect(result.current.agentId).toBeNull();
+    expect(result.current.isAgentResolving).toBe(false);
+  });
+
   it("honors the project default over the org default", async () => {
     const { result } = renderHook(() =>
       useInitialChatModelState({

@@ -16,7 +16,7 @@ import {
   INSTALLER_CLIENT_LABELS,
   type InstallerClientId,
 } from "@archestra/shared/connection-setup";
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, desc, eq, inArray, like, notExists, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -1142,8 +1142,19 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMemberSignupStatus,
         description:
-          "Get which members have completed signup (have an account record)",
+          "Get which members have not completed signup (no account record). Pass `userIds` to ask about the members on screen instead of every member.",
         tags: ["Organization"],
+        querystring: z.object({
+          userIds: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string()).max(100),
+            )
+            .optional()
+            .describe(
+              "Only these members (comma-separated user IDs), such as the rows of one Users page. Without it, every member of the organization is checked.",
+            ),
+        }),
         response: constructResponseSchema(
           z.object({
             pendingSignupMembers: z.array(
@@ -1161,96 +1172,73 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      // Get all member user IDs for this organization
-      const members = await db
-        .select({ userId: schema.membersTable.userId })
-        .from(schema.membersTable)
-        .where(eq(schema.membersTable.organizationId, organizationId));
-
-      if (members.length === 0) {
+    async ({ organizationId, query }, reply) => {
+      if (query.userIds && query.userIds.length === 0) {
         return reply.send({ pendingSignupMembers: [] });
       }
 
-      const memberUserIds = members.map((m) => m.userId);
+      const members = schema.membersTable;
+      const users = schema.usersTable;
+      const invitations = schema.invitationsTable;
 
-      // Find which of these users have an account record
-      const usersWithAccounts = await db
-        .select({ userId: schema.accountsTable.userId })
-        .from(schema.accountsTable)
-        .where(inArray(schema.accountsTable.userId, memberUserIds));
-
-      const hasAccountSet = new Set(usersWithAccounts.map((a) => a.userId));
-      const pendingUserIds = memberUserIds.filter(
-        (id) => !hasAccountSet.has(id),
-      );
-
-      if (pendingUserIds.length === 0) {
-        return reply.send({ pendingSignupMembers: [] });
-      }
-
-      // Look up auto-provisioned invitations to get provider and invitation ID
-      const invitations = await db
-        .select({
-          id: schema.invitationsTable.id,
-          email: schema.invitationsTable.email,
-          status: schema.invitationsTable.status,
-        })
-        .from(schema.invitationsTable)
+      // The newest auto-provisioned invitation for the member's email, if
+      // any: its status carries the provider ("auto-provisioned:<provider>")
+      // and its id builds the sign-up link.
+      const invitation = db
+        .select({ id: invitations.id, status: invitations.status })
+        .from(invitations)
         .where(
           and(
-            eq(schema.invitationsTable.organizationId, organizationId),
-            like(
-              schema.invitationsTable.status,
-              `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
-            ),
+            eq(invitations.organizationId, members.organizationId),
+            eq(invitations.email, users.email),
+            like(invitations.status, `${AUTO_PROVISIONED_INVITATION_STATUS}%`),
           ),
-        );
-
-      // Build email → { provider, invitationId } map
-      const emailToInvitation = new Map<
-        string,
-        { provider: string | null; invitationId: string }
-      >();
-      for (const inv of invitations) {
-        const parts = inv.status.split(":");
-        emailToInvitation.set(inv.email, {
-          provider: parts.length === 2 ? parts[1] : null,
-          invitationId: inv.id,
-        });
-      }
-
-      // Get emails for pending users
-      const pendingUsers = await db
-        .select({
-          id: schema.usersTable.id,
-          email: schema.usersTable.email,
-          name: schema.usersTable.name,
-          image: schema.usersTable.image,
-          role: schema.membersTable.role,
-        })
-        .from(schema.membersTable)
-        .innerJoin(
-          schema.usersTable,
-          eq(schema.membersTable.userId, schema.usersTable.id),
         )
+        .orderBy(desc(invitations.createdAt))
+        .limit(1)
+        .as("auto_provisioned_invitation");
+
+      // One statement: the members (of one page, when `userIds` is given)
+      // that have no account row yet, each with its invitation. This used to
+      // read every member id, every account of those members and every
+      // auto-provisioned invitation, then send every pending member of the
+      // organization on each Users page load.
+      const rows = await db
+        .select({
+          userId: members.userId,
+          name: users.name,
+          email: users.email,
+          image: users.image,
+          role: members.role,
+          invitationId: invitation.id,
+          invitationStatus: invitation.status,
+        })
+        .from(members)
+        .innerJoin(users, eq(members.userId, users.id))
+        .leftJoinLateral(invitation, sql`true`)
         .where(
           and(
-            eq(schema.membersTable.organizationId, organizationId),
-            inArray(schema.usersTable.id, pendingUserIds),
+            eq(members.organizationId, organizationId),
+            notExists(
+              db
+                .select({ one: sql`1` })
+                .from(schema.accountsTable)
+                .where(eq(schema.accountsTable.userId, members.userId)),
+            ),
+            query.userIds ? inArray(members.userId, query.userIds) : undefined,
           ),
         );
 
-      const pendingSignupMembers = pendingUsers.map((u) => {
-        const inv = emailToInvitation.get(u.email);
+      const pendingSignupMembers = rows.map((row) => {
+        const parts = row.invitationStatus?.split(":") ?? [];
         return {
-          userId: u.id,
-          name: u.name,
-          email: u.email,
-          image: u.image,
-          role: u.role,
-          provider: inv?.provider ?? null,
-          invitationId: inv?.invitationId ?? null,
+          userId: row.userId,
+          name: row.name,
+          email: row.email,
+          image: row.image,
+          role: row.role,
+          provider: parts.length === 2 ? parts[1] : null,
+          invitationId: row.invitationId ?? null,
         };
       });
 

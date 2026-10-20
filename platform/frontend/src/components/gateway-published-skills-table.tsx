@@ -2,8 +2,10 @@
 
 import { useCallback, useState } from "react";
 import type { EditableSkill } from "@/components/agent-skills-editor";
-import { AvailableSkillsTable } from "@/components/available-skills-table";
-import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import {
+  AVAILABLE_SKILLS_PAGE_SIZE,
+  AvailableSkillsTable,
+} from "@/components/available-skills-table";
 
 /** The effective All-mode set from the gateway's exclusion picker. */
 export function GatewayPublishedSkillsTable({
@@ -16,7 +18,7 @@ export function GatewayPublishedSkillsTable({
   const [search, setSearch] = useState("");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
-    pageSize: DEFAULT_TABLE_LIMIT,
+    pageSize: AVAILABLE_SKILLS_PAGE_SIZE,
   });
   const normalizedSearch = search.trim();
   const excluded = new Set(excludedIds);

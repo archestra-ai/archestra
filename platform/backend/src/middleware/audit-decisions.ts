@@ -1106,6 +1106,14 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "internal unresolved owner dependencies",
   },
+  interactionSessionHeadsTable: {
+    audited: false,
+    reason: "derived newest-interaction index of log sessions",
+  },
+  interactionSessionHeadsBackfillTable: {
+    audited: false,
+    reason: "internal backfill progress marker",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

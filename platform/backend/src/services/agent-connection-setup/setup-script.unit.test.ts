@@ -1285,7 +1285,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain(
-      `cli claude plugin marketplace add --scope user '${SKILLS.cloneUrl}'`,
+      `cli_redacted claude plugin marketplace add --scope user '${SKILLS.cloneUrl}'`,
     );
     // The skill plugin is installed by the script, not via a manual browse step.
     expect(script).toContain(

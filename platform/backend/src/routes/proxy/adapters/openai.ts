@@ -35,6 +35,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { fetchWithAbortSignal } from "@/utils/client-disconnect-signal";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
   estimateToolResultContentLength,
@@ -1541,9 +1542,16 @@ export const openaiAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): OpenAIProvider {
     // Use observable fetch for request duration metrics if agent is provided
-    const baseFetch = options.agent
-      ? metrics.llm.getObservableFetch("openai", options.agent, options.source)
-      : undefined;
+    const baseFetch = fetchWithAbortSignal(
+      options.agent
+        ? metrics.llm.getObservableFetch(
+            "openai",
+            options.agent,
+            options.source,
+          )
+        : undefined,
+      options.abortSignal,
+    );
 
     // "ChatGPT subscription" (Codex) auth mode: the resolved credential is an
     // encoded ChatGPT OAuth credential, not an `sk-…` key. Route through the

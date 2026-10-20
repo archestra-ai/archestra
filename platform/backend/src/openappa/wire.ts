@@ -734,9 +734,11 @@ export function isClientRunToolType(type: string): boolean {
  *    `x-opencode-session` header, then request fields that are stable across a
  *    conversation: `prompt_cache_key` (OpenAI's own per-conversation cache
  *    partition), an explicit `metadata.session_id`, then `conversation`.
+ *  - any other wire - the headers above only. Its body is not read.
  */
 export function appaSessionIdentity(params: {
-  family: AppaWireFamily;
+  /** Undefined for a wire OpenAPPA does not read: headers only. */
+  family: AppaWireFamily | undefined;
   body: unknown;
   headers: Record<string, unknown>;
 }): AppaSessionIdentity {
@@ -781,6 +783,9 @@ export function appaSessionIdentity(params: {
       provenance: "opencode-session",
     };
   }
+
+  // The body of another wire names nothing this reads.
+  if (!params.family) return { parentId, provenance: "none" };
 
   const cacheKey = field(body?.prompt_cache_key);
   const declared = field(asRecord(body?.metadata)?.session_id);

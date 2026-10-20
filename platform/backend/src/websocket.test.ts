@@ -4068,6 +4068,69 @@ describe("cross-replica MCP status delivery", () => {
       stopReplicas(replicas);
     }
   });
+
+  test("a large validation progress event reaches only its user on another replica, keeping the failing step", async () => {
+    const replicas = await startReplicas();
+    const [origin, other] = replicas;
+    const colleagueSend = vi.fn();
+    const colleague = {
+      readyState: WS.OPEN,
+      send: colleagueSend,
+    } as unknown as WS;
+    other.internals.wss?.clients.add(colleague);
+    other.internals.clientContexts.set(colleague, {
+      userId: "user-2",
+      organizationId: "org-1",
+      userIsMcpServerAdmin: false,
+    });
+    const steps = Array.from({ length: 300 }, (_, index) => ({
+      line: index + 1,
+      tool: "mcp/files/read",
+      expected: "allow",
+      actual: index === 299 ? "deny" : "allow",
+      status: index === 299 ? ("failed" as const) : ("passed" as const),
+      error: index === 299 ? "x".repeat(10_000) : null,
+    }));
+
+    try {
+      origin.replica.sendOpenAppaValidationProgress({
+        userId: "user-1",
+        organizationId: "org-1",
+        payload: {
+          token: "token-1",
+          phase: "file_finished",
+          path: "traces/long.appa",
+          status: "failed",
+          assertionCount: 300,
+          durationMs: 12,
+          error: null,
+          steps,
+        },
+      });
+
+      await vi.waitFor(() => expect(other.send).toHaveBeenCalledTimes(1));
+      const [message] = sentMessages(other.send);
+      expect(message).toMatchObject({
+        type: "openappa_validation_progress",
+        payload: {
+          token: "token-1",
+          phase: "file_finished",
+          assertionCount: 300,
+        },
+      });
+      const relayed = message.payload.steps as typeof steps;
+      expect(relayed.length).toBeGreaterThan(0);
+      expect(relayed.length).toBeLessThan(steps.length);
+      expect(relayed.at(-1)).toMatchObject({ line: 300, status: "failed" });
+      expect(relayed.at(-1)?.error?.length).toBeLessThanOrEqual(500);
+      expect(relayed.map((step) => step.line)).toEqual(
+        relayed.map((step) => step.line).toSorted((a, b) => a - b),
+      );
+      expect(colleagueSend).not.toHaveBeenCalled();
+    } finally {
+      stopReplicas(replicas);
+    }
+  });
 });
 
 /**

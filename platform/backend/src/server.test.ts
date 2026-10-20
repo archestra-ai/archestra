@@ -24,14 +24,21 @@ vi.mock("@sentry/node", async (importOriginal) => {
   };
 });
 
+import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import config from "@/config";
 import OrganizationModel from "@/models/organization";
 // Import after mock setup
 import healthRoutes from "@/routes/health";
 import {
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
+import {
   buildSandboxFrameAncestors,
   createFastifyInstance,
   registerApiRoutes,
+  registerWorkerRoutes,
 } from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
@@ -359,10 +366,11 @@ describe("createFastifyInstance", () => {
       );
 
       const app = createFastifyInstance();
+      const databaseHost = new URL(config.database.url).hostname;
       // Mimic the ORM's per-query wrapper around an underlying DNS failure
       app.get("/test-db-unavailable", async () => {
         throw new Error('Failed query: select "id" from "agents"', {
-          cause: new Error("getaddrinfo EAI_AGAIN db.example.internal"),
+          cause: new Error(`getaddrinfo EAI_AGAIN ${databaseHost}`),
         });
       });
 
@@ -390,6 +398,60 @@ describe("createFastifyInstance", () => {
       });
 
       captureSpy.mockRestore();
+    });
+
+    test.each([
+      [
+        "an MCP error relaying a DNS failure",
+        new Error(
+          "MCP error -32603: request to https://api.example.com/v1 failed, reason: getaddrinfo ENOTFOUND api.example.com",
+        ),
+        "api.example.com",
+      ],
+      [
+        "an SDK wrapping a refused connection",
+        new Error("Connection error.", {
+          cause: Object.assign(
+            new Error("connect ECONNREFUSED 203.0.113.10:443"),
+            {
+              code: "ECONNREFUSED",
+              syscall: "connect",
+              address: "203.0.113.10",
+              port: 443,
+            },
+          ),
+        }),
+        "203.0.113.10:443",
+      ],
+    ])("names the unreachable host instead of blaming the database for %s", async (_kind, thrown, host) => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+      const app = createFastifyInstance();
+      app.get("/test-outbound-unreachable", async () => {
+        throw thrown;
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-outbound-unreachable",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({
+        error: {
+          message: `Could not connect to ${host}. Check that the network egress policy allows this host and that the service is reachable, then retry.`,
+          type: "api_service_unavailable_error",
+        },
+      });
+      expect(captureSpy).not.toHaveBeenCalled();
+
+      captureSpy.mockRestore();
+      await app.close();
     });
 
     test.each([
@@ -1187,5 +1249,45 @@ describe("buildSandboxFrameAncestors", () => {
         sandboxDomain: null,
       }),
     ).toBe("https://archestra.example.com");
+  });
+});
+
+describe("registerWorkerRoutes", () => {
+  // Scheduled and A2A runs execute on workers, where the in-process APPA
+  // runtime posts its annotators and helper consults to this server.
+  test("serves the APPA runtime's loopback endpoints", async () => {
+    const originalEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    const app = createFastifyInstance();
+    try {
+      await app.register(authPlugin);
+      await registerWorkerRoutes(app);
+
+      const noop = await app.inject({
+        method: "POST",
+        url: GUARDRAILS_NOOP_ANNOTATOR_PATH,
+        payload: {
+          version: 1,
+          kind: "annotation",
+          name: "noop",
+          artifact: { args: { name: "unlisted_tool", arguments: {} } },
+          declaration: {},
+        },
+      });
+      expect(noop.statusCode, noop.body).toBe(200);
+
+      // Without the per-process bridge bearer: the route is mounted and
+      // turns the caller away itself.
+      for (const url of [
+        OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+        `${OPENAPPA_HELPERS_PREFIX}/${crypto.randomUUID()}/helper`,
+      ]) {
+        const response = await app.inject({ method: "POST", url, payload: {} });
+        expect(response.statusCode, `${url}: ${response.body}`).toBe(401);
+      }
+    } finally {
+      config.openappa.enabled = originalEnabled;
+      await app.close();
+    }
   });
 });

@@ -95,6 +95,7 @@ const {
   mockUseInternalMcpCatalog: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseKnowledgeBases: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseMcpInstallOrchestrator: vi.fn((_options?: unknown) => ({
+    closeInstallForms: vi.fn(),
     closeLocalInstall: vi.fn(),
     closeNoAuthInstall: vi.fn(),
     closeOAuth: vi.fn(),
@@ -352,6 +353,39 @@ describe("InitialAgentSelector before the agent resolves", () => {
       mockRoster.pending = false;
       mockUseProfile.mockClear();
     }
+  });
+
+  it("does not stand in another agent while the caller is still deciding", () => {
+    // After a reload the roster is restored at once, before the conversation
+    // or the default agent has loaded. Guessing from it painted the first
+    // agent, then swapped to the real one.
+    queryClient.clear();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <InitialAgentSelector
+          currentAgentId={null}
+          onAgentChange={vi.fn()}
+          isAgentResolving
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Loading agent" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText("Alpha Agent")).not.toBeInTheDocument();
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <InitialAgentSelector
+          currentAgentId="agent-2"
+          onAgentChange={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Beta Agent" }),
+    ).toBeInTheDocument();
+    mockUseProfile.mockClear();
   });
 });
 

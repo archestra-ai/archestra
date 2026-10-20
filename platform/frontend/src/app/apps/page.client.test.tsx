@@ -183,6 +183,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   authorName: "Ada Lovelace",
   viewerRole: "owner",
   icon: null,
+  iconUrl: null,
   latestVersion: 1,
   enabled: true,
   locked: false,
@@ -209,6 +210,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   pinnedAt: null,
   labels: [],
   icon: null,
+  iconUrl: null,
   requiresInput: false,
 };
 

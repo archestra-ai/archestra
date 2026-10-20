@@ -262,6 +262,39 @@ export class ResourcePermissions {
     return expandScopedGrants({ policies, subjectKeys: keys });
   }
 
+  /**
+   * {@link resolveAll} for a request that asks only `*`-scope questions and
+   * whether `actions` are held at all: the `*` grants in full, and the
+   * `resource:action` pairs held at `*` or on at least one object. It does
+   * not read every object the organization shares with the caller.
+   */
+  static async resolveWildcardsAndHeldActions(params: {
+    organizationId: string;
+    userId: string;
+    lookups?: PrincipalSource;
+    resources: ScopedResource[];
+    actions: ResourcePermissionAction[];
+  }): Promise<{
+    wildcards: ManagedScopedPermission[];
+    heldActions: Set<string>;
+  }> {
+    const subjects = await ResourcePermissions.getSubjects(params);
+    const { wildcards, heldActions } =
+      await ResourcePermissionPolicyModel.findWildcardsAndHeldActions({
+        organizationId: params.organizationId,
+        subjects,
+        resources: params.resources,
+        actions: params.actions,
+      });
+    return {
+      wildcards: expandScopedGrants({
+        policies: wildcards,
+        subjectKeys: new Set(subjects.map(subjectKey)),
+      }),
+      heldActions: new Set(heldActions),
+    };
+  }
+
   /** Check a list of organization-owned environments with one policy read. */
   static async getUsableEnvironmentIds(params: {
     organizationId: string;

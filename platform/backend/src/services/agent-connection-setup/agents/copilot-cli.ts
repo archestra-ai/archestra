@@ -391,7 +391,7 @@ cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
 fi`;
     });
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
-if ! cli copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+if ! cli_redacted copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
 fi
 ${installs.join("\n")}`);
@@ -443,7 +443,7 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install plugin — run 'copilot
       })
       .join("\n");
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
-copilot plugin marketplace add ${psq(ctx.skills.cloneUrl)}
+Invoke-ArchRedacted { copilot plugin marketplace add ${psq(ctx.skills.cloneUrl)} }
 if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect." }
 ${pluginInstalls}`);
   }

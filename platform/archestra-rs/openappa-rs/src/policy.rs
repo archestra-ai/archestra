@@ -138,7 +138,7 @@ fn config_failure(error: &ConfigError) -> BindingFailure {
         | ConfigError::UnsupportedBatteryTarget { .. }
         | ConfigError::UnresolvedInclude { .. }
         | ConfigError::MixedAliasSpellings
-        | ConfigError::UnsupportedToolAliases
+        | ConfigError::ToolAlias(_)
         | ConfigError::IncludedTopLevel { .. }
         | ConfigError::IncludedPolicyField { .. }
         | ConfigError::IncludedConfinesForeignTool { .. }

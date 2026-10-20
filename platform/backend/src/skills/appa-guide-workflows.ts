@@ -46,7 +46,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
 
 ## Inspect
 
-1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\` (root text), \`revision\`, \`delivery\` (local revision or GitHub PR), and \`effective\`. Note \`[policy.deployment]\`, \`include\`, and \`[aliases.mcp]\`, and which rules come from batteries; \`effective.content\` shows each bound credential under \`[credentials]\`. \`effective.batteries\` gives each battery's status:
+1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\` (root text), \`revision\`, \`delivery\` (local revision or GitHub PR), and \`effective\`. Note \`[policy.deployment]\`, \`include\`, and \`[aliases.mcp]\`, and which rules come from batteries; \`effective.credentialBindings\` lists each bound credential, and \`composed: true\` adds the composed text as \`effective.content\`. \`effective.batteries\` gives each battery's status:
    - \`active\`: its rules or routed annotator can govern calls.
    - \`unavailable\`: no battery package answers the entry.
    - \`missing_credentials\`: a required variable has no binding; bind it with \`archestra__bind_guardrails_credential\`.
@@ -55,7 +55,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
    - \`unrouted\`: no tool rule uses this organization-wide battery's annotator.
    - \`refused\`: the runtime rejected the composition.
 
-   Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` keeps the last composition that opened, if one did; do not claim the new text is enforced.
+   Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` (with \`composed: true\`) keeps the last composition that opened, if one did; do not claim the new text is enforced.
 2. List deployments with \`archestra__list_mcp_server_deployments\`. It lists only deployments the user can read: in the calling agent's environment, or across environments for the built-in configuration agent. A server selected from Coverage can belong to another environment; keep its Catalog ID.
 3. For each distinct Catalog ID in scope, call \`archestra__inspect_guardrails_server\` with \`{ "mcpServerId": "<Catalog ID>" }\` (not the deployment ID). Add \`"detail": "full"\` with \`"tools": ["<name>"]\` before you write a rule on a tool's arguments, and follow \`nextOffset\` for more rows. State the inspection's scope and report any server you could not inspect; do not claim complete coverage from a partial inventory.
 4. Call \`archestra__search_tools\` for the tools visible to the calling agent.

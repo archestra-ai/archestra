@@ -24,6 +24,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import {
+  getAgentTypeListPermissionChecker,
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
   isGlobalAdmin,
@@ -33,7 +34,10 @@ import {
 // tests mock `@/auth` wholesale to open up permissions, and these are
 // validation rules (team existence, org ownership, the ≥1-team invariant) that
 // must keep running in those tests rather than silently becoming no-ops.
-import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import type {
+  AgentTypeListPermissionChecker,
+  AgentTypePermissionChecker,
+} from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -343,10 +347,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const effectiveTypes =
         agentTypes || (agentType ? [agentType] : undefined);
 
-      // Single DB query for all permission checks
-      const checker = await getAgentTypePermissionChecker({
+      // A list asks about whole agent types only, so it does not read the
+      // grants of every agent shared with the caller.
+      const checker = await getAgentTypeListPermissionChecker({
         userId: user.id,
         organizationId,
+        // The deleted view asks for delete, every view for read.
+        actions: status === "deleted" ? ["read", "delete"] : ["read"],
       });
 
       const permittedTypes = getPermittedAgentTypesForList({
@@ -705,15 +712,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultMcpGateway,
-        description: "Get default MCP Gateway",
+        description:
+          "Get the caller's personal MCP Gateway, creating it on first use.",
         tags: ["MCP Gateway"],
-        response: constructResponseSchema(SelectAgentSchema),
+        querystring: z.object({
+          includeTools: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Attach the gateway's assigned tools. Defaults to true. Pass false when you need only the gateway or its `toolsCount` and `subagentsCount`, which are always present: the tool refs make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned', and `sandboxAvailable` is absent.",
+            ),
+        }),
+        response: constructResponseSchema(
+          AgentListItemSchema.omit({ pinnedAt: true }),
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ query, user, organizationId }, reply) => {
       const gateway = await AgentModel.ensurePersonalMcpGateway({
-        userId: request.user.id,
-        organizationId: request.organizationId,
+        userId: user.id,
+        organizationId,
+        includeTools: query.includeTools,
       });
       return reply.send(gateway);
     },
@@ -2953,7 +2972,7 @@ async function validateConnectorAccess(params: {
 }
 
 function getPermittedAgentTypesForList(params: {
-  checker: AgentTypePermissionChecker;
+  checker: AgentTypePermissionChecker | AgentTypeListPermissionChecker;
   effectiveTypes: AgentType[] | undefined;
   status: "active" | "deleted" | undefined;
 }): AgentType[] | undefined {

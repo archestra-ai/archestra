@@ -404,9 +404,12 @@ export async function admitOpenappaRequest(params: {
     const incomingAppaSessionHeader =
       headers[APPA_SESSION_HEADER.toLowerCase()];
     const family = appaWireFamily(params.interactionType);
-    const identity: AppaSessionIdentity = family
-      ? extractAppaSessionIdentity({ family, body, headers })
-      : {};
+    const identity = clientSessionIdentity({
+      family,
+      body,
+      headers,
+      clientWire: ingress.clientWire,
+    });
     const hasNativeClientSession =
       nativeSetupClientFromProvenance(identity.provenance) !== undefined;
     if (
@@ -434,7 +437,7 @@ export async function admitOpenappaRequest(params: {
     const traceable =
       callerId &&
       identity.sessionId &&
-      family &&
+      (family ?? ingress.clientWire) &&
       !isInternalChat &&
       !incomingAppaSessionHeader &&
       !headers[APPA_PARENT_HEADER.toLowerCase()] &&
@@ -585,6 +588,7 @@ export async function admitOpenappaRequest(params: {
       headers,
       body,
       interactionType: params.interactionType,
+      clientWire: ingress.clientWire,
       organizationId: agent.organizationId,
       callerId,
       isInternalChat,
@@ -682,6 +686,7 @@ function observedAppaSession(params: {
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
   interactionType: Parameters<typeof appaWireFamily>[0];
+  clientWire: OpenappaIngress["clientWire"];
   organizationId: string;
   callerId: string | undefined;
   isInternalChat: boolean;
@@ -700,14 +705,12 @@ function observedAppaSession(params: {
     );
   if (!governable) return undefined;
   try {
-    const family = appaWireFamily(params.interactionType);
-    const identity = family
-      ? extractAppaSessionIdentity({
-          family,
-          body: params.body,
-          headers: params.headers,
-        })
-      : {};
+    const identity = clientSessionIdentity({
+      family: appaWireFamily(params.interactionType),
+      body: params.body,
+      headers: params.headers,
+      clientWire: params.clientWire,
+    });
     const headers = { ...params.headers };
     fillAppaSessionHeaders(headers, identity);
     return sessionFromHeaders({
@@ -741,6 +744,28 @@ function observedAppaSession(params: {
       );
     return undefined;
   }
+}
+
+/**
+ * The session the client reports. On a wire OpenAPPA does not read, it is
+ * read from the client's own wire when a Model Router route translated it,
+ * and otherwise from the headers alone.
+ */
+function clientSessionIdentity(params: {
+  family: AppaWireFamily | undefined;
+  body: unknown;
+  headers: Record<string, string | string[] | undefined>;
+  clientWire: OpenappaIngress["clientWire"];
+}): AppaSessionIdentity {
+  const { family, body, headers, clientWire } = params;
+  if (family) return extractAppaSessionIdentity({ family, body, headers });
+  if (clientWire)
+    return extractAppaSessionIdentity({
+      family: clientWire.family,
+      body: clientWire.body,
+      headers,
+    });
+  return extractAppaSessionIdentity({ family: undefined, body, headers });
 }
 
 function firstHeaderValue(

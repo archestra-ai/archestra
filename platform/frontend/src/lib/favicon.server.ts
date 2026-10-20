@@ -72,6 +72,9 @@ export async function getDeploymentFavicon(): Promise<DeploymentFavicon> {
 const FAVICON_TTL_MS = 30_000;
 /** How long the very first document of a cold process waits for the backend. */
 const COLD_WAIT_MS = 200;
+const DEPLOYMENT_APPEARANCE_CACHE_KEY = Symbol.for(
+  "archestra.deploymentAppearanceCache",
+);
 
 class DeploymentFaviconCache {
   private value: { appearance: DeploymentAppearance; readAt: number } | null =
@@ -115,7 +118,20 @@ class DeploymentFaviconCache {
   }
 }
 
-const deploymentFaviconCache = new DeploymentFaviconCache();
+/**
+ * One cache per server process, not per module instance. Next bundles
+ * `instrumentation.ts` apart from the app's server code, so each loads its
+ * own copy of this module: a module-level cache would let the startup warm-up
+ * fill a copy no document reads, and every new process would then render its
+ * first document with the default theme until the client corrected it.
+ */
+const processGlobal = globalThis as {
+  [DEPLOYMENT_APPEARANCE_CACHE_KEY]?: DeploymentFaviconCache;
+};
+const deploymentFaviconCache =
+  processGlobal[DEPLOYMENT_APPEARANCE_CACHE_KEY] ??
+  new DeploymentFaviconCache();
+processGlobal[DEPLOYMENT_APPEARANCE_CACHE_KEY] = deploymentFaviconCache;
 
 /** Throws when the backend cannot answer, so the cache keeps its last value. */
 async function readDeploymentAppearance(): Promise<DeploymentAppearance> {

@@ -65,5 +65,12 @@ function scheduleIdle(callback: () => void) {
  * just-hydrated screen shows (and takes input) before the work starts.
  */
 export function afterNextPaint(callback: () => void): void {
+  // A hidden tab paints nothing and pauses animation frames until it is shown,
+  // so waiting for a frame there would hold the work (and every request it
+  // starts) until someone switches to the tab. There is no paint to protect.
+  if (document.visibilityState === "hidden") {
+    setTimeout(callback, 0);
+    return;
+  }
   requestAnimationFrame(() => setTimeout(callback, 0));
 }

@@ -57305,7 +57305,18 @@
         "tags": [
           "MCP Gateway"
         ],
-        "description": "Get default MCP Gateway\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpGateway:read`: Open MCP Gateways",
+        "description": "Get the caller's personal MCP Gateway, creating it on first use.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpGateway:read`: Open MCP Gateways",
+        "parameters": [
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeTools",
+            "required": false,
+            "description": "Attach the gateway's assigned tools. Defaults to true. Pass false when you need only the gateway or its `toolsCount` and `subagentsCount`, which are always present: the tool refs make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned', and `sandboxAvailable` is absent."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -58008,6 +58019,18 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "toolsCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Assigned tools other than subagent delegations, as the Agents and MCP Gateways pages count them. Always present, even when `tools` is not requested."
+                    },
+                    "subagentsCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Agents this agent delegates to. Always present, even when `tools` is not requested."
                     }
                   },
                   "required": [
@@ -58054,7 +58077,9 @@
                     "labels",
                     "knowledgeBaseIds",
                     "connectorIds",
-                    "suggestedPrompts"
+                    "suggestedPrompts",
+                    "toolsCount",
+                    "subagentsCount"
                   ],
                   "additionalProperties": false
                 }
@@ -91132,6 +91157,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "iconUrl": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdBy": {
                                 "nullable": true,
                                 "type": "object",
@@ -91257,6 +91286,7 @@
                               "pinnedAt",
                               "labels",
                               "icon",
+                              "iconUrl",
                               "createdBy",
                               "source",
                               "id",
@@ -91337,6 +91367,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "iconUrl": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "createdBy": {
                                 "nullable": true,
                                 "type": "object",
@@ -91405,6 +91439,7 @@
                               "pinnedAt",
                               "labels",
                               "icon",
+                              "iconUrl",
                               "createdBy",
                               "source",
                               "catalogId",
@@ -92787,6 +92822,87 @@
           "permissions": [
             "app:read"
           ]
+        }
+      }
+    },
+    "/api/apps/external/{catalogId}/icon": {
+      "get": {
+        "operationId": "getExternalAppIcon",
+        "tags": [
+          "Apps"
+        ],
+        "description": "The image icon of an external app's backing server, for the apps list, which links image icons instead of carrying them inline.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "description": "Content version; any value."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "catalogId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "app:read"
+          ]
+        }
+      }
+    },
+    "/api/apps/{appId}/icon": {
+      "get": {
+        "operationId": "getAppIcon",
+        "tags": [
+          "Apps"
+        ],
+        "description": "The image icon of an app the caller may view, for the apps list, which links image icons instead of carrying them inline.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "description": "Content version; any value."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "appId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -122364,7 +122480,7 @@
         "tags": [
           "Config"
         ],
-        "description": "Get the signed-in user's permissions, organization, and platform config in one request\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get the signed-in user's permissions, organization, platform config, appearance settings, and chat defaults in one request\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -123551,13 +123667,280 @@
                         "providerBaseUrls"
                       ],
                       "additionalProperties": false
+                    },
+                    "publicConfig": {
+                      "type": "object",
+                      "properties": {
+                        "disableBasicAuth": {
+                          "type": "boolean"
+                        },
+                        "disableInvitations": {
+                          "type": "boolean"
+                        },
+                        "disableImpersonation": {
+                          "type": "boolean"
+                        },
+                        "devAutoLoginEnabled": {
+                          "type": "boolean"
+                        },
+                        "maintenanceMode": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "siteNotificationMessage": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "enterpriseCoreActive": {
+                          "type": "boolean"
+                        },
+                        "analytics": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "instanceId": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "posthog": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "host": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "host"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "instanceId",
+                            "posthog"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "rum": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "sampleRate": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "sampleRate"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "disableBasicAuth",
+                        "disableInvitations",
+                        "disableImpersonation",
+                        "devAutoLoginEnabled",
+                        "maintenanceMode",
+                        "siteNotificationMessage",
+                        "enterpriseCoreActive",
+                        "analytics",
+                        "rum"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "appearance": {
+                      "type": "object",
+                      "properties": {
+                        "theme": {
+                          "type": "string",
+                          "enum": [
+                            "modern-minimal",
+                            "clean-slate",
+                            "mono",
+                            "twitter",
+                            "tangerine",
+                            "bubblegum",
+                            "caffeine",
+                            "amber-minimal",
+                            "cosmic-night",
+                            "doom-64",
+                            "mocha-mousse",
+                            "nature",
+                            "sunset-horizon",
+                            "neo-brutalism",
+                            "vercel",
+                            "claude",
+                            "vintage-paper",
+                            "boxy-minimalistic",
+                            "catppuccin",
+                            "solarized-dark",
+                            "gruvbox-dark",
+                            "dracula-dark",
+                            "monokai-dark",
+                            "moonlight-dark"
+                          ]
+                        },
+                        "customFont": {
+                          "type": "string",
+                          "enum": [
+                            "lato",
+                            "inter",
+                            "open-sans",
+                            "roboto",
+                            "source-sans-pro",
+                            "jetbrains-mono"
+                          ]
+                        },
+                        "logo": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "logoDark": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "favicon": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "iconLogo": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "iconLogoDark": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "appName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ogDescription": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "footerText": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "chatLinks": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 25
+                              },
+                              "url": {
+                                "type": "string",
+                                "maxLength": 2000
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "url"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "chatErrorSupportMessage": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "slimChatErrorUi": {
+                          "type": "boolean"
+                        },
+                        "animateChatPlaceholders": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "theme",
+                        "customFont",
+                        "logo",
+                        "logoDark",
+                        "favicon",
+                        "iconLogo",
+                        "iconLogoDark",
+                        "appName",
+                        "ogDescription",
+                        "footerText",
+                        "chatLinks",
+                        "chatErrorSupportMessage",
+                        "slimChatErrorUi",
+                        "animateChatPlaceholders"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "memberDefaultAgent": {
+                      "type": "object",
+                      "properties": {
+                        "defaultAgentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "personalChatAgentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "defaultAgentId",
+                        "personalChatAgentId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "memberDefaultModel": {
+                      "type": "object",
+                      "properties": {
+                        "modelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "chatApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "modelId",
+                        "chatApiKeyId"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "permissions",
                     "scopedCapabilities",
                     "organization",
-                    "config"
+                    "config",
+                    "publicConfig",
+                    "appearance",
+                    "memberDefaultAgent",
+                    "memberDefaultModel"
                   ],
                   "additionalProperties": false
                 }
@@ -356903,6 +357286,11 @@
                   },
                   "partial": {
                     "type": "boolean"
+                  },
+                  "progressToken": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
@@ -357011,6 +357399,11 @@
                           "contentHash": {
                             "type": "string"
                           },
+                          "durationMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
                           "steps": {
                             "type": "array",
                             "items": {
@@ -357042,6 +357435,12 @@
                                 "error": {
                                   "nullable": true,
                                   "type": "string"
+                                },
+                                "reasons": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 }
                               },
                               "required": [
@@ -357460,6 +357859,11 @@
                             "contentHash": {
                               "type": "string"
                             },
+                            "durationMs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
                             "steps": {
                               "type": "array",
                               "items": {
@@ -357491,6 +357895,12 @@
                                   "error": {
                                     "nullable": true,
                                     "type": "string"
+                                  },
+                                  "reasons": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
                                   }
                                 },
                                 "required": [
@@ -357946,6 +358356,11 @@
                           "contentHash": {
                             "type": "string"
                           },
+                          "durationMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
                           "steps": {
                             "type": "array",
                             "items": {
@@ -357977,6 +358392,12 @@
                                 "error": {
                                   "nullable": true,
                                   "type": "string"
+                                },
+                                "reasons": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
                                 }
                               },
                               "required": [
@@ -379131,7 +379552,22 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get which members have completed signup (have an account record)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get which members have not completed signup (no account record). Pass `userIds` to ask about the members on screen instead of every member.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "userIds",
+            "required": false,
+            "description": "Only these members (comma-separated user IDs), such as the rows of one Users page. Without it, every member of the organization is checked."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",

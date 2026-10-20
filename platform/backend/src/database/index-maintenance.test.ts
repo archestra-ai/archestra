@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import db from "@/database";
 import {
   createAgentToolsIndexes,
+  createInteractionsIndexes,
   createMcpServerIndexes,
   dropLegacyPayloadTrgmIndexes,
 } from "./index-maintenance";
@@ -198,6 +199,39 @@ describe("createMcpServerIndexes", () => {
     expect(await createMcpServerIndexes(options)).toEqual({
       [name]: "unexpected_definition",
     });
+  });
+});
+
+describe("createInteractionsIndexes", () => {
+  const name = "interactions_session_preview_missing_idx";
+  const options = {
+    concurrently: false,
+    client: {
+      query: (text: string, values?: unknown[]) =>
+        db.$client.query(text, values),
+    },
+  };
+
+  beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
+  });
+
+  test("creates the missing-preview index, then recognizes it on the next boot", async () => {
+    expect(await createInteractionsIndexes(options)).toEqual({
+      [name]: "created",
+    });
+    expect(await indexDefinition(name)).toBe(
+      `CREATE INDEX ${name} ON public.interactions USING btree (created_at, id) WHERE ((session_preview IS NULL) AND (encrypted_chat_conversation_id IS NULL))`,
+    );
+    const oid = await indexOid(name);
+
+    // A predicate that does not match what PostgreSQL prints back would read
+    // as someone else's index here, and the index would never be maintained.
+    expect(await createInteractionsIndexes(options)).toEqual({
+      [name]: "already_valid",
+    });
+    expect(await indexOid(name)).toBe(oid);
+    expect(await advisoryLockCount()).toBe(0);
   });
 });
 

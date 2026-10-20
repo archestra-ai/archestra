@@ -639,6 +639,20 @@ mod tests {
     }
 
     #[test]
+    fn image_pull_failure_is_terminal_for_every_operation() {
+        // the engine is healthy and the registry is unreachable from it, so a
+        // fresh session would hit the same blocked pull.
+        let err = SandboxError::ImagePullFailed {
+            image: "ghcr.io/example/base:1".to_string(),
+            registry: "ghcr.io".to_string(),
+        };
+        assert!(!is_engine_unreachable(&err));
+        assert_eq!(retry_reason(SessionOperation::Run, &err), None);
+        assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);
+        assert_eq!(retry_reason(SessionOperation::CheckSession, &err), None);
+    }
+
+    #[test]
     fn panic_to_error_retags_recovered_engine_fault_for_retry() {
         // dagger-sdk panics (instead of returning a typed error) on a
         // stale-attachables timeout; the recovered fault must re-enter the

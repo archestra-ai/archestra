@@ -117,6 +117,15 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 600,
     payload: {},
   },
+  // Fills session_preview on interactions written before migration 0562, so
+  // the session list stops rebuilding full requests to show a preview. Runs
+  // are time-bounded, and a short interval keeps a long history moving. Once
+  // every row is done, a run is one empty partial-index read.
+  {
+    taskType: "interaction_session_preview_backfill",
+    intervalSeconds: 60,
+    payload: {},
+  },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

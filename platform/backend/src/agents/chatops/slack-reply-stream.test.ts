@@ -1,12 +1,14 @@
 import type { WebClient } from "@slack/web-api";
 import type { UIMessageChunk } from "ai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { SlackReplyStream } from "./slack-reply-stream";
+import { SlackReplyStream, updatePausedTasks } from "./slack-reply-stream";
 
-// The Slack Web API is the process boundary: a fake client records every call.
+// The Slack Web API is the process boundary: a fake client records every call,
+// and keeps the thread's stored messages for reads and edits.
 function createStream(
   options: { recipient?: boolean; startError?: Error } = {},
 ) {
+  const thread: SlackMessage[] = [];
   const chat = {
     startStream: options.startError
       ? vi.fn().mockRejectedValue(options.startError)
@@ -14,10 +16,30 @@ function createStream(
     appendStream: vi.fn().mockResolvedValue({ ok: true }),
     stopStream: vi.fn().mockResolvedValue({ ok: true }),
     delete: vi.fn().mockResolvedValue({ ok: true }),
+    update: vi.fn(
+      async (args: { ts: string; text: string; blocks: unknown[] }) => {
+        const message = thread.find((m) => m.ts === args.ts);
+        if (!message) throw new Error("message_not_found");
+        message.text = args.text;
+        message.blocks = args.blocks as SlackMessage["blocks"];
+        return { ok: true };
+      },
+    ),
   };
+  const conversations = {
+    replies: vi.fn(async (args: { oldest?: string; latest?: string }) => ({
+      ok: true,
+      messages: thread.filter(
+        (m) =>
+          (!args.oldest || m.ts >= args.oldest) &&
+          (!args.latest || m.ts <= args.latest),
+      ),
+    })),
+  };
+  const client = { chat, conversations } as unknown as WebClient;
   const postReply = vi.fn().mockResolvedValue(undefined);
   const stream = new SlackReplyStream({
-    client: { chat } as unknown as WebClient,
+    client,
     channelId: "C1",
     threadTs: "100.1",
     ...(options.recipient && {
@@ -35,7 +57,41 @@ function createStream(
         : [],
     postReply,
   });
-  return { stream, chat, postReply };
+  return { stream, chat, postReply, thread, client };
+}
+
+interface SlackMessage {
+  ts: string;
+  text: string;
+  blocks: {
+    type: string;
+    title?: string;
+    tasks?: { task_id: string; title: string; status: string }[];
+  }[];
+}
+
+/** What Slack stores for a stream stopped with a task still pending. */
+function stoppedWithPendingTask(ts: string, taskId: string): SlackMessage {
+  return {
+    ts,
+    text: "Checking the policy.",
+    blocks: [
+      { type: "rich_text" },
+      {
+        type: "plan",
+        title: "Something went wrong",
+        tasks: [{ task_id: taskId, title: "remedy", status: "error" }],
+      },
+    ],
+  };
+}
+
+function planOf(message: SlackMessage | undefined) {
+  const plan = message?.blocks.find((block) => block.type === "plan");
+  return {
+    title: plan?.title,
+    statuses: plan?.tasks?.map((task) => task.status),
+  };
 }
 
 const text = (delta: string): UIMessageChunk => ({
@@ -214,6 +270,83 @@ describe("SlackReplyStream", () => {
     await stream.abandon({ keepContent: false });
     expect(chat.delete).toHaveBeenCalledWith({ channel: "C1", ts: "STREAM.1" });
     expect(stream.isLive).toBe(false);
+  });
+
+  test("an approval pause shows the paused tool card as waiting, and the decision settles it", async () => {
+    const { stream, chat, thread, client } = createStream();
+    thread.push({ ts: "100.1", text: "user asks", blocks: [] });
+    stream.push(text("Checking the policy."));
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "call-1",
+      toolName: "archestra__execute_remedy_plan",
+      input: {},
+    });
+    stream.push({
+      type: "tool-approval-request",
+      approvalId: "approval-1",
+      toolCallId: "call-1",
+    });
+    await flush();
+    chat.stopStream.mockImplementationOnce(async () => {
+      thread.push(stoppedWithPendingTask("STREAM.1", "call-1"));
+      return { ok: true };
+    });
+
+    await stream.finish({ text: "Checking the policy." });
+    expect(planOf(thread[1])).toEqual({
+      title: "Waiting for approval",
+      statuses: ["pending"],
+    });
+
+    // The resumed run answers in a new message; the decision finds the paused
+    // reply in the thread by its tool call.
+    thread.push({ ts: "STREAM.2", text: "approval form", blocks: [] });
+    await updatePausedTasks({
+      client,
+      channelId: "C1",
+      threadTs: "100.1",
+      taskIds: ["call-1"],
+      outcome: "approved",
+    });
+    expect(planOf(thread[1])).toEqual({
+      title: "Approved",
+      statuses: ["complete"],
+    });
+    expect(thread[1].text).toBe("Checking the policy.");
+  });
+
+  test("a declined approval marks the paused tool card failed", async () => {
+    const { thread, client } = createStream();
+    thread.push(stoppedWithPendingTask("STREAM.1", "call-1"));
+
+    await updatePausedTasks({
+      client,
+      channelId: "C1",
+      threadTs: "100.1",
+      taskIds: ["call-1"],
+      outcome: "declined",
+    });
+    expect(planOf(thread[0])).toEqual({
+      title: "Declined",
+      statuses: ["error"],
+    });
+  });
+
+  test("a tool card left open without an approval request is not rewritten", async () => {
+    const { stream, chat } = createStream();
+    stream.push(text("Working on it."));
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "call-1",
+      toolName: "slow_tool",
+      input: {},
+    });
+    await flush();
+
+    await stream.finish({ text: "Working on it." });
+    expect(chat.stopStream).toHaveBeenCalledTimes(1);
+    expect(chat.update).not.toHaveBeenCalled();
   });
 
   test("a stopped stream keeps its content and marks open tool cards stopped", async () => {

@@ -84,11 +84,14 @@ export default function SessionDetailPage({
   const targetToolCallId = searchParams.get(LLM_LOG_FOCUS_PARAM.toolCall);
   const targetRequestId = searchParams.get(LLM_LOG_FOCUS_PARAM.request);
 
+  // Past page one, the read also takes the previous page's newest row: it
+  // bounds this page's tool-call window, and a second read would delay them.
+  const hasNewerPage = offset > 0;
   const { data: interactionsResponse, isLoading: interactionsLoading } =
     useInteractionSummaries({
       sessionId: sessionId,
-      limit: pageSize,
-      offset,
+      limit: hasNewerPage ? pageSize + 1 : pageSize,
+      offset: hasNewerPage ? offset - 1 : offset,
       sortBy: "createdAt",
       sortDirection: "desc",
     });
@@ -104,18 +107,17 @@ export default function SessionDetailPage({
     toastOnError: false,
   });
 
-  const interactions = interactionsResponse?.data ?? [];
+  const pageRows = interactionsResponse?.data ?? [];
+  const newerRequest = hasNewerPage ? (pageRows[0] ?? null) : null;
+  const interactions = useMemo(
+    () => (hasNewerPage ? pageRows.slice(1) : pageRows),
+    [hasNewerPage, pageRows],
+  );
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
   const { data: lineage } = useSessionLineage({
     sessionId,
     enabled: openappaEnabled,
-  });
-  const latestInteractionId = sessionData?.lastInteractionId ?? undefined;
-  const { data: lastMainRequest } = useInteraction({
-    interactionId: latestInteractionId,
-    refetchInterval: null,
-    enabled: latestInteractionId !== undefined,
   });
 
   // Use session data from API for accurate totals, fall back to page data
@@ -153,16 +155,6 @@ export default function SessionDetailPage({
 
   const exportSession = useExportSessionInteractions();
 
-  // Whether the latest main request captured a thread: its thread is the
-  // whole conversation, so the list marks it and the details offer a way to it.
-  const latestHasConversation = useMemo(
-    () =>
-      lastMainRequest
-        ? new DynamicInteraction(lastMainRequest).mapToUiMessages().length > 0
-        : false,
-    [lastMainRequest],
-  );
-
   const goToPage = useCallback(
     (nextPageIndex: number) =>
       setPagination({ pageIndex: nextPageIndex, pageSize }),
@@ -171,10 +163,10 @@ export default function SessionDetailPage({
   const sessionToolCalls = useSessionToolCalls({
     sessionId,
     requests: interactions,
+    newerRequest,
     requestsReady: interactionsResponse !== undefined && !interactionsLoading,
     pageIndex,
     pageSize,
-    offset,
     onLocatePage: goToPage,
     targetToolCallId,
   });
@@ -188,6 +180,29 @@ export default function SessionDetailPage({
     onLocatePage: goToPage,
     targetRequestId,
   });
+
+  // The trace draws once: this page's requests and tool calls, on the page a
+  // link points at. Drawing each as it lands reflows the rows and moves the
+  // selection.
+  const traceLoading =
+    interactionsLoading || !sessionToolCalls.ready || !linkedRequest.ready;
+
+  // Whether the latest main request captured a thread: its thread is the
+  // whole conversation, so the list marks it and the details offer a way to
+  // it. The full record can run to megabytes, so it waits for the trace.
+  const latestInteractionId = sessionData?.lastInteractionId ?? undefined;
+  const { data: lastMainRequest } = useInteraction({
+    interactionId: latestInteractionId,
+    refetchInterval: null,
+    enabled: latestInteractionId !== undefined && !traceLoading,
+  });
+  const latestHasConversation = useMemo(
+    () =>
+      lastMainRequest
+        ? new DynamicInteraction(lastMainRequest).mapToUiMessages().length > 0
+        : false,
+    [lastMainRequest],
+  );
 
   const timeline = useMemo(
     () => buildTimeline({ requests: interactions, toolCalls }),
@@ -358,7 +373,7 @@ export default function SessionDetailPage({
             >
               <TraceWaterfall
                 timeline={timeline}
-                loading={interactionsLoading}
+                loading={traceLoading}
                 profileName={profileName}
                 serverDisplayByName={serverDisplayByName}
                 conversationRowId={
@@ -413,8 +428,8 @@ export default function SessionDetailPage({
               <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
               <TraceDetails
                 height={detailsHeight}
-                loading={interactionsLoading}
-                span={selected}
+                loading={traceLoading}
+                span={traceLoading ? null : selected}
                 origin={timeline?.origin ?? 0}
                 previous={selectedIndex > 0 ? spans[selectedIndex - 1] : null}
                 index={selectedIndex}

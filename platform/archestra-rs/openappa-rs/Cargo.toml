@@ -14,11 +14,14 @@ crate-type = ["cdylib"]
 # table (#666), void returns for marked spawns (#665), typed refusal classes
 # (#681), live policy revisions with snapshot views (#677); then on main,
 # replay steps without `expect` (#688) and the deployment targets each
-# battery lists (#691).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b0358c04789f060d3a99885f78c41178beb82fd", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b0358c04789f060d3a99885f78c41178beb82fd" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b0358c04789f060d3a99885f78c41178beb82fd", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "2b0358c04789f060d3a99885f78c41178beb82fd" }
+# battery lists (#691), loopback requests staying local (#692),
+# parallel subagent spawns waiting for the earlier bind (#694), and plain
+# errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
+# and the generic coding battery (#697).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e935b5b10293677a498413a7c43ce06c576d8008", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e935b5b10293677a498413a7c43ce06c576d8008" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e935b5b10293677a498413a7c43ce06c576d8008", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e935b5b10293677a498413a7c43ce06c576d8008" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

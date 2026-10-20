@@ -4033,6 +4033,34 @@
       "when": 1792417477813,
       "tag": "0575_apikey_key_index",
       "breakpoints": true
+    },
+    {
+      "idx": 576,
+      "version": "7",
+      "when": 1792419527326,
+      "tag": "0576_signup_status_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 577,
+      "version": "7",
+      "when": 1792421603566,
+      "tag": "0577_crazy_warhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 578,
+      "version": "7",
+      "when": 1792438322806,
+      "tag": "0578_interaction_session_heads",
+      "breakpoints": true
+    },
+    {
+      "idx": 579,
+      "version": "7",
+      "when": 1792452235075,
+      "tag": "0579_remove_seeded_openappa_plugin",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,8 @@ import { vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import { hasPermission } from "@/auth";
 import config from "@/config";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; turns at-rest content encryption on
+import { _resetContentKeys } from "@/content-encryption/index.ee";
 import db, { schema } from "@/database";
 import {
   createFastifyInstance,
@@ -16,6 +18,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ConversationModel from "@/models/conversation";
 import McpToolCallModel from "@/models/mcp-tool-call";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { stampToolCallId } from "@/openappa/trajectory-stamp";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import routes from "./openappa-yells.routes";
@@ -180,6 +183,56 @@ describe("OpenAPPA yells", () => {
     expect(
       all.data.find((row: { id: string }) => row.id === unlogged.id),
     ).toMatchObject({ trace: null });
+  });
+
+  test("links a yell to its call when logged content is encrypted at rest", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    config.contentEncryption.secret = "yell-trace-link-secret-0123456789";
+    _resetContentKeys();
+    try {
+      const agent = await makeAgent({ organizationId });
+      await makeInteraction(agent.id, { sessionId: "run-1" });
+      // Gateway clients send the model's id back with its trajectory stamp.
+      const stamped = stampToolCallId({
+        callId: "toolu_1",
+        sessionId: "run-1",
+        organizationId,
+        callerId: `user:${user.id}`,
+        secret: "stamp-secret",
+      });
+      const call = await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "archestra",
+        method: "tools/call",
+        toolCall: { id: "archestra-1", name: "archestra__yell", arguments: {} },
+        toolResult: null,
+        sessionId: "run-1",
+        llmToolCallId: stamped,
+      });
+      const yell = await OpenAppaYellModel.record({
+        organizationId,
+        callerId: `user:${user.id}`,
+        sessionId: `user:${user.id}|run-1`,
+        toolCallId: "toolu_1",
+        message: "Blocked",
+        withTrajectory: false,
+        superyell: false,
+      });
+
+      const body = (
+        await app.inject({ url: `/api/openappa/yells/${yell.id}` })
+      ).json();
+
+      expect(body.trace).toEqual({
+        llmSessionId: "run-1",
+        mcpToolCallId: call.id,
+      });
+    } finally {
+      config.contentEncryption.secret = undefined;
+      _resetContentKeys();
+    }
   });
 
   test("lists and counts only the active organization's reports and paginates search", async ({

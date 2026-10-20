@@ -1016,6 +1016,8 @@ export const RouteId = {
   // MCP App Routes
   GetApps: "getApps",
   GetExternalApp: "getExternalApp",
+  GetExternalAppIcon: "getExternalAppIcon",
+  GetAppIcon: "getAppIcon",
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",

@@ -308,6 +308,9 @@ const interactionsTable = pgTable(
     // The optional interactions_statistics_v2_idx is managed by the operator
     // CLI db:create-statistics-index. Keep it out of Drizzle's transactional
     // migrations so its build remains concurrent on existing large tables.
+    // The partial interactions_session_preview_missing_idx (rows still without
+    // a session preview) is built concurrently from worker startup
+    // (database/index-maintenance.ts), for the same reason.
     // Note: interactions deliberately has NO trgm/GIN indexes on the request/
     // response payload columns. Migration 0116 used to create them for a
     // free-text log search that no longer exists (the LLM logs UI filters by

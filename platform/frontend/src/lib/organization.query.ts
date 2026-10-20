@@ -38,7 +38,9 @@ export const appearanceKeys = {
 export function useAppearanceSettings(enabled = true) {
   return useQuery({
     queryKey: appearanceKeys.public(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.appearance) return seed.appearance;
       const { data, error } = await archestraApiSdk.getAppearanceSettings();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
@@ -64,8 +66,12 @@ export const organizationKeys = {
   details: () => [...organizationKeys.all, "details"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
-  memberSignupStatus: () =>
-    [...organizationKeys.all, "member-signup-status"] as const,
+  memberSignupStatus: (userIds?: string[]) =>
+    [
+      ...organizationKeys.all,
+      "member-signup-status",
+      ...(userIds ? [{ userIds }] : []),
+    ] as const,
 };
 
 /**
@@ -885,13 +891,21 @@ export type PendingSignupMember = {
 };
 
 /**
- * Get member signup status — returns members that haven't completed signup
+ * Which members have not completed signup. Pass the user IDs on screen so
+ * the request stays the size of one page instead of every pending member.
  */
-export function useMemberSignupStatus() {
+export function useMemberSignupStatus(options?: {
+  userIds?: string[];
+  enabled?: boolean;
+}) {
+  const userIds = options?.userIds ? [...options.userIds].sort() : undefined;
   return useQuery({
-    queryKey: organizationKeys.memberSignupStatus(),
+    queryKey: organizationKeys.memberSignupStatus(userIds),
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getMemberSignupStatus();
+      const { data, error } = await archestraApiSdk.getMemberSignupStatus(
+        userIds ? { query: { userIds } } : undefined,
+      );
       throwOnApiError(error, { toastOnError: false });
       return data ?? { pendingSignupMembers: [] as PendingSignupMember[] };
     },

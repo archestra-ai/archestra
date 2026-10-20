@@ -121,13 +121,24 @@ describe("proxy", () => {
           ),
         ).toBe(route);
       }
+      // An existing conversation, by its id.
+      const conversation = "/chat/0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+      expect(
+        forwarded(
+          proxy(
+            createMockRequest({ url: conversation, headers: documentLoad }),
+          ),
+        ),
+      ).toBe(conversation);
       for (const url of [
         "/agents",
         "/mcp/gateways",
         "/mcp/registry/abc",
-        // A conversation is not the new-chat screen.
+        // Not a conversation id, nor a page under one.
         "/chat/abc",
         "/chat/new",
+        "/chat/runs/0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+        "/chat/0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b/files",
       ]) {
         expect(
           forwarded(proxy(createMockRequest({ url, headers: documentLoad }))),

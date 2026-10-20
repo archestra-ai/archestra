@@ -21,14 +21,17 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { getUserPermissions } from "@/services/user";
 import {
   AgentCredentialReadinessSchema,
+  ApiError,
   AppearanceSettingsSchema,
   AssignedToolSchema,
   ChatAgentRosterSchema,
   constructResponseSchema,
   LlmProviderApiKeyWithScopeInfoSchema,
   SelectAgentSchema,
+  SelectConversationSchema,
   SelectOrganizationSchema,
   SuggestedPromptInputSchema,
+  UuidIdSchema,
 } from "@/types";
 import {
   getAgentCredentialReadinessForUser,
@@ -41,6 +44,7 @@ import {
   getAgentDelegationsForUser,
   getAgentToolsForUser,
 } from "./agent-tool";
+import { readConversationForRequest } from "./chat/routes";
 import {
   ConfigResponseSchema,
   getConfigResponse,
@@ -52,6 +56,50 @@ import {
   getVisibleLlmProviderApiKeys,
 } from "./llm-provider-api-keys";
 import { getAvailableLlmModels, LlmModelSchema } from "./llm-provider-models";
+
+/** The new-chat composer's parts; see `/api/bootstrap/new-chat`. */
+const NewChatBootstrapSchema = z.object({
+  /** `GET /api/agents/chat-roster?bootstrap=true` */
+  roster: z.array(ChatAgentRosterSchema),
+  /** `GET /api/llm-provider-api-keys` */
+  apiKeys: z.array(LlmProviderApiKeyWithScopeInfoSchema),
+  /** `GET /api/llm-provider-api-keys/available`, null for a caller that endpoint refuses */
+  availableApiKeys: z.array(LlmProviderApiKeyWithScopeInfoSchema).nullable(),
+  /** `GET /api/llm-models/available` */
+  models: z.array(LlmModelSchema),
+  agent: z
+    .object({
+      id: z.string().uuid(),
+      /** `GET /api/agents/:id` */
+      detail: SelectAgentSchema,
+      /** `GET /api/agents/:id/delegations` */
+      delegations: z.array(AgentDelegationTargetSchema),
+      /** `GET /api/agents/credential-readiness?ids=:id` */
+      credentialReadiness: z.array(AgentCredentialReadinessSchema),
+      /** `GET /api/agents/:id/tools?catalogId=<Playwright catalog>` */
+      browserTools: z.array(AssignedToolSchema),
+      /** `GET /api/agents/:id/default-suggested-prompts`, only when the agent has no prompts of its own */
+      defaultSuggestedPrompts: z.array(SuggestedPromptInputSchema).nullable(),
+      /** `GET /api/llm-models/available?apiKeyId=:llmApiKeyId`, only when the agent has a key */
+      keyModels: z.array(LlmModelSchema).nullable(),
+    })
+    .nullable(),
+  /**
+   * `GET /api/llm-models/available?apiKeyId=:chatApiKeyId` for the
+   * member's saved default key, when it is set and is not the
+   * starting agent's key: the composer then picks its model from
+   * that key's list.
+   */
+  memberDefaultKeyModels: z
+    .object({
+      apiKeyId: z.string().uuid(),
+      models: z.array(LlmModelSchema),
+    })
+    .nullable(),
+});
+
+/** How many of its last messages a seeded conversation document carries. */
+const CONVERSATION_SEED_TAIL = 30;
 
 /**
  * The reads the app shell needs before it can draw a page, in one round trip.
@@ -162,125 +210,63 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get the new-chat composer's agents, provider keys, models, and the starting agent's details in one request",
         tags: ["Config"],
+        response: constructResponseSchema(NewChatBootstrapSchema),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      return reply.send(
+        await getNewChatComposer({ userId: user.id, organizationId }),
+      );
+    },
+  );
+
+  /**
+   * An existing conversation's first screen in one round trip: its end (the
+   * same as `GET /api/chat/conversations/:id?tail=30`) and the composer's
+   * parts for the conversation's agent (the same as the new-chat bootstrap's,
+   * with that agent as the starting one). The frontend server reads this for
+   * a full load of `/chat/<id>`, so the HTML carries the last messages and a
+   * ready composer; the rest of the history loads after paint.
+   */
+  fastify.get(
+    "/api/bootstrap/conversation/:id",
+    {
+      schema: {
+        operationId: RouteId.GetConversationBootstrap,
+        description:
+          "Get the end of a conversation and its composer's agent, keys and models in one request",
+        tags: ["Config"],
+        params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(
           z.object({
-            /** `GET /api/agents/chat-roster?bootstrap=true` */
-            roster: z.array(ChatAgentRosterSchema),
-            /** `GET /api/llm-provider-api-keys` */
-            apiKeys: z.array(LlmProviderApiKeyWithScopeInfoSchema),
-            /** `GET /api/llm-provider-api-keys/available`, null for a caller that endpoint refuses */
-            availableApiKeys: z
-              .array(LlmProviderApiKeyWithScopeInfoSchema)
-              .nullable(),
-            /** `GET /api/llm-models/available` */
-            models: z.array(LlmModelSchema),
-            agent: z
-              .object({
-                id: z.string().uuid(),
-                /** `GET /api/agents/:id` */
-                detail: SelectAgentSchema,
-                /** `GET /api/agents/:id/delegations` */
-                delegations: z.array(AgentDelegationTargetSchema),
-                /** `GET /api/agents/credential-readiness?ids=:id` */
-                credentialReadiness: z.array(AgentCredentialReadinessSchema),
-                /** `GET /api/agents/:id/tools?catalogId=<Playwright catalog>` */
-                browserTools: z.array(AssignedToolSchema),
-                /** `GET /api/agents/:id/default-suggested-prompts`, only when the agent has no prompts of its own */
-                defaultSuggestedPrompts: z
-                  .array(SuggestedPromptInputSchema)
-                  .nullable(),
-                /** `GET /api/llm-models/available?apiKeyId=:llmApiKeyId`, only when the agent has a key */
-                keyModels: z.array(LlmModelSchema).nullable(),
-              })
-              .nullable(),
-            /**
-             * `GET /api/llm-models/available?apiKeyId=:chatApiKeyId` for the
-             * member's saved default key, when it is set and is not the
-             * starting agent's key: the composer then picks its model from
-             * that key's list.
-             */
-            memberDefaultKeyModels: z
-              .object({
-                apiKeyId: z.string().uuid(),
-                models: z.array(LlmModelSchema),
-              })
-              .nullable(),
+            /** `GET /api/chat/conversations/:id?tail=30` */
+            conversation: SelectConversationSchema,
+            /** The new-chat bootstrap with the conversation's agent */
+            composer: NewChatBootstrapSchema,
           }),
         ),
       },
     },
-    async ({ user, organizationId }, reply) => {
-      const userId = user.id;
-      const [
-        roster,
-        apiKeys,
-        availableApiKeys,
-        models,
-        memberDefaultAgentId,
-        organization,
-        memberDefaultModel,
-      ] = await Promise.all([
-        getChatRosterBootstrap({ userId, organizationId }),
-        getVisibleLlmProviderApiKeys({ query: {}, userId, organizationId }),
-        // Read with the other parts, and only for a caller its own endpoint
-        // would answer.
-        canCallEndpoint({
-          routeId: RouteId.GetAvailableLlmProviderApiKeys,
-          userId,
-          organizationId,
-        }).then((allowed) =>
-          allowed
-            ? getAvailableLlmProviderApiKeys({
-                query: {},
-                userId,
-                organizationId,
-              })
-            : null,
-        ),
-        getAvailableLlmModels({ query: {}, userId, organizationId }),
-        MemberModel.getDefaultAgentId(userId, organizationId),
-        OrganizationModel.getById(organizationId),
-        MemberModel.getDefaultModelSelection(userId, organizationId),
-      ]);
-
-      const candidates = roster.filter((agent) => !agent.builtIn);
-      const byId = (id: string | null | undefined) =>
-        id ? candidates.find((agent) => agent.id === id) : undefined;
-      const startingAgent =
-        byId(memberDefaultAgentId) ??
-        byId(organization?.defaultAgentId) ??
-        candidates.find((agent) => agent.scope === "personal") ??
-        candidates[0];
-
-      const memberKeyId = memberDefaultModel.chatApiKeyId;
-      const [agent, memberDefaultKeyModels] = await Promise.all([
-        startingAgent
-          ? getNewChatAgentParts({
-              agentId: startingAgent.id,
-              llmApiKeyId: startingAgent.llmApiKeyId,
-              userId,
-              organizationId,
-            })
-          : null,
-        memberKeyId && memberKeyId !== startingAgent?.llmApiKeyId
-          ? getAvailableLlmModels({
-              query: { apiKeyId: memberKeyId },
-              userId,
-              organizationId,
-            }).then((keyModels) => ({
-              apiKeyId: memberKeyId,
-              models: keyModels,
-            }))
-          : null,
-      ]);
-
+    async (request, reply) => {
+      const conversation = await readConversationForRequest({
+        request,
+        id: request.params.id,
+        tail: CONVERSATION_SEED_TAIL,
+      });
+      // A deleted agent comes back as null.
+      const agent = conversation.agent
+        ? {
+            id: conversation.agent.id,
+            llmApiKeyId: conversation.agent.llmApiKeyId,
+          }
+        : null;
       return reply.send({
-        roster,
-        apiKeys,
-        availableApiKeys,
-        models,
-        agent,
-        memberDefaultKeyModels,
+        conversation,
+        composer: await getNewChatComposer({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          agent,
+        }),
       });
     },
   );
@@ -289,6 +275,106 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default bootstrapRoutes;
 
 // ===
+
+/**
+ * The new-chat composer's parts (see `/api/bootstrap/new-chat`). With `agent`
+ * (an existing conversation's), that agent's parts instead of the starting
+ * agent the member's and the organization's defaults choose, without the
+ * platform's default prompts, which only an empty chat shows; an agent the
+ * caller cannot read leaves the agent part empty.
+ */
+async function getNewChatComposer(params: {
+  userId: string;
+  organizationId: string;
+  agent?: { id: string; llmApiKeyId: string | null } | null;
+}) {
+  const { userId, organizationId } = params;
+  const [
+    roster,
+    apiKeys,
+    availableApiKeys,
+    models,
+    memberDefaultAgentId,
+    organization,
+    memberDefaultModel,
+  ] = await Promise.all([
+    getChatRosterBootstrap({ userId, organizationId }),
+    getVisibleLlmProviderApiKeys({ query: {}, userId, organizationId }),
+    // Read with the other parts, and only for a caller its own endpoint
+    // would answer.
+    canCallEndpoint({
+      routeId: RouteId.GetAvailableLlmProviderApiKeys,
+      userId,
+      organizationId,
+    }).then((allowed) =>
+      allowed
+        ? getAvailableLlmProviderApiKeys({
+            query: {},
+            userId,
+            organizationId,
+          })
+        : null,
+    ),
+    getAvailableLlmModels({ query: {}, userId, organizationId }),
+    MemberModel.getDefaultAgentId(userId, organizationId),
+    OrganizationModel.getById(organizationId),
+    MemberModel.getDefaultModelSelection(userId, organizationId),
+  ]);
+
+  const candidates = roster.filter((agent) => !agent.builtIn);
+  const byId = (id: string | null | undefined) =>
+    id ? candidates.find((agent) => agent.id === id) : undefined;
+  const startingAgent =
+    params.agent !== undefined
+      ? (params.agent ?? undefined)
+      : (byId(memberDefaultAgentId) ??
+        byId(organization?.defaultAgentId) ??
+        candidates.find((agent) => agent.scope === "personal") ??
+        candidates[0]);
+
+  const memberKeyId = memberDefaultModel.chatApiKeyId;
+  const [agent, memberDefaultKeyModels] = await Promise.all([
+    startingAgent
+      ? getNewChatAgentParts({
+          agentId: startingAgent.id,
+          llmApiKeyId: startingAgent.llmApiKeyId,
+          userId,
+          organizationId,
+          withPlatformPrompts: params.agent === undefined,
+        }).catch((error) => {
+          // A given agent the caller cannot read (a shared chat's agent)
+          // leaves the part empty; its endpoints refuse the caller too.
+          if (
+            params.agent &&
+            error instanceof ApiError &&
+            error.statusCode === 404
+          ) {
+            return null;
+          }
+          throw error;
+        })
+      : null,
+    memberKeyId && memberKeyId !== startingAgent?.llmApiKeyId
+      ? getAvailableLlmModels({
+          query: { apiKeyId: memberKeyId },
+          userId,
+          organizationId,
+        }).then((keyModels) => ({
+          apiKeyId: memberKeyId,
+          models: keyModels,
+        }))
+      : null,
+  ]);
+
+  return {
+    roster,
+    apiKeys,
+    availableApiKeys,
+    models,
+    agent,
+    memberDefaultKeyModels,
+  };
+}
 
 /**
  * Whether the caller holds every permission an endpoint's route check asks
@@ -324,6 +410,8 @@ async function getNewChatAgentParts(params: {
   llmApiKeyId: string | null;
   userId: string;
   organizationId: string;
+  /** False for an existing conversation: only an empty chat shows them. */
+  withPlatformPrompts: boolean;
 }) {
   const { agentId, llmApiKeyId, userId, organizationId } = params;
   const [
@@ -354,7 +442,9 @@ async function getNewChatAgentParts(params: {
           organizationId,
         })
       : null,
-    getAgentDefaultSuggestedPrompts({ id: agentId, userId, organizationId }),
+    params.withPlatformPrompts
+      ? getAgentDefaultSuggestedPrompts({ id: agentId, userId, organizationId })
+      : null,
   ]);
   // The composer asks for the platform's prompts only for an agent without
   // its own: they are read with the other parts and kept in that case alone.

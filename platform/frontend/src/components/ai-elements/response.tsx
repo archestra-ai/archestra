@@ -30,6 +30,9 @@ const markdown = preloadableLazy(() => import("./response-markdown"));
  */
 export const preloadResponseMarkdown = markdown.preload;
 
+/** Hand over the renderer a page imported statically (see preloadableLazy). */
+export const provideResponseMarkdown = markdown.provide;
+
 if (typeof window !== "undefined" && window.location.pathname !== "/chat") {
   void appInteractive.whenIdle().then(preloadResponseMarkdown);
 }
@@ -40,11 +43,19 @@ if (typeof window !== "undefined" && window.location.pathname !== "/chat") {
  * plain, wrapped text in the same box, so nothing jumps when it swaps in.
  */
 export const Response = memo(
-  (props: ResponseProps) => (
-    <Suspense fallback={<PlainResponse {...props} />}>
+  (props: ResponseProps) =>
+    // A page that ships the renderer with its route (a conversation, whose
+    // HTML holds its last messages) renders the markdown in the same pass.
+    // Without a boundary of its own, the server sends the transcript with its
+    // markdown in one piece rather than message by message, each swapping in
+    // over its plain text and growing the transcript as it lands.
+    markdown.isLoaded() ? (
       <markdown.Component {...props} />
-    </Suspense>
-  ),
+    ) : (
+      <Suspense fallback={<PlainResponse {...props} />}>
+        <markdown.Component {...props} />
+      </Suspense>
+    ),
   (prevProps, nextProps) =>
     prevProps.children === nextProps.children &&
     prevProps.isStreaming === nextProps.isStreaming &&

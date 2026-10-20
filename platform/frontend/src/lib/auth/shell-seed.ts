@@ -7,14 +7,34 @@
  * own data (see the registry's `prefetch-first-page.ts`).
  *
  * `/chat` is the new-chat screen. `/chat/new` is not here: it only redirects
- * to `/chat` in the browser.
+ * to `/chat` in the browser. Existing conversations (`/chat/<id>`) are matched
+ * by `seededConversationId`.
  */
 export const SHELL_SEED_ROUTES: readonly string[] = ["/mcp/registry", "/chat"];
 
 /** Whether a page path renders its first rows on the server. */
 export function isShellSeedRoute(pathname: string | null | undefined): boolean {
-  return !!pathname && SHELL_SEED_ROUTES.includes(pathname);
+  return (
+    !!pathname &&
+    (SHELL_SEED_ROUTES.includes(pathname) ||
+      seededConversationId(pathname) !== null)
+  );
 }
+
+/**
+ * The conversation an existing-chat path (`/chat/<id>`) opens, or null. Its
+ * document is seeded too: the shell, the end of the conversation and the
+ * composer's agent (see `prefetchShellSeed`). Other `/chat/...` pages
+ * (`/chat/new`, `/chat/runs/<id>`) are not conversations.
+ */
+export function seededConversationId(
+  pathname: string | null | undefined,
+): string | null {
+  return CONVERSATION_PATH.exec(pathname ?? "")?.[1] ?? null;
+}
+
+const CONVERSATION_PATH =
+  /^\/chat\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 /**
  * The request header the proxy sets on such a document load, holding the

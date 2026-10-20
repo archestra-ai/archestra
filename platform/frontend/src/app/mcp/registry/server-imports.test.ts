@@ -15,6 +15,7 @@ const SERVER_IMPORTED_MODULES = [
   "lib/auth/shell-seed.server.ts",
   "lib/auth/shell-seed.ts",
   // The shell seed keys its reads with these modules' query keys.
+  "lib/agent-runs-query-keys.ts",
   "lib/app.query.ts",
   "lib/auth/auth.query.ts",
   "lib/chat/conversations-query-key.ts",

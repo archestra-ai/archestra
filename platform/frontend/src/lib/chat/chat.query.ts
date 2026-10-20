@@ -17,6 +17,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { agentCatalogToolsQueryKey } from "@/lib/agent-query-keys";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
+import { appInteractive } from "@/lib/app-interactive";
 import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
@@ -25,7 +26,10 @@ import {
   type ConversationFileItem,
   deleteTargetFor,
 } from "@/lib/chat/conversation-files";
-import { conversationsQueryKey } from "@/lib/chat/conversations-query-key";
+import {
+  conversationQueryKey,
+  conversationsQueryKey,
+} from "@/lib/chat/conversations-query-key";
 import {
   ENCRYPTED_CHAT_KEY_HEADER,
   encryptedChatRequestHeaders,
@@ -160,10 +164,24 @@ export function useConversation(
   },
 ) {
   return useQuery({
-    queryKey: ["conversation", conversationId],
-    queryFn: () => (conversationId ? fetchConversation(conversationId) : null),
+    queryKey: conversationQueryKey(conversationId),
+    queryFn: async ({ client }) => {
+      if (!conversationId) return null;
+      // A server-seeded document holds only the end of a long conversation.
+      // The rest is not on screen, so it loads once the page is interactive.
+      const seeded = client.getQueryData<{ olderMessageCount?: number }>(
+        conversationQueryKey(conversationId),
+      );
+      if (seeded?.olderMessageCount) await appInteractive.whenIdle();
+      return fetchConversation(conversationId);
+    },
     enabled: !!conversationId,
-    staleTime: CONVERSATION_STALE_TIME_MS,
+    // The end of a long conversation is a placeholder for the whole of it.
+    staleTime: (query) =>
+      (query.state.data as { olderMessageCount?: number } | null | undefined)
+        ?.olderMessageCount
+        ? 0
+        : CONVERSATION_STALE_TIME_MS,
     refetchOnMount: options?.refetchOnMount ?? true,
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus

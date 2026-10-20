@@ -300,6 +300,101 @@ test("a cold new-chat load renders a ready composer from the server's one read",
   }
 });
 
+test("a cold conversation load renders its end on the server and its history after paint", async ({
+  page,
+  mswControl,
+}) => {
+  await page.goto("/chat");
+  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
+  const [config, publicConfig] = await page.evaluate(() =>
+    Promise.all(
+      ["/api/config", "/api/config/public"].map((url) =>
+        fetch(url).then((response) => response.json()),
+      ),
+    ),
+  );
+
+  const { key, agent, model } = composerFixture();
+  const full = conversation(
+    "10000000-0000-4000-8000-0000000000c3",
+    "Long probe",
+    agent.id,
+  );
+  full.messages = Array.from({ length: 6 }, (_, index) => ({
+    id: `${full.id}-m${index + 1}`,
+    role: index % 2 === 0 ? "user" : "assistant",
+    parts: [{ type: "text", text: `Turn ${index + 1} of Long probe` }],
+  }));
+  await mswControl.registerMany([
+    bootstrapOverride({ config, publicConfig, agent, model, key }),
+    {
+      method: "get",
+      url: `/api/bootstrap/conversation/${full.id}`,
+      body: {
+        conversation: {
+          ...full,
+          messages: full.messages.slice(-2),
+          olderMessageCount: 4,
+        },
+        composer: {
+          roster: [agent],
+          apiKeys: [key],
+          availableApiKeys: [key],
+          models: [model],
+          agent: {
+            id: agent.id,
+            detail: agent,
+            delegations: [],
+            credentialReadiness: [],
+            browserTools: [],
+            defaultSuggestedPrompts: [],
+            keyModels: null,
+          },
+        },
+      },
+    },
+    { method: "get", url: `/api/chat/conversations/${full.id}`, body: full },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${full.id}/files`,
+      body: [],
+    },
+    {
+      method: "get",
+      url: `/api/chat/conversations/${full.id}/share`,
+      body: null,
+    },
+  ]);
+  await startColdLoad(page, agent.id);
+  const requests = countRequests(page);
+
+  const response = await page.goto(`/chat/${full.id}`);
+  // The conversation's end is in the HTML, not only its shell.
+  const html = (await response?.text()) ?? "";
+  expect(html).toContain("Turn 6 of Long probe");
+  expect(html).not.toContain("Turn 1 of Long probe");
+
+  // The earlier history arrives in front of it once the page is idle.
+  const transcript = page.getByText(/^Turn \d of Long probe$/);
+  await expect(transcript).toHaveText(
+    full.messages.map((_, index) => `Turn ${index + 1} of Long probe`),
+  );
+  await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeEditable();
+  await page.waitForTimeout(1500);
+
+  expect(requests.count(`GET /api/chat/conversations/${full.id}`)).toBe(1);
+  for (const path of [
+    `/api/bootstrap/conversation/${full.id}`,
+    "/api/bootstrap/new-chat",
+    "/api/agents/chat-roster",
+    `/api/agents/${agent.id}`,
+    "/api/llm-provider-api-keys/available",
+    "/api/llm-models/available",
+  ]) {
+    expect(requests.count(`GET ${path}`), path).toBe(0);
+  }
+});
+
 function composerFixture() {
   const key = makeLlmProviderApiKey({ provider: "openai" });
   const agent = makeAgent({ llmApiKeyId: null });

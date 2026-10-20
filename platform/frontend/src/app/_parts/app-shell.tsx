@@ -32,6 +32,7 @@ import { Version } from "@/components/version";
 import { afterNextPaint, appInteractive } from "@/lib/app-interactive";
 import { MAIN_CONTENT_ID } from "@/lib/app-shell-region";
 import { useSession } from "@/lib/auth/auth.query";
+import { seededConversationId } from "@/lib/auth/shell-seed";
 import {
   ConnectivityProvider,
   useConnectivity,
@@ -249,7 +250,9 @@ export function AppShell({ children }: AppShellProps) {
                   only after it mounts: rendering it there would draw two
                   lines on the server and drop one as the page starts,
                   moving the centred composer. */}
-              {pathname !== "/chat" && <Version />}
+              {pathname !== "/chat" && !seededConversationId(pathname) && (
+                <Version />
+              )}
             </div>
           </main>
           <Toaster />

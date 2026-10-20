@@ -68,6 +68,10 @@ import { TypingText } from "@/components/ui/typing-text";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
+  SIDEBAR_PINNED_RUNS,
+  SIDEBAR_RECENT_RUNS,
+} from "@/lib/agent-runs-query-keys";
+import {
   useCancelAgentRun,
   useDeleteAgentRun,
   useMyAgentRun,
@@ -160,8 +164,8 @@ export function ChatSidebarSection({
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const runsEnabled =
     isAuthenticated && canReadConversation === true && runtimeEnabled;
-  const recentRunsQuery = useMyAgentRuns(runsEnabled, { pinned: false });
-  const pinnedRunsQuery = useMyAgentRuns(runsEnabled, { pinned: true });
+  const recentRunsQuery = useMyAgentRuns(runsEnabled, SIDEBAR_RECENT_RUNS);
+  const pinnedRunsQuery = useMyAgentRuns(runsEnabled, SIDEBAR_PINNED_RUNS);
   const selectedRunId = pathname.startsWith("/chat/runs/")
     ? (pathname.split("/").at(-1) ?? "")
     : "";

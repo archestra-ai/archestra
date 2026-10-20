@@ -654,9 +654,10 @@ export function ChatMessages({
           feedback={contextCompactionFeedback}
         />
         <ConversationContent
-          scrollClassName={
-            transcriptFromHtml ? OPEN_AT_END_SCROLL_CLASS : undefined
-          }
+          scrollClassName={cn(
+            "overflow-y-auto",
+            transcriptFromHtml && OPEN_AT_END_SCROLL_CLASS,
+          )}
         >
           <div className="@container/chat max-w-4xl mx-auto relative pb-8">
             <TranscriptWindowEdge
@@ -1704,11 +1705,14 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
 /**
  * The transcript in the server's HTML opens at its end: until the page takes
  * over, its scroller lays out bottom-up, which browsers scroll to the end
- * (`justify-end` keeps a short transcript at the top). The HTML streams in
+ * (the auto bottom margin keeps a short transcript at the top and collapses
+ * once it overflows). The HTML streams in
  * hidden segments, so a script could not scroll it; stick-to-bottom only
- * starts after hydration.
+ * starts after hydration. The scroller is `overflow-y-auto` from the HTML on,
+ * rather than from stick-to-bottom's mount effect, so the HTML scrolls it.
  */
-const OPEN_AT_END_SCROLL_CLASS = "flex flex-col-reverse justify-end";
+const OPEN_AT_END_SCROLL_CLASS =
+  "flex flex-col-reverse [&>*]:shrink-0 [&>*]:mb-auto";
 
 /**
  * Hands the scroller to stick-to-bottom before the first client paint: the

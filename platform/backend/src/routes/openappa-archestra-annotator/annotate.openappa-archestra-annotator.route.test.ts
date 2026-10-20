@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http, passthrough } from "msw";
-import { takeInternalCall } from "@/clients/internal-call";
+import { internalCallProvenance } from "@/clients/internal-call";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -136,8 +136,9 @@ describe("archestra annotator", () => {
           sent.push({
             body,
             source: proxied.headers.get(SOURCE_HEADER),
-            internal: takeInternalCall(Object.fromEntries(proxied.headers))
-              .guardrail,
+            internal: internalCallProvenance({
+              headers: Object.fromEntries(proxied.headers),
+            }).guardrail,
             user: proxied.headers.get(USER_ID_HEADER),
             session: proxied.headers.get(SESSION_ID_HEADER),
           });

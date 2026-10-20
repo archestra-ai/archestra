@@ -35,6 +35,7 @@ import {
   type ChatToolContext,
   type McpGatewayToken,
 } from "@/clients/chat-tool-builder";
+import { internalCallHeader } from "@/clients/internal-call";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
@@ -88,6 +89,7 @@ export function createLoopbackGatewayTransport(
     fetch: loopbackGatewayFetch,
     requestInit: {
       headers: new Headers({
+        ...internalCallHeader(),
         Authorization: `Bearer ${authToken}`,
         Accept: "application/json, text/event-stream",
         // Tells the gateway's call log this is the built-in chat, not an

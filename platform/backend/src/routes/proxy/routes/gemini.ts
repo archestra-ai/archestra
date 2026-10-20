@@ -399,7 +399,9 @@ function stripArchestraHeaders(
 ): Record<string, string | string[] | undefined> {
   return Object.fromEntries(
     Object.entries(headers).filter(
-      ([name]) => !name.toLowerCase().startsWith("x-archestra-"),
+      ([name]) =>
+        !name.toLowerCase().startsWith("x-archestra-") &&
+        name.toLowerCase() !== "provider-api-key-id",
     ),
   );
 }

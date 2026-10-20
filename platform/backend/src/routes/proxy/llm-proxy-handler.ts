@@ -37,7 +37,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { takeInternalCall } from "@/clients/internal-call";
+import { internalCallProvenance } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
@@ -421,7 +421,7 @@ export async function handleLLMProxy<
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
-  const proof = takeInternalCall(request.headers);
+  const proof = internalCallProvenance(request);
   // Credential paths accept either proof; only the guardrail proof reaches
   // OpenAPPA as its bypass.
   const internalCall = proof.inProcess || proof.guardrail;

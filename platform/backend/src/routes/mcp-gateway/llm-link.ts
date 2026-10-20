@@ -1,9 +1,9 @@
 import { SOURCE_HEADER } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
+import { internalCallProvenance } from "@/clients/internal-call";
 import { isWellFormedAppaId } from "@/openappa/service";
 import { followAppaSessionHeader } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { extractSessionInfo } from "@/routes/proxy/utils/headers/session-id";
-import { isLoopbackRequest } from "@/utils/network";
 
 /**
  * The LLM proxy session a gateway request belongs to, read the way the LLM
@@ -28,12 +28,10 @@ export function gatewayLlmSessionId(
   >;
   const { sessionId } = followAppaSessionHeader({
     headers,
-    // The proxy ignores the OpenAPPA header for its chat sources, and trusts
-    // a chat source only from loopback. Mirror both so a remote caller that
-    // claims to be chat cannot move its calls to another session.
+    // Only the built-in client may identify itself as chat.
     source:
       readHeader(request, SOURCE_HEADER) === "chat" &&
-      isLoopbackRequest(request)
+      internalCallProvenance(request).inProcess
         ? "chat"
         : "api",
     ordinarySession: extractSessionInfo({

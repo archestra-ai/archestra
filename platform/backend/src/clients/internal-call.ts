@@ -27,11 +27,46 @@ export function guardrailCallHeader(): Record<string, string> {
   return proofHeader(GUARDRAIL);
 }
 
+type Headers = Record<string, string | string[] | undefined>;
+type ProofCarrier = {
+  headers: Headers;
+  raw?: { headers: Headers; rawHeaders?: string[] };
+};
+type Provenance = { inProcess: boolean; guardrail: boolean };
+const verified = new WeakMap<object, Provenance>();
+
+/**
+ * Capture provenance before header validation, and retain it for every reader
+ * of the same raw request. Neither a schema transform nor a previous reader
+ * can erase it or upgrade an outside request later.
+ */
+export function internalCallProvenance(request: ProofCarrier): Provenance {
+  const key = request.raw ?? request;
+  const result = verified.get(key) ?? takeInternalCall(request.headers);
+  verified.set(key, result);
+  for (const headers of new Set([request.headers, request.raw?.headers])) {
+    if (headers) {
+      delete headers[IN_PROCESS.header];
+      delete headers[GUARDRAIL.header];
+    }
+  }
+  const rawHeaders = request.raw?.rawHeaders;
+  if (rawHeaders) {
+    for (let i = rawHeaders.length - 2; i >= 0; i -= 2) {
+      const name = rawHeaders[i].toLowerCase();
+      if (name === IN_PROCESS.header || name === GUARDRAIL.header) {
+        rawHeaders.splice(i, 2);
+      }
+    }
+  }
+  return result;
+}
+
 /**
  * Removes both proofs from the headers and reports which were valid. Every
  * check goes through this, so the proofs never reach the provider.
  */
-export function takeInternalCall(
+function takeInternalCall(
   headers: Record<string, string | string[] | undefined>,
 ): { inProcess: boolean; guardrail: boolean } {
   const inProcess = hasProof(headers, IN_PROCESS);
@@ -56,9 +91,12 @@ function hasProof(
   proof: Proof,
 ): boolean {
   const presented = headers[proof.header];
-  if (typeof presented !== "string") return false;
+  if (typeof presented !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(presented))
+    return false;
   const bytes = Buffer.from(presented, "base64url");
   return (
-    bytes.length === proof.value.length && timingSafeEqual(bytes, proof.value)
+    bytes.toString("base64url") === presented &&
+    bytes.length === proof.value.length &&
+    timingSafeEqual(bytes, proof.value)
   );
 }

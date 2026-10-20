@@ -59,6 +59,6 @@ export function openappaAnnotatorContext(
 ): OpenappaEncryptedChat | null {
   if (token === undefined) return null;
   const context = annotatorRequests.get(token);
-  if (!context) throw new ApiError(401, "Expired OpenAPPA annotation context");
+  if (!context) throw new ApiError(401, "OpenAPPA annotation context expired");
   return context;
 }

@@ -23,6 +23,7 @@ import { handleInteractionSessionPreviewBackfill } from "./interaction-session-p
 import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleLlmModelSync } from "./llm-model-sync-handler";
+import { handleMcpToolDescriptionBackfill } from "./mcp-tool-description-backfill-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handlePluginGithubSync } from "./plugin-github-sync-handler";
@@ -108,6 +109,10 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "interaction_session_preview_backfill",
     handleInteractionSessionPreviewBackfill,
+  );
+  taskQueueService.registerHandler(
+    "mcp_tool_description_backfill",
+    handleMcpToolDescriptionBackfill,
   );
   taskQueueService.registerHandler("llm_model_sync", handleLlmModelSync);
 }

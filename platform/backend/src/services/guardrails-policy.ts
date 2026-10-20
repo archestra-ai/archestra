@@ -331,7 +331,7 @@ export const guardrailsPolicyService = {
       } catch {
         logger.warn(
           { organizationId },
-          "Could not queue informational validation after a policy change",
+          "OpenAPPA could not queue informational validation after a policy change",
         );
       }
     }

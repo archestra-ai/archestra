@@ -499,7 +499,7 @@ export async function replaySavedValidations(params: {
   } catch (error) {
     logger.warn(
       { err: error, organizationId: params.organizationId },
-      "Could not replay saved validations for a policy preview",
+      "OpenAPPA could not replay saved validations for a policy preview",
     );
     return null;
   }
@@ -752,7 +752,7 @@ async function executeAutomaticPolicyValidation(
   }
   logger.info(
     { organizationId: job.organizationId },
-    "Informational policy validation completed",
+    "OpenAPPA informational policy validation completed",
   );
 }
 function assertCurrentCollection(
@@ -818,7 +818,7 @@ class ReplayProgress {
     } catch (error) {
       logger.warn(
         { err: error },
-        "Dropped an unreadable replay progress event",
+        "OpenAPPA dropped an unreadable replay progress event",
       );
     }
   };
@@ -843,7 +843,7 @@ class ReplayProgress {
     try {
       this.report(event);
     } catch (error) {
-      logger.warn({ err: error }, "Could not report replay progress");
+      logger.warn({ err: error }, "OpenAPPA could not report replay progress");
     }
   }
 }

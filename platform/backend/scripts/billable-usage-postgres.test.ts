@@ -46,7 +46,7 @@ test("PostgreSQL receipt concurrency, rollback, reset races and posting overhead
     await pool.query(
       await readFile(
         new URL(
-          "../src/database/migrations/0582_loud_zeigeist.sql",
+          "../src/database/migrations/0583_loud_zeigeist.sql",
           import.meta.url,
         ),
         "utf8",

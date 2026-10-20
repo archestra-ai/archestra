@@ -109,7 +109,7 @@ class OpenAppaGithubAppSetup {
     if (!app?.success) {
       logger.warn(
         { status: response.status },
-        "GitHub App manifest conversion failed",
+        "OpenAPPA GitHub App manifest conversion failed",
       );
       throw new ApiError(
         502,

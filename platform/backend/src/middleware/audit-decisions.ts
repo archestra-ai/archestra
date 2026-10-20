@@ -578,6 +578,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "per-viewer UI state; intentionally excluded from audit logs",
   },
+  mcpServerToolDescriptionsTable: {
+    audited: false,
+    reason:
+      "derived from each installation's MCP tool discovery, like tools; no route mutates it directly",
+  },
   teamMembersTable: {
     audited: false,
     reason: "join: team × member; member changes audited via member",

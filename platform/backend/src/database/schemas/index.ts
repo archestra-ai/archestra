@@ -194,6 +194,7 @@ export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpPresetEntriesTable } from "./mcp-preset-entry";
 export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerAlertMutesTable } from "./mcp-server-alert-mute";
+export { default as mcpServerToolDescriptionsTable } from "./mcp-server-tool-description";
 export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";

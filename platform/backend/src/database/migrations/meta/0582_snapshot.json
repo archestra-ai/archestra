@@ -1,5 +1,5 @@
 {
-  "id": "9154ab1f-ee3a-4696-a93b-b7cc84da6b89",
+  "id": "c5179793-e7b0-4e13-9c2b-5e2effec3999",
   "prevId": "25c76046-7005-47b4-be10-0aaf0b807b7d",
   "version": "7",
   "dialect": "postgresql",
@@ -10992,102 +10992,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.interaction_billing": {
-      "name": "interaction_billing",
-      "schema": "",
-      "columns": {
-        "interaction_id": {
-          "name": "interaction_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "fingerprint": {
-          "name": "fingerprint",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "usage": {
-          "name": "usage",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "environment_id": {
-          "name": "environment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_mode": {
-          "name": "billing_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "billing_team_id": {
-          "name": "billing_team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "interaction_billing_user_period_idx": {
-          "name": "interaction_billing_user_period_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.interaction_session_heads_backfill": {
       "name": "interaction_session_heads_backfill",
       "schema": "",
@@ -15183,81 +15087,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.limit_billing_usage": {
-      "name": "limit_billing_usage",
-      "schema": "",
-      "columns": {
-        "limit_id": {
-          "name": "limit_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "covered_tokens_in": {
-          "name": "covered_tokens_in",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "covered_tokens_out": {
-          "name": "covered_tokens_out",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "cost": {
-          "name": "cost",
-          "type": "numeric(24, 10)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "incomplete": {
-          "name": "incomplete",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "limit_billing_usage_limit_id_limits_id_fk": {
-          "name": "limit_billing_usage_limit_id_limits_id_fk",
-          "tableFrom": "limit_billing_usage",
-          "tableTo": "limits",
-          "columnsFrom": [
-            "limit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "limit_billing_usage_limit_id_model_pk": {
-          "name": "limit_billing_usage_limit_id_model_pk",
-          "columns": [
-            "limit_id",
-            "model"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.limit_labels": {
       "name": "limit_labels",
       "schema": "",
@@ -16998,6 +16827,95 @@
           "value": "\"mcp_server_alert_mutes\".\"issue_kind\" in ('failed-to-start', 'not-running', 'needs-reauth')"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.mcp_server_tool_descriptions": {
+      "name": "mcp_server_tool_descriptions",
+      "schema": "",
+      "columns": {
+        "mcp_server_id": {
+          "name": "mcp_server_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tool_id": {
+          "name": "tool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mcp_server_tool_descriptions_tool_id_idx": {
+          "name": "mcp_server_tool_descriptions_tool_id_idx",
+          "columns": [
+            {
+              "expression": "tool_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mcp_server_tool_descriptions_mcp_server_id_mcp_server_id_fk": {
+          "name": "mcp_server_tool_descriptions_mcp_server_id_mcp_server_id_fk",
+          "tableFrom": "mcp_server_tool_descriptions",
+          "tableTo": "mcp_server",
+          "columnsFrom": [
+            "mcp_server_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mcp_server_tool_descriptions_tool_id_tools_id_fk": {
+          "name": "mcp_server_tool_descriptions_tool_id_tools_id_fk",
+          "tableFrom": "mcp_server_tool_descriptions",
+          "tableTo": "tools",
+          "columnsFrom": [
+            "tool_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "mcp_server_tool_descriptions_mcp_server_id_tool_id_pk": {
+          "name": "mcp_server_tool_descriptions_mcp_server_id_tool_id_pk",
+          "columns": [
+            "mcp_server_id",
+            "tool_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.mcp_server_user": {

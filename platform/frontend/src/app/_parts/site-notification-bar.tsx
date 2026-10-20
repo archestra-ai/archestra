@@ -1,9 +1,14 @@
 "use client";
 
 import { X } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { usePublicConfig } from "@/lib/config/config.query";
+import {
+  dismissSiteNotification,
+  isSiteNotificationDismissed,
+  subscribeToSiteNotificationDismissals,
+} from "@/lib/site-notification-dismissal";
 import { preloadableLazy } from "@/lib/utils/preloadable-lazy";
 
 // Most pages have no banner; its markdown renderer loads only when one shows.
@@ -12,8 +17,6 @@ const siteNotificationMarkdown = preloadableLazy<{ content: string }>(() =>
     default: m.SiteNotificationMarkdown,
   })),
 );
-
-const STORAGE_PREFIX = "site-notification-dismissed:";
 
 /**
  * Instance-wide banner driven by ARCHESTRA_SITE_NOTIFICATION_MESSAGE
@@ -45,25 +48,27 @@ export function SiteNotificationBar({
   content,
   notificationId,
 }: SiteNotificationBarProps) {
-  const [dismissed, setDismissed] = useState(() =>
-    isNotificationDismissed(notificationId),
+  // Hydration starts from the server's answer (not dismissed: it cannot read
+  // storage) and switches to the stored one right after. Until then the head
+  // script's stylesheet keeps a dismissed bar hidden.
+  const dismissed = useSyncExternalStore(
+    subscribeToSiteNotificationDismissals,
+    () => isSiteNotificationDismissed(notificationId),
+    () => false,
   );
-
-  useEffect(() => {
-    setDismissed(isNotificationDismissed(notificationId));
-  }, [notificationId]);
 
   if (dismissed) {
     return null;
   }
 
-  const handleDismiss = () => {
-    markNotificationDismissed(notificationId);
-    setDismissed(true);
-  };
+  const handleDismiss = () => dismissSiteNotification(notificationId);
 
   return (
-    <div className="sticky top-0 z-40 border-b border-primary bg-primary text-primary-foreground shadow-sm">
+    <div
+      // Matched by HIDE_DISMISSED_SITE_NOTIFICATIONS_SCRIPT.
+      data-site-notification-id={notificationId}
+      className="sticky top-0 z-40 border-b border-primary bg-primary text-primary-foreground shadow-sm"
+    >
       <div className="flex items-start gap-3 px-6 py-2">
         <div className="flex-1 text-sm [&_a]:font-medium [&_a]:underline [&_a]:underline-offset-2 [&_h1]:my-0 [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:leading-5 [&_h2]:my-0 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:leading-5 [&_p]:my-0 [&_strong]:font-semibold">
           {/* The text shows at once, as plain text, while the markdown
@@ -85,15 +90,6 @@ export function SiteNotificationBar({
       </div>
     </div>
   );
-}
-
-function isNotificationDismissed(notificationId: string) {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(`${STORAGE_PREFIX}${notificationId}`) === "true";
-}
-
-function markNotificationDismissed(notificationId: string) {
-  localStorage.setItem(`${STORAGE_PREFIX}${notificationId}`, "true");
 }
 
 function contentHash(content: string) {

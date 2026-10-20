@@ -3,6 +3,7 @@ import db, { schema } from "@/database";
 import InteractionModel from "@/models/interaction";
 import InteractionDeltaManager from "@/models/interaction-delta-manager";
 import { expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { interactionSessionPreviewBackfill } from "./interaction-session-preview-backfill";
 
@@ -104,6 +105,133 @@ test("leaves encrypted-chat rows alone", async ({
   expect(row.sessionPreview).toBeNull();
 });
 
+test("fills a delta thread from its stored rows in one pass, with the previews each row was written with", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const ids = await seedEditedClaudeCodeSession({
+    agentId: agent.id,
+    sessionId: "edited-session",
+  });
+  const stored = await readRows(ids);
+  // Two threads: the conversation and the head the compaction started.
+  expect(new Set(stored.map((row) => row.threadId)).size).toBe(2);
+  const written = new Map(stored.map((row) => [row.id, row.sessionPreview]));
+  await clearPreviews(ids);
+  // Fold from the stored rows, not from what the writes left in the cache.
+  InteractionDeltaManager.reset();
+
+  const { result, statements } = await recordQueries(() => runToCompletion());
+  expect(result).toEqual({ filled: ids.length, failed: 0 });
+  // Each thread is sized and read once (two statements per thread); no row
+  // loads its own chain through the delta manager.
+  expect(statements.filter((s) => /thread_id = \$/.test(s))).toHaveLength(4);
+  expect(
+    statements.filter((s) => s.includes("processed_request_shared_prefix")),
+  ).toHaveLength(0);
+
+  const backfilled = await readRows(ids);
+  expect(
+    new Map(backfilled.map((row) => [row.id, row.sessionPreview])),
+  ).toEqual(written);
+});
+
+test("folds a missing row through an ancestor that already has a preview", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const ids = await seedClaudeCodeSession({
+    agentId: agent.id,
+    sessionId: "rollout-session",
+    turns: 3,
+  });
+  const stored = await readRows(ids);
+  const written = new Map(stored.map((row) => [row.id, row.sessionPreview]));
+  // As during the rollout that introduced previews: a row written by a pod on
+  // the new build sits between rows written by a pod on the old one. The
+  // row after it only stores a tool result, so its preview text lives in the
+  // ancestor that keeps its preview.
+  const keep = ids[3];
+  await clearPreviews(ids.filter((id) => id !== keep));
+  InteractionDeltaManager.reset();
+
+  expect(await runToCompletion()).toEqual({
+    filled: ids.length - 1,
+    failed: 0,
+  });
+  const backfilled = await readRows(ids);
+  expect(
+    new Map(backfilled.map((row) => [row.id, row.sessionPreview])),
+  ).toEqual(written);
+});
+
+test("leaves a thread over the memory budget to the list and reports its rows", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const ids = await seedClaudeCodeSession({
+    agentId: agent.id,
+    sessionId: "large-session",
+    turns: 2,
+  });
+  await clearPreviews(ids);
+  InteractionDeltaManager.reset();
+
+  expect(
+    await interactionSessionPreviewBackfill.run({ threadStoredBytesLimit: 1 }),
+  ).toEqual({ filled: 0, failed: ids.length, complete: true });
+  expect(
+    (await readRows(ids)).every((row) => row.sessionPreview === null),
+  ).toBe(true);
+
+  // The next pass, with the budget back, fills them.
+  expect(await runToCompletion()).toEqual({ filled: ids.length, failed: 0 });
+});
+
+test("fills a row that stores its whole request", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  // Sessionless, so it is never delta-encoded.
+  const created = await InteractionModel.create({
+    profileId: agent.id,
+    sessionId: null,
+    sessionSource: null,
+    type: "anthropic:messages",
+    request: {
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "a single whole request" }],
+    },
+    response: {
+      id: "msg",
+      type: "message",
+      role: "assistant",
+      model: "claude-test",
+      content: [{ type: "text", text: "noted" }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 1, output_tokens: 1 },
+    },
+  });
+  await drainBackgroundWork();
+  const [stored] = await readRows([created.id]);
+  expect(stored.threadId).toBeNull();
+  await clearPreviews([created.id]);
+
+  expect(await runToCompletion()).toEqual({ filled: 1, failed: 0 });
+  const [backfilled] = await readRows([created.id]);
+  expect(backfilled.sessionPreview).toEqual(stored.sessionPreview);
+});
+
 // ===== Helpers =====
 
 /**
@@ -186,6 +314,97 @@ async function seedClaudeCodeSession(params: {
     await send();
     messages.push({ role: "assistant", content: "Looking into it" });
   }
+  await drainBackgroundWork();
+  return ids;
+}
+
+/**
+ * A Claude Code session with every fold shape the write path produces: a
+ * string-content turn, a tool round-trip whose tip holds only a tool result,
+ * a text-block turn, a history the client rewrote (its request chains to an
+ * older row than the last one), and a compaction that starts a new head.
+ */
+async function seedEditedClaudeCodeSession(params: {
+  agentId: string;
+  sessionId: string;
+}): Promise<string[]> {
+  const base = {
+    profileId: params.agentId,
+    sessionId: params.sessionId,
+    sessionSource: "claude_metadata" as const,
+    type: "anthropic:messages" as const,
+  };
+  const ids: string[] = [];
+  let messages: unknown[] = [];
+  const send = async () => {
+    const created = await InteractionModel.create({
+      ...base,
+      request: {
+        model: "claude-test",
+        max_tokens: 100,
+        messages: [...messages],
+      },
+      response: {
+        id: "msg",
+        type: "message" as const,
+        role: "assistant" as const,
+        model: "claude-test",
+        content: [{ type: "text" as const, text: "Looking into it" }],
+        stop_reason: "end_turn" as const,
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    });
+    ids.push(created.id);
+  };
+  const toolRoundTrip = (n: number) => {
+    messages.push({
+      role: "assistant",
+      content: [{ type: "tool_use", id: `tool-${n}`, name: "Bash", input: {} }],
+    });
+    messages.push({
+      role: "user",
+      content: [
+        { type: "tool_result", tool_use_id: `tool-${n}`, content: "ok" },
+      ],
+    });
+  };
+
+  messages.push({
+    role: "user",
+    content: `${params.sessionId} turn 0: a string ask`,
+  });
+  await send();
+  toolRoundTrip(0);
+  await send();
+  messages.push({ role: "assistant", content: "Looking into it" });
+  messages.push({
+    role: "user",
+    content: [
+      { type: "text", text: `${params.sessionId} turn 1: a block ask` },
+    ],
+  });
+  await send();
+  // The client rewrites the history: the last exchange is dropped and the
+  // question asked again, so this request chains to the earlier row.
+  messages = messages.slice(0, -2);
+  messages.push({
+    role: "user",
+    content: `${params.sessionId} turn 1: asked again`,
+  });
+  await send();
+  toolRoundTrip(1);
+  await send();
+  // Compaction: a new first message starts a new thread in the same session.
+  messages = [
+    {
+      role: "user",
+      content: [{ type: "text", text: `${params.sessionId} summary` }],
+    },
+  ];
+  await send();
+  toolRoundTrip(2);
+  await send();
   await drainBackgroundWork();
   return ids;
 }

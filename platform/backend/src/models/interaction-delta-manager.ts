@@ -92,6 +92,28 @@ interface ReconstructableRow {
   processedRequest?: unknown;
 }
 
+/**
+ * A stored, already-decrypted row as {@link
+ * InteractionDeltaManager.foldLoadedRows} takes it: a {@link ChainRow} whose
+ * processed side may be left out when the caller only needs the request.
+ */
+type LoadedChainRow = Omit<
+  ChainRow,
+  "processedRequestSharedPrefix" | "processedRequest"
+> &
+  Partial<Pick<ChainRow, "processedRequestSharedPrefix" | "processedRequest">>;
+
+/**
+ * One row's fold: its full request and the message arrays the next row's
+ * fold slices, kept apart from the envelope the way {@link foldFor} keeps
+ * them.
+ */
+interface FoldState {
+  full: FullRequest;
+  requestMessages: unknown[];
+  processedMessages: unknown[] | null;
+}
+
 const CACHE_MAX_SIZE = 5000;
 
 /**
@@ -369,6 +391,90 @@ class InteractionDeltaManager {
     return result;
   }
 
+  /**
+   * Fold rows the caller has already loaded and decrypted (targets plus every
+   * ancestor each one needs), without touching the reconstruct cache, and
+   * hand each target's full request to `visit` as soon as it is folded.
+   *
+   * For the session-preview backfill, which rebuilds every row of a thread in
+   * one pass. Going through {@link reconstructMany} there would load the chain
+   * of every row again, size (stringify) one whole conversation per row to
+   * cache it, and hold one conversation per row until the batch was done; on
+   * a Claude Code session of hundreds of turns that exhausted the worker's
+   * heap. Here each row is folded once from its parent's fold, so a thread
+   * costs one pass over its messages and holds one fold at a time.
+   *
+   * A row whose parent is not in `rows` is folded as its own head, as
+   * {@link reconstructMany} treats a chain cut by retention. Ancestors cached
+   * by earlier reads are still reused.
+   */
+  static foldLoadedRows(
+    rows: Iterable<LoadedChainRow>,
+    targets: Iterable<string>,
+    visit: (id: string, request: unknown) => void,
+  ): void {
+    const map = new Map<string, ChainRow>();
+    for (const row of rows) {
+      map.set(row.id, {
+        processedRequestSharedPrefix: null,
+        processedRequest: null,
+        ...row,
+      });
+    }
+    // Each row is folded once, from its parent's fold, and a parent's fold
+    // is dropped once its last loaded child has been folded: a linear thread
+    // holds one fold at a time however long it is.
+    const unfoldedChildren = new Map<string, number>();
+    for (const row of map.values()) {
+      if (row.parentId !== null && map.has(row.parentId)) {
+        unfoldedChildren.set(
+          row.parentId,
+          (unfoldedChildren.get(row.parentId) ?? 0) + 1,
+        );
+      }
+    }
+    const states = new Map<string, FoldState>();
+    const folded = (row: ChainRow, state: FoldState) => {
+      states.set(row.id, state);
+      if (row.parentId === null) return;
+      const left = (unfoldedChildren.get(row.parentId) ?? 1) - 1;
+      unfoldedChildren.set(row.parentId, left);
+      if (left <= 0) states.delete(row.parentId);
+    };
+    const stateOf = (id: string): FoldState | null => {
+      // Walk up to the nearest folded or cached ancestor, then fold down.
+      const pending: ChainRow[] = [];
+      let state: FoldState | null = null;
+      let cursor = map.get(id);
+      while (cursor) {
+        const known = states.get(cursor.id);
+        if (known) {
+          state = known;
+          break;
+        }
+        const cached = InteractionDeltaManager.reconstructCache.get(cursor.id);
+        if (cached) {
+          state = stateFromFull(cached);
+          break;
+        }
+        pending.push(cursor);
+        cursor =
+          cursor.parentId === null ? undefined : map.get(cursor.parentId);
+      }
+      for (let i = pending.length - 1; i >= 0; i--) {
+        state = InteractionDeltaManager.foldChild(pending[i], state);
+        folded(pending[i], state);
+      }
+      return state;
+    };
+    for (const id of targets) {
+      const state = stateOf(id);
+      if (!state) continue;
+      visit(id, state.full.request);
+      if ((unfoldedChildren.get(id) ?? 0) <= 0) states.delete(id);
+    }
+  }
+
   /** Clear both caches. Intended for tests that exercise the cold-cache DB path. */
   static reset(): void {
     InteractionDeltaManager.tipCache.clear();
@@ -563,10 +669,15 @@ class InteractionDeltaManager {
     return map;
   }
 
-  /** Fold a row's parent chain, reusing cached ancestors and caching the target. */
+  /**
+   * Fold a row's parent chain, reusing cached ancestors and caching the
+   * target. `cache` false leaves the cache untouched for a caller that folds
+   * a whole thread and reads each result once.
+   */
   private static foldFor(
     id: string,
     map: Map<string, ChainRow>,
+    cache = true,
   ): FullRequest | null {
     const target = map.get(id);
     if (!target) return null;
@@ -576,7 +687,7 @@ class InteractionDeltaManager {
         request: target.request,
         processedRequest: target.processedRequest,
       };
-      InteractionDeltaManager.reconstructCache.set(id, full);
+      if (cache) InteractionDeltaManager.reconstructCache.set(id, full);
       return full;
     }
 
@@ -590,64 +701,71 @@ class InteractionDeltaManager {
     }
     chain.reverse();
 
-    let requestMessages: unknown[] | null = null;
-    let processedMessages: unknown[] | null = null;
-    // The previous row's reconstructed full request — the source for inheriting
-    // omitted `tools`/`system`. Null at the head (which stores the full envelope).
-    let parentFull: FullRequest | null = null;
     // The fold result, held locally rather than read back out of the cache. The
     // cache is byte-bounded, so writing an entry does not guarantee it is still
     // there a moment later: a request larger than the whole budget is evicted
     // immediately. Reading it back would turn that into a spurious null and send
     // the caller down the "no delta" path with a partial request.
-    let foldedTarget: FullRequest | null = null;
-
+    let state: FoldState | null = null;
     for (const row of chain) {
       const cached = InteractionDeltaManager.reconstructCache.get(row.id);
-      if (cached) {
-        requestMessages = getMessages(cached.request) ?? [];
-        processedMessages = getMessages(cached.processedRequest);
-        parentFull = cached;
-        foldedTarget = cached;
-        continue;
-      }
-
-      if (requestMessages === null) {
-        // Head row stores full messages.
-        requestMessages = [...(getMessages(row.request) ?? [])];
-        processedMessages = getMessages(row.processedRequest);
-      } else {
-        requestMessages = requestMessages
-          .slice(0, row.requestSharedPrefix ?? 0)
-          .concat(getMessages(row.request) ?? []);
-        if (row.processedRequestSharedPrefix === null) {
-          processedMessages = getMessages(row.processedRequest);
-        } else {
-          processedMessages = (processedMessages ?? [])
-            .slice(0, row.processedRequestSharedPrefix)
-            .concat(getMessages(row.processedRequest) ?? []);
-        }
-      }
-
-      const full = buildFull(
-        row,
-        requestMessages,
-        processedMessages,
-        parentFull,
-      );
-      parentFull = full;
-      foldedTarget = full;
+      state = cached
+        ? stateFromFull(cached)
+        : InteractionDeltaManager.foldChild(row, state);
     }
+    const foldedTarget = state?.full ?? null;
 
     // Intermediate conversations grow with every turn. Sizing and retaining
     // each prefix repeats work over the same messages and churns the byte
     // budget; only the requested target needs a new cache entry.
-    if (foldedTarget) {
+    if (foldedTarget && cache) {
       InteractionDeltaManager.reconstructCache.set(id, foldedTarget);
     }
 
     return foldedTarget;
   }
+
+  /**
+   * Fold one row onto its parent's fold. A head row (no parent fold) stores
+   * its full messages; a delta row keeps the parent's first
+   * `requestSharedPrefix` messages and appends its own. The parent's full
+   * request is also the source of any `tools`/`system` the row omitted.
+   */
+  private static foldChild(row: ChainRow, parent: FoldState | null): FoldState {
+    let requestMessages: unknown[];
+    let processedMessages: unknown[] | null;
+    if (parent === null) {
+      requestMessages = [...(getMessages(row.request) ?? [])];
+      processedMessages = getMessages(row.processedRequest);
+    } else {
+      requestMessages = parent.requestMessages
+        .slice(0, row.requestSharedPrefix ?? 0)
+        .concat(getMessages(row.request) ?? []);
+      if (row.processedRequestSharedPrefix === null) {
+        processedMessages = getMessages(row.processedRequest);
+      } else {
+        processedMessages = (parent.processedMessages ?? [])
+          .slice(0, row.processedRequestSharedPrefix)
+          .concat(getMessages(row.processedRequest) ?? []);
+      }
+    }
+    const full = buildFull(
+      row,
+      requestMessages,
+      processedMessages,
+      parent?.full ?? null,
+    );
+    return { full, requestMessages, processedMessages };
+  }
+}
+
+/** The fold state a cached full request stands in for. */
+function stateFromFull(full: FullRequest): FoldState {
+  return {
+    full,
+    requestMessages: getMessages(full.request) ?? [],
+    processedMessages: getMessages(full.processedRequest),
+  };
 }
 
 function tipKey(sessionId: string, threadId: string): string {

@@ -21,7 +21,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
-import { __test, tools } from "./search-tools";
+import { __test } from "./search-tools";
 
 const {
   makeRankingCandidate,
@@ -1807,7 +1807,7 @@ describe("search_tools", () => {
         organizationId: org.id,
         name: "Widgets MCP",
       });
-      for (let index = 0; index < 22; index++) {
+      for (let index = 0; index < 21; index++) {
         const tool = await makeTool({
           name: `widgets__action_${index}`,
           description: "widget action",
@@ -1833,20 +1833,11 @@ describe("search_tools", () => {
       const structured =
         result.structuredContent as SearchToolsStructuredContent;
       expect(structured.total).toBe(20);
-      expect(structured.matchCount).toBe(22);
+      expect(structured.matchCount).toBe(21);
       expect(structured.truncated).toBe(true);
       // Already at the cap: point at narrowing, not at a larger limit.
-      expect(structured.hint).toContain("top 20 of 22");
+      expect(structured.hint).toContain("top 20 of 21");
       expect(structured.hint).not.toContain("raise limit");
-
-      // The published schema still names the cap for models that read it.
-      const searchTool = tools.find(
-        (tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
-      );
-      expect(
-        (searchTool?.inputSchema.properties?.limit as { maximum?: number })
-          ?.maximum,
-      ).toBe(20);
     });
 
     test("zero results return an actionable hint naming available servers", async ({

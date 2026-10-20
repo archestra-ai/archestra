@@ -62,8 +62,9 @@ import { getSkillDelegationTools } from "./skill-delegation";
 import { tools as runtimeMcpTools } from "./tasks";
 
 // The most tools one search returns. A model that wants the whole catalog
-// often asks for more (limit: 100) despite the advertised maximum, so a larger
-// limit is capped here instead of failing the call.
+// often asks for more (limit: 100), so a larger limit is capped instead of
+// failing the call. The schema has no `maximum` for the same reason: a client
+// that checks input against it would refuse the call before it arrives.
 const MAX_SEARCH_LIMIT = 20;
 
 const SearchToolsArgsSchema = z
@@ -81,7 +82,6 @@ const SearchToolsArgsSchema = z
       .int()
       .positive()
       .overwrite((limit) => Math.min(limit, MAX_SEARCH_LIMIT))
-      .max(MAX_SEARCH_LIMIT)
       .optional()
       .default(8)
       .describe(

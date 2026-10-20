@@ -1,7 +1,12 @@
 "use client";
 
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { useSyncExternalStore } from "react";
+import {
+  type Query,
+  type QueryClient,
+  type QueryKey,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useState, useSyncExternalStore } from "react";
 
 /**
  * Whether the app shell may start its deferred requests: the nav dots, the
@@ -34,6 +39,39 @@ export function markShellSeeded(client: QueryClient): void {
 /** Whether the server rendered this page with the shell's data. */
 export function useIsShellSeeded(): boolean {
   return seededClients.has(useQueryClient());
+}
+
+/**
+ * Whether a query still holds the value this document's server seed wrote:
+ * no fetch has replaced it, and the page load is recent. A page that needs a
+ * fresh read on mount (the connection approval page) can count that value as
+ * its read, because the server made it for this document's request. Later
+ * mounts, and any refresh, read from the endpoint as usual.
+ */
+export function isDocumentSeedFresh(
+  client: QueryClient,
+  query: Pick<Query, "state"> | undefined,
+): boolean {
+  return (
+    seededClients.has(client) &&
+    !!query &&
+    query.state.dataUpdateCount === 1 &&
+    query.state.fetchStatus === "idle" &&
+    Date.now() - query.state.dataUpdatedAt < DOCUMENT_SEED_FRESH_MS
+  );
+}
+
+/**
+ * {@link isDocumentSeedFresh} for one query, decided on the first render and
+ * kept for the life of the component, so the server and the hydrating
+ * browser render the same thing.
+ */
+export function useDocumentSeedFresh(queryKey: QueryKey): boolean {
+  const client = useQueryClient();
+  const [fresh] = useState(() =>
+    isDocumentSeedFresh(client, client.getQueryCache().find({ queryKey })),
+  );
+  return fresh;
 }
 
 // === Internal helpers
@@ -110,6 +148,9 @@ const FALLBACK_MS = 1500;
 
 /** How long the cache must stay idle to count the first wave as settled. */
 const SETTLE_MS = 50;
+
+/** How long after the page load a seeded value still counts as the page's own read. */
+const DOCUMENT_SEED_FRESH_MS = 30_000;
 
 const deferrals = new WeakMap<QueryClient, ShellDeferral>();
 

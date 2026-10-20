@@ -12,14 +12,36 @@
  */
 export const SHELL_SEED_ROUTES: readonly string[] = ["/mcp/registry", "/chat"];
 
-/** Whether a page path renders its first rows on the server. */
-export function isShellSeedRoute(pathname: string | null | undefined): boolean {
+/**
+ * Whether a page renders its first rows on the server. `search` is the
+ * document's query string: the connection approval page (`/connection` with a
+ * `connectRequest`) is seeded, the plain Connect page is not.
+ */
+export function isShellSeedRoute(
+  pathname: string | null | undefined,
+  search: string | null = null,
+): boolean {
   return (
     !!pathname &&
     (SHELL_SEED_ROUTES.includes(pathname) ||
       seededConversationId(pathname) !== null ||
-      seededRunId(pathname) !== null)
+      seededRunId(pathname) !== null ||
+      seededConnectRequest(pathname, search) !== null)
   );
+}
+
+/**
+ * The installer's connection request a `/connection` document approves, or
+ * null. Its document is seeded with the shell and everything the approval
+ * page reads before it can show its final state (see `prefetchShellSeed`).
+ */
+export function seededConnectRequest(
+  pathname: string | null | undefined,
+  search: string | null,
+): string | null {
+  if (pathname !== "/connection") return null;
+  const id = new URLSearchParams(search ?? "").get("connectRequest");
+  return id && CONNECT_REQUEST_ID.test(id) ? id : null;
 }
 
 /**
@@ -48,6 +70,8 @@ export function seededRunId(
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const CONVERSATION_PATH = new RegExp(`^/chat/(${UUID})$`, "i");
 const RUN_PATH = new RegExp(`^/chat/runs/(${UUID})$`, "i");
+/** The random request id `POST /api/client-connections` returns (24 bytes, hex). */
+const CONNECT_REQUEST_ID = /^[a-f0-9]{48}$/;
 
 /**
  * The request header the proxy sets on such a document load, holding the

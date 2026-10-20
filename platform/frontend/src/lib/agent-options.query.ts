@@ -9,6 +9,10 @@ import {
   useInfiniteQuery,
   useQuery,
 } from "@tanstack/react-query";
+import {
+  agentOptionsByIdsQueryKey,
+  agentOptionsPageQueryKey,
+} from "@/lib/connection-approval-query-keys";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export type AgentOptionFilters = Omit<
@@ -52,7 +56,7 @@ export function useAgentOptionsPage({
 }) {
   const query = { excludeBuiltIn: true, ...filters, search, limit };
   return useInfiniteQuery({
-    queryKey: ["agents", "options", "page", query],
+    queryKey: agentOptionsPageQueryKey(query),
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       const { data, error } = await archestraApiSdk.getAgentOptionsPage({
@@ -91,7 +95,7 @@ export function useAgentOptionsByIds({
 }) {
   const uniqueIds = [...new Set(ids)].sort();
   return useQuery({
-    queryKey: ["agents", "options", "ids", uniqueIds, filters],
+    queryKey: agentOptionsByIdsQueryKey(uniqueIds, filters),
     queryFn: async () => {
       const batches: string[][] = [];
       for (

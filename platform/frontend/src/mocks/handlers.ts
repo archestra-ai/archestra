@@ -2,6 +2,7 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
   ClientFilterSchema,
@@ -784,6 +785,30 @@ export const handlers: HttpHandler[] = [
   // /connection probes the org's default gateway + the single LLM Proxy
   ...getJson("/api/mcp-gateways/default", makeAgent()),
   ...getJson("/api/llm-proxy", makeAgent()),
+
+  // The connection approval page an installer opens (/connection with a
+  // connectRequest): its request, the skill names it lists, and the setup it
+  // prepares (on the server with the document, else in the browser).
+  ...getJson("/api/client-connections/:id", {
+    clientId: "opencode",
+    platform: "linux",
+    exclude: [],
+    gateway: null,
+    plugins: null,
+    deviceName: "test-laptop",
+    userCode: "ABCD-1234",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  }),
+  ...getJson("/api/skills/names", { data: [], total: 0 }),
+  ...postJson("/api/connection-setups", {
+    id: "setup-1",
+    // A mock of the setup command, on the loopback address the platform
+    // dials itself by (see shared/loopback-dial.test.ts).
+    command: `curl -fsSL '${DEFAULT_INTERNAL_API_BASE_URL}/api/connection-setups/tok' | bash`,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    tokenStart: "tok",
+    plugins: [],
+  }),
 
   // The static marketplace (the primary install path in the /connection step).
   ...getJson("/api/skill-marketplace", skillMarketplaceSeed),

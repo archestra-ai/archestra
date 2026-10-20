@@ -64,7 +64,18 @@ export const BOOTSTRAP_QUERY_RETRY = (failureCount: number): boolean =>
 export function restorePersistedQueryCache(client: QueryClient): void {
   const snapshot = readSnapshot();
   if (!snapshot) return;
-  hydrate(client, snapshot.state);
+  // A query that already holds data got it from this page: the document's
+  // server seed, or a read since mount. The snapshot is older than that
+  // whatever the clocks say, so it never replaces such a value.
+  const cache = client.getQueryCache();
+  hydrate(client, {
+    ...snapshot.state,
+    queries: snapshot.state.queries.filter(
+      (query) =>
+        cache.find({ queryKey: query.queryKey, exact: true })?.state.data ===
+        undefined,
+    ),
+  });
 }
 
 /**

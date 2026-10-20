@@ -48521,7 +48521,7 @@
             "in": "query",
             "name": "includeTools",
             "required": false,
-            "description": "Attach each internal agent's assigned tools. Defaults to true. The Agents page passes false: it shows only `toolsCount` and `subagentsCount`, which are present either way, while the tool refs carry every assigned tool's name and description. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'."
+            "description": "Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'."
           },
           {
             "schema": {
@@ -50210,7 +50210,7 @@
             "in": "query",
             "name": "includeTools",
             "required": false,
-            "description": "Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'."
+            "description": "Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'."
           },
           {
             "schema": {
@@ -57314,7 +57314,7 @@
             "in": "query",
             "name": "includeTools",
             "required": false,
-            "description": "Attach the gateway's assigned tools. Defaults to true. Pass false when you need only the gateway or its `toolsCount` and `subagentsCount`, which are always present: the tool refs make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned', and `sandboxAvailable` is absent."
+            "description": "Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent."
           }
         ],
         "responses": {

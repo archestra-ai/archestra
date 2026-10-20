@@ -26,10 +26,7 @@ import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import {
-  expandCommandExecutionPolicyRules,
-  normalizeCommandExecutionArguments,
-} from "@/openappa/command-normalization";
+import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
@@ -679,7 +676,7 @@ async function effectivePolicy(
     return {
       ...(await openappaDeclarations.dispatchPolicy({
         organizationId,
-        content: expandCommandExecutionPolicyRules(policy.content),
+        content: policy.content,
       })),
       compositionHash: policy.contentHash,
     };

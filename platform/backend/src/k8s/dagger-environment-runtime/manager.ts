@@ -4,6 +4,10 @@ import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
 import { getK8sCapabilities } from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
+import {
+  fetchPlatformPodNodeSelector,
+  fetchPlatformPodTolerations,
+} from "@/k8s/mcp-server-runtime/k8s-deployment";
 import { constructManagedNetworkPolicyName } from "@/k8s/mcp-server-runtime/network-policy";
 import {
   createK8sClients,
@@ -58,6 +62,12 @@ interface EngineReconcileTarget {
 interface OrganizationDefaultEngineTarget {
   id: string;
   defaultEnvironmentNamespace: string | null;
+}
+
+/** Where an engine pod may be scheduled. */
+interface EngineScheduling {
+  nodeSelector: k8s.V1PodSpec["nodeSelector"] | null;
+  tolerations: k8s.V1Toleration[] | null;
 }
 
 const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.9";
@@ -361,7 +371,12 @@ class DaggerEnvironmentRuntimeManager {
     // Must precede the StatefulSet: a new engine pod mounts this ConfigMap and
     // would be stuck in ContainerCreating (failed mount) if it didn't exist yet.
     await this.applyEngineConfig(clients.coreApi, engineId, namespace);
-    await this.applyEngineStatefulSet(clients.appsApi, engineId, namespace);
+    await this.applyEngineStatefulSet(
+      clients.appsApi,
+      engineId,
+      namespace,
+      await this.resolveEngineScheduling(),
+    );
 
     const effectivePolicy = await this.resolveEngineEffectivePolicy(target);
     const capabilities = (await getK8sCapabilities()).networkPolicy;
@@ -441,15 +456,49 @@ class DaggerEnvironmentRuntimeManager {
     });
   }
 
+  // Engines land where the platform runs unless an operator names a pool of
+  // their own, matching MCP server pods. Without this, a platform pinned to a
+  // tainted pool leaves its engines Pending (no toleration) or on nodes outside
+  // that pool (no selector). The platform pod lookup is cached and never
+  // throws; a failed lookup falls back to default scheduling.
+  private async resolveEngineScheduling(): Promise<EngineScheduling> {
+    const override = config.daggerRuntime.engine.nodeSelector;
+    if (Object.keys(override).length > 0) {
+      return {
+        nodeSelector: override,
+        tolerations: Object.entries(override).map(([key, value]) => ({
+          key,
+          operator: "Equal",
+          value,
+          effect: "NoSchedule",
+        })),
+      };
+    }
+    const platformNamespace = process.env.POD_NAMESPACE || getK8sNamespace();
+    const { kubeConfig } = loadKubeConfig();
+    const { coreApi } = createK8sClients(kubeConfig, platformNamespace);
+    return {
+      nodeSelector: await fetchPlatformPodNodeSelector(
+        coreApi,
+        platformNamespace,
+      ),
+      tolerations: await fetchPlatformPodTolerations(
+        coreApi,
+        platformNamespace,
+      ),
+    };
+  }
+
   private async applyEngineStatefulSet(
     appsApi: k8s.AppsV1Api,
     engineId: string,
     namespace: string,
+    scheduling: EngineScheduling,
   ): Promise<void> {
     try {
       await appsApi.createNamespacedStatefulSet({
         namespace,
-        body: this.buildEngineStatefulSet(engineId, namespace),
+        body: this.buildEngineStatefulSet(engineId, namespace, scheduling),
       });
     } catch (error) {
       if (!isConflict(error)) throw error;
@@ -458,20 +507,23 @@ class DaggerEnvironmentRuntimeManager {
       // rarely changes; bumping ENGINE_IMAGE needs a manual StatefulSet delete).
       // The per-reconcile mutation a target actually drives — its egress policy
       // — is applied below via the NetworkPolicy, not the engine spec.
-      await this.warnIfSandboxMemoryUncapped(appsApi, engineId, namespace);
+      await this.warnIfEngineOutdated(appsApi, engineId, namespace, scheduling);
     }
   }
 
   /**
-   * An engine created before the sandbox memory cap keeps its original command
-   * for as long as it lives, so it goes on running sandboxes unbounded. Nothing
-   * repairs that on its own — say so, since the alternative is a silent gap in
-   * a control the deployment believes it has.
+   * An existing engine keeps the spec it was created with for as long as it
+   * lives. One created before the sandbox memory cap goes on running sandboxes
+   * unbounded, and one created before engines inherited the platform's
+   * scheduling can sit Pending or on the wrong nodes. Nothing repairs either on
+   * its own — say so, since the alternative is a silent gap the deployment does
+   * not know it has.
    */
-  private async warnIfSandboxMemoryUncapped(
+  private async warnIfEngineOutdated(
     appsApi: k8s.AppsV1Api,
     engineId: string,
     namespace: string,
+    scheduling: EngineScheduling,
   ): Promise<void> {
     const name = daggerEngineDeploymentName(engineId);
     try {
@@ -479,17 +531,27 @@ class DaggerEnvironmentRuntimeManager {
         name,
         namespace,
       });
-      const command =
-        existing.spec?.template.spec?.containers[0]?.command?.join("\n") ?? "";
-      if (command.includes(sandboxCgroupName(engineId))) return;
-      logger.warn(
-        { engineId, namespace, statefulSet: name },
-        "[DaggerEnvRuntime] engine predates the sandbox memory cap and runs sandboxes unbounded; delete the StatefulSet to recreate it",
-      );
+      const podSpec = existing.spec?.template.spec;
+      const command = podSpec?.containers[0]?.command?.join("\n") ?? "";
+      if (!command.includes(sandboxCgroupName(engineId))) {
+        logger.warn(
+          { engineId, namespace, statefulSet: name },
+          "[DaggerEnvRuntime] engine predates the sandbox memory cap and runs sandboxes unbounded; delete the StatefulSet to recreate it",
+        );
+      }
+      if (
+        schedulingKey(podSpec?.nodeSelector, podSpec?.tolerations) !==
+        schedulingKey(scheduling.nodeSelector, scheduling.tolerations)
+      ) {
+        logger.warn(
+          { engineId, namespace, statefulSet: name },
+          "[DaggerEnvRuntime] engine nodeSelector/tolerations differ from the desired scheduling; delete the StatefulSet to recreate it",
+        );
+      }
     } catch (error) {
       logger.debug(
         { err: error, engineId, namespace },
-        "[DaggerEnvRuntime] could not check whether the engine caps sandbox memory",
+        "[DaggerEnvRuntime] could not check whether the engine spec is current",
       );
     }
   }
@@ -519,6 +581,7 @@ class DaggerEnvironmentRuntimeManager {
   private buildEngineStatefulSet(
     engineId: string,
     namespace: string,
+    scheduling: EngineScheduling,
   ): k8s.V1StatefulSet {
     const name = daggerEngineDeploymentName(engineId);
     const labels = daggerEnginePodLabels(engineId);
@@ -539,6 +602,13 @@ class DaggerEnvironmentRuntimeManager {
             // API, so it gets no ServiceAccount token mounted next to the
             // privileged sandbox workload it runs.
             automountServiceAccountToken: false,
+            ...(scheduling.nodeSelector &&
+            Object.keys(scheduling.nodeSelector).length > 0
+              ? { nodeSelector: scheduling.nodeSelector }
+              : {}),
+            ...(scheduling.tolerations?.length
+              ? { tolerations: scheduling.tolerations }
+              : {}),
             containers: [
               {
                 name: ENGINE_CONTAINER,
@@ -788,6 +858,22 @@ function engineStartupScript(
     "fi",
     "exec /usr/local/bin/dagger-entrypoint.sh",
   ].join("\n");
+}
+
+// Order-insensitive identity of a pod's scheduling, so an engine read back from
+// the API compares equal to the desired spec regardless of key order.
+function schedulingKey(
+  nodeSelector: Record<string, string> | null | undefined,
+  tolerations: k8s.V1Toleration[] | null | undefined,
+): string {
+  const sortedEntries = (record: object) =>
+    Object.entries(record)
+      .filter(([, value]) => value !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify({
+    nodeSelector: sortedEntries(nodeSelector ?? {}),
+    tolerations: (tolerations ?? []).map(sortedEntries),
+  });
 }
 
 function sandboxCgroupName(engineId: string): string {

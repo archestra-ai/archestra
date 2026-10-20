@@ -64,9 +64,9 @@ describe("bundled batteries", () => {
           : undefined,
     });
     const shipped = bundled.filter(({ name }) =>
-      ["archestra", "claude-code"].includes(name),
+      ["archestra", "coding", "claude-code"].includes(name),
     );
-    expect(shipped).toHaveLength(2);
+    expect(shipped).toHaveLength(3);
     for (const battery of bundled) {
       const edited = await native.editOpenappaPolicy(
         root.content,
@@ -96,7 +96,7 @@ describe("composing an organization's declarations", () => {
     config.openappa.enabled = true;
   });
 
-  test("the shipped default governs the built-in tools with the archestra battery and client built-ins with the claude-code battery", async ({
+  test("the shipped default governs the built-in tools with the archestra battery and client built-ins with the coding and claude-code batteries", async ({
     makeOrganization,
   }) => {
     const organizationId = (await makeOrganization()).id;
@@ -121,6 +121,7 @@ describe("composing an organization's declarations", () => {
         status: "active",
       },
       { batteryName: "claude-code", catalogId: null, status: "active" },
+      { batteryName: "coding", catalogId: null, status: "active" },
     ]);
   });
 

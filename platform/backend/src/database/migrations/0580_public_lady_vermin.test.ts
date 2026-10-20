@@ -5,7 +5,7 @@ import db from "@/database";
 import { describe, expect, test } from "@/test";
 
 const statements = fs
-  .readFileSync(path.join(__dirname, "0579_public_lady_vermin.sql"), "utf8")
+  .readFileSync(path.join(__dirname, "0580_public_lady_vermin.sql"), "utf8")
   .split("--> statement-breakpoint")
   .map((statement) => statement.trim())
   .filter(Boolean);
@@ -22,7 +22,7 @@ const ROLLBACK = [
     .filter((statement) => statement.includes("openappa_root_openings")),
 ];
 
-describe("0579 drops the policy-snapshot schema", () => {
+describe("0580 drops the policy-snapshot schema", () => {
   test("a fresh install has no setting for new sessions, no retained annotators and no root openings", async () => {
     expect(await present()).toEqual({
       newSessionPolicy: false,

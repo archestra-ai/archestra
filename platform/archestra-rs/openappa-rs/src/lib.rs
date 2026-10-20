@@ -34,6 +34,7 @@ use appa_runtime_api::{
     SpawnBinding, SpawnKind, SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json, value::RawValue};
@@ -510,8 +511,17 @@ pub async fn inspect_openappa_policy_tests(input: String) -> napi::Result<String
 /// Evaluate bounded `.appa` scenarios against the supplied effective policy with the
 /// credential values the host resolved for it. Every consult the policy declares is
 /// made live, as a dispatch makes it; no tool runs and every trajectory stays in memory.
+///
+/// `onProgress`, when given, receives each file's progress as JSON while the replay runs:
+/// `{"phase":"file_started","path"}`, then `{"phase":"file_finished", ...}` with that
+/// file's result, before the next file starts. It only observes: calls are queued without
+/// waiting, and the listener must not throw. Events still queued when the replay settles
+/// may arrive after its promise resolves.
 #[napi(js_name = "replayOpenappaPolicy")]
-pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
+pub async fn replay_openappa_policy(
+    input: String,
+    on_progress: Option<ThreadsafeFunction<String, (), String, napi::Status, false>>,
+) -> napi::Result<String> {
     // Live consults wait on remote parties, so a few replays may run at once.
     static REPLAY_SLOTS: Semaphore = Semaphore::const_new(4);
     AssertUnwindSafe(async move {
@@ -519,7 +529,16 @@ pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
             .try_acquire()
             .map_err(|_| error("Too many OpenAPPA replays are running; retry later"))?;
         let request = replay::Request::parse(&input).map_err(error)?;
-        let response = tokio::time::timeout(Duration::from_secs(120), replay::run(request))
+        let report = |event: replay::Progress<'_>| {
+            let Some(listener) = &on_progress else {
+                return;
+            };
+            // An event that cannot be encoded or queued is dropped; the run goes on.
+            if let Ok(event) = serde_json::to_string(&event) {
+                listener.call(event, ThreadsafeFunctionCallMode::NonBlocking);
+            }
+        };
+        let response = tokio::time::timeout(Duration::from_secs(120), replay::run(request, report))
             .await
             .map_err(|_| error("OpenAPPA replay exceeded its 120 second limit"))?;
         serde_json::to_string(&response).map_err(error)

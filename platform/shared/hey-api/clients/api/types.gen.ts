@@ -14377,7 +14377,7 @@ export type GetAgentCatalogData = {
          */
         pinned?: boolean;
         /**
-         * Attach each internal agent's assigned tools. Defaults to true. The Agents page passes false: it shows only `toolsCount` and `subagentsCount`, which are present either way, while the tool refs carry every assigned tool's name and description. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
+         * Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
          */
         includeTools?: boolean;
         limit?: number;
@@ -14754,7 +14754,7 @@ export type GetAgentsData = {
          */
         pinned?: boolean;
         /**
-         * Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'.
+         * Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
          */
         includeTools?: boolean;
         /**
@@ -16436,7 +16436,7 @@ export type GetDefaultMcpGatewayData = {
     path?: never;
     query?: {
         /**
-         * Attach the gateway's assigned tools. Defaults to true. Pass false when you need only the gateway or its `toolsCount` and `subagentsCount`, which are always present: the tool refs make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned', and `sandboxAvailable` is absent.
+         * Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.
          */
         includeTools?: boolean;
     };
@@ -94117,6 +94117,7 @@ export type RunOpenAppaPolicyTestsData = {
         sourceVersion: string;
         directory?: string;
         partial?: boolean;
+        progressToken?: string;
     };
     path?: never;
     query?: never;
@@ -94217,6 +94218,7 @@ export type RunOpenAppaPolicyTestsResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;
@@ -94338,6 +94340,7 @@ export type GetOpenAppaPolicyTestRunsResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;
@@ -94463,6 +94466,7 @@ export type PreviewOpenAppaPolicyTestResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;

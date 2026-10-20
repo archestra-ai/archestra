@@ -691,10 +691,14 @@ describe("ConnectCommandPanel", () => {
       await user.click(
         screen.getByRole("button", { name: "Approve connection" }),
       );
-      await screen.findByText(
-        "Connection approved. Return to your terminal to finish setup.",
-      );
+      await screen.findByRole("heading", {
+        name: "Switch back to your terminal",
+      });
       expect(decisions).toEqual([{ decision: "approve", setupId: "setup-1" }]);
+      // A decided request has nothing left to customize.
+      expect(
+        screen.queryByRole("button", { name: /Setup options/ }),
+      ).toBeNull();
     } finally {
       view.unmount();
       queryClient.clear();

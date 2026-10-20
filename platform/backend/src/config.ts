@@ -3254,6 +3254,15 @@ const config = {
       additionalDeniedCidrs: parseEngineDeniedCidrs(
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS,
       ),
+      // Steers engines onto a dedicated node pool: a key=value list that
+      // becomes each engine's nodeSelector, plus one matching NoSchedule
+      // toleration per entry. Empty (the default) inherits the platform pod's
+      // nodeSelector and tolerations, like MCP server pods.
+      nodeSelector: parseLabelSelector(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR,
+        {},
+        "ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR",
+      ),
     },
   },
   /**

@@ -1,49 +1,13 @@
 "use client";
-import {
-  ExternalLink,
-  History,
-  Info,
-  Loader2,
-  LockKeyhole,
-  MessageCircle,
-  MoreHorizontal,
-  Play,
-  TriangleAlert,
-} from "lucide-react";
-import Link from "next/link";
+import { Info, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { InlineNoticeDetails } from "@/components/ui/inline-notice-details";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
-import { formatDate } from "@/lib/utils/date-time";
-import {
-  GithubManagedPolicyNotice,
-  useManagedValidationsLink,
-} from "../../_parts/github-managed-policy-notice";
-import { OpenAppaChatButton } from "../../_parts/openappa-chat-button";
-import {
-  validationSuiteSummary,
-  validationSummaryText,
-} from "../../_parts/validation-run-history";
+import { GithubManagedPolicyNotice } from "../../_parts/github-managed-policy-notice";
+import { validationSuiteSummary } from "../../_parts/validation-run-history";
 import { useValidation } from "./validation-context";
 
 export function ValidationNotices({
@@ -123,119 +87,6 @@ export function ValidationNotices({
   );
 }
 
-/** The page header: the agent prompts, Run all, and the rarely used links behind ⋯. */
-export function ValidationPageActions() {
-  const { files, runnable, runAll, runningAll, busy, github, collection } =
-    useValidation();
-  const managed = useManagedValidationsLink(collection.activeDirectory);
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <OpenAppaChatButton
-        size="sm"
-        variant="outline"
-        promptKey="explainValidations"
-        disabled={busy}
-      >
-        <Info />
-        <span>Explain validations</span>
-      </OpenAppaChatButton>
-      <OpenAppaChatButton
-        size="sm"
-        variant="outline"
-        promptKey="writeValidations"
-        permissions={{ guardrailsPolicy: ["read", "update"] }}
-        disabled={busy}
-      >
-        <MessageCircle />
-        <span>Write a validation</span>
-      </OpenAppaChatButton>
-      <Button size="sm" disabled={!runnable || !files.length} onClick={runAll}>
-        {runningAll ? <Loader2 className="animate-spin" /> : <Play />}
-        <span>Run all</span>
-      </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            aria-label="More validation actions"
-          >
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem asChild>
-            <Link href="/openappa/validation/history">
-              <History />
-              <span>Run history</span>
-            </Link>
-          </DropdownMenuItem>
-          {github && managed.href && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <a
-                  href={managed.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <LockKeyhole />
-                  <span>{managed.label}</span>
-                  <ExternalLink className="ml-auto" />
-                  <span className="sr-only">(opens in new tab)</span>
-                </a>
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}
-
-const summaryTextColor = {
-  passed: "text-green-700 dark:text-green-400",
-  failed: "text-red-700 dark:text-red-400",
-  cannot_run: "text-yellow-800 dark:text-yellow-300",
-  not_run: undefined,
-} as const;
-
-/**
- * One line adding up the per-file statuses of the rows shown, linking to run
- * history. It reads the same results as the Status column, so the two always
- * agree, also under a search or status filter.
- */
-export function ValidationLastRun({
-  files,
-}: {
-  files: { path: string; content: string }[];
-}) {
-  const { history } = useValidation();
-  const summary = history.data
-    ? validationSuiteSummary(files, history.data)
-    : null;
-  if (!summary) return null;
-  const outcome = validationSummaryText(summary);
-  return (
-    <Button
-      size="sm"
-      variant="ghost"
-      className="font-normal text-muted-foreground"
-      asChild
-    >
-      <Link
-        href="/openappa/validation/history"
-        aria-label={`Last run ${formatDate({ date: summary.runAt })}, ${outcome}. Open run history`}
-      >
-        <History />
-        <span>{`Last run ${formatDate({ date: summary.runAt, dateFormat: "MM/dd HH:mm" })}`}</span>
-        <span aria-hidden>·</span>
-        <span className={summaryTextColor[summary.status]}>{outcome}</span>
-      </Link>
-    </Button>
-  );
-}
-
 /** What the per-file statuses cannot say: history did not load, or the last run never started. */
 export function ValidationRunNotices() {
   const { files, history } = useValidation();
@@ -292,152 +143,6 @@ export function ValidationStatusBadge({
   );
 }
 
-export function ValidationRunOutcome({
-  run,
-  binary = false,
-}: {
-  run: PolicyTestRun;
-  binary?: boolean;
-}) {
-  if (run.executionError)
-    return <ValidationStatusBadge status={binary ? "failed" : "cannot_run"} />;
-  const passed = run.files.filter((file) => file.status === "passed").length;
-  const failed = run.files.filter((file) => file.status === "failed").length;
-  const cannotRun = run.files.filter(
-    (file) => file.status === "cannot_run",
-  ).length;
-  return (
-    <div className="flex flex-wrap gap-2">
-      <ValidationStatusBadge status="passed">
-        {passed} passed
-      </ValidationStatusBadge>
-      <ValidationStatusBadge status="failed">
-        {failed + (binary ? cannotRun : 0)} failed
-      </ValidationStatusBadge>
-      {!binary && (
-        <ValidationStatusBadge status="cannot_run">
-          {cannotRun} cannot run
-        </ValidationStatusBadge>
-      )}
-    </div>
-  );
-}
-
-type ValidationStep = PolicyTestRun["files"][number]["steps"][number];
-
-/**
- * Why a file failed, when a call's decision did not match its expectation:
- * the line and tool, what was expected, what came instead and the reasons.
- * The engine's full feedback, written for the agent, stays behind a toggle.
- */
-export function FailedStepNotice({
-  step,
-  onShowLine,
-}: {
-  step: ValidationStep;
-  /** Moves the editor to the step's line. */
-  onShowLine?: () => void;
-}) {
-  return (
-    <InlineNotice variant="error">
-      <TriangleAlert />
-      <InlineNoticeText className="space-y-1.5">
-        <div className="flex flex-wrap items-center gap-x-1.5 font-medium text-destructive">
-          <span>Failed</span>
-          <span aria-hidden>·</span>
-          {onShowLine ? (
-            <UnstyledButton
-              className="font-mono underline underline-offset-2"
-              onClick={onShowLine}
-            >
-              {`Line ${step.line}`}
-            </UnstyledButton>
-          ) : (
-            <span className="font-mono">{`Line ${step.line}`}</span>
-          )}
-          <span aria-hidden>·</span>
-          <span className="font-mono">{step.tool}</span>
-        </div>
-        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
-          <dt>Expected</dt>
-          <dd className="font-mono">{step.expected}</dd>
-          <dt>Got</dt>
-          <dd className="font-mono">{step.actual ?? "no decision"}</dd>
-          {!!step.reasons?.length && (
-            <>
-              <dt>Why</dt>
-              <dd>
-                {step.reasons.map((reason) => (
-                  <p key={reason}>{reason}</p>
-                ))}
-              </dd>
-            </>
-          )}
-        </dl>
-      </InlineNoticeText>
-      {step.error && (
-        <InlineNoticeDetails label="full error">
-          {step.error}
-        </InlineNoticeDetails>
-      )}
-    </InlineNotice>
-  );
-}
-
-export function StepResults({ steps }: { steps: ValidationStep[] }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Line / tool</TableHead>
-          <TableHead>Expected</TableHead>
-          <TableHead>Actual</TableHead>
-          <TableHead>Result</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {steps.map((step) => (
-          <TableRow key={`${step.line}:${step.tool}`}>
-            <TableCell>
-              <span className="font-mono text-xs">{`${step.line} · ${step.tool}`}</span>
-            </TableCell>
-            <TableCell>{step.expected}</TableCell>
-            <TableCell>{step.actual ?? "—"}</TableCell>
-            <TableCell>
-              <div className="space-y-1">
-                <ValidationStatusBadge status={step.status} />
-                {step.reasons?.length ? (
-                  <>
-                    {step.reasons.map((reason) => (
-                      <p key={reason} className="text-xs">
-                        {reason}
-                      </p>
-                    ))}
-                    {step.error && (
-                      <details className="text-xs">
-                        <summary className="cursor-pointer text-muted-foreground">
-                          Show full error
-                        </summary>
-                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px]">
-                          {step.error}
-                        </pre>
-                      </details>
-                    )}
-                  </>
-                ) : (
-                  step.error && (
-                    <p className="whitespace-pre-wrap text-xs">{step.error}</p>
-                  )
-                )}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
 export function statusLabel(status: string) {
   return status === "cannot_run"
     ? "Cannot run"
@@ -483,6 +188,7 @@ export function ValidationRunDiagnostics({
   );
 }
 
+/** Downloads one validation file, e.g. a draft to keep before refreshing. */
 export function exportValidationFile(file: { path: string; content: string }) {
   const url = URL.createObjectURL(
     new Blob([file.content], { type: "text/plain;charset=utf-8" }),

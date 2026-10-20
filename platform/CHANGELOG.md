@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.77](https://github.com/archestra-ai/archestra/compare/platform-v1.3.76...platform-v1.3.77) (2026-10-20)
+
+
+### Bug Fixes
+
+* **gemini:** keep Vertex AI Gemini models when Vertex AI refuses every call (backport release/1.3) ([#9291](https://github.com/archestra-ai/archestra/issues/9291)) ([d282dd2](https://github.com/archestra-ai/archestra/commit/d282dd28f5fe89fb4dd90e0f838a4df9342ace59))
+* **llm-proxy:** fit replayed tool-call ids to each provider's limits (backport release/1.3) ([#9293](https://github.com/archestra-ai/archestra/issues/9293)) ([98b0a19](https://github.com/archestra-ai/archestra/commit/98b0a190155e6d0657178258151c4d0f640fdffd))
+* **llm-proxy:** keep Gemini thought signatures on Responses streams (backport [#9201](https://github.com/archestra-ai/archestra/issues/9201)) ([#9207](https://github.com/archestra-ai/archestra/issues/9207)) ([6f67c05](https://github.com/archestra-ai/archestra/commit/6f67c056890d0812c25b7cdf781951ed9dac89dc))
+* **mcp-gateway:** cap search_tools limit instead of rejecting it (backport release/1.3) ([#9305](https://github.com/archestra-ai/archestra/issues/9305)) ([7aad9de](https://github.com/archestra-ai/archestra/commit/7aad9de0228efdfd32a29585f0a51ecde541281f))
+* **security:** require expat 2.9.0-r0 in platform and MCP server base images (backport release/1.3) ([#9209](https://github.com/archestra-ai/archestra/issues/9209)) ([9ffd60b](https://github.com/archestra-ai/archestra/commit/9ffd60b278a7442de6dd3744ddcfe3bc7410b503))
+
 ## [1.3.76](https://github.com/archestra-ai/archestra/compare/platform-v1.3.75...platform-v1.3.76) (2026-10-17)
 
 

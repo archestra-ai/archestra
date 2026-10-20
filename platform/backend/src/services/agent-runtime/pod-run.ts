@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
   followAgentCatalogImage,
+  type InteractionSource,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
@@ -76,6 +77,7 @@ async function startAgentRunSession(params: {
   completionTarget?: AgentRunCompletionTarget;
   onRuntimeSessionCreated?: RuntimeSessionCreatedCallback;
   task?: string | null;
+  source?: InteractionSource;
   title?: string;
   runMode: "interactive" | "one_shot";
   modelId: string | null;
@@ -154,6 +156,7 @@ async function startAgentRunSession(params: {
       effectiveNetworkPolicy,
       appName: organization?.appName ?? DEFAULT_APP_NAME,
       task,
+      source: params.source,
       runMode: params.runMode,
       inputFiles,
       ...(workspace
@@ -398,6 +401,7 @@ export async function runTaskInAgentRuntime(params: {
   completionTarget?: AgentRunCompletionTarget;
   onRuntimeSessionCreated?: RuntimeSessionCreatedCallback;
   task?: string | null;
+  source?: InteractionSource;
   title?: string;
   runMode: "interactive" | "one_shot";
   modelId: string | null;

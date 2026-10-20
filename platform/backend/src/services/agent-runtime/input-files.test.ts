@@ -57,6 +57,7 @@ describe("Agent run input files", () => {
       taskId: task.id,
       task: "Read both.",
       inputs,
+      source: "chatops:slack",
     });
     expect(prompt).toContain("Read both.");
     expect(prompt).toContain(agentRuntimeAttachmentsManifestPath(task.id));
@@ -87,6 +88,7 @@ describe("Agent run input files", () => {
       taskId: followUp.id,
       task: "Inspect the screenshot.",
       inputs: [followUpInput],
+      source: "chatops:slack",
     });
     expect(followUpPrompt).toContain("Inspect the screenshot.");
     expect(followUpPrompt).toContain(
@@ -97,6 +99,23 @@ describe("Agent run input files", () => {
     );
     expect(followUpPrompt).not.toContain(followUpInput.runtimePath);
     expect(followUpPrompt).not.toContain(followUpInput.originalName);
+    for (const source of [
+      undefined,
+      "chat",
+      "api",
+      "email",
+      "schedule-trigger",
+    ] as const) {
+      const directPrompt = taskWithAgentRunInputs({
+        taskId: followUp.id,
+        task: "Inspect the screenshot.",
+        inputs: [followUpInput],
+        source,
+      });
+      expect(directPrompt).toBe(
+        `Inspect the screenshot.\n\nAttached files are available for this run:\n- ${followUpInput.runtimePath}`,
+      );
+    }
   });
 
   test.each([

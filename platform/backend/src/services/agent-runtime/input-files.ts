@@ -1,3 +1,4 @@
+import type { InteractionSource } from "@archestra/shared";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { AgentRunInputModel } from "@/models";
 import type { AgentRunInput } from "@/types";
@@ -40,18 +41,29 @@ export async function persistAgentRunInputs(params: {
   );
 }
 
-/** Refer to staged inputs without triggering native clients' image-paste handlers. */
+/** Use manifests for messaging inputs; preserve direct paths for other callers. */
 export function taskWithAgentRunInputs(params: {
   taskId: string;
   task: string | null | undefined;
   inputs: AgentRunInput[];
+  source?: InteractionSource;
 }): string | null | undefined {
   if (params.inputs.length === 0) return params.task;
-  // The manifest is staged before startup for every runtime. Keep attachment
-  // paths out of the prompt: some TUIs expand image paths asynchronously and
-  // can swallow the submit key while doing so. Read files through normal tools
-  // after submission instead, independently of the client's input handling.
-  return `${params.task ?? ""}\n\nAttached files for this turn are listed in ${agentRuntimeAttachmentsManifestPath(params.taskId)}. Read the manifest, then use your file tools to inspect the relevant attachments.`.trim();
+  if (
+    params.source === "chatops:slack" ||
+    params.source === "chatops:ms-teams" ||
+    params.source === "chatops:telegram"
+  ) {
+    // Keep messaging attachments out of the prompt: some TUIs expand image
+    // paths asynchronously and can swallow the submit key while doing so.
+    // The current message's source decides this, not its reply destination,
+    // which can survive a later continuation from the web UI.
+    return `${params.task ?? ""}\n\nAttached files for this turn are listed in ${agentRuntimeAttachmentsManifestPath(params.taskId)}. Read the manifest, then use your file tools to inspect the relevant attachments.`.trim();
+  }
+  const paths = params.inputs
+    .map((input) => `- ${input.runtimePath}`)
+    .join("\n");
+  return `${params.task ?? ""}\n\nAttached files are available for this run:\n${paths}`.trim();
 }
 
 // === Internal helpers ===

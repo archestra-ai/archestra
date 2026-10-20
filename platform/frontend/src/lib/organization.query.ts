@@ -14,6 +14,7 @@ import { awaitBootstrapSeed, useSession } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import { isDocumentSeedFresh } from "@/lib/shell-deferral";
 import { environmentKeys } from "./environment.query";
 import { parseRoleAssignmentBlocked } from "./role-assignment-blocked";
 import {
@@ -332,6 +333,7 @@ export function useOrganization(
   options: { fresh?: boolean } = {},
 ) {
   const session = useSession();
+  const client = useQueryClient();
   const { fresh = false } = options;
 
   return useQuery({
@@ -350,9 +352,12 @@ export function useOrganization(
     // Org settings (theme, app name, etc.) change rarely and all mutations
     // imperatively setQueryData() this key, so a long stale time keeps
     // re-mounts cheap. Connect opts into a fresh read because these settings
-    // authorize which setup artifacts may be generated.
+    // authorize which setup artifacts may be generated. A value the server
+    // read for this document (a seeded approval page) is that fresh read.
     staleTime: fresh ? 0 : 5 * 60 * 1000,
-    refetchOnMount: fresh ? "always" : undefined,
+    refetchOnMount: fresh
+      ? (query) => (isDocumentSeedFresh(client, query) ? false : "always")
+      : undefined,
     refetchOnWindowFocus: fresh || undefined,
     // Restored on refresh: the shell reads the app name and theme from here,
     // so without it a reload repaints the branding a beat after the layout.

@@ -41,8 +41,9 @@ import {
   useAllCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useOrganization } from "@/lib/organization.query";
+import { organizationKeys, useOrganization } from "@/lib/organization.query";
 import { usePlugins } from "@/lib/plugins/plugin.query";
+import { markShellSeeded } from "@/lib/shell-deferral";
 import { saveConnectChoices } from "./connect-choices";
 import ConnectionPage from "./page";
 
@@ -1018,6 +1019,43 @@ describe("ConnectionPage (connect request approval)", () => {
     expect(
       screen.getByRole("status", { name: "Checking connection settings" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the flow at once from the settings the server read for this document", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "connectRequest=request&clientId=opencode",
+      ) as ReturnType<typeof useSearchParams>,
+    );
+    const settings = {
+      connectionSkillsEnabled: true,
+      connectionLlmProxyEnabled: true,
+      connectionPluginsEnabled: true,
+    };
+    // No read has happened since mount: only the server seed holds the data.
+    vi.mocked(useOrganization).mockReturnValue({
+      data: settings,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+    const seeded = new QueryClient();
+    markShellSeeded(seeded);
+    seeded.setQueryData(organizationKeys.details(), settings);
+
+    rtlRender(<ConnectionPage />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={seeded}>{children}</QueryClientProvider>
+      ),
+    });
+
+    expect(
+      screen.queryByRole("status", { name: "Checking connection settings" }),
+    ).toBeNull();
+    expect(connectionFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ skillsEnabled: true, llmProxyEnabled: true }),
+    );
   });
 
   it("keeps the flow visible during revalidation without dropping selections", () => {

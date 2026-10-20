@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  AGENT_OPTIONS_MAX_PAGE_SIZE,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import { headers } from "next/headers";
 import {
   agentRunQueryKey,
@@ -13,6 +17,7 @@ import {
   isShellSeedRoute,
   SHELL_SEED_HEADER,
   SHELL_SEED_SEARCH_HEADER,
+  seededConnectRequest,
   seededConversationId,
   seededRunId,
   seedsNewChatComposer,
@@ -24,6 +29,11 @@ import {
 } from "@/lib/chat/conversations-query-key";
 import { newChatSeedQueries } from "@/lib/chat/new-chat-seed";
 import { getBackendBaseUrl } from "@/lib/config/config";
+import {
+  CONNECTION_GATEWAY_PAGE_QUERY,
+  CONNECTION_GATEWAY_REFERENCE_FILTERS,
+  connectionApprovalSeedQueries,
+} from "@/lib/connection-approval-seed";
 import { environmentKeys } from "@/lib/environment.query";
 import { mcpRegistryIssueIndexQueryKey } from "@/lib/mcp/mcp-registry.query";
 import {
@@ -60,8 +70,8 @@ export type ShellSeed = {
 export async function prefetchShellSeed(): Promise<ShellSeed | null> {
   const requestHeaders = await headers();
   const route = requestHeaders.get(SHELL_SEED_HEADER);
-  if (!isShellSeedRoute(route)) return null;
   const search = requestHeaders.get(SHELL_SEED_SEARCH_HEADER);
+  if (!isShellSeedRoute(route, search)) return null;
   try {
     const apiHeaders = await getServerApiHeaders();
     const [session, bootstrap, queries] = await withServerSeedDeadline(
@@ -178,16 +188,133 @@ async function readShellQueries(params: {
     : params.route === "/chat" && seedsNewChatComposer(params.search)
       ? readNewChatComposer(options)
       : Promise.resolve([]);
-  const [shell, composerQueries, runs] = await Promise.all([
+  // The connection approval page: everything it reads before its final state.
+  const connectRequest = seededConnectRequest(params.route, params.search);
+  const approval = connectRequest
+    ? readConnectionApproval({
+        ...options,
+        connectRequest,
+        search: params.search,
+        bootstrap: params.bootstrap,
+      })
+    : Promise.resolve([]);
+  const [shell, composerQueries, runs, approvalQueries] = await Promise.all([
     Promise.all(reads),
     composer,
     readSidebarRuns({ ...options, bootstrap: params.bootstrap }),
+    approval,
   ]);
   return [
     ...shell.filter((entry) => entry !== null),
     ...runs,
     ...composerQueries,
+    ...approvalQueries,
   ];
+}
+
+/**
+ * The connection approval page's reads, each from its own endpoint, in
+ * parallel: the installer's request, the default gateway and the gateway
+ * list, the LLM Proxy, the skill names, the plugins, the provider keys and
+ * the models. The organization's connection settings (in the bootstrap) say
+ * which of the optional parts the page shows. The gateways the page names by
+ * id are read once the default gateway is known. A part the viewer may not
+ * read is left out, and its query loads in the browser.
+ */
+async function readConnectionApproval(options: {
+  headers: Record<string, string>;
+  signal: AbortSignal;
+  connectRequest: string;
+  search: string | null;
+  bootstrap: Promise<{ data?: ShellSeed["bootstrap"] }>;
+}): Promise<ShellSeed["queries"]> {
+  const { data: bootstrap } = await options.bootstrap.catch(() => ({
+    data: undefined,
+  }));
+  const organization = bootstrap?.organization;
+  if (!organization) return [];
+  const sdk = { headers: options.headers, signal: options.signal };
+  const urlGatewayId = new URLSearchParams(options.search ?? "").get(
+    "gatewayId",
+  );
+  const defaultGatewayRead = readValue(
+    archestraApiSdk.getDefaultMcpGateway({
+      ...sdk,
+      query: { includeTools: false },
+    }),
+  );
+  const referencesRead = defaultGatewayRead.then(async (defaultGateway) => {
+    const ids = [
+      ...new Set(
+        [
+          urlGatewayId,
+          organization.connectionDefaultMcpGatewayId,
+          defaultGateway?.id,
+        ].filter((id): id is string => !!id),
+      ),
+    ].sort();
+    if (ids.length === 0) return undefined;
+    const page = await readValue(
+      archestraApiSdk.getAgentOptions({
+        ...sdk,
+        query: {
+          ...CONNECTION_GATEWAY_REFERENCE_FILTERS,
+          ids,
+          limit: AGENT_OPTIONS_MAX_PAGE_SIZE,
+        },
+      }),
+    );
+    return page ? { ids, options: page.data } : undefined;
+  });
+  const [
+    request,
+    defaultGateway,
+    gatewayReferences,
+    gatewayPage,
+    llmProxy,
+    skillNames,
+    plugins,
+    availableApiKeys,
+    models,
+  ] = await Promise.all([
+    readValue(
+      archestraApiSdk.getClientConnection({
+        ...sdk,
+        path: { id: options.connectRequest },
+      }),
+    ),
+    defaultGatewayRead,
+    referencesRead,
+    readValue(
+      archestraApiSdk.getAgentOptionsPage({
+        ...sdk,
+        query: CONNECTION_GATEWAY_PAGE_QUERY,
+      }),
+    ),
+    organization.connectionLlmProxyEnabled
+      ? readValue(archestraApiSdk.getLlmProxy(sdk))
+      : undefined,
+    organization.connectionSkillsEnabled
+      ? readValue(archestraApiSdk.getSkillNames(sdk))
+      : undefined,
+    organization.connectionPluginsEnabled
+      ? readValue(archestraApiSdk.getPlugins({ ...sdk, query: {} }))
+      : undefined,
+    readValue(archestraApiSdk.getAvailableLlmProviderApiKeys(sdk)),
+    readValue(archestraApiSdk.getLlmModels(sdk)),
+  ]);
+  return connectionApprovalSeedQueries({
+    connectRequest: options.connectRequest,
+    request,
+    defaultGateway,
+    gatewayPage,
+    gatewayReferences,
+    llmProxy,
+    skillNames,
+    plugins,
+    availableApiKeys,
+    models,
+  });
 }
 
 /**
@@ -260,6 +387,18 @@ async function readNewChatComposer(options: {
     return error || !data ? [] : newChatSeedQueries(data);
   } catch {
     return [];
+  }
+}
+
+/** A read's data, or undefined when it failed or the viewer may not make it. */
+async function readValue<T>(
+  read: Promise<{ data?: T; error?: unknown }>,
+): Promise<T | undefined> {
+  try {
+    const { data, error } = await read;
+    return error ? undefined : data;
+  } catch {
+    return undefined;
   }
 }
 

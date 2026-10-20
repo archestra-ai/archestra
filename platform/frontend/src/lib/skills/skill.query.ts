@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { skillNamesQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
@@ -905,7 +906,7 @@ export type SkillName =
  */
 export function useSkillNames(params: { enabled: boolean }) {
   return useQuery({
-    queryKey: ["skills", "names"],
+    queryKey: skillNamesQueryKey,
     queryFn: async () => {
       const { data, error } = await getSkillNames();
       if (error) throwOnApiError(error);

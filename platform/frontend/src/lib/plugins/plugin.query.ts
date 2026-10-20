@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { pluginsQueryKey } from "@/lib/connection-approval-query-keys";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -56,7 +57,7 @@ export function usePlugins(
   const sharedWith = filters?.sharedWith;
   const owner = filters?.owner;
   return useQuery({
-    queryKey: ["plugins", { labels, access, sharedWith, owner }],
+    queryKey: pluginsQueryKey({ labels, access, sharedWith, owner }),
     enabled,
     queryFn: async () => {
       const { data, error } = await getPlugins({

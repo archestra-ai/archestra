@@ -309,7 +309,15 @@ export function ConnectCommandPanel({
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
   // user can override it in the review step.
-  const [platform, setPlatform] = useState<ConnectPlatformOption>("macos");
+  // A platform the URL names (the installer's request) is known on the
+  // server too, so it starts selected and the first render already matches.
+  const [platform, setPlatform] = useState<ConnectPlatformOption>(() =>
+    requestedPlatform === "windows" ||
+    requestedPlatform === "linux" ||
+    requestedPlatform === "macos"
+      ? toPlatformOption(requestedPlatform)
+      : "macos",
+  );
   useEffect(() => {
     setPlatform(
       requestedPlatform === "windows" ||

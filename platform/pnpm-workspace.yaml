@@ -48,8 +48,10 @@ overrides:
   # GHSA-j3f2-48v5-ccww (infinite loop in .proto option parsing) in 8.6.6.
   protobufjs: '>=8.6.6'
   '@protobufjs/utf8': '>=1.1.1'
-  # GHSA-587h-7wmj-h5pm (CVE-2026-112942): bundled launch-editor command
-  # injection is fixed in 7.3.7, published 2026-10-06 (past the age window).
+  # CVE-2026-112942 (HIGH, command injection) affects >=7.0.0 <=7.3.6 and is
+  # fixed in 7.3.7. Transitive-only (vitest, @vitest/mocker and
+  # vite-tsconfig-paths resolve it), so the override is the only way to lift
+  # every resolution past the vulnerable range.
   vite: 7.3.7
   # GHSA-395f-4hp3-45gv (HIGH): quadratic-complexity DoS in shell-quote's
   # parse(), fixed in 1.9.0. GHSA-pqg4-j6r4-53mv (CVE-2026-102422, CRITICAL):

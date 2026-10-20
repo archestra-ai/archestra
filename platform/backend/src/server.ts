@@ -89,6 +89,7 @@ import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import { PlaywrightRuntimeModel } from "@/models";
+import InteractionSessionHeadModel from "@/models/interaction-session-head";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
@@ -1041,6 +1042,9 @@ const startWebServer = async () => {
       void dropLegacyPayloadTrgmIndexes();
       void createAgentToolsIndexes();
       void createMcpServerIndexes();
+      // Fold pre-existing interactions into the session head table in
+      // bounded batches; the session list scans interactions until it is done.
+      void InteractionSessionHeadModel.backfill();
       void createInteractionsIndexes();
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1512,6 +1516,7 @@ const startWorker = async () => {
     void dropLegacyPayloadTrgmIndexes();
     void createAgentToolsIndexes();
     void createMcpServerIndexes();
+    void InteractionSessionHeadModel.backfill();
     void createInteractionsIndexes();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

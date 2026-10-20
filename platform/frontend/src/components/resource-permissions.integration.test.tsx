@@ -406,7 +406,12 @@ it("lets readers inspect grants without offering mutations", async () => {
   policy.effectiveActions = ["read"];
   renderEditor();
   await screen.findByText("Build automation");
-  expect(screen.getByText("You can’t change permissions.")).toBeInTheDocument();
+  // With the audience header shown, the lock beside it says why.
+  expect(
+    screen.getByRole("button", {
+      name: "You can't change permissions. Ask someone with full access to let you change permissions.",
+    }),
+  ).toBeInTheDocument();
   expect(
     screen.getByRole("combobox", { name: "Permission for Build automation" }),
   ).toBeDisabled();
@@ -436,7 +441,11 @@ it("a locked object offers no sharing even to someone who manages permissions", 
     </QueryClientProvider>,
   );
   await screen.findByText("Build automation");
-  expect(screen.getByText("Only for its owner.")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", {
+      name: "You can't change permissions. Only for its owner.",
+    }),
+  ).toBeInTheDocument();
   expect(
     screen.queryByRole("combobox", { name: "Add access" }),
   ).not.toBeInTheDocument();

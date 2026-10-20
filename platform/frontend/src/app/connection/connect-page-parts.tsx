@@ -2,19 +2,7 @@
 
 // Connect page pieces: picker, dialogs, helpers.
 
-import type { ResourceVisibilityScope } from "@archestra/shared";
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  History,
-  Search,
-} from "lucide-react";
-import dynamic from "next/dynamic";
-import Link from "next/link";
+import { Check, Copy, History } from "lucide-react";
 import {
   type ComponentProps,
   type ReactNode,
@@ -23,9 +11,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { SCOPE_META } from "@/components/scope-vocabulary";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -42,32 +27,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
-import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
-import { skillDetailHref } from "../skills/_parts/skill-page-config";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
-import type { ConnectChoices } from "./connect-choices";
-import type { ConnectPageData, ConnectPageSkill } from "./connect-page-data";
-
-// The skill viewer is the Skills pages' editor; it loads when a skill opens.
-const Response = dynamic(
-  () => import("@/components/ai-elements/response").then((m) => m.Response),
-  { ssr: false },
-);
-
-const MODAL_ROW_CAP = 200;
+import type { ConnectPageData } from "./connect-page-data";
 
 // The markdown renderer is large; only a skill being read needs it.
 
@@ -154,404 +124,6 @@ export function AgentSearch({
   );
 }
 
-// === Browse dialog: "See all", the lists plus the skills switch ===
-
-type BrowseTab = "servers" | "skills" | "plugins";
-
-export function BrowseDialog({
-  open,
-  tab,
-  focus,
-  onTab,
-  onOpenChange,
-  data,
-  client,
-  skills,
-  choices,
-}: {
-  open: boolean;
-  tab: BrowseTab;
-  /**
-   * From a row on the profile card: the server to open expanded (its tools),
-   * or the skill to open.
-   */
-  focus: string | null;
-  onTab: (t: BrowseTab) => void;
-  onOpenChange: (v: boolean) => void;
-  data: ConnectPageData;
-  client: ConnectClient;
-  skills: ConnectPageSkill[];
-  choices: ConnectChoices;
-}) {
-  const [q, setQ] = useState("");
-  const [skillOffset, setSkillOffset] = useState(0);
-  const [skillSearch, setSkillSearch] = useState("");
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSkillSearch(q);
-      setSkillOffset(0);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [q]);
-  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  const skillQuery = useSkillsPaginated(
-    {
-      limit: 100,
-      offset: skillOffset,
-      search: skillSearch || undefined,
-      includeContent: false,
-    },
-    {
-      enabled:
-        open &&
-        tab === "skills" &&
-        data.skillsEnabled &&
-        canReadSkills === true,
-    },
-  );
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [openSkill, setOpenSkill] = useState<ConnectPageSkill | null>(null);
-  // Only on open: switching tabs inside the dialog keeps what's open.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on open only
-  useEffect(() => {
-    if (open) {
-      setExpanded(tab === "servers" ? focus : null);
-      setOpenSkill(
-        tab === "skills" && focus
-          ? (skills.find((s) => s.id === focus) ?? null)
-          : null,
-      );
-      setQ("");
-      setSkillOffset(0);
-      setSkillSearch("");
-    }
-  }, [open, focus]);
-  const parts = data.partsFor(client);
-  const plugins = data.pluginsFor(client);
-  const needle = q.toLowerCase();
-  const serverMatch = data.servers.filter((s) =>
-    s.name.toLowerCase().includes(needle),
-  );
-  const skillMatch = skillQuery.data?.data ?? [];
-  const pluginMatch = plugins.filter((p) =>
-    `${p.name} ${p.description ?? ""}`.toLowerCase().includes(needle),
-  );
-  const tabs: [BrowseTab, string, string][] = [
-    ["servers", "MCP servers", fmt(data.servers.length)],
-    ["skills", "Skills", data.skillsEnabled ? fmt(data.totalSkills) : "off"],
-    ...(parts.plugins
-      ? [
-          ["plugins", "Plugins", fmt(plugins.length)] as [
-            BrowseTab,
-            string,
-            string,
-          ],
-        ]
-      : []),
-  ];
-  const skillsOff = parts.skills && !choices.skills;
-  const reading = tab === "skills" && openSkill;
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Reading a skill gets a taller, wider dialog for its SKILL.md. */}
-      <DialogContent
-        className={
-          reading ? "h-[85dvh] max-w-4xl" : "h-[min(85dvh,46rem)] max-w-3xl"
-        }
-      >
-        <DialogHeader className="px-6">
-          <DialogTitle>What {client.label} gets</DialogTitle>
-          <DialogDescription className="sr-only">
-            The MCP servers, skills and plugins this setup adds.
-          </DialogDescription>
-        </DialogHeader>
-        {reading ? (
-          <SkillReader skill={openSkill} onBack={() => setOpenSkill(null)} />
-        ) : (
-          <>
-            {/* Tabs and search stay put; only the list scrolls. */}
-            <div className="flex flex-wrap items-center gap-2 px-6 pt-4">
-              <Tabs value={tab} onValueChange={(v) => onTab(v as BrowseTab)}>
-                <TabsList>
-                  {tabs.map(([value, label, count]) => (
-                    <TabsTrigger key={value} value={value}>
-                      {label}{" "}
-                      <span className="tabular-nums text-muted-foreground">
-                        {count}
-                      </span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-              <div className="relative min-w-[12rem] flex-1">
-                <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder={`Search ${tab === "servers" ? "servers" : tab}`}
-                  className="pl-8"
-                />
-              </div>
-            </div>
-            <DialogBody className="space-y-3 px-6 pb-6">
-              {tab === "servers" ? (
-                <>
-                  {/* Said once here, not on every row: both are gateway-wide. */}
-                  {(data.allServers || data.progressive) && (
-                    <p className="text-xs text-muted-foreground">
-                      {data.allServers && data.progressive
-                        ? "New servers your org adds join automatically, and tools load on demand."
-                        : data.allServers
-                          ? "New servers your org adds join automatically."
-                          : "Tools load on demand."}
-                    </p>
-                  )}
-                  <ul className="divide-y rounded-lg border">
-                    {serverMatch.slice(0, MODAL_ROW_CAP).map((s) => {
-                      const isOpen = expanded === s.key;
-                      return (
-                        <li
-                          key={s.key}
-                          ref={(el) => {
-                            if (el && isOpen && s.key === focus)
-                              el.scrollIntoView({ block: "nearest" });
-                          }}
-                        >
-                          <UnstyledButton
-                            type="button"
-                            onClick={() => setExpanded(isOpen ? null : s.key)}
-                            aria-expanded={isOpen}
-                            className="flex w-full min-w-0 items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-muted/50"
-                          >
-                            <McpCatalogIcon
-                              icon={s.icon}
-                              catalogId={s.catalogId ?? undefined}
-                              size={18}
-                            />
-                            <span className="truncate">{s.name}</span>
-                            <span className="text-xs tabular-nums text-muted-foreground">
-                              {s.toolCount} {plural(s.toolCount, "tool")}
-                              <span>{serverCost(data, s.key)}</span>
-                            </span>
-                            <ChevronDown
-                              className={cn(
-                                "ml-auto size-3.5 text-muted-foreground transition-transform",
-                                isOpen && "rotate-180",
-                              )}
-                            />
-                          </UnstyledButton>
-                          {isOpen && (
-                            <div className="flex flex-wrap gap-1 px-4 pb-3 pl-11">
-                              {s.tools.slice(0, 40).map((t) => (
-                                <span
-                                  key={t.name}
-                                  title={t.description ?? undefined}
-                                  className="rounded border bg-muted/40 px-1.5 py-0.5 text-xs"
-                                >
-                                  {t.name}
-                                </span>
-                              ))}
-                              {s.tools.length > 40 && (
-                                <span className="px-1.5 py-0.5 text-xs text-muted-foreground">
-                                  {s.tools.length - 40} more
-                                </span>
-                              )}
-                              {s.tools.length === 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  Tool names load after the server is installed.
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                    {serverMatch.length === 0 && (
-                      <Empty>
-                        {data.servers.length === 0
-                          ? "No MCP servers on this gateway yet."
-                          : "No servers match."}
-                      </Empty>
-                    )}
-                  </ul>
-                  {serverMatch.length > MODAL_ROW_CAP && (
-                    <p className="text-xs text-muted-foreground">
-                      Showing {MODAL_ROW_CAP} of {serverMatch.length}. Search to
-                      narrow down.
-                    </p>
-                  )}
-                </>
-              ) : tab === "skills" ? (
-                canReadSkills === false ? (
-                  <Empty>You don’t have access to skills.</Empty>
-                ) : !data.skillsEnabled ? (
-                  <Empty>
-                    Your admin hasn't shared skills with agents yet.
-                  </Empty>
-                ) : (
-                  <>
-                    <ul
-                      className={cn(
-                        "divide-y rounded-lg border",
-                        skillsOff && "opacity-50",
-                      )}
-                    >
-                      {skillMatch.slice(0, MODAL_ROW_CAP).map((s) => (
-                        <li key={s.id}>
-                          <UnstyledButton
-                            type="button"
-                            onClick={() => setOpenSkill(s)}
-                            className="flex w-full min-w-0 items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-sm">{s.name}</span>
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {s.description}
-                              </span>
-                            </span>
-                            <span className="text-xs capitalize text-muted-foreground">
-                              {s.scope}
-                            </span>
-                            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-                          </UnstyledButton>
-                        </li>
-                      ))}
-                      {skillQuery.isPending ? (
-                        <Empty>Loading skills…</Empty>
-                      ) : skillQuery.isError ? (
-                        <Empty>Skills could not be loaded.</Empty>
-                      ) : (
-                        skillMatch.length === 0 && (
-                          <Empty>
-                            {data.totalSkills === 0
-                              ? "No skills in your org yet."
-                              : "No skills match."}
-                          </Empty>
-                        )
-                      )}
-                    </ul>
-                    <div className="flex items-center justify-between gap-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={skillOffset === 0 || skillQuery.isFetching}
-                        onClick={() =>
-                          setSkillOffset((offset) => Math.max(0, offset - 100))
-                        }
-                      >
-                        Previous
-                      </Button>
-                      <span className="text-xs text-muted-foreground">
-                        {fmt(skillQuery.data?.pagination.total ?? 0)} skills
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={
-                          skillQuery.isFetching ||
-                          skillOffset + 100 >=
-                            (skillQuery.data?.pagination.total ?? 0)
-                        }
-                        onClick={() => setSkillOffset((offset) => offset + 100)}
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </>
-                )
-              ) : (
-                <ul className="divide-y rounded-lg border">
-                  {pluginMatch.map((p) => (
-                    <li key={p.id}>
-                      {/* The plugin's own page shows what it contains. */}
-                      <Link
-                        href={`/plugins/${encodeURIComponent(p.id)}`}
-                        className="group/row flex min-w-0 items-center gap-3 px-4 py-2.5 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm group-hover/row:underline">
-                            {p.name}
-                          </span>
-                          {p.description && (
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {p.description}
-                            </span>
-                          )}
-                        </span>
-                        <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
-                      </Link>
-                    </li>
-                  ))}
-                  {pluginMatch.length === 0 && <Empty>No plugins match.</Empty>}
-                </ul>
-              )}
-            </DialogBody>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** One skill in full: its SKILL.md, read in place of the list. */
-function SkillReader({
-  skill,
-  onBack,
-}: {
-  skill: ConnectPageSkill;
-  onBack: () => void;
-}) {
-  const { data: detail, isLoading } = useSkill(skill.id);
-  // Just SKILL.md, rendered; the skill page has the rest.
-  const body = detail?.content ? stripFrontmatter(detail.content) : "";
-  return (
-    <>
-      <div className="flex min-w-0 items-start gap-2 px-6 pt-4">
-        <Button variant="ghost" size="icon-sm" onClick={onBack}>
-          <ArrowLeft />
-          <span className="sr-only">Back to skills</span>
-        </Button>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate text-sm font-semibold">
-              {skill.name}
-            </span>
-            <ScopeBadge scope={skill.scope} />
-          </div>
-          {skill.description && (
-            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-              {skill.description}
-            </p>
-          )}
-        </div>
-        <Link
-          href={skillDetailHref(skill.id)}
-          className="inline-flex shrink-0 items-center gap-1 rounded-sm pt-1 text-sm font-medium underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          Open skill page
-          <ArrowUpRight className="size-3.5" />
-        </Link>
-      </div>
-      {/* Only the SKILL.md box scrolls; the header stays put. */}
-      <DialogBody className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6">
-        {isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-5/6" />
-          </div>
-        ) : body ? (
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border p-5 text-sm">
-            <Response>{body}</Response>
-          </div>
-        ) : (
-          <Empty>This skill's instructions can't be shown.</Empty>
-        )}
-      </DialogBody>
-    </>
-  );
-}
-
 export function InfoDialog({
   open,
   onOpenChange,
@@ -575,14 +147,6 @@ export function InfoDialog({
         </DialogBody>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Empty({ children }: { children: ReactNode }) {
-  return (
-    <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-      {children}
-    </div>
   );
 }
 
@@ -678,21 +242,6 @@ export function PromptRow({
 
 // === Helpers ===
 
-/**
- * Every agent the picker offers, in its order: the featured tiles, then the
- * Other agents list, with Generic client last.
- */
-export function agentsInPickerOrder(data: ConnectPageData): ConnectClient[] {
-  const featuredIds = new Set(data.featuredClients.map((c) => c.id));
-  const others = data.clients.filter(
-    (c) => !featuredIds.has(c.id) && c.id !== "generic",
-  );
-  if (!data.hasClientOrder)
-    others.sort((a, b) => a.label.localeCompare(b.label));
-  const generic = data.clients.find((c) => c.id === "generic");
-  return [...data.featuredClients, ...others, ...(generic ? [generic] : [])];
-}
-
 export function nameOf(client: ConnectClient) {
   return client.id === "generic" ? "your agent" : client.label;
 }
@@ -717,37 +266,4 @@ export function approxTokens(n: number) {
   if (n < 1000) return `~${Math.max(100, Math.round(n / 100) * 100)} tokens`;
   const k = n / 1000;
   return `~${k < 100 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}K tokens`;
-}
-
-/**
- * One server's share of the context. On-demand loading is gateway-wide, so
- * the dialog says it once above the list instead.
- */
-function serverCost(data: ConnectPageData, key: string) {
-  if (!data.toolTokens || data.progressive) return "";
-  const tokens = data.toolTokens.byServer[key];
-  return tokens ? ` · ${approxTokens(tokens)}` : "";
-}
-
-/** SKILL.md without its YAML frontmatter blocks (name, description...). */
-function stripFrontmatter(content: string) {
-  let body = content.trimStart();
-  for (;;) {
-    const next = body
-      .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
-      .trimStart();
-    if (next === body) return body.trim();
-    body = next;
-  }
-}
-
-/** Who the skill is for, in the app's one scope vocabulary. */
-function ScopeBadge({ scope }: { scope: ResourceVisibilityScope }) {
-  const { label, icon: Icon, styles } = SCOPE_META[scope];
-  return (
-    <Badge variant="outline" className={cn("gap-1 font-normal", styles)}>
-      <Icon className="size-3" />
-      {label}
-    </Badge>
-  );
 }

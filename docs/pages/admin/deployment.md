@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-17
+lastUpdated: 2026-10-19
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -84,6 +84,20 @@ archestra:
 
 Provide the same database URL to the migration Job and application. The chart runs migrations before rolling out an upgrade. Keep `archestra.migrationJob.enabled` enabled unless your pipeline applies migrations separately.
 
+To verify the database's TLS certificate, mount the CA bundle with `archestra.extraVolumes` and `archestra.extraVolumeMounts` and point the URL at it, for example `?sslmode=verify-full&sslrootcert=/etc/ssl/db/ca.pem`. The web pods, worker pods and migration Job all get these mounts. The migration Job skips `persistentVolumeClaim` volumes, because it runs while the previous pods still hold their claims.
+
+```yaml
+archestra:
+  extraVolumes:
+    - name: db-ca
+      secret:
+        secretName: db-ca-bundle
+  extraVolumeMounts:
+    - name: db-ca
+      mountPath: /etc/ssl/db
+      readOnly: true
+```
+
 For Knowledge Base vector storage, PostgreSQL must have the pgvector extension available and the migration user must be able to create the extension, or an administrator must install it first.
 
 Set `archestra.database.connectionBudget` to size query pools across peak web and worker pods, including rollout overlap. Leave room in PostgreSQL for other clients and reserved connections. Each peak pod needs at least 13 budgeted connections; the chart rejects smaller budgets. A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/reference/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Complete one rollout before starting another.
@@ -129,6 +143,20 @@ The server caches the most-active list for at most 30 seconds, including load ti
 `archestra.replicaCount` controls web replicas. `archestra.worker.replicaCount` controls separate workers. Enabling `archestra.horizontalPodAutoscaler.enabled` replaces the web replica setting; the default HPA range is 2–10 pods. Worker replicas remain manual. Increase database connection capacity alongside replicas.
 
 Use `archestra.resources` and `archestra.worker.resources` to size pods. Diagnostics storage shared by concurrent pods requires a compatible `ReadWriteMany` volume; check `archestra.diagnostics` in the selected chart's values.
+
+The web and worker pods share `archestra.nodeSelector`, `archestra.tolerations`, `archestra.affinity`, `archestra.topologySpreadConstraints` and `archestra.podAnnotations`.
+
+To survive a zone outage, spread replicas across zones with `archestra.topologySpreadConstraints`. Leave out `labelSelector` and each Deployment counts only its own pods, so web pods and worker pods each spread evenly and can share a zone:
+
+```yaml
+archestra:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+```
+
+For pod anti-affinity, add `matchLabelKeys: [app.kubernetes.io/component]` to the term so web and worker pods are counted separately (Kubernetes 1.31 and later).
 
 ### Accessing the Platform
 

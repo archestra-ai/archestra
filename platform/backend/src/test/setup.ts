@@ -86,6 +86,14 @@ let pristineConfig: Record<string, unknown> | null = null;
 // would pull config.ts before the env above is set.
 type EnterpriseTierRef = typeof import("../enterprise-tier.js").enterpriseTier;
 let enterpriseTier: EnterpriseTierRef | null = null;
+// archestraMcpBranding is the same kind of singleton: a test that syncs the
+// built-in catalog for a white-labeled organization leaves the tool prefix
+// branded (`acme_copilot__` instead of `archestra__`) for every later test in
+// the worker, and the next file in the worker then names its OpenAPPA tools
+// after that organization. Reset it with config, on the way in and out.
+type ArchestraMcpBrandingRef =
+  typeof import("../archestra-mcp-server/branding.js").archestraMcpBranding;
+let archestraMcpBranding: ArchestraMcpBrandingRef | null = null;
 if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
   liveConfig = (await import("../config.js")).default as unknown as Record<
     string,
@@ -93,6 +101,8 @@ if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
   >;
   pristineConfig = structuredClone(liveConfig);
   enterpriseTier = (await import("../enterprise-tier.js")).enterpriseTier;
+  archestraMcpBranding = (await import("../archestra-mcp-server/branding.js"))
+    .archestraMcpBranding;
 }
 type TestDatabase = ReturnType<typeof drizzle>;
 let testDb: TestDatabase | null = null;
@@ -204,6 +214,10 @@ beforeEach(async ({ task }) => {
   if (enterpriseTier) {
     enterpriseTier.setUserCountForTesting(0);
   }
+
+  // Same for the MCP branding singleton: back to the unbranded default, so a
+  // white-label test earlier in the worker cannot rename this test's tools.
+  archestraMcpBranding?.syncFromOrganization(null);
 
   // Agent Runtime availability is detected from whatever cluster the default
   // kubeconfig points at, so a developer machine with the Agent Sandbox
@@ -359,6 +373,7 @@ function restoreTestGlobals(): void {
   if (liveConfig && pristineConfig) {
     restoreConfig(liveConfig, structuredClone(pristineConfig));
   }
+  archestraMcpBranding?.syncFromOrganization(null);
 }
 
 /**

@@ -1,11 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
-  assignedSubagentsSummary,
-  assignedToolsSummary,
   excludedSourcesSummary,
   excludedSubagentsSummary,
-  excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
@@ -135,18 +132,7 @@ describe("shouldOfferAppCatalogs", () => {
   });
 });
 
-describe("Auto-mode summaries", () => {
-  // Auto pins progressive loading and the connection prompt, so their rows are
-  // not rendered there and this line is where what Auto does gets said.
-  it("says what Auto buys, not just how many are excluded", () => {
-    expect(excludedToolsSummary(0)).toBe(
-      "Saves context by exposing only search_tools and run_tool, with access to every tool.",
-    );
-    expect(excludedToolsSummary(3)).toBe(
-      "Saves context by exposing only search_tools and run_tool, with access to every tool except 3.",
-    );
-  });
-
+describe("Auto-mode knowledge summary", () => {
   it("names the absence of exceptions rather than counting to zero", () => {
     expect(excludedSourcesSummary(0)).toBe(
       "Every knowledge source, with no exceptions.",
@@ -177,18 +163,5 @@ describe("All-mode subagent summary", () => {
     expect(excludedSubagentsSummary(2)).toBe(
       "All local agents are subagents, except 2 excluded.",
     );
-  });
-});
-
-describe("Custom-mode summaries", () => {
-  it("says nothing at zero, leaving the empty state to say it once", () => {
-    expect(assignedToolsSummary(0)).toBe("");
-    expect(assignedSubagentsSummary(0)).toBe("");
-  });
-
-  it("counts what is assigned, singular and plural", () => {
-    expect(assignedToolsSummary(1)).toBe("1 tool assigned.");
-    expect(assignedToolsSummary(12)).toBe("12 tools assigned.");
-    expect(assignedSubagentsSummary(3)).toBe("3 subagents assigned.");
   });
 });

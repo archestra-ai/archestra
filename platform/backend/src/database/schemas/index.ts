@@ -136,6 +136,10 @@ export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";
 export {
+  interactionSessionHeadsBackfillTable,
+  interactionSessionHeadsTable,
+} from "./interaction-session-head";
+export {
   interactionUserActivityDeltasTable,
   interactionUserActivityMissingOwnersTable,
   interactionUserActivityStateTable,

@@ -450,6 +450,20 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
       setSelectedCatalogItem(null);
       setReauthServerId(null);
     },
+    /**
+     * Closes whichever install form is open. A host that shows the form
+     * inline calls it when it navigates away, so the form doesn't reopen
+     * wherever the same orchestrator also renders the modal dialogs.
+     */
+    closeInstallForms: () => {
+      closeDialog("remote-install");
+      closeDialog("local-install");
+      closeDialog("no-auth");
+      setSelectedCatalogItem(null);
+      setLocalServerCatalogItem(null);
+      setNoAuthCatalogItem(null);
+      setReauthServerId(null);
+    },
   };
 }
 

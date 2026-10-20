@@ -26,6 +26,17 @@ import {
 import { ConnectorIdentityCache } from "../identity-cache";
 
 const BATCH_SIZE = 50;
+/**
+ * Largest file the Contents API returns inline. Bigger files come back with no
+ * content, so they are read through the Git Blobs API instead.
+ */
+const CONTENTS_API_MAX_FILE_BYTES = 1024 * 1024;
+/**
+ * Repository files above this size are skipped rather than fetched: the Git
+ * Blobs API stops at 100 MB, and a text file this large is almost always
+ * generated output or a data dump rather than knowledge worth indexing.
+ */
+const MAX_REPOSITORY_FILE_BYTES = 10 * 1024 * 1024;
 /** Cap for the per-pass login → profile cache: sized so a normal org never evicts. */
 const USER_PROFILE_CACHE_MAX_SIZE = 10_000;
 /**
@@ -375,11 +386,11 @@ export class GithubConnector extends BaseConnector {
   }): AsyncGenerator<ConnectorSyncBatch> {
     const { octokit, config, repo, checkpoint, isLastGroup } = params;
     const repoFullName = `${repo.owner}/${repo.name}`;
-    const indexedExtensions = getIndexedFileExtensions(config);
+    const fileTypeFilter = getFileTypeFilter(config);
     const indexedPathPrefixes = getIndexedPathPrefixes(config);
 
     this.log.info(
-      { repo: repoFullName, indexedExtensions, indexedPathPrefixes },
+      { repo: repoFullName, fileTypeFilter, indexedPathPrefixes },
       "Starting repository file sync",
     );
 
@@ -423,7 +434,7 @@ export class GithubConnector extends BaseConnector {
       "Fetching repository tree",
     );
 
-    let treeItems: Array<{ path: string; sha: string }>;
+    let treeItems: RepositoryFile[];
     try {
       const treeResponse = await octokit.rest.git.getTree({
         owner: repo.owner,
@@ -438,12 +449,13 @@ export class GithubConnector extends BaseConnector {
             item.type === "blob" &&
             item.path &&
             isWithinIndexedPaths(item.path, indexedPathPrefixes) &&
-            isIndexedRepositoryFile(item.path, indexedExtensions) &&
+            isIndexedRepositoryFile(item.path, fileTypeFilter) &&
             item.sha,
         )
         .map((item) => ({
           path: item.path as string,
           sha: item.sha as string,
+          size: item.size,
         }));
 
       // GitHub caps a recursive tree listing; past the cap it returns a partial
@@ -520,16 +532,38 @@ export class GithubConnector extends BaseConnector {
       );
 
       for (const file of batch) {
+        if (file.size !== undefined && file.size > MAX_REPOSITORY_FILE_BYTES) {
+          this.log.warn(
+            { repo: repoFullName, path: file.path, size: file.size },
+            "Repository file exceeds the size limit, skipping",
+          );
+          this.trackSkipped({
+            itemId: file.path,
+            sourceId: githubFileSourceId(repo.name, file.path),
+            name: file.path,
+            reason: `File exceeds ${MAX_REPOSITORY_FILE_BYTES} byte size limit`,
+          });
+          continue;
+        }
+
         await this.rateLimit();
         const content = await this.safeItemFetch({
-          fetch: () => getFileContent(octokit, repo, file.path),
+          fetch: () => getFileContent(octokit, repo, file),
           fallback: null,
           itemId: file.path,
           resource: "file_content",
           itemUnavailable: true,
         });
 
-        if (content !== null) {
+        if (content !== null && looksBinary(content)) {
+          this.trackSkipped({
+            itemId: file.path,
+            sourceId: githubFileSourceId(repo.name, file.path),
+            name: file.path,
+            reason: "Binary file",
+            category: "unsupported_type",
+          });
+        } else if (content !== null) {
           documents.push(
             repositoryFileToDocument(file.path, content, repo, branch),
           );
@@ -537,6 +571,7 @@ export class GithubConnector extends BaseConnector {
       }
 
       const failures = this.flushFailures();
+      const skipped = this.flushSkipped();
       const hasMoreFiles = i + BATCH_SIZE < treeItems.length;
 
       this.log.info(
@@ -547,6 +582,7 @@ export class GithubConnector extends BaseConnector {
           totalBatches,
           documentsIndexed: documents.length,
           failureCount: failures.length,
+          skippedCount: skipped.length,
           hasMore: hasMoreFiles || !isLastGroup,
         },
         "Repository file batch completed",
@@ -555,6 +591,7 @@ export class GithubConnector extends BaseConnector {
       yield {
         documents,
         failures,
+        skipped,
         checkpoint: buildCheckpoint({
           type: "github",
           itemUpdatedAt: null,
@@ -1069,18 +1106,19 @@ async function getRepos(
       // which 404s and gets silently skipped, ingesting nothing.
       const { owner, name } = parseRepoEntry(entry, config.owner);
       let defaultBranch: string | null = null;
+      let htmlUrl = deriveRepoHtmlUrl({
+        githubUrl: config.githubUrl,
+        owner,
+        name,
+      });
       try {
         const response = await octokit.rest.repos.get({ owner, repo: name });
         defaultBranch = response.data.default_branch;
+        htmlUrl = response.data.html_url || htmlUrl;
       } catch {
         // If we can't fetch repo metadata, fall back to null (main→master fallback)
       }
-      repos.push({
-        owner,
-        name,
-        htmlUrl: `${config.githubUrl.replace(/\/api\/v3$/, "").replace(/\/+$/, "")}/${owner}/${name}`,
-        defaultBranch,
-      });
+      repos.push({ owner, name, htmlUrl, defaultBranch });
     }
     return repos;
   }
@@ -1131,6 +1169,26 @@ async function getRepos(
   }
 
   return repos;
+}
+
+/**
+ * Best-effort web URL for a repo when GitHub's own `html_url` is unavailable.
+ * The configured URL is the API base: github.com serves its API from a separate
+ * `api.github.com` host, while GitHub Enterprise Server serves it under
+ * `/api/v3` on the web host.
+ */
+function deriveRepoHtmlUrl(params: {
+  githubUrl: string;
+  owner: string;
+  name: string;
+}): string {
+  const { githubUrl, owner, name } = params;
+  const base = githubUrl.replace(/\/+$/, "").replace(/\/api\/v3$/, "");
+  const webBase = base.replace(
+    /^(https?:\/\/)api\.github\.com$/i,
+    "$1github.com",
+  );
+  return `${webBase}/${owner}/${name}`;
 }
 
 /**
@@ -1229,23 +1287,113 @@ function shouldSkipItem(item: any, labelsToSkip?: string[]): boolean {
 
 const DEFAULT_REPOSITORY_FILE_EXTENSIONS = [".md", ".mdx", ".yaml", ".yml"];
 
-function getIndexedFileExtensions(config: GithubConfig): string[] {
-  const extensions =
+/**
+ * Extensions that `*` leaves out without fetching: they are never text, and
+ * fetching each one would spend the credential's hourly request budget only to
+ * discard the result. Anything else that turns out to be binary is caught by
+ * {@link looksBinary} after the fetch.
+ */
+const BINARY_FILE_EXTENSIONS = new Set([
+  ".7z",
+  ".avif",
+  ".bin",
+  ".bmp",
+  ".class",
+  ".dll",
+  ".dylib",
+  ".eot",
+  ".exe",
+  ".gif",
+  ".gz",
+  ".ico",
+  ".jar",
+  ".jpeg",
+  ".jpg",
+  ".mov",
+  ".mp3",
+  ".mp4",
+  ".otf",
+  ".pdf",
+  ".png",
+  ".pyc",
+  ".so",
+  ".tar",
+  ".tgz",
+  ".ttf",
+  ".wasm",
+  ".webm",
+  ".webp",
+  ".woff",
+  ".woff2",
+  ".zip",
+]);
+
+type FileTypeFilter = {
+  /** `*`: every text file. */
+  allTextFiles: boolean;
+  suffixes: string[];
+  basenames: string[];
+};
+
+/**
+ * Parse the configured File Types. An entry is one of:
+ * - `*`: every text file;
+ * - an extension, with or without the dot or a leading `*` (`.md`, `md`,
+ *   `*.md`, `.tm.hcl`);
+ * - an exact file name (`Dockerfile`, `Makefile`), matched in any folder.
+ * A dotless entry is ambiguous between the last two, so it matches either way.
+ */
+function getFileTypeFilter(config: GithubConfig): FileTypeFilter {
+  const entries =
     config.fileTypes && config.fileTypes.length > 0
       ? config.fileTypes
       : DEFAULT_REPOSITORY_FILE_EXTENSIONS;
 
-  return extensions
-    .map((extension) => extension.trim().toLowerCase())
-    .filter(Boolean)
-    .map((extension) =>
-      extension.startsWith(".") ? extension : `.${extension}`,
-    );
+  const filter: FileTypeFilter = {
+    allTextFiles: false,
+    suffixes: [],
+    basenames: [],
+  };
+  for (const raw of entries) {
+    const entry = raw.trim().toLowerCase();
+    if (!entry) continue;
+    if (entry === "*" || entry === "*.*") {
+      filter.allTextFiles = true;
+    } else if (entry.startsWith("*.")) {
+      filter.suffixes.push(entry.slice(1));
+    } else if (entry.startsWith(".")) {
+      filter.suffixes.push(entry);
+    } else {
+      filter.suffixes.push(`.${entry}`);
+      filter.basenames.push(entry);
+    }
+  }
+  return filter;
 }
 
-function isIndexedRepositoryFile(path: string, extensions: string[]): boolean {
+function isIndexedRepositoryFile(
+  path: string,
+  filter: FileTypeFilter,
+): boolean {
   const lower = path.toLowerCase();
-  return extensions.some((extension) => lower.endsWith(extension));
+  const basename = lower.slice(lower.lastIndexOf("/") + 1);
+  if (
+    filter.basenames.includes(basename) ||
+    filter.suffixes.some((suffix) => lower.endsWith(suffix))
+  ) {
+    return true;
+  }
+  if (!filter.allTextFiles) return false;
+  const dot = basename.lastIndexOf(".");
+  return dot <= 0 || !BINARY_FILE_EXTENSIONS.has(basename.slice(dot));
+}
+
+/**
+ * Git's own heuristic: a NUL byte near the start of a file marks it binary.
+ * Text decoded from such a file is noise, not knowledge.
+ */
+function looksBinary(content: string): boolean {
+  return content.slice(0, 8000).includes("\u0000");
 }
 
 /**
@@ -1278,23 +1426,41 @@ function isWithinIndexedPaths(path: string, prefixes: string[]): boolean {
   );
 }
 
+type RepositoryFile = { path: string; sha: string; size?: number };
+
 async function getFileContent(
   octokit: Octokit,
   repo: { owner: string; name: string },
-  path: string,
+  file: RepositoryFile,
 ): Promise<string> {
-  const response = await octokit.rest.repos.getContent({
-    owner: repo.owner,
-    repo: repo.name,
-    path,
-  });
+  if (file.size === undefined || file.size <= CONTENTS_API_MAX_FILE_BYTES) {
+    const response = await octokit.rest.repos.getContent({
+      owner: repo.owner,
+      repo: repo.name,
+      path: file.path,
+    });
 
-  const data = response.data;
-  if (!("content" in data) || !data.content) {
-    throw new Error(`No content returned for ${path}`);
+    const data = response.data;
+    if ("content" in data && data.content) {
+      return Buffer.from(data.content, "base64").toString("utf-8");
+    }
   }
 
-  return Buffer.from(data.content, "base64").toString("utf-8");
+  // Past the Contents API's inline limit GitHub returns the file's metadata
+  // with empty content; the blob itself is readable up to 100 MB.
+  const blob = await octokit.rest.git.getBlob({
+    owner: repo.owner,
+    repo: repo.name,
+    file_sha: file.sha,
+  });
+  if (!blob.data.content) {
+    throw new Error(`No content returned for ${file.path}`);
+  }
+
+  return Buffer.from(
+    blob.data.content,
+    blob.data.encoding === "base64" ? "base64" : "utf-8",
+  ).toString("utf-8");
 }
 
 function repositoryFileToDocument(

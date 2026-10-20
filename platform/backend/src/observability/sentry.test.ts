@@ -5,6 +5,7 @@ import type { ErrorEvent, EventHint, TransactionEvent } from "@sentry/core";
 import * as Sentry from "@sentry/node";
 import { SentrySampler, SentrySpanProcessor } from "@sentry/opentelemetry";
 import { describe, expect, test } from "vitest";
+import config from "@/config";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import {
   buildRawProviderError,
@@ -155,9 +156,10 @@ describe("filterErrorEvent", () => {
   test("groups transient DB connectivity failures by root cause", () => {
     // A DNS lookup failure the ORM wrapped per-query: fingerprint by the
     // root cause so an outage groups into one issue, not one per statement.
+    const databaseHost = new URL(config.database.url).hostname;
     const dbError = new Error(
       'Failed query: select "id" from "agents" where "slug" = $1',
-      { cause: new Error("getaddrinfo ENOTFOUND postgresql.archestra-dev") },
+      { cause: new Error(`getaddrinfo ENOTFOUND ${databaseHost}`) },
     );
     const event = makeEvent();
     const result = filterErrorEvent(event, hintFor(dbError));

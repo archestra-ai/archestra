@@ -74,7 +74,9 @@ export function GuardrailsPolicyEditor({
               }
               ariaLabel="Policy source file"
               searchPlaceholder="Search included batteries"
-              className="h-8 w-64 max-w-full"
+              // On phones the picker takes its own full-width row under the
+              // view toggle and the guide link, instead of a ragged middle row.
+              className="order-last h-8 w-full sm:order-none sm:w-64"
               pinnedItems={[{ value: "root", label: "Organization policy" }]}
               items={(declarations.data?.batteries ?? []).map((battery) => ({
                 value: battery.entry,
@@ -121,7 +123,7 @@ export function GuardrailsPolicyEditor({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <span>Policy guide</span>
+                    <span className="sr-only sm:not-sr-only">Policy guide</span>
                     <ExternalLink className="size-3.5" />
                   </a>
                 </Button>

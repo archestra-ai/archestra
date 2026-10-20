@@ -378,6 +378,26 @@ describe("ConnectPage gateway footprint", () => {
     expect(within(dialog).queryByText(/16\.9K tokens/)).toBeNull();
   });
 
+  it("links each server name to its registry page and lists no tool names", async () => {
+    api.use(http.get(previewUrl, () => HttpResponse.json(listed(1200))));
+    show();
+    await requestToolCounts();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    await userEvent.click(
+      await within(summary).findByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const row = within(dialog).getByRole("listitem");
+    expect(
+      within(row).getByRole("link", { name: "Example server" }),
+    ).toHaveAttribute("href", "/mcp/registry/catalog-1");
+    expect(within(row).getByText("2 tools")).toBeVisible();
+    // The server page lists the tools; the dialog stays one line per server.
+    expect(within(dialog).queryByText("example__read")).toBeNull();
+  });
+
   it("shows an empty gateway instead of retaining catalog counts", async () => {
     api.use(
       http.get(previewUrl, () =>

@@ -235,7 +235,7 @@ fn remove_pending(
     owner: &LeaseOwner,
     operations: Vec<OperationKey>,
     results: Vec<ProcessedResultKey>,
-) -> Result<(), appa_eventlog::postgres::PostgresError> {
+) -> Result<(), crate::SqlError> {
     if operations.is_empty() && results.is_empty() {
         return Ok(());
     }
@@ -273,10 +273,7 @@ fn remove_pending(
 
 /// Where `root`'s event log ends now, or -1 for an empty log. A failed dispatch
 /// compares it with where the log ended when it began.
-pub(crate) fn log_end(
-    sql: &Sql<'_>,
-    root: &str,
-) -> Result<i64, appa_eventlog::postgres::PostgresError> {
+pub(crate) fn log_end(sql: &Sql<'_>, root: &str) -> Result<i64, crate::SqlError> {
     let root = root.to_owned();
     sql.with_client(move |client| {
         Ok(client

@@ -429,6 +429,10 @@ function PermissionsEditor({
       ? null
       : grantsAudience(draftGrants ?? []);
   const audienceHeader = hideAudience ? null : audience;
+  const lockReason = canManage
+    ? null
+    : (lockedReason ??
+      "Ask someone with full access to let you change permissions.");
   const Container = embedded ? "div" : "form";
   const noun = scopedResourceNouns[policy.resource];
   const explanation =
@@ -635,7 +639,9 @@ function PermissionsEditor({
           embedded={embedded && !dialog}
           standalone={standalone || inShell}
         >
-          {!canManage && (
+          {/* With an audience header, the header carries this as a lock
+              icon; the notice is only for blocks that show no header. */}
+          {!canManage && !audienceHeader && (
             <InlineNotice variant="info">
               <Info />
               <span className="font-medium">You can’t change permissions.</span>
@@ -646,7 +652,10 @@ function PermissionsEditor({
             </InlineNotice>
           )}
           {layout !== "settings" && audienceHeader && (
-            <AccessAudienceHeader audience={audienceHeader} />
+            <AccessAudienceHeader
+              audience={audienceHeader}
+              lockedReason={lockReason}
+            />
           )}
           {layout !== "settings" && !audience && title !== null && (
             <div className="min-w-0 space-y-1">
@@ -701,7 +710,10 @@ function PermissionsEditor({
           )}
 
           {layout === "settings" ? (
-            <PermissionsSettingsSection audience={audienceHeader}>
+            <PermissionsSettingsSection
+              audience={audienceHeader}
+              lockedReason={lockReason}
+            >
               {accessRows}
             </PermissionsSettingsSection>
           ) : (

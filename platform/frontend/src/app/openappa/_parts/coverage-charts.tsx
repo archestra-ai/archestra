@@ -41,7 +41,7 @@ export function RulesCard() {
         />
       ) : !totals ? (
         <div className="flex items-center justify-center gap-6">
-          <Skeleton className="size-32 shrink-0 rounded-full" />
+          <Skeleton className="size-28 shrink-0 rounded-full" />
           <Skeleton className="hidden h-28 flex-1 @[22rem]:block" />
         </div>
       ) : totals.tools === 0 ? (
@@ -142,7 +142,7 @@ function CoverageDonut({ totals }: { totals: Totals }) {
     // The legend shows beside the donut while the card is wide enough for
     // both; narrower, the donut stands alone and hovering a slice names it.
     <div className="flex items-center justify-center gap-5">
-      <div className="relative size-32 shrink-0">
+      <div className="relative size-28 shrink-0">
         <svg
           viewBox="0 0 100 100"
           className="size-full"
@@ -205,7 +205,7 @@ function CoverageDonut({ totals }: { totals: Totals }) {
             <TooltipTrigger asChild>
               <div
                 className={cn(
-                  "col-span-4 grid grid-cols-subgrid items-center py-1 transition-opacity duration-150 motion-reduce:transition-none",
+                  "col-span-4 grid grid-cols-subgrid items-center py-0.5 transition-opacity duration-150 motion-reduce:transition-none",
                   hovered && slice.key !== hovered && "opacity-50",
                 )}
                 {...hover(slice.key)}

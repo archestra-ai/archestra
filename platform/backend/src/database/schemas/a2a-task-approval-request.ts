@@ -24,7 +24,7 @@ const a2aTaskApprovalRequestTable = pgTable(
     approved: boolean("approved").notNull().default(false),
     resolved: boolean("resolved").notNull().default(false),
     // OpenAPPA human review: set only when the paused call is the
-    // `execute_remedy_plan` for an offer that needs the `hitl` authority.
+    // `execute_remedy_plan` for an offer that needs the `human-approval` authority.
     // The blocked action itself lives in OpenAPPA's tables.
     openappaOfferId: text("openappa_offer_id"),
     openappaReviewText: text("openappa_review_text"),

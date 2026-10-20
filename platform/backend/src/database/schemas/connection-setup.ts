@@ -107,6 +107,8 @@ const connectionSetupsTable = pgTable(
   (table) => [
     uniqueIndex("connection_setups_token_hash_idx").on(table.tokenHash),
     index("connection_setups_org_id_idx").on(table.organizationId),
+    // The Connect page lists one user's setups.
+    index("connection_setups_user_id_idx").on(table.userId),
     index("connection_setups_token_start_idx").on(table.tokenStart),
   ],
 );

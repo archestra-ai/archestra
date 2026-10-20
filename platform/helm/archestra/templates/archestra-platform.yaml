@@ -209,4 +209,12 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.archestra.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.archestra.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- include "archestra-platform.topologySpreadConstraints" (dict "constraints" . "selectorLabels" (include "archestra-platform.selectorLabels" $)) | nindent 8 }}
+      {{- end }}
       {{- include "archestra-platform.volumes" . | nindent 6 }}

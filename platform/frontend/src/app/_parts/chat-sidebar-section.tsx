@@ -68,6 +68,10 @@ import { TypingText } from "@/components/ui/typing-text";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
+  SIDEBAR_PINNED_RUNS,
+  SIDEBAR_RECENT_RUNS,
+} from "@/lib/agent-runs-query-keys";
+import {
   useCancelAgentRun,
   useDeleteAgentRun,
   useMyAgentRun,
@@ -75,6 +79,7 @@ import {
   useUpdateAgentRun,
 } from "@/lib/agent-runtime.query";
 import {
+  SIDEBAR_PINNED_APPS_QUERY,
   useApps,
   useOpenAppInChat,
   useOpenExternalAppInChat,
@@ -99,6 +104,7 @@ import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import {
+  SIDEBAR_PINNED_PROJECTS_QUERY,
   useCreateProject,
   usePinProject,
   useProjects,
@@ -158,8 +164,8 @@ export function ChatSidebarSection({
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const runsEnabled =
     isAuthenticated && canReadConversation === true && runtimeEnabled;
-  const recentRunsQuery = useMyAgentRuns(runsEnabled, { pinned: false });
-  const pinnedRunsQuery = useMyAgentRuns(runsEnabled, { pinned: true });
+  const recentRunsQuery = useMyAgentRuns(runsEnabled, SIDEBAR_RECENT_RUNS);
+  const pinnedRunsQuery = useMyAgentRuns(runsEnabled, SIDEBAR_PINNED_RUNS);
   const selectedRunId = pathname.startsWith("/chat/runs/")
     ? (pathname.split("/").at(-1) ?? "")
     : "";
@@ -230,9 +236,7 @@ export function ChatSidebarSection({
   // projects are asked for: the sidebar shows none of the others.
   const { data: pinnedProjectsData, isLoading: pinnedProjectsLoading } =
     useProjects({
-      pinned: true,
-      limit: 100,
-      offset: 0,
+      ...SIDEBAR_PINNED_PROJECTS_QUERY,
       enabled: canReadProjects === true,
     });
   const pinProjectMutation = usePinProject();
@@ -242,11 +246,9 @@ export function ChatSidebarSection({
   // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
   // useApps skips the request for roles without app:read. Only pinned apps
   // are asked for: the full list is far larger and the sidebar shows none of it.
-  const { data: appsData, isLoading: pinnedAppsLoading } = useApps({
-    limit: 100,
-    offset: 0,
-    pinned: true,
-  });
+  const { data: appsData, isLoading: pinnedAppsLoading } = useApps(
+    SIDEBAR_PINNED_APPS_QUERY,
+  );
   const pinAppMutation = usePinApp();
   const openAppMutation = useOpenAppInChat();
   const openExternalAppMutation = useOpenExternalAppInChat();

@@ -36,13 +36,16 @@ export const ChatMessages = Object.assign(
   function DeferredChatMessages(
     props: ComponentProps<typeof ChatMessagesModule.ChatMessages>,
   ) {
-    const [mounted, setMounted] = useState(false);
+    // A conversation document the server rendered ships the transcript with
+    // the page (see ConversationParts): it renders in the first pass, as the
+    // server drew it.
+    const [mounted, setMounted] = useState(LazyChatMessages.isLoaded);
     useEffect(() => {
       afterNextPaint(() => startTransition(() => setMounted(true)));
     }, []);
     return mounted ? <LazyChatMessages {...props} /> : null;
   },
-  { preload: LazyChatMessages.preload },
+  { preload: LazyChatMessages.preload, provide: LazyChatMessages.provide },
 );
 
 export const ConversationFilesPanel = lazyComponent<

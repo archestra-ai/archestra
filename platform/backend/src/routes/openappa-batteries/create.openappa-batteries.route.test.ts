@@ -165,6 +165,7 @@ describe("guardrails batteries", () => {
       .filter(
         (battery) =>
           battery.name !== ARCHESTRA_BATTERY &&
+          battery.name !== CODING_BATTERY &&
           battery.name !== CLAUDE_CODE_BATTERY,
       )
       .flatMap((battery) => battery.installs);
@@ -1351,9 +1352,11 @@ describe("guardrails batteries", () => {
   });
 });
 
+const CODING_BATTERY = "coding";
 const CLAUDE_CODE_BATTERY = "claude-code";
 const SHIPPED_ENTRIES = [
   bundledEntry(ARCHESTRA_BATTERY),
+  bundledEntry(CODING_BATTERY),
   bundledEntry(CLAUDE_CODE_BATTERY),
 ];
 

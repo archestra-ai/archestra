@@ -2,7 +2,7 @@
 "use client";
 
 import type { CreatedBy, ResourceVisibilityScope } from "@archestra/shared";
-import { Building2, UserRound, Users } from "lucide-react";
+import { Building2, Lock, UserRound, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { CreatorAvatar, creatorLabel } from "@/components/created-by-cell";
 import { SCOPE_META } from "@/components/scope-vocabulary";
@@ -158,15 +158,39 @@ export function AudienceChip({
 export function AccessAudienceHeader({
   audience,
   action,
+  lockedReason,
 }: {
   audience: ResourceVisibilityScope;
   action?: ReactNode;
+  /** Why the viewer cannot change these grants; null when they can. */
+  lockedReason?: string | null;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">Who can use it</h3>
         <AudienceChip audience={audience} />
+        {lockedReason && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <UnstyledButton
+                type="button"
+                aria-label={`You can't change permissions. ${lockedReason}`}
+                className="inline-flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+              >
+                <Lock className="size-3.5" />
+              </UnstyledButton>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <div className="flex flex-col gap-0.5">
+                <span className="font-medium">
+                  You can&apos;t change permissions.
+                </span>
+                <span>{lockedReason}</span>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
       {action}
     </div>

@@ -52,6 +52,64 @@ describe("chat conversation and message routes", () => {
     await app.close();
   });
 
+  test("a tail read returns the last messages of the full read and the count of the earlier ones", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const conversation = await ConversationModel.create({
+      organizationId,
+      userId: currentUser.id,
+      agentId: agent.id,
+    });
+    // Two messages share a timestamp, so the order also rests on the id.
+    const start = Date.parse("2026-01-01T00:00:00Z");
+    await MessageModel.bulkCreate(
+      Array.from({ length: 12 }, (_, index) => {
+        const id = uuidv7();
+        const role = index % 2 === 0 ? "user" : "assistant";
+        return {
+          id,
+          conversationId: conversation.id,
+          role,
+          content: {
+            id,
+            role,
+            parts: [{ type: "text", text: `turn ${index}` }],
+          },
+          createdAt: new Date(start + Math.min(index, 10) * 1000),
+        };
+      }),
+    );
+
+    const read = async (query = "") => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations/${conversation.id}${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    };
+    const full = await read();
+    const tail = await read("?tail=5");
+
+    expect(full.messages).toHaveLength(12);
+    expect(full.olderMessageCount).toBeUndefined();
+    expect(tail.messages).toEqual(full.messages.slice(-5));
+    expect(tail.olderMessageCount).toBe(7);
+    const { messages: _full, ...fullRest } = full;
+    const { messages: _tail, olderMessageCount: _count, ...tailRest } = tail;
+    expect(tailRest).toEqual(fullRest);
+    expect((await read("?tail=50")).olderMessageCount).toBe(0);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/chat/conversations/${conversation.id}?tail=0`,
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
+
   test("upgrading policy chats keeps ordinary and former policy chats readable", async ({
     makeAgent,
   }) => {

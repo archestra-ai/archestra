@@ -2,7 +2,6 @@ import { calculatePaginationMeta, parseFullToolName } from "@archestra/shared";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
-import { UNDECLARED_TOOL_ANNOTATOR } from "@/services/guardrails-policy";
 import type { CompositionView } from "@/types/openappa-batteries";
 import type {
   CoverageBatteryFit,
@@ -697,16 +696,14 @@ async function buildReport(
     };
     const specific = matched.find((entry) => entry.rule.selector === null);
     const primary = specific ?? fallback;
-    // The default wildcards deliberately add no coverage: noop adds nothing,
-    // and the default model catch-all is what judges a tool no rule names.
-    // Origin and revision do not change this classification.
+    // A noop catch-all adds no coverage: it labels nothing. Any other
+    // catch-all annotator, the default model one included, judges the call.
     const covered =
       primary !== null &&
       primary !== undefined &&
       !(
         primary.rule.source === "catchall" &&
-        primary.rule.annotator !== null &&
-        DEFAULT_CATCH_ALL_ANNOTATORS.has(primary.rule.annotator)
+        primary.rule.annotator === NOOP_ANNOTATOR
       );
     const own: CoverageTool = primary
       ? {
@@ -917,10 +914,5 @@ function page<T>(
 /** A battery rule's name: `mcp/<namespace>/<tool>`. */
 const CANONICAL_RULE_NAME = /^mcp\/([^/]+)\/(.+)$/;
 
-/** The catch-all annotators a default policy routes `*` to. */
-const DEFAULT_CATCH_ALL_ANNOTATORS = new Set([
-  "noop",
-  // The catch-all's name in starting policies saved before the rename.
-  "archestra.undeclared-tool",
-  UNDECLARED_TOOL_ANNOTATOR,
-]);
+/** The annotator that labels nothing; a catch-all routed to it covers no tool. */
+const NOOP_ANNOTATOR = "noop";

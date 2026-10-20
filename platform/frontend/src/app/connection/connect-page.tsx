@@ -68,6 +68,7 @@ import {
   type AfterConnectPhase,
   type AfterConnectRun,
 } from "./after-connect";
+import { BrowseDialog } from "./browse-dialog";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -85,13 +86,13 @@ import {
   type ConnectPlugin,
   type ConnectServer,
   gatewayServerName,
+  type StartingTools,
   useConnectPageData,
   welcomePrompt,
 } from "./connect-page-data";
 import {
   AgentSearch,
   approxTokens,
-  BrowseDialog,
   fmt,
   nameOf,
   PromptRow,
@@ -106,6 +107,7 @@ import {
   LastConnectedMark,
   useConnectedAgents,
 } from "./connected-agents";
+import { GatewayLink } from "./gateway-link";
 import { type IncludeChange, IncludeDialog } from "./include-dialog";
 import {
   readsPrompts,
@@ -321,7 +323,6 @@ export function ConnectPage() {
         onOpenChange={(v) => !v && setDialog(null)}
         data={data}
         client={client}
-        skills={skillsSorted}
         choices={choices}
       />
       <IncludeDialog
@@ -899,7 +900,7 @@ function scriptNextSteps(client: ConnectClient): string[] {
     case "claude-code":
       return [
         "Say yes when the terminal offers to sign you in to the gateway.",
-        "Open a new terminal and run the claude command it prints. Skills load on their own.",
+        "Press Enter when it offers to start Claude Code, or run the claude command it prints in a new terminal. Skills load on their own.",
       ];
     case "cursor":
       return [
@@ -910,23 +911,23 @@ function scriptNextSteps(client: ConnectClient): string[] {
     case "codex":
       return [
         "Say yes when the terminal offers to sign you in to the gateway.",
-        "Open a new terminal and run the codex command it prints.",
+        "Press Enter when it offers to start Codex, or run the codex command it prints in a new terminal.",
         "For skills, run /plugins in Codex and install the plugin.",
       ];
     case "copilot-cli":
       return [
         "If you connected an LLM provider, its settings are saved in providers.json. The printed environment variables are optional.",
-        "Open a new terminal and run the copilot command it prints. It opens the browser to sign in to the gateway.",
+        "Press Enter when it offers to start Copilot CLI, or run the copilot command it prints in a new terminal. It opens the browser to sign in to the gateway.",
       ];
     case "opencode":
       return [
         "Say yes when the terminal offers to sign you in to the gateway.",
-        "Close OpenCode if it's open, then run the opencode command it prints in a new terminal.",
+        "Close OpenCode if it's open, then press Enter when it offers to start it.",
       ];
     case "kilo":
       return [
         "Say yes when the terminal offers to sign you in to the gateway.",
-        "Close Kilo Code if it's open, then run the kilo command it prints in a new terminal.",
+        "Close Kilo Code if it's open, then press Enter when it offers to start it.",
       ];
     default:
       return [`Restart ${nameOf(client)}.`];
@@ -1342,6 +1343,7 @@ function ProfileCard({
                   tools !== null && tools > 0 && data.toolTokens ? (
                     <ToolLoadingNote
                       progressive={data.progressive}
+                      startingTools={data.startingTools}
                       clientId={client.id}
                       tools={tools}
                       tokens={data.toolTokens.total}
@@ -1609,12 +1611,14 @@ function ListRow({
 function ToolLoadingNote({
   clientId,
   progressive,
+  startingTools,
   tools,
   tokens,
   count,
 }: {
   clientId: string;
   progressive: boolean;
+  startingTools: StartingTools | null;
   tools: number;
   /** Observed or estimated tokens of the tool list the agent starts with. */
   tokens: number | null;
@@ -1633,7 +1637,7 @@ function ToolLoadingNote({
       {label}
       <InfoTip label="How tools load">
         {progressive
-          ? `Your agent starts with ${fmt(tools)} ${plural(tools, "tool")} and finds more when a task needs them.`
+          ? startingToolsSentence(tools, startingTools)
           : `All ${fmt(tools)} ${plural(tools, "tool")} load at the start of each session. More tools take more of your agent's working memory.`}
         <span hidden={tokens === null}>
           {" "}
@@ -1648,6 +1652,30 @@ function ToolLoadingNote({
   );
 }
 
+/**
+ * How many tools a progressive gateway starts with, and why it is more than
+ * search_tools and run_tool when it lists tools that must be callable at once.
+ */
+function startingToolsSentence(
+  tools: number,
+  startingTools: StartingTools | null,
+): string {
+  const start = `Your agent starts with ${fmt(tools)} ${plural(tools, "tool")}`;
+  if (!startingTools || startingTools.discovery === 0)
+    return `${start} and finds more when a task needs them.`;
+  const extras = [
+    startingTools.controls > 0 &&
+      `${fmt(startingTools.controls)} for questions and guardrail recovery`,
+    startingTools.apps > 0 &&
+      `${fmt(startingTools.apps)} that open an app's interface, which clients must see up front`,
+  ].filter((part): part is string => !!part);
+  const discovery =
+    "search_tools and run_tool, which find every other tool when a task needs it";
+  return extras.length === 0
+    ? `${start}: ${discovery}.`
+    : `${start}: ${discovery}, plus ${extras.join(" and ")}.`;
+}
+
 /** The gateway the admin picked, then the lists; empty states in words. */
 function cardIntro(
   data: ConnectPageData,
@@ -1658,8 +1686,9 @@ function cardIntro(
   if (servers.length > 0 || extras > 0)
     return data.gateway ? (
       <>
-        Connects to <span className="font-semibold">{data.gateway.name}</span>,
-        which gives it:
+        Connects to{" "}
+        <GatewayLink gateway={data.gateway} className="font-semibold" />, which
+        gives it:
       </>
     ) : (
       "Connects to your organization's gateway, which gives it:"

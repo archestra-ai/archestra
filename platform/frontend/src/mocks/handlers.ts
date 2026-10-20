@@ -310,6 +310,16 @@ export const handlers: HttpHandler[] = [
   ...paths("/api/bootstrap").map((url) =>
     http.get(url, () => HttpResponse.json(null, { status: 401 })),
   ),
+  // The new-chat composer's bundle: unavailable by default for the same
+  // reason, so the composer loads from the individual reads.
+  ...paths("/api/bootstrap/new-chat").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
+  // A conversation's first screen: unavailable by default, so the page loads
+  // the conversation and composer from the individual reads.
+  ...paths("/api/bootstrap/conversation/:id").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
   // Recipients for an object not created yet: the admin may share with
@@ -603,6 +613,12 @@ export const handlers: HttpHandler[] = [
   // The agents list asks which of the caller's agents is their personal
   // default; unmocked, it reaches the real backend and trips the leak guard.
   ...getJson("/api/members/default-agent", { defaultAgentId: null }),
+  // The new-chat page asks for the member's saved model too; unmocked, the
+  // request escapes to the real backend and trips the leak guard.
+  ...getJson("/api/members/default-model", {
+    modelId: null,
+    chatApiKeyId: null,
+  }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",

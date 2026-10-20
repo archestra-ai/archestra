@@ -36,12 +36,18 @@ test("keeps drafts editable and sending disabled while the compact chat roster l
   await expect(
     page.getByRole("button", { name: "Submit", exact: true }),
   ).toBeEnabled();
-  await page.evaluate(() => sessionStorage.clear());
   await mswControl.use({
     method: "get",
     url: "/api/agents/chat-roster",
     body: [agent],
     delayMs: 60_000,
+  });
+  // Cold reload: drop the refresh snapshot as the next document starts.
+  // Clearing it from this page would race the persister's debounced write,
+  // which can land after the clear and before the navigation; a restored
+  // snapshot then answers the roster and sending is never held.
+  await page.addInitScript(() => {
+    sessionStorage.clear();
   });
   await page.reload({ waitUntil: "commit" });
   await expect(textarea).toBeEditable();

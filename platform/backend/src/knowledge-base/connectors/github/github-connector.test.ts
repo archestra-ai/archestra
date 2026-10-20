@@ -12,6 +12,7 @@ const mockListComments = vi.fn();
 const mockGetRef = vi.fn();
 const mockGetTree = vi.fn();
 const mockGetContent = vi.fn();
+const mockGetBlob = vi.fn();
 const mockReposGet = vi.fn();
 const mockListCollaborators = vi.fn();
 const mockReposListTeams = vi.fn();
@@ -52,7 +53,7 @@ vi.mock("@octokit/rest", () => ({
         list: mockTeamsList,
         listMembersInOrg: mockListMembersInOrg,
       },
-      git: { getRef: mockGetRef, getTree: mockGetTree },
+      git: { getRef: mockGetRef, getTree: mockGetTree, getBlob: mockGetBlob },
     };
   },
 }));
@@ -1339,6 +1340,260 @@ describe("GithubConnector", () => {
       expect(mdBatch?.documents[0].content).toBe("# B file");
       expect(mdBatch?.failures).toHaveLength(1);
       expect(mdBatch?.failures?.[0].itemId).toBe("a.md");
+    });
+  });
+
+  describe("repository file source URLs", () => {
+    async function syncReadmeSourceUrl(
+      config: Record<string, unknown>,
+    ): Promise<string | undefined> {
+      mockListForRepo.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+      mockGetTree.mockResolvedValueOnce({
+        data: { tree: [{ type: "blob", path: "README.md", sha: "sha1" }] },
+      });
+      mockGetContent.mockResolvedValueOnce({
+        data: { content: Buffer.from("# Hello").toString("base64") },
+      });
+
+      const documents = [];
+      for await (const batch of connector.sync({
+        config: { ...config, includeRepositoryFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        documents.push(...batch.documents);
+      }
+      return documents.find((d) => d.metadata.kind === "repository_file")
+        ?.sourceUrl;
+    }
+
+    test("links to the repository's web page reported by GitHub", async () => {
+      mockReposGet.mockResolvedValue({
+        data: {
+          default_branch: "main",
+          html_url: "https://github.com/test-org/my-repo",
+        },
+      });
+
+      await expect(syncReadmeSourceUrl(validConfig)).resolves.toBe(
+        "https://github.com/test-org/my-repo/blob/main/README.md",
+      );
+    });
+
+    test("links to github.com, not the API host, when repo metadata is unavailable", async () => {
+      mockReposGet.mockReset();
+      mockReposGet.mockRejectedValue(new Error("Not found"));
+
+      await expect(syncReadmeSourceUrl(validConfig)).resolves.toBe(
+        "https://github.com/test-org/my-repo/blob/main/README.md",
+      );
+    });
+
+    test("links to the GitHub Enterprise web host when repo metadata is unavailable", async () => {
+      mockReposGet.mockReset();
+      mockReposGet.mockRejectedValue(new Error("Not found"));
+
+      await expect(
+        syncReadmeSourceUrl({
+          ...validConfig,
+          githubUrl: "https://ghe.example.com/api/v3",
+        }),
+      ).resolves.toBe(
+        "https://ghe.example.com/test-org/my-repo/blob/main/README.md",
+      );
+    });
+  });
+
+  describe("large repository files", () => {
+    async function syncFiles(
+      tree: Array<{ path: string; sha: string; size: number }>,
+    ): Promise<ConnectorSyncBatch[]> {
+      mockListForRepo.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+      mockGetTree.mockResolvedValueOnce({
+        data: { tree: tree.map((file) => ({ type: "blob", ...file })) },
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeRepositoryFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+      return batches;
+    }
+
+    test("indexes a file larger than the Contents API's 1 MiB inline limit", async () => {
+      const largeContent = `# Big\n${"x".repeat(2 * 1024 * 1024)}`;
+      // What GitHub returns for a 1-100 MB file: metadata, but no content.
+      mockGetContent.mockResolvedValue({
+        data: { type: "file", encoding: "none", content: "" },
+      });
+      mockGetBlob.mockResolvedValue({
+        data: {
+          encoding: "base64",
+          content: Buffer.from(largeContent).toString("base64"),
+        },
+      });
+
+      const batches = await syncFiles([
+        { path: "docs/big.md", sha: "big-sha", size: largeContent.length },
+      ]);
+
+      const fileDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file");
+      expect(fileDocs).toHaveLength(1);
+      expect(fileDocs[0].content).toBe(largeContent);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([]);
+    });
+
+    test("skips a file over the size limit without failing the run", async () => {
+      mockGetContent.mockResolvedValue({
+        data: { content: Buffer.from("# Small").toString("base64") },
+      });
+
+      const batches = await syncFiles([
+        { path: "data/dump.md", sha: "dump-sha", size: 50 * 1024 * 1024 },
+        { path: "README.md", sha: "readme-sha", size: 7 },
+      ]);
+
+      const fileDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file");
+      expect(fileDocs.map((d) => d.metadata.filePath)).toEqual(["README.md"]);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([]);
+      expect(batches.flatMap((b) => b.skipped ?? [])).toEqual([
+        expect.objectContaining({
+          itemId: "data/dump.md",
+          sourceId: "my-repo#file:data/dump.md",
+        }),
+      ]);
+      expect(mockGetContent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ path: "data/dump.md" }),
+      );
+      expect(mockGetBlob).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("repository file types", () => {
+    async function syncWithFileTypes(params: {
+      fileTypes: string[];
+      files: Record<string, string>;
+    }): Promise<ConnectorSyncBatch[]> {
+      mockListForRepo.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: Object.keys(params.files).map((path, index) => ({
+            type: "blob",
+            path,
+            sha: `sha${index}`,
+          })),
+        },
+      });
+      mockGetContent.mockImplementation(async ({ path }: { path: string }) => ({
+        data: {
+          content: Buffer.from(params.files[path], "binary").toString("base64"),
+        },
+      }));
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeRepositoryFiles: true,
+          fileTypes: params.fileTypes,
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+      return batches;
+    }
+
+    function indexedPaths(batches: ConnectorSyncBatch[]): unknown[] {
+      return batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file")
+        .map((d) => d.metadata.filePath);
+    }
+
+    test("matches exact file names at the root and in nested folders", async () => {
+      const batches = await syncWithFileTypes({
+        fileTypes: ["Dockerfile", "Makefile"],
+        files: {
+          Dockerfile: "FROM node:22",
+          "services/api/Dockerfile": "FROM node:22",
+          Makefile: "build:",
+          "docs/README.md": "# Docs",
+          "docs/Dockerfile-guide.md": "# Guide",
+        },
+      });
+
+      expect(indexedPaths(batches)).toEqual([
+        "Dockerfile",
+        "services/api/Dockerfile",
+        "Makefile",
+      ]);
+    });
+
+    test("matches dotless, compound, and glob-style extensions", async () => {
+      const batches = await syncWithFileTypes({
+        fileTypes: ["md", ".tm.hcl", "*.yaml"],
+        files: {
+          "README.md": "# Readme",
+          "infra/stack.tm.hcl": "stack {}",
+          "infra/main.hcl": "resource {}",
+          "deploy/app.yaml": "kind: Deployment",
+          "src/index.ts": "export {};",
+        },
+      });
+
+      expect(indexedPaths(batches)).toEqual([
+        "README.md",
+        "infra/stack.tm.hcl",
+        "deploy/app.yaml",
+      ]);
+    });
+
+    test("indexes every text file for *, skipping binaries", async () => {
+      const batches = await syncWithFileTypes({
+        fileTypes: ["*"],
+        files: {
+          "README.md": "# Readme",
+          "src/index.ts": "export {};",
+          Dockerfile: "FROM node:22",
+          "assets/logo.png": "\x89PNG\r\n\x1a\n\x00\x00",
+          "bin/tool": "\x7fELF\x02\x01\x01\x00\x00\x00",
+        },
+      });
+
+      expect(indexedPaths(batches)).toEqual([
+        "README.md",
+        "src/index.ts",
+        "Dockerfile",
+      ]);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([]);
+      expect(batches.flatMap((b) => b.skipped ?? [])).toEqual([
+        expect.objectContaining({
+          itemId: "bin/tool",
+          sourceId: "my-repo#file:bin/tool",
+        }),
+      ]);
+      expect(mockGetContent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ path: "assets/logo.png" }),
+      );
     });
   });
 

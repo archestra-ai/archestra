@@ -66,6 +66,7 @@ import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee"
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import {
   createAgentToolsIndexes,
+  createInteractionsIndexes,
   createMcpServerIndexes,
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
@@ -88,6 +89,7 @@ import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import { PlaywrightRuntimeModel } from "@/models";
+import InteractionSessionHeadModel from "@/models/interaction-session-head";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
@@ -1034,11 +1036,16 @@ const startWebServer = async () => {
       // Fire-and-forget index maintenance, all concurrent (non-write-blocking):
       // drop the legacy interactions payload indexes on deployments upgrading
       // from before migration 0116 stopped creating them, and build the
-      // agent_tools and mcp_server lookup indexes. Idempotent; errors are
-      // logged inside and retried next boot.
+      // agent_tools, mcp_server and interactions lookup indexes (the
+      // session-preview backfill and passthrough-key indexes). Idempotent;
+      // errors are logged inside and retried next boot.
       void dropLegacyPayloadTrgmIndexes();
       void createAgentToolsIndexes();
       void createMcpServerIndexes();
+      // Fold pre-existing interactions into the session head table in
+      // bounded batches; the session list scans interactions until it is done.
+      void InteractionSessionHeadModel.backfill();
+      void createInteractionsIndexes();
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1509,6 +1516,8 @@ const startWorker = async () => {
     void dropLegacyPayloadTrgmIndexes();
     void createAgentToolsIndexes();
     void createMcpServerIndexes();
+    void InteractionSessionHeadModel.backfill();
+    void createInteractionsIndexes();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

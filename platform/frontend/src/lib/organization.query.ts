@@ -38,7 +38,9 @@ export const appearanceKeys = {
 export function useAppearanceSettings(enabled = true) {
   return useQuery({
     queryKey: appearanceKeys.public(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.appearance) return seed.appearance;
       const { data, error } = await archestraApiSdk.getAppearanceSettings();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;

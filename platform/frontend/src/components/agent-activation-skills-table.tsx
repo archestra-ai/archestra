@@ -2,10 +2,10 @@
 
 import { useCallback, useState } from "react";
 import {
+  AVAILABLE_SKILLS_PAGE_SIZE,
   AvailableSkillsMessageTable,
   AvailableSkillsTable,
 } from "@/components/available-skills-table";
-import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { agentActivationSkillReferenceKey } from "@/lib/agent-skill-reference";
 import {
   type AgentActivationSkill,
@@ -26,7 +26,7 @@ export function AgentActivationSkillsTable({
   const [search, setSearch] = useState("");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
-    pageSize: DEFAULT_TABLE_LIMIT,
+    pageSize: AVAILABLE_SKILLS_PAGE_SIZE,
   });
   const normalizedSearch = search.trim();
   const { data, isPending, isFetching, isError } = useAgentActivationSkills({

@@ -320,7 +320,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json().error.message).toContain(
-      'Revision 1: unsupported policy: tool "grain__*" has an invalid qualified identity',
+      'Revision 1: unsupported policy: A full tool name has three parts: where the tool comes from, the server, and the tool, like "mcp/github/list_issues". "grain__*" is not a full name or the exact name of a tool. Use one of them.',
     );
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
     // Turning it off is never refused.

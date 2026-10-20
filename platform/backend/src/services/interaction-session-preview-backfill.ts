@@ -22,11 +22,13 @@ import InteractionModel from "@/models/interaction";
  * and stored bytes. A delta-encoded row (Claude Code, Claude Desktop) stores
  * only the messages new since its parent, so its preview needs the request
  * folded from its ancestors; when one turns up, its whole thread is filled at
- * once, each row folded from its parent's fold, so the chain is loaded and
- * folded one time rather than once per row. Filling those rows chunk by chunk
- * held dozens of whole conversations at a time and exhausted the worker's
- * heap on sessions of hundreds of turns; a crashed worker then started over
- * from the same rows.
+ * once, its rows loaded oldest first in chunks of the same size and each
+ * folded from the previous one, so the chain is loaded and folded one time
+ * rather than once per row and a thread of any size holds one chunk and one
+ * conversation at a time. Filling those rows chunk by chunk through the
+ * read path's reconstruction held dozens of whole conversations at a time
+ * and exhausted the worker's heap on sessions of hundreds of turns; a
+ * crashed worker then started over from the same rows.
  *
  * Driven by the `interaction_session_preview_backfill` periodic task. Once
  * every row has a preview, a run is one empty read of a partial index that only
@@ -41,18 +43,14 @@ class InteractionSessionPreviewBackfill {
   private cursor: { createdAt: string; id: string } | null = null;
 
   /**
-   * Threads left alone this pass because their stored requests exceed the
-   * memory budget. Their rows keep turning up in later pages; remembering
-   * them keeps each thread sized and reported once per pass.
+   * `chunkRows` caps the rows loaded at once, for tests that want to see a
+   * thread cross chunk boundaries without seeding dozens of rows.
    */
-  private skippedThreads = new Set<string>();
-
   async run(
-    params: { timeBudgetMs?: number; threadStoredBytesLimit?: number } = {},
+    params: { timeBudgetMs?: number; chunkRows?: number } = {},
   ): Promise<{ filled: number; failed: number; complete: boolean }> {
     const deadline = Date.now() + (params.timeBudgetMs ?? RUN_TIME_BUDGET_MS);
-    const threadStoredBytesLimit =
-      params.threadStoredBytesLimit ?? THREAD_MAX_STORED_BYTES;
+    const chunkRows = params.chunkRows ?? MAX_CHUNK_ROWS;
     let filled = 0;
     let failed = 0;
 
@@ -63,7 +61,6 @@ class InteractionSessionPreviewBackfill {
       });
       if (page.length === 0) {
         this.cursor = null;
-        this.skippedThreads.clear();
         return { filled, failed, complete: true };
       }
 
@@ -75,7 +72,7 @@ class InteractionSessionPreviewBackfill {
       const whole = page.filter(
         (row) => row.threadId === null || row.sessionId === null,
       );
-      for (const ids of budgetedChunks(whole)) {
+      for (const ids of budgetedChunks(whole, chunkRows)) {
         if (Date.now() >= deadline) {
           exhausted = true;
           break;
@@ -97,14 +94,12 @@ class InteractionSessionPreviewBackfill {
         thread.pageRows += 1;
         threads.set(key, thread);
       }
-      for (const [key, thread] of threads) {
-        if (this.skippedThreads.has(key)) continue;
+      for (const thread of threads.values()) {
         if (exhausted || Date.now() >= deadline) {
           exhausted = true;
           break;
         }
-        const result = await fillThread(thread, threadStoredBytesLimit);
-        if (result.skipped) this.skippedThreads.add(key);
+        const result = await fillThread(thread, chunkRows);
         filled += result.filled;
         failed += result.failed;
       }
@@ -126,24 +121,16 @@ export const interactionSessionPreviewBackfill =
 /** Rows read per keyset page, before the byte budget subdivides them. */
 const PAGE_SIZE = 200;
 
-/** Whole-request rows filled per statement. */
+/** Rows loaded at once, for whole-request rows and for a thread's rows alike. */
 const MAX_CHUNK_ROWS = 20;
 
 /**
- * Stored request bytes of whole-request rows loaded at once. `pg_column_size`
- * reports the compressed size, and a request parsed from it takes several
- * times that, so this stays well below what the worker could hold. A single
- * row larger than this travels alone.
+ * Stored request bytes loaded at once. `pg_column_size` reports the
+ * compressed size, and a request parsed from it takes several times that, so
+ * this stays well below what the worker could hold. A single row larger than
+ * this travels alone.
  */
 const MAX_CHUNK_BYTES = 4 * 1024 * 1024;
-
-/**
- * Stored request bytes (compressed) the rows a thread fill loads may hold.
- * Their suffixes are parsed and held while the rows are folded; a Claude Code
- * session of a thousand turns stays under this, and a thread above it is left
- * to the list's on-read fallback rather than risk the worker's heap.
- */
-const THREAD_MAX_STORED_BYTES = 16 * 1024 * 1024;
 
 /**
  * One run's share of the worker. Well under the task queue's five-minute stuck
@@ -196,40 +183,27 @@ async function fillChunk(
 }
 
 /**
- * Fill one thread. A thread over the byte budget, or one whose fill fails as
- * a whole, is reported once and left to the list's on-read fallback. When the
- * fill throws, the thread's rows on the current page count as failed; how
- * many more it holds is unknown at that point.
+ * Fill one thread. A thread whose fill fails as a whole is reported and left
+ * to the list's on-read fallback; its rows on the current page count as
+ * failed, since how many more it holds is unknown at that point.
  */
 async function fillThread(
   thread: ThreadOnPage,
-  storedBytesLimit: number,
-): Promise<{ filled: number; failed: number; skipped: boolean }> {
+  chunkRows: number,
+): Promise<{ filled: number; failed: number }> {
   try {
-    const result = await InteractionModel.fillThreadSessionPreviews({
+    return await InteractionModel.fillThreadSessionPreviews({
       sessionId: thread.sessionId,
       threadId: thread.threadId,
-      storedBytesLimit,
+      batchRows: chunkRows,
+      batchBytes: MAX_CHUNK_BYTES,
     });
-    if (result.skipped) {
-      logger.warn(
-        {
-          sessionId: thread.sessionId,
-          threadId: thread.threadId,
-          rows: result.failed,
-          storedBytes: result.storedBytes,
-          storedBytesLimit,
-        },
-        "Left a thread's session previews unfilled: its stored requests exceed the backfill's memory budget, so the session list keeps deriving them on read",
-      );
-    }
-    return result;
   } catch (error) {
     logger.warn(
       { err: error, sessionId: thread.sessionId, threadId: thread.threadId },
       "Could not fill a thread's session previews; the session list keeps deriving them on read",
     );
-    return { filled: 0, failed: thread.pageRows, skipped: true };
+    return { filled: 0, failed: thread.pageRows };
   }
 }
 
@@ -240,6 +214,7 @@ async function fillThread(
  */
 function* budgetedChunks(
   rows: Array<{ id: string; requestBytes: number }>,
+  maxRows: number,
 ): Generator<string[]> {
   let chunk: string[] = [];
   let bytes = 0;
@@ -247,8 +222,7 @@ function* budgetedChunks(
   for (const row of rows) {
     if (
       chunk.length > 0 &&
-      (bytes + row.requestBytes > MAX_CHUNK_BYTES ||
-        chunk.length >= MAX_CHUNK_ROWS)
+      (bytes + row.requestBytes > MAX_CHUNK_BYTES || chunk.length >= maxRows)
     ) {
       yield chunk;
       chunk = [];

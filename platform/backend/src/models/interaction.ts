@@ -120,19 +120,44 @@ const GUARDRAIL_SKIP_SCAN_ROWS = 200;
 /** Rows per UPDATE when the session-preview backfill stores previews. */
 const SESSION_PREVIEW_UPDATE_ROWS = 50;
 
-/** A thread's row as fillThreadSessionPreviews loads it (raw SQL, snake_case). */
-type ThreadPreviewRow = {
+/**
+ * A row of a thread's skeleton as fillThreadSessionPreviews lists it (raw
+ * SQL, snake_case): no payload, just what the fold order and the batches need.
+ */
+type ThreadSkeletonRow = {
   id: string;
   parent_id: string | null;
-  thread_id: string | null;
-  request_shared_prefix: number | null;
-  request: unknown;
-  source: InteractionSource | null;
-  session_source: string | null;
-  type: string;
-  encrypted_chat_conversation_id: string | null;
+  bytes: number | null;
   missing: boolean;
 };
+
+/**
+ * Cut consecutive rows into batches of at most `maxRows` rows and `maxBytes`
+ * stored bytes. A row larger than the byte budget travels alone rather than
+ * being skipped.
+ */
+function* sizedBatches<T extends { bytes: number | null }>(
+  rows: T[],
+  maxRows: number,
+  maxBytes: number,
+): Generator<T[]> {
+  let batch: T[] = [];
+  let bytes = 0;
+  for (const row of rows) {
+    const size = Number(row.bytes ?? 0);
+    if (
+      batch.length > 0 &&
+      (bytes + size > maxBytes || batch.length >= maxRows)
+    ) {
+      yield batch;
+      batch = [];
+      bytes = 0;
+    }
+    batch.push(row);
+    bytes += size;
+  }
+  if (batch.length > 0) yield batch;
+}
 
 /**
  * Session totals keyed by filter set (see getSessions). Per-pod and in-process
@@ -1875,30 +1900,29 @@ class InteractionModel {
    * a time, as {@link fillSessionPreviews} does, loads the chain of every row
    * in the chunk and folds one whole conversation per row; on Claude Code
    * sessions of hundreds of turns that exhausted the worker's heap. Here the
-   * rows still missing a preview and every ancestor they fold from are loaded
-   * once, and each row is folded from its parent's fold, so what is held is
-   * those stored suffixes plus one fold at a time.
+   * rows still missing a preview and the ancestors their folds need are
+   * listed once without their payloads, then loaded oldest first in batches
+   * bounded by rows and stored bytes and folded one from the previous, so a
+   * thread of any size holds one batch and one conversation at a time. A
+   * thread can be many times the size of its conversation: it stores the
+   * whole conversation again in a new head row whenever the client's tool
+   * list changes.
    *
    * Ancestors are loaded whether or not they have a preview: a row written by
    * a pod on the previous build during the rollout that introduced previews
-   * can sit between two rows that have one. A thread whose loaded rows exceed
-   * `storedBytesLimit` (compressed, as `pg_column_size` reports) is left
-   * alone, and its rows keep deriving the preview on read. A row that cannot
-   * be read fails together with its descendants, which cannot be folded
-   * without it; the rest of the thread is filled.
+   * can sit between two rows that have one. A row that cannot be read fails
+   * together with its descendants, which cannot be folded without it; the
+   * rest of the thread is filled.
    */
   static async fillThreadSessionPreviews(params: {
     sessionId: string;
     threadId: string;
-    storedBytesLimit: number;
-  }): Promise<{
-    filled: number;
-    failed: number;
-    skipped: boolean;
-    storedBytes: number;
-  }> {
-    // The rows to fill plus the ancestors their folds need, each once.
-    const chain = sql`
+    batchRows: number;
+    batchBytes: number;
+  }): Promise<{ filled: number; failed: number }> {
+    // The rows to fill plus the ancestors their folds need, oldest first and
+    // without payloads: the skeleton the fold walks and the batches come from.
+    const { rows: skeleton } = await db.execute<ThreadSkeletonRow>(sql`
       WITH RECURSIVE chain AS (
         SELECT id, parent_id FROM interactions
         WHERE session_id = ${params.sessionId}
@@ -1909,131 +1933,91 @@ class InteractionModel {
         SELECT i.id, i.parent_id FROM interactions i
         JOIN chain c ON i.id = c.parent_id
       )
-    `;
-    const {
-      rows: [size],
-    } = await db.execute<{
-      rows: number;
-      missing: number;
-      bytes: string | number;
-    }>(sql`
-      ${chain}
-      SELECT count(*)::int AS rows,
-             count(*) FILTER (WHERE i.session_preview IS NULL)::int AS missing,
-             COALESCE(SUM(pg_column_size(i.request)), 0) AS bytes
-      FROM chain c JOIN interactions i ON i.id = c.id
-    `);
-    const storedBytes = Number(size?.bytes ?? 0);
-    const missing = Number(size?.missing ?? 0);
-    if (missing === 0) {
-      return { filled: 0, failed: 0, skipped: false, storedBytes };
-    }
-    if (storedBytes > params.storedBytesLimit) {
-      return { filled: 0, failed: missing, skipped: true, storedBytes };
-    }
-
-    const { rows } = await db.execute<ThreadPreviewRow>(sql`
-      ${chain}
-      SELECT i.id, i.parent_id, i.thread_id, i.request_shared_prefix, i.request,
-             i.source, i.session_source, i.type, i.encrypted_chat_conversation_id,
+      SELECT c.id, c.parent_id, pg_column_size(i.request) AS bytes,
              (i.session_preview IS NULL) AS missing
       FROM chain c JOIN interactions i ON i.id = c.id
       ORDER BY i.created_at, i.id
     `);
-    const values = InteractionModel.threadSessionPreviewValues(
-      rows,
-      await InteractionModel.titleResponsesFor(
-        rows.map((row) => ({
-          id: row.id,
-          source: row.source,
-          request: row.request,
-        })),
-      ),
+    if (!skeleton.some((row) => row.missing)) return { filled: 0, failed: 0 };
+
+    const folder = InteractionDeltaManager.threadFolder(
+      skeleton.map((row) => ({ id: row.id, parentId: row.parent_id })),
     );
-    // Counted from the rows as loaded, not from the sizing query: a
-    // concurrent run can fill rows between the two.
-    const targets = rows.filter((row) => row.missing).length;
-    const filled = await InteractionModel.storeSessionPreviews(values);
-    return {
-      filled,
-      failed: targets - values.length,
-      skipped: false,
-      storedBytes,
-    };
-  }
-
-  /**
-   * The previews of a thread's rows that lack one, folded from the loaded
-   * rows. Kept apart from the write so the rows can be collected before it.
-   */
-  private static threadSessionPreviewValues(
-    rows: ThreadPreviewRow[],
-    responses: Map<string, unknown>,
-  ): Array<{ id: string; sessionPreview: unknown }> {
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    const unreadable = new Set<string>();
-    for (const row of rows) {
-      try {
-        readInteractionRow(row);
-      } catch (error) {
-        unreadable.add(row.id);
-        logger.warn(
-          { err: error, interactionId: row.id },
-          "Could not read an interaction while filling its thread's session previews; it and its descendants keep deriving the preview on read",
-        );
-      }
-    }
-    // SPDX-SnippetEnd
-    // A row below an unreadable one cannot be folded either. Resolved by
-    // walking parents, so the result does not depend on row order.
-    const broken = new Map<string, boolean>();
-    const isBroken = (id: string): boolean => {
-      const known = broken.get(id);
-      if (known !== undefined) return known;
-      const row = byId.get(id);
-      const result =
-        row !== undefined &&
-        (unreadable.has(id) ||
-          (row.parent_id !== null &&
-            byId.has(row.parent_id) &&
-            isBroken(row.parent_id)));
-      broken.set(id, result);
-      return result;
-    };
-    const readable = rows.filter((row) => !isBroken(row.id));
-
-    const values: Array<{ id: string; sessionPreview: unknown }> = [];
-    InteractionDeltaManager.foldLoadedRows(
-      readable.map((row) => ({
-        id: row.id,
-        parentId: row.parent_id,
-        threadId: row.thread_id,
-        requestSharedPrefix: row.request_shared_prefix,
-        request: row.request,
-      })),
-      readable.filter((row) => row.missing).map((row) => row.id),
-      (id, request) => {
-        const row = byId.get(id);
-        if (!row) return;
-        values.push(
-          InteractionModel.sessionPreviewValue(
-            {
-              id: row.id,
-              source: row.source,
-              sessionSource: row.session_source,
-              type: row.type,
-              request: row.request,
-            },
-            request,
-            responses.get(id) ?? null,
+    // Rows that could not be read or folded; their descendants cannot be
+    // folded either. Parents come before children, so one pass settles it.
+    const unfoldable = new Set<string>();
+    let filled = 0;
+    let failed = 0;
+    for (const batch of sizedBatches(
+      skeleton,
+      params.batchRows,
+      params.batchBytes,
+    )) {
+      const t = schema.interactionsTable;
+      const loaded = await db
+        .select({
+          id: t.id,
+          parentId: t.parentId,
+          threadId: t.threadId,
+          requestSharedPrefix: t.requestSharedPrefix,
+          request: t.request,
+          source: t.source,
+          sessionSource: t.sessionSource,
+          type: t.type,
+          encryptedChatConversationId: t.encryptedChatConversationId,
+        })
+        .from(t)
+        .where(
+          inArray(
+            t.id,
+            batch.map((row) => row.id),
           ),
         );
-      },
-    );
-    return values;
+      const byId = new Map(loaded.map((row) => [row.id, row]));
+      const responses = await InteractionModel.titleResponsesFor(loaded);
+      const values: Array<{ id: string; sessionPreview: unknown }> = [];
+      for (const member of batch) {
+        const row = byId.get(member.id);
+        if (!row) {
+          // Removed since the skeleton was read.
+          unfoldable.add(member.id);
+          if (member.missing) failed += 1;
+          continue;
+        }
+        let full: unknown = null;
+        if (row.parentId === null || !unfoldable.has(row.parentId)) {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          try {
+            readInteractionRow(row);
+            full = folder.fold(row);
+          } catch (error) {
+            logger.warn(
+              { err: error, interactionId: row.id },
+              "Could not read an interaction while filling its thread's session previews; it and its descendants keep deriving the preview on read",
+            );
+          }
+          // SPDX-SnippetEnd
+        }
+        if (full === null) {
+          unfoldable.add(row.id);
+          if (member.missing) failed += 1;
+          continue;
+        }
+        if (member.missing) {
+          values.push(
+            InteractionModel.sessionPreviewValue(
+              row,
+              full,
+              responses.get(row.id) ?? null,
+            ),
+          );
+        }
+      }
+      filled += await InteractionModel.storeSessionPreviews(values);
+    }
+    return { filled, failed };
   }
 
   /**

@@ -125,9 +125,9 @@ test("fills a delta thread from its stored rows in one pass, with the previews e
 
   const { result, statements } = await recordQueries(() => runToCompletion());
   expect(result).toEqual({ filled: ids.length, failed: 0 });
-  // Each thread is sized and read once (two statements per thread); no row
-  // loads its own chain through the delta manager.
-  expect(statements.filter((s) => /thread_id = \$/.test(s))).toHaveLength(4);
+  // Each thread's rows are listed once; no row loads its own chain through
+  // the delta manager.
+  expect(statements.filter((s) => /thread_id = \$/.test(s))).toHaveLength(2);
   expect(
     statements.filter((s) => s.includes("processed_request_shared_prefix")),
   ).toHaveLength(0);
@@ -169,7 +169,7 @@ test("folds a missing row through an ancestor that already has a preview", async
   ).toEqual(written);
 });
 
-test("leaves a thread over the memory budget to the list and reports its rows", async ({
+test("fills a thread longer than one chunk, chunk by chunk", async ({
   makeOrganization,
   makeAgent,
 }) => {
@@ -177,21 +177,35 @@ test("leaves a thread over the memory budget to the list and reports its rows", 
   const agent = await makeAgent({ organizationId: org.id });
   const ids = await seedClaudeCodeSession({
     agentId: agent.id,
-    sessionId: "large-session",
-    turns: 2,
+    sessionId: "long-session",
+    turns: 5,
   });
+  const stored = await readRows(ids);
+  const written = new Map(stored.map((row) => [row.id, row.sessionPreview]));
   await clearPreviews(ids);
   InteractionDeltaManager.reset();
 
+  // Eleven rows in the conversation thread, three per chunk: every chunk
+  // after the first folds from a parent loaded by an earlier one.
+  const { result, statements } = await recordQueries(() =>
+    interactionSessionPreviewBackfill.run({ chunkRows: 3 }),
+  );
+  expect(result).toEqual({ filled: ids.length, failed: 0, complete: true });
   expect(
-    await interactionSessionPreviewBackfill.run({ threadStoredBytesLimit: 1 }),
-  ).toEqual({ filled: 0, failed: ids.length, complete: true });
+    statements.filter((s) =>
+      /from "interactions" where "interactions"\."id" in \(/i.test(s),
+    ),
+  ).not.toHaveLength(0);
   expect(
-    (await readRows(ids)).every((row) => row.sessionPreview === null),
-  ).toBe(true);
+    statements.filter((s) =>
+      /from "interactions" where "interactions"\."id" in \(/i.test(s),
+    ).length,
+  ).toBeGreaterThanOrEqual(4);
 
-  // The next pass, with the budget back, fills them.
-  expect(await runToCompletion()).toEqual({ filled: ids.length, failed: 0 });
+  const backfilled = await readRows(ids);
+  expect(
+    new Map(backfilled.map((row) => [row.id, row.sessionPreview])),
+  ).toEqual(written);
 });
 
 test("fills a row that stores its whole request", async ({

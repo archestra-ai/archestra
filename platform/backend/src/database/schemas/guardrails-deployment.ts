@@ -1,8 +1,5 @@
 import { boolean, pgTable, text, uuid, varchar } from "drizzle-orm/pg-core";
-import type {
-  NewSessionPolicy,
-  UnsupportedAppaClientAction,
-} from "@/types/guardrails-policy";
+import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 
@@ -16,10 +13,9 @@ const guardrailsDeploymentTable = pgTable("guardrails_deployment", {
     .default("bypass"),
   // Whether a yell also turns OpenAPPA off for the session that sends it.
   breakTheGlassEnabled: boolean("superyell_enabled").notNull().default(true),
-  // `snapshot`: no policy revision is published, open sessions keep the
-  // revision they have, and new ones keep the policy they open with.
+  // Unread since policy snapshots were removed: every session follows its
+  // organization's policy. The column stays until the next release drops it.
   newSessionPolicy: varchar("new_session_policy", { length: 16 })
-    .$type<NewSessionPolicy>()
     .notNull()
     .default("live"),
   // The model and key `builtin = "archestra"` annotators answer with, set

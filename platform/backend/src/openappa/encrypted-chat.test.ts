@@ -44,13 +44,13 @@ test("concurrent annotations keep separate keys and expire each capability when 
   releases[0].resolve();
   await dispatched[0];
   expect(() => openappaAnnotatorContext(capabilities[0])).toThrow(
-    "Expired OpenAPPA annotation context",
+    "OpenAPPA annotation context expired",
   );
   expect(openappaAnnotatorContext(capabilities[1])).toBe(contexts[1]);
   releases[1].resolve();
   await dispatched[1];
   expect(() => openappaAnnotatorContext(capabilities[1])).toThrow(
-    "Expired OpenAPPA annotation context",
+    "OpenAPPA annotation context expired",
   );
 });
 
@@ -70,7 +70,7 @@ test("a failed dispatch also expires its annotation capability", async () => {
   ).rejects.toThrow("Dispatch failed");
   expect(capability).toBeTruthy();
   expect(() => openappaAnnotatorContext(capability)).toThrow(
-    "Expired OpenAPPA annotation context",
+    "OpenAPPA annotation context expired",
   );
 });
 
@@ -94,7 +94,7 @@ test("keys never cross organization or conversation boundaries, and ordinary cal
   );
   expect(openappaAnnotatorContext(undefined)).toBeNull();
   expect(() => openappaAnnotatorContext("unknown")).toThrow(
-    "Expired OpenAPPA annotation context",
+    "OpenAPPA annotation context expired",
   );
 });
 

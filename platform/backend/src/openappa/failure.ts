@@ -1,5 +1,6 @@
 import { trace } from "@opentelemetry/api";
 import { z } from "zod";
+import logger from "@/logging";
 import { ApiError } from "@/types/api";
 import { isPolicyMoved } from "./policy-moved";
 
@@ -10,18 +11,22 @@ import { isPolicyMoved } from "./policy-moved";
  * classified detail: a policy the runtime refuses is the organization's own
  * configuration and names what to fix, while storage and runtime failures can
  * carry connection strings and stay generic. Every message ends with the trace
- * id so an operator can find the full cause in the logs.
+ * id so an operator can find the full cause in the logs. A generic runtime
+ * failure also names its code, or `unknown` when it carries none, so the
+ * error card says which failure it was.
  *
  * A refused policy fails the same way on every request, so clients are told
  * not to retry it (`x-should-retry: false` on a 500). So do a missing
  * deployment setting and a request the binding cannot read, and a
- * conversation whose opening policy the runtime cannot reopen (a 409). An
- * unavailable runtime may recover, so it stays a retryable 503, as does a
- * failure that carries no code (the addon did not load, or the host failed).
+ * conversation the runtime cannot continue, such as one opened under an
+ * earlier policy model (a 409). An unavailable runtime may recover, so it
+ * stays a retryable 503, as does a failure that carries no code (the addon
+ * did not load, or the host failed).
  */
 export function openappaFailure(error: unknown): ApiError {
   if (error instanceof OpenappaFailure) return error;
   const failure = classify(error);
+  if (failure.statusCode >= 500) logCause(error);
   const reference = trace.getActiveSpan()?.spanContext().traceId;
   const message = `${FAILURE_PREFIX}: ${failure.detail}${
     reference ? ` (ref: ${reference})` : ""
@@ -31,6 +36,23 @@ export function openappaFailure(error: unknown): ApiError {
   if (failure.statusCode === 503) apiError.retryAfterSeconds = RETRY_AFTER;
   apiError.cause = error;
   return apiError;
+}
+
+/**
+ * Logs the native cause with the trace id the logger adds, its URL
+ * credentials removed. The error handler logs only the classified message.
+ */
+function logCause(error: unknown): void {
+  logger.error(
+    {
+      code: runtimeFailureCode(error),
+      cause: summarize(
+        error instanceof Error ? error.message : String(error),
+        MAX_CAUSE,
+      ),
+    },
+    "OpenAPPA could not safely complete an operation",
+  );
 }
 
 /** What {@link openappaFailure} returns: an OpenAPPA failure already classified. */
@@ -78,16 +100,6 @@ export function unansweredAnnotationNotice(error: unknown): string | null {
     : `${head} Retrying it will not help. Tell the user that Guardrails could not check this call. An administrator can check the annotator on the ${POLICY_PAGE} page.`;
 }
 
-/** A conversation whose opening policy names an annotator the served policy does not answer. */
-export class OpenappaRetiredAnnotatorError extends Error {
-  constructor(readonly annotator: string) {
-    super(
-      "the served policy does not answer an annotator from the opening policy",
-    );
-    this.name = "OpenappaRetiredAnnotatorError";
-  }
-}
-
 /**
  * The organization's text was refused and no composition ever opened, so the
  * runtime has nothing to enforce: every governed call is refused.
@@ -117,6 +129,7 @@ const FAILURE_PREFIX = "OpenAPPA could not safely complete this operation";
 const RETRY_AFTER = 5;
 const MAX_DETAIL = 240;
 const MAX_NAME = 80;
+const MAX_CAUSE = 2000;
 /** The title the frontend gives the page an administrator edits the policy on. */
 const POLICY_PAGE = "Guardrails";
 
@@ -150,6 +163,7 @@ const RuntimeFailureCode = z.enum([
   "held_elsewhere",
   "unstarted_parent",
   "policy_moved",
+  "legacy_family",
   "policy_refused",
   "runtime_misconfigured",
   "pool_exhausted",
@@ -166,11 +180,6 @@ function classify(error: unknown): Failure {
   const code = runtimeFailureCode(error);
   if (code !== null)
     return classifyCode(code, error instanceof Error ? error.message : "");
-  if (error instanceof OpenappaRetiredAnnotatorError)
-    return {
-      statusCode: 409,
-      detail: `this conversation started under a policy that no longer declares annotator "${summarize(error.annotator, MAX_NAME)}". Start a new conversation, or an administrator can declare "${summarize(error.annotator, MAX_NAME)}" again on the ${POLICY_PAGE} page.`,
-    };
   if (error instanceof OpenappaRootOnlyError)
     return {
       statusCode: 500,
@@ -183,7 +192,7 @@ function classify(error: unknown): Failure {
     };
   // A runtime whose refusal carries no policy-moved class yet reports it in text.
   if (isPolicyMoved(error)) return POLICY_MOVED;
-  return UNAVAILABLE;
+  return unavailable("unknown");
 }
 
 function classifyCode(code: RuntimeFailureCode, message: string): Failure {
@@ -226,6 +235,14 @@ function classifyCode(code: RuntimeFailureCode, message: string): Failure {
         statusCode: 409,
         detail:
           "this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
+      };
+    // The conversation opened pinned to the policy it started under, which no
+    // longer exists in the policy model. Every later request fails the same way.
+    case "legacy_family":
+      return {
+        statusCode: 409,
+        detail:
+          "This conversation was opened under an earlier policy model. Start a new conversation.",
       };
     // No fork exists for the subagent to open, whatever the retry.
     case "spawn_not_taken":
@@ -275,7 +292,7 @@ function classifyCode(code: RuntimeFailureCode, message: string): Failure {
     case "dispatch":
     case "remedy":
     case "spawn":
-      return UNAVAILABLE;
+      return unavailable(code);
     default:
       return code satisfies never;
   }
@@ -287,10 +304,16 @@ const POLICY_MOVED: Failure = {
     "the organization's guardrails policy changed while this request was checked. Retry the request.",
 };
 
-const UNAVAILABLE: Failure = {
-  statusCode: 503,
-  detail: "the policy runtime is unavailable.",
-};
+/**
+ * The generic runtime failure, naming its code: a fixed name, never the
+ * runtime's text. `unknown` marks a failure that carries no code.
+ */
+function unavailable(code: RuntimeFailureCode | "unknown"): Failure {
+  return {
+    statusCode: 503,
+    detail: `the policy runtime is unavailable (code: ${code}).`,
+  };
+}
 
 /**
  * The runtime's refusal of a call whose annotator gave no answer:

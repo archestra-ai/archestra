@@ -97,7 +97,7 @@ export async function rememberYellResult(
   } catch (error) {
     logger.warn(
       { err: error },
-      "Could not retain the OpenAPPA reporting result",
+      "OpenAPPA could not retain the reporting result",
     );
   }
 }
@@ -145,7 +145,7 @@ export async function rememberYellSession(params: {
     );
   } catch (error) {
     // A lost entry costs only this yell, refused at the gateway; the turn goes on.
-    logger.warn({ err: error }, "Could not record the OpenAPPA yell session");
+    logger.warn({ err: error }, "OpenAPPA could not record the yell session");
   }
 }
 
@@ -159,7 +159,7 @@ export async function recallYellSession(params: {
       { throwOnError: true },
     );
   } catch (error) {
-    logger.warn({ err: error }, "Could not recall the OpenAPPA yell session");
+    logger.warn({ err: error }, "OpenAPPA could not recall the yell session");
     throw new ApiError(
       503,
       "OpenAPPA reporting is temporarily unavailable; retry the same yell call",

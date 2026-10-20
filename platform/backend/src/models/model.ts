@@ -1067,6 +1067,23 @@ class ModelModel {
     return map;
   }
 
+  static async findByProviderAndModelIds(
+    provider: SupportedProvider,
+    modelIds: string[],
+  ): Promise<Map<string, Model>> {
+    if (!modelIds.length) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.modelsTable)
+      .where(
+        and(
+          eq(schema.modelsTable.provider, provider),
+          inArray(schema.modelsTable.modelId, modelIds),
+        ),
+      );
+    return new Map(rows.map((row) => [row.modelId, row]));
+  }
+
   /**
    * The model's architectural context window: the admin-set override when one
    * exists, otherwise whatever the provider reported. This is the ceiling

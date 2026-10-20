@@ -1,11 +1,13 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import logger from "@/logging";
 import { ApiError } from "@/types/api";
 import {
-  OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
   unansweredAnnotationNotice,
 } from "./failure";
+
+vi.mock("@/logging");
 
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {
@@ -26,31 +28,73 @@ describe("openappaFailure", () => {
   });
 
   test("keeps runtime and storage diagnostics out of the message and allows a retry", () => {
-    for (const cause of [
-      runtimeFailure(
-        "storage",
-        "storage failure: connect postgresql://app:secret@db.internal/archestra",
-      ),
-      runtimeFailure(
-        "panicked",
-        "OpenAPPA panicked; operation was not released",
-      ),
-      runtimeFailure(
-        "replay_timed_out",
-        "OpenAPPA replay exceeded its 120 second limit",
-      ),
-      new Error("private native database error"),
-      "not even an error",
-    ]) {
+    for (const [cause, detail] of [
+      [
+        runtimeFailure(
+          "storage",
+          "storage failure: connect postgresql://app:secret@db.internal/archestra",
+        ),
+        "the policy runtime is unavailable (code: storage).",
+      ],
+      [
+        runtimeFailure(
+          "panicked",
+          "OpenAPPA panicked; operation was not released",
+        ),
+        "the policy runtime is unavailable (code: panicked).",
+      ],
+      [
+        runtimeFailure(
+          "replay_timed_out",
+          "OpenAPPA replay exceeded its 120 second limit",
+        ),
+        "the policy runtime is unavailable (code: replay_timed_out).",
+      ],
+      [
+        new Error("private native database error"),
+        "the policy runtime is unavailable (code: unknown).",
+      ],
+      [
+        "not even an error",
+        "the policy runtime is unavailable (code: unknown).",
+      ],
+    ] as const) {
       const failure = openappaFailure(cause);
 
       expect(failure.statusCode).toBe(503);
       expect(failure.shouldRetry).toBe(true);
       expect(failure.retryAfterSeconds).toBeGreaterThan(0);
       expect(failure.message).toBe(
-        "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
+        `OpenAPPA could not safely complete this operation: ${detail}`,
       );
     }
+  });
+
+  test("logs the cause and its code without URL credentials", () => {
+    vi.mocked(logger.error).mockClear();
+
+    openappaFailure(
+      runtimeFailure(
+        "storage",
+        "storage failure: connect postgresql://app:secret@db.internal/archestra",
+      ),
+    );
+
+    expect(logger.error).toHaveBeenCalledWith(
+      {
+        code: "storage",
+        cause: "storage failure: connect postgresql://db.internal/archestra",
+      },
+      "OpenAPPA could not safely complete an operation",
+    );
+  });
+
+  test("does not log a failure the client caused", () => {
+    vi.mocked(logger.error).mockClear();
+
+    openappaFailure(runtimeFailure("untrusted_log", "stored batch 7"));
+
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   test("tells a conversation whose stored record no longer decodes to start again, without retrying", () => {
@@ -134,20 +178,23 @@ describe("openappaFailure", () => {
     expect(failure.shouldRetry).toBe(true);
     expect(failure.retryAfterSeconds).toBeGreaterThan(0);
     expect(failure.message).toBe(
-      "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
+      "OpenAPPA could not safely complete this operation: the policy runtime is unavailable (code: unknown).",
     );
     expect(failure.cause).toBe(cause);
   });
 
-  test("a session whose annotator the policy retired is not retried", () => {
-    const cause = new OpenappaRetiredAnnotatorError("jev.tool-call");
+  test("a conversation opened under the earlier policy model is refused once, not retried", () => {
+    const cause = runtimeFailure(
+      "legacy_family",
+      "this trajectory family was opened before live policy revisions; open a new one",
+    );
     const failure = openappaFailure(cause);
 
     expect(failure.statusCode).toBe(409);
     expect(failure.shouldRetry).toBe(false);
     expect(failure.retryAfterSeconds).toBeUndefined();
     expect(failure.message).toBe(
-      'OpenAPPA could not safely complete this operation: this conversation started under a policy that no longer declares annotator "jev.tool-call". Start a new conversation, or an administrator can declare "jev.tool-call" again on the Guardrails page.',
+      "OpenAPPA could not safely complete this operation: This conversation was opened under an earlier policy model. Start a new conversation.",
     );
     expect(failure.cause).toBe(cause);
   });

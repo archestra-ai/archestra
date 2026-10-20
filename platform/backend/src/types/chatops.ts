@@ -133,6 +133,8 @@ export interface IncomingChatMessage {
  * Options for sending a chat reply
  */
 export interface ChatReplyOptions {
+  /** Use bounded delivery without retries for optional Slack acknowledgments. */
+  bestEffort?: boolean;
   /** The original message to reply to */
   originalMessage: IncomingChatMessage;
   /** The reply text */

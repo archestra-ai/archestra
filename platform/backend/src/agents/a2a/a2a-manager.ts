@@ -186,6 +186,11 @@ export interface A2ASystemParams {
   source?: InteractionSource;
   routeCategory?: RouteCategory;
   completionTarget?: AgentRunCompletionTarget;
+  /** Awaited after persistence, before launch: register delivery without awaiting network I/O. */
+  onRuntimeSessionCreated?: (session: {
+    taskId: string;
+    workspaceId: string;
+  }) => Promise<void>;
   /**
    * Interactive is reserved for a person opening the execution terminal in
    * Chat. Every other durable task is one-shot so delegation surfaces can
@@ -683,6 +688,7 @@ export class A2AManager {
                 organizationId: actor.organizationId,
                 projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
+                onRuntimeSessionCreated: systemParams?.onRuntimeSessionCreated,
                 task: executedTurnText,
                 title: systemParams?.runtimeTitle,
                 modelId: agent.modelId,

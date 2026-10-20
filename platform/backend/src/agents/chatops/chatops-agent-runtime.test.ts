@@ -1,7 +1,10 @@
 import { HttpResponse, http } from "msw";
 import { onTestFinished, vi } from "vitest";
 import * as a2aExecutor from "@/agents/a2a-executor";
+import { watchTaskCompletion } from "@/agents/task-completion-watcher";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
@@ -12,6 +15,7 @@ import {
   ChatOpsChannelBindingModel,
 } from "@/models";
 import AgentRunInputModel from "@/models/agent-run-input";
+import agentRuntimeRoutes from "@/routes/agent-runtime/agent-runtime.routes";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
@@ -67,6 +71,7 @@ beforeEach(
   }) => {
     const previousUrl = config.agentRuntime.platformBaseUrl;
     config.agentRuntime.platformBaseUrl = "https://platform.example.test";
+    config.frontendBaseUrl = "https://platform.example.test";
     onTestFinished(() => {
       config.agentRuntime.platformBaseUrl = previousUrl;
     });
@@ -149,6 +154,166 @@ test("a message to an Agent Runtime agent starts a run in its runtime and report
   await expect
     .poll(() => vi.mocked(provider.clearTypingStatus)?.mock.calls.length)
     .toBe(1);
+});
+
+test.each([
+  "mention",
+  "dm",
+  "continued",
+] as const)("Slack acknowledges a %s with a usable chat link before runtime startup finishes", async (kind) => {
+  const previous =
+    kind === "continued" ? await retainedRun({ state: "idle" }) : null;
+  const launchGate = deferred();
+  const launch = vi
+    .spyOn(backend, previous ? "continueRun" : "launch")
+    .mockImplementation(async () => {
+      await launchGate.promise;
+      throw new Error("Startup stopped by test");
+    });
+  vi.spyOn(backend, "getWorkspaceConnection").mockResolvedValue(null);
+  vi.spyOn(backend, "getStartupProgress").mockRejectedValue(
+    new Error("No pod yet"),
+  );
+  const app = createFastifyInstance();
+  app.addHook("onRequest", async (request) => {
+    Object.assign(request, {
+      user: { id: userId },
+      organizationId: agent.organizationId,
+    });
+  });
+  await app.register(agentRuntimeRoutes);
+  const incoming = message("Investigate this issue");
+  incoming.metadata =
+    kind === "dm" ? { conversationType: "personal" } : { botMentioned: true };
+  try {
+    const result = await chatOpsManager.processMessage({
+      message: incoming,
+      provider,
+    });
+    expect(result.success).toBe(true);
+    await expect.poll(() => launch.mock.calls.length).toBe(1);
+    await expect.poll(() => replies.length).toBe(1);
+    const run = await latestRun();
+    const sessionId = previous?.taskId ?? run?.taskId;
+    expect(replies[0]).toMatchObject({
+      text: "I'm on it.",
+      conversationUrl: `https://platform.example.test/chat/runs/${sessionId}`,
+      originalMessage: { threadId: THREAD_ID },
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${sessionId}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      taskId: run?.taskId,
+      viewerRole: "owner",
+    });
+    expect(provider.clearTypingStatus).not.toHaveBeenCalled();
+    await chatOpsManager.processMessage({ message: incoming, provider });
+    expect(replies).toHaveLength(1);
+    expect(launch).toHaveBeenCalledOnce();
+  } finally {
+    launchGate.resolve();
+    await expect
+      .poll(() =>
+        replies.some((reply) => reply.text.includes("Startup stopped by test")),
+      )
+      .toBe(true);
+    await app.close();
+  }
+});
+
+test("an addressed request muted before its session exists does not send a startup acknowledgment", async () => {
+  const startupGate = deferred();
+  const ready = vi
+    .spyOn(backend, "assertReady")
+    .mockImplementation(() => startupGate.promise);
+  vi.spyOn(backend, "launch").mockRejectedValue(
+    new Error("Startup stopped by test"),
+  );
+  const incoming = message("Investigate this issue");
+  incoming.metadata = { botMentioned: true };
+  const processing = chatOpsManager.processMessage({
+    message: incoming,
+    provider,
+  });
+  try {
+    await expect.poll(() => ready.mock.calls.length).toBeGreaterThan(0);
+    expect(replies).toHaveLength(0);
+    await stopChannelThreadReply({
+      provider: "slack",
+      channelId: incoming.channelId,
+      threadId: THREAD_ID,
+    });
+  } finally {
+    startupGate.resolve();
+  }
+  await processing;
+  await expect
+    .poll(() => vi.mocked(provider.clearTypingStatus)?.mock.calls.length)
+    .toBeGreaterThan(0);
+  expect(replies).toHaveLength(0);
+});
+
+test.each([
+  false,
+  true,
+])("a slow Slack acknowledgment does not block startup or lose the final reply (delivery fails: %s)", async (failAcknowledgement) => {
+  const previous = await retainedRun({ state: "idle" });
+  await chatOpsManager.notifyBindingThread({
+    taskId: previous.taskId,
+    bindingId: binding.id,
+    threadId: THREAD_ID,
+    text: "Previous answer",
+  });
+  replies.length = 0;
+  const ackGate = deferred();
+  const send = vi
+    .spyOn(provider, "sendReply")
+    .mockImplementation(async (options) => {
+      if (options.bestEffort) {
+        await ackGate.promise;
+        if (failAcknowledgement) throw new Error("Slack unavailable");
+      }
+      replies.push(options);
+      return "reply-id";
+    });
+  const launch = vi
+    .spyOn(backend, "continueRun")
+    .mockRejectedValue(new Error("Runtime startup failed"));
+  const incoming = message("Continue the investigation");
+  incoming.metadata = { botMentioned: true };
+  try {
+    await chatOpsManager.processMessage({ message: incoming, provider });
+    await expect.poll(() => launch.mock.calls.length).toBe(1);
+    await expect
+      .poll(() => send.mock.calls.some(([options]) => options.bestEffort))
+      .toBe(true);
+    const run = await latestRun();
+    if (!run?.completionTarget)
+      throw new Error("Expected run completion target");
+    await expect
+      .poll(async () => (await A2ATaskModel.findById(run.taskId))?.state)
+      .toBe("TASK_STATE_FAILED");
+    // The reconciler can deliver on another replica, without the local promise gate.
+    await watchTaskCompletion({
+      taskId: run.taskId,
+      target: run.completionTarget,
+      agentName: agent.name,
+    });
+    expect(replies).toHaveLength(0);
+  } finally {
+    ackGate.resolve();
+  }
+  await expect.poll(() => replies.length).toBe(failAcknowledgement ? 1 : 2);
+  expect(replies.at(-1)?.text).toContain("Runtime startup failed");
+  if (!failAcknowledgement) {
+    expect(replies[0].conversationUrl).toContain(
+      `/chat/runs/${previous.taskId}`,
+    );
+    expect(replies[0].hint).toBeUndefined();
+  }
 });
 
 test.each([
@@ -454,6 +619,64 @@ test("a rejected first post preserves the anchor for its retry", async () => {
   expect(replies[0].hint).toBe(THREAD_MUTE_HINT);
 });
 
+test("a final reply retries when the acknowledgment gate cannot be read", async () => {
+  const run = await retainedRun({ state: "idle" });
+  cacheManager.shutdown();
+  await expect(
+    chatOpsManager.notifyBindingThread({
+      taskId: run.taskId,
+      bindingId: binding.id,
+      threadId: THREAD_ID,
+      text: "The answer",
+    }),
+  ).rejects.toThrow("CacheManager: Not started");
+  expect(replies).toHaveLength(0);
+});
+
+test("a startup link is delivered while an earlier answer owns the thread footer", async () => {
+  const previous = await retainedRun({ state: "idle" });
+  const firstReplyGate = deferred();
+  const launchGate = deferred();
+  const send = vi
+    .spyOn(provider, "sendReply")
+    .mockImplementation(async (options) => {
+      if (options.text === "Previous answer") await firstReplyGate.promise;
+      replies.push(options);
+      return "reply-id";
+    });
+  vi.spyOn(backend, "continueRun").mockImplementation(async () => {
+    await launchGate.promise;
+    throw new Error("Startup stopped by test");
+  });
+  const firstReply = chatOpsManager.notifyBindingThread({
+    taskId: previous.taskId,
+    bindingId: binding.id,
+    threadId: THREAD_ID,
+    text: "Previous answer",
+  });
+  try {
+    await expect.poll(() => send.mock.calls.length).toBe(1);
+    const incoming = message("Continue the investigation");
+    incoming.metadata = { botMentioned: true };
+    await chatOpsManager.processMessage({ message: incoming, provider });
+    await expect.poll(() => replies.length).toBe(1);
+    expect(replies[0]).toMatchObject({
+      bestEffort: true,
+      conversationUrl: `https://platform.example.test/chat/runs/${previous.taskId}`,
+    });
+    expect(replies[0].hint).toBeUndefined();
+  } finally {
+    firstReplyGate.resolve();
+    await firstReply;
+    launchGate.resolve();
+    await expect
+      .poll(() =>
+        replies.some((reply) => reply.text.includes("Startup stopped by test")),
+      )
+      .toBe(true);
+  }
+});
+
 test("concurrent first answers retry after anchor delivery instead of posting two footers", async () => {
   const run = await retainedRun({ state: "idle" });
   let completePost: (() => void) | undefined;
@@ -734,6 +957,14 @@ const RUNTIME: AgentRuntime = {
 };
 
 let messageCounter = 0;
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 function message(text: string): IncomingChatMessage {
   messageCounter += 1;

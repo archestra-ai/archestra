@@ -178,6 +178,8 @@ interface A2AManagerConfig {
 export interface A2ASystemParams {
   /** New A2A task, retained runtime workspace: terminal tasks remain immutable. */
   resumeFromTaskId?: string;
+  /** Caller-owned runtime title; bypasses automatic title generation. */
+  runtimeTitle?: string;
   sessionId?: string;
   /** Project assigned by an interactive Chat execution launcher. */
   projectId?: string;
@@ -682,6 +684,7 @@ export class A2AManager {
                 projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
                 task: executedTurnText,
+                title: systemParams?.runtimeTitle,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
                 runMode: systemParams?.runtimeMode ?? "one_shot",

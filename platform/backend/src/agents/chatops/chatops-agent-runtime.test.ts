@@ -76,6 +76,7 @@ beforeEach(
     vi.spyOn(backend, "assertReady").mockResolvedValue();
     vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
     vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "teardown").mockResolvedValue();
 
     const user = await makeUser({ email: "runtime-chat@example.com" });
     userId = user.id;
@@ -125,6 +126,9 @@ test("a message to an Agent Runtime agent starts a run in its runtime and report
   expect(executor).not.toHaveBeenCalled();
   await expect.poll(() => launch.mock.calls.length).toBe(1);
   const run = await latestRun();
+  expect(run?.title).toBe("Slack: Fix the flaky test");
+  await drainBackgroundWork();
+  expect((await latestRun())?.title).toBe("Slack: Fix the flaky test");
   expect(run?.completionTarget).toEqual({
     type: "chatops",
     bindingId: binding.id,
@@ -165,6 +169,13 @@ test.each([
     channelInstructions: "Use the incident checklist before proposing a fix.",
   });
   const previous = await retainedRun({ state: "idle" });
+  const title = "Investigate the cold cache failure";
+  await AgentRunModel.updateForActor({
+    taskId: previous.taskId,
+    actorUserId: userId,
+    organizationId: agent.organizationId,
+    title,
+  });
   const historicBytes = Buffer.from("earlier diagnostic output");
   const currentBytes = Buffer.from("new diagnostic output");
   const historicalId = "1700000000.000150";
@@ -222,6 +233,9 @@ test.each([
   expect(spec.frozenName).toBe(previous.workloadName);
   expect(launch).not.toHaveBeenCalled();
   expect(spec.taskId).not.toBe(previous.taskId);
+  expect((await AgentRunModel.findByTaskId(spec.taskId))?.title).toBe(title);
+  await drainBackgroundWork();
+  expect((await AgentRunModel.findByTaskId(spec.taskId))?.title).toBe(title);
   expect(result.agentResponse).toBe("");
   const prompt = JSON.stringify(spec);
   expect(prompt).toContain(incoming.text);
@@ -351,6 +365,10 @@ test.each([
   expect(result.success).toBe(true);
   await expect.poll(() => launch.mock.calls.length).toBe(1);
   expect(continuation).not.toHaveBeenCalled();
+  await drainBackgroundWork();
+  expect((await latestRun())?.title).toBe(
+    `${providerId === "slack" ? "Slack" : "MS Teams"}: Help me with this`,
+  );
   const prompt = JSON.stringify(launch.mock.calls[0][0]);
   expect(prompt).toContain("You are replying via");
   expect(prompt).toContain("Your final answer is posted");

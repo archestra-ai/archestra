@@ -1,5 +1,6 @@
 import { trace } from "@opentelemetry/api";
 import { z } from "zod";
+import logger from "@/logging";
 import { ApiError } from "@/types/api";
 import { isPolicyMoved } from "./policy-moved";
 
@@ -10,7 +11,8 @@ import { isPolicyMoved } from "./policy-moved";
  * classified detail: a policy the runtime refuses is the organization's own
  * configuration and names what to fix, while storage and runtime failures can
  * carry connection strings and stay generic. Every message ends with the trace
- * id so an operator can find the full cause in the logs.
+ * id so an operator can find the full cause in the logs. A generic runtime
+ * failure also names its code, so the error card says which failure it was.
  *
  * A refused policy fails the same way on every request, so clients are told
  * not to retry it (`x-should-retry: false` on a 500). So do a missing
@@ -22,6 +24,7 @@ import { isPolicyMoved } from "./policy-moved";
 export function openappaFailure(error: unknown): ApiError {
   if (error instanceof OpenappaFailure) return error;
   const failure = classify(error);
+  if (failure.statusCode >= 500) logCause(error);
   const reference = trace.getActiveSpan()?.spanContext().traceId;
   const message = `${FAILURE_PREFIX}: ${failure.detail}${
     reference ? ` (ref: ${reference})` : ""
@@ -31,6 +34,23 @@ export function openappaFailure(error: unknown): ApiError {
   if (failure.statusCode === 503) apiError.retryAfterSeconds = RETRY_AFTER;
   apiError.cause = error;
   return apiError;
+}
+
+/**
+ * Logs the native cause with the trace id the logger adds, its URL
+ * credentials removed. The error handler logs only the classified message.
+ */
+function logCause(error: unknown): void {
+  logger.error(
+    {
+      code: runtimeFailureCode(error),
+      cause: summarize(
+        error instanceof Error ? error.message : String(error),
+        MAX_CAUSE,
+      ),
+    },
+    "OpenAPPA could not safely complete an operation",
+  );
 }
 
 /** What {@link openappaFailure} returns: an OpenAPPA failure already classified. */
@@ -117,6 +137,7 @@ const FAILURE_PREFIX = "OpenAPPA could not safely complete this operation";
 const RETRY_AFTER = 5;
 const MAX_DETAIL = 240;
 const MAX_NAME = 80;
+const MAX_CAUSE = 2000;
 /** The title the frontend gives the page an administrator edits the policy on. */
 const POLICY_PAGE = "Guardrails";
 
@@ -275,7 +296,7 @@ function classifyCode(code: RuntimeFailureCode, message: string): Failure {
     case "dispatch":
     case "remedy":
     case "spawn":
-      return UNAVAILABLE;
+      return unavailable(code);
     default:
       return code satisfies never;
   }
@@ -291,6 +312,14 @@ const UNAVAILABLE: Failure = {
   statusCode: 503,
   detail: "the policy runtime is unavailable.",
 };
+
+/** The generic runtime failure, naming its code: a fixed name, never the runtime's text. */
+function unavailable(code: RuntimeFailureCode): Failure {
+  return {
+    statusCode: 503,
+    detail: `the policy runtime is unavailable (code: ${code}).`,
+  };
+}
 
 /**
  * The runtime's refusal of a call whose annotator gave no answer:

@@ -1,4 +1,5 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import logger from "@/logging";
 import { ApiError } from "@/types/api";
 import {
   OpenappaRetiredAnnotatorError,
@@ -6,6 +7,8 @@ import {
   openappaFailure,
   unansweredAnnotationNotice,
 } from "./failure";
+
+vi.mock("@/logging");
 
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {
@@ -26,31 +29,70 @@ describe("openappaFailure", () => {
   });
 
   test("keeps runtime and storage diagnostics out of the message and allows a retry", () => {
-    for (const cause of [
-      runtimeFailure(
-        "storage",
-        "storage failure: connect postgresql://app:secret@db.internal/archestra",
-      ),
-      runtimeFailure(
-        "panicked",
-        "OpenAPPA panicked; operation was not released",
-      ),
-      runtimeFailure(
-        "replay_timed_out",
-        "OpenAPPA replay exceeded its 120 second limit",
-      ),
-      new Error("private native database error"),
-      "not even an error",
-    ]) {
+    for (const [cause, detail] of [
+      [
+        runtimeFailure(
+          "storage",
+          "storage failure: connect postgresql://app:secret@db.internal/archestra",
+        ),
+        "the policy runtime is unavailable (code: storage).",
+      ],
+      [
+        runtimeFailure(
+          "panicked",
+          "OpenAPPA panicked; operation was not released",
+        ),
+        "the policy runtime is unavailable (code: panicked).",
+      ],
+      [
+        runtimeFailure(
+          "replay_timed_out",
+          "OpenAPPA replay exceeded its 120 second limit",
+        ),
+        "the policy runtime is unavailable (code: replay_timed_out).",
+      ],
+      [
+        new Error("private native database error"),
+        "the policy runtime is unavailable.",
+      ],
+      ["not even an error", "the policy runtime is unavailable."],
+    ] as const) {
       const failure = openappaFailure(cause);
 
       expect(failure.statusCode).toBe(503);
       expect(failure.shouldRetry).toBe(true);
       expect(failure.retryAfterSeconds).toBeGreaterThan(0);
       expect(failure.message).toBe(
-        "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
+        `OpenAPPA could not safely complete this operation: ${detail}`,
       );
     }
+  });
+
+  test("logs the cause and its code without URL credentials", () => {
+    vi.mocked(logger.error).mockClear();
+
+    openappaFailure(
+      runtimeFailure(
+        "storage",
+        "storage failure: connect postgresql://app:secret@db.internal/archestra",
+      ),
+    );
+
+    expect(logger.error).toHaveBeenCalledWith(
+      {
+        code: "storage",
+        cause: "storage failure: connect postgresql://db.internal/archestra",
+      },
+      "OpenAPPA could not safely complete an operation",
+    );
+  });
+
+  test("does not log a failure the client caused", () => {
+    vi.mocked(logger.error).mockClear();
+
+    openappaFailure(runtimeFailure("untrusted_log", "stored batch 7"));
+
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   test("tells a conversation whose stored record no longer decodes to start again, without retrying", () => {

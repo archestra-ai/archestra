@@ -177,7 +177,15 @@ function GuardrailPeek({ conversationId }: { conversationId?: string }) {
                 : ""
           }`}
           className="sr-only"
-        />
+        >
+          {/* The labels as text too, worded as in the panel, so the readout
+              holds them and not only its name. */}
+          <span>{`trust:${status.trust} audience:${status.audience}`}</span>
+          {typeof status.policyRevision === "number" && (
+            <span>{` revision:${status.policyRevision}`}</span>
+          )}
+          {snapshot && <span> policy snapshot</span>}
+        </output>
       )}
       {/* The z's sit outside the clipped window, over APPA's right ear. */}
       {mood === "asleep" && (

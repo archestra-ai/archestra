@@ -121,9 +121,11 @@ it("reads the newly selected session's labels", async () => {
 it("opens the labels as today, with the title linking to the Guardrails page", async () => {
   respondWith({ trust: "trusted", audience: "public", policyRevision: 7 });
   const { client, view } = renderPeek("revised");
-  await screen.findByRole("status", {
+  const readout = await screen.findByRole("status", {
     name: "Trust: trusted; audience: public; policy revision: 7",
   });
+  // The readout holds the labels as text, not only in its name.
+  expect(readout).toHaveTextContent("trust:trusted audience:public revision:7");
   await userEvent.click(peekButton() as HTMLElement);
   const dialog = await screen.findByRole("dialog");
   expect(dialog).toHaveTextContent("trust:trusted");

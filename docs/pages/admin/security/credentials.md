@@ -19,7 +19,7 @@ A **GitHub App** always belongs to the organization. It holds an API URL, app ID
 
 Install the GitHub App on the repositories it needs. Its installation permissions determine the token's access. Individual integrations describe their required permissions.
 
-A **GitLab token** always belongs to the organization. Skills, plugins, and [Git sync](/docs/agents/guardrails/policies#git-sync) use it for gitlab.com and self-managed GitLab.
+A **GitLab token** always belongs to the organization. Skills, plugins, and [Git sync](/docs/agents/guardrails/git-sync) use it for gitlab.com and self-managed GitLab.
 
 - It holds a GitLab URL and an access token.
 - You add it while you pick a GitLab repository. See [Private Repositories](/docs/agents/skills/importing#private-repositories).

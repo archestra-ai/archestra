@@ -2,46 +2,40 @@
 title: Guardrail Batteries
 sidebarTitle: Batteries
 description: Cover an MCP server's tools with a ready-made policy package
-order: 2
+order: 5
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-18
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A [battery](https://www.openappa.com/batteries) is a ready-made policy for a set of tools, usually one MCP server such as GitHub, Linear, or Google Workspace. Include it, and those tools are covered without writing rules. See the [available batteries](https://www.openappa.com/available-batteries).
+A [battery](https://www.openappa.com/batteries) is a ready-made policy for a set of tools, usually one MCP server such as GitHub, Linear, or Google Workspace. Include it, and those tools are covered without writing rules. You can include the batteries that ship with Archestra. Your own battery packages are not supported yet.
 
 ![The Batteries tab listing bundled batteries with their source, status, and servers](/docs/automated_screenshots/platform-openappa_batteries.webp)
 
 ## Include a Battery
 
-Including a battery needs [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). Binding a credential also needs **Can use** on that credential. Uploading a package with helper scripts needs **Can use** on every credential. See [Who Can Manage a Credential](/docs/admin/security/credentials#who-can-manage-a-credential).
+Including a battery needs [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). Binding a credential also needs **Can use** on that credential. See [Who Can Manage a Credential](/docs/admin/security/credentials#who-can-manage-a-credential).
 
-- **Ask the agent:** click the **Batteries** card on **Overview**. The agent finds the batteries that fit your servers.
-- **Do it yourself:** on the **Batteries** tab, click a battery's edit button and attach it to an installed MCP server.
-- **On install:** when you install an MCP server from the registry, Archestra offers its battery.
+- **Ask the agent:** open any chat button on the Guardrails pages and ask which batteries fit your servers.
+- **Do it yourself:** on the **Batteries** tab, open a battery and click **Attach to a server**.
+- **On install:** when you finish adding an MCP server from the registry, click **Configure Guardrails with agent**.
 
 ## Fix a Battery
 
-An included battery that cannot run shows a problem instead of **Enforced**:
+An included battery that cannot run shows its problem on the **Batteries** tab instead of **Configured**:
 
-- **Needs a credential:** the battery calls an API, for example to check if a repository is public. Bind a key from [Credentials](/docs/admin/security/credentials) in the battery's edit dialog. A battery holds no keys, and the key never appears in the policy.
-- **No server bound:** attach the battery to an installed MCP server.
+- **Credential not configured:** the battery calls an API, for example to check if a repository is public. Open the battery and bind a key from [Credentials](/docs/admin/security/credentials). The key never appears in the policy.
+- **Server not configured:** attach the battery to an installed MCP server.
+- **Server conflict:** more than one MCP server has the battery's tool prefix, so it cannot tell which one to check. Attach it to one server.
 
 What to know:
 
-- Archestra saves the key beside the policy, not in it. So you can bind a key before the battery is included, and while [Git sync](/docs/agents/guardrails/policies#git-sync) owns the policy.
-- A `[credentials]` line in the policy wins over a key bound here. Remove the line to manage the key in the dialog.
+- Archestra saves the key beside the policy, not in it. So you can bind a key before the battery is included, and while [Git sync](/docs/agents/guardrails/git-sync) owns the policy.
+- The policy text cannot hold a `[credentials]` line, and a save with one is refused.
 
 ## When a Revision Is Refused
 
-A refused revision does not turn your guardrails off. The runtime keeps enforcing the last composition that opened, until a revision composes again.
+A refused revision does not turn your guardrails off. The runtime keeps enforcing the last policy that worked, and the **Policy** tab says **an earlier composition stays enforced**. Fix what the refusal message names, and save again.
 
-- The **Batteries** tab names the refused revision and the one that stays enforced. Fix what the refusal message names, or save a revision that composes.
-- Each battery shows how the enforced composition holds it. A **Now** line, such as **Now: Needs a credential**, shows what the current text would change.
-- **Not yet enforced:** the current text includes the battery, but the enforced composition does not.
-- **Nothing is enforced:** no composition opened before the refusal, so governed calls are refused until the text composes.
-
-## Write Your Own
-
-[Write a battery](https://www.openappa.com/write-a-battery), then click **Upload package** on the **Batteries** tab. A battery can bring its own helper programs, such as sanitizers and authorities. Those that call APIs run in the [code sandbox](/docs/agents#code-sandbox).
+If no revision ever worked, the **Policy** tab says **nothing is enforced**, and calls the policy governs are refused until a revision works.

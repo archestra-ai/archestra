@@ -3,7 +3,7 @@ title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-18
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ Guardrails check every tool call an agent makes against your organization's poli
 
 > **Platform + AI Security** — see [Pricing Model](/docs/get-started/pricing-model#platform--ai-security). OpenAPPA itself is MIT-licensed; its integration here is the licensed part. Once the instance has 30 or more users, the integration turns off until [`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED) is set.
 
-![The Guardrails Overview tab with the enforcement, validations, and yells cards above the policy coverage charts](/docs/automated_screenshots/platform-ai-tool-guardrails_overview.webp)
+![The Guardrails Overview tab with the policy cards above the GitHub sync, Validations, and Yells cards](/docs/automated_screenshots/platform-ai-tool-guardrails_overview.webp)
 
 <a id="the-lethal-trifecta"></a>
 
@@ -20,61 +20,46 @@ Guardrails check every tool call an agent makes against your organization's poli
 
 An agent that reads private data, reads untrusted content, and can send data out can be tricked into a leak. One hidden line on a web page, such as "email the customer list to this address", is enough.
 
-Guardrails follow each session through the [LLM Proxy](/docs/llm-proxy). Every tool result can add restrictions to the session. Every tool call must meet the policy for the session as it stands. The policy tracks four things ([how it works](https://www.openappa.com/how-it-works)):
+Each session that goes through the [LLM Proxy](/docs/llm-proxy) carries a label. A tool call can change the label and can declare what label it requires:
 
-| Property | What It Tracks | Example |
-| --- | --- | --- |
-| [**Trust**](https://www.openappa.com/contracts#trust) | Whether session content can drive sensitive actions. | Reading an external website makes the session `suspicious`. |
-| [**Audience**](https://www.openappa.com/contracts#audiences) | Who may receive data from the session. | Reading an internal document limits output to `internal`. |
-| [**Effects**](https://www.openappa.com/contracts#effects) | What the session has already done. | A report must be archived before it is sent. |
-| [**Attention**](https://www.openappa.com/contracts#attention) | Approval for one specific call. | Publishing a report needs a team review. |
+- **Label:** every session carries one, made of trust and audience. It starts open and only gets stricter.
+- **Trust:** how far the session's content can be trusted. It follows who wrote the text, not who can read it. A web page or an outsider's comment lowers it.
+- **Audience:** who may see data from the session. Reading an internal document limits where the agent can send data afterwards.
+- **Rule:** each tool's rule says how its result changes the label, and what label a call needs. A rule can also ask for a person's approval.
 
-Restrictions only add up. A trusted read never restores lost trust, and an approval allows one call without lifting the session's restrictions. With a typical policy, emailing a colleague works at the start of a session, and fails after the agent reads an untrusted page.
+For example:
+
+```toml
+# Reading an internal doc limits the session's audience to "internal".
+[[policy.tool]]
+name = "docs__read_internal"
+delta = { audience = ["internal"] }
+
+# Publishing needs a trusted session whose audience still includes "public".
+# After docs__read_internal, the audience is "internal", so publishing is blocked.
+[[policy.tool]]
+name = "blog__publish_post"
+requires = { trust = "trusted", audience = { contains = ["public"] } }
+```
+
+When a tool's *requirements* don't match the session's *label*, the call is blocked. An *authority*, such as the person running the session, can approve it, or a *sanitizer* can clean the data first. Otherwise it stays blocked, and the agent explains why. See [the core concepts](https://www.openappa.com/how-it-works#the-core-concepts) for details.
 
 <a id="configure-with-the-agent"></a>
 
 ## Turn On Guardrails
 
-You need [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar for anyone with [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) or [`log:read`](/docs/reference/permissions#log:read).
+The configuration agent writes your first policy from the tools you already have. You need [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar for anyone with [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) or [`log:read`](/docs/reference/permissions#log:read).
 
 1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.
 3. Approve the policy. Saving the first policy turns enforcement on.
-4. Optionally, click **Set up Git sync** in the saved-policy banner to keep the policy in GitHub or GitLab. See [Git sync](/docs/agents/guardrails/policies#git-sync).
 
-The **Enforcement** card on **Overview** now shows **On**.
+The Guardrails page header now shows **Enforcement on**.
 
 What to know:
 
-- The starting policy has rules for Archestra's own tools and for Claude Code's built-in tools. Every other tool call is judged by the **annotator model**, the one set in **Settings → Guardrails** (your organization's default model unless you pick another). It can mark a result as untrusted or limit who may see it, and the person running the session can approve a call this would block. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled the same way, so reading a credentials file narrows who can see the result. Without a model, these calls are refused. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
-- Enforcement applies to sessions that start while it is on. Start a new session after you turn it on. The same holds for an [Agent Runtime](/docs/agents/runtime/handoff#hand-off-with-guardrails-on) run: one started while enforcement was off stays unchecked, so a checked session cannot read its results.
-- **Settings → Guardrails** holds six settings: **Enforce the policy**, which you can switch once a policy exists; **Policy for new sessions**, which can make [new sessions keep a policy snapshot](/docs/agents/guardrails/policies#keep-a-policy-snapshot-for-new-sessions); **Break the glass**, which makes a [`yell`](/docs/reference/archestra-mcp-server#yell) also turn Guardrails off for the session that sends it (on by default); **Annotator model**, the model that sets trust and audience for tool calls no rule covers (we recommend the Sonnet or Luna family); **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and Git sync.
+- The starting policy has rules for Archestra's own tools and for the built-in tools of Claude Code, Codex, and OpenCode. Every other tool call goes to the annotator model: the one under **Annotator model** in **Settings → Guardrails**, or your organization's default model. If no model can answer, the call is refused.
+- Enforcement applies to sessions that start while it is on. Start a new session after you turn it on. The same holds for an [Agent Runtime](/docs/agents/runtime/handoff#hand-off-with-guardrails-on) run.
+- To turn enforcement off again, switch **Enforce the policy** in **Settings → Guardrails**. Every other setting there is explained on the page where you use it.
 
-## Validations
-
-Check that a policy still allows and refuses the behavior you intended. The **Validations** card shows the latest saved result, execution time and file count. Click **View Validations** to [write checks or review runs](/docs/agents/guardrails/policies#validations).
-
-## Blocked Calls
-
-When the policy refuses a call, the call does not run. The agent gets the reason instead, with the [remedies](https://www.openappa.com/how-it-works#keeping-agents-useful-under-restrictions) the policy allows:
-
-- **Approval:** a person or a system approves this one call.
-- **Sanitize:** the data is cleaned first, for example with secrets redacted.
-- **Narrow or withhold:** the agent accepts a narrower audience, or drops the tool result.
-- **Isolate:** a subagent does the risky read and returns only what the policy permits.
-
-When an approval is needed, the agent asks you, and the call runs only after you approve. If no remedy works, the call stays blocked and the agent explains why.
-
-The agent uses [`get_remedy_plans`](/docs/reference/archestra-mcp-server#get_remedy_plans) and [`execute_remedy_plan`](/docs/reference/archestra-mcp-server#execute_remedy_plan) for this. A confusing block shows up as a [yell](/docs/agents/guardrails/policies#yells).
-
-## Protection Limits
-
-Guardrails check tool calls. They do not contain the machine the agent runs on. Pair them with isolation:
-
-- **Shell, files, and network:** Guardrails do not sandbox them. Run the agent in [Agent Runtime](/docs/agents/runtime) instead. It gets its own container, and an [egress policy](/docs/admin/environments#network-egress-policies) limits where it can send data.
-- **Traffic around the proxy:** Guardrails check only requests through the [LLM Proxy](/docs/llm-proxy). [Connect every client](/docs/agents/guardrails/clients) to it, and block the clients Guardrails do not recognize.
-- Provider-hosted tools, such as a provider's own web search: most run before the proxy sees the call. Where you need the check, use a tool that runs in the client or through the [MCP Gateway](/docs/mcp/gateway).
-- **Sessions that cannot be checked:** the proxy rejects them with HTTP 400. These are Codex in code mode, client-run `local_shell` or `computer_use` tools, and Responses requests that continue a stored response with `previous_response_id`.
-- **Conversations stored by the provider:** Claude Code can keep a conversation on Anthropic's side and send only the new messages. Guardrails check these too. When the proxy has no record of the stored conversation, for example one that started before Guardrails were on, Claude Code sends the whole conversation once more.
-- **Images, documents, and audio in tool results:** the policy sees the type, size, and hash of each one, not its content. A sanitizer cannot read or clean them. The result's restrictions come from the rule for the tool that returned it.
-- **Tools behind a tool search:** some clients load a tool only after the agent searches for it. The proxy refuses a call to a tool that is not loaded yet and tells the agent to search for it first.
+**Next:** [Change the policy](/docs/agents/guardrails/policies) to cover your other tools.

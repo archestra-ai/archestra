@@ -2,9 +2,9 @@
 title: Guardrail Clients
 sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
-order: 3
+order: 4
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -36,17 +36,14 @@ Route model requests through the proxy so Guardrails can check the tool calls th
 
 ## Approval Cards
 
-Read the complete call and policy scope before approving. Long text arguments can have a **Generated summary** to help you find the purpose and constraints. The summary can omit details; it never replaces the exact arguments or grants permission.
+Read the complete call before you approve it. An approval allows this one call only, and only when the policy allows it.
 
-Archestra prepares the summary with a separate model request, without tools or your conversation history. This uses inference tokens and requires an [explicitly configured summary model](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER); it does not use the organization's default model automatically. If no summary model is configured or summarization fails, the complete review still appears.
+Claude Code asks "Run *tool*?" and offers **Allow**, **Deny**, and **Inspect**. The card shows the call's arguments, and under **Allow** what an approval accepts. **Inspect** prints the complete review in the chat, then shows the card again. It never grants permission.
 
-Claude Code asks "Run *tool*?" and offers **Allow**, **Deny**, and **Inspect**. The preview beside the choices shows the call's arguments, and under **Allow** also what an approval accepts. A value too long for the card shows its size and points to **Inspect**.
+What to know:
 
-**Inspect** prints the complete platform review in the chat transcript, then shows the same card again. Prose keeps its paragraphs, commands use literal code blocks, and structured values use formatted JSON. Inspection never grants permission.
-
-Inspecting adds the full review to the conversation history and therefore to subsequent model requests. It does not rewrite earlier messages or change the tool arguments. Stale or mismatched answers cannot authorize a changed call; if the card cannot show everything an approval accepts, it does not offer **Allow**.
-
-Use the chat transcript's selection and copy controls for the full review. Claude Code controls selection inside its native preview pane; Archestra cannot enable it through the question tool.
+- Long text arguments can get a **Generated summary**. It needs an [explicitly configured summary model](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER), uses tokens, and never replaces the exact arguments.
+- If the card cannot show everything an approval accepts, it does not offer **Allow**.
 
 ## Session Headers
 
@@ -92,3 +89,13 @@ Work handed to another agent stays under the same policy.
 
 - **Subagents:** a subagent runs in its own session. The parent decides before it starts what it may return. Its answer passes a [checked return path](https://www.openappa.com/contracts#remedy-plans-and-child-returns).
 - **Claude Code teammates:** a message that adds no restrictions arrives directly. Any other message waits. The receiver can read it with [`read_peer_message`](/docs/reference/archestra-mcp-server#read_peer_message), and then takes on its restrictions.
+
+## Protection Limits
+
+Guardrails check tool calls. They do not contain the machine the agent runs on. Pair them with isolation:
+
+- **Shell, files, and network:** Guardrails do not sandbox them. Run the agent in [Agent Runtime](/docs/agents/runtime) instead. It gets its own container, and an [egress policy](/docs/admin/environments#network-egress-policies) limits where it can send data.
+- **Traffic around the proxy:** Guardrails check only requests through the LLM Proxy. Connect every client to it, and set **Other clients** to **Blocked**.
+- **Provider-hosted tools:** most, such as a provider's own web search, run before the proxy sees the call. Where you need the check, use a tool that runs in the client or through the MCP Gateway.
+- **Sessions that cannot be checked:** the proxy rejects them with HTTP 400. These are Codex in code mode, client-run `local_shell` or `computer_use` tools, and Responses requests that continue a stored response with `previous_response_id`.
+- **Images, documents, and audio in tool results:** the policy sees the type, size, and hash of each one, not its content. Their restrictions come from the rule for the tool that returned them.

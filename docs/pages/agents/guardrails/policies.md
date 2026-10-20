@@ -1,41 +1,38 @@
 ---
 title: Guardrail Policies
 sidebarTitle: Policies
-description: Cover your tools with rules, change the policy, and sync it with GitHub or GitLab
+description: Cover your tools with rules and change the policy by describing what you want
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Your policy decides which tool calls an agent can make, and when. It combines your own rules with [batteries](/docs/agents/guardrails/batteries), ready-made rules for common MCP servers.
-
-Let the configuration agent do the work. Describe what you want in plain words, such as "CRM tools only send data inside the company". The agent writes the rules for you. You can still read every rule in [OpenAPPA](https://www.openappa.com/contracts) format.
+Describe the rule you want in plain words, such as "CRM tools only send data inside the company", and the configuration agent writes it into your policy. The policy combines your own rules with [batteries](/docs/agents/guardrails/batteries), ready-made rules for common MCP servers. You can still read every rule in [OpenAPPA](https://www.openappa.com/contracts) format.
 
 ## Policy Coverage
 
-The **Tool coverage** chart on **Overview** shows how many of your tools a rule covers:
+The **Rules annotate your tools** chart on **Overview**, and the **Tool coverage** column under **MCP servers**, show which of your tools a rule covers. Start with the servers that read private data or send data out.
 
 | Coverage | Meaning |
 | --- | --- |
 | **Custom rule** | A rule in your own policy. |
 | **Battery rule** | A rule from a [battery](/docs/agents/guardrails/batteries). |
-| **Catch-all rule** | A wildcard rule that classifies the call. |
+| **Catch-all rule** | A wildcard rule classifies the call. The starting policy's catch-all asks the annotator model. |
 | **Not enforced** | A battery covers the tool but cannot run yet. |
-| **No rule** | No rule was written for the tool. The starting policy's catch-all counts here: the annotator model judges each call. |
+| **No rule** | No rule reaches the tool, so its calls always run. |
 
-While a revision is refused, the chart counts the earlier composition the runtime still enforces, and says so under the chart.
-
-Start with the servers that read private data or send data out. Under **MCP servers**, click **Ask** on a server to have the agent propose rules for its tools. **Improve with chat** does the same for all your tools.
+Under **MCP servers**, click **Improve** on a server or a tool, and the agent proposes rules for it.
 
 ## Change the Policy
 
-1. Click any chat button on the Guardrails pages.
-2. Describe the change, such as "require a review before anything is posted to Slack".
-3. Review the change and approve it.
+Any chat button on the Guardrails pages opens the configuration agent.
 
-The **Policy** tab shows the source. **Effective** shows the policy that runs, with batteries included.
+1. Describe the change, such as "require a review before anything is posted to Slack".
+2. Review the change and approve it.
+
+On the **Policy** tab, **Source** shows your policy text. **Effective** shows the policy that runs, with batteries included.
 
 ![The Policy tab showing the organization policy source](/docs/automated_screenshots/platform-openappa_policy.webp)
 
@@ -53,117 +50,53 @@ requires = { trust = "trusted", audience = { contains = ["public"] } }
 
 What to know:
 
-- Conversations that follow the live policy take a change at their next tool call; pinned conversations keep their snapshot. A review under the earlier revision is withdrawn, and the agent asks again. **Effective** shows the runtime revision in force.
+- Running sessions take a change at their next tool call, unless they keep a snapshot. A review asked under the earlier revision is withdrawn, and the agent asks again.
 - A change that fails keeps the last valid policy running. **Effective** shows the error.
-- Changing the policy needs [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). Turning enforcement on or off needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+- With [Git sync](/docs/agents/guardrails/git-sync), a change opens a pull request instead of saving.
 
 For every field, see the [policy reference](https://www.openappa.com/contracts).
 
 ### Keep a Policy Snapshot for New Sessions
 
-To stop policy changes from reaching running sessions, without a redeploy, go to **Settings → Guardrails** and set **Policy for new sessions**:
+A snapshot stops policy changes from reaching sessions that are already running. Go to **Settings → Guardrails** and set **Policy for new sessions**:
 
-- **New sessions reference the live policy** (the default): new sessions follow policy changes. Existing sessions that follow the live policy take a change at their next tool call.
-- **New sessions keep a policy snapshot**: a new session keeps the policy it opens with until it ends, and a policy change reaches new sessions only. No new policy revision is published, so running sessions keep the revision they have.
+- **New sessions reference the live policy** (the default): sessions take each policy change at their next tool call.
+- **New sessions keep a policy snapshot**: a new session keeps the policy it opens with until it ends. A change reaches new sessions only.
 
-When you select the live policy again, following sessions take the next change. A session that opened with a snapshot keeps it. The chat shows **policy snapshot** for such a session. Changing the setting needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+The chat shows **policy snapshot** for a session that keeps one. Changing the setting needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
 ## Human Review
 
-Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy's reviewer covers this mark, any other mark but `blocked`, data below `trusted`, and a missing `public` audience. A policy saved earlier keeps its reviewer, which may be named `hitl`; copy the `human-approval` authority from the starting policy into it (or into `appa.toml` with GitHub sync) to get this default.
+Ask for a person's approval on calls that are destructive or publish outside the company, not on every call. Mark them in the rule with `requires = { attention = ["human-approval"] }`. The starting policy's reviewer covers this mark, data below `trusted`, and a missing `public` audience.
 
-In Slack, Microsoft Teams, and Telegram, the agent pauses and posts the review in the conversation with **Approve** and **Decline** buttons. Only the person who sent the message can answer, within 24 hours. After that the action stays blocked. An approval lets the agent continue only when the policy allows it.
+- **Chat and coding agents:** the agent asks you, and the call runs only after you approve. See [approval cards](/docs/agents/guardrails/clients#approval-cards).
+- **Slack, Microsoft Teams, and Telegram:** the agent posts the review in the conversation with **Approve** and **Deny**. Only the person who sent the message can answer, within 24 hours.
+- **[A2A](/docs/agents/triggers-and-channels/webhook-a2a#approving-tool-calls):** the task pauses and the caller answers.
 
-Over [A2A](/docs/agents/triggers-and-channels/webhook-a2a#approving-tool-calls), the task pauses and the caller answers.
+A policy saved before the starting policy had this reviewer keeps its own. Copy the `human-approval` authority from the starting policy into it to get the default.
 
-<span id="github-sync"></span>
+<a id="blocked-calls"></a>
 
-## Git Sync
+## Unblock a Call
 
-With Git sync, the policy lives in a GitHub or GitLab repository, and every change gets reviewed there. Sync runs both ways: a change merged in the repository applies here, and a change made here opens a pull request (a merge request on GitLab) instead of saving.
+A refused call does not run. The agent gets the reason, with the [remedies](https://www.openappa.com/how-it-works#keeping-agents-useful-under-restrictions) the policy allows:
 
-1. Go to **Settings → Guardrails** and click **Set up Git sync**.
-2. Pick **GitHub** or **GitLab**, then follow its steps below.
+- **Approval:** a person or a system approves this one call.
+- **Sanitize:** the data is cleaned first, for example with secrets redacted.
+- **Narrow or withhold:** the agent accepts a narrower audience, or drops the tool result.
+- **Isolate:** a subagent does the risky read and returns only what the policy permits.
 
-### GitHub
-
-1. Enter the **GitHub URL**, either GitHub.com or your GitHub Enterprise Server address, and the **Organization**. Then choose one:
-   - **Start fresh:** click **Create on GitHub** to create a private repository from the [OpenAPPA template](https://github.com/archestra-ai/openappa-config). On GitHub Enterprise Server, create an empty private repository instead, and setup adds the OpenAPPA files.
-   - **Use an existing repository:** one that already holds an OpenAPPA policy.
-2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install a new App on the policy repository only.
-3. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
-
-If repository rules block the commit, setup opens an initial pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass. Until then, the Guardrails pages show **Merge your initial policy**.
-
-### GitLab
-
-Git sync works with gitlab.com and self-managed GitLab, through an access token with the `api` scope.
-
-1. Pick a saved token, or click [**Add a GitLab token**](/docs/agents/skills/importing#private-repositories).
-2. Choose the policy project. To change the branch, policy file, validations folder, or schedule, open **Advanced** first.
-   - **New project:** pick a **Group**, or **Your namespace** for your own account, and enter a **Project name**. Click **Create project**. Setup creates a private project and adds the OpenAPPA files with your current policy.
-   - **Existing project:** pick it and click **Connect project**.
-
-If GitLab refuses the first commit to a protected branch, setup stops with an error. To fix it, use a token with the Maintainer role, or allow the initial push to that branch.
-
-### Repository Checks
-
-Before you connect, the dialog checks the repository or project:
-
-- **OpenAPPA template**, **Empty repository**, or **Empty project:** setup copies your current policy into it.
-- **Found appa.toml:** that file replaces your current policy.
-- **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
-- **No access:** the App or token cannot read it. On GitHub, click **Change access** to fix it.
-
-It also warns when the validations folder is missing. When setup is done, the card on **Settings → Guardrails** shows **Connected**.
-
-After the configuration agent saves a policy, the banner in chat links to **Set up Git sync**. It opens this setup in a new tab.
-
-What to know:
-
-- Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) and, to pick a saved App or token, [`credential:read`](/docs/reference/permissions#credential:read). Creating a GitHub App or saving a GitLab token also needs [`credential:create`](/docs/reference/permissions#credential:create).
-- The GitHub App needs only the policy repository, with **Read & write** on Contents and Pull requests. On GitHub Enterprise Server, an App created in setup also gets Workflows **Read & write**.
-- A merged change that gives a battery a credential waits for approval. Click **Review** in **Settings > Guardrails** or on **Batteries** to see each battery and its credential, then **Approve**, which needs **Can use** on every credential ([Granular Access Control](/docs/admin/access-control#granular-access-control)). To reject it, undo the change in GitHub or GitLab.
-
-## Validations
-
-Keep a policy assumption checked over time, such as refusing an email after an agent reads untrusted data. Open **View Validations** on **Overview** to review the latest saved run, or use the **Validations** tab.
-
-1. Open the **…** menu, click **Write a validation**, and describe the case; the agent drafts a `.appa` scenario. **Explain validations** in the same menu answers questions about the format.
-2. Review the expected decisions and test the draft from its editor.
-3. Save locally, or commit the file to the configured Git repository.
-4. Click **Run all** to check every saved file, or the run button on a row to check one. **Run all** opens a panel that shows each file finish as it runs. Both keep the result in run history.
-
-Each file describes ordered tool calls and expected decisions. Calls in one file share session state; separate files start fresh. Replay uses the effective policy, including batteries. It runs no tools, but asks the policy's annotators, helpers and models live with your organization's credentials, so a run can spend model tokens. See the [OpenAPPA validation guide](https://www.openappa.com/validation) for the format.
-
-What to know:
-
-- **Results:** each file shows its newest result, **Passed**, **Failed** or **Cannot run**, from whichever run checked it last. A failing row shows the line and the reason under its name. A file cannot run when replay stops at a call whose answer did not come, such as a model whose key is not set or a helper that cannot be reached. Replay asks no person: a step that expects `authority human-approval` passes when the call offers human review. The summary line adds up these results; click **last run** to open that run, or **Run history** in the **…** menu to compare runs.
-- **Drafts:** **Test draft** in the editor checks unsaved text. Its result is temporary and does not change saved results or history. Search filters and unsaved drafts do not change **Run all**.
-- **Policy changes:** accepted changes from local saves or Git sync automatically queue the full suite. Unchanged syncs and validation-only edits do not trigger runs. Validation failures do not block or roll back a policy; configure repository CI if failures should block merges.
-
-### Git-Backed Validations
-
-With sync enabled, Git is the only source of truth for validation files. Archestra loads them from the same accepted commit as the policy, with no local fallback.
-
-Set the validations folder under **Advanced** during setup, or later with **Edit source** on **Settings → Guardrails**. It defaults to `traces`. Validations run once the folder holds `.appa` files. Editor changes remain drafts you can preview and export for a repository commit.
-
-### Ask the Configuration Agent
-
-For an open-ended request, the agent discovers a few replayable examples and asks which observed behavior you want to preserve. Discovery checks single calls in fresh sessions; it does not prove broader protection or complete coverage. If discovery cannot prepare a check, it explains the missing input or unavailable dependency instead of inventing prerequisites.
-
-After you choose a discovered example, the agent previews its exact file for review. A specific requirement uses normal drafting and replay, even when the assertion fails against the current policy. It saves only within your authorization. Validation-only requests leave the policy unchanged, and first-time policy setup skips validations unless requested.
-
-For a concrete policy change, the agent can include a focused regression check and replay the full suite against the proposal. It preserves unrelated files and expectations. Publication saves policy and validations together locally, or opens one pull request (a merge request on GitLab); previews do not create saved run history.
+The agent uses [`get_remedy_plans`](/docs/reference/archestra-mcp-server#get_remedy_plans) and [`execute_remedy_plan`](/docs/reference/archestra-mcp-server#execute_remedy_plan) for this. If no remedy works, the call stays blocked.
 
 ## Yells
 
-When a remedy plan makes no sense, an agent keeps getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, the agent reports it with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. See [Reporting](https://www.openappa.com/yell). With **Break the glass** on in **Settings → Guardrails**, a yell also turns Guardrails off for that session, so the agent is no longer stuck. A yell that did this is marked in the list. The **Yells** tab lists the reports for anyone with [`log:read`](/docs/reference/permissions#log:read). The list shows unresolved reports. To see a resolved report or reopen it, set the status filter to **Resolved**. The link keeps the filter, so you can share it. Click **Investigate in chat** to have the agent propose a fix, then **Mark resolved**.
+When the agent keeps getting blocked, or a remedy makes no sense, it reports the problem with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. The **Yells** tab lists the reports for anyone with [`log:read`](/docs/reference/permissions#log:read).
 
-An authenticated runtime or client can also report from a session outside enforcement. Its feedback is saved locally without a diagnostic archive, and the session stays outside enforcement.
+1. Open a report and click **Investigate in chat**. The agent compares the report with the policy and the [validations](/docs/agents/guardrails/validations), and proposes a fix.
+2. Approve the fix, then click **Mark resolved**.
 
-The agent compares the report with the current policy and validations. A policy fix can include an essential regression check where replay represents the issue. Client and helper failures receive their own diagnosis rather than weaker policy.
+What to know:
 
-Once you confirm the fix, the agent can mark the report resolved in the chat. A report keeps its investigation chat, so **Investigate in chat** opens it again.
-
-Reports stay in your deployment. With analytics on, they also go to the shared OpenAPPA reporting service. To keep them local, set [`ARCHESTRA_ANALYTICS=disabled`](/docs/reference/configuration#ARCHESTRA_ANALYTICS). To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
+- With **Break the glass** on in **Settings → Guardrails** (the default), a yell also turns Guardrails off for that session, so the agent is no longer stuck. The list marks these yells.
+- The list shows unresolved reports. Set the status filter to **Resolved** to see or reopen the others.
+- Reports stay in your deployment. With analytics on, they also go to the shared [OpenAPPA reporting service](https://www.openappa.com/yell). To keep them local, set [`ARCHESTRA_ANALYTICS=disabled`](/docs/reference/configuration#ARCHESTRA_ANALYTICS). To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).

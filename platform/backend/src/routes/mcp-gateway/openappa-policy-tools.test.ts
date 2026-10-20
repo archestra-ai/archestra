@@ -202,7 +202,7 @@ describe("implicit OpenAPPA policy read tools", () => {
   }) => {
     const organization = await makeOrganization();
     const reader = await makeCustomRole(organization.id, {
-      permission: { ...memberPermissions, openappaPolicy: ["read"] },
+      permission: { ...memberPermissions, guardrailsPolicy: ["read"] },
     });
     const { organizationId, userId } = await contextFor({
       makeOrganization: async () => organization,
@@ -267,7 +267,7 @@ describe("implicit OpenAPPA policy read tools", () => {
     ).rejects.toMatchObject({ code: -32601 });
   });
 
-  test("a caller without a user, or without openappaPolicy:read, neither lists nor runs policy reads", async ({
+  test("a caller without a user, or without guardrailsPolicy:read, neither lists nor runs policy reads", async ({
     makeOrganization,
     makeUser,
     makeMember,

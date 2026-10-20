@@ -71,6 +71,11 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
         .iter()
         .filter(|battery| match battery.manifest() {
             Ok(package) => match &package.role {
+                // A battery that needs each person's own token does not list the
+                // multi-user target, and this host runs one shared token.
+                Role::Battery(declared) if !declared.targets.supports(BatteryTarget::MultiUser) => {
+                    false
+                }
                 Role::Battery(declared) => {
                     let document = |path: &str| {
                         battery
@@ -79,7 +84,7 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
                     };
                     let target = declared
                         .targets
-                        .as_ref()
+                        .policies()
                         .and_then(|targets| document(targets.multi_user.policy.as_str()));
                     document(declared.base.as_str()).is_none_or(|base| {
                         serves_this_host(
@@ -122,9 +127,10 @@ pub(crate) enum PackageOrigin {
 }
 
 /// Bundled batteries written for another host's own tools that this host serves
-/// anyway: a root's `[aliases] host` table rebinds their rules onto the client
-/// built-ins Archestra derives as `host/archestra/<name>`.
-const HOST_ALIASED_BATTERIES: &[&str] = &["claude-code"];
+/// anyway: `coding` names canonical tools that `claude-code`'s tool map binds to
+/// Claude Code's built-ins, and a root's `[aliases] host` table rebinds those onto
+/// the client built-ins Archestra derives as `host/archestra/<name>`.
+const HOST_ALIASED_BATTERIES: &[&str] = &["coding", "claude-code"];
 
 /// Validate a battery package from its files and read what the host needs from it.
 /// Runs the marketplace's own package validation on a scratch copy, so an uploaded
@@ -170,10 +176,16 @@ pub(crate) fn inspect(files: &[BatteryFile], origin: PackageOrigin) -> Result<Ba
         let document = toml::from_str(&text).map_err(|error| error.to_string())?;
         Ok((text, document))
     };
+    if !battery.targets.supports(BatteryTarget::MultiUser) {
+        return Err(format!(
+            "battery {} does not list the multi-user target, so it needs each person's own token, and this host runs one shared token",
+            package.name
+        ));
+    }
     let (base, document) = policy(battery.base.as_str())?;
     let target = battery
         .targets
-        .as_ref()
+        .policies()
         .map(|targets| policy(targets.multi_user.policy.as_str()))
         .transpose()?;
     let target_document = target.as_ref().map(|(_, document)| document);
@@ -193,7 +205,7 @@ pub(crate) fn inspect(files: &[BatteryFile], origin: PackageOrigin) -> Result<Ba
         Some((policy, target)) => Some(BatteryTargetInfo {
             target_credentials: battery
                 .targets
-                .as_ref()
+                .policies()
                 .map(|targets| targets.multi_user.credentials.clone())
                 .unwrap_or_default(),
             externals: [helper_externals(&target)?, externals.clone()].concat(),
@@ -387,15 +399,18 @@ mod tests {
     }
 
     #[test]
-    fn the_bundled_claude_code_battery_is_served_for_host_aliasing_and_no_other_host_battery_is() {
+    fn the_bundled_coding_and_claude_code_batteries_are_served_and_no_other_host_battery_is() {
         let served = bundled().expect("bundled batteries validate");
-        let claude_code = served
-            .iter()
-            .find(|battery| battery.name == "claude-code")
-            .expect("the claude-code battery is rebound onto this host's client built-ins");
-        // Its rules name another host's tools, so no server alias points it anywhere.
-        assert!(claude_code.namespaces.is_empty());
-        assert!(!claude_code.routed_annotators.is_empty());
+        for name in ["coding", "claude-code"] {
+            let battery = served
+                .iter()
+                .find(|battery| battery.name == name)
+                .unwrap_or_else(|| panic!("{name} is rebound onto this host's client built-ins"));
+            // Its rules name canonical or another host's tools, so no server alias
+            // points it anywhere.
+            assert!(battery.namespaces.is_empty(), "{name}");
+            assert!(!battery.routed_annotators.is_empty(), "{name}");
+        }
         let foreign: Vec<&str> = bundled_batteries()
             .iter()
             .filter(|battery| !HOST_ALIASED_BATTERIES.contains(&battery.name))
@@ -440,6 +455,21 @@ mod tests {
             .collect();
         assert!(inspect(&files, PackageOrigin::Bundled).is_ok());
         assert!(uploaded(&files).is_err());
+    }
+
+    #[test]
+    fn batteries_that_need_each_persons_own_token_are_not_served() {
+        let served: Vec<&str> = bundled()
+            .expect("bundled batteries validate")
+            .iter()
+            .map(|battery| battery.name.as_str())
+            .collect();
+        for name in ["slack", "google-workspace"] {
+            assert!(!served.contains(&name), "{name} is served");
+        }
+        for name in ["github", "cloudflare", "grain", "archestra"] {
+            assert!(served.contains(&name), "{name} is not served");
+        }
     }
 
     fn uploaded(files: &[BatteryFile]) -> Result<BatteryInfo, String> {

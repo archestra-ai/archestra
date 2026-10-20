@@ -35,6 +35,13 @@ import OrganizationRoleModel from "./organization-role";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
+/**
+ * How often a token's `last_used_at` is rewritten while it is in use. The
+ * column only feeds a "last used" label, so a minute of staleness is fine and
+ * saves an UPDATE on every service-account request.
+ */
+const TOKEN_LAST_USED_REFRESH_MS = 60_000;
+
 class ServiceAccountModel {
   static readonly MAX_TOKENS_PER_SERVICE_ACCOUNT = 50;
 
@@ -589,12 +596,47 @@ class ServiceAccountModel {
       return null;
     }
 
-    await db
-      .update(schema.serviceAccountTokensTable)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(schema.serviceAccountTokensTable.id, row.token.id));
+    // last_used_at feeds a "last used" label; writing it on every request put
+    // an UPDATE on the hot path of every service-account call. Refresh it at
+    // most once per TOKEN_LAST_USED_REFRESH_MS per token.
+    const lastUsedAt = row.token.lastUsedAt?.getTime() ?? 0;
+    if (Date.now() - lastUsedAt >= TOKEN_LAST_USED_REFRESH_MS) {
+      await db
+        .update(schema.serviceAccountTokensTable)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(schema.serviceAccountTokensTable.id, row.token.id));
+    }
 
     return row;
+  }
+
+  /**
+   * The columns the authorization path needs for a synthetic service-account
+   * caller. `findById` also reads the tokens, the creator and the labels:
+   * four statements per permission check, paid on every request.
+   */
+  static async findAuthContext(
+    id: string,
+    organizationId: string,
+  ): Promise<Pick<
+    SelectServiceAccount,
+    "organizationId" | "role" | "disabled"
+  > | null> {
+    const [row] = await db
+      .select({
+        organizationId: schema.serviceAccountsTable.organizationId,
+        role: schema.serviceAccountsTable.role,
+        disabled: schema.serviceAccountsTable.disabled,
+      })
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.id, id),
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   static async getPermissions(

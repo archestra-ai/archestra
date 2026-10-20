@@ -11,6 +11,11 @@ import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { SidebarWarningsAccordion } from "./sidebar-warnings-accordion";
 
+// The shell's deferral gate is released here unless a test holds it.
+const mockShellReady = vi.fn(() => true);
+vi.mock("@/lib/shell-deferral", () => ({
+  useShellReady: () => mockShellReady(),
+}));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/environment.query", () => ({
@@ -18,10 +23,14 @@ vi.mock("@/lib/environment.query", () => ({
 }));
 vi.mock("@/app/openappa/_parts/guardrails-deployment-toggle", () => ({
   GuardrailsDisabledWarning: () => <div>Guardrails disabled row</div>,
+  GuardrailsSnapshotPolicyWarning: () => <div>Policy snapshot row</div>,
 }));
 let guardrailsEnabled = false;
+let newSessionPolicy = "live";
 vi.mock("@/lib/guardrails-deployment.query", () => ({
-  useGuardrailsDeployment: () => ({ data: { enabled: guardrailsEnabled } }),
+  useGuardrailsDeployment: () => ({
+    data: { enabled: guardrailsEnabled, newSessionPolicy },
+  }),
 }));
 vi.mock("next/navigation");
 
@@ -42,15 +51,18 @@ function setup({
   openappaEnabled = false,
   showGuardrailsStatus,
   enforcementEnabled = false,
+  snapshot = false,
 }: {
   enforcementStatus?: EnforcementStatus;
   canUpdateEnvironment?: boolean;
   openappaEnabled?: boolean;
   showGuardrailsStatus?: boolean;
   enforcementEnabled?: boolean;
+  snapshot?: boolean;
 }) {
   vi.mocked(useFeature).mockReturnValue(openappaEnabled);
   guardrailsEnabled = enforcementEnabled;
+  newSessionPolicy = snapshot ? "snapshot" : "live";
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions: Record<string, unknown>) =>
       ({
@@ -161,6 +173,44 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     expect(vi.mocked(useK8sCapabilities)).toHaveBeenCalledWith(false);
   });
 
+  // Only the default admin, with password sign-in on, can see that warning.
+  it("does not ask for the default credentials status for a user other than the default admin", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { email: "someone@example.org" } },
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as ReturnType<typeof useDefaultCredentialsEnabled>);
+    vi.mocked(useDisableBasicAuth).mockReturnValue(false);
+    vi.mocked(useK8sCapabilities).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useK8sCapabilities>);
+
+    render(
+      <SidebarProvider>
+        <SidebarWarningsAccordion />
+      </SidebarProvider>,
+    );
+
+    expect(useDefaultCredentialsEnabled).toHaveBeenCalledWith({
+      enabled: false,
+    });
+  });
+
+  it("asks for nothing until the page's first data has settled", () => {
+    mockShellReady.mockReturnValueOnce(false);
+    setup({ canUpdateEnvironment: true });
+
+    expect(vi.mocked(useK8sCapabilities)).toHaveBeenCalledWith(false);
+    expect(useDefaultCredentialsEnabled).toHaveBeenCalledWith({
+      enabled: false,
+    });
+  });
+
   it("links to the SSRF protection docs in a new tab", () => {
     setup({ enforcementStatus: "verified-not-enforced" });
 
@@ -221,5 +271,24 @@ describe("SidebarWarningsAccordion guardrails warning row", () => {
     setup({ openappaEnabled: false, showGuardrailsStatus: true });
 
     expect(screen.queryByText("Guardrails disabled row")).toBeNull();
+  });
+
+  it("warns about a policy snapshot in every sidebar mode, since no navigation row carries it", () => {
+    setup({
+      openappaEnabled: true,
+      enforcementEnabled: true,
+      showGuardrailsStatus: false,
+      snapshot: true,
+    });
+
+    expect(screen.getByText("Policy snapshot row")).toBeInTheDocument();
+  });
+
+  it("says nothing about the policy for new sessions while it is live or OpenAPPA is off", () => {
+    setup({ openappaEnabled: true, enforcementEnabled: true });
+    expect(screen.queryByText("Policy snapshot row")).toBeNull();
+
+    setup({ openappaEnabled: false, snapshot: true });
+    expect(screen.queryByText("Policy snapshot row")).toBeNull();
   });
 });

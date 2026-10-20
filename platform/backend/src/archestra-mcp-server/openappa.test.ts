@@ -8,8 +8,10 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
 import { memberPermissions } from "@archestra/shared/access-control";
+import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
+import db from "@/database";
 import { scopedSessionId } from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
@@ -993,6 +995,93 @@ describe("OpenAPPA tool execution", () => {
     expect(content[1].text).toContain("reviewer selected Approve");
     expect(content[1].text).toMatch(/offer IDs? by design/);
     expect(extractMcpHumanRuling(result)).toBe("approve");
+  });
+
+  test("chat client: an approval answered after a policy publish says the policy changed, not that it was approved", async () => {
+    await publishRevision(orgId, 1);
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this issue?",
+      session_id: "session-1",
+      tool: "github__create_issue",
+      arguments: "{}",
+    });
+    // The dispatch that runs the remedy carries the policy saved while the
+    // reviewer decided, publishes it, and finds the offer retired.
+    vi.spyOn(openappaService, "executeRemedyByOffer").mockImplementation(
+      async () => {
+        await publishRevision(orgId, 2);
+        return {
+          result: {
+            content: [
+              {
+                type: "text",
+                text: "[appa] this offer no longer stands; re-propose the call",
+              },
+            ],
+          },
+          known: true,
+        };
+      },
+    );
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "offer-hitl",
+        trajectory: trajectory(),
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    const text = JSON.stringify(result.content);
+    expect(extractMcpHumanRuling(result)).toBe("superseded");
+    expect(result.isError).toBe(false);
+    expect(text).toContain("policy changed");
+    expect(text).toContain("Propose the call again");
+    expect(text).not.toContain("reviewer selected Approve");
+  });
+
+  test("chat client: a retired offer with no publish keeps the reviewer's answer", async () => {
+    await publishRevision(orgId, 1);
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this issue?",
+      session_id: "session-1",
+    });
+    vi.spyOn(openappaService, "executeRemedyByOffer").mockResolvedValue({
+      result: {
+        content: [
+          {
+            type: "text",
+            text: "[appa] this offer no longer stands; re-propose the call",
+          },
+        ],
+      },
+      known: true,
+    });
+    const elicitSpy = vi.fn().mockResolvedValue({
+      status: "answered",
+      result: { action: "accept", content: { action: "approve" } },
+    });
+
+    const result = await executeArchestraTool(
+      toolFullName,
+      {
+        offer_id: "offer-hitl",
+        trajectory: trajectory(),
+        plan: "Human review",
+      },
+      { ...mockContext, elicitation: { elicit: elicitSpy } as any },
+    );
+
+    expect(extractMcpHumanRuling(result)).toBe("approve");
+    expect(JSON.stringify(result.content)).not.toContain("policy changed");
   });
 
   test("chat client: a form decline is not a human denial", async () => {
@@ -2233,7 +2322,7 @@ describe("list_guardrails_battery_fits", () => {
     const owner = await makeUser();
     const viewer = await makeUser();
     const reader = await makeCustomRole(org.id, {
-      permission: { ...memberPermissions, openappaPolicy: ["read"] },
+      permission: { ...memberPermissions, guardrailsPolicy: ["read"] },
     });
     await makeMember(owner.id, org.id, { role: reader.role });
     await makeMember(viewer.id, org.id, { role: reader.role });
@@ -2261,3 +2350,20 @@ describe("list_guardrails_battery_fits", () => {
     expect(await fits({ mcpServerId: null }, context(viewer.id))).toEqual([]);
   });
 });
+
+/** Publish revision `revision` of the organization's policy line, as the runtime's store does. */
+async function publishRevision(organizationId: string, revision: number) {
+  const hash = `test-policy-${revision}`;
+  await db.execute(sql`
+    INSERT INTO openappa_policy_files (hash, bytes) VALUES (${hash}, '\\x00')
+    ON CONFLICT DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO openappa_deployments (name, head) VALUES (${organizationId}, ${revision})
+    ON CONFLICT (name) DO UPDATE SET head = excluded.head
+  `);
+  await db.execute(sql`
+    INSERT INTO openappa_policy_revisions (deployment, revision, hash)
+    VALUES (${organizationId}, ${revision}, ${hash})
+  `);
+}

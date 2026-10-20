@@ -16,8 +16,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import type { A2AAttachment } from "@/agents/a2a-executor";
-import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
+import { userHasPermission } from "@/auth";
 import config, { getAppAssetBaseOrigin } from "@/config";
 import logger from "@/logging";
 import {
@@ -28,6 +28,7 @@ import {
   AgentRunModel,
   AgentTeamModel,
   AgentWorkspaceModel,
+  InteractionModel,
 } from "@/models";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
@@ -194,13 +195,11 @@ async function launchDelegatedTask(params: {
     // Work started from a chat thread reports back to that thread when it
     // settles. The callback coordinates are also persisted on the Agent run,
     // so the reconciler can recover delivery after a restart.
-    if (context.chatOpsBindingId && context.chatOpsThreadId) {
-      void watchChatOpsTask({
+    if (completionTarget) {
+      void watchTaskCompletion({
         taskId: taskRow.id,
-        bindingId: context.chatOpsBindingId,
-        threadId: context.chatOpsThreadId,
         agentName: agent.name,
-        pinnedAgentId: context.chatOpsPinnedAgentId,
+        target: completionTarget,
       }).catch((error) => {
         logger.warn(
           { error, taskId: taskRow.id },
@@ -356,6 +355,12 @@ const ListAgentRunsOutputSchema = z.object({
   runs: z.array(
     z.object({
       task_id: z.string().uuid(),
+      llm_session_id: z
+        .string()
+        .nullable()
+        .describe(
+          "Verified LLM telemetry session key for /llm/logs/:id; URL-encode it as one path segment. Null when no readable logged session is available. This is not a task ID or runtime handle.",
+        ),
       title: z.string(),
       prompt: z.string(),
       state: z.string(),
@@ -935,8 +940,27 @@ const registry = defineArchestraTools([
           limit: args.limit,
           thread,
         });
+        const [canReadLogs, canReadAllLogs] = await Promise.all([
+          userHasPermission(actor.id, actor.organizationId, "log", "read"),
+          userHasPermission(actor.id, actor.organizationId, "log", "admin"),
+        ]);
+        // Maintained runtime clients send the persisted workload name as
+        // X-Archestra-Session-Id. The OpenAPPA key adds a caller scope and is
+        // not the key stored on LLM interactions. Never substitute a task ID
+        // or a workspace row's UUID; continued turns keep this header value.
+        const sessionKeys = rows.map((row) => row.workloadName);
+        const logged = canReadLogs
+          ? await InteractionModel.findLoggedSessionIds({
+              organizationId: actor.organizationId,
+              sessionIds: sessionKeys,
+              ...(canReadAllLogs ? {} : { ownUserId: actor.id }),
+            })
+          : new Set<string>();
         const hidePrompt = await isGuardrailsV2Active();
-        const runs = rows.map((row) => ({
+        const runs = rows.map((row, index) => ({
+          llm_session_id: logged.has(sessionKeys[index])
+            ? sessionKeys[index]
+            : null,
           task_id: row.taskId,
           title: row.title,
           prompt: hidePrompt ? "" : row.prompt,

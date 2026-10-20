@@ -8,7 +8,7 @@ A withhold plan runs the tool and delivers no result Value to the agent. This in
 
 ### Subagent Returns
 
-This section governs a `subagent fork`: a child started by an approved spawn in the parent's `trajectory family`. It does not govern a `root fork`, which opens an independent family from copied context without a spawn dispatch or child-return contract. A root fork retains the source family's opening policy and frozen policy state; it does not select a return-remedy plan. See Subagent forks and root forks.
+This section governs a `subagent fork`: a child started by an approved spawn in the parent's `trajectory family`. It does not govern a `root fork`, which opens an independent family from copied context without a spawn dispatch or child-return contract. A root fork belongs to the source family's deployment and keeps its frozen policy state; it does not select a return-remedy plan. See Subagent forks and root forks.
 
 A child agent can read data without exposing it to the parent agent. `context_control = true` declares that the integration keeps the child's data separate and can withhold its answer until OpenAPPA allows it. The parent chooses how the answer will be checked or cleaned before the child starts.
 

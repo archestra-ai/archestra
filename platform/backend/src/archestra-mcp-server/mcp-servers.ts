@@ -1761,6 +1761,11 @@ async function discoverLocalMcpServerTools(params: {
       rawToolName: tool.name,
       description: tool.description,
       parameters: tool.inputSchema,
+      meta: {
+        _meta: tool._meta,
+        annotations: tool.annotations,
+        outputSchema: tool.outputSchema,
+      },
       catalogId: catalogItem.id,
     }));
 
@@ -1822,6 +1827,11 @@ async function discoverRemoteMcpServerTools(params: {
         rawToolName: tool.name,
         description: tool.description,
         parameters: tool.inputSchema,
+        meta: {
+          _meta: tool._meta,
+          annotations: tool.annotations,
+          outputSchema: tool.outputSchema,
+        },
         catalogId: catalogItem.id,
       }));
       const createdTools =

@@ -760,6 +760,228 @@ describe("websocket Agent run authorization and cleanup", () => {
     ).toBe(readableTranscript);
   });
 
+  test("sends the end of a complete recording at its terminal size and counts what it left out", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      workloadName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    await AgentRunModel.close({ id: run.id, logs: "final tail\n" });
+    // Two stored chunks (256 KiB each); the size is set in the first.
+    const marker = "\u001b]777;archestra-terminal-size=100x30\u0007";
+    const recording = `${marker}${"earlier output\n".repeat(30_000)}done ✓\n`;
+    await agentRunTranscriptStore.persist({
+      runId: run.id,
+      transcript: recording,
+      observedBytes: Buffer.byteLength(recording),
+      readableTranscript: JSON.stringify({
+        version: 1,
+        provider: "claude-code",
+        entries: [{ type: "message", role: "user", text: "Build it" }],
+      }),
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: owner.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: task.id, tailBytes: 64 * 1024 },
+      },
+      ws,
+    );
+
+    const sent = vi
+      .mocked(ws.send)
+      .mock.calls.map(([message]) => JSON.parse(String(message)));
+    const logs = sent
+      .filter((message) => message.type === "agent_run_logs")
+      .map((message) => message.payload.logs)
+      .join("");
+    const total = Buffer.byteLength(recording);
+    const tail = logs.slice(marker.length);
+    expect(logs.startsWith(marker)).toBe(true);
+    // Whole lines from the second chunk on, ending with the recording's end.
+    expect(tail.startsWith("earlier output\n")).toBe(true);
+    expect(recording.endsWith(tail)).toBe(true);
+    expect(Buffer.byteLength(tail)).toBeLessThan(total - 256 * 1024 + 1);
+    expect(sent.at(-1)).toEqual({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: task.id,
+        source: "full",
+        truncated: false,
+        totalBytes: total,
+        omittedBytes: total - Buffer.byteLength(tail),
+      },
+    });
+    // The readable transcript has no reader on the page; a tail leaves it out.
+    expect(sent.some((message) => message.payload.channel === "readable")).toBe(
+      false,
+    );
+  });
+
+  test("a tail read that fails after output was sent ends in an error, not the full recording", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const { ws, task, recording } = await makeEndedRunWithRecording({
+      makeOrganization,
+      makeUser,
+      makeAgent,
+    });
+    const streamTail = vi
+      .spyOn(agentRunTranscriptStore, "streamTail")
+      .mockImplementation(async (params) => {
+        params.onChunk(Buffer.from("partial tail\n"));
+        throw new Error("chunk 3 is corrupt");
+      });
+    try {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_logs",
+          payload: { runId: task.id, tailBytes: 64 * 1024 },
+        },
+        ws,
+      );
+    } finally {
+      streamTail.mockRestore();
+    }
+    const sent = vi
+      .mocked(ws.send)
+      .mock.calls.map(([message]) => JSON.parse(String(message)));
+    expect(
+      sent
+        .filter((message) => message.type === "agent_run_logs")
+        .map((message) => message.payload.logs),
+    ).toEqual(["partial tail\n"]);
+    expect(sent.at(-1)).toEqual({
+      type: "agent_run_logs_error",
+      payload: {
+        runId: task.id,
+        error: "Could not read the end of the recording",
+      },
+    });
+    expect(
+      sent.some((message) => message.type === "agent_run_logs_ended"),
+    ).toBe(false);
+    expect(JSON.stringify(sent)).not.toContain(recording.slice(0, 40));
+  });
+
+  test("a tail read that fails before any output falls back to the full recording", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const { ws, task, recording } = await makeEndedRunWithRecording({
+      makeOrganization,
+      makeUser,
+      makeAgent,
+    });
+    const streamTail = vi
+      .spyOn(agentRunTranscriptStore, "streamTail")
+      .mockRejectedValue(new Error("sizes query failed"));
+    try {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_logs",
+          payload: { runId: task.id, tailBytes: 64 * 1024 },
+        },
+        ws,
+      );
+    } finally {
+      streamTail.mockRestore();
+    }
+    const sent = vi
+      .mocked(ws.send)
+      .mock.calls.map(([message]) => JSON.parse(String(message)));
+    expect(
+      sent
+        .filter((message) => message.type === "agent_run_logs")
+        .map((message) => message.payload.logs)
+        .join(""),
+    ).toBe(recording);
+    expect(sent.at(-1).type).toBe("agent_run_logs_ended");
+  });
+
+  test("a session history that cannot be counted ends the tail in an error", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const { ws, task } = await makeEndedRunWithRecording({
+      makeOrganization,
+      makeUser,
+      makeAgent,
+    });
+    const listPreviousTurns = vi
+      .spyOn(AgentRunModel, "listPreviousTurns")
+      .mockRejectedValue(new Error("connection reset"));
+    try {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_logs",
+          payload: {
+            runId: task.id,
+            includeSessionHistory: true,
+            tailBytes: 64 * 1024,
+          },
+        },
+        ws,
+      );
+    } finally {
+      listPreviousTurns.mockRestore();
+    }
+    const sent = vi
+      .mocked(ws.send)
+      .mock.calls.map(([message]) => JSON.parse(String(message)));
+    expect(sent.at(-1)).toEqual({
+      type: "agent_run_logs_error",
+      payload: { runId: task.id, error: "Could not read session history" },
+    });
+    expect(
+      sent.some((message) => message.type === "agent_run_logs_ended"),
+    ).toBe(false);
+  });
+
   test("owner session history includes earlier turns while shared access remains per turn", async ({
     makeOrganization,
     makeUser,
@@ -847,6 +1069,33 @@ describe("websocket Agent run authorization and cleanup", () => {
       messages.find((message) => message.type === "agent_run_logs_ended")
         .payload.truncated,
     ).toBe(false);
+    // Asked for the end only, the session sends its last turn and counts the
+    // earlier one as left out.
+    vi.mocked(ws.send).mockClear();
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: {
+          runId: turns[0].id,
+          includeSessionHistory: true,
+          tailBytes: 64 * 1024,
+        },
+      },
+      ws,
+    );
+    const tailMessages = vi
+      .mocked(ws.send)
+      .mock.calls.map(([value]) => JSON.parse(String(value)));
+    expect(
+      tailMessages
+        .filter((message) => message.type === "agent_run_logs")
+        .map((message) => message.payload.logs)
+        .join(""),
+    ).toBe("second turn ✓");
+    expect(tailMessages.at(-1).payload).toMatchObject({
+      omittedBytes: Buffer.byteLength("first turn ✓"),
+      totalBytes: Buffer.byteLength("first turn ✓second turn ✓"),
+    });
     vi.mocked(ws.send).mockClear();
     // Requesting the same session ID never grants another user the owner's accumulated history.
     service.clientContexts.set(ws, {
@@ -1582,6 +1831,7 @@ describe("websocket MCP deployment statuses", () => {
     service.mcpLogsSubscriptions.clear();
     service.mcpExecSubscriptions.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
+    service.lastMcpDeploymentRefreshAt = 0;
   });
 
   afterEach(() => {
@@ -1653,6 +1903,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     expect(ws.send).toHaveBeenCalledTimes(1);
     const sentMessage = JSON.parse(
@@ -1678,6 +1929,60 @@ describe("websocket MCP deployment statuses", () => {
     });
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(true);
   });
+
+  for (const status of ["initializing", "error"] as const)
+    test(`sends no statuses while the runtime is ${status}, as the server's attention order assumes`, async ({
+      makeOrganization,
+      makeUser,
+      makeMcpServer,
+      makeInternalMcpCatalog,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const catalog = await makeInternalMcpCatalog({
+        serverType: "local",
+        organizationId: org.id,
+      });
+      await makeMcpServer({
+        scope: "team",
+        catalogId: catalog.id,
+        ownerId: user.id,
+        teamId: team.id,
+      });
+      vi.spyOn(McpServerRuntimeManager, "refreshAllStates").mockResolvedValue(
+        undefined,
+      );
+      vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue(
+        { status, mcpServers: {} } as never,
+      );
+      const ws = {
+        readyState: WS.OPEN,
+        send: vi.fn(),
+        close: vi.fn(),
+      } as unknown as WS;
+      service.clientContexts.set(ws, {
+        userId: user.id,
+        organizationId: org.id,
+        userIsMcpServerAdmin: true,
+      });
+
+      await service.handleMessage(
+        { type: "subscribe_mcp_deployment_statuses", payload: {} },
+        ws,
+      );
+      await flushDeferredRefresh();
+
+      // A "not created" for every install would flag every healthy one.
+      const sent = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        ([raw]) => JSON.parse(raw as string),
+      );
+      expect(sent.length).toBeGreaterThan(0);
+      for (const message of sent) {
+        expect(message.payload.statuses).toEqual({});
+      }
+    });
 
   test("filters out remote servers from deployment statuses", async ({
     makeOrganization,
@@ -1756,6 +2061,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     const sentMessage = JSON.parse(
       (ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string,
@@ -1812,6 +2118,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({
@@ -1875,6 +2182,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(true);
     expect(service.mcpDeploymentStatusPollInterval).not.toBeNull();
@@ -1939,6 +2247,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     const firstSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
     expect(firstSubscription).toBeDefined();
@@ -1951,6 +2260,7 @@ describe("websocket MCP deployment statuses", () => {
       },
       ws,
     );
+    await flushDeferredRefresh();
 
     const secondSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
     expect(secondSubscription).toBeDefined();
@@ -1967,6 +2277,7 @@ describe("websocket MCP deployment statuses shared poller", () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     service.clientContexts.clear();
     service.mcpDeploymentStatusSubscriptions.clear();
+    service.lastMcpDeploymentRefreshAt = 0;
   });
 
   afterEach(() => {
@@ -1985,11 +2296,13 @@ describe("websocket MCP deployment statuses shared poller", () => {
       close: vi.fn(),
     }) as unknown as WS;
 
-  const subscribe = (ws: WS) =>
-    service.handleMessage(
+  const subscribe = async (ws: WS) => {
+    await service.handleMessage(
       { type: "subscribe_mcp_deployment_statuses", payload: {} },
       ws,
     );
+    await flushDeferredRefresh();
+  };
 
   test("one tick triggers a single shared refresh for multiple subscribers", async ({
     makeOrganization,
@@ -2598,7 +2911,145 @@ describe("websocket MCP deployment statuses shared poller", () => {
     expect(retried.payload.statuses[mcpServer.id].state).toBe("running");
   });
 
-  test("socket closed during subscribe awaits is not registered and poller stays off", async ({
+  describe("a new subscriber", () => {
+    const setup = async (fixtures: {
+      makeOrganization: () => Promise<{ id: string }>;
+      makeUser: () => Promise<{ id: string }>;
+      makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+      makeInternalMcpCatalog: (
+        overrides: Record<string, unknown>,
+      ) => Promise<{ id: string }>;
+      makeMcpServer: (
+        overrides: Record<string, unknown>,
+      ) => Promise<{ id: string }>;
+    }) => {
+      const org = await fixtures.makeOrganization();
+      const user = await fixtures.makeUser();
+      const team = await fixtures.makeTeam(org.id, user.id);
+      const catalog = await fixtures.makeInternalMcpCatalog({
+        serverType: "local",
+        organizationId: org.id,
+      });
+      await fixtures.makeMcpServer({
+        scope: "team",
+        catalogId: catalog.id,
+        ownerId: user.id,
+        teamId: team.id,
+      });
+      const refreshSpy = vi
+        .spyOn(McpServerRuntimeManager, "refreshAllStates")
+        .mockResolvedValue(undefined);
+      vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue(
+        { status: "running", mcpServers: {} },
+      );
+      const ws = makeWs();
+      service.clientContexts.set(ws, {
+        userId: user.id,
+        organizationId: org.id,
+        userIsMcpServerAdmin: true,
+      });
+      const handle = () =>
+        service.handleMessage(
+          { type: "subscribe_mcp_deployment_statuses", payload: {} },
+          ws,
+        );
+      return { ws, refreshSpy, handle };
+    };
+
+    test("is answered from the summary with no refresh while the watchers keep it current", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const fixtures = {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      } as unknown as Parameters<typeof setup>[0];
+      const { ws, refreshSpy, handle } = await setup(fixtures);
+      vi.spyOn(
+        McpServerRuntimeManager,
+        "deploymentStateWatchersActive",
+        "get",
+      ).mockReturnValue(true);
+      service.lastMcpDeploymentRefreshAt = Date.now();
+
+      await handle();
+      await flushDeferredRefresh();
+
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    test("is answered from the summary first and refreshed after the handler when the summary may be stale", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const fixtures = {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      } as unknown as Parameters<typeof setup>[0];
+      const { ws, refreshSpy, handle } = await setup(fixtures);
+      vi.spyOn(
+        McpServerRuntimeManager,
+        "deploymentStateWatchersActive",
+        "get",
+      ).mockReturnValue(false);
+      service.lastMcpDeploymentRefreshAt = Date.now() - 5 * 60_000;
+
+      await handle();
+
+      // The handler answered without running the refresh itself.
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      expect(refreshSpy).not.toHaveBeenCalled();
+
+      await flushDeferredRefresh();
+
+      expect(refreshSpy).toHaveBeenCalledTimes(1);
+      // Nothing changed, so the push after the refresh sends nothing more.
+      expect(ws.send).toHaveBeenCalledTimes(1);
+    });
+
+    test("waits for the first refresh when there is no summary yet, and gets it pushed", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const fixtures = {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      } as unknown as Parameters<typeof setup>[0];
+      const { ws, refreshSpy, handle } = await setup(fixtures);
+      service.lastMcpDeploymentRefreshAt = 0;
+
+      await handle();
+
+      expect(ws.send).not.toHaveBeenCalled();
+      expect(refreshSpy).not.toHaveBeenCalled();
+
+      await flushDeferredRefresh();
+
+      expect(refreshSpy).toHaveBeenCalledTimes(1);
+      expect(ws.send).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  test("a socket closed before the first refresh answers is dropped and the poller stops", async ({
     makeOrganization,
     makeUser,
     makeMcpServer,
@@ -2647,10 +3098,11 @@ describe("websocket MCP deployment statuses shared poller", () => {
     // setTimeout is real in this describe, so waitFor can poll
     await vi.waitFor(() => expect(refreshSpy).toHaveBeenCalled());
 
-    // Socket closes while subscribe is still awaiting the refresh
+    // The socket closes while the first refresh (after the handler) runs.
+    await subscribePromise;
     (ws as { readyState: number }).readyState = WS.CLOSED;
     resolveRefresh?.();
-    await subscribePromise;
+    await flushDeferredRefresh();
 
     expect(ws.send).not.toHaveBeenCalled();
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(false);
@@ -3865,4 +4317,127 @@ describe("cross-replica MCP status delivery", () => {
       stopReplicas(replicas);
     }
   });
+
+  test("a large validation progress event reaches only its user on another replica, keeping the failing step", async () => {
+    const replicas = await startReplicas();
+    const [origin, other] = replicas;
+    const colleagueSend = vi.fn();
+    const colleague = {
+      readyState: WS.OPEN,
+      send: colleagueSend,
+    } as unknown as WS;
+    other.internals.wss?.clients.add(colleague);
+    other.internals.clientContexts.set(colleague, {
+      userId: "user-2",
+      organizationId: "org-1",
+      userIsMcpServerAdmin: false,
+    });
+    const steps = Array.from({ length: 300 }, (_, index) => ({
+      line: index + 1,
+      tool: "mcp/files/read",
+      expected: "allow",
+      actual: index === 299 ? "deny" : "allow",
+      status: index === 299 ? ("failed" as const) : ("passed" as const),
+      error: index === 299 ? "x".repeat(10_000) : null,
+    }));
+
+    try {
+      origin.replica.sendOpenAppaValidationProgress({
+        userId: "user-1",
+        organizationId: "org-1",
+        payload: {
+          token: "token-1",
+          phase: "file_finished",
+          path: "traces/long.appa",
+          status: "failed",
+          assertionCount: 300,
+          durationMs: 12,
+          error: null,
+          steps,
+        },
+      });
+
+      await vi.waitFor(() => expect(other.send).toHaveBeenCalledTimes(1));
+      const [message] = sentMessages(other.send);
+      expect(message).toMatchObject({
+        type: "openappa_validation_progress",
+        payload: {
+          token: "token-1",
+          phase: "file_finished",
+          assertionCount: 300,
+        },
+      });
+      const relayed = message.payload.steps as typeof steps;
+      expect(relayed.length).toBeGreaterThan(0);
+      expect(relayed.length).toBeLessThan(steps.length);
+      expect(relayed.at(-1)).toMatchObject({ line: 300, status: "failed" });
+      expect(relayed.at(-1)?.error?.length).toBeLessThanOrEqual(500);
+      expect(relayed.map((step) => step.line)).toEqual(
+        relayed.map((step) => step.line).toSorted((a, b) => a - b),
+      );
+      expect(colleagueSend).not.toHaveBeenCalled();
+    } finally {
+      stopReplicas(replicas);
+    }
+  });
 });
+
+/**
+ * A new deployment-status subscriber's refresh runs after the subscribe
+ * handler returns (setImmediate), then pushes; let both finish.
+ */
+async function flushDeferredRefresh() {
+  for (let i = 0; i < 3; i++) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
+
+/** An ended run with a small complete recording, and a client subscribed as its owner. */
+async function makeEndedRunWithRecording(fixtures: {
+  makeOrganization: () => Promise<{ id: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  makeAgent: (params: { organizationId: string }) => Promise<{ id: string }>;
+}) {
+  const organization = await fixtures.makeOrganization();
+  const owner = await fixtures.makeUser();
+  const agent = await fixtures.makeAgent({ organizationId: organization.id });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: owner.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_COMPLETED",
+  });
+  const run = await AgentRunModel.create({
+    organizationId: organization.id,
+    taskId: task.id,
+    agentId: agent.id,
+    actorKind: "user",
+    actorId: owner.id,
+    actorUserId: owner.id,
+    workloadName: `agent-run-${task.id}`,
+    backend: "kubernetes",
+    runtimeScope: "archestra-dev",
+    virtualApiKeyId: null,
+  });
+  await AgentRunModel.close({ id: run.id, logs: "final tail\n" });
+  const recording = `${"recorded line\n".repeat(200)}done ✓\n`;
+  await agentRunTranscriptStore.persist({
+    runId: run.id,
+    transcript: recording,
+    observedBytes: Buffer.byteLength(recording),
+  });
+  const ws = {
+    readyState: WS.OPEN,
+    send: vi.fn(),
+    close: vi.fn(),
+  } as unknown as WS;
+  service.clientContexts.set(ws, {
+    userId: owner.id,
+    organizationId: organization.id,
+    userIsMcpServerAdmin: false,
+  });
+  return { ws, task, run, owner, organization, recording };
+}

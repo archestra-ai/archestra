@@ -23,7 +23,7 @@ describe("initialPolicy", () => {
     const policy = document.policy as ReturnType<typeof parse>;
     const externals = document.externals as ReturnType<typeof parse>;
     const authorities = externals.authorities as ReturnType<typeof parse>;
-    expect(authorities.hitl).toEqual({ builtin: "hitl" });
+    expect(authorities["human-approval"]).toEqual({ builtin: "hitl" });
 
     // Replay asks no person; it answers every authority in process. The
     // shipped authority's permissions are enforced by the real engine.
@@ -59,7 +59,7 @@ describe("initialPolicy", () => {
           },
         ],
       },
-      externals: { authorities: { hitl: { builtin: "approve" } } },
+      externals: { authorities: { "human-approval": { builtin: "approve" } } },
     });
     const result = JSON.parse(
       await replayOpenappaPolicy(
@@ -68,12 +68,12 @@ describe("initialPolicy", () => {
           files: [
             ...["trusted", "public", "custom_review"].map((tool) => ({
               path: `${tool}.appa`,
-              content: `mcp/test/read {}\nexpect allow\nmcp/test/${tool} {}\nexpect authority hitl\n`,
+              content: `mcp/test/read {}\nexpect allow\nmcp/test/${tool} {}\nexpect authority human-approval\n`,
             })),
             {
               path: "human-approval.appa",
               content:
-                "mcp/test/review {}\nexpect authority hitl\nmcp/test/review {}\nexpect authority hitl\n",
+                "mcp/test/review {}\nexpect authority human-approval\nmcp/test/review {}\nexpect authority human-approval\n",
             },
             {
               path: "blocked.appa",
@@ -100,7 +100,7 @@ describe("initialPolicy", () => {
             },
             {
               path: "human-review.appa",
-              content: "mcp/test/review {}\nexpect authority hitl\n",
+              content: "mcp/test/review {}\nexpect authority human-approval\n",
             },
           ],
         }),
@@ -114,9 +114,9 @@ describe("initialPolicy", () => {
       humanResult.files[1],
       JSON.stringify(humanResult.files[1]),
     ).toMatchObject({
-      // The shipped hitl binding is answered in process too, as appa replay does.
+      // The shipped human-approval binding is answered in process too, as appa replay does.
       status: "passed",
-      steps: [{ status: "passed", actual: "authority hitl" }],
+      steps: [{ status: "passed", actual: "authority human-approval" }],
     });
   });
 
@@ -159,6 +159,9 @@ describe("initialPolicy", () => {
       expect.objectContaining({
         name: UNDECLARED_TOOL_ANNOTATOR,
         builtin: "archestra",
+        // The model may narrow who reads the result, never ask a person.
+        audiences: ["self", "internal"],
+        marks: [],
       }),
     );
   });

@@ -10,7 +10,7 @@ import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { useSession } from "@/lib/auth/auth.query";
+import { awaitBootstrapSeed, useSession } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
@@ -38,7 +38,9 @@ export const appearanceKeys = {
 export function useAppearanceSettings(enabled = true) {
   return useQuery({
     queryKey: appearanceKeys.public(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.appearance) return seed.appearance;
       const { data, error } = await archestraApiSdk.getAppearanceSettings();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
@@ -64,8 +66,12 @@ export const organizationKeys = {
   details: () => [...organizationKeys.all, "details"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
-  memberSignupStatus: () =>
-    [...organizationKeys.all, "member-signup-status"] as const,
+  memberSignupStatus: (userIds?: string[]) =>
+    [
+      ...organizationKeys.all,
+      "member-signup-status",
+      ...(userIds ? [{ userIds }] : []),
+    ] as const,
 };
 
 /**
@@ -86,11 +92,15 @@ export function useInvitation(invitationId: string) {
 }
 
 /**
- * Use active organization from authClient hook
- * Note: This uses the authClient hook directly as it's already optimized
+ * The caller's active organization id, from the session: no full-organization
+ * fetch, which also loads the members.
  */
-export function useActiveOrganization() {
-  return authClient.useActiveOrganization();
+export function useActiveOrganizationId() {
+  const { data: session, isPending } = useSession();
+  return {
+    data: session?.session?.activeOrganizationId ?? undefined,
+    isPending,
+  };
 }
 
 /**
@@ -99,9 +109,9 @@ export function useActiveOrganization() {
  * session is unresolved or names no active organization.
  *
  * The endpoint resolves the organization from the session itself, so this
- * gates on the session's activeOrganizationId rather than on
- * useActiveOrganization() — waiting for the full-organization fetch would put
- * an extra request in front of the role for no reason.
+ * gates on the session's activeOrganizationId rather than on a
+ * full-organization fetch, which would put an extra request in front of the
+ * role for no reason.
  */
 export function useActiveMemberRole() {
   const { data: session, isPending: isSessionPending } = useSession();
@@ -326,7 +336,9 @@ export function useOrganization(
 
   return useQuery({
     queryKey: organizationKeys.details(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.organization) return seed.organization;
       const { data, error } = await archestraApiSdk.getOrganization();
       throwOnApiError(error, { toastOnError: false });
       return data;
@@ -879,13 +891,21 @@ export type PendingSignupMember = {
 };
 
 /**
- * Get member signup status — returns members that haven't completed signup
+ * Which members have not completed signup. Pass the user IDs on screen so
+ * the request stays the size of one page instead of every pending member.
  */
-export function useMemberSignupStatus() {
+export function useMemberSignupStatus(options?: {
+  userIds?: string[];
+  enabled?: boolean;
+}) {
+  const userIds = options?.userIds ? [...options.userIds].sort() : undefined;
   return useQuery({
-    queryKey: organizationKeys.memberSignupStatus(),
+    queryKey: organizationKeys.memberSignupStatus(userIds),
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getMemberSignupStatus();
+      const { data, error } = await archestraApiSdk.getMemberSignupStatus(
+        userIds ? { query: { userIds } } : undefined,
+      );
       throwOnApiError(error, { toastOnError: false });
       return data ?? { pendingSignupMembers: [] as PendingSignupMember[] };
     },

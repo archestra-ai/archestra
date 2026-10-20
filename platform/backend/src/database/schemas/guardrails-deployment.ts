@@ -1,5 +1,10 @@
-import { boolean, pgTable, text, varchar } from "drizzle-orm/pg-core";
-import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
+import { boolean, pgTable, text, uuid, varchar } from "drizzle-orm/pg-core";
+import type {
+  NewSessionPolicy,
+  UnsupportedAppaClientAction,
+} from "@/types/guardrails-policy";
+import llmProviderApiKeysTable from "./llm-provider-api-key";
+import modelsTable from "./model";
 
 // One row for the deployment; deliberately not owned by an organization.
 const guardrailsDeploymentTable = pgTable("guardrails_deployment", {
@@ -11,5 +16,23 @@ const guardrailsDeploymentTable = pgTable("guardrails_deployment", {
     .default("bypass"),
   // Whether a yell also turns OpenAPPA off for the session that sends it.
   breakTheGlassEnabled: boolean("superyell_enabled").notNull().default(true),
+  // `snapshot`: no policy revision is published, open sessions keep the
+  // revision they have, and new ones keep the policy they open with.
+  newSessionPolicy: varchar("new_session_policy", { length: 16 })
+    .$type<NewSessionPolicy>()
+    .notNull()
+    .default("live"),
+  // The model and key `builtin = "archestra"` annotators answer with, set
+  // together. Both null: the organization's default model.
+  annotatorModelId: uuid("annotator_model_id").references(
+    () => modelsTable.id,
+    {
+      onDelete: "set null",
+    },
+  ),
+  annotatorLlmApiKeyId: uuid("annotator_llm_api_key_id").references(
+    () => llmProviderApiKeysTable.id,
+    { onDelete: "set null" },
+  ),
 });
 export default guardrailsDeploymentTable;

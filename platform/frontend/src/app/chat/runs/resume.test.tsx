@@ -14,6 +14,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { AgentRunChatSession } from "./page.client";
 
 vi.mock("next/navigation");
@@ -52,6 +53,9 @@ const previous = {
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+  } as ReturnType<typeof useHasPermissions>);
   archestraApiClient.setConfig({ baseUrl: origin });
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),

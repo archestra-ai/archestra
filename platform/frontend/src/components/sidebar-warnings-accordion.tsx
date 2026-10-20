@@ -3,7 +3,10 @@
 import { DEFAULT_ADMIN_EMAIL, DocsPage } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { GuardrailsDisabledWarning } from "@/app/openappa/_parts/guardrails-deployment-toggle";
+import {
+  GuardrailsDisabledWarning,
+  GuardrailsSnapshotPolicyWarning,
+} from "@/app/openappa/_parts/guardrails-deployment-toggle";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import {
   DropdownMenu,
@@ -28,6 +31,7 @@ import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useK8sCapabilities } from "@/lib/environment.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
+import { useShellReady } from "@/lib/shell-deferral";
 import { cn } from "@/lib/utils/tailwind";
 
 interface Warning {
@@ -44,31 +48,39 @@ export function SidebarWarningsAccordion({
 }) {
   const { data: session } = useSession();
   const userEmail = session?.user?.email;
-  const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
-    useDefaultCredentialsEnabled();
+  // The default-credentials and network-policy checks wait for the page's
+  // first data (see useShellReady).
+  const shellReady = useShellReady();
   const disableBasicAuth = useDisableBasicAuth();
   const openappaEnabled = useFeature("openappaEnabled");
   const guardrailsDeployment = useGuardrailsDeployment();
   const { data: canUpdateOrg } = useHasPermissions({
     organization: ["update"],
   });
+  // Only the default admin with organization:update sees this warning, and
+  // only while password sign-in is on.
+  const canSeeDefaultCredsWarning =
+    canUpdateOrg === true &&
+    disableBasicAuth === false &&
+    userEmail === DEFAULT_ADMIN_EMAIL;
+  const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
+    useDefaultCredentialsEnabled({
+      enabled: shellReady && canSeeDefaultCredsWarning,
+    });
   // Reading capabilities needs environment:update, so gating the query on the
   // same permission keeps it from 403-ing for everyone else on every page.
   const { data: canUpdateEnvironment } = useHasPermissions({
     environment: ["update"],
   });
   const { data: capabilities } = useK8sCapabilities(
-    canUpdateEnvironment === true,
+    shellReady && canUpdateEnvironment === true,
   );
   const { state: sidebarState } = useSidebar();
 
   const showDefaultCredsWarning =
-    canUpdateOrg === true &&
-    disableBasicAuth === false &&
+    canSeeDefaultCredsWarning &&
     !isLoadingCreds &&
-    defaultCredentialsEnabled !== undefined &&
-    defaultCredentialsEnabled &&
-    userEmail === DEFAULT_ADMIN_EMAIL;
+    defaultCredentialsEnabled === true;
 
   // Only a measured verdict warns. "unknown" means nothing tested the cluster,
   // which is not evidence that egress rules are inert.
@@ -107,7 +119,11 @@ export function SidebarWarningsAccordion({
     openappaEnabled === true &&
     showGuardrailsStatus &&
     guardrailsDeployment.data?.enabled === false;
-  if (warnings.length === 0 && !showGuardrails) {
+  // No navigation row carries this one, so it shows in every sidebar mode.
+  const showSnapshotPolicy =
+    openappaEnabled === true &&
+    guardrailsDeployment.data?.newSessionPolicy === "snapshot";
+  if (warnings.length === 0 && !showGuardrails && !showSnapshotPolicy) {
     return null;
   }
 
@@ -172,6 +188,7 @@ export function SidebarWarningsAccordion({
             warnings.map((w) => <WarningItem key={w.label} {...w} />)
           )}
           {showGuardrails && <GuardrailsDisabledWarning />}
+          {showSnapshotPolicy && <GuardrailsSnapshotPolicyWarning />}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

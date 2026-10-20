@@ -1,17 +1,22 @@
 "use client";
 
 import {
-  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   type Permissions,
   RESOURCE_ACCESS_RELATIONS,
   type ResourceAccessRelation,
-  ResourceAccessRelationSchema,
   type ScopedResource,
 } from "@archestra/shared";
 import { Check, ChevronDown, Users } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { filterControlClass } from "@/components/filter-bar";
+import {
+  OWNER_PARAM,
+  RESOURCE_ACCESS_PARAM,
+  resolveResourceAccess,
+  SHARED_WITH_PARAM,
+  serializeAccess,
+} from "@/components/resource-access-params";
 import {
   ResourceOwnerFilter,
   ResourceSharedWithFilter,
@@ -180,23 +185,16 @@ export function useResourceAccessParam(options?: {
   const rawSharedWith = active.get(SHARED_WITH_PARAM);
   const rawOwner = active.get(OWNER_PARAM);
   const offerAdminAccess = options?.offerAdminAccess ?? true;
-  return useMemo(() => {
-    const parsed = parseAccess(rawAccess);
-    const withoutAdmin = parsed.filter((relation) => relation !== "others");
-    const access = offerAdminAccess
-      ? parsed
-      : withoutAdmin.length > 0
-        ? withoutAdmin
-        : DEFAULT_RESOURCE_ACCESS_RELATIONS;
-    const sharedWith = offerAdminAccess ? parseList(rawSharedWith) : undefined;
-    const owner = offerAdminAccess ? parseList(rawOwner) : undefined;
-    return {
-      access,
-      sharedWith,
-      owner,
-      isDefault: serializeAccess(access) === null && !sharedWith && !owner,
-    };
-  }, [rawAccess, rawSharedWith, rawOwner, offerAdminAccess]);
+  return useMemo(
+    () =>
+      resolveResourceAccess({
+        rawAccess,
+        rawSharedWith,
+        rawOwner,
+        offerAdminAccess,
+      }),
+    [rawAccess, rawSharedWith, rawOwner, offerAdminAccess],
+  );
 }
 
 /** Every URL parameter the access filters own, for a page's "Clear" action. */
@@ -207,13 +205,6 @@ export const RESOURCE_ACCESS_FILTER_PARAMS = [
 ] as const;
 
 // ===
-
-/** The URL parameter every grant-governed list keeps the relation filter in. */
-const RESOURCE_ACCESS_PARAM = "access";
-/** The URL parameter of the "Shared with" filter: subject keys. */
-const SHARED_WITH_PARAM = "sharedWith";
-/** The URL parameter of the "Owner" filter: user ids. */
-const OWNER_PARAM = "owner";
 
 /** The checkbox rows of the first box, each covering one or more relations. */
 type AccessOptionId = "mine" | "shared" | "others";
@@ -388,44 +379,9 @@ function CheckboxRow({
   );
 }
 
-function parseAccess(raw: string | null): ResourceAccessRelation[] {
-  if (!raw) return DEFAULT_RESOURCE_ACCESS_RELATIONS;
-  const requested = new Set(
-    raw.split(",").flatMap((value) => {
-      const parsed = ResourceAccessRelationSchema.safeParse(value);
-      return parsed.success ? [parsed.data] : [];
-    }),
-  );
-  const access = RESOURCE_ACCESS_RELATIONS.filter((relation) =>
-    requested.has(relation),
-  );
-  return access.length > 0 ? access : DEFAULT_RESOURCE_ACCESS_RELATIONS;
-}
-
-/** Null for the default selection, so the default keeps a clean URL. */
-function serializeAccess(access: ResourceAccessRelation[]): string | null {
-  const value = RESOURCE_ACCESS_RELATIONS.filter((relation) =>
-    access.includes(relation),
-  ).join(",");
-  return value === DEFAULT_RESOURCE_ACCESS_RELATIONS.join(",") ? null : value;
-}
-
 /** Change the URL without re-rendering the server page; Next.js syncs `useSearchParams`. */
 function pushUrlInPlace(url: string) {
   window.history.pushState(null, "", url);
-}
-
-/** A comma-separated list parameter; undefined when absent or empty. */
-function parseList(raw: string | null): string[] | undefined {
-  const values = [
-    ...new Set(
-      (raw ?? "")
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  ];
-  return values.length > 0 ? values : undefined;
 }
 
 function summarize({

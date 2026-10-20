@@ -148,6 +148,19 @@ export interface DispatchPolicy {
   content: string
   /** Variable → value, for the document's `runtimeCredentials`. Secrets. */
   credentials: Record<string, string>
+  /**
+   * The content hash of the stored composition `content` was read from. A
+   * dispatch whose composition is no longer the stored one publishes nothing
+   * and is refused as retryable; absent, nothing is checked.
+   */
+  compositionHash?: string
+  /**
+   * Whether new sessions keep a policy snapshot. While it is true nothing is
+   * published: a new family opens pinned to `content` for its whole life, and
+   * a family that follows the organization's line decides at the line's head
+   * as it stands. Absent is false.
+   */
+  snapshot?: boolean
 }
 
 export interface EditedPolicy {
@@ -173,8 +186,12 @@ export declare function executeRemedyByOffer(input: string, policy: DispatchPoli
 /** The upstream pin and host replay boundary version stored with each run. */
 export declare function getOpenappaReplayEngineVersion(): string
 
-/** Read the current label of a started session without mutating its trajectory. */
-export declare function getOpenappaStatus(organizationId: string, sessionId: string, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
+/**
+ * Read the current label of a started session without mutating its trajectory.
+ * The read runs through a view pinned to the organization's deployment line, as
+ * a dispatch does: a family is read on the line it follows.
+ */
+export declare function getOpenappaStatus(organizationId: string, sessionId: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
 
 export interface HelperBindingInput {
   /**
@@ -259,6 +276,8 @@ export declare function openappaOpeningKeys(batches: Array<Buffer>): Array<strin
 export interface OpenappaStatus {
   trust: string
   audience: string
+  /** The organization's policy revision the session's next event is decided under. */
+  policyRevision?: number
 }
 
 /**
@@ -317,8 +336,14 @@ export declare function readPeerMessage(input: string, policy: DispatchPolicy): 
  * Evaluate bounded `.appa` scenarios against the supplied effective policy with the
  * credential values the host resolved for it. Every consult the policy declares is
  * made live, as a dispatch makes it; no tool runs and every trajectory stays in memory.
+ *
+ * `onProgress`, when given, receives each file's progress as JSON while the replay runs:
+ * `{"phase":"file_started","path"}`, then `{"phase":"file_finished", ...}` with that
+ * file's result, before the next file starts. It only observes: calls are queued without
+ * waiting, and the listener must not throw. Events still queued when the replay settles
+ * may arrive after its promise resolves.
  */
-export declare function replayOpenappaPolicy(input: string): Promise<string>
+export declare function replayOpenappaPolicy(input: string, onProgress?: (((arg: string) => void)) | undefined | null): Promise<string>
 
 export interface ReportingOptions {
   endpoint: string

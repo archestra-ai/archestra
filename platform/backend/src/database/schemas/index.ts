@@ -135,6 +135,17 @@ export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";
+export {
+  interactionSessionHeadsBackfillTable,
+  interactionSessionHeadsTable,
+} from "./interaction-session-head";
+export {
+  interactionUserActivityDeltasTable,
+  interactionUserActivityMissingOwnersTable,
+  interactionUserActivityStateTable,
+  interactionUserActivityTable,
+  interactionUserActivityUsersTable,
+} from "./interaction-user-activity";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";

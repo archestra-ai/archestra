@@ -21,7 +21,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMcpToolCalls,
         description:
-          "Get MCP tool calls in the active organization with cursor pagination. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.",
+          "Get MCP tool calls in the active organization with cursor pagination, newest first. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization. Each row's `sessionId` names the LLM proxy session that issued it, when known, and `llmToolCallId` the model's own id for the call.",
         tags: ["MCP Tool Call"],
         querystring: z
           .object({
@@ -46,6 +46,14 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller.",
               ),
+            sessionId: z
+              .string()
+              .min(1)
+              .max(1024)
+              .optional()
+              .describe(
+                "Filter by the LLM proxy session that issued the call: calls recorded with that session, and tool calls whose run resolves to it.",
+              ),
           })
           .merge(CursorQuerySchema),
         response: constructResponseSchema(
@@ -61,6 +69,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
           endDate,
           mcpServerName,
           userId,
+          sessionId,
           limit,
           cursor,
         },
@@ -89,6 +98,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
             startDate: startDate ? new Date(startDate) : undefined,
             endDate: endDate ? new Date(endDate) : undefined,
             mcpServerName,
+            sessionId,
             ownUserId: canSeeAllLogs ? userId : user.id,
           },
         ),
@@ -111,9 +121,16 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { mcpToolCallId }, user, organizationId }, reply) => {
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
       const mcpToolCall = await McpToolCallModel.findById({
         id: mcpToolCallId,
         organizationId,
+        ownUserId: canSeeAllLogs ? undefined : user.id,
       });
 
       if (!mcpToolCall) {
@@ -122,12 +139,6 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Own-logs view: someone else's (or unattributed) row does not exist
       // for this caller — 404, not 403, so existence is not disclosed.
-      const canSeeAllLogs = await userHasPermission(
-        user.id,
-        organizationId,
-        "log",
-        "admin",
-      );
       if (!canSeeAllLogs && mcpToolCall.userId !== user.id) {
         throw new ApiError(404, "MCP tool call not found");
       }

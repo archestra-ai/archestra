@@ -36,17 +36,16 @@ import {
   AgentRuntimePreflightError,
 } from "@/components/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AgentConnectionNotice } from "@/components/chat/agent-connection-notice";
 import { AppsProvider } from "@/components/chat/apps-context";
-import { BrowserPanel } from "@/components/chat/browser-panel";
 import {
   ChatLinkButton,
   MobileHeaderChatLinks,
 } from "@/components/chat/chat-help-link";
-import { ChatMessages } from "@/components/chat/chat-messages";
 import {
   collectBrowserToolCallIds,
   deriveAppFilesRevisions,
@@ -54,7 +53,6 @@ import {
 } from "@/components/chat/chat-messages.utils";
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { useConversationActions } from "@/components/chat/conversation-actions";
-import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -62,18 +60,11 @@ import {
   getComposerAnswer,
   takesComposerAnswer,
 } from "@/components/chat/mcp-elicitation-fields";
-import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
-import {
-  AppsPanelContent,
-  type RightPanelTab,
-  RightSidePanel,
-} from "@/components/chat/right-side-panel";
+import type { RightPanelTab } from "@/components/chat/right-side-panel";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
-import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
 import { LoadingState } from "@/components/loading";
-import { NoApiKeySetup } from "@/components/no-api-key-setup";
-import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
+import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-run-state";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -107,6 +98,7 @@ import {
 } from "@/lib/agent-runtime.query";
 import { trackEvent } from "@/lib/analytics";
 import { useApp } from "@/lib/app.query";
+import { afterNextPaint } from "@/lib/app-interactive";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -135,6 +127,7 @@ import {
   useHasPlaywrightMcpTools,
   useKeepViewedConversationRead,
   useMemberDefaultModel,
+  useRefreshConversationFilesAfterTurn,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
@@ -212,6 +205,18 @@ import {
   resolveChatModelState,
   resolvePreferredModelForProvider,
 } from "./chat-initial-state";
+import { composerMorph } from "./composer-morph";
+import {
+  AppsPanelContent,
+  BrowserPanel,
+  ChatMessages,
+  ConversationFilesPanel,
+  DefaultModelOnboardingStep,
+  NoApiKeySetup,
+  OnboardingWizardButton,
+  preloadConversationParts,
+  RightSidePanel,
+} from "./lazy-parts";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
   type ChatSubmitOptions,
@@ -286,12 +291,33 @@ export function ChatPageContent({
     router.replace(redirectPath);
   }, [routeConversationId, router]);
 
+  // A conversation has a transcript to render: fetch the markdown renderer
+  // now, behind the composer, rather than on the next idle callback.
+  useEffect(() => {
+    if (!routeConversationId) return;
+    afterNextPaint(() => {
+      preloadConversationParts();
+      void preloadResponseMarkdown();
+    });
+  }, [routeConversationId]);
+
   // Hide version display from layout - chat page has its own version display
   useEffect(() => {
     document.body.classList.add("hide-version");
     return () => document.body.classList.remove("hide-version");
   }, []);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
+  const [hasOpenedRightPanel, setHasOpenedRightPanel] = useState(false);
+  // The composer's shared-element morph is for arriving from the centered
+  // new-chat (or project) composer. Between two conversations the composer
+  // stays put, and the morph only cost a document view transition that held
+  // the new composer's first frames, so it is off there. Decided once per
+  // mount, so the wrapper never changes under a composer holding a draft.
+  const [morphComposer] = useState(() => composerMorph.shouldMorph());
+  useEffect(() => {
+    if (!routeConversationId) return;
+    return composerMorph.registerConversationComposer();
+  }, [routeConversationId]);
   const [isApplyingAgentSelection, setIsApplyingAgentSelection] =
     useState(false);
   const pendingPromptRef = useRef<string | undefined>(undefined);
@@ -340,9 +366,14 @@ export function ChatPageContent({
   const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
-  const { data: canReadAgent } = useHasPermissions({
-    agent: ["read"],
-  });
+  const { data: canReadAgentGrant, isPending: isPermissionsPending } =
+    useHasPermissions({
+      agent: ["read"],
+    });
+  // Unknown while the session and its permissions load: the page renders
+  // optimistically (on a session cookie) before either answers, and assumes
+  // the common case until told otherwise rather than flashing a refusal.
+  const canReadAgent = isPermissionsPending ? undefined : canReadAgentGrant;
   const { data: canReadLlmProvider } = useHasPermissions({
     llmProviderApiKey: ["read"],
   });
@@ -407,9 +438,15 @@ export function ChatPageContent({
     }
   }, [scheduledRunData?.status, conversationId, queryClient]);
 
-  const hasChatAccess = canReadAgent !== false;
+  // The roster, key and model queries wait for the resolved permissions: a
+  // role without these grants would otherwise get 403s from them. None of
+  // them is on the path to the composer, which renders without them (the
+  // agent and model chips fill in when they land).
+  const hasChatAccess = !isPermissionsPending && canReadAgent !== false;
   const canUseProviderSettings =
-    canReadLlmProvider === true && canReadLlmModels === true;
+    !isPermissionsPending &&
+    canReadLlmProvider === true &&
+    canReadLlmModels === true;
 
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
@@ -419,24 +456,29 @@ export function ChatPageContent({
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider({ enabled: canUseProviderSettings });
+  const canLoadApiKeys = hasChatAccess && canUseProviderSettings;
   const {
     data: chatApiKeys = [],
     isLoading: isLoadingApiKeys,
+    isPending: isApiKeysPending,
     isLoadingError: isApiKeysLoadError,
     refetch: refetchApiKeys,
   } = useLlmProviderApiKeys({
-    enabled: hasChatAccess && canUseProviderSettings,
+    enabled: canLoadApiKeys,
     toastOnError: false,
   });
   // The keys the viewer may use. A key shared as read-only is in the list
   // above but refused when a chat sends it, so the model/key pairing below
   // only ever picks from these (plus the agent's own key, which needs no
   // grant of its own).
-  const { data: usableChatApiKeys = [], isLoading: isLoadingUsableApiKeys } =
-    useAvailableLlmProviderApiKeys({
-      enabled: hasChatAccess && canUseProviderSettings,
-      toastOnError: false,
-    });
+  const {
+    data: usableChatApiKeys = [],
+    isLoading: isLoadingUsableApiKeys,
+    isPending: isUsableApiKeysPending,
+  } = useAvailableLlmProviderApiKeys({
+    enabled: canLoadApiKeys,
+    toastOnError: false,
+  });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   // The user's saved default (model, key) pair — top of the resolution chain
   // for a new chat ("member" level).
@@ -467,6 +509,7 @@ export function ChatPageContent({
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
+    isAgentResolving: isInitialAgentResolving,
     selectedAgent: initialAgentReference,
     modelId: initialModel,
     apiKeyId: initialApiKeyId,
@@ -556,9 +599,12 @@ export function ChatPageContent({
     [],
   );
 
-  const { isLoading: isLoadingFeatures } = useConfig();
-  const { data: chatModels = [] } = useLlmModels();
-  const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
+  // Config decides whether a runtime agent can chat without a provider key,
+  // so only the no-key screen waits for it (see below).
+  const { data: config } = useConfig();
+  const { data: chatModels = [] } = useLlmModels({
+    enabled: !isPermissionsPending && canReadLlmModels === true,
+  });
 
   useEffect(() => {
     setConversationId(routeConversationId);
@@ -622,7 +668,11 @@ export function ChatPageContent({
   // (forAgentId) applies here; a cross-environment skill resolves
   // "unavailable" rather than prefilling a token the composer can't parse.
   const urlSkillCommandsQuery = useSkillsPaginated(
-    { limit: 100, forAgentId: initialAgentId ?? undefined },
+    {
+      limit: 100,
+      forAgentId: initialAgentId ?? undefined,
+      includeContent: false,
+    },
     {
       enabled:
         (urlSkillWanted || hasAnyExternalMcpSkillParam) &&
@@ -836,13 +886,24 @@ export function ChatPageContent({
         ownerId: conversation?.userId,
       })
     : !!conversation?.share;
+  // Someone else's conversation. Decided only once the session is known: the
+  // page renders before get-session answers (see WithAuthCheck), and an
+  // unknown viewer must not hide the composer from the owner.
   const isReadOnlyConversation =
     !!conversationId &&
     !!conversation &&
-    conversation.userId !== session?.user.id;
+    !!session?.user &&
+    conversation.userId !== session.user.id;
   const persistedConversationMessages = useMemo(
     () => (conversation?.messages ?? []) as UIMessage[],
     [conversation?.messages],
+  );
+  // A document the server seeded carries only the end of a long conversation
+  // (olderMessageCount says how much is left out); the full history follows
+  // after paint. Its older messages then go in front of the live thread.
+  const startedFromTail = useStartedFromTail(
+    conversationId,
+    conversation?.olderMessageCount,
   );
   const isWaitingForScheduledPrompt =
     conversation?.origin === "schedule_trigger" &&
@@ -998,13 +1059,20 @@ export function ChatPageContent({
   // Unknown while the usable list loads, so the visible list (restored on
   // refresh) still decides the first paint.
   const hasAnyApiKey =
-    chatApiKeys.length > 0 &&
-    // The usable list has not settled yet: keep the composer.
-    (isLoadingUsableApiKeys ||
-      // A key the viewer may use.
-      usableChatApiKeys.length > 0 ||
-      // Or the agent's own key, which works through the agent.
-      Boolean(selectedAgentSummary?.llmApiKeyId));
+    // Until the permissions and then the keys arrive, keep the composer: the
+    // no-provider screen shows only once the list has said there are none.
+    // "No data yet", not "fetching": the render that enables the queries is
+    // not fetching yet, and must not flash the no-provider screen.
+    isPermissionsPending ||
+    (((canLoadApiKeys && isApiKeysPending) || chatApiKeys.length > 0) &&
+      // The usable list has not settled yet: keep the composer.
+      ((canLoadApiKeys && isUsableApiKeysPending) ||
+        // A key the viewer may use.
+        usableChatApiKeys.length > 0 ||
+        // Or the agent's own key, which works through the agent — unknown
+        // until the roster has answered.
+        Boolean(selectedAgentSummary?.llmApiKeyId) ||
+        (hasChatAccess && isLoadingAgents)));
   const isAgentSubscriptionMetadataPending = Boolean(
     (selectedAgentSummary && !selectedAgentDetail) ||
       (activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending),
@@ -1572,9 +1640,10 @@ export function ChatPageContent({
         ? mergePersistedMessageMetadata({
             liveMessages: chatSession.messages,
             persistedMessages: persistedConversationMessages,
+            includeEarlierPersisted: startedFromTail,
           })
         : persistedConversationMessages,
-    [chatSession?.messages, persistedConversationMessages],
+    [chatSession?.messages, persistedConversationMessages, startedFromTail],
   );
   const mcpApps = useChatApps({
     messages,
@@ -1813,6 +1882,17 @@ export function ChatPageContent({
       }),
     [messages, optimisticToolCalls],
   );
+  // Browser calls already in the saved thread are history: they never open
+  // the panel, whenever they arrive (the end of a long conversation first,
+  // its earlier messages after paint).
+  const savedBrowserToolCallIds = useMemo(
+    () =>
+      collectBrowserToolCallIds({
+        messages: persistedConversationMessages,
+        optimisticToolCalls: [],
+      }),
+    [persistedConversationMessages],
+  );
   const tokenUsage = chatSession?.tokenUsage;
   const contextTokensUsed = chatSession?.contextTokensUsed;
   const contextWindow = chatSession?.contextWindow ?? null;
@@ -1842,10 +1922,11 @@ export function ChatPageContent({
         mergePersistedMessageMetadata({
           liveMessages: current,
           persistedMessages,
+          includeEarlierPersisted: startedFromTail,
         }),
       );
     },
-    [setMessages],
+    [setMessages, startedFromTail],
   );
 
   // Sync once the turn has settled — including a failed one. regenerate (and
@@ -1862,13 +1943,16 @@ export function ChatPageContent({
 
   const conversationAgentId =
     conversation?.agentId ?? conversation?.agent?.id ?? null;
-  const activeAgentId = conversationAgentId ?? initialAgentId;
+  // While a conversation loads, its agent is unknown. Standing in the new-chat
+  // default there painted an unrelated agent on reload, then swapped it.
+  const fallbackAgentId = isLoadingConversation ? null : initialAgentId;
+  const activeAgentId = conversationAgentId ?? fallbackAgentId;
+  const isActiveAgentResolving =
+    !activeAgentId && (isLoadingConversation || isInitialAgentResolving);
   const promptAgentId = conversation?.agent?.id ?? activeAgentId;
-  const newChatAgentId =
-    activeAgentId ??
-    initialAgentId ??
-    internalAgents.find((agent) => !agent.builtIn)?.id ??
-    null;
+  // The resolved agent only: a stand-in would load another agent's detail
+  // and readiness while the choice resolves.
+  const newChatAgentId = activeAgentId ?? null;
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
@@ -2161,17 +2245,13 @@ export function ChatPageContent({
     queryClient,
   ]);
 
-  // Refresh the Files list and the conversation (for the artifact) whenever the
-  // chat settles to "ready" — the initial open and the end of every turn. This
-  // surfaces `download_file` outputs and picks up a rewritten artifact, so the
-  // Files panel can follow the latest output.
-  useEffect(() => {
-    if (!conversationId || status !== "ready") return;
-    invalidateConversationFileQueries(queryClient, {
-      conversationId,
-      projectId: conversation?.projectId,
-    });
-  }, [status, conversationId, conversation?.projectId, queryClient]);
+  // Surface `download_file` outputs and a rewritten artifact when a turn ends,
+  // so the Files panel can follow the latest output.
+  useRefreshConversationFilesAfterTurn({
+    conversationId,
+    projectId: conversation?.projectId,
+    status,
+  });
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)
@@ -2272,6 +2352,7 @@ export function ChatPageContent({
       queueEnabled,
       directSendPending: directSendPendingRef.current,
       isCompacting: isContextCompacting,
+      sessionPending: !sendMessage,
     });
 
     if (submitAction === "stop") {
@@ -2521,7 +2602,10 @@ export function ChatPageContent({
       return;
     }
 
-    const seenBrowserToolCallIds = seenBrowserToolCallIdsRef.current;
+    const seenBrowserToolCallIds = new Set([
+      ...seenBrowserToolCallIdsRef.current,
+      ...savedBrowserToolCallIds,
+    ]);
     const hasNewBrowserToolCall = Array.from(browserToolCallIds).some(
       (toolCallId) => !seenBrowserToolCallIds.has(toolCallId),
     );
@@ -2536,6 +2620,7 @@ export function ChatPageContent({
     }
   }, [
     browserToolCallIds,
+    savedBrowserToolCallIds,
     conversationId,
     openRightPanelTab,
     showBrowserButton,
@@ -3029,23 +3114,21 @@ export function ChatPageContent({
     );
   }
 
-  // Hold the screen for one thing only: whether a provider key exists at all.
-  // That decides between two entirely different screens — the composer and the
-  // connect-a-provider prompt — so guessing it and correcting shows the user a
-  // screen that was never true. It is also cheap to wait for: a handful of rows
-  // that the refresh snapshot restores, so on a reload this is already resolved.
+  // Nothing the composer shows holds the screen. The provider keys decide
+  // between the composer and the connect-a-provider prompt, but nearly every
+  // load has keys: the composer renders while they load, with the model
+  // button and send waiting on them, and switches to the prompt only once the
+  // list says there are none.
   //
-  // Everything else the composer needs now fills in around it rather than in
-  // front of it:
+  // The rest of what the composer needs fills in around it as well:
   //
   // - The agent roster. It is the largest thing the page fetches, and on a big
   //   organization it is over the refresh snapshot's per-query budget, so it is
   //   the one gate a reload could not skip. Until it lands the agent chip reads
   //   "Select agent" and submit is disabled — a toolbar that fills in, rather
   //   than a spinner where the page should be.
-  if (isLoadingApiKeyCheck) {
-    return <LoadingState variant="fill" />;
-  }
+  // - The session, its permissions and the config. The page renders before
+  //   any of them answer (see WithAuthCheck), so none of them may hold it.
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).
   // Show a retry state rather than the setup prompt, which would wrongly imply
@@ -3066,6 +3149,9 @@ export function ChatPageContent({
 
   // If API key is not configured, show setup prompt with inline creation dialog.
   if (!hasAnyApiKey && !isInitialRuntimeMode) {
+    // A runtime agent chats without a key, and the config says whether the
+    // runtime is on: until it does, an empty key list is not yet the answer.
+    if (!config) return <LoadingState variant="fill" />;
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
@@ -3177,6 +3263,11 @@ export function ChatPageContent({
     hasPendingHandoffFiles: hasPendingChatHandoffFiles(),
     autoSendTriggered: autoSendTriggeredRef.current,
   });
+
+  // The side panel (files, browser, apps, artifact) is a lazy chunk of its
+  // own; mounting it closed would fetch and evaluate it while the composer
+  // hydrates. It mounts the first time it opens and stays (keeping its state).
+  if (isRightPanelOpen && !hasOpenedRightPanel) setHasOpenedRightPanel(true);
 
   const page = (
     <AppsProvider
@@ -3301,7 +3392,7 @@ export function ChatPageContent({
                           conversationId={conversationId}
                           readOnly={isReadOnlyConversation}
                           agentId={
-                            currentProfileId || initialAgentId || undefined
+                            currentProfileId || fallbackAgentId || undefined
                           }
                           messages={messages}
                           status={status}
@@ -3323,7 +3414,7 @@ export function ChatPageContent({
                                   (a) => a.id === currentProfileId,
                                 )
                               : internalAgents.find(
-                                  (a) => a.id === initialAgentId,
+                                  (a) => a.id === fallbackAgentId,
                                 )
                             )?.name ?? conversation?.agent?.name
                           }
@@ -3452,19 +3543,25 @@ export function ChatPageContent({
                       </div>
                     </div>
                   ) : isAppOversight || isResolvingOversightApp ? null : (
-                    activeAgentId && (
+                    // Drawn while the conversation (and so its agent) is
+                    // still loading, so it takes input from the first paint.
+                    (activeAgentId || isLoadingConversation) && (
                       <div className={COMPOSER_DOCK_CLASS}>
                         {/* Shared-element pair with the centered New Chat
                             composer (and the project-page composer): on the
                             splash → conversation swap the box morphs from
                             center screen to its bottom anchor. */}
                         <ViewTransition
-                          name="chat-composer"
-                          share="chat-composer-morph"
+                          name={morphComposer ? "chat-composer" : undefined}
+                          share={
+                            morphComposer ? "chat-composer-morph" : undefined
+                          }
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">
-                            <AgentConnectionNotice agentId={activeAgentId} />
+                            {activeAgentId && (
+                              <AgentConnectionNotice agentId={activeAgentId} />
+                            )}
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               answersQuestion={takesComposerAnswer(
@@ -3489,7 +3586,9 @@ export function ChatPageContent({
                               allowFileUploads={
                                 organization?.allowChatFileUploads ?? false
                               }
-                              isModelsLoading={isModelsLoading}
+                              isModelsLoading={
+                                isModelsLoading || isLoadingApiKeys
+                              }
                               tokensUsed={tokensUsed}
                               cachedTokens={tokenUsage?.cacheReadTokens}
                               maxContextLength={selectedModelContextLength}
@@ -3502,8 +3601,17 @@ export function ChatPageContent({
                               submitDisabled={
                                 isWaitingForScheduledPrompt ||
                                 isAwaitingScheduledStream ||
-                                isApplyingAgentSelection ||
-                                isAgentSubscriptionMetadataPending
+                                isApplyingAgentSelection
+                              }
+                              // Still loading what a send needs: the
+                              // conversation's agent, its credentials, the
+                              // provider keys. Typing is welcome meanwhile
+                              // (the composer renders before any of them);
+                              // only sending waits.
+                              sendDisabled={
+                                !activeAgentId ||
+                                isAgentSubscriptionMetadataPending ||
+                                isLoadingApiKeys
                               }
                               disabledReason={
                                 isWaitingForScheduledPrompt ||
@@ -3511,9 +3619,13 @@ export function ChatPageContent({
                                   ? "Waiting for the scheduled run"
                                   : isApplyingAgentSelection
                                     ? "Switching agent…"
-                                    : isAgentSubscriptionMetadataPending
-                                      ? "Checking the agent's credentials…"
-                                      : undefined
+                                    : !activeAgentId
+                                      ? "Loading the conversation…"
+                                      : isAgentSubscriptionMetadataPending
+                                        ? "Checking the agent's credentials…"
+                                        : isLoadingApiKeys
+                                          ? "Loading model providers…"
+                                          : undefined
                               }
                               subscriptionConnectRequired={
                                 conversationPerUserConnect.needsConnect
@@ -3534,6 +3646,7 @@ export function ChatPageContent({
                                   : undefined
                               }
                               selectorAgentId={activeAgentId}
+                              isSelectorAgentResolving={isActiveAgentResolving}
                               onAgentChange={handleConversationAgentChange}
                               modelSource={conversationModelSource}
                               onResetModelOverride={
@@ -3674,7 +3787,7 @@ export function ChatPageContent({
                         >
                           <div className="w-full">
                             {newChatAgentId && !isInitialRuntimeMode && (
-                              <div className="mb-3">
+                              <div className="mb-3 empty:hidden">
                                 <AgentConnectionNotice
                                   agentId={newChatAgentId}
                                 />
@@ -3737,7 +3850,9 @@ export function ChatPageContent({
                               allowFileUploads={
                                 organization?.allowChatFileUploads ?? false
                               }
-                              isModelsLoading={isModelsLoading}
+                              isModelsLoading={
+                                isModelsLoading || isLoadingApiKeys
+                              }
                               inputModalities={selectedModelInputModalities}
                               agentLlmApiKeyId={
                                 (
@@ -3756,6 +3871,7 @@ export function ChatPageContent({
                               // nothing.
                               sendDisabled={
                                 isLoadingAgents ||
+                                isLoadingApiKeys ||
                                 !initialAgentId ||
                                 (!isInitialRuntimeMode &&
                                   isAgentSubscriptionMetadataPending) ||
@@ -3766,15 +3882,17 @@ export function ChatPageContent({
                               disabledReason={
                                 isLoadingAgents
                                   ? "Loading agents…"
-                                  : !initialAgentId
-                                    ? "No agent is available to you"
-                                    : isInitialRuntimeMode
-                                      ? runtimePreflightDisabledReason(
-                                          runtimePreflight,
-                                        )
-                                      : isAgentSubscriptionMetadataPending
-                                        ? "Checking the agent's credentials…"
-                                        : undefined
+                                  : isLoadingApiKeys
+                                    ? "Loading model providers…"
+                                    : !initialAgentId
+                                      ? "No agent is available to you"
+                                      : isInitialRuntimeMode
+                                        ? runtimePreflightDisabledReason(
+                                            runtimePreflight,
+                                          )
+                                        : isAgentSubscriptionMetadataPending
+                                          ? "Checking the agent's credentials…"
+                                          : undefined
                               }
                               subscriptionConnectRequired={
                                 initialPerUserConnect.needsConnect
@@ -3783,6 +3901,7 @@ export function ChatPageContent({
                                 initialPerUserConnect.provider
                               }
                               selectorAgentId={initialAgentId}
+                              isSelectorAgentResolving={isInitialAgentResolving}
                               onAgentChange={handleInitialAgentChange}
                               encryptedChat={
                                 isInitialRuntimeMode
@@ -3838,7 +3957,7 @@ export function ChatPageContent({
           {/* Right-side panel - desktop only. Unmounted (not just CSS-hidden)
               on mobile so its Apps tab never hosts a second, invisible copy of
               the app iframe alongside the inline mobile panel above. */}
-          {!isMobile && (
+          {!isMobile && hasOpenedRightPanel && (
             <div className="hidden md:flex h-full min-h-0">
               <RightSidePanel
                 isOpen={isRightPanelOpen}
@@ -3988,3 +4107,24 @@ function subscriptionDebug(event: string, data: Record<string, unknown>) {
 // fade just above it keeps a line from being sliced in half there.
 const COMPOSER_DOCK_CLASS =
   "sticky bottom-0 bg-background px-4 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-gradient-to-t before:from-background before:to-transparent";
+
+/**
+ * Whether this conversation's first loaded snapshot was a tail read (it left
+ * out older messages). Fixed per conversation: the full history replacing the
+ * tail does not reset it.
+ */
+function useStartedFromTail(
+  conversationId: string | undefined,
+  olderMessageCount: number | undefined,
+): boolean {
+  const seen = useRef<{ id: string | undefined; fromTail: boolean } | null>(
+    null,
+  );
+  if (seen.current?.id !== conversationId) {
+    seen.current =
+      olderMessageCount === undefined
+        ? null
+        : { id: conversationId, fromTail: olderMessageCount > 0 };
+  }
+  return seen.current?.fromTail ?? false;
+}

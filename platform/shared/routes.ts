@@ -105,6 +105,8 @@ export const RouteId = {
   // Config Routes
   GetConfig: "getConfig",
   GetBootstrap: "getBootstrap",
+  GetNewChatBootstrap: "getNewChatBootstrap",
+  GetConversationBootstrap: "getConversationBootstrap",
   GetPublicConfig: "getPublicConfig",
 
   // RUM Routes
@@ -117,6 +119,10 @@ export const RouteId = {
 
   // MCP Catalog Routes
   GetInternalMcpCatalog: "getInternalMcpCatalog",
+  SearchMcpRegistry: "searchMcpRegistry",
+  SearchMcpRegistryIds: "searchMcpRegistryIds",
+  GetMcpRegistryIssueIndex: "getMcpRegistryIssueIndex",
+  GetInternalMcpCatalogIcon: "getInternalMcpCatalogIcon",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
   GetInternalMcpCatalogCredentialPreflight:
@@ -581,6 +587,8 @@ export const RouteId = {
 
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
+  GetLlmModelIdsByKey: "getLlmModelIdsByKey",
+  GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
   BulkUpdateModels: "bulkUpdateModels",
 
@@ -898,6 +906,8 @@ export const RouteId = {
   GetOpenAppaYell: "getOpenAppaYell",
   UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",
+  GetOpenappaExternalConsult: "getOpenappaExternalConsult",
+  GetOpenappaLabelChanges: "getOpenappaLabelChanges",
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",
@@ -966,6 +976,7 @@ export const RouteId = {
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
   GetAuditLog: "getAuditLog",
+  GetAuditLogResources: "getAuditLogResources",
 
   // Hook File Routes
   GetHooks: "getHooks",
@@ -1007,6 +1018,8 @@ export const RouteId = {
   // MCP App Routes
   GetApps: "getApps",
   GetExternalApp: "getExternalApp",
+  GetExternalAppIcon: "getExternalAppIcon",
+  GetAppIcon: "getAppIcon",
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",

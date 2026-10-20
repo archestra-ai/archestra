@@ -1,35 +1,31 @@
 ---
 title: "Permissions"
-description: "Built-in role grants, available permissions, and LLM API access requirements"
-order: 6
-lastUpdated: 2026-10-15
+description: "What each built-in role can do, and every permission a custom role can hold"
+order: 2
+lastUpdated: 2026-10-19
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
 Run `pnpm codegen:access-control-docs` to regenerate.
 -->
 
-Organization permissions use `resource:action` names. Roles combine these permissions; [Access Control](/docs/admin/access-control) explains how roles and resource grants work together.
+Every permission is a `resource:action` pair, such as `agent:create`. A role is a set of these permissions. Docs pages link here by permission name. [Access Control](/docs/admin/access-control) explains how roles and per-item grants work together.
 
 ## Predefined Roles
 
-Built-in roles cannot be edited or deleted.
+Every organization has these four roles. You cannot edit or delete them.
 
 ### Admin
 
-Full access to all resources including user management, roles, and platform settings
-
-The admin role has **all permissions** on every resource.
+Admin holds every permission, including user management, roles, and organization settings.
 
 ### Platform Admin
 
-Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users
-
-Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, `openappaDiagnostics:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](/docs/admin/access-control#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
+Platform Admin holds every permission except `log:admin`, `auditLog:admin`, and `member:impersonate`. It manages users, roles, settings, and resources, but sees only its own logs and audit records, and cannot sign in as another member. Because of [No Privilege Escalation](/docs/admin/access-control#no-privilege-escalation), it cannot grant a role that holds the withheld permissions.
 
 ### Editor
 
-Full access to core resources, but cannot change organization settings or manage users, roles, or identity providers
+Full access to core resources, but cannot change organization settings or manage users, roles, or identity providers.
 
 | Resource | Actions |
 |----------|--------|
@@ -37,6 +33,7 @@ Full access to core resources, but cannot change organization settings or manage
 | Skills | `read`, `create`, `delete` |
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create` |
+| Guardrails Policy | `read`, `update` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create` |
 | LLM Virtual Keys | `read`, `create` |
@@ -48,8 +45,6 @@ Full access to core resources, but cannot change organization settings or manage
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | Credentials | `read`, `create` |
-| OpenAPPA Policy | `read`, `update` |
-| OpenAPPA Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -63,7 +58,7 @@ Full access to core resources, but cannot change organization settings or manage
 
 ### Member
 
-Can manage agents, tools, and chat, with read-only access to most other resources
+Can manage agents, tools, and chat, with read-only access to most other resources.
 
 | Resource | Actions |
 |----------|--------|
@@ -87,9 +82,11 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Teams | `read` |
 
 
+<span id="llm-api-permissions"></span>
+
 ## Available Permissions
 
-These permissions can be selected in custom roles. Per-resource actions and scopes are described under [Granular Access Control](/docs/admin/access-control#granular-access-control).
+A [custom role](/docs/admin/access-control#custom-roles) can hold any of these permissions. To grant an action on a single item, such as one agent, see [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 | Permission | Description |
 |------------|-------------|
@@ -120,6 +117,8 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="environment:create"></span>`environment:create` | Create deployment environments |
 | <span id="environment:update"></span>`environment:update` | Modify deployment environments, including the org default environment |
 | <span id="environment:delete"></span>`environment:delete` | Delete deployment environments |
+| <span id="guardrailsPolicy:read"></span>`guardrailsPolicy:read` | View Guardrails policy, batteries, and coverage |
+| <span id="guardrailsPolicy:update"></span>`guardrailsPolicy:update` | Validate and edit Guardrails policy and manage batteries |
 | <span id="identityProvider:read"></span>`identityProvider:read` | View identity provider configurations (SSO) |
 | <span id="identityProvider:create"></span>`identityProvider:create` | Set up new identity providers |
 | <span id="identityProvider:update"></span>`identityProvider:update` | Modify identity provider settings |
@@ -142,8 +141,8 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="llmProxy:update"></span>`llmProxy:update` | Modify LLM Proxy configuration |
 | <span id="llmVirtualKey:read"></span>`llmVirtualKey:read` | Open LLM virtual keys |
 | <span id="llmVirtualKey:create"></span>`llmVirtualKey:create` | Create LLM virtual keys |
-| <span id="log:read"></span>`log:read` | View your own LLM proxy and MCP tool call logs in the active organization |
-| <span id="log:admin"></span>`log:admin` | View every LLM and MCP log in your organization (also requires Read) |
+| <span id="log:read"></span>`log:read` | View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells |
+| <span id="log:admin"></span>`log:admin` | View every LLM, MCP, and Guardrails consult log in your organization (also requires Read) |
 | <span id="mcpGateway:read"></span>`mcpGateway:read` | Open MCP Gateways |
 | <span id="mcpGateway:create"></span>`mcpGateway:create` | Create new MCP gateways |
 | <span id="mcpGateway:delete"></span>`mcpGateway:delete` | Open the trash of deleted MCP gateways |
@@ -160,11 +159,6 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="member:impersonate"></span>`member:impersonate` | Temporarily sign in as another member to see the app with their access (role debugging) |
 | <span id="mcpOauthClient:read"></span><span id="llmOauthClient:read"></span><span id="oauthClient:read"></span>`oauthClient:read` | Open OAuth client registrations |
 | <span id="mcpOauthClient:create"></span><span id="llmOauthClient:create"></span><span id="oauthClient:create"></span>`oauthClient:create` | Create OAuth client registrations |
-| <span id="openappaDiagnostics:read"></span>`openappaDiagnostics:read` | Read all organization yells and your own consult logs |
-| <span id="openappaDiagnostics:update"></span>`openappaDiagnostics:update` | Resolve and reopen organization yells |
-| <span id="openappaDiagnostics:admin"></span>`openappaDiagnostics:admin` | Read consult logs across the organization |
-| <span id="openappaPolicy:read"></span>`openappaPolicy:read` | View OpenAPPA policy, batteries, and coverage |
-| <span id="openappaPolicy:update"></span>`openappaPolicy:update` | Validate and edit OpenAPPA policy and manage batteries |
 | <span id="organizationSettings:read"></span>`organizationSettings:read` | View every organization settings page, including messaging channels |
 | <span id="organizationSettings:update"></span>`organizationSettings:update` | Change organization settings, messaging channels, and site notifications |
 | <span id="plugin:read"></span>`plugin:read` | View plugins and their file metadata |
@@ -184,22 +178,3 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="team:create"></span>`team:create` | Create new teams |
 | <span id="team:update"></span>`team:update` | Modify team settings |
 | <span id="team:delete"></span>`team:delete` | Delete teams |
-
-
-## LLM API Permissions
-
-| API data | Required permissions | Visibility |
-|----------|----------------------|------------|
-| View LLM Proxy configuration | `llmProxy:read` | The active organization's proxy and connection details |
-| Update LLM Proxy configuration | `llmProxy:update` | The active organization's proxy configuration |
-| Personal usage (`/api/statistics/me*`) | None | The caller's usage |
-| Cost totals, teams, agents, models, and savings | `llmCost:read` | All matching usage in the active organization |
-| User cost statistics (`/api/statistics/users`) | `llmCost:read` | The caller's usage |
-| User cost statistics for all users | `llmCost:read` and `member:read` | Identified users in the active organization |
-| App cost statistics | `llmCost:read` and `app:read` | Apps allowed by the caller’s read grants |
-| Skill cost statistics | `llmCost:read` and `skill:read` | Skills allowed by the caller’s read grants |
-| Tool-call, app, and skill usage (`/api/statistics/mcp-tool-calls`, `app-usage`, `skill-usage`) | `llmCost:read`, plus `app:read` or `skill:read` for apps and skills | The caller's usage; add `member:read` for everyone's |
-| LLM and MCP logs for the caller | `log:read` | Records attributed to the caller |
-| All LLM and MCP logs | `log:read` and `log:admin` | All records in the active organization, including unattributed traffic |
-
-Service accounts use their assigned role for these APIs. A service account has no personal usage or caller-attributed log rows. Grant `llmCost:read` for organization-wide cost exports. Grant both `log:read` and `log:admin` for organization-wide log exports. Add `member:read` to include per-user cost statistics.

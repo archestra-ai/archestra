@@ -14,12 +14,15 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   OpenAppaClientCoverageSetting,
   OpenAppaEnforcementSetting,
+  OpenAppaNewSessionPolicySetting,
 } from "./openappa-settings-sections";
 
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
@@ -28,9 +31,14 @@ const server = setupServer();
 let enabled: boolean;
 let featureEnabled: boolean;
 let clientAction: "bypass" | "block";
+let newSessionPolicy: "live" | "snapshot";
 let revision: number;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  // The Guardrails status is read only while OpenAPPA is on.
+  vi.mocked(useFeature).mockImplementation(
+    (feature) => feature === "openappaEnabled",
+  );
   Element.prototype.scrollIntoView = vi.fn();
   Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
   Element.prototype.setPointerCapture = vi.fn();
@@ -43,6 +51,7 @@ beforeEach(() => {
   enabled = false;
   featureEnabled = true;
   clientAction = "bypass";
+  newSessionPolicy = "live";
   revision = 1;
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
@@ -51,6 +60,7 @@ beforeEach(() => {
         featureEnabled,
         active: enabled,
         unsupportedClientAction: clientAction,
+        newSessionPolicy,
       }),
     ),
     http.get(`${api}/guardrails-policy`, () =>
@@ -234,4 +244,73 @@ test("hidden docs links keep the branded client coverage explanation", async () 
     "Guardrails follow Workspace chat, Claude Code, Codex, and more, plus any client that sends OpenAPPA session headers.",
   );
   expect(screen.queryByRole("link")).not.toBeInTheDocument();
+});
+
+test("an administrator gives new sessions a policy snapshot and returns them to the live policy", async () => {
+  const updates: unknown[] = [];
+  server.use(
+    http.put(`${api}/guardrails-deployment`, async ({ request }) => {
+      const body = (await request.json()) as {
+        newSessionPolicy: "live" | "snapshot";
+      };
+      updates.push(body);
+      newSessionPolicy = body.newSessionPolicy;
+      return HttpResponse.json({
+        enabled,
+        featureEnabled,
+        active: enabled,
+        unsupportedClientAction: clientAction,
+        newSessionPolicy,
+      });
+    }),
+  );
+  const { container } = show(<OpenAppaNewSessionPolicySetting />);
+  const selector = await screen.findByRole("combobox", {
+    name: "Policy for new sessions",
+  });
+  expect(selector).toHaveTextContent("New sessions reference the live policy");
+  expect(container).toHaveTextContent(
+    "Live sessions take policy changes at their next tool call. Sessions opened with a snapshot keep it.",
+  );
+
+  fireEvent.click(selector);
+  fireEvent.click(
+    screen.getByRole("option", { name: /New sessions keep a policy snapshot/ }),
+  );
+  await waitFor(() =>
+    expect(selector).toHaveTextContent("New sessions keep a policy snapshot"),
+  );
+  expect(container).toHaveTextContent(
+    "No policy revision is published, so existing live sessions keep their current revision",
+  );
+
+  await waitFor(() => expect(selector).toBeEnabled());
+  fireEvent.click(selector);
+  fireEvent.click(
+    screen.getByRole("option", {
+      name: /New sessions reference the live policy/,
+    }),
+  );
+  await waitFor(() =>
+    expect(updates).toEqual([
+      { newSessionPolicy: "snapshot" },
+      { newSessionPolicy: "live" },
+    ]),
+  );
+  await waitFor(() =>
+    expect(selector).toHaveTextContent(
+      "New sessions reference the live policy",
+    ),
+  );
+});
+
+test("members who cannot manage it see the policy for new sessions but cannot change it", async () => {
+  readOnly();
+  newSessionPolicy = "snapshot";
+  show(<OpenAppaNewSessionPolicySetting />);
+  const selector = await screen.findByRole("combobox", {
+    name: "Policy for new sessions",
+  });
+  expect(selector).toHaveTextContent("New sessions keep a policy snapshot");
+  expect(selector).toBeDisabled();
 });

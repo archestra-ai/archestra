@@ -87,7 +87,7 @@ fn insert(
     pg: &crate::Sql<'_>,
     attribution: Attribution,
     mut columns: Columns,
-) -> Result<(), PostgresError> {
+) -> Result<(), crate::SqlError> {
     let cipher = pg.0.cipher();
     for index in 0..columns.id.len() {
         let context = |field: &str| {
@@ -99,19 +99,24 @@ fn insert(
                 field,
             ])
         };
-        columns.request[index] = cipher.seal_json(&context("request"), &columns.request[index])?;
+        columns.request[index] = cipher
+            .seal_json(&context("request"), &columns.request[index])
+            .map_err(PostgresError::from)?;
         columns.answer[index] = columns.answer[index]
             .as_ref()
             .map(|value| cipher.seal_json(&context("answer"), value))
-            .transpose()?;
+            .transpose()
+            .map_err(PostgresError::from)?;
         columns.raw_response[index] = columns.raw_response[index]
             .as_ref()
             .map(|bytes| cipher.seal_bytes(&context("raw_response"), bytes))
-            .transpose()?;
+            .transpose()
+            .map_err(PostgresError::from)?;
         columns.diagnostics[index] = columns.diagnostics[index]
             .as_ref()
             .map(|bytes| cipher.seal_bytes(&context("diagnostics"), bytes))
-            .transpose()?;
+            .transpose()
+            .map_err(PostgresError::from)?;
     }
     pg.with_client(move |client| {
         client
@@ -150,7 +155,7 @@ fn insert(
 }
 
 /// The driver's own message is only "db error"; the server's reason is its source.
-fn described(error: impl std::error::Error) -> PostgresError {
+pub(crate) fn described(error: impl std::error::Error) -> PostgresError {
     match error.source() {
         Some(source) => PostgresError(format!("{error}: {source}")),
         None => PostgresError(error.to_string()),

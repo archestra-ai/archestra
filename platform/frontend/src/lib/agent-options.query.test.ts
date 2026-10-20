@@ -168,3 +168,41 @@ it("never requests the roster without IDs", async () => {
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(requests).toBe(0);
 });
+
+it("keeps the resolved rows on screen while a changed id list loads", async () => {
+  let releaseSecond = () => {};
+  const secondHeld = new Promise<void>((resolve) => {
+    releaseSecond = resolve;
+  });
+  server.use(
+    http.get(`${API_ORIGIN}/api/agents/options`, async ({ request }) => {
+      const ids =
+        new URL(request.url).searchParams.get("ids")?.split(",") ?? [];
+      if (ids.length > 1) await secondHeld;
+      return HttpResponse.json({
+        data: ids.map((id) => ({ id, name: id })),
+        pagination: { limit: 1000, hasNext: false, nextCursor: null },
+      });
+    }),
+  );
+  let ids = [agentId(0)];
+  const hook = renderWithClient(() =>
+    useAgentOptionsByIds({ ids, keepPreviousData: true }),
+  );
+  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+
+  ids = [agentId(0), agentId(1)];
+  hook.rerender();
+  await waitFor(() => expect(hook.result.current.isFetching).toBe(true));
+  expect(hook.result.current.isPlaceholderData).toBe(true);
+  expect(hook.result.current.data?.map((row) => row.id)).toEqual([agentId(0)]);
+
+  releaseSecond();
+  await waitFor(() =>
+    expect(hook.result.current.data?.map((row) => row.id)).toEqual([
+      agentId(0),
+      agentId(1),
+    ]),
+  );
+  expect(hook.result.current.isPlaceholderData).toBe(false);
+});

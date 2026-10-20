@@ -129,6 +129,7 @@ function makeSessionSummary(
     models: ["gpt-5.4"],
     profileId: orgProxy.id,
     profileName: orgProxy.name,
+    profileAgentType: "llm_proxy",
     externalAgentIds: [],
     externalAgentIdLabels: [],
     authMethods: [],
@@ -424,7 +425,7 @@ describe("LlmProxyLogsPage proxy filter", () => {
     render(<LlmProxyLogsPage />);
 
     await user.click(screen.getByText("GPT-5.4"));
-    expect(push).toHaveBeenCalledWith("/llm/logs/session/chat-session");
+    expect(push).toHaveBeenCalledWith("/llm/logs/chat-session");
 
     push.mockClear();
     const chatLink = screen.getByRole("link", { name: "Open chat" });
@@ -433,7 +434,7 @@ describe("LlmProxyLogsPage proxy filter", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("opens a lone interaction at its own detail page", async () => {
+  it("opens a sessionless interaction as a session of its own", async () => {
     const user = userEvent.setup();
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: {

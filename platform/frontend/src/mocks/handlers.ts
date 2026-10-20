@@ -81,6 +81,8 @@ import {
   userStatisticsFor,
 } from "./data/statistics";
 
+import { registryHandlers } from "./registry";
+
 // Every endpoint is registered once, under its backend-relative path, which
 // MSW matches against any origin. Both consumers arrive that way: the browser
 // worker sees same-origin `/api/...` requests, and the mock backend route
@@ -275,6 +277,12 @@ export const handlers: HttpHandler[] = [
     ],
   }),
   ...getJson("/api/openappa/policy-tests/runs", []),
+  // A session trace reads its guardrail checks and label history; none by default.
+  ...getJson("/api/openappa/external-consults", {
+    data: [],
+    pagination: { limit: 100, hasNext: false, nextCursor: null },
+  }),
+  ...getJson("/api/openappa/label-changes", { data: [] }),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
   ...getJson("/api/openappa/yells", {
     data: [],
@@ -300,6 +308,16 @@ export const handlers: HttpHandler[] = [
   // Unavailable by default, so the shell falls back to the individual reads
   // below and per-test overrides of those endpoints keep taking effect.
   ...paths("/api/bootstrap").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
+  // The new-chat composer's bundle: unavailable by default for the same
+  // reason, so the composer loads from the individual reads.
+  ...paths("/api/bootstrap/new-chat").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
+  // A conversation's first screen: unavailable by default, so the page loads
+  // the conversation and composer from the individual reads.
+  ...paths("/api/bootstrap/conversation/:id").map((url) =>
     http.get(url, () => HttpResponse.json(null, { status: 401 })),
   ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
@@ -402,6 +420,10 @@ export const handlers: HttpHandler[] = [
       hasPrev: false,
     },
   }),
+  // The Audit Logs page's resource picker searches this when it opens, and
+  // reads one entry to label a resource filter carried in the URL. No
+  // matches keeps the strict unhandled-request guard satisfied.
+  ...getJson("/api/audit-logs/resources", { data: [] }),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.
   ...getJson("/api/environments", {
@@ -454,6 +476,8 @@ export const handlers: HttpHandler[] = [
   // "tools" segment can never be read as a catalog id.
   ...getJson("/api/internal_mcp_catalog/tools", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
+  // Paged search, issue index and by-id reads, derived from the lists above.
+  ...registryHandlers,
   ...getJson("/api/mcp_server", installedServersSeed),
   // Org-wide auto-mode roster; per-test seeds override when a test needs
   // auto-mode agents in the usage surfaces.
@@ -570,6 +594,17 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agent-tools", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 1,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
@@ -578,6 +613,12 @@ export const handlers: HttpHandler[] = [
   // The agents list asks which of the caller's agents is their personal
   // default; unmocked, it reaches the real backend and trips the leak guard.
   ...getJson("/api/members/default-agent", { defaultAgentId: null }),
+  // The new-chat page asks for the member's saved model too; unmocked, the
+  // request escapes to the real backend and trips the leak guard.
+  ...getJson("/api/members/default-model", {
+    modelId: null,
+    chatApiKeyId: null,
+  }),
   ...postJson("/api/agents", makeAgent()),
   ...postJson(
     "/api/agents/:id/clone",
@@ -702,7 +743,7 @@ export const handlers: HttpHandler[] = [
     }),
   ),
 
-  // LLM proxy logs (/llm/logs list, session detail, interaction detail).
+  // LLM proxy logs (/llm/logs list and the session detail page).
   ...getJson("/api/interactions/sessions/:sessionId/lineage", {
     forkedFrom: null,
     forks: [],
@@ -791,6 +832,8 @@ export const handlers: HttpHandler[] = [
   // empty so the strict-mode unhandled-request guard doesn't fire on
   // background fetches we don't actually care about for these tests.
   ...getJson("/api/llm-models", []),
+  ...getJson("/api/llm-models/key-model-ids", []),
+  ...getJson("/api/llm-models/options", []),
   ...getJson("/api/llm-models/by-provider", []),
   ...getJson("/api/llm-models/with-api-keys", []),
   ...getJson("/api/knowledge-bases", []),

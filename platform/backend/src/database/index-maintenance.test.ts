@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, test } from "vitest";
 import db from "@/database";
 import {
   createAgentToolsIndexes,
+  createInteractionsIndexes,
+  createMcpServerIndexes,
   dropLegacyPayloadTrgmIndexes,
 } from "./index-maintenance";
 
@@ -136,6 +138,121 @@ describe("createAgentToolsIndexes", () => {
       [otherName]: "created",
     });
     expect(await indexDefinition(takenName)).toBe(before);
+    expect(await advisoryLockCount()).toBe(0);
+  });
+});
+
+describe("createMcpServerIndexes", () => {
+  const name = "mcp_server_catalog_id_live_idx";
+  const options = {
+    concurrently: false,
+    client: {
+      query: (text: string, values?: unknown[]) =>
+        db.$client.query(text, values),
+    },
+  };
+
+  beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
+  });
+
+  test("creates the live-install catalog index, then leaves it alone", async () => {
+    expect(await createMcpServerIndexes(options)).toEqual({
+      [name]: "created",
+    });
+    expect(await indexDefinition(name)).toBe(
+      `CREATE INDEX ${name} ON public.mcp_server USING btree (catalog_id) WHERE (deleted_at IS NULL)`,
+    );
+    const oid = await indexOid(name);
+
+    expect(await createMcpServerIndexes(options)).toEqual({
+      [name]: "already_valid",
+    });
+    expect(await indexOid(name)).toBe(oid);
+    expect(await advisoryLockCount()).toBe(0);
+  });
+
+  test("rebuilds the index when an interrupted build left it invalid", async () => {
+    await createMcpServerIndexes(options);
+    const oid = await indexOid(name);
+    // What a cancelled CREATE INDEX CONCURRENTLY leaves behind.
+    await db.execute(
+      sql`update pg_index set indisvalid = false where indexrelid = ${oid}::oid`,
+    );
+
+    expect(await createMcpServerIndexes(options)).toEqual({
+      [name]: "rebuilt_invalid",
+    });
+    expect(await indexOid(name)).not.toBe(oid);
+    const rebuilt = await db.execute(
+      sql`select indisvalid from pg_index where indexrelid = to_regclass(${name})`,
+    );
+    expect(rebuilt.rows[0]?.indisvalid).toBe(true);
+    expect(await advisoryLockCount()).toBe(0);
+  });
+
+  test("leaves an index of that name on another table alone", async () => {
+    await db.execute(
+      sql.raw(`CREATE INDEX "${name}" ON agent_tools (agent_id)`),
+    );
+
+    expect(await createMcpServerIndexes(options)).toEqual({
+      [name]: "unexpected_definition",
+    });
+  });
+});
+
+describe("createInteractionsIndexes", () => {
+  const name = "interactions_session_preview_missing_idx";
+  const passthroughName = "interactions_passthrough_virtual_key_id_idx";
+  const options = {
+    concurrently: false,
+    client: {
+      query: (text: string, values?: unknown[]) =>
+        db.$client.query(text, values),
+    },
+  };
+
+  beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${passthroughName}"`));
+  });
+
+  test("creates the missing-preview index, then recognizes it on the next boot", async () => {
+    expect(await createInteractionsIndexes(options)).toEqual({
+      [name]: "created",
+      [passthroughName]: "created",
+    });
+    expect(await indexDefinition(name)).toBe(
+      `CREATE INDEX ${name} ON public.interactions USING btree (created_at, id) WHERE ((session_preview IS NULL) AND (encrypted_chat_conversation_id IS NULL))`,
+    );
+    const oid = await indexOid(name);
+
+    // A predicate that does not match what PostgreSQL prints back would read
+    // as someone else's index here, and the index would never be maintained.
+    expect(await createInteractionsIndexes(options)).toEqual({
+      [name]: "already_valid",
+      [passthroughName]: "already_valid",
+    });
+    expect(await indexOid(name)).toBe(oid);
+    expect(await advisoryLockCount()).toBe(0);
+  });
+
+  // The predicate must read back as Postgres prints it, or every boot would
+  // find the index under an "unexpected" definition and never repair it.
+  test("creates the passthrough key index, then leaves it alone", async () => {
+    expect((await createInteractionsIndexes(options))[passthroughName]).toBe(
+      "created",
+    );
+    expect(await indexDefinition(passthroughName)).toBe(
+      `CREATE INDEX ${passthroughName} ON public.interactions USING btree (passthrough_virtual_key_id) WHERE (passthrough_virtual_key_id IS NOT NULL)`,
+    );
+    const oid = await indexOid(passthroughName);
+
+    expect((await createInteractionsIndexes(options))[passthroughName]).toBe(
+      "already_valid",
+    );
+    expect(await indexOid(passthroughName)).toBe(oid);
     expect(await advisoryLockCount()).toBe(0);
   });
 });

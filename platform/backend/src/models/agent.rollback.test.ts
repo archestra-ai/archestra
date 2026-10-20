@@ -14,10 +14,12 @@ import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { accessGrants, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import AgentModel from "./agent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentToolModel from "./agent-tool";
+import AgentUsageModel from "./agent-usage";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import ModelModel from "./model";
@@ -125,6 +127,133 @@ describe("AgentModel", () => {
         false,
       );
     });
+  });
+
+  test("lists that skip the total still know whether another page follows", async ({
+    makeAdmin,
+    makeAgent,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeAdmin();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    for (const name of ["a", "b", "c", "d", "e"]) {
+      await makeAgent({
+        name,
+        organizationId: organization.id,
+        authorId: user.id,
+      });
+    }
+    const page = (offset: number, includeTotal: boolean) =>
+      AgentModel.findAllPaginated(
+        { limit: 2, offset },
+        { sortBy: "name", sortDirection: "asc" },
+        { organizationId: organization.id, includeTotal },
+        user.id,
+        true,
+      );
+    const counted = await page(0, true);
+    const total = counted.pagination.total;
+    for (let offset = 0; offset < total + 2; offset += 2) {
+      const [withTotal, withoutTotal] = await Promise.all([
+        page(offset, true),
+        page(offset, false),
+      ]);
+      expect(withoutTotal.data.map((agent) => agent.id)).toEqual(
+        withTotal.data.map((agent) => agent.id),
+      );
+      expect(withoutTotal.pagination.hasNext).toBe(
+        withTotal.pagination.hasNext,
+      );
+      // A lower bound: the agents up to this page, plus one when more follow.
+      expect(withoutTotal.pagination.total).toBe(
+        offset + Math.min(3, Math.max(0, total - offset)),
+      );
+    }
+  });
+
+  test("pages put the caller's personal agents first and walk the rest in sort order without gaps", async ({
+    makeAdmin,
+    makeAgent,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeAdmin();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const other = await makeAdmin();
+    await makeMember(other.id, organization.id, { role: "admin" });
+    const sameTime = new Date("2026-01-01T00:00:00Z");
+    const make = async (name: string, mine: boolean, personal: boolean) => {
+      const agent = await makeAgent({
+        name,
+        organizationId: organization.id,
+        authorId: mine ? user.id : other.id,
+        access: personal ? "personal" : "org",
+      });
+      // Bulk-created agents share a creation time; the id must break ties.
+      await db
+        .update(schema.agentsTable)
+        .set({ createdAt: sameTime })
+        .where(eq(schema.agentsTable.id, agent.id));
+      return { id: agent.id, name, first: mine && personal };
+    };
+    const agents = [
+      await make("m-mine-1", true, true),
+      await make("c-mine-2", true, true),
+      await make("q-mine-3", true, true),
+      await make("x-mine-shared", true, false),
+      await make("a-theirs", false, false),
+      await make("k-theirs", false, false),
+      await make("b-theirs-personal", false, true),
+      await make("z-theirs", false, false),
+    ];
+    for (const [sortBy, direction] of [
+      ["name", "asc"],
+      ["name", "desc"],
+      ["createdAt", "asc"],
+      ["createdAt", "desc"],
+    ] as const) {
+      const visible = (
+        await AgentModel.findAllPaginated(
+          { limit: 100, offset: 0 },
+          { sortBy, sortDirection: direction },
+          { organizationId: organization.id },
+          user.id,
+          true,
+        )
+      ).data.map((agent) => agent.id);
+      const key = (agent: (typeof agents)[number]) =>
+        `${sortBy === "name" ? agent.name : sameTime.toISOString()}\0${agent.id}`;
+      const expected = agents
+        .filter((agent) => visible.includes(agent.id))
+        .sort((a, b) => {
+          if (a.first !== b.first) return a.first ? -1 : 1;
+          const order = key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
+          return direction === "asc" ? order : -order;
+        })
+        .map((agent) => agent.id);
+      expect(visible).toEqual(expected);
+      // Smaller pages fall wholly within the caller's own agents, straddle
+      // the boundary to the rest, or lie past it, and must add up to the same
+      // list.
+      for (const limit of [1, 2, 3]) {
+        const paged: string[] = [];
+        for (let offset = 0; offset < expected.length; offset += limit) {
+          const page = await AgentModel.findAllPaginated(
+            { limit, offset },
+            { sortBy, sortDirection: direction },
+            { organizationId: organization.id },
+            user.id,
+            true,
+          );
+          expect(page.pagination.total).toBe(expected.length);
+          paged.push(...page.data.map((agent) => agent.id));
+        }
+        expect(paged).toEqual(expected);
+      }
+    }
   });
 
   test("filters paginated agents by configured provider key", async ({
@@ -1405,6 +1534,84 @@ describe("AgentModel", () => {
       expect(await sorted("asc")).toEqual([...descending].reverse());
     });
 
+    test("applies the knowledge search tool name rule the same whether or not the list carries the tools", async ({
+      makeAdmin,
+      makeAgent,
+      makeAgentTool,
+      makeKnowledgeBase,
+      makeMember,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      // Tool names on both sides of the knowledge search tool rule. Counted as
+      // that tool: the bare name, a server prefix, a longer separator run. Not
+      // counted: an empty prefix, a further segment, a longer short name.
+      const server = `srv${crypto.randomUUID().slice(0, 8)}`;
+      const names = [
+        "query_knowledge_sources",
+        `${server}__query_knowledge_sources`,
+        `${server}___query_knowledge_sources`,
+        "__query_knowledge_sources",
+        `${server}__query_knowledge_sources__other`,
+        `${server}__query_knowledge_sourcesx`,
+      ];
+      const tools = await Promise.all(names.map((name) => makeTool({ name })));
+      const target = await makeAgent({ organizationId: org.id });
+      const withSources = await makeAgent({
+        organizationId: org.id,
+        name: "Counted twice with sources",
+      });
+      const withoutSources = await makeAgent({
+        organizationId: org.id,
+        name: "Counted twice without sources",
+      });
+      for (const agent of [withSources, withoutSources]) {
+        for (const tool of tools) {
+          await makeAgentTool(agent.id, tool.id);
+        }
+        await AgentToolModel.assignDelegation({
+          agentId: agent.id,
+          targetAgentId: target.id,
+        });
+      }
+      await AgentKnowledgeBaseModel.assign(
+        withSources.id,
+        (await makeKnowledgeBase(org.id)).id,
+      );
+      const counts = async (includeTools: boolean) =>
+        (
+          await AgentModel.findAllPaginated(
+            { limit: 20, offset: 0 },
+            { sortBy: "name", sortDirection: "asc" },
+            { name: "Counted twice", includeTools },
+            admin.id,
+            true,
+          )
+        ).data.map(({ name, toolsCount, subagentsCount }) => ({
+          name,
+          toolsCount,
+          subagentsCount,
+        }));
+
+      const fromSql = await counts(false);
+      expect(fromSql).toEqual([
+        {
+          name: "Counted twice with sources",
+          toolsCount: 6,
+          subagentsCount: 1,
+        },
+        {
+          name: "Counted twice without sources",
+          toolsCount: 3,
+          subagentsCount: 1,
+        },
+      ]);
+      expect(await counts(true)).toEqual(fromSql);
+    });
+
     test("counts tools and subagents as the tools show them, with or without the tools", async ({
       makeAdmin,
       makeAgent,
@@ -1593,7 +1800,7 @@ describe("AgentModel", () => {
       expect(resultByTeam.data).toHaveLength(4);
     });
 
-    test("populates lastUsedAt from the MCP tool-call log and sorts by it", async ({
+    test("stamps lastUsedAt from McpToolCallModel.create and sorts by it", async ({
       makeAdmin,
       makeAgent,
       makeOrganization,
@@ -1643,6 +1850,8 @@ describe("AgentModel", () => {
         toolResult: null,
         createdAt: newer,
       });
+      // The stamp runs as background work after each insert.
+      await drainBackgroundWork();
 
       const result = await AgentModel.findAllPaginated(
         { limit: 10, offset: 0 },
@@ -3994,16 +4203,19 @@ describe("AgentModel", () => {
   describe("lastUsedAt", () => {
     const at = (isoDay: string) => new Date(`2026-08-${isoDay}T00:00:00.000Z`);
 
-    const seedMcpCall = (agentId: string, createdAt: Date) =>
-      db.insert(schema.mcpToolCallsTable).values({
+    // Rows inserted directly, then stamped the way the log writers do.
+    const seedMcpCall = async (agentId: string, createdAt: Date) => {
+      await db.insert(schema.mcpToolCallsTable).values({
         agentId,
         mcpServerName: "test-server",
         method: "tools/call",
         createdAt,
       });
+      await AgentUsageModel.recordUse({ agentId, usedAt: createdAt });
+    };
 
-    const seedInteraction = (profileId: string, createdAt: Date) =>
-      db.insert(schema.interactionsTable).values({
+    const seedInteraction = async (profileId: string, createdAt: Date) => {
+      await db.insert(schema.interactionsTable).values({
         profileId,
         request: {
           model: "claude-sonnet-5",
@@ -4016,6 +4228,11 @@ describe("AgentModel", () => {
         type: "anthropic:messages",
         createdAt,
       });
+      await AgentUsageModel.recordUse({
+        agentId: profileId,
+        usedAt: createdAt,
+      });
+    };
 
     const lastUsedOf = async (name: string) => {
       const result = await AgentModel.findAllPaginated({
@@ -4102,6 +4319,31 @@ describe("AgentModel", () => {
       expect(await lastUsedOf("Second")).toEqual(at("21"));
       expect(await lastUsedOf("Tied")).toEqual(at("07"));
       expect(await lastUsedOf("Idle")).toBeNull();
+    });
+
+    test("reads the stored value, not the logs", async ({ makeAgent }) => {
+      const stamped = await makeAgent({ name: "Stamped, no logs" });
+      const logged = await makeAgent({ name: "Logs, no stamp" });
+      await AgentUsageModel.recordUse({
+        agentId: stamped.id,
+        usedAt: at("09"),
+      });
+      // Log rows alone, as after a retention purge or before a stamp lands,
+      // no longer drive the reported value.
+      await db.insert(schema.mcpToolCallsTable).values({
+        agentId: logged.id,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        createdAt: at("10"),
+      });
+
+      expect(await lastUsedOf("Stamped, no logs")).toEqual(at("09"));
+      expect(await lastUsedOf("Logs, no stamp")).toBeNull();
+      const sorted = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        { sortBy: "lastUsedAt", sortDirection: "desc" },
+      );
+      expect(sorted.data[0]?.name).toBe("Stamped, no logs");
     });
 
     test("sorts by the same value the rows report", async ({ makeAgent }) => {

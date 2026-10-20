@@ -61,17 +61,58 @@ const statusUrl = () =>
   `/api/chat/conversations/${conversationId}/openappa-status`;
 
 test("reads the current status of an accessible protected conversation", async () => {
-  statusRead.mockResolvedValue({ trust: "suspicious", audience: "internal" });
+  statusRead.mockResolvedValue({
+    trust: "suspicious",
+    audience: "internal",
+    policyRevision: 3,
+  });
   const response = await app.inject({ method: "GET", url: statusUrl() });
   expect(response.statusCode).toBe(200);
   expect(response.json()).toEqual({
     trust: "suspicious",
     audience: "internal",
+    policyRevision: 3,
+    newSessionPolicy: "live",
   });
   expect(statusRead).toHaveBeenCalledWith({
     organizationId,
     sessionId: conversationId,
   });
+});
+
+test("reports a policy snapshot for new sessions while it is selected", async () => {
+  statusRead.mockResolvedValue({
+    trust: "trusted",
+    audience: "internal",
+    policyRevision: null,
+  });
+  await GuardrailsDeploymentModel.set({ newSessionPolicy: "snapshot" });
+  const snapshot = await app.inject({ method: "GET", url: statusUrl() });
+  expect(snapshot.statusCode).toBe(200);
+  expect(snapshot.json()).toEqual({
+    trust: "trusted",
+    audience: "internal",
+    policyRevision: null,
+    newSessionPolicy: "snapshot",
+  });
+
+  await GuardrailsDeploymentModel.set({ newSessionPolicy: "live" });
+  expect(
+    (await app.inject({ method: "GET", url: statusUrl() })).json(),
+  ).toMatchObject({ newSessionPolicy: "live" });
+});
+
+test("reads the status without loading the transcript", async () => {
+  statusRead.mockResolvedValue({
+    trust: "trusted",
+    audience: "public",
+    policyRevision: null,
+  });
+  // findAccessibleById reads every message; the status needs only access.
+  const transcriptRead = vi.spyOn(ConversationModel, "findAccessibleById");
+  const response = await app.inject({ method: "GET", url: statusUrl() });
+  expect(response.statusCode).toBe(200);
+  expect(transcriptRead).not.toHaveBeenCalled();
 });
 
 test("returns null before a session has opened", async () => {
@@ -128,7 +169,7 @@ test.each([
     expect(
       openappaEncryptedChat(organizationId, conversationId)?.audit.dek,
     ).toEqual(dek);
-    return { trust: "suspicious", audience: "internal" };
+    return { trust: "suspicious", audience: "internal", policyRevision: null };
   });
   const response = await app.inject({
     method: "GET",
@@ -148,6 +189,8 @@ test.each([
     expect(response.json()).toEqual({
       trust: "suspicious",
       audience: "internal",
+      policyRevision: null,
+      newSessionPolicy: "live",
     });
     expect(statusRead).toHaveBeenCalledOnce();
   } else {

@@ -6,7 +6,6 @@ import {
   isBuiltInCatalogId,
   isPlaywrightCatalogItem,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Check,
@@ -62,11 +61,9 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import {
-  fetchCatalogTools,
-  useAllCatalogTools,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useAllCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
+import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 import { cn } from "@/lib/utils/tailwind";
 import { AgentReachBrowser } from "./agent-reach-browser";
 import { summarizeAllToolAccess } from "./all-access.utils";
@@ -74,8 +71,6 @@ import { connectorLabel as connectorTypeLabel } from "./connector-label";
 import { QuickEditFooter } from "./view-header";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
-type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 type KnowledgeBase =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
 type Connector =
@@ -121,7 +116,7 @@ export function AgentSettingsView({
   allKnowledgeBases: KnowledgeBase[];
   allConnectors: Connector[];
   onAddTools: () => void;
-  onChooseTools: (catalog: CatalogItem) => void;
+  onChooseTools: (catalog: { id: string }) => void;
   onEditSubagents: () => void;
   onEditKnowledge: () => void;
 }) {
@@ -451,12 +446,13 @@ function ToolsSection({
   highlightCatalogId: string | null;
   accessSwitch: ReactNode;
   onAddTools: () => void;
-  onChooseTools: (catalog: CatalogItem) => void;
+  onChooseTools: (catalog: { id: string }) => void;
 }) {
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [] } = useMcpCatalogDirectory();
   const { data: assignedToolsData, isPending } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
+    includeToolDetails: false,
     enabled: !!agentId,
   });
   const { catalogName: builtInCatalogName } = useArchestraMcpIdentity();
@@ -496,14 +492,15 @@ function ToolsSection({
         ),
     [catalogItems, assignedByCatalog, highlightCatalogId],
   );
-
-  const totalToolQueries = useQueries({
-    queries: assignedCatalogs.map((catalog) => ({
-      queryKey: ["mcp-catalog", catalog.id, "tools", "picker"],
-      queryFn: () => fetchCatalogTools(catalog.id),
-      staleTime: 60_000,
-    })),
+  // The registry row counts the tools its picker lists.
+  const assignedRows = useMcpRegistryRowsByIds([...assignedByCatalog.keys()], {
+    includeBuiltIn: true,
+    includeApps: true,
   });
+  const toolCountByCatalog = useMemo(
+    () => new Map(assignedRows.data.map((row) => [row.id, row.toolCount])),
+    [assignedRows.data],
+  );
 
   const removeServer = (catalogId: string) => {
     const entry = assignedByCatalog.get(catalogId);
@@ -559,10 +556,10 @@ function ToolsSection({
         />
       ) : (
         <ul className="space-y-1.5">
-          {assignedCatalogs.map((catalog, index) => {
+          {assignedCatalogs.map((catalog) => {
             const entry = assignedByCatalog.get(catalog.id);
             const assignedCount = entry?.toolIds.length ?? 0;
-            const total = totalToolQueries[index]?.data?.length;
+            const total = toolCountByCatalog.get(catalog.id);
             const builtIn = isBuiltInCatalogId(catalog.id);
             const displayName =
               catalog.id === ARCHESTRA_MCP_CATALOG_ID
@@ -652,7 +649,7 @@ function AllToolsSection({
   accessSwitch: ReactNode;
   editExclusionsHref: string | null;
 }) {
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [] } = useMcpCatalogDirectory();
   const { data: catalogTools, isPending: toolsPending } = useAllCatalogTools();
   const { data: toolExclusions } = useAgentToolExclusions(agent.id);
   const { data: canReadKnowledgeBase } = useHasPermissions({

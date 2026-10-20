@@ -7,14 +7,18 @@
 use appa_eventlog::LogStore;
 use appa_package::PackageName;
 use appa_runtime::{
-    api::Runtime,
-    config::{ArchestraEndpoint, Config, HostDefaults, HostedBattery, IncludeResolution},
+    api::{OpenError, Runtime},
+    config::{
+        ArchestraEndpoint, Config, ConfigError, HostDefaults, HostedBattery, IncludeResolution,
+    },
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
     time::Duration,
 };
+
+use crate::{BindingFailure, Fault};
 
 /// The consult budget every external of a hosted policy gets. Fixed for v0: the
 /// helper bridge derives its own deadline from it.
@@ -69,14 +73,111 @@ const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 pub(crate) fn compile(
     content: &str,
     lookup: impl Fn(&str) -> Option<String>,
-) -> Result<Config, String> {
-    Config::hosted(content, defaults(), lookup).map_err(|error| error.to_string())
+) -> Result<Config, Fault> {
+    Config::hosted(content, defaults(), lookup)
+        .map_err(|error| Fault::binding(config_failure(&error), error))
 }
 
 /// Open a runtime over `store` under the Archestra adapter.
-pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, String> {
-    Runtime::open_with_store_as(config, store, None, crate::adapter::adapter())
-        .map_err(|error| error.to_string())
+pub(crate) fn open(config: Config, store: Arc<LogStore>) -> Result<Runtime, Fault> {
+    Runtime::open_with_store_as(config, store, None, crate::adapter::adapter()).map_err(open_fault)
+}
+
+/// The runtime's refusal to open, prepare or pin a deployment, by who fixes it.
+pub(crate) fn open_fault(error: OpenError) -> Fault {
+    let kind = match &error {
+        OpenError::Config(error) => config_failure(error),
+        OpenError::Modules(_)
+        | OpenError::Policy(_)
+        | OpenError::UnsupportedPolicy(_)
+        | OpenError::ReservedTool(_)
+        | OpenError::ReservedAnnotator(_)
+        | OpenError::NonCanonicalTool { .. }
+        | OpenError::UnboundExternal { .. }
+        | OpenError::UndeclaredExternal { .. }
+        | OpenError::BoundBuiltinAnnotator(_)
+        | OpenError::JevInputs(_)
+        | OpenError::JevTrustRanks(_) => BindingFailure::PolicyRefused,
+        OpenError::LlmNotConfigured(_)
+        | OpenError::ModelKeyMissing { .. }
+        | OpenError::JevNotConfigured(_)
+        | OpenError::ArchestraNotConfigured(_) => BindingFailure::RuntimeMisconfigured,
+        // The binding's adapter or its own use of the runtime, not the policy.
+        OpenError::UnspelledControlTool | OpenError::KeysDeferred => BindingFailure::InvalidInput,
+        OpenError::Damaged(_)
+        | OpenError::Schema(_)
+        | OpenError::Storage(_)
+        | OpenError::Publish(_) => BindingFailure::Storage,
+        OpenError::PolicyHeadMoved { .. } | OpenError::PolicyRevisionMismatch { .. } => {
+            BindingFailure::PolicyMoved
+        }
+    };
+    Fault::binding(kind, error)
+}
+
+/// Who fixes a hosted document that does not compile: the document's author, the
+/// operator of this deployment, or nobody, when its storage failed.
+fn config_failure(error: &ConfigError) -> BindingFailure {
+    match error {
+        ConfigError::CredentialStore { .. }
+        | ConfigError::Unreadable { .. }
+        | ConfigError::UnreadableBatteryManifest { .. } => BindingFailure::Storage,
+        ConfigError::MissingSecret { .. }
+        | ConfigError::LlmNotConfigured { .. }
+        | ConfigError::InvalidBatteryTarget { .. }
+        | ConfigError::InvalidPrincipalSource { .. }
+        | ConfigError::UnrepresentableHostDefault { .. } => BindingFailure::RuntimeMisconfigured,
+        ConfigError::Unparsable { .. }
+        | ConfigError::UnparsablePolicy { .. }
+        | ConfigError::UnrenderablePolicy { .. }
+        | ConfigError::InvalidPolicyVersion
+        | ConfigError::AbsoluteInclude { .. }
+        | ConfigError::TraversingInclude { .. }
+        | ConfigError::DuplicateInclude { .. }
+        | ConfigError::TargetPolicyIncluded { .. }
+        | ConfigError::UnsupportedBatteryTarget { .. }
+        | ConfigError::UnresolvedInclude { .. }
+        | ConfigError::MixedAliasSpellings
+        | ConfigError::ToolAlias(_)
+        | ConfigError::IncludedTopLevel { .. }
+        | ConfigError::IncludedPolicyField { .. }
+        | ConfigError::IncludedConfinesForeignTool { .. }
+        | ConfigError::IncludedExternalsField { .. }
+        | ConfigError::SelectorDeclaration { .. }
+        | ConfigError::IncludedVersion { .. }
+        | ConfigError::DuplicateJevProfile { .. }
+        | ConfigError::MissingJevKey
+        | ConfigError::DuplicateExternal { .. }
+        | ConfigError::InvalidComposedMetadata { .. }
+        | ConfigError::InvalidEndpoint { .. }
+        | ConfigError::CleartextEndpoint { .. }
+        | ConfigError::CredentialsInUrl { .. }
+        | ConfigError::ForeignSecretVariable { .. }
+        | ConfigError::ChildCredentialVariable { .. }
+        | ConfigError::CommandCredentialVariable { .. }
+        | ConfigError::TokenEnvList { .. }
+        | ConfigError::ZeroTimeout
+        | ConfigError::ZeroReviewTimeout
+        | ConfigError::ZeroByteCap
+        | ConfigError::ModelLimitTooSmall { .. }
+        | ConfigError::InvalidLlmProvider { .. }
+        | ConfigError::ImplementationChoice { .. }
+        | ConfigError::BuiltinNotAllowed { .. }
+        | ConfigError::BadReaderMapping { .. }
+        | ConfigError::UnknownLookupTarget { .. }
+        | ConfigError::ChainedLookup { .. }
+        | ConfigError::ReadersWithoutLookup { .. }
+        | ConfigError::InvalidBuiltinName { .. }
+        | ConfigError::InvalidCommand { .. }
+        | ConfigError::HostedKey { .. }
+        | ConfigError::HostedCommand { .. }
+        | ConfigError::RootField { .. }
+        | ConfigError::FileRootField { .. }
+        | ConfigError::CredentialVariable { .. }
+        | ConfigError::CredentialValue { .. }
+        | ConfigError::UneditableDocument { .. }
+        | ConfigError::UngrantedBatteryCredential { .. } => BindingFailure::PolicyRefused,
+    }
 }
 
 /// The environment namespace the host keeps for itself: the bearer its helper
@@ -487,7 +588,9 @@ mod tests {
     use crate::deployments::HostCredentials;
     use appa_eventlog::Backend;
     use appa_runtime::hooks;
-    use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
+    use appa_runtime_api::{
+        Actor, HookDecision, HookEvent, ProposedCall, RefusalClass, TrajectoryId,
+    };
 
     const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
 
@@ -498,9 +601,56 @@ mod tests {
         strip_default_result_cap(&toml::Table::new(), reloaded).unwrap()
     }
 
+    /// A policy that cannot load names who fixes it: its author, the operator of
+    /// this deployment, or nobody, when the store failed.
+    #[test]
+    fn a_policy_load_failure_names_who_fixes_it() {
+        use crate::{BindingFailure, Failure};
+        use appa_eventlog::DeploymentName;
+        let compiled = |content: &str| {
+            super::compile(content, |_| None)
+                .map(drop)
+                .map_err(|fault| fault.kind)
+        };
+        assert_eq!(
+            compiled("[policy]\nversion = \"two\"\n"),
+            Err(Failure::Binding(BindingFailure::PolicyRefused))
+        );
+        let unset = ConfigError::MissingSecret {
+            section: "annotators",
+            name: "check".into(),
+            var: "APPA_CHECK_TOKEN".into(),
+        };
+        for (error, kind) in [
+            (
+                OpenError::Config(unset),
+                BindingFailure::RuntimeMisconfigured,
+            ),
+            (
+                OpenError::JevNotConfigured("judge".into()),
+                BindingFailure::RuntimeMisconfigured,
+            ),
+            (
+                OpenError::ReservedTool("appa".into()),
+                BindingFailure::PolicyRefused,
+            ),
+            (OpenError::Storage("down".into()), BindingFailure::Storage),
+            (
+                OpenError::PolicyHeadMoved {
+                    deployment: DeploymentName::new("org-a"),
+                    head: None,
+                },
+                BindingFailure::PolicyMoved,
+            ),
+        ] {
+            assert_eq!(open_fault(error).kind, Failure::Binding(kind));
+        }
+    }
+
     /// A compilation no organization's values reach, as a composition's is.
     fn compile(content: &str) -> Result<Config, String> {
         super::compile(content, |var| HostCredentials::default().lookup(var))
+            .map_err(|fault| fault.message)
     }
     const GITHUB_ENTRY: &str = "batteries/github/appa.toml";
     const LINEAR_ENTRY: &str = "batteries/linear@sha256-3f9c/appa.toml";
@@ -745,10 +895,12 @@ delta = {}
         ));
     }
 
-    /// The document a trajectory opened under keeps judging it after the serving
-    /// policy changes: a recompile never rewrites an open conversation's rules.
+    /// An open trajectory decides its next call under its line's head: a policy
+    /// published after it opened changes what it may do, as it does for a
+    /// conversation started afterwards. A view pinned behind a head another runtime
+    /// published refuses retryably, committing nothing, until it pins that head.
     #[tokio::test]
-    async fn an_open_trajectory_is_judged_by_the_document_it_opened_under() {
+    async fn an_open_trajectory_decides_under_its_lines_head() {
         let root = format!("include = [\"{GITHUB_ENTRY}\"]\n[policy]\nversion = 2\n");
         let aliased = compose(
             &format!("{root}[aliases.mcp]\ngithub = [\"github_prod\"]\n"),
@@ -757,27 +909,119 @@ delta = {}
         .unwrap()
         .content;
         let unaliased = compose(&root, &[github_battery()]).unwrap().content;
-        let runtime = memory_runtime(&aliased);
-        let old = started(&runtime, "opened-under-aliases").await;
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        let process = || open(compile("[policy]\nversion = 2\n").unwrap(), store.clone()).unwrap();
+        let (this, other) = (process(), process());
+        let line = appa_eventlog::DeploymentName::new("org-a");
+        let pin = |runtime: &Runtime, content: &str| {
+            let prepared = runtime
+                .prepare_deployment(compile(content).unwrap())
+                .unwrap();
+            let published = runtime.publish(&line, &prepared).unwrap();
+            (published.revision(), runtime.pinned(&published))
+        };
+        let prod = "github_prod__get_file_contents";
+
+        let (revision, view) = pin(&this, &aliased);
+        assert_eq!(revision, 1);
+        let open = started(&view, "opened-under-aliases").await;
         assert!(matches!(
-            hooks::handle(&runtime, call(&old, "github_prod__get_file_contents")).await,
+            hooks::handle(&view, call(&open, prod)).await,
             HookDecision::AllowCall { .. }
         ));
-        runtime.reload(compile(&unaliased).unwrap()).unwrap();
-        let pinned = hooks::handle(&runtime, call(&old, "github_prod__get_file_contents")).await;
+
+        assert_eq!(pin(&other, &unaliased).0, 2, "another process publishes");
+        let stale = hooks::handle(&view, call(&open, prod)).await;
         assert!(
-            matches!(pinned, HookDecision::AllowCall { .. }),
-            "the open trajectory keeps its document: {pinned:?}"
+            matches!(&stale, HookDecision::Refuse { class: RefusalClass::PolicyMoved, detail } if detail.contains("moved to policy revision 2")),
+            "a view pinned behind the head refuses retryably: {stale:?}"
         );
-        let fresh = started(&runtime, "opened-after-reload").await;
+
+        let (revision, head) = pin(&this, &unaliased);
+        assert_eq!(revision, 2, "the head's own bytes publish nothing");
+        let decided = hooks::handle(&head, call(&open, prod)).await;
+        assert!(
+            matches!(&decided, HookDecision::Refuse { class, .. } if *class != RefusalClass::PolicyMoved),
+            "the open trajectory follows the head, which drops the alias: {decided:?}"
+        );
+
+        let (revision, restored) = pin(&this, &aliased);
+        assert_eq!(
+            revision, 3,
+            "publishing earlier bytes again is a new revision"
+        );
         assert!(matches!(
-            hooks::handle(&runtime, call(&fresh, "github_prod__get_file_contents")).await,
+            hooks::handle(&restored, call(&open, prod)).await,
+            HookDecision::AllowCall { .. }
+        ));
+    }
+
+    /// Two organizations that publish the same policy files at the same revisions
+    /// each decide their families on their own line: an earlier revision's engine
+    /// is cached per line, not shared by file and revision alone.
+    #[tokio::test]
+    async fn organizations_publishing_the_same_policy_keep_their_own_lines() {
+        let one = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/archestra/read_file\"\ndelta = {}\n";
+        let two = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/archestra/write_file\"\ndelta = {}\n";
+        let runtime = memory_runtime("[policy]\nversion = 2\n");
+        for organization in ["org-a", "org-b"] {
+            let line = appa_eventlog::DeploymentName::new(organization);
+            let pin = |content: &str| {
+                let prepared = runtime
+                    .prepare_deployment(compile(content).unwrap())
+                    .unwrap();
+                runtime.pinned(&runtime.publish(&line, &prepared).unwrap())
+            };
+            let first = pin(one);
+            let parent = started(&first, &format!("{organization}-parent")).await;
+            assert!(matches!(
+                hooks::handle(&first, call(&parent, "read_file")).await,
+                HookDecision::AllowCall { .. }
+            ));
+            let second = pin(two);
+            let decided = hooks::handle(&second, call(&parent, "write_file")).await;
+            assert!(
+                matches!(decided, HookDecision::AllowCall { .. }),
+                "{organization}: {decided:?}"
+            );
+            let forked = second.open_root_fork(
+                &parent.root,
+                &parent.root,
+                &TrajectoryId(format!("{organization}-fork")),
+            );
+            assert!(forked.is_ok(), "{organization}: {forked:?}");
+        }
+    }
+
+    /// A family belongs to the line it opened on: another organization's view
+    /// refuses it, whatever the two lines serve.
+    #[tokio::test]
+    async fn a_family_of_one_line_is_refused_by_anothers_view() {
+        let plain = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"host/archestra/read_file\"\ndelta = {}\n";
+        let runtime = memory_runtime("[policy]\nversion = 2\n");
+        let view = |organization: &str| {
+            let prepared = runtime.prepare_deployment(compile(plain).unwrap()).unwrap();
+            runtime.pinned(
+                &runtime
+                    .publish(&appa_eventlog::DeploymentName::new(organization), &prepared)
+                    .unwrap(),
+            )
+        };
+        let (a, b) = (view("org-a"), view("org-b"));
+        let family = started(&a, "org-a-conversation").await;
+        assert!(matches!(
+            hooks::handle(&a, call(&family, "read_file")).await,
+            HookDecision::AllowCall { .. }
+        ));
+        assert!(matches!(
+            hooks::handle(&b, call(&family, "read_file")).await,
             HookDecision::Refuse { .. }
         ));
     }
 
     /// A stored policy that already names one helper under two kinds restores
-    /// without rewriting those bytes. The open trajectory keeps that document.
+    /// without rewriting those bytes, and serving the same bytes again publishes no
+    /// new revision.
     #[tokio::test]
     async fn a_stored_cross_kind_helper_policy_restores_without_rewriting_it() {
         let stored = "\
@@ -803,7 +1047,9 @@ token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
             hooks::handle(&runtime, call(&opened, "github__get_file_contents")).await,
             HookDecision::AllowCall { .. }
         ));
-        runtime.reload(compile(stored).unwrap()).unwrap();
+        let reloaded = runtime.reload(compile(stored).unwrap()).unwrap();
+        assert!(!reloaded.changed);
+        assert_eq!(reloaded.policy_revision, 1);
         assert!(
             matches!(
                 hooks::handle(&runtime, call(&opened, "github__get_file_contents")).await,

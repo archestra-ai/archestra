@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
 import appConfig, { DEFAULT_BACKEND_URL } from "./config";
@@ -16,7 +17,9 @@ export function useConfig() {
   const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["config"],
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed) return seed.config;
       const { data, error } = await getConfig();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
@@ -30,7 +33,9 @@ export function useConfig() {
 export function usePublicConfig() {
   return useQuery({
     queryKey: ["public-config"],
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.publicConfig) return seed.publicConfig;
       const { data, error } = await archestraApiSdk.getPublicConfig();
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;

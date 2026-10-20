@@ -2,7 +2,6 @@
 
 import { FEEDBACK_TYPEFORM_URL } from "@archestra/shared";
 import type { Permissions } from "@archestra/shared/permission.types";
-import posthog from "posthog-js";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +18,8 @@ import {
   useMarkNavItemsSeen,
   useSeenNavItems,
 } from "@/lib/onboarding/onboarding.query";
+import { posthogClient } from "@/lib/posthog-client";
+import { useShellReady } from "@/lib/shell-deferral";
 
 /**
  * One-time "share feedback" nudge for admins. Shows on the first session that
@@ -30,9 +31,14 @@ import {
 export function FeedbackPopupDialog() {
   const { data: isAdmin } = useHasPermissions(FEEDBACK_ADMIN_PERMISSION);
   const { data: session } = useSession();
-  const { data: seenData, isSuccess: seenLoaded } = useSeenNavItems();
+  const shellReady = useShellReady();
+  const { data: seenData, isSuccess: seenLoaded } = useSeenNavItems({
+    enabled: shellReady,
+  });
+  const alreadySeen = (seenData?.items ?? []).includes(FEEDBACK_POPUP_SEEN_KEY);
+  // Asked only while the nudge could still show.
   const { data: activation } = useFeedbackPopupActivation({
-    enabled: isAdmin === true,
+    enabled: isAdmin === true && seenLoaded && !alreadySeen,
   });
   const { mutate: markItemsSeen } = useMarkNavItemsSeen();
   const appName = useAppName();
@@ -49,12 +55,12 @@ export function FeedbackPopupDialog() {
   const open =
     isAdmin === true &&
     seenLoaded &&
-    !(seenData?.items ?? []).includes(FEEDBACK_POPUP_SEEN_KEY) &&
+    !alreadySeen &&
     !dismissed &&
     activatedBeforeThisSession;
 
   useEffect(() => {
-    if (open) posthog.capture("feedback_popup_viewed");
+    if (open) posthogClient.capture("feedback_popup_viewed");
   }, [open]);
 
   const dismiss = () => {

@@ -15,7 +15,7 @@ describe("parse-only policy test inspection", () => {
   beforeEach(async ({ makeMember, makeCustomRole }) => {
     config.openappa.enabled = true;
     const reader = await makeCustomRole(ctx.organizationId, {
-      permission: { openappaPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"] },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
   });

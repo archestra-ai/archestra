@@ -1,8 +1,9 @@
 {
   "name": "@archestra/shared",
-  "version": "1.4.0-rc.50",
+  "version": "1.4.0-rc.51",
   "description": "",
   "type": "module",
+  "sideEffects": false,
   "private": true,
   "exports": {
     ".": "./index.ts",

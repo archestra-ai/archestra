@@ -1,9 +1,15 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   afterAll,
   afterEach,
@@ -13,6 +19,9 @@ import {
   it,
   vi,
 } from "vitest";
+import type { ExternalConsult } from "@/lib/openappa/external-consults.query";
+import { ConsultPayloads } from "./consult-detail-sheet";
+import { toConsultView } from "./consult-details";
 import { ConsultsTable } from "./consults-table";
 
 vi.mock("next/navigation");
@@ -22,6 +31,7 @@ const origin = "http://localhost:9000";
 const consultsUrl = `${origin}/api/openappa/external-consults`;
 const server = setupServer();
 const requests: URL[] = [];
+const push = vi.fn();
 // jsdom has no Blob URLs; the export needs one to hand the file to the browser.
 const jsdomCreateObjectURL = URL.createObjectURL;
 
@@ -30,10 +40,14 @@ beforeEach(() => {
   requests.length = 0;
   URL.createObjectURL = () => "blob:consults";
   URL.revokeObjectURL = () => {};
+  push.mockReset();
+  vi.mocked(useRouter).mockReturnValue({
+    push,
+  } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(usePathname).mockReturnValue("/consults/logs");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(
-      "outcome=answered&sessionId=ses-1",
+      "outcome=answered&search=ses-1",
     ) as unknown as ReturnType<typeof useSearchParams>,
   );
   archestraApiClient.setConfig({ baseUrl: origin });
@@ -66,12 +80,40 @@ it("lists consults for the URL filters with the tool name", async () => {
   renderTable();
 
   expect(await screen.findByText("fetch")).toBeInTheDocument();
-  expect(screen.getByRole("img", { name: "Answered" })).toBeInTheDocument();
+  expect(screen.getByText("jev.tool-call")).toBeInTheDocument();
   expect(
-    screen.getByRole("img", { name: "Request duration: 812ms" }),
+    screen.getByRole("button", { name: "jev.tool-call: Answered" }),
   ).toBeInTheDocument();
+  expect(screen.getByText("812ms")).toBeInTheDocument();
   expect(requests[0].searchParams.get("outcome")).toBe("answered");
-  expect(requests[0].searchParams.get("sessionId")).toBe("ses-1");
+  expect(requests[0].searchParams.get("search")).toBe("ses-1");
+  expect(requests[0].searchParams.has("sessionId")).toBe(false);
+});
+
+it("names an outcome on the row only when the service did not answer", async () => {
+  server.use(
+    http.get(consultsUrl, () =>
+      HttpResponse.json({
+        data: [
+          CONSULT,
+          {
+            ...CONSULT,
+            id: "01999999-0000-7000-8000-000000000002",
+            externalName: "egress-policy",
+            outcome: "timeout",
+            answer: null,
+            httpStatus: null,
+          },
+        ],
+        pagination: { limit: 20, nextCursor: null, hasNext: false },
+      }),
+    ),
+  );
+  renderTable();
+
+  expect(await screen.findByText("Timed out")).toBeInTheDocument();
+  const table = screen.getByRole("table");
+  expect(within(table).queryByText("Answered")).not.toBeInTheDocument();
 });
 
 it("exports JSONL with the current filters", async () => {
@@ -89,39 +131,46 @@ it("exports JSONL with the current filters", async () => {
     (url) => url.searchParams.get("format") === "jsonl",
   );
   expect(exportRequest?.searchParams.get("outcome")).toBe("answered");
-  expect(exportRequest?.searchParams.get("sessionId")).toBe("ses-1");
+  expect(exportRequest?.searchParams.get("search")).toBe("ses-1");
   expect(exportRequest?.searchParams.has("cursor")).toBe(false);
 });
 
-it("opens a metadata-only consult without its withheld content", async () => {
-  const notStored = { __redacted: "log_content_policy" };
+it("opens a consult on its own page, which leads on to its session", async () => {
   server.use(
     http.get(consultsUrl, () =>
       HttpResponse.json({
-        data: [
-          {
-            ...CONSULT,
-            request: {
-              ...notStored,
-              kind: "annotation",
-              artifact: {
-                args: { name: "fetch", arguments: notStored },
-              },
-            },
-            answer: null,
-            diagnostics: null,
-          },
-        ],
+        data: [CONSULT],
         pagination: { limit: 20, nextCursor: null, hasNext: false },
       }),
     ),
   );
   renderTable();
 
-  fireEvent.click(await screen.findByText("fetch"));
+  fireEvent.click(await screen.findByText(CONSULT.externalName));
 
-  expect(await screen.findByText("Content not stored")).toBeInTheDocument();
+  expect(push).toHaveBeenCalledWith(`/consults/logs/${CONSULT.id}`);
+});
+
+it("shows a metadata-only consult without its withheld content", () => {
+  const notStored = { __redacted: "log_content_policy" };
+  render(
+    <ConsultPayloads
+      view={toConsultView({
+        ...CONSULT,
+        request: {
+          ...notStored,
+          kind: "annotation",
+          artifact: { args: { name: "fetch", arguments: notStored } },
+        },
+        answer: null,
+        diagnostics: null,
+      } as ExternalConsult)}
+    />,
+  );
+
+  expect(screen.getByText("Content not stored")).toBeInTheDocument();
   expect(screen.getByText("Tool: fetch")).toBeInTheDocument();
+  expect(screen.queryByText(/log_content_policy/)).not.toBeInTheDocument();
   expect(screen.queryByText("No answer.")).not.toBeInTheDocument();
 });
 

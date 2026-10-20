@@ -5,6 +5,7 @@ import {
   type ResourceAccessRelation,
 } from "@archestra/shared";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { requestScope } from "@/auth/request-scope";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import MemberModel from "./member";
@@ -88,10 +89,13 @@ export default class ResourcePermissionSubjectModel {
     userId: string;
     organizationId: string;
   }): Promise<GrantPrincipal> {
-    return {
-      organizationId: params.organizationId,
-      subjects: await ResourcePermissionSubjectModel.resolveSubjects(params),
-    };
+    return requestScope.memo(
+      `principal\0${params.organizationId}\0${params.userId}`,
+      async () => ({
+        organizationId: params.organizationId,
+        subjects: await ResourcePermissionSubjectModel.resolveSubjects(params),
+      }),
+    );
   }
 
   /**
@@ -378,7 +382,11 @@ export default class ResourcePermissionSubjectModel {
       );
       if (!member) return [];
       const [teamIds, sources] = await Promise.all([
-        TeamModel.getUserTeamIds(params.userId),
+        requestScope.isMemoizing()
+          ? TeamModel.getUserTeamContext(params).then(
+              (context) => context.subjectTeamIds,
+            )
+          : TeamModel.getUserTeamIds(params.userId),
         RoleCompositionModel.getUserSources(params),
       ]);
       subjects.push(

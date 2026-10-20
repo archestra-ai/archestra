@@ -1,9 +1,9 @@
 import type { ChatMessage } from "@/types";
 
-// How much of a chat tool result the model gets to read, in UTF-8 bytes: ~16k
-// tokens, ample for legitimate large outputs. It bounds model context only and
-// is independent of the policy's result cap (`max_body_bytes`).
-export const MAX_TOOL_RESULT_CONTEXT_BYTES = 65_536;
+// How much of a chat tool result the model gets to read, in UTF-8 bytes: ~8k
+// tokens; the rest stays readable in the sandbox. It bounds model context only
+// and is independent of the policy's result cap (`max_body_bytes`).
+export const MAX_TOOL_RESULT_CONTEXT_BYTES = 32_768;
 
 export function utf8Length(text: string): number {
   return Buffer.byteLength(text, "utf8");

@@ -1,10 +1,12 @@
 import { hasPersistableAssistantContent } from "@archestra/shared";
 import {
   and,
+  count,
   desc,
   eq,
   getTableColumns,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   or,
@@ -115,8 +117,17 @@ class ConversationModel {
     userId: string,
     organizationId: string,
     searchQuery?: string,
+    options: {
+      /** Non-search rows to return, newest first; pinned chats are always added. */
+      limit?: number;
+      /** False returns null `artifact` and `todoList` without reading them. */
+      includeArtifacts?: boolean;
+    } = {},
   ): Promise<Conversation[]> {
     const trimmedSearch = searchQuery?.trim();
+    const conversationColumns = listConversationColumns(
+      options.includeArtifacts ?? true,
+    );
 
     // Build WHERE conditions
     const conditions = [
@@ -213,7 +224,7 @@ class ConversationModel {
 
       const rows = await db
         .select({
-          conversation: getTableColumns(schema.conversationsTable),
+          conversation: conversationColumns,
           message: getTableColumns(schema.messagesTable),
           shareVisibility: conversationShareVisibility(),
           projectName: schema.projectsTable.name,
@@ -311,36 +322,61 @@ class ConversationModel {
       return Array.from(conversationMap.values());
     } else {
       // Non-search case: exclude messages for performance
-      const rows = await db
-        .select({
-          conversation: getTableColumns(schema.conversationsTable),
-          shareVisibility: conversationShareVisibility(),
-          projectName: schema.projectsTable.name,
-          projectIcon: schema.projectsTable.icon,
-          // No systemPrompt here: list rows only need identity/config refs,
-          // and a roster of custom agents can carry very large prompts.
-          // findById selects it for the flows that need it (e.g. compaction).
-          agent: {
-            id: schema.agentsTable.id,
-            name: schema.agentsTable.name,
-            agentType: schema.agentsTable.agentType,
-            toolExposureMode: schema.agentsTable.toolExposureMode,
-            llmApiKeyId: schema.agentsTable.llmApiKeyId,
-            deletedAt: schema.agentsTable.deletedAt,
-          },
-        })
-        .from(schema.conversationsTable)
-        .leftJoin(
-          schema.agentsTable,
-          eq(schema.conversationsTable.agentId, schema.agentsTable.id),
-        )
-        .leftJoin(
-          schema.projectsTable,
-          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
-        )
-        .where(and(...conditions))
-        .orderBy(desc(schema.conversationsTable.lastMessageAt))
-        .limit(ConversationModel.LIST_RESULT_LIMIT);
+      const limit = Math.min(
+        options.limit ?? ConversationModel.LIST_RESULT_LIMIT,
+        ConversationModel.LIST_RESULT_LIMIT,
+      );
+      const listQuery = (where: SQL | undefined, rowLimit?: number) => {
+        const query = db
+          .select({
+            conversation: conversationColumns,
+            shareVisibility: conversationShareVisibility(),
+            projectName: schema.projectsTable.name,
+            projectIcon: schema.projectsTable.icon,
+            // No systemPrompt here: list rows only need identity/config refs,
+            // and a roster of custom agents can carry very large prompts.
+            // findById selects it for the flows that need it (e.g. compaction).
+            agent: {
+              id: schema.agentsTable.id,
+              name: schema.agentsTable.name,
+              agentType: schema.agentsTable.agentType,
+              toolExposureMode: schema.agentsTable.toolExposureMode,
+              llmApiKeyId: schema.agentsTable.llmApiKeyId,
+              deletedAt: schema.agentsTable.deletedAt,
+            },
+          })
+          .from(schema.conversationsTable)
+          .leftJoin(
+            schema.agentsTable,
+            eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+          )
+          .leftJoin(
+            schema.projectsTable,
+            eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+          )
+          .where(where)
+          .orderBy(desc(schema.conversationsTable.lastMessageAt));
+        return rowLimit === undefined ? query : query.limit(rowLimit);
+      };
+      // Pinned chats show in the sidebar however old they are, so they are
+      // read on their own rather than cut off by the recent-chats limit, up
+      // to the list's own cap.
+      const [recentRows, pinnedRows] = await Promise.all([
+        listQuery(and(...conditions), limit),
+        listQuery(
+          and(...conditions, isNotNull(schema.conversationsTable.pinnedAt)),
+          ConversationModel.LIST_RESULT_LIMIT,
+        ),
+      ]);
+      const recentIds = new Set(recentRows.map((row) => row.conversation.id));
+      const rows = [
+        ...recentRows,
+        ...pinnedRows.filter((row) => !recentIds.has(row.conversation.id)),
+      ].sort(
+        (a, b) =>
+          b.conversation.lastMessageAt.getTime() -
+          a.conversation.lastMessageAt.getTime(),
+      );
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
@@ -392,84 +428,24 @@ class ConversationModel {
     id,
     userId,
     organizationId,
+    tail,
   }: {
     id: string;
     userId: string;
     organizationId: string;
+    /** Only the last `tail` messages, with the count of the older ones. */
+    tail?: number;
   }): Promise<Conversation | null> {
-    const rows = await db
-      .select({
-        conversation: getTableColumns(schema.conversationsTable),
-        message: getTableColumns(schema.messagesTable),
-        shareVisibility: conversationShareVisibility(),
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-          systemPrompt: schema.agentsTable.systemPrompt,
-          agentType: schema.agentsTable.agentType,
-          toolExposureMode: schema.agentsTable.toolExposureMode,
-          llmApiKeyId: schema.agentsTable.llmApiKeyId,
-          deletedAt: schema.agentsTable.deletedAt,
-        },
-      })
-      .from(schema.conversationsTable)
-      .leftJoin(
-        schema.agentsTable,
-        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
-      )
-      .leftJoin(
-        schema.messagesTable,
-        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
-      )
-      .where(
-        and(
-          notDeletedConversation,
-          eq(schema.conversationsTable.id, id),
-          eq(schema.conversationsTable.userId, userId),
-          eq(schema.conversationsTable.organizationId, organizationId),
-        ),
-      )
-      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
-
-    if (rows.length === 0) {
-      return null;
-    }
-
-    const firstRow = rows[0];
-    const [chatErrors, compactions, contextUsage] = await Promise.all([
-      ConversationChatErrorModel.findByConversation(id),
-      ConversationCompactionModel.findByConversation(id),
-      InteractionModel.findLatestChatContextUsage(id),
-    ]);
-    const messages = [];
-
-    for (const row of rows) {
-      // EncryptedChat rows are ciphertext under a browser-held key: the route
-      // layer decrypts them (or returns the locked shape) — never attempt the
-      // server-key decrypt here.
-      if (firstRow.conversation.encryptedChat) {
-        break;
-      }
-      if (row.message) {
-        decryptMessageRow(row.message);
-      }
-      if (
-        row.message?.content &&
-        shouldReturnPersistedMessageRow(row.message)
-      ) {
-        // Merge database UUID into message content (overrides AI SDK's temporary ID)
-        messages.push(addMessagePersistenceMetadata(row.message));
-      }
-    }
-
-    return {
-      ...withVisibleAgent(firstRow.conversation, firstRow.agent),
-      share: shareSummary(firstRow.shareVisibility),
-      messages,
-      chatErrors,
-      compactions,
-      contextTokensUsed: latestContextTokens(compactions, contextUsage),
-    };
+    return ConversationModel.loadWithMessages({
+      id,
+      tail,
+      where: and(
+        notDeletedConversation,
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      ),
+    });
   }
 
   /**
@@ -624,6 +600,8 @@ class ConversationModel {
      * shares are intentional grants and bypass it.
      */
     canReadOthersViaProject: () => Promise<boolean>;
+    /** Only the last `tail` messages, with the count of the older ones. */
+    tail?: number;
   }): Promise<Conversation | null> {
     return ConversationModel.findForRead({
       ...params,
@@ -681,78 +659,17 @@ class ConversationModel {
   static async findByIdInOrganization(params: {
     id: string;
     organizationId: string;
+    tail?: number;
   }): Promise<Conversation | null> {
-    const rows = await db
-      .select({
-        conversation: getTableColumns(schema.conversationsTable),
-        message: getTableColumns(schema.messagesTable),
-        shareVisibility: conversationShareVisibility(),
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-          systemPrompt: schema.agentsTable.systemPrompt,
-          agentType: schema.agentsTable.agentType,
-          toolExposureMode: schema.agentsTable.toolExposureMode,
-          llmApiKeyId: schema.agentsTable.llmApiKeyId,
-          deletedAt: schema.agentsTable.deletedAt,
-        },
-      })
-      .from(schema.conversationsTable)
-      .leftJoin(
-        schema.agentsTable,
-        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
-      )
-      .leftJoin(
-        schema.messagesTable,
-        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
-      )
-      .where(
-        and(
-          notDeletedConversation,
-          eq(schema.conversationsTable.id, params.id),
-          eq(schema.conversationsTable.organizationId, params.organizationId),
-        ),
-      )
-      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
-
-    if (rows.length === 0) {
-      return null;
-    }
-
-    const firstRow = rows[0];
-    const [chatErrors, compactions, contextUsage] = await Promise.all([
-      ConversationChatErrorModel.findByConversation(params.id),
-      ConversationCompactionModel.findByConversation(params.id),
-      InteractionModel.findLatestChatContextUsage(params.id),
-    ]);
-    const messages = [];
-
-    for (const row of rows) {
-      // EncryptedChat rows are ciphertext under a browser-held key: the route
-      // layer decrypts them (or returns the locked shape) — never attempt the
-      // server-key decrypt here.
-      if (firstRow.conversation.encryptedChat) {
-        break;
-      }
-      if (row.message) {
-        decryptMessageRow(row.message);
-      }
-      if (
-        row.message?.content &&
-        shouldReturnPersistedMessageRow(row.message)
-      ) {
-        messages.push(addMessagePersistenceMetadata(row.message));
-      }
-    }
-
-    return {
-      ...withVisibleAgent(firstRow.conversation, firstRow.agent),
-      share: shareSummary(firstRow.shareVisibility),
-      messages,
-      chatErrors,
-      compactions,
-      contextTokensUsed: latestContextTokens(compactions, contextUsage),
-    };
+    return ConversationModel.loadWithMessages({
+      id: params.id,
+      tail: params.tail,
+      where: and(
+        notDeletedConversation,
+        eq(schema.conversationsTable.id, params.id),
+        eq(schema.conversationsTable.organizationId, params.organizationId),
+      ),
+    });
   }
 
   /**
@@ -1121,6 +1038,79 @@ class ConversationModel {
     return result[0]?.agentId ?? null;
   }
 
+  /**
+   * The conversation row (with its agent and share state) read once, and its
+   * messages read on their own: a join repeated the whole conversation row
+   * and the agent's prompt on every message row. With `tail`, only the last
+   * `tail` messages are read; their ids are chosen first on narrow columns, so
+   * the older messages' content is never loaded.
+   */
+  private static async loadWithMessages(params: {
+    id: string;
+    where: SQL | undefined;
+    tail?: number;
+  }): Promise<Conversation | null> {
+    const [row] = await db
+      .select({
+        conversation: getTableColumns(schema.conversationsTable),
+        shareVisibility: conversationShareVisibility(),
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+          systemPrompt: schema.agentsTable.systemPrompt,
+          agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
+          llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
+        },
+      })
+      .from(schema.conversationsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .where(params.where)
+      .limit(1);
+
+    if (!row) {
+      return null;
+    }
+
+    const [storedMessages, chatErrors, compactions, contextUsage] =
+      await Promise.all([
+        loadConversationMessages({ id: params.id, tail: params.tail }),
+        ConversationChatErrorModel.findByConversation(params.id),
+        ConversationCompactionModel.findByConversation(params.id),
+        InteractionModel.findLatestChatContextUsage(params.id),
+      ]);
+    const messages = [];
+
+    // EncryptedChat rows are ciphertext under a browser-held key: the route
+    // layer decrypts them (or returns the locked shape) — never attempt the
+    // server-key decrypt here.
+    if (!row.conversation.encryptedChat) {
+      for (const message of storedMessages.rows) {
+        decryptMessageRow(message);
+        if (message.content && shouldReturnPersistedMessageRow(message)) {
+          // Merge database UUID into message content (overrides AI SDK's temporary ID)
+          messages.push(addMessagePersistenceMetadata(message));
+        }
+      }
+    }
+
+    return {
+      ...withVisibleAgent(row.conversation, row.agent),
+      share: shareSummary(row.shareVisibility),
+      messages,
+      ...(storedMessages.olderMessageCount === undefined
+        ? {}
+        : { olderMessageCount: storedMessages.olderMessageCount }),
+      chatErrors,
+      compactions,
+      contextTokensUsed: latestContextTokens(compactions, contextUsage),
+    };
+  }
+
   /** Keep transcript and metadata reads on exactly the same authorization path. */
   private static async findForRead<T>(
     params: Parameters<typeof ConversationModel.findAccessibleById>[0] & {
@@ -1303,6 +1293,48 @@ function shouldReturnPersistedMessageRow(message: {
   );
 }
 
+/**
+ * A conversation's stored messages in order, or only the last `tail` of them
+ * with the count of the older ones.
+ */
+async function loadConversationMessages(params: { id: string; tail?: number }) {
+  const table = schema.messagesTable;
+  if (params.tail === undefined) {
+    const rows = await db
+      .select()
+      .from(table)
+      .where(eq(table.conversationId, params.id))
+      .orderBy(table.createdAt, table.id);
+    return { rows, olderMessageCount: undefined };
+  }
+  const [lastIds, [{ total }]] = await Promise.all([
+    db
+      .select({ id: table.id })
+      .from(table)
+      .where(eq(table.conversationId, params.id))
+      .orderBy(desc(table.createdAt), desc(table.id))
+      .limit(params.tail),
+    db
+      .select({ total: count() })
+      .from(table)
+      .where(eq(table.conversationId, params.id)),
+  ]);
+  const rows =
+    lastIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(table)
+          .where(
+            inArray(
+              table.id,
+              lastIds.map(({ id }) => id),
+            ),
+          )
+          .orderBy(table.createdAt, table.id);
+  return { rows, olderMessageCount: total - rows.length };
+}
+
 function addMessagePersistenceMetadata(message: {
   id: string;
   content: unknown;
@@ -1354,10 +1386,35 @@ function listProjectIcon(icon: string | null | undefined): string | null {
   return icon;
 }
 
-function withVisibleAgent(
-  conversation: typeof schema.conversationsTable.$inferSelect,
+/**
+/**
+ * Conversation columns for a list read: never the encrypted-chat escrow
+ * bookkeeping, which no list response carries. Without artifacts, the
+ * document and todo list come back as null and are not read; each can be
+ * hundreds of KB.
+ */
+function listConversationColumns(includeArtifacts: boolean) {
+  const {
+    encryptedChatEscrow: _encryptedChatEscrow,
+    encryptedChatDekFingerprint: _encryptedChatDekFingerprint,
+    ...columns
+  } = getTableColumns(schema.conversationsTable);
+  if (includeArtifacts) return columns;
+  return {
+    ...columns,
+    artifact: sql<ConversationRow["artifact"]>`null`,
+    todoList: sql<ConversationRow["todoList"]>`null`,
+  };
+}
+
+type ConversationRow = typeof schema.conversationsTable.$inferSelect;
+
+function withVisibleAgent<
+  T extends Pick<typeof schema.conversationsTable.$inferSelect, "agentId">,
+>(
+  conversation: T,
   agent: JoinedConversationAgent,
-): typeof schema.conversationsTable.$inferSelect & {
+): T & {
   agent: Conversation["agent"];
 } {
   if (!agent?.id || agent.deletedAt !== null) {

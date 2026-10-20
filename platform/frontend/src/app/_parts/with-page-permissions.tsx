@@ -30,8 +30,12 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // the indicator jumping across the page. The sidebar toggle carries the
   // progress; the content area simply stays empty until we know whether this
   // page is even allowed.
+  //
+  // Chat is the exception: it is what nearly every visitor opens first, and
+  // almost everyone may use it, so it renders while the check runs and gives
+  // way to the Forbidden page only if the answer is "no chat:read".
   if (isPending && requiredPermissions) {
-    return null;
+    return isOptimisticChatPath(pathname) ? <>{children}</> : null;
   }
 
   // A reader without the Settings area (the member baseline) is sent to the
@@ -59,6 +63,15 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   return <>{children}</>;
 };
+
+/** New chat and a conversation; not the other pages under /chat. */
+function isOptimisticChatPath(pathname: string) {
+  if (pathname === "/chat") return true;
+  const segment = /^\/chat\/([^/]+)$/.exec(pathname)?.[1];
+  return !!segment && !NON_CONVERSATION_CHAT_SEGMENTS.has(segment);
+}
+
+const NON_CONVERSATION_CHAT_SEGMENTS = new Set(["new", "runs"]);
 
 function resolvePagePermissions(pathname: string) {
   const exact = requiredPagePermissionsMap[pathname];

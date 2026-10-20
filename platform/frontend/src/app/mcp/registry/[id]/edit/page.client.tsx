@@ -20,7 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useFeature } from "@/lib/config/config.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useInternalMcpCatalogItem } from "@/lib/mcp/mcp-registry.query";
 import {
   SETUP_STEPS,
   type SetupStepId,
@@ -38,8 +38,12 @@ import { IdleHibernationSection } from "../../_parts/idle-hibernation-section";
 import type { CatalogItem } from "../../_parts/mcp-server-card";
 
 export function McpCatalogItemEditPage({ id }: { id: string }) {
-  const { data: catalogItems, isPending } = useInternalMcpCatalog({});
-  const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
+  // The one item this page shows, by id, with its list figures (tool count,
+  // the caller's actions) — not the whole registry.
+  const { data: itemById, isPending } = useInternalMcpCatalogItem(id);
+  // An app's backing entry is never listed in the registry; its id opens
+  // nothing here, as it did when the page looked the item up in the list.
+  const item = itemById && itemById.serverType !== "app" ? itemById : undefined;
   const navigation = useSetupNavigation();
 
   return (

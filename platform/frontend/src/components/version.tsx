@@ -4,14 +4,15 @@
 import Link from "next/link";
 import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSession } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useConfig } from "@/lib/config/config.query";
 import { useHealth } from "@/lib/config/health.query";
 import { useLatestGitHubRelease } from "@/lib/github/github-release.query";
 import {
   useAppearanceSettings,
   useOrganization,
 } from "@/lib/organization.query";
-import { hasNewerVersion } from "@/lib/utils/version";
 
 interface VersionProps {
   inline?: boolean;
@@ -28,7 +29,15 @@ export const VERSION_SLOT_ATTRIBUTE = "data-version-slot";
 export const VERSION_SLOT_GENERATION_ATTRIBUTE = "data-version-slot-generation";
 
 export const Version = memo(function Version({ inline = false }: VersionProps) {
-  const { data } = useHealth();
+  // Signed in, the version comes with the config the shell already loads;
+  // `/health` is only asked on signed-out pages (e.g. sign-in), once the
+  // session check says so: a signed-in page load never asks it.
+  const { data: session, isPending: isSessionPending } = useSession();
+  const isAuthenticated = session?.user != null;
+  const { data: appConfig } = useConfig();
+  const { data: health } = useHealth({
+    enabled: !isSessionPending && !isAuthenticated,
+  });
   const { data: organization } = useOrganization();
   const { data: appearance } = useAppearanceSettings();
   // SPDX-SnippetBegin
@@ -38,7 +47,7 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   // SPDX-SnippetEnd
   // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
   const footerText = organization?.footerText ?? appearance?.footerText;
-  const version = data?.version;
+  const version = isAuthenticated ? appConfig?.version : health?.version;
   // Dev and staging builds report a full 40-char commit SHA; seven is enough
   // to identify it, and the full value stays in the hover title.
   const displayVersion =
@@ -52,10 +61,23 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   const [shouldHide, setShouldHide] = useState(false);
   const [footerSlot, setFooterSlot] = useState<Element | null>(null);
 
-  const hasNewVersion = useMemo(() => {
-    if (!version || !latestRelease?.tag_name) return false;
-    return hasNewerVersion(version, latestRelease.tag_name);
-  }, [version, latestRelease?.tag_name]);
+  // The comparison needs semver, which loads only once there is a release to
+  // compare against (it is not part of the first load).
+  const [hasNewVersion, setHasNewVersion] = useState(false);
+  const latestTag = latestRelease?.tag_name;
+  useEffect(() => {
+    if (!version || !latestTag) {
+      setHasNewVersion(false);
+      return;
+    }
+    let cancelled = false;
+    void import("@/lib/utils/version").then(({ hasNewerVersion }) => {
+      if (!cancelled) setHasNewVersion(hasNewerVersion(version, latestTag));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [version, latestTag]);
 
   const footerString = useMemo(() => {
     // Wait for version to load before rendering to avoid layout shift

@@ -48,6 +48,12 @@ type RollingLimitCleanupInterval = Extract<
 >;
 
 type LimitModelUsageRecord = typeof schema.limitModelUsageTable.$inferSelect;
+type ModelUsageBreakdown = {
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  cost: number;
+};
 
 // Data batch-loaded once per request and shared across the priority-ordered
 // entity checks, so token_cost limit evaluation issues no per-entity queries.
@@ -197,20 +203,38 @@ class LimitModel {
   }
 
   /**
-   * Get per-model usage breakdown for a token_cost limit
-   * Returns the cost for each model in the limit
+   * Per-model usage of several token_cost limits, keyed by limit id. One usage
+   * read and one price lookup for any number of limits.
    */
-  static async getModelUsageBreakdown(
-    limitId: string,
-  ): Promise<
-    Array<{ model: string; tokensIn: number; tokensOut: number; cost: number }>
-  > {
+  static async getModelUsageBreakdowns(
+    limitIds: string[],
+  ): Promise<Map<string, ModelUsageBreakdown[]>> {
+    const breakdowns = new Map<string, ModelUsageBreakdown[]>(
+      limitIds.map((id) => [id, []]),
+    );
+    if (limitIds.length === 0) return breakdowns;
+
     const modelUsages = await db
       .select()
       .from(schema.limitModelUsageTable)
-      .where(eq(schema.limitModelUsageTable.limitId, limitId));
+      .where(inArray(schema.limitModelUsageTable.limitId, limitIds));
+    const pricing = await ModelModel.findByModelIdsOnly([
+      ...new Set(modelUsages.map((usage) => usage.model)),
+    ]);
 
-    return (await calculateModelUsageCosts(modelUsages)).breakdown;
+    const usagesByLimitId = new Map<string, LimitModelUsageRecord[]>();
+    for (const usage of modelUsages) {
+      const list = usagesByLimitId.get(usage.limitId) ?? [];
+      list.push(usage);
+      usagesByLimitId.set(usage.limitId, list);
+    }
+    for (const [limitId, usages] of usagesByLimitId) {
+      breakdowns.set(
+        limitId,
+        computeModelUsageCosts(usages, pricing).breakdown,
+      );
+    }
+    return breakdowns;
   }
 
   /**
@@ -1760,17 +1784,8 @@ function isCalendarCleanupInterval(
   );
 }
 
-async function calculateModelUsageCosts(modelUsages: LimitModelUsageRecord[]) {
-  const modelEntriesByModelId = await ModelModel.findByModelIdsOnly(
-    Array.from(new Set(modelUsages.map((usage) => usage.model))),
-  );
-
-  return computeModelUsageCosts(modelUsages, modelEntriesByModelId);
-}
-
-// Pure cost computation given already-loaded model pricing. Split out from
-// calculateModelUsageCosts so the LLM-proxy pre-request check can evaluate many
-// limits against a single batched price lookup instead of querying per limit.
+// Pure cost computation from already-loaded pricing, so callers can share one
+// batched price lookup across many limits.
 function computeModelUsageCosts(
   modelUsages: LimitModelUsageRecord[],
   modelEntriesByModelId: Map<string, Model>,

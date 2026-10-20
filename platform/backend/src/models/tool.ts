@@ -16,6 +16,7 @@ import {
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
+  slugifyMcpServerName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -46,7 +47,10 @@ import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata"
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
+import {
+  ARCHESTRA_TOOL_NAME_UNIQUE_INDEX,
+  toolUiResourceUriExpression,
+} from "@/database/schemas/tool";
 import { restore, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
@@ -301,10 +305,7 @@ class ToolModel {
    * rejected before they collide on the global tool-name string.
    */
   static sanitizeServerNameForSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/\s+/g, "_")
-      .replace(/[^a-z0-9_-]/g, "");
+    return slugifyMcpServerName(name);
   }
 
   static slugifyName(mcpServerName: string, toolName: string): string {
@@ -2352,6 +2353,35 @@ class ToolModel {
   }
 
   /**
+   * Whether a tool assigned to the agent under `name` declares an upstream
+   * object `outputSchema`, i.e. whether the MCP gateway advertises one for it.
+   */
+  static async assignedToolDeclaresOutputSchema(params: {
+    agentId: string;
+    name: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        and(
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+          eq(schema.agentToolsTable.agentId, params.agentId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.name, params.name),
+          sql`${schema.toolsTable.meta}->'outputSchema'->>'type' = 'object'`,
+          notDeleted(schema.toolsTable),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
    * Rows a catalog's tool picker lists: discovered (not a pending clone),
    * active, and without the meta/knowledge dispatch tools the pickers never
    * show. Shared by {@link findByCatalogId}, {@link findListableByCatalogIds}
@@ -4076,17 +4106,12 @@ function extractArchestraBuiltInShortName(toolName: string): string | null {
 
 /**
  * SQL expression resolving a tool's MCP App `ui://` resource URI, or NULL when
- * the tool is not a UI app. Canonical `_meta.ui.resourceUri` first, then the
- * legacy flat `ui/resourceUri` key; both must use the `ui://` scheme. Shared by
- * the external-apps listing and the catalog list's `providesUi` flag so the two
- * never drift.
+ * the tool is not a UI app. Shared by the external-apps listing and the catalog
+ * list's `providesUi` flag so the two never drift; `is not null` on it is served
+ * by the `tools_ui_resource_catalog_idx` partial index.
  */
 export function toolUiResourceUriSql(): SQL<string | null> {
-  const meta = schema.toolsTable.meta;
-  return sql<string | null>`coalesce(
-    case when ${meta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${meta}->'_meta'->'ui'->>'resourceUri' end,
-    case when ${meta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${meta}->'_meta'->>'ui/resourceUri' end
-  )`;
+  return toolUiResourceUriExpression(schema.toolsTable.meta);
 }
 
 /** Identical catalog fences for coverage page candidates and hydrated inventory. */

@@ -23,13 +23,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -49,13 +42,7 @@ import {
   usesGenericInstructions,
 } from "./clients";
 import type { ConnectPageData } from "./connect-page-data";
-import {
-  agentsInPickerOrder,
-  fmt,
-  nameOf,
-  plural,
-  TextButton,
-} from "./connect-page-parts";
+import { fmt, nameOf, plural, TextButton } from "./connect-page-parts";
 import { readsPrompts } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
 
@@ -297,7 +284,9 @@ function DisconnectDialog({
         <DialogContent className="max-w-lg">
           <DialogHeader className="px-4">
             <DialogTitle className="flex items-center gap-2.5">
-              <ClientIcon client={client} size={22} />
+              <span aria-hidden>
+                <ClientIcon client={client} size={22} />
+              </span>
               Disconnect {client.label}
             </DialogTitle>
             <DialogDescription>Two steps, in this order.</DialogDescription>
@@ -384,13 +373,12 @@ export function DisconnectLine({
 }
 
 /**
- * How disconnecting works, for any agent. It opens on the agent picked on the
- * page and lists the same agents as the picker; its own selector switches it,
- * so what it shows never changes behind the user's back.
+ * How disconnecting works, for the agent picked on the page. The dialog opens
+ * over that pick, so it shows only its steps.
  */
 function HowToDisconnect({
   data,
-  picked,
+  picked: client,
   open,
   onOpenChange,
 }: {
@@ -399,46 +387,20 @@ function HowToDisconnect({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const [selectedId, setSelectedId] = useState(picked.id);
-  // Each opening starts again from the page's pick.
-  useEffect(() => {
-    if (open) setSelectedId(picked.id);
-  }, [open, picked.id]);
-  const options = agentsInPickerOrder(data);
-  const client = options.find((c) => c.id === selectedId) ?? picked;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader className="px-4">
-          <DialogTitle>Disconnecting an agent</DialogTitle>
+          <DialogTitle className="flex items-center gap-2.5">
+            <span aria-hidden>
+              <ClientIcon client={client} size={22} />
+            </span>
+            Disconnect {nameOf(client)}
+          </DialogTitle>
           <DialogDescription className="sr-only">
-            How to remove an agent's connection to {data.appName}.
+            How to remove {nameOf(client)}'s connection to {data.appName}.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2.5 px-4 pt-4 text-sm">
-          <span className="text-muted-foreground">Show steps for</span>
-          <Select value={client.id} onValueChange={setSelectedId}>
-            {/* Wide enough for the longest agent name, and the list opens
-                below it rather than over the text. */}
-            <SelectTrigger
-              size="sm"
-              aria-label="Show steps for"
-              className="min-w-56"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper" align="start" className="max-h-80">
-              {options.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  <span className="flex items-center gap-2 whitespace-nowrap">
-                    <ClientIcon client={c} size={16} />
-                    {c.label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         <DisconnectSteps
           // The details fold resets per agent.
           key={client.id}

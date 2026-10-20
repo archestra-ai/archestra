@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { parse as parseToml } from "smol-toml";
 import config from "@/config";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
@@ -94,6 +95,19 @@ function withGithub(): string {
   );
 }
 
+/** The JSON text the model reads from a tool result. */
+function modelView(result: CallToolResult) {
+  expect(result.isError).toBeFalsy();
+  const [block] = result.content;
+  return JSON.parse(block?.type === "text" ? block.text : "null") as {
+    effective: {
+      error: string | null;
+      credentialBindings: { variable: string; key: string }[];
+      content?: string;
+    };
+  };
+}
+
 function credentialLine(key: string): string {
   return `\n[credentials]\n${GITHUB_TOKEN} = "${key}"\n`;
 }
@@ -176,13 +190,41 @@ describe("bind_guardrails_credential", () => {
     ]);
   });
 
+  test("policy reads and publishes list bindings and carry the composed text only on request", async () => {
+    await bind("github-token");
+    const binding = { variable: GITHUB_TOKEN, key: "github-token" };
+
+    const published = modelView(
+      await call("update_guardrails_policy", {
+        content: withGithub(),
+        expectedRevision: 0,
+      }),
+    );
+    expect(published.effective.credentialBindings).toEqual([binding]);
+    expect(published.effective).not.toHaveProperty("content");
+
+    const read = modelView(await call("get_guardrails_policy", {}));
+    expect(read.effective.error).toBeNull();
+    expect(read.effective.credentialBindings).toEqual([binding]);
+    expect(read.effective).not.toHaveProperty("content");
+
+    const composed = modelView(
+      await call("get_guardrails_policy", { composed: true }),
+    );
+    expect(composed.effective.credentialBindings).toEqual([binding]);
+    expect(
+      (parseToml(composed.effective.content ?? "") as { credentials: unknown })
+        .credentials,
+    ).toEqual({ [GITHUB_TOKEN]: "github-token" });
+  });
+
   test("takes use on the credential on top of policy update", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const policyOnly = await makeCustomRole(organizationId, {
-      permission: { openappaPolicy: ["read", "update"] },
+      permission: { guardrailsPolicy: ["read", "update"] },
     });
     const editor = (await makeUser()).id;
     await makeMember(editor, organizationId, { role: policyOnly.role });

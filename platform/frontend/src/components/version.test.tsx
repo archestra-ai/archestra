@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockUseHealth,
+  mockUseConfig,
+  mockUseSession,
   mockUseLatestGitHubRelease,
   mockUseOrganization,
   mockUseAppearanceSettings,
 } = vi.hoisted(() => ({
   mockUseHealth: vi.fn(),
+  mockUseConfig: vi.fn(),
+  mockUseSession: vi.fn(),
   mockUseLatestGitHubRelease: vi.fn(),
   mockUseOrganization: vi.fn(),
   mockUseAppearanceSettings: vi.fn(),
@@ -42,7 +46,15 @@ vi.mock("@/lib/config/config", () => ({
 }));
 
 vi.mock("@/lib/config/health.query", () => ({
-  useHealth: () => mockUseHealth(),
+  useHealth: (params?: { enabled?: boolean }) => mockUseHealth(params),
+}));
+
+vi.mock("@/lib/config/config.query", () => ({
+  useConfig: () => mockUseConfig(),
+}));
+
+vi.mock("@/lib/auth/auth.query", () => ({
+  useSession: () => mockUseSession(),
 }));
 
 vi.mock("@/lib/github/github-release.query", () => ({
@@ -62,6 +74,9 @@ describe("Version", () => {
     vi.clearAllMocks();
     mockConfig.enterpriseFeatures.fullWhiteLabeling = false;
 
+    // Signed out by default: the version comes from /health.
+    mockUseSession.mockReturnValue({ data: null, isPending: false });
+    mockUseConfig.mockReturnValue({ data: undefined });
     mockUseHealth.mockReturnValue({
       data: { version: "1.1.32" },
     });
@@ -76,12 +91,39 @@ describe("Version", () => {
     mockUseAppearanceSettings.mockReturnValue({ data: null });
   });
 
-  it("shows the latest release link by default", () => {
+  it("signed in, reads the version from the loaded config instead of asking /health", () => {
+    mockUseSession.mockReturnValue({
+      data: { user: { id: "user-1" } },
+      isPending: false,
+    });
+    mockUseConfig.mockReturnValue({ data: { version: "1.1.32" } });
+    mockUseHealth.mockReturnValue({ data: undefined });
+
+    render(<Version inline />);
+
+    expect(screen.getByText(/Version: 1\.1\.32/)).toBeInTheDocument();
+    expect(mockUseHealth).toHaveBeenCalledWith({ enabled: false });
+  });
+
+  // A signed-in page load renders the footer before its session check
+  // answers; asking /health then is a request nobody reads.
+  it("asks /health nothing until the session check says signed out", () => {
+    mockUseSession.mockReturnValue({ data: undefined, isPending: true });
+    mockUseHealth.mockReturnValue({ data: undefined });
+
+    render(<Version inline />);
+
+    expect(mockUseHealth).toHaveBeenCalledWith({ enabled: false });
+    expect(mockUseHealth).not.toHaveBeenCalledWith({ enabled: true });
+  });
+
+  it("shows the latest release link by default", async () => {
     const { container } = render(<Version inline />);
 
     expect(container.firstChild).toHaveTextContent("Version: 1.1.32");
+    // The version comparison loads its semver dependency on demand.
     expect(
-      screen.getByRole("link", {
+      await screen.findByRole("link", {
         name: "v1.1.33",
       }),
     ).toHaveAttribute(

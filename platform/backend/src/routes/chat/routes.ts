@@ -32,6 +32,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
@@ -123,7 +124,10 @@ import {
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { generateConversationTitle } from "@/services/title-generation";
@@ -150,6 +154,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { ConversationFilesResponseSchema } from "@/types/conversation-file";
+import { NewSessionPolicySchema } from "@/types/guardrails-policy";
 import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
 import {
   resolveAgentLlmOrDefault,
@@ -361,6 +366,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Optional sampling override; when omitted the provider/model default applies (unchanged
           // behavior). The benchmark harness sets this to pin runs against temperature variance.
           temperature: z.number().min(0).max(2).optional(),
+          // Optional step ceiling that can only lower MAX_AGENT_STEPS. The benchmark harness sets
+          // this so a runaway trajectory stops long before the interactive-chat ceiling.
+          maxSteps: z.number().int().min(1).max(MAX_AGENT_STEPS).optional(),
           // The depth the composer is showing for this turn. Sent with the
           // message so the turn cannot run at a depth the user has replaced but
           // whose PATCH has not landed yet; the stored column is the fallback
@@ -378,6 +386,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           messages,
           trigger,
           temperature,
+          maxSteps,
           thinkingEffort: requestedThinkingEffort,
         },
         user,
@@ -1385,7 +1394,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     }),
                   }),
                   ...(supportsToolCalling && { tools: mcpTools }),
-                  stopWhen: buildChatStopConditions(repeatTracker),
+                  stopWhen: buildChatStopConditions(repeatTracker, maxSteps),
                   abortSignal: chatAbortController.signal,
                   experimental_repairToolCall: createToolCallRepair({
                     toolNames: Object.keys(mcpTools),
@@ -2310,7 +2319,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { user, organizationId } = request;
-      const conversation = await ConversationModel.findAccessibleById({
+      // Authorization only: the replay comes from the run, not the transcript.
+      const conversation = await ConversationModel.findAccessibleMetadataById({
         id,
         userId: user.id,
         organizationId,
@@ -2381,10 +2391,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversations,
         description:
-          "List all conversations for current user with agent details. Optionally filter by search query.",
+          "List the current user's conversations with agent details, newest first. Optionally filter by search query. Without a search, `limit` caps the recent conversations returned (pinned ones are always included); search results have their own cap of 50.",
         tags: ["Chat"],
         querystring: z.object({
           search: z.string().optional(),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(250)
+            .default(250)
+            .describe(
+              "Recent conversations to return when not searching. Pinned ones are always added.",
+            ),
+          includeArtifacts: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Include each chat's artifact and todo list (default true). False returns them as null for lightweight lists.",
+            ),
         }),
         response: constructResponseSchema(
           z.array(
@@ -2404,11 +2429,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { search } = request.query;
+      const { search, limit, includeArtifacts } = request.query;
       const conversations = await ConversationModel.findAll(
         request.user.id,
         request.organizationId,
         search,
+        { limit, includeArtifacts },
       );
       const runs = await ScheduleTriggerRunModel.findByChatConversationIds({
         organizationId: request.organizationId,
@@ -2457,77 +2483,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetChatConversation,
-        description: "Get conversation with messages",
+        description:
+          "Get conversation with messages. With `tail`, only the last `tail` messages and the count of the earlier ones (`olderMessageCount`).",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          tail: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(CONVERSATION_TAIL_MAX)
+            .optional()
+            .describe("Return only the last N messages"),
+        }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (request, reply) => {
       const {
         params: { id },
-        user,
-        organizationId,
+        query: { tail },
       } = request;
-      const conversation = await findReadableConversationById({
-        conversationId: id,
-        userId: user.id,
-        organizationId,
-      });
-
-      if (!conversation) {
-        throw new ApiError(404, "Conversation not found");
-      }
-
-      // EncryptedChat: the model returned no message content (it cannot — the key
-      // only exists on this request). Decrypt here with the presented key, or
-      // return the locked shape for the tombstone. A wrong key is a 409.
-      if (conversation.encryptedChat) {
-        const keyInfo = await ConversationModel.getEncryptedChatKeyInfo(id);
-        const access = resolveEncryptedChatAccess({
-          request,
-          conversation: keyInfo ?? {
-            id,
-            encryptedChat: true,
-            encryptedChatDekFingerprint: null,
-            hasEscrow: false,
-          },
-        });
-        if (access.state === "unlocked") {
-          // Chat errors are loaded locked-safe by the model (it has no key),
-          // so re-read them here now that one is in hand.
-          const [rows, chatErrors] = await Promise.all([
-            MessageModel.findByConversation(id, access.key),
-            ConversationChatErrorModel.findByConversation(id, access.key),
-          ]);
-          conversation.messages = toConversationApiMessages(
-            rows,
-          ) as typeof conversation.messages;
-          conversation.chatErrors = chatErrors;
-        } else {
-          conversation.messages = [];
-          conversation.contentLocked = true;
-          return reply.send(conversation);
-        }
-      }
-
-      // Hook-run debug parts are persisted on every turn but only surfaced to
-      // admins while this conversation has debug mode on. Strip them otherwise
-      // so hook stdout/stderr/payload never reach a non-admin client. (When
-      // debug is off we skip the permission lookup entirely.)
-      const hooksDebugVisible =
-        config.hooks.enabled &&
-        conversation.hooksDebugEnabled &&
-        (await hasAnyAgentTypeAdminPermission({
-          userId: user.id,
-          organizationId,
-        }));
-      conversation.messages = stripHookRunParts(
-        conversation.messages as ChatMessage[],
-        { visible: hooksDebugVisible },
+      return reply.send(
+        await readConversationForRequest({ request, id, tail }),
       );
-
-      return reply.send(conversation);
     },
   );
 
@@ -2541,14 +2520,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(
-          z.object({ trust: z.string(), audience: z.string() }).nullable(),
+          z
+            .object({
+              trust: z.string(),
+              audience: z.string(),
+              policyRevision: z.number().int().nullable(),
+              // `snapshot` while new sessions keep the policy they open with.
+              newSessionPolicy: NewSessionPolicySchema,
+            })
+            .nullable(),
         ),
       },
     },
     async (request, reply) => {
       const { id } = request.params;
       const { user, organizationId } = request;
-      const conversation = await findReadableConversationById({
+      // The label lives on the session, so only read access is checked here.
+      const conversation = await findReadableConversationMetadataById({
         conversationId: id,
         userId: user.id,
         organizationId,
@@ -2566,7 +2554,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? { organizationId, userId: user.id, audit: access.key }
           : null,
       );
-      if (!(await isGuardrailsV2Active())) return reply.send(null);
+      const deployment = await getGuardrailsDeployment();
+      if (!deployment.active) return reply.send(null);
       // A superyelled conversation is out of OpenAPPA: its label no longer
       // applies.
       if (
@@ -2575,8 +2564,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         )
       )
         return reply.send(null);
+      const status = await getOpenappaStatus({
+        organizationId,
+        sessionId: id,
+      });
       return reply.send(
-        await getOpenappaStatus({ organizationId, sessionId: id }),
+        status && {
+          ...status,
+          newSessionPolicy: deployment.newSessionPolicy,
+        },
       );
     },
   );
@@ -4145,9 +4141,91 @@ export function resolveTitleUserInput(
   );
 }
 
-export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
+/**
+ * A conversation as `GET /api/chat/conversations/:id` returns it to the
+ * caller: 404 unless they may read it, an encrypted chat decrypted with the
+ * request's key (the full history) or locked without one, and hook-run debug
+ * parts kept only for an admin while debug mode is on. With `tail`, only the
+ * last `tail` messages and the count of the earlier ones.
+ */
+export async function readConversationForRequest(params: {
+  request: FastifyRequest;
+  id: string;
+  tail?: number;
+}): Promise<z.infer<typeof SelectConversationSchema>> {
+  const { request, id, tail } = params;
+  const { user, organizationId } = request;
+  const conversation = await findReadableConversationById({
+    conversationId: id,
+    userId: user.id,
+    organizationId,
+    tail,
+  });
+
+  if (!conversation) {
+    throw new ApiError(404, "Conversation not found");
+  }
+
+  // EncryptedChat: the model returned no message content (it cannot — the key
+  // only exists on this request). Decrypt here with the presented key, or
+  // return the locked shape for the tombstone. A wrong key is a 409.
+  if (conversation.encryptedChat) {
+    const keyInfo = await ConversationModel.getEncryptedChatKeyInfo(id);
+    const access = resolveEncryptedChatAccess({
+      request,
+      conversation: keyInfo ?? {
+        id,
+        encryptedChat: true,
+        encryptedChatDekFingerprint: null,
+        hasEscrow: false,
+      },
+    });
+    if (access.state === "unlocked") {
+      // Chat errors are loaded locked-safe by the model (it has no key),
+      // so re-read them here now that one is in hand.
+      const [rows, chatErrors] = await Promise.all([
+        MessageModel.findByConversation(id, access.key),
+        ConversationChatErrorModel.findByConversation(id, access.key),
+      ]);
+      // The key-holding read is the full history: a tail read does not
+      // apply to an encrypted chat.
+      conversation.messages = toConversationApiMessages(
+        rows,
+      ) as typeof conversation.messages;
+      delete conversation.olderMessageCount;
+      conversation.chatErrors = chatErrors;
+    } else {
+      conversation.messages = [];
+      conversation.contentLocked = true;
+      return conversation;
+    }
+  }
+
+  // Hook-run debug parts are persisted on every turn but only surfaced to
+  // admins while this conversation has debug mode on. Strip them otherwise
+  // so hook stdout/stderr/payload never reach a non-admin client. (When
+  // debug is off we skip the permission lookup entirely.)
+  const hooksDebugVisible =
+    config.hooks.enabled &&
+    conversation.hooksDebugEnabled &&
+    (await hasAnyAgentTypeAdminPermission({
+      userId: user.id,
+      organizationId,
+    }));
+  conversation.messages = stripHookRunParts(
+    conversation.messages as ChatMessage[],
+    { visible: hooksDebugVisible },
+  );
+
+  return conversation;
+}
+
+export function buildChatStopConditions(
+  repeatTracker: ToolCallRepeatTracker,
+  maxSteps: number = MAX_AGENT_STEPS,
+) {
   return [
-    stepCountIs(MAX_AGENT_STEPS),
+    stepCountIs(Math.min(maxSteps, MAX_AGENT_STEPS)),
     repeatCeilingStopCondition(repeatTracker),
   ];
 }
@@ -4784,16 +4862,21 @@ function attachRequestAbortListeners(params: {
   return cleanup;
 }
 
+/** The largest `tail` a conversation read accepts. */
+const CONVERSATION_TAIL_MAX = 200;
+
 async function findReadableConversationById(params: {
   conversationId: string;
   userId: string;
   organizationId: string;
+  tail?: number;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
   return (
     (await ConversationModel.findAccessibleById({
       id: params.conversationId,
       userId: params.userId,
       organizationId: params.organizationId,
+      tail: params.tail,
       canReadOthersViaProject: () =>
         ResourcePermissions.allows({
           userId: params.userId,
@@ -4807,6 +4890,7 @@ async function findReadableConversationById(params: {
       conversationId: params.conversationId,
       userId: params.userId,
       organizationId: params.organizationId,
+      tail: params.tail,
     }))
   );
 }
@@ -4841,11 +4925,13 @@ async function findScheduleRunConversationForAdmin(params: {
   conversationId: string;
   userId: string;
   organizationId: string;
+  tail?: number;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
   if (!(await canReadScheduleRunConversation(params))) return null;
   return ConversationModel.findByIdInOrganization({
     id: params.conversationId,
     organizationId: params.organizationId,
+    tail: params.tail,
   });
 }
 

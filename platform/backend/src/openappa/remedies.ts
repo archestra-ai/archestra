@@ -43,12 +43,7 @@ class OpenAppaRemediesService {
         openappaBatteriesService.coverageSnapshot(params.organizationId),
         // Consults are recorded per session; an org-wide status needs the
         // permission that shows every session's consults.
-        userHasPermission(
-          params.userId,
-          params.organizationId,
-          "openappaDiagnostics",
-          "admin",
-        ),
+        userHasPermission(params.userId, params.organizationId, "log", "admin"),
       ]);
     const files: PolicyFile[] = [
       { entry: null, battery: null, text: rootContent, firstLine: 1 },

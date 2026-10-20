@@ -1,13 +1,10 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
-  LAZY_MODEL_SYNC_STATUS_HEADER,
-  LAZY_MODEL_SYNC_STATUS_PENDING,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
   keepPreviousData,
-  type QueryClient,
   useMutation,
   useQuery,
   useQueryClient,
@@ -15,6 +12,9 @@ import {
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import { llmModelsQueryKey } from "@/lib/llm-models-query-keys";
+import { soleAvailableLlmProviderApiKeyId } from "@/lib/llm-provider-api-keys.query";
+import { inFlightQueryData } from "@/lib/query-in-flight";
 import {
   BOOTSTRAP_QUERY_RETRY,
   PERSISTED_QUERY_META,
@@ -24,6 +24,8 @@ import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 const {
   getLlmModels,
   getModelsWithApiKeys,
+  getLlmModelIdsByKey,
+  getLlmModelOptions,
   updateModel,
   syncLlmModels,
   bulkUpdateModels,
@@ -32,16 +34,6 @@ type LlmModelsQuery = NonNullable<archestraApiTypes.GetLlmModelsData["query"]>;
 type LlmModelsParams = Partial<LlmModelsQuery> & {
   enabled?: boolean;
 };
-
-export const LAZY_MODEL_SYNC_REFETCH_DELAY_MS = 1500;
-/** Stop polling after this many refetches so a never-resolving sync can't loop forever. */
-const LAZY_MODEL_SYNC_MAX_REFETCHES = 5;
-
-interface LazyModelSyncRefetchState {
-  attempts: number;
-  timer: ReturnType<typeof setTimeout> | null;
-}
-const lazyModelSyncRefetchState = new Map<string, LazyModelSyncRefetchState>();
 
 export type LlmModel = archestraApiTypes.GetLlmModelsResponses["200"][number];
 export type ModelCapabilities = NonNullable<LlmModel["capabilities"]>;
@@ -55,16 +47,30 @@ export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
  */
 export function useLlmModels(params?: LlmModelsParams) {
   const apiKeyId = params?.apiKeyId;
-  const queryClient = useQueryClient();
-  const queryKey = ["llm-models", apiKeyId ?? null] as const;
+  const client = useQueryClient();
+  // The server lists the models of every key the viewer may use, or of one
+  // of them. When that key is their only one, both answers are the same
+  // list: reuse the full one rather than ask again.
+  const allModels = () =>
+    apiKeyId && soleAvailableLlmProviderApiKeyId(client) === apiKeyId
+      ? client.getQueryState<LlmModel[]>(llmModelsQueryKey(null))
+      : undefined;
   return useQuery({
-    queryKey,
-    queryFn: async (): Promise<LlmModel[]> => {
-      const { data, error, response } = await getLlmModels({
+    queryKey: llmModelsQueryKey(apiKeyId ?? null),
+    initialData: () => allModels()?.data,
+    initialDataUpdatedAt: () => allModels()?.dataUpdatedAt,
+    queryFn: async ({ client }): Promise<LlmModel[]> => {
+      if (apiKeyId && soleAvailableLlmProviderApiKeyId(client) === apiKeyId) {
+        const listed = await inFlightQueryData<LlmModel[]>(
+          client,
+          llmModelsQueryKey(null),
+        );
+        if (listed) return listed;
+      }
+      const { data, error } = await getLlmModels({
         query: apiKeyId ? { apiKeyId } : undefined,
       });
       throwOnApiError(error);
-      scheduleRefetchAfterLazyModelSync({ queryClient, queryKey, response });
       return data ?? [];
     },
     // Keep showing previous models while fetching for a new apiKeyId,
@@ -106,17 +112,14 @@ export async function resolveModelDisplayName(
  * Returns only models with configured embedding dimensions for the given API key.
  */
 export function useEmbeddingModels(apiKeyId: string | null) {
-  const queryClient = useQueryClient();
-  const queryKey = ["llm-models", "embedding", apiKeyId] as const;
   return useQuery({
-    queryKey,
+    queryKey: ["llm-models", "embedding", apiKeyId],
     queryFn: async (): Promise<LlmModel[]> => {
       if (!apiKeyId) return [];
-      const { data, error, response } = await getLlmModels({
+      const { data, error } = await getLlmModels({
         query: { apiKeyId, isEmbedding: "true" },
       });
       throwOnApiError(error);
-      scheduleRefetchAfterLazyModelSync({ queryClient, queryKey, response });
       return data ?? [];
     },
     enabled: !!apiKeyId,
@@ -154,29 +157,62 @@ export function useLlmModelsByProvider(params?: LlmModelsParams) {
   };
 }
 
-export function useModelsWithApiKeys(options?: {
-  toastOnError?: boolean;
-  enabled?: boolean;
-  /** The models page's access filters; models have no owner. */
-  access?: NonNullable<
-    archestraApiTypes.GetModelsWithApiKeysData["query"]
-  >["access"];
-  sharedWith?: string[];
-}) {
-  const toastOnError = options?.toastOnError;
-  const access = options?.access;
-  const sharedWith = options?.sharedWith;
+type ModelsWithApiKeysQuery = NonNullable<
+  archestraApiTypes.GetModelsWithApiKeysData["query"]
+>;
+
+/**
+ * Models with their provider keys. Pickers narrow it with `apiKeyIds` or
+ * `embedding`, and pass `includeAssignments: false` when they show no teams,
+ * users or labels.
+ */
+export function useModelsWithApiKeys(
+  options?: {
+    toastOnError?: boolean;
+    enabled?: boolean;
+  } & Pick<
+    ModelsWithApiKeysQuery,
+    "access" | "sharedWith" | "apiKeyIds" | "embedding" | "includeAssignments"
+  >,
+) {
+  const { toastOnError, enabled, ...filters } = options ?? {};
+  const query = Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== undefined),
+  ) as ModelsWithApiKeysQuery;
   return useQuery({
     queryKey:
-      access || sharedWith
-        ? ["models-with-api-keys", { access, sharedWith }]
+      Object.keys(query).length > 0
+        ? ["models-with-api-keys", query]
         : ["models-with-api-keys"],
-    enabled: options?.enabled,
+    enabled,
     queryFn: async (): Promise<ModelWithApiKeys[]> => {
-      const { data, error } = await getModelsWithApiKeys({
-        query: { access, sharedWith },
-      });
+      const { data, error } = await getModelsWithApiKeys({ query });
       throwOnApiError(error, { toastOnError });
+      return data ?? [];
+    },
+  });
+}
+
+/** For each provider key the caller can see, the ids of its shown models. */
+export function useLlmModelIdsByKey(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["models-with-api-keys", "key-model-ids"],
+    enabled: options?.enabled,
+    queryFn: async () => {
+      const { data, error } = await getLlmModelIdsByKey();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+/** The catalog's models as a picker shows them: name, provider and price. */
+export function useLlmModelOptions() {
+  return useQuery({
+    queryKey: ["models-with-api-keys", "options"],
+    queryFn: async () => {
+      const { data, error } = await getLlmModelOptions();
+      throwOnApiError(error);
       return data ?? [];
     },
   });
@@ -280,42 +316,4 @@ export function useSyncLlmModels() {
   });
 }
 
-function scheduleRefetchAfterLazyModelSync(params: {
-  queryClient: QueryClient;
-  queryKey: readonly unknown[];
-  response?: Response;
-}) {
-  const { queryClient, queryKey, response } = params;
-  const timerKey = JSON.stringify(queryKey);
-  const state = lazyModelSyncRefetchState.get(timerKey);
-
-  const pending =
-    response?.headers.get(LAZY_MODEL_SYNC_STATUS_HEADER) ===
-    LAZY_MODEL_SYNC_STATUS_PENDING;
-  if (!pending) {
-    // sync settled (models arrived or the server stopped retrying): drop the loop.
-    if (state?.timer) {
-      clearTimeout(state.timer);
-    }
-    lazyModelSyncRefetchState.delete(timerKey);
-    return;
-  }
-
-  if (state?.timer) {
-    return; // a refetch is already armed for this key
-  }
-
-  const attempts = state?.attempts ?? 0;
-  if (attempts >= LAZY_MODEL_SYNC_MAX_REFETCHES) {
-    return; // give up; a later natural query will pick up the synced models
-  }
-
-  const timer = setTimeout(() => {
-    lazyModelSyncRefetchState.set(timerKey, {
-      attempts: attempts + 1,
-      timer: null,
-    });
-    void queryClient.invalidateQueries({ queryKey });
-  }, LAZY_MODEL_SYNC_REFETCH_DELAY_MS);
-  lazyModelSyncRefetchState.set(timerKey, { attempts, timer });
-}
+// ===

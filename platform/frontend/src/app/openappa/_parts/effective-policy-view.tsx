@@ -4,6 +4,7 @@ import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import {
   useEffectivePolicy,
   usePolicyDeclarations,
@@ -24,6 +25,7 @@ import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 export function EffectivePolicyView() {
   const effective = useEffectivePolicy();
   const declarations = usePolicyDeclarations();
+  const deployment = useGuardrailsDeployment();
   if (effective.isPending)
     return <Skeleton className="h-[65vh] w-full rounded-t-none" />;
   if (effective.isError || !effective.data)
@@ -150,6 +152,22 @@ export function EffectivePolicyView() {
                 ? `Revision ${rootRevision} refused · enforcing an earlier composition · ${hash}`
                 : `Revision ${rootRevision} refused · enforcing revision ${served.rootRevision} · ${hash}`}
         </span>
+        {effective.data.servedRevision && (
+          <span className="block">
+            {`Runtime revision ${effective.data.servedRevision.revision} · published ${formatDate(
+              {
+                date: effective.data.servedRevision.publishedAt,
+                dateFormat: "MM/dd HH:mm",
+              },
+            )} · open conversations follow it`}
+          </span>
+        )}
+        {deployment.data?.newSessionPolicy === "snapshot" && (
+          <span className="block">
+            New sessions keep a policy snapshot: a policy change reaches new
+            sessions only, and no new revision is published
+          </span>
+        )}
       </div>
     </div>
   );

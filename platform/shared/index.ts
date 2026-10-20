@@ -44,6 +44,7 @@ export * from "./mcp-human-ruling";
 export * from "./mcp-image-pull-policy";
 export * from "./mcp-orchestrator";
 export * from "./mcp-server-config";
+export * from "./mcp-server-issues";
 export * from "./mcp-tool-error";
 export * from "./model-constants";
 export * from "./model-resolution";

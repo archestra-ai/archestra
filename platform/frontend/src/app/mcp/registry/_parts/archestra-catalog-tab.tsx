@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  type archestraCatalogTypes,
-  E2eTestId,
-} from "@archestra/shared";
+import { type archestraCatalogTypes, E2eTestId } from "@archestra/shared";
 
 import {
   BookOpen,
@@ -39,7 +35,7 @@ import {
   useMcpRegistryServersInfinite,
   useMcpServerCategories,
 } from "@/lib/mcp/external-mcp-catalog.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
 import type { SelectedCategory } from "./CatalogFilters";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformExternalCatalogToFormValues } from "./mcp-catalog-form.utils";
@@ -60,10 +56,8 @@ const isDemoCategory = (category: string | null | undefined) =>
   category === MCP_APPS_DEMO_CATEGORY;
 
 export function ArchestraCatalogTab({
-  catalogItems: initialCatalogItems,
   onSelectServer,
 }: {
-  catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   onSelectServer: (formValues: McpCatalogFormValues) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,10 +69,10 @@ export function ArchestraCatalogTab({
     category: "all",
   });
 
-  // Get catalog items for filtering (with live updates)
-  const { data: catalogItems } = useInternalMcpCatalog({
-    initialData: initialCatalogItems,
-  });
+  // The names already in the private registry, from its slim index (with
+  // live updates) rather than the full catalog list.
+  const { data: issueIndex } = useMcpRegistryIssueIndex();
+  const catalogItems = issueIndex?.catalogItems;
 
   // Fetch available categories
   const { data: availableCategories = [] } = useMcpServerCategories();

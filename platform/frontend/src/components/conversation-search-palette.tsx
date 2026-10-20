@@ -73,7 +73,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpRegistryPage } from "@/lib/mcp/mcp-registry.query";
 import { usePlugins } from "@/lib/plugins/plugin.query";
 import { useProjects } from "@/lib/projects/projects.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
@@ -224,6 +224,7 @@ export function ConversationSearchPalette({
   } = useConversations({
     enabled: open && isAuthenticated && canReadConversation === true,
     search: debouncedSearch,
+    limit: PALETTE_CONVERSATION_LIMIT,
   });
 
   // Agent Runtime sessions live in the same sidebar timeline as chats,
@@ -267,7 +268,7 @@ export function ConversationSearchPalette({
     (!href.startsWith("/settings/") || canSeeSettingsArea);
   const entitySearch = debouncedSearch.trim();
   const canSearchEntities = open && isAuthenticated && entitySearch.length > 0;
-  const settingsTabs = useSettingsTabs();
+  const settingsTabs = useSettingsTabs({ enabled: open });
   const agentOptions = useAgentOptionsPage({
     // The /agents page lists internal agents only; gateways and proxies
     // have their own pages.
@@ -277,7 +278,12 @@ export function ConversationSearchPalette({
     enabled: canSearchEntities && canOpenPage("/agents"),
   });
   const skillsPage = useSkillsPaginated(
-    { search: entitySearch, limit: ENTITY_RESULTS_LIMIT, offset: 0 },
+    {
+      search: entitySearch,
+      limit: ENTITY_RESULTS_LIMIT,
+      offset: 0,
+      includeContent: false,
+    },
     {
       enabled: canSearchEntities && canOpenPage("/skills"),
       toastOnError: false,
@@ -306,11 +312,24 @@ export function ConversationSearchPalette({
     name: entitySearch,
     enabled: canSearchEntities && canOpenPage("/settings/teams"),
   });
+  // MCP servers are searched by the server like skills: the first name
+  // matches from the registry's paged list, the built-in entry included.
+  const mcpPage = useMcpRegistryPage(
+    {
+      search: entitySearch,
+      includeBuiltIn: true,
+      sortBy: "name",
+      sortDirection: "asc",
+      limit: ENTITY_RESULTS_LIMIT,
+      offset: 0,
+    },
+    {
+      enabled: canSearchEntities && canOpenPage("/mcp/registry"),
+      placeholderScope: "search-palette",
+    },
+  );
   // No server-side name search for these; their pages also hold the whole
   // list and filter it in the browser.
-  const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({
-    enabled: canSearchEntities && canOpenPage("/mcp/registry"),
-  });
   const { data: plugins = [] } = usePlugins(
     canSearchEntities && canOpenPage("/plugins"),
   );
@@ -469,12 +488,14 @@ export function ConversationSearchPalette({
     },
     {
       heading: "MCP Servers",
-      links: nameMatches(mcpCatalogItems, (item) => item.name).map((item) => ({
-        key: `mcp-${item.id}`,
-        href: `/mcp/registry/${item.id}`,
-        label: item.name,
-        icon: Route,
-      })),
+      links: serverResults(mcpPage.data?.data, mcpPage.isPlaceholderData).map(
+        (item) => ({
+          key: `mcp-${item.id}`,
+          href: `/mcp/registry/${item.id}`,
+          label: item.name,
+          icon: Route,
+        }),
+      ),
     },
   ];
   const hasEntityMatches = searchGroups.some((group) => group.links.length > 0);
@@ -1175,3 +1196,9 @@ const GRID_GROUP_CLASS_NAME =
   "[&_[cmdk-group-items]]:grid [&_[cmdk-group-items]]:grid-cols-2 [&_[cmdk-group-items]]:gap-1";
 const PAGES_GRID_CLASS_NAME =
   "[&_[cmdk-group-items]]:grid [&_[cmdk-group-items]]:grid-cols-2 sm:[&_[cmdk-group-items]]:grid-cols-3 [&_[cmdk-group-items]]:gap-x-1";
+
+/**
+ * The palette's recent list before a query is typed: the server's maximum, as
+ * this is where the sidebar's "More" leads.
+ */
+const PALETTE_CONVERSATION_LIMIT = 250;

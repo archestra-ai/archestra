@@ -9,13 +9,19 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# OpenAPPA main: the replay-only appa/do_something call (#670), the [aliases]
-# table (#666), void returns for marked spawns (#665), and typed refusal
-# classes (#681).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "88a41d01c7df20bea357caffb12439d55561c242", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "88a41d01c7df20bea357caffb12439d55561c242" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "88a41d01c7df20bea357caffb12439d55561c242", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "88a41d01c7df20bea357caffb12439d55561c242" }
+# OpenAPPA v0.35.1: conditional publication (#685), the replay-only
+# appa/do_something call (#670), the [aliases]
+# table (#666), void returns for marked spawns (#665), typed refusal classes
+# (#681), live policy revisions with snapshot views (#677); then on main,
+# replay steps without `expect` (#688) and the deployment targets each
+# battery lists (#691), loopback requests staying local (#692),
+# parallel subagent spawns waiting for the earlier bind (#694), and plain
+# errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
+# and the generic coding battery (#697).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e935b5b10293677a498413a7c43ce06c576d8008", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e935b5b10293677a498413a7c43ce06c576d8008" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e935b5b10293677a498413a7c43ce06c576d8008", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "e935b5b10293677a498413a7c43ce06c576d8008" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

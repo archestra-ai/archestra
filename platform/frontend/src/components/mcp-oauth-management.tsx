@@ -21,32 +21,20 @@ import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
-  useAllOauthClients,
   useCreateOauthClient,
   useDeleteOauthClient,
+  useOauthClientsForResource,
   useRotateOauthClientSecret,
   useUpdateOauthClient,
 } from "@/lib/oauth-clients.query";
 
 type Client = archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
 
-export function isMcpOauthClientApplicable(
-  client: Pick<Client, "grantType" | "allowedGatewayIds">,
-  resourceId: string,
-) {
-  return (
-    client.grantType === "authorization_code" ||
-    client.allowedGatewayIds.includes(resourceId)
-  );
-}
-
 export function McpOauthManagement({
   resourceId,
-  resourceKind,
   heading,
 }: {
   resourceId: string;
-  resourceKind: "agent" | "gateway";
   heading?: {
     title: string;
     description: string;
@@ -62,7 +50,10 @@ export function McpOauthManagement({
       action,
       id: client.id,
     });
-  const query = useAllOauthClients({ enabled: canRead === true });
+  const query = useOauthClientsForResource({
+    resourceId,
+    enabled: canRead === true,
+  });
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   const create = useCreateOauthClient();
   const update = useUpdateOauthClient();
@@ -112,13 +103,8 @@ export function McpOauthManagement({
       </div>
     );
 
-  // Authorization-code clients are dynamically granted after user consent;
-  // client-credentials clients are statically assigned to resources.
-  const clients = (query.data ?? []).filter(
-    (client) =>
-      client.scopes.includes(resourceKind === "agent" ? "a2a" : "mcp") &&
-      isMcpOauthClientApplicable(client, resourceId),
-  );
+  // The server returns only the clients that can reach this resource.
+  const clients = query.data ?? [];
 
   return (
     <div className="space-y-3">

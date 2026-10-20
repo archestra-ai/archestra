@@ -512,7 +512,9 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.statusCode).toBe(200);
 
     // Verify usage was recorded in the limit
-    const breakdown = await LimitModel.getModelUsageBreakdown(limit.id);
+    const breakdown =
+      (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id) ??
+      [];
     expect(breakdown).toHaveLength(1);
     expect(breakdown[0].model).toBe("gpt-4o");
     // Usage should be > 0 (exact amount depends on cost calculation,
@@ -677,7 +679,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     // BUG REPRODUCTION: team all-models limit usage should be updated
-    const teamUsage = await LimitModel.getModelUsageBreakdown(teamLimit.id);
+    const teamUsage =
+      (await LimitModel.getModelUsageBreakdowns([teamLimit.id])).get(
+        teamLimit.id,
+      ) ?? [];
     expect(teamUsage).toHaveLength(1);
     expect(teamUsage[0].model).toBe("gpt-4o");
     expect(teamUsage[0].tokensIn).toBe(500);
@@ -762,20 +767,29 @@ describe("LLM proxy limit enforcement (integration)", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     // BUG REPRODUCTION: team1 all-models limit usage must be updated
-    const team1Usage = await LimitModel.getModelUsageBreakdown(team1Limit.id);
+    const team1Usage =
+      (await LimitModel.getModelUsageBreakdowns([team1Limit.id])).get(
+        team1Limit.id,
+      ) ?? [];
     expect(team1Usage).toHaveLength(1);
     expect(team1Usage[0].model).toBe("gpt-4o");
     expect(team1Usage[0].tokensIn).toBe(300);
     expect(team1Usage[0].tokensOut).toBe(60);
 
     // team2 specific-model limit should also be updated
-    const team2Usage = await LimitModel.getModelUsageBreakdown(team2Limit.id);
+    const team2Usage =
+      (await LimitModel.getModelUsageBreakdowns([team2Limit.id])).get(
+        team2Limit.id,
+      ) ?? [];
     expect(team2Usage).toHaveLength(1);
     expect(team2Usage[0].tokensIn).toBe(300);
     expect(team2Usage[0].tokensOut).toBe(60);
 
     // org all-models limit should be updated (control — user confirmed this works)
-    const orgUsage = await LimitModel.getModelUsageBreakdown(orgLimit.id);
+    const orgUsage =
+      (await LimitModel.getModelUsageBreakdowns([orgLimit.id])).get(
+        orgLimit.id,
+      ) ?? [];
     expect(orgUsage).toHaveLength(1);
     expect(orgUsage[0].model).toBe("gpt-4o");
     expect(orgUsage[0].tokensIn).toBe(300);

@@ -53,7 +53,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by user ID (from X-Archestra-User-Id header)"),
-            sessionId: z.string().optional().describe("Filter by session ID"),
+            sessionId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+              ),
             startDate: z
               .string()
               .datetime()
@@ -169,7 +174,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             profileId: UuidIdSchema.optional(),
             externalAgentId: z.string().optional(),
             userId: z.string().optional(),
-            sessionId: z.string().optional(),
+            sessionId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+              ),
             startDate: z.string().datetime().optional(),
             endDate: z.string().datetime().optional(),
           })
@@ -257,7 +267,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
             client: ClientFilterSchema.optional().describe(
               "Filter by client app (queries external_agent_id; e.g. claude)",
             ),
-            sessionId: z.string().optional().describe("Filter by session ID"),
+            sessionId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by session ID. A request logged without a session is a session of its own, addressed by its interaction ID.",
+              ),
             startDate: z
               .string()
               .datetime()

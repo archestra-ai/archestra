@@ -92,6 +92,30 @@ describe("WithPagePermissions", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "/chat",
+    "/chat/0b6f3c8e-6a49-4c47-9d0a-2c5b9d1d4e11",
+  ])("renders %s while permissions load", (pathname) => {
+    signInAs(null);
+    renderAt(pathname);
+    expect(screen.getByText("Page content")).toBeVisible();
+  });
+
+  it("keeps the other chat pages behind the check", () => {
+    signInAs(null);
+    renderAt("/chat/runs");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+  });
+
+  it("swaps an optimistic chat for the Forbidden page without chat:read", () => {
+    signInAs({ agent: ["read"] } as Permissions);
+    renderAt("/chat");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("You don't have permission to access this page."),
+    ).toBeVisible();
+  });
+
   it("leaves pages outside Settings to their own permission", () => {
     signInAs(predefinedPermissionsMap.member);
     renderAt("/account/credentials");

@@ -292,6 +292,13 @@ describe("CompactToolGroup", () => {
       circle: "execute remedy plan (approved by you)",
       header: "Approved by you",
     },
+    {
+      // The reviewer approved, but a policy publish retired the offer first.
+      ruling: "superseded",
+      text: "[appa] this offer no longer stands; re-propose the call",
+      circle: "execute remedy plan (policy changed, the agent will ask again)",
+      header: "Policy changed, the agent will ask again",
+    },
   ])("says the viewer's own ruling on a reviewed remedy ($ruling)", ({
     ruling,
     text,

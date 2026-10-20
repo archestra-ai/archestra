@@ -1,5 +1,10 @@
 import { archestraApiClient, PopularAgentIdSchema } from "@archestra/shared";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  dehydrate,
+  hydrate,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
@@ -183,6 +188,46 @@ async function ready() {
 }
 
 describe("popular agent configuration", () => {
+  it("revalidates restored settings without relying on a catalog elsewhere on the page", async () => {
+    const previousClient = new QueryClient();
+    previousClient.setQueryData(organizationKeys.details(), organization);
+    const snapshot = dehydrate(previousClient);
+    organization = {
+      ...organization,
+      popularAgentOverrides: savedOverrides(["claude-code", "codex"]),
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    hydrate(queryClient, snapshot);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <IntegrationAvailabilitySection
+          catalogKey="popularAgentOverrides"
+          catalog={PopularAgentIdSchema.options}
+          title="Coding agents"
+          options={PopularAgentIdSchema.options.map((id) => ({
+            value: id,
+            label: AGENT_CATALOG_TEMPLATE_NAMES[id],
+          }))}
+          placeholder="Select coding agents…"
+          emptyMessage="No agents found."
+          savedMessage="Coding agents updated"
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        picker().getAllByRole("button", { name: /^Remove / }),
+      ).toHaveLength(2),
+    );
+    expect(picker().queryByText("OpenCode")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+    expect(writes).toEqual([]);
+  });
+
   it("withholds cached templates during a fresh read and offers retry after a refresh failure", async () => {
     const responseReady = Promise.withResolvers<void>();
     server.use(

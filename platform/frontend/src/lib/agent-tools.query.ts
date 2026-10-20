@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { agentDelegationsQueryKeys } from "@/lib/agent-tools-query-keys";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import {
   getApiErrorMessage,
@@ -71,6 +72,7 @@ export function useAllProfileTools({
   sorting,
   filters,
   skipPagination,
+  includeToolDetails,
   enabled = true,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
@@ -90,6 +92,8 @@ export function useAllProfileTools({
     mcpServerOwnerId?: string;
   };
   skipPagination?: boolean;
+  /** False leaves out each tool's parameter schema and description. */
+  includeToolDetails?: boolean;
   enabled?: boolean;
 }) {
   return useQuery({
@@ -106,6 +110,7 @@ export function useAllProfileTools({
         mcpServerId: filters?.mcpServerId,
         mcpServerOwnerId: filters?.mcpServerOwnerId,
         skipPagination,
+        includeToolDetails,
       },
     ],
     queryFn: async () => {
@@ -120,6 +125,7 @@ export function useAllProfileTools({
           origin: filters?.origin,
           mcpServerOwnerId: filters?.mcpServerOwnerId,
           skipPagination,
+          includeToolDetails,
         },
       });
       throwOnApiError(result.error);
@@ -402,15 +408,6 @@ export function useProfileToolPatchMutation() {
 // ============================================================================
 // Agent Delegations (Internal Agents Only)
 // ============================================================================
-
-/**
- * Query key factory for agent delegations
- */
-export const agentDelegationsQueryKeys = {
-  all: ["agent-delegations"] as const,
-  connections: ["agent-delegations", "connections"] as const,
-  byAgent: (agentId: string) => ["agent-delegations", agentId] as const,
-};
 
 /**
  * Get all delegation targets for an internal agent.

@@ -792,7 +792,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
         isPrimary: true,
       },
       // The environment-seeded key serves the whole organization.
-      { publishToOrganization: true },
+      { publishToOrganization: true, apiKeyValue },
     );
 
     logger.info(

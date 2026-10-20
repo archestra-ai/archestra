@@ -6,6 +6,7 @@ import {
 import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
+import { requestScope } from "@/auth/request-scope";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -296,10 +297,7 @@ export class Authnz {
       logger.trace("[Authnz] Attempting session-based authentication");
       // Reads the short-lived cookie cache when present (see session.cookieCache
       // in better-auth config), falling back to the session table on a miss.
-      const { response: session } = await betterAuth.api.getSession({
-        headers,
-        returnHeaders: true,
-      });
+      const { response: session } = await this.getSession(request);
 
       if (session) {
         logger.trace(
@@ -318,35 +316,21 @@ export class Authnz {
 
     const authHeader = headers.get("authorization");
     if (authHeader) {
-      try {
-        logger.trace("[Authnz] Attempting API key authentication");
-        const { valid } = await betterAuth.api.verifyApiKey({
-          body: { key: authHeader },
-        });
-
-        if (valid) {
-          logger.trace({ valid }, "[Authnz] API key verification result");
-          return true;
-        }
-      } catch (_apiKeyError) {
-        logger.trace(
-          "[Authnz] API key verification failed, trying service account token",
-        );
+      // Service-account tokens go first. Both token kinds carry the platform
+      // prefix, but a service-account token is one indexed lookup by hash,
+      // while Better Auth's API-key check reads the apikey table by key and
+      // logs an error on every miss. Checking API keys first charged every
+      // service-account request that miss twice: here and again in
+      // populateUserInfo.
+      if (await this.verifyServiceAccountToken(request, authHeader)) {
+        logger.trace("[Authnz] Service account token verification succeeded");
+        return true;
       }
 
-      try {
-        const serviceAccountResult =
-          await ServiceAccountModel.verifyToken(authHeader);
-        if (serviceAccountResult) {
-          request.serviceAccountAuthResult = serviceAccountResult;
-          logger.trace("[Authnz] Service account token verification succeeded");
-          return true;
-        }
-      } catch (error) {
-        logger.warn(
-          { error: error instanceof Error ? error.message : "unknown" },
-          "[Authnz] Service account token verification errored, treating as unauthenticated",
-        );
+      const apiKey = await this.verifyApiKey(request, authHeader);
+      if (apiKey?.valid) {
+        logger.trace("[Authnz] API key verification succeeded");
+        return true;
       }
     }
 
@@ -504,12 +488,86 @@ export class Authnz {
     };
   };
 
+  private getSession = (request: FastifyRequest) =>
+    requestScope.memo("session", () =>
+      betterAuth.api.getSession({
+        headers: new Headers(request.headers as HeadersInit),
+        returnHeaders: true,
+      }),
+    );
+
+  /**
+   * Better Auth's API-key verification, once per request. The promise is kept
+   * on the request so populateUserInfo reuses what isAuthenticated found
+   * instead of repeating the lookup and, on a miss, its error log.
+   */
+  private apiKeyResults = new WeakMap<
+    FastifyRequest,
+    Promise<Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>> | null>
+  >();
+
+  private verifyApiKey = (request: FastifyRequest, authHeader: string) => {
+    const cached = this.apiKeyResults.get(request);
+    if (cached) return cached;
+    logger.trace("[Authnz] Attempting API key authentication");
+    const result = betterAuth.api
+      .verifyApiKey({ body: { key: authHeader } })
+      .catch((error: unknown) => {
+        // Reached only by real API keys and unknown tokens now, so a miss is
+        // worth a debug line when someone's key stops working.
+        logger.debug(
+          { error: error instanceof Error ? error.message : "unknown" },
+          "[Authnz] API key verification failed",
+        );
+        return null;
+      });
+    this.apiKeyResults.set(request, result);
+    return result;
+  };
+
+  /**
+   * Service-account token verification, once per request: the result stays on
+   * the request for populateUserInfo and the route handlers.
+   */
+  private verifyServiceAccountToken = async (
+    request: FastifyRequest,
+    authHeader: string,
+  ) => {
+    if (request.serviceAccountAuthResult) {
+      return request.serviceAccountAuthResult;
+    }
+    try {
+      const result = await ServiceAccountModel.verifyToken(authHeader);
+      if (result) {
+        request.serviceAccountAuthResult = result;
+      }
+      return result;
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : "unknown" },
+        "[Authnz] Service account token verification errored, treating as unauthenticated",
+      );
+      return null;
+    }
+  };
+
   private populateUserInfo = async (
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<void> => {
     try {
       const headers = new Headers(request.headers as HeadersInit);
+
+      // A service-account token verified by isAuthenticated needs no session
+      // or API-key lookup here: both would miss, and Better Auth logs the
+      // API-key miss as an error.
+      if (request.serviceAccountAuthResult) {
+        this.populateServiceAccountUserInfo(
+          request,
+          request.serviceAccountAuthResult,
+        );
+        return;
+      }
 
       // Try session-based authentication first
       try {
@@ -520,7 +578,7 @@ export class Authnz {
         // short TTL would lapse between those calls and most API requests would
         // still hit the session table.
         const { response: session, headers: authHeaders } =
-          await betterAuth.api.getSession({ headers, returnHeaders: true });
+          await this.getSession(request);
         this.forwardSessionCookies(reply, authHeaders);
 
         if (session?.user?.id) {
@@ -571,9 +629,7 @@ export class Authnz {
       if (authHeader) {
         try {
           logger.trace("[Authnz] populateUserInfo: trying API key lookup");
-          const apiKeyResult = await betterAuth.api.verifyApiKey({
-            body: { key: authHeader },
-          });
+          const apiKeyResult = await this.verifyApiKey(request, authHeader);
 
           if (apiKeyResult?.valid && apiKeyResult.key?.referenceId) {
             logger.trace(
@@ -600,11 +656,11 @@ export class Authnz {
           );
         }
 
-        const serviceAccountResult =
-          request.serviceAccountAuthResult ??
-          (await ServiceAccountModel.verifyToken(authHeader));
+        const serviceAccountResult = await this.verifyServiceAccountToken(
+          request,
+          authHeader,
+        );
         if (serviceAccountResult) {
-          request.serviceAccountAuthResult = serviceAccountResult;
           this.populateServiceAccountUserInfo(request, serviceAccountResult);
           return;
         }

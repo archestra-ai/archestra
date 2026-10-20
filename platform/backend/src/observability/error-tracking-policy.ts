@@ -1,6 +1,7 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import {
   getDbResourceExhaustionErrorCode,
+  getNonDatabaseConnectionTarget,
   getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
@@ -54,9 +55,11 @@ export function classifyErrorForTracking(
   // A proxy relay preserves its cause for diagnostics. Its explicit upstream
   // origin takes precedence over socket codes shared with database errors.
   if (error instanceof ApiError && error.upstream) return { report: false };
-  // A native HTTP fetch failure has a known upstream origin. Its socket errno
-  // can also occur on database connections, so classify it before DB matching.
-  if (isFetchConnectivityError(error)) return { report: false };
+  // A native HTTP fetch failure, or a connection failure naming a host other
+  // than the database, has a known upstream origin. Its socket errno can also
+  // occur on database connections, so classify it before DB matching.
+  if (isFetchConnectivityError(error) || getNonDatabaseConnectionTarget(error))
+    return { report: false };
 
   // Availability incidents: report once, grouped by root cause.
   //

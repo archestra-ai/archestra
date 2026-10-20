@@ -36,10 +36,15 @@ export function DataTablePagination<TData>({
   const pageIndex = paginationState?.pageIndex ?? 0;
   const pageSize = paginationState?.pageSize ?? 10;
   const total = totalRows ?? table.getFilteredRowModel().rows.length;
+  // A server-paged table holds one page; its selection can span pages. Count
+  // the whole selection against every matching row, not against this page.
+  const selectedCount =
+    totalRows !== undefined
+      ? Object.values(table.getState().rowSelection).filter(Boolean).length
+      : table.getFilteredSelectedRowModel().rows.length;
   const leftContent = hideSelectedCount ? null : (
     <>
-      {table.getFilteredSelectedRowModel().rows.length} of{" "}
-      {table.getFilteredRowModel().rows.length} row(s) selected.
+      {selectedCount} of {total} row(s) selected.
     </>
   );
 

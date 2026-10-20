@@ -165,6 +165,7 @@ describe("guardrails batteries", () => {
       .filter(
         (battery) =>
           battery.name !== ARCHESTRA_BATTERY &&
+          battery.name !== CODING_BATTERY &&
           battery.name !== CLAUDE_CODE_BATTERY,
       )
       .flatMap((battery) => battery.installs);
@@ -924,7 +925,7 @@ describe("guardrails batteries", () => {
     const role = await makeCustomRole(organizationId, {
       permission: {
         organizationSettings: ["update"],
-        openappaPolicy: ["read", "update"],
+        guardrailsPolicy: ["read", "update"],
       },
     });
     await makeMember(manager.id, organizationId, { role: role.role });
@@ -1315,7 +1316,7 @@ describe("guardrails batteries", () => {
   }) => {
     const member = await makeUser();
     const reader = await makeCustomRole(organizationId, {
-      permission: { openappaPolicy: ["read"] },
+      permission: { guardrailsPolicy: ["read"] },
     });
     await makeMember(member.id, organizationId, { role: reader.role });
     const memberApp = createFastifyInstance();
@@ -1351,9 +1352,11 @@ describe("guardrails batteries", () => {
   });
 });
 
+const CODING_BATTERY = "coding";
 const CLAUDE_CODE_BATTERY = "claude-code";
 const SHIPPED_ENTRIES = [
   bundledEntry(ARCHESTRA_BATTERY),
+  bundledEntry(CODING_BATTERY),
   bundledEntry(CLAUDE_CODE_BATTERY),
 ];
 

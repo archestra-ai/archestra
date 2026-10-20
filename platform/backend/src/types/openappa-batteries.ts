@@ -271,6 +271,14 @@ export const EffectivePolicyViewSchema = EffectivePolicySchema.omit({
 }).extend({
   composition: CompositionViewSchema,
   retained: RetainedAnnotatorsViewSchema.nullable(),
+  /**
+   * The deployment head and its publication time. A saved change publishes at
+   * the next protected live call; null before the first publish. Pinned
+   * families keep their opening policy.
+   */
+  servedRevision: z
+    .object({ revision: z.number().int(), publishedAt: z.date() })
+    .nullable(),
 });
 export type EffectivePolicyView = z.infer<typeof EffectivePolicyViewSchema>;
 

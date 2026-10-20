@@ -40,7 +40,6 @@ import { typeRole } from "@/lib/design/type-scale";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   type McpDeploymentFeedState,
-  useMcpServers,
   useRestoreMcpServerAlerts,
 } from "@/lib/mcp/mcp-server.query";
 import {
@@ -66,16 +65,19 @@ import {
   installBlockedSummary,
   useMcpInstallBlockers,
 } from "./mcp-credential-blockers";
-import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
 import {
   getMcpServerActionModel,
   mcpServerAction,
 } from "./mcp-server-actions-model";
 import { mcpServerAlertTarget } from "./mcp-server-alert-target";
 import { describeMcpIssueActionOwners } from "./mcp-server-attention-owner";
-import type { CatalogItem, InstalledServer } from "./mcp-server-card";
+import type {
+  RegistryListItem as CatalogItem,
+  InstalledServer,
+} from "./mcp-server-card";
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
+import { useRegistryPageServers } from "./registry-page-servers";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -107,6 +109,9 @@ type McpServerTableProps = {
     options?: { alsoReinstallCatalog?: boolean },
   ) => void | Promise<void>;
   onCancelInstallation?: (serverId: string) => void;
+  /** The list pages on the server; the table shows one page of it. */
+  pagination?: { pageIndex: number; pageSize: number; total: number };
+  onPaginationChange?: (next: { pageIndex: number; pageSize: number }) => void;
   selection?: {
     rowSelection: RowSelectionState;
     onRowSelectionChange: OnChangeFn<RowSelectionState>;
@@ -136,19 +141,16 @@ export function McpServerTable({
   onInstall,
   onReinstall,
   onCancelInstallation,
+  pagination,
+  onPaginationChange,
   selection,
   attention,
 }: McpServerTableProps) {
   const router = useRouter();
   const { data: session } = useSession();
   const _currentUserId = session?.user?.id;
-  const { data: allMcpServers } = useMcpServers({
-    includeAssignedAgents: false,
-  });
   const isInstalledForViewer = (item: CatalogItem) =>
-    isMcpServerInstalledForViewer(
-      (allMcpServers ?? []).filter((server) => server.catalogId === item.id),
-    );
+    item.install.installedForViewer;
   const canSelect = (item: CatalogItem) =>
     !isPlaywrightCatalogItem(item.id) &&
     (!!attention || !!getServerInfo(item).installedServer) &&
@@ -161,7 +163,8 @@ export function McpServerTable({
     if (
       item.serverType !== "local" ||
       !installedServer ||
-      deploymentFeedState !== "ready"
+      (deploymentFeedState !== "ready" &&
+        deploymentFeedState !== "reconnecting")
     ) {
       return null;
     }
@@ -411,6 +414,9 @@ export function McpServerTable({
       emptyIcon={Route}
       emptyMessage="No MCP servers found."
       hidePaginationWhenSinglePage
+      manualPagination={!!pagination}
+      pagination={pagination}
+      onPaginationChange={onPaginationChange}
       fixedWidthColumnIds={
         attention
           ? ["select", "name", "actions"]
@@ -442,14 +448,13 @@ const McpServerRowActions = memo(function McpServerRowActions({
   onReinstall: McpServerTableProps["onReinstall"];
   onCancelInstallation?: (serverId: string) => void;
 }) {
-  const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const { startChatById, isCreating: isChatCreating } =
+    useChatWithCatalogItem();
   const installBlockers = useMcpInstallBlockers(item);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
-  const { data: allMcpServers } = useMcpServers({
-    includeAssignedAgents: false,
-  });
+  const allMcpServers = useRegistryPageServers();
   const { data: canManageInstalls } = useHasPermissions(
     { mcpRegistry: ["update"] },
     "*",
@@ -478,8 +483,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
       (s.scope === "personal" || (!s.scope && !s.teamId)),
   );
   const hasPersonalConnection = personalServersForCatalog.length > 0;
-  const isInstalledForViewer =
-    isMcpServerInstalledForViewer(allServersForCatalog);
+  const isInstalledForViewer = item.install.installedForViewer;
   const hasLocalInstalls = allServersForCatalog.some(
     (s) => s.serverType === "local",
   );
@@ -611,7 +615,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
       icon: <MessageSquare className="h-4 w-4" />,
       label: isChatCreating ? "Creating…" : "Chat",
       disabled: isChatCreating,
-      onClick: () => startChat(item),
+      onClick: () => startChatById(item.id),
     });
   }
   if (!isInstalling && !isBuiltin) {
@@ -767,7 +771,11 @@ function McpServerNameCell({
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
         <span className="relative shrink-0">
-          <McpCatalogIcon icon={item.icon} catalogId={item.id} size={16} />
+          <McpCatalogIcon
+            icon={item.iconUrl ?? item.icon}
+            catalogId={item.id}
+            size={16}
+          />
           {deploymentSummary && (
             <DeploymentStatusIconDot summary={deploymentSummary} />
           )}

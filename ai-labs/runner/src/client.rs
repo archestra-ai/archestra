@@ -23,6 +23,10 @@ const TOOLS_PAGE_SIZE: usize = 100;
 /// lever against run-to-run variance — see the reproducibility notes in the repo README.
 pub(crate) const BENCH_TEMPERATURE: f32 = 0.0;
 
+/// Agent step ceiling sent on every benchmark chat request. Passing trajectories finish within ~90
+/// steps (p99.9 86 over runs 103-134); past that a run is almost always a runaway loop burning cost.
+pub(crate) const BENCH_MAX_STEPS: u32 = 150;
+
 #[derive(Debug, Clone)]
 pub struct ArchestraApiError {
     pub method: String,
@@ -1124,6 +1128,7 @@ fn build_chat_body(
         "id": conversation_id,
         "messages": messages,
         "temperature": BENCH_TEMPERATURE,
+        "maxSteps": BENCH_MAX_STEPS,
         "trigger": "submit-message",
     })
 }
@@ -1197,6 +1202,7 @@ mod tests {
     fn test_chat_body_pins_temperature() {
         let body = build_chat_body("conv-1", &[], "hello", &[], "turn-1");
         assert_eq!(body["temperature"], serde_json::json!(BENCH_TEMPERATURE));
+        assert_eq!(body["maxSteps"], serde_json::json!(BENCH_MAX_STEPS));
         assert_eq!(body["id"], "conv-1");
         assert_eq!(body["trigger"], "submit-message");
         assert_eq!(body["messages"][0]["parts"][0]["text"], "hello");

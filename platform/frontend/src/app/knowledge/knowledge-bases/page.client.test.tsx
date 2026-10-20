@@ -15,6 +15,7 @@ import KnowledgeBasesPage from "./page.client";
 const mockUseKnowledgeBasesPaginated = vi.fn();
 const mockUseAllMatchingKnowledgeBases = vi.fn();
 const mockUseConnectors = vi.fn();
+const mockUseConnectorsByIds = vi.fn();
 const mockRestoreMutate = vi.fn();
 const mockPurgeMutateAsync = vi.fn();
 
@@ -42,6 +43,7 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectors: (params: unknown) => mockUseConnectors(params),
+  useConnectorsByIds: (...args: unknown[]) => mockUseConnectorsByIds(...args),
   // By-id query behind the ?connector= deep link; no param in these tests.
   useConnector: () => ({ data: undefined }),
   useAssignConnectorToKnowledgeBases: () => ({
@@ -180,7 +182,9 @@ beforeEach(() => {
           visibility: "org-wide",
           teamIds: [],
           totalDocsIndexed: 12,
-          assignedAgents: [{ id: "agent-1", name: "Support", agentType: "a" }],
+          // The page opts out of the agent list and reads the count.
+          assignedAgents: [],
+          assignedAgentCount: 1,
         },
       ],
       pagination: { total: 1 },
@@ -190,7 +194,7 @@ beforeEach(() => {
     isLoadingError: false,
     refetch: vi.fn(),
   });
-  mockUseConnectors.mockReturnValue({
+  const pageConnectors = {
     data: [
       makeConnector({ id: "conn-1", name: "Org Connector" }),
       makeConnector({
@@ -200,7 +204,9 @@ beforeEach(() => {
       }),
     ],
     isPending: false,
-  });
+  };
+  mockUseConnectors.mockReturnValue(pageConnectors);
+  mockUseConnectorsByIds.mockReturnValue(pageConnectors);
 });
 
 describe("KnowledgeBasesPage", () => {
@@ -224,6 +230,49 @@ describe("KnowledgeBasesPage", () => {
     expect(screen.getByText("documents")).toBeInTheDocument();
     expect(screen.getByText("agent")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View 1 label" })).toBeVisible();
+  });
+
+  it("shows each knowledge base's agent count without loading the agents", () => {
+    mockUseKnowledgeBasesPaginated.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "kb-1",
+            name: "Handbook",
+            description: null,
+            labels: [],
+            connectors: [],
+            visibility: "org-wide",
+            teamIds: [],
+            totalDocsIndexed: 0,
+            assignedAgents: [],
+            assignedAgentCount: 37,
+          },
+        ],
+        pagination: { total: 1 },
+      },
+      isPending: false,
+      isFetching: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<KnowledgeBasesPage />);
+
+    expect(screen.getByText("37")).toBeInTheDocument();
+    expect(screen.getByText("agents")).toBeInTheDocument();
+  });
+
+  it("reads sync status for exactly the connectors on the page, polling while they sync", () => {
+    render(<KnowledgeBasesPage />);
+
+    expect(mockUseConnectorsByIds).toHaveBeenCalledWith(["conn-1", "conn-2"], {
+      enabled: true,
+      pollWhileSyncing: true,
+    });
+    // The organization-wide connector list is the add-connector picker's,
+    // and that dialog is closed.
+    expect(mockUseConnectors).not.toHaveBeenCalled();
   });
 
   it("keeps the per-connector actions the expandable sub-table used to own", async () => {

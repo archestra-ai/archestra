@@ -6,7 +6,16 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { format, subDays } from "date-fns";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { preloadConversationActionParts } from "@/components/chat/conversation-actions";
 
 // Mock ResizeObserver used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -16,6 +25,7 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 const mockRouterPush = vi.fn();
+const mockRouterPrefetch = vi.fn();
 const { mockUpdateRunMutate, mockUpdateRunMutateAsync } = vi.hoisted(() => ({
   mockUpdateRunMutate: vi.fn(),
   mockUpdateRunMutateAsync: vi.fn().mockResolvedValue(undefined),
@@ -100,6 +110,9 @@ let mockApps: Array<{
   pinnedAt: string | null;
 }> = [];
 
+// True while the pinned-apps request is still in flight.
+let mockAppsLoading = false;
+
 let mockRuns: Array<Record<string, unknown>> = [];
 
 let useRealRunsQuery = false;
@@ -165,6 +178,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
+  SIDEBAR_PINNED_PROJECTS_QUERY: { pinned: true, limit: 100, offset: 0 },
   // Answers like the endpoint: `pinned` splits the list, results are paged.
   useProjects: (filters?: { pinned?: boolean; enabled?: boolean }) => {
     mockUseProjects(filters);
@@ -183,7 +197,11 @@ vi.mock("@/lib/projects/projects.query", () => ({
 }));
 
 vi.mock("@/lib/app.query", () => ({
-  useApps: () => ({ data: { data: mockApps } }),
+  SIDEBAR_PINNED_APPS_QUERY: { limit: 100, offset: 0, pinned: true },
+  useApps: () =>
+    mockAppsLoading
+      ? { data: undefined, isLoading: true }
+      : { data: { data: mockApps }, isLoading: false },
   usePinApp: () => ({ mutate: vi.fn() }),
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: vi.fn() }),
@@ -397,6 +415,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 6 /* July */, 16, 12));
   vi.mocked(useRouter).mockReturnValue({
     push: mockRouterPush,
+    prefetch: mockRouterPrefetch,
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(usePathname).mockImplementation(() => mockChatState.pathname);
   vi.mocked(useSearchParams).mockReturnValue({
@@ -438,6 +457,9 @@ function daysAgo(n: number) {
   return subDays(new Date(), n).toISOString();
 }
 
+// The conversation menu's project picker is a lazy chunk; load it first.
+beforeAll(() => preloadConversationActionParts());
+
 describe("ChatSidebarSection", () => {
   const fadeIn = {
     pending: () => true,
@@ -449,6 +471,7 @@ describe("ChatSidebarSection", () => {
     mockConversations = [];
     mockProjects = [];
     mockApps = [];
+    mockAppsLoading = false;
     mockRuns = [];
     useRealRunsQuery = false;
     mockChatState.pathname = "/chat";
@@ -571,15 +594,16 @@ describe("ChatSidebarSection", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("opens an OpenAPPA configuration session in chat", () => {
+  it("links an OpenAPPA configuration session to its chat, warming the route on hover", () => {
     mockConversations = [
       { ...makeConv("policy-session", "Review policy"), origin: "user" },
     ];
     render(<ChatSidebarSection fadeIn={fadeIn} />);
-    fireEvent.click(screen.getByText("Review policy"));
-    expect(mockRouterPush).toHaveBeenCalledExactlyOnceWith(
-      "/chat/policy-session",
-    );
+    const row = screen.getByRole("link", { name: /Review policy/ });
+    expect(row).toHaveAttribute("href", "/chat/policy-session");
+    expect(mockRouterPrefetch).not.toHaveBeenCalled();
+    fireEvent.mouseEnter(row);
+    expect(mockRouterPrefetch).toHaveBeenCalledWith("/chat/policy-session");
   });
 
   it("collapses pinned and date groups independently and restores their chats", () => {
@@ -636,13 +660,11 @@ describe("ChatSidebarSection", () => {
       },
     ];
     render(<ChatSidebarSection fadeIn={fadeIn} />);
-    const label = screen.getByText("Daily summary");
     expect(screen.getAllByLabelText("Scheduled task")).toHaveLength(1);
-    fireEvent.click(label);
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(screen.getByRole("link", { name: /Daily summary/ })).toHaveAttribute(
+      "href",
       "/chat/scheduled-chat?scheduleTriggerId=trigger-1&scheduleRunId=run-1",
     );
-    mockRouterPush.mockClear();
     fireEvent.click(
       screen.getByRole("button", { name: "Open project Reports" }),
     );
@@ -1052,6 +1074,37 @@ describe("ChatSidebarSection", () => {
     expect(
       screen.getAllByTestId("app-catalog-icon").map((el) => el.textContent),
     ).toEqual(["🚀", "📋"]);
+  });
+
+  it("draws the Pinned list once every pinned source has answered, in pin order", () => {
+    mockConversations = [
+      makeConv("chat-1", "Pinned chat", { pinnedAt: "2026-01-04T00:00:00Z" }),
+    ];
+    mockApps = [
+      {
+        source: "owned",
+        id: "app-1",
+        name: "Sprint Board",
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+    ];
+    mockAppsLoading = true;
+
+    const { rerender } = render(<ChatSidebarSection fadeIn={fadeIn} />);
+    // Chats are in, apps are not: showing the chat now would push it down a
+    // row as soon as the more recently pinned app lands.
+    expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pinned chat")).not.toBeInTheDocument();
+
+    mockAppsLoading = false;
+    rerender(<ChatSidebarSection fadeIn={fadeIn} />);
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    const boardRow = screen.getByText("Sprint Board");
+    const chatRow = screen.getByText("Pinned chat");
+    expect(
+      boardRow.compareDocumentPosition(chatRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("routes an app without an icon through the fallback for its kind", () => {

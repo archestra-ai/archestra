@@ -5,8 +5,8 @@ import {
   useAppearanceSettings,
   useUpdateAppearanceSettings,
 } from "./organization.query";
+import { THEME_STORAGE_KEY } from "./theme-storage";
 
-const THEME_STORAGE_KEY = "archestra-theme";
 const DEFAULT_THEME: OrganizationTheme = DEFAULT_THEME_ID as OrganizationTheme;
 
 export function useOrgTheme() {
@@ -33,7 +33,14 @@ export function useOrgTheme() {
       : null;
 
   const [currentUITheme, setCurrentUITheme] = useState<OrganizationTheme>(
-    themeFromBackend || themeFromLocalStorage || DEFAULT_THEME,
+    () =>
+      themeFromBackend ||
+      // The server renders the organization's theme class on <html> (from its
+      // cached appearance read), so the first paint is already themed; start
+      // from it rather than repaint with an older or default choice.
+      readServerRenderedTheme() ||
+      themeFromLocalStorage ||
+      DEFAULT_THEME,
   );
 
   const saveAppearance = useCallback(
@@ -94,7 +101,7 @@ export function useOrgTheme() {
   };
 }
 
-const applyThemeOnUI = (themeId: OrganizationTheme) => {
+export const applyThemeOnUI = (themeId: OrganizationTheme) => {
   const root = document.documentElement;
   const themeClasses = Array.from(root.classList).filter((cls) =>
     cls.startsWith("theme-"),
@@ -108,3 +115,13 @@ const applyThemeOnUI = (themeId: OrganizationTheme) => {
 const applyThemeInLocalStorage = (themeId: OrganizationTheme) => {
   localStorage.setItem(THEME_STORAGE_KEY, themeId);
 };
+
+function readServerRenderedTheme(): OrganizationTheme | null {
+  if (typeof document === "undefined") return null;
+  const themeClass = Array.from(document.documentElement.classList).find(
+    (cls) => cls.startsWith("theme-"),
+  );
+  return themeClass
+    ? (themeClass.slice("theme-".length) as OrganizationTheme)
+    : null;
+}

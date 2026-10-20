@@ -52,6 +52,64 @@ describe("chat conversation and message routes", () => {
     await app.close();
   });
 
+  test("a tail read returns the last messages of the full read and the count of the earlier ones", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const conversation = await ConversationModel.create({
+      organizationId,
+      userId: currentUser.id,
+      agentId: agent.id,
+    });
+    // Two messages share a timestamp, so the order also rests on the id.
+    const start = Date.parse("2026-01-01T00:00:00Z");
+    await MessageModel.bulkCreate(
+      Array.from({ length: 12 }, (_, index) => {
+        const id = uuidv7();
+        const role = index % 2 === 0 ? "user" : "assistant";
+        return {
+          id,
+          conversationId: conversation.id,
+          role,
+          content: {
+            id,
+            role,
+            parts: [{ type: "text", text: `turn ${index}` }],
+          },
+          createdAt: new Date(start + Math.min(index, 10) * 1000),
+        };
+      }),
+    );
+
+    const read = async (query = "") => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations/${conversation.id}${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    };
+    const full = await read();
+    const tail = await read("?tail=5");
+
+    expect(full.messages).toHaveLength(12);
+    expect(full.olderMessageCount).toBeUndefined();
+    expect(tail.messages).toEqual(full.messages.slice(-5));
+    expect(tail.olderMessageCount).toBe(7);
+    const { messages: _full, ...fullRest } = full;
+    const { messages: _tail, olderMessageCount: _count, ...tailRest } = tail;
+    expect(tailRest).toEqual(fullRest);
+    expect((await read("?tail=50")).olderMessageCount).toBe(0);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/chat/conversations/${conversation.id}?tail=0`,
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
+
   test("upgrading policy chats keeps ordinary and former policy chats readable", async ({
     makeAgent,
   }) => {
@@ -301,6 +359,101 @@ describe("chat conversation and message routes", () => {
     }
   });
 
+  test("a light list leaves out the artifact and todo list, which the detail read keeps", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const conversation = await ConversationModel.create({
+      organizationId,
+      userId: currentUser.id,
+      agentId: agent.id,
+      title: "Has an artifact",
+    });
+    await ConversationModel.update(
+      conversation.id,
+      currentUser.id,
+      organizationId,
+      {
+        artifact: "# A long artifact".repeat(100),
+      },
+    );
+    await db
+      .update(schema.conversationsTable)
+      .set({ todoList: [{ id: 1, content: "step", status: "pending" }] })
+      .where(eq(schema.conversationsTable.id, conversation.id));
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations?includeArtifacts=false",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [row] = response.json();
+    expect(row).toMatchObject({
+      id: conversation.id,
+      title: "Has an artifact",
+      artifact: null,
+      todoList: null,
+    });
+
+    // The single-conversation read still carries both.
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(detail.json().artifact).toContain("# A long artifact");
+    expect(detail.json().todoList).toHaveLength(1);
+  });
+
+  test("limits the list to the newest conversations but always keeps pinned ones", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const ids: string[] = [];
+    for (let index = 0; index < 4; index++) {
+      const conversation = await ConversationModel.create({
+        organizationId,
+        userId: currentUser.id,
+        agentId: agent.id,
+        title: `Chat ${index}`,
+      });
+      ids.push(conversation.id);
+      // Spread recency explicitly; creation order alone can tie.
+      await db
+        .update(schema.conversationsTable)
+        .set({ lastMessageAt: new Date(Date.UTC(2026, 0, 1 + index)) })
+        .where(eq(schema.conversationsTable.id, conversation.id));
+    }
+    // The oldest chat is pinned.
+    await db
+      .update(schema.conversationsTable)
+      .set({ pinnedAt: new Date() })
+      .where(eq(schema.conversationsTable.id, ids[0]));
+
+    const limited = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations?limit=2",
+    });
+    expect(limited.statusCode).toBe(200);
+    expect(limited.json().map((c: { id: string }) => c.id)).toEqual([
+      ids[3],
+      ids[2],
+      ids[0],
+    ]);
+
+    const tooMany = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations?limit=251",
+    });
+    expect(tooMany.statusCode).toBe(400);
+
+    const byDefault = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(byDefault.json()).toHaveLength(4);
+  });
+
   test("hides an app-opened chat from the list until the user writes into it", async ({
     makeAgent,
   }) => {
@@ -391,6 +544,66 @@ describe("chat conversation and message routes", () => {
 
     expect(unpinResponse.statusCode).toBe(200);
     expect(unpinResponse.json().pinnedAt).toBeNull();
+  });
+
+  test("lists conversations without their artifacts when asked", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      access: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "Budget review",
+    });
+    const todoList = [
+      { id: 1, content: "Check the totals", status: "pending" as const },
+    ];
+    await db
+      .update(schema.conversationsTable)
+      .set({ artifact: "# Budget\n\nNumbers.", todoList })
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        role: "user",
+        parts: [{ type: "text", text: "Summarize the budget" }],
+      },
+    });
+
+    const list = async (query: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json()
+        .find((c: { id: string }) => c.id === conversation.id);
+    };
+
+    // API clients keep the full rows by default.
+    expect(await list("")).toMatchObject({
+      artifact: "# Budget\n\nNumbers.",
+      todoList,
+    });
+    expect(await list("?includeArtifacts=false")).toMatchObject({
+      title: "Budget review",
+      artifact: null,
+      todoList: null,
+    });
+    const searchRow = await list("?search=budget&includeArtifacts=false");
+    expect(searchRow).toMatchObject({
+      title: "Budget review",
+      artifact: null,
+      todoList: null,
+    });
+    expect(searchRow.messages).toHaveLength(1);
   });
 
   test("moves a conversation into a project and removes it again", async ({

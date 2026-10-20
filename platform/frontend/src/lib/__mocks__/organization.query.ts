@@ -14,7 +14,7 @@ export const organizationKeys = actual.organizationKeys;
 
 export const useAppearanceSettings = vi.fn();
 export const useInvitation = vi.fn();
-export const useActiveOrganization = vi.fn();
+export const useActiveOrganizationId = vi.fn();
 export const useActiveMemberRole = vi.fn();
 export const useIsGlobalAdmin = vi.fn();
 export const useAcceptInvitation = vi.fn();

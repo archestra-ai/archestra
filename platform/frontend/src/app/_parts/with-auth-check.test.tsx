@@ -1,14 +1,13 @@
-import * as Sentry from "@sentry/nextjs";
 import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { errorReporting } from "@/lib/error-reporting";
 import { WithAuthCheck } from "./with-auth-check";
 
-// Mock Sentry
-vi.mock("@sentry/nextjs", () => ({
-  setUser: vi.fn(),
+vi.mock("@/lib/error-reporting", () => ({
+  errorReporting: { setUser: vi.fn(), captureException: vi.fn() },
 }));
 
 // Mock Next.js router and navigation
@@ -54,6 +53,7 @@ vi.mock("@archestra/shared", async (importOriginal) => ({
 }));
 
 const mockRouterPush = vi.fn();
+const mockLocationReload = vi.fn();
 const MockChild = () => (
   <div data-testid="protected-content">Protected Content</div>
 );
@@ -67,6 +67,7 @@ const setWindowLocation = (pathname: string, search = "") => {
       search: url.search,
       hash: url.hash,
       href: url.href,
+      reload: mockLocationReload,
     },
     writable: true,
   });
@@ -347,6 +348,48 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
     });
 
+    it("renders the app at once when the request carried a session cookie", () => {
+      vi.mocked(usePathname).mockReturnValue("/chat");
+
+      render(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    it("swaps the optimistic app for the sign-in redirect when the cookie was stale", async () => {
+      vi.mocked(usePathname).mockReturnValue("/chat");
+      setWindowLocation("/chat");
+      const { rerender } = render(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+      rerender(
+        <WithAuthCheck hasSessionCookie>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(screen.queryByTestId("protected-content")).toBeNull();
+      await waitFor(() =>
+        expect(mockRouterPush).toHaveBeenCalledWith(
+          "/auth/sign-in?redirectTo=%2Fchat",
+        ),
+      );
+    });
+
     it("shows the auth page immediately instead of waiting for the session", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
 
@@ -465,7 +508,7 @@ describe("WithAuthCheck", () => {
       );
 
       await waitFor(() => {
-        expect(Sentry.setUser).toHaveBeenCalledWith({
+        expect(errorReporting.setUser).toHaveBeenCalledWith({
           id: "user123",
           email: "test@example.com",
           username: "Test User",
@@ -496,7 +539,7 @@ describe("WithAuthCheck", () => {
       );
 
       await waitFor(() => {
-        expect(Sentry.setUser).toHaveBeenCalledWith({
+        expect(errorReporting.setUser).toHaveBeenCalledWith({
           id: "user456",
           email: "another@example.com",
           username: "another@example.com",
@@ -519,33 +562,8 @@ describe("WithAuthCheck", () => {
       );
 
       await waitFor(() => {
-        expect(Sentry.setUser).toHaveBeenCalledWith(null);
+        expect(errorReporting.setUser).toHaveBeenCalledWith(null);
       });
-    });
-
-    it("should handle Sentry errors silently", () => {
-      vi.mocked(Sentry.setUser).mockImplementationOnce(() => {
-        throw new Error("Sentry error");
-      });
-
-      vi.mocked(useSession).mockReturnValue({
-        data: {
-          user: { id: "user789", email: "error@example.com" },
-          session: { id: "session789" },
-        },
-        isPending: false,
-      } as unknown as ReturnType<typeof useSession>);
-
-      vi.mocked(usePathname).mockReturnValue("/dashboard");
-
-      // Should not throw
-      expect(() => {
-        render(
-          <WithAuthCheck>
-            <MockChild />
-          </WithAuthCheck>,
-        );
-      }).not.toThrow();
     });
   });
 
@@ -555,6 +573,9 @@ describe("WithAuthCheck", () => {
         data: null,
         isPending: false,
       } as unknown as ReturnType<typeof useSession>);
+      setWindowLocation("/dashboard");
+      window.sessionStorage.clear();
+      mockLocationReload.mockClear();
     });
 
     afterEach(() => {
@@ -587,8 +608,48 @@ describe("WithAuthCheck", () => {
         });
       });
       // Endpoint is hit exactly once (guarded by a ref) rather than the login
-      // form being shown.
+      // form being shown, and the document loads again with the new cookie so
+      // the server seeds it as for any signed-in visitor.
       expect(fetchMock).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(mockLocationReload).toHaveBeenCalledTimes(1);
+      });
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(
+        Number(
+          window.sessionStorage.getItem(
+            "archestra.dev-auto-login.attempted-at",
+          ),
+        ),
+      ).toBeGreaterThan(0);
+    });
+
+    it("sends a reloaded page that is still signed out to sign-in instead of signing in again", async () => {
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: { devAutoLoginEnabled: true },
+        isLoading: false,
+      } as unknown as ReturnType<typeof usePublicConfig>);
+      vi.mocked(usePathname).mockReturnValue("/dashboard");
+      window.sessionStorage.setItem(
+        "archestra.dev-auto-login.attempted-at",
+        String(Date.now()),
+      );
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      await waitFor(() => {
+        expect(mockRouterPush).toHaveBeenCalledWith(
+          "/auth/sign-in?redirectTo=%2Fdashboard",
+        );
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(mockLocationReload).not.toHaveBeenCalled();
     });
 
     it("falls back to the sign-in redirect when auto-login fails", async () => {

@@ -80,8 +80,8 @@ for (const width of [1280, 390]) {
             url: "/api/user/permissions",
             body: {
               ...permissions,
-              openappaDiagnostics: ["read", "update"],
-              openappaPolicy: ["read", "update"],
+              log: ["read"],
+              guardrailsPolicy: ["read", "update"],
               organizationSettings: ["read", "update"],
             },
           },
@@ -285,7 +285,7 @@ for (const width of [1280, 390]) {
   }
 }
 
-test("a diagnostics-only reader reaches Yells without fetching policy or settings", async ({
+test("a log-only reader reaches Yells without fetching policy or settings", async ({
   page,
   request,
   mswControl,
@@ -311,9 +311,9 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
       body: {
         ...permissions,
         chat: ["read"],
-        openappaPolicy: [],
+        guardrailsPolicy: [],
         organizationSettings: [],
-        openappaDiagnostics: ["read"],
+        log: ["read"],
       },
     },
     {
@@ -385,7 +385,7 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
   const tooltip = page.getByRole("tooltip");
   await expect(tooltip).toContainText("Missing permissions");
   await expect(tooltip).toContainText("Chats: create");
-  await expect(tooltip).toContainText("OpenAPPA Policy: read");
+  await expect(tooltip).toContainText("Guardrails Policy: read");
   await expect(tooltip).not.toContainText("Diagnostics");
   const table = await page.getByRole("table").boundingBox();
   const download = await page

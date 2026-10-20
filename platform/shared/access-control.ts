@@ -32,6 +32,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
+  guardrailsPolicy: ["read", "update"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -53,10 +54,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create"],
-
-  // OpenAPPA
-  openappaPolicy: ["read", "update"],
-  openappaDiagnostics: ["read", "update", "admin"],
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
@@ -95,6 +92,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
+  guardrailsPolicy: ["read", "update"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -110,10 +108,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   credential: ["read", "create"],
-
-  // OpenAPPA
-  openappaPolicy: ["read", "update"],
-  openappaDiagnostics: ["read", "update"],
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
@@ -152,6 +146,9 @@ export const memberPermissions: Record<Resource, Action[]> = {
   skill: ["read", "create", "delete"],
   plugin: [],
   app: ["read", "create"],
+  // Members do not see the Guardrails pages or read the policy. Enforcement,
+  // yells, and remedies do not depend on this permission.
+  guardrailsPolicy: [],
 
   // LLM
   llmProxy: ["read"],
@@ -173,11 +170,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Opening the Credentials page. Which credentials a member sees, connects
   // or changes is decided by grants on each one.
   credential: ["read"],
-
-  // OpenAPPA. Members do not see the Guardrails pages or read the policy.
-  // Enforcement, yells, and remedies do not depend on these permissions.
-  openappaPolicy: [],
-  openappaDiagnostics: [],
 
   // Knowledge
   knowledgeSource: ["read", "query"],
@@ -266,7 +258,6 @@ export const adminPermissions: Record<Resource, Action[]> = {
  */
 export const platformAdminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
-  openappaDiagnostics: ["read", "update"],
   log: ["read"],
   auditLog: ["read"],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
@@ -339,14 +330,6 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
  * in allAvailableActions has a corresponding entry here.
  */
 export const permissionDescriptions: Record<string, string> = {
-  // OpenAPPA
-  "openappaPolicy:read": "View OpenAPPA policy, batteries, and coverage",
-  "openappaPolicy:update":
-    "Validate and edit OpenAPPA policy and manage batteries",
-  "openappaDiagnostics:read":
-    "Read all organization yells and your own consult logs",
-  "openappaDiagnostics:update": "Resolve and reopen organization yells",
-  "openappaDiagnostics:admin": "Read consult logs across the organization",
   // Agents
   "agent:read":
     "Open Agents, and use the code sandboxes and files of agents you can use",
@@ -361,6 +344,9 @@ export const permissionDescriptions: Record<string, string> = {
   "plugin:delete": "Delete plugins",
   "app:read": "Open Apps",
   "app:create": "Create new MCP Apps",
+  "guardrailsPolicy:read": "View Guardrails policy, batteries, and coverage",
+  "guardrailsPolicy:update":
+    "Validate and edit Guardrails policy and manage batteries",
 
   // MCP
   "oauthClient:read": "Open OAuth client registrations",
@@ -414,7 +400,7 @@ export const permissionDescriptions: Record<string, string> = {
     "Edit project descriptions, instructions, sharing, and schedules",
   "project:delete": "Delete projects and schedules",
   "log:read":
-    "View your own LLM proxy and MCP tool call logs in the active organization",
+    "View your own LLM proxy, MCP tool call, and Guardrails consult logs in the active organization, and view and resolve Guardrails yells",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -444,7 +430,7 @@ export const permissionDescriptions: Record<string, string> = {
   "auditLog:admin":
     "View every audit event in your organization (also requires Read)",
   "log:admin":
-    "View every LLM and MCP log in your organization (also requires Read)",
+    "View every LLM, MCP, and Guardrails consult log in your organization (also requires Read)",
   "accessPolicies:read": "View access policies for all resource types",
   "accessPolicies:update":
     "Edit access policies and grant access across all resource types",
@@ -476,15 +462,15 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
-  [RouteId.GetOpenAppaPolicyTests]: { openappaPolicy: ["read"] },
-  [RouteId.InspectOpenAppaPolicyTests]: { openappaPolicy: ["read"] },
-  [RouteId.UpdateOpenAppaPolicyTests]: { openappaPolicy: ["update"] },
-  [RouteId.RunOpenAppaPolicyTests]: { openappaPolicy: ["update"] },
-  [RouteId.PreviewOpenAppaPolicyTest]: { openappaPolicy: ["update"] },
-  [RouteId.GetOpenAppaPolicyTestRuns]: { openappaPolicy: ["read"] },
-  [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
-  [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["read"] },
-  [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },
+  [RouteId.GetOpenAppaPolicyTests]: { guardrailsPolicy: ["read"] },
+  [RouteId.InspectOpenAppaPolicyTests]: { guardrailsPolicy: ["read"] },
+  [RouteId.UpdateOpenAppaPolicyTests]: { guardrailsPolicy: ["update"] },
+  [RouteId.RunOpenAppaPolicyTests]: { guardrailsPolicy: ["update"] },
+  [RouteId.PreviewOpenAppaPolicyTest]: { guardrailsPolicy: ["update"] },
+  [RouteId.GetOpenAppaPolicyTestRuns]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetGuardrailsPolicy]: { guardrailsPolicy: ["read"] },
+  [RouteId.ValidateGuardrailsPolicy]: { guardrailsPolicy: ["read"] },
+  [RouteId.UpdateGuardrailsPolicy]: { guardrailsPolicy: ["update"] },
   // Connecting an external agent, and inspecting a URL before connecting it,
   // needs Agent create, like building any other agent. The list and detail
   // reads need Agent read and return only the external agents the caller can
@@ -719,6 +705,11 @@ export const requiredEndpointPermissionsMap: Partial<
     log: ["read"],
   },
   [RouteId.GetInternalMcpCatalog]: {},
+  // Like the full list: the handlers read only what the caller may list.
+  [RouteId.SearchMcpRegistry]: {},
+  [RouteId.SearchMcpRegistryIds]: {},
+  [RouteId.GetMcpRegistryIssueIndex]: {},
+  [RouteId.GetInternalMcpCatalogIcon]: {},
   [RouteId.CreateInternalMcpCatalogItem]: {
     mcpRegistry: ["create"],
   },
@@ -1148,6 +1139,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RotateMcpOauthClientSecret]: {},
   [RouteId.DeleteMcpOauthClient]: {},
   [RouteId.GetModelsWithApiKeys]: {},
+  [RouteId.GetLlmModelIdsByKey]: {},
+  [RouteId.GetLlmModelOptions]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},
   // Delegation routes: agent-type permission checked dynamically in handler
@@ -1708,22 +1701,22 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppaGithubAppRepositories]: { organizationSettings: ["update"] },
   [RouteId.GetAppaGithubRepositoryStatus]: { organizationSettings: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },
-  [RouteId.GetOpenappaBatteries]: { openappaPolicy: ["read"] },
-  [RouteId.GetOpenappaBatteryPolicySource]: { openappaPolicy: ["read"] },
-  [RouteId.GetOpenappaEffectivePolicy]: { openappaPolicy: ["read"] },
-  [RouteId.GetOpenappaBatteryMatches]: { openappaPolicy: ["read"] },
-  [RouteId.CreateOpenappaBatteryInstall]: { openappaPolicy: ["update"] },
-  [RouteId.UpdateOpenappaBatteryInstall]: { openappaPolicy: ["update"] },
-  [RouteId.DeleteOpenappaBatteryInstall]: { openappaPolicy: ["update"] },
-  [RouteId.DeleteOpenappaBatteryInclude]: { openappaPolicy: ["update"] },
-  [RouteId.UploadOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
-  [RouteId.DeleteOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
+  [RouteId.GetOpenappaBatteries]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryPolicySource]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaEffectivePolicy]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaBatteryMatches]: { guardrailsPolicy: ["read"] },
+  [RouteId.CreateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
+  [RouteId.UpdateOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryInstall]: { guardrailsPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryInclude]: { guardrailsPolicy: ["update"] },
+  [RouteId.UploadOpenappaBatteryPackage]: { guardrailsPolicy: ["update"] },
+  [RouteId.DeleteOpenappaBatteryPackage]: { guardrailsPolicy: ["update"] },
   // Binding hands an organization credential's value to helper code, so the
   // route also requires `use` on that credential.
   [RouteId.SetOpenappaCredentialBinding]: {
-    openappaPolicy: ["update"],
+    guardrailsPolicy: ["update"],
   },
-  [RouteId.GetOpenappaPolicyDeclarations]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaPolicyDeclarations]: { guardrailsPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
@@ -1732,20 +1725,23 @@ export const requiredEndpointPermissionsMap: Partial<
   // Loopback-only `builtin = "archestra"` annotator; authenticated by the same
   // per-process bridge bearer inside the route.
   [RouteId.AnnotateOpenappaToolWithArchestra]: {},
-  // Diagnostics readers see all yells and their own consults; admin widens consult visibility.
-  [RouteId.GetOpenAppaYells]: { openappaDiagnostics: ["read"] },
-  [RouteId.GetOpenAppaYellsSummary]: { openappaDiagnostics: ["read"] },
-  [RouteId.DownloadOpenAppaYell]: { openappaDiagnostics: ["read"] },
-  [RouteId.GetOpenAppaYell]: { openappaDiagnostics: ["read"] },
-  [RouteId.UpdateOpenAppaYell]: { openappaDiagnostics: ["read", "update"] },
-  [RouteId.GetOpenappaExternalConsults]: { openappaDiagnostics: ["read"] },
+  // Log readers see and resolve all yells and read their own consults;
+  // log:admin widens consult visibility to the whole organization.
+  [RouteId.GetOpenAppaYells]: { log: ["read"] },
+  [RouteId.GetOpenAppaYellsSummary]: { log: ["read"] },
+  [RouteId.DownloadOpenAppaYell]: { log: ["read"] },
+  [RouteId.GetOpenAppaYell]: { log: ["read"] },
+  [RouteId.UpdateOpenAppaYell]: { log: ["read"] },
+  [RouteId.GetOpenappaExternalConsults]: { log: ["read"] },
+  [RouteId.GetOpenappaExternalConsult]: { log: ["read"] },
+  [RouteId.GetOpenappaLabelChanges]: { log: ["read"] },
   // Read-only views of what the policy covers; nothing here changes state.
-  [RouteId.GetOpenappaCoverageEntities]: { openappaPolicy: ["read"] },
-  [RouteId.GetOpenappaCoverageTools]: { openappaPolicy: ["read"] },
-  [RouteId.GetOpenappaCoverageSummary]: { openappaPolicy: ["read"] },
-  [RouteId.GetOpenappaTrustAudience]: { openappaPolicy: ["read"] },
-  [RouteId.GetOpenappaRemedies]: { openappaPolicy: ["read"] },
-  [RouteId.GetOpenappaRemediesActivity]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageEntities]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageTools]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaCoverageSummary]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaTrustAudience]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaRemedies]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaRemediesActivity]: { guardrailsPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
@@ -1844,6 +1840,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAuditLog]: {
     auditLog: ["read"],
   },
+  [RouteId.GetAuditLogResources]: {
+    auditLog: ["read"],
+  },
 
   // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
   // The public marketplace git endpoint stays outside this map; it is allowlisted in
@@ -1860,6 +1859,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: {},
   [RouteId.GetExternalApp]: { app: ["read"] },
+  [RouteId.GetExternalAppIcon]: { app: ["read"] },
+  // Like GetApp: the handler serves only an app the caller may view.
+  [RouteId.GetAppIcon]: {},
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: {},
   [RouteId.UpdateApp]: {},
@@ -1901,6 +1903,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConfig]: {},
   // Bundles the signed-in user's own startup reads; each part is self-scoped.
   [RouteId.GetBootstrap]: {},
+  // Bundles the new-chat composer's reads; each part keeps its own
+  // endpoint's checks.
+  [RouteId.GetNewChatBootstrap]: {},
+  // The conversation part is the conversation read with its own checks.
+  [RouteId.GetConversationBootstrap]: {},
 
   // Site Notification Routes
   // Every signed-in user sees the active banner.
@@ -1994,7 +2001,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  // Every choice on the chooser, connecting an external agent included, creates
+  // an agent.
+  "/agents/new": { agent: ["create"] },
   "/agents/a2a": { agent: ["read"] },
+  "/agents/a2a/new": { agent: ["read"] },
+  "/agents/a2a/[id]": { agent: ["read"] },
   "/messaging-channels": { organizationSettings: ["read"] },
   "/messaging-channels/slack": { organizationSettings: ["read"] },
   "/messaging-channels/ms-teams": { organizationSettings: ["read"] },
@@ -2029,16 +2041,17 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/gateways": { mcpGateway: ["read"] },
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 
-  "/openappa": { openappaPolicy: ["read"] },
-  "/openappa/policy": { openappaPolicy: ["read"] },
-  "/openappa/batteries": { openappaPolicy: ["read"] },
-  "/openappa/yells": { openappaDiagnostics: ["read"] },
+  "/openappa": { guardrailsPolicy: ["read"] },
+  "/openappa/policy": { guardrailsPolicy: ["read"] },
+  "/openappa/batteries": { guardrailsPolicy: ["read"] },
+  "/openappa/yells": { log: ["read"] },
 
   // Logs
   "/llm/logs": { log: ["read"] },
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
-  "/consults/logs": { openappaDiagnostics: ["read"] },
+  "/consults/logs": { log: ["read"] },
+  "/consults/logs/[id]": { log: ["read"] },
   "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge

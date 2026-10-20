@@ -2,7 +2,7 @@
 title: LLM Proxy
 description: See and control every model call your company makes, from coding agents to your own apps
 order: 4
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -55,6 +55,8 @@ Add headers to group requests by app, run, or session in logs and costs. Headers
 | `X-Archestra-Meta` | All three, as `<agent-id>/<run-id>/<session-id>` | `workflow-service/run-456/research-123` |
 
 In `X-Archestra-Meta`, a segment can be empty, but no value can contain `/`. A single header wins over the same value in `X-Archestra-Meta`.
+
+Send the same session header to the [MCP Gateway](/docs/mcp/gateway), and the agent's tool calls are filed under that session too.
 
 To tie a request to a person for certain, use a credential that names them. See [Attribution in Logs](/docs/llm-proxy/authentication#attribution-in-logs).
 

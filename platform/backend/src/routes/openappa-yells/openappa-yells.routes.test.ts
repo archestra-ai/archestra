@@ -7,6 +7,8 @@ import { vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import { hasPermission } from "@/auth";
 import config from "@/config";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; turns at-rest content encryption on
+import { _resetContentKeys } from "@/content-encryption/index.ee";
 import db, { schema } from "@/database";
 import {
   createFastifyInstance,
@@ -14,7 +16,9 @@ import {
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ConversationModel from "@/models/conversation";
+import McpToolCallModel from "@/models/mcp-tool-call";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { stampToolCallId } from "@/openappa/trajectory-stamp";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import routes from "./openappa-yells.routes";
@@ -124,6 +128,113 @@ describe("OpenAPPA yells", () => {
     ).toEqual({ unresolved: 2, superyells: 1 });
   });
 
+  test("lists a session's yells with their place in its trace", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    await makeInteraction(agent.id, { sessionId: "chat-1" });
+    const yellCall = (llmToolCallId: string) =>
+      McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "archestra",
+        method: "tools/call",
+        toolCall: { id: llmToolCallId, name: "archestra__yell", arguments: {} },
+        toolResult: null,
+        sessionId: "chat-1",
+        llmToolCallId,
+      });
+    const first = await yellCall("toolu_1");
+    const second = await yellCall("toolu_2");
+    const inSession = (toolCallId: string, superyell = false) =>
+      OpenAppaYellModel.record({
+        organizationId,
+        callerId: `user:${user.id}`,
+        sessionId: `user:${user.id}|chat-1`,
+        toolCallId,
+        message: toolCallId,
+        withTrajectory: false,
+        superyell,
+      });
+    const yell = await inSession("toolu_1");
+    const superyell = await inSession("toolu_2", true);
+    const unlogged = await record("From a session with no logged requests");
+
+    const list = (
+      await app.inject({
+        url: "/api/openappa/yells?status=all&llmSessionId=chat-1",
+      })
+    ).json();
+
+    expect(
+      Object.fromEntries(
+        list.data.map((row: { id: string; trace: unknown }) => [
+          row.id,
+          row.trace,
+        ]),
+      ),
+    ).toEqual({
+      [yell.id]: { llmSessionId: "chat-1", mcpToolCallId: first.id },
+      [superyell.id]: { llmSessionId: "chat-1", mcpToolCallId: second.id },
+    });
+    const all = (
+      await app.inject({ url: "/api/openappa/yells?status=all" })
+    ).json();
+    expect(
+      all.data.find((row: { id: string }) => row.id === unlogged.id),
+    ).toMatchObject({ trace: null });
+  });
+
+  test("links a yell to its call when logged content is encrypted at rest", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    config.contentEncryption.secret = "yell-trace-link-secret-0123456789";
+    _resetContentKeys();
+    try {
+      const agent = await makeAgent({ organizationId });
+      await makeInteraction(agent.id, { sessionId: "run-1" });
+      // Gateway clients send the model's id back with its trajectory stamp.
+      const stamped = stampToolCallId({
+        callId: "toolu_1",
+        sessionId: "run-1",
+        organizationId,
+        callerId: `user:${user.id}`,
+        secret: "stamp-secret",
+      });
+      const call = await McpToolCallModel.create({
+        agentId: agent.id,
+        mcpServerName: "archestra",
+        method: "tools/call",
+        toolCall: { id: "archestra-1", name: "archestra__yell", arguments: {} },
+        toolResult: null,
+        sessionId: "run-1",
+        llmToolCallId: stamped,
+      });
+      const yell = await OpenAppaYellModel.record({
+        organizationId,
+        callerId: `user:${user.id}`,
+        sessionId: `user:${user.id}|run-1`,
+        toolCallId: "toolu_1",
+        message: "Blocked",
+        withTrajectory: false,
+        superyell: false,
+      });
+
+      const body = (
+        await app.inject({ url: `/api/openappa/yells/${yell.id}` })
+      ).json();
+
+      expect(body.trace).toEqual({
+        llmSessionId: "run-1",
+        mcpToolCallId: call.id,
+      });
+    } finally {
+      config.contentEncryption.secret = undefined;
+      _resetContentKeys();
+    }
+  });
+
   test("lists and counts only the active organization's reports and paginates search", async ({
     makeOrganization,
   }) => {
@@ -200,14 +311,14 @@ describe("OpenAPPA yells", () => {
     ).toEqual({ unresolved: 1, superyells: 0 });
   });
 
-  test("a diagnostics reader can read all organization reports but cannot resolve them", async ({
+  test("a log reader can read and resolve all organization reports", async ({
     makeUser,
     makeMember,
     makeCustomRole,
     makeAgent,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { openappaDiagnostics: ["read"] },
+      permission: { log: ["read"] },
     });
     const reporter = user;
     const other = await record("Shared report");
@@ -268,15 +379,13 @@ describe("OpenAPPA yells", () => {
     expect(
       (await app.inject({ url: `/api/openappa/yells/${other.id}` })).statusCode,
     ).toBe(200);
-    expect(
-      (
-        await app.inject({
-          method: "PATCH",
-          url: `/api/openappa/yells/${other.id}`,
-          payload: { resolved: true },
-        })
-      ).statusCode,
-    ).toBe(403);
+    const resolved = await app.inject({
+      method: "PATCH",
+      url: `/api/openappa/yells/${other.id}`,
+      payload: { resolved: true },
+    });
+    expect(resolved.statusCode, resolved.body).toBe(200);
+    expect(resolved.json().resolvedBy).toBe(user.id);
   });
 
   test("links a yell to the first chat that reads it and shows it only to that chat's owner", async ({
@@ -419,20 +528,14 @@ describe("OpenAPPA yells", () => {
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
     ).toEqual({ unresolved: 1, superyells: 0 });
 
-    const memberWith = async (permission: "read" | "update") => {
-      const role = await makeCustomRole(organizationId, {
-        permission: { openappaDiagnostics: [permission] },
-      });
-      const member = await makeUser();
-      await makeMember(member.id, organizationId, { role: role.role });
-      return member.id;
-    };
-    expect(
-      (await resolve({ id: yell.id }, await memberWith("read"))).isError,
-    ).toBe(true);
-    await expect(
-      resolve({ id: yell.id }, await memberWith("update")),
-    ).rejects.toThrow("permission to read yells");
+    const role = await makeCustomRole(organizationId, {
+      permission: { guardrailsPolicy: ["read", "update"] },
+    });
+    const policyEditor = await makeUser();
+    await makeMember(policyEditor.id, organizationId, { role: role.role });
+    expect((await resolve({ id: yell.id }, policyEditor.id)).isError).toBe(
+      true,
+    );
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
     ).toEqual({ unresolved: 1, superyells: 0 });
@@ -450,6 +553,32 @@ describe("OpenAPPA yells", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: missing.id, caller: null }),
         expect.objectContaining({ id: system.id, caller: null }),
+      ]),
+    );
+  });
+
+  test("names the app that sent a yell, within the report organization", async ({
+    makeApp,
+    makeOrganization,
+  }) => {
+    const reporter = await makeApp({ organizationId, name: "Release notes" });
+    const foreignApp = await makeApp({
+      organizationId: (await makeOrganization()).id,
+      name: "Other release notes",
+    });
+    const yell = await record("App report", { callerId: `app:${reporter.id}` });
+    const foreign = await record("Unmatched app", {
+      callerId: `app:${foreignApp.id}`,
+    });
+    const list = (await app.inject({ url: "/api/openappa/yells" })).json();
+    expect(list.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: yell.id,
+          caller: null,
+          callerApp: { id: reporter.id, name: "Release notes" },
+        }),
+        expect.objectContaining({ id: foreign.id, callerApp: null }),
       ]),
     );
   });
@@ -497,14 +626,14 @@ describe("OpenAPPA yells", () => {
     });
   });
 
-  test("denies readers without diagnostics permission", async ({
+  test("denies callers without log:read", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const yell = await record("Shared report");
     const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read"], openappaPolicy: ["read", "update"] },
+      permission: { guardrailsPolicy: ["read", "update"] },
     });
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });
@@ -516,31 +645,6 @@ describe("OpenAPPA yells", () => {
     ]) {
       expect((await app.inject({ url })).statusCode).toBe(403);
     }
-  });
-
-  test("composed diagnostics roles can resolve a yell without policy or log permissions", async ({
-    makeUser,
-    makeMember,
-    makeCustomRole,
-  }) => {
-    const yell = await record("Shared report");
-    const read = await makeCustomRole(organizationId, {
-      permission: { openappaDiagnostics: ["read"] },
-    });
-    const update = await makeCustomRole(organizationId, {
-      permission: { openappaDiagnostics: ["update"] },
-    });
-    user = await makeUser();
-    await makeMember(user.id, organizationId, {
-      role: `${read.role},${update.role}`,
-    });
-    const response = await app.inject({
-      method: "PATCH",
-      url: `/api/openappa/yells/${yell.id}`,
-      payload: { resolved: true },
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().resolvedBy).toBe(user.id);
   });
 
   test("does not disclose or mutate another organization's report", async ({

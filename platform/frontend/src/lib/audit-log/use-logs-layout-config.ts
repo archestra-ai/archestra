@@ -12,14 +12,14 @@ export function useLogsLayoutConfig() {
     tabs: [
       { label: "LLM Proxy", href: "/llm/logs" },
       { label: "MCP Gateway", href: "/mcp/logs" },
-      ...(permissionMap?.["/audit/logs"]
-        ? [{ label: "Audit", href: "/audit/logs" }]
+      ...(openappaEnabled && permissionMap?.["/consults/logs"]
+        ? [{ label: "Guardrail consults", href: "/consults/logs" }]
         : []),
       ...(permissionMap?.["/connections/logs"]
         ? [{ label: "Agent connections", href: "/connections/logs" }]
         : []),
-      ...(openappaEnabled && permissionMap?.["/consults/logs"]
-        ? [{ label: "Guardrails consult", href: "/consults/logs" }]
+      ...(permissionMap?.["/audit/logs"]
+        ? [{ label: "Audit", href: "/audit/logs" }]
         : []),
     ],
   };

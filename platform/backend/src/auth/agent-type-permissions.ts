@@ -198,6 +198,68 @@ export async function getAgentTypePermissionChecker(params: {
 }
 
 /**
+ * {@link getAgentTypePermissionChecker} for agent lists, which ask only
+ * whether the caller holds an action on a whole agent type: through a role, a
+ * `*` grant, or a grant on at least one agent. It reads the `*` grants and
+ * whether each of `actions` is held, not every agent the organization shares
+ * with the caller, which the full checker loads to answer per-agent
+ * questions. The checker answers about `actions` and `update` at `*` only.
+ */
+export async function getAgentTypeListPermissionChecker(params: {
+  userId: string;
+  organizationId: string;
+  /** The actions the list asks about by type, e.g. `read`. */
+  actions: Array<"read" | "delete">;
+}): Promise<AgentTypeListPermissionChecker> {
+  const { actions, ...context } = params;
+  const [permissions, { wildcards, heldActions }] = await Promise.all([
+    getPermissionsForUserContext(context),
+    ResourcePermissions.resolveWildcardsAndHeldActions({
+      ...context,
+      resources: ["agent", "mcpGateway"],
+      actions,
+    }),
+  ]);
+  const hasRoleAction = (agentType: AgentType, action: Action) =>
+    permissions[getResourceForAgentType(agentType)]?.includes(action) ?? false;
+  const hasGrant = (agentType: AgentType, action: Action) => {
+    const resource = getResourceForAgentType(agentType);
+    return heldActions.has(`${resource}:${action}`);
+  };
+  const hasWildcard = (resource: Resource, action: Action) =>
+    wildcards.some(
+      (grant) =>
+        grant.organizationId === params.organizationId &&
+        grant.resource === resource &&
+        grant.action === action &&
+        grant.scope === "*",
+    );
+  return {
+    require(agentType, action) {
+      if (hasRoleAction(agentType, action)) return;
+      const resource = getResourceForAgentType(agentType);
+      throw new ApiError(
+        403,
+        buildForbiddenErrorMessage({
+          missingPermissions: { [resource]: [action] },
+        }),
+      );
+    },
+    isAdmin: (agentType) =>
+      hasWildcard(getResourceForAgentType(agentType), "update"),
+    hasAnyAdminPermission: () =>
+      AGENT_TYPE_RESOURCES.some((resource) => hasWildcard(resource, "update")),
+    getAgentTypesWithPermission: (action) =>
+      GENERIC_AGENT_TYPES.filter(
+        (agentType) =>
+          hasRoleAction(agentType, action) || hasGrant(agentType, action),
+      ),
+    getAgentTypesWithScopedPermission: (action) =>
+      GENERIC_AGENT_TYPES.filter((agentType) => hasGrant(agentType, action)),
+  };
+}
+
+/**
  * Authorizes a modification of one existing agent. The caller must hold the
  * action on that agent through a grant — on the agent itself, or at `*` scope.
  * Role actions (`admin`, `team-admin`) and the agent's legacy scope, teams and
@@ -253,6 +315,19 @@ export interface AgentTypePermissionChecker {
   /** Returns true if the user holds `update` at `*` scope on any agent-type resource. */
   hasAnyAdminPermission(): boolean;
 }
+
+/**
+ * The questions an agent list asks: see
+ * {@link getAgentTypeListPermissionChecker}. `require` checks role actions
+ * only, as the full checker does for a plain action.
+ */
+export type AgentTypeListPermissionChecker = Pick<
+  AgentTypePermissionChecker,
+  "isAdmin" | "hasAnyAdminPermission" | "getAgentTypesWithPermission"
+> & {
+  require(agentType: AgentType, action: Action): void;
+  getAgentTypesWithScopedPermission(action: Action): AgentType[];
+};
 
 // ===== Internal helpers =====
 

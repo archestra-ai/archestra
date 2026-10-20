@@ -161,6 +161,11 @@ export default class OpenAppaYellModel {
               ? isNotNull(table.resolvedAt)
               : undefined,
           params.sessionId ? eq(table.sessionId, params.sessionId) : undefined,
+          // OpenAPPA's session id is the caller scope, `|`, then the client's
+          // own session id, which is the LLM session id.
+          params.llmSessionId
+            ? sql`substr(${table.sessionId}, strpos(${table.sessionId}, '|') + 1) = ${params.llmSessionId}`
+            : undefined,
           params.search
             ? ilike(
                 table.message,

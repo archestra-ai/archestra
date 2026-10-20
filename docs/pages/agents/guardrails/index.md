@@ -3,7 +3,7 @@ title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,7 +35,7 @@ Restrictions only add up. A trusted read never restores lost trust, and an appro
 
 ## Turn On Guardrails
 
-You need [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar for anyone with [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) or [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read).
+You need [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar for anyone with [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) or [`log:read`](/docs/reference/permissions#log:read).
 
 1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.
@@ -46,9 +46,9 @@ The **Enforcement** card on **Overview** now shows **On**.
 
 What to know:
 
-- The starting policy covers only Archestra's own tools. Every other tool runs without restrictions. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled by your organization's default model before each command, so reading a credentials file narrows who can see the result. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
+- The starting policy has rules for Archestra's own tools and for Claude Code's built-in tools. Every other tool call is judged by the **annotator model**, the one set in **Settings → Guardrails** (your organization's default model unless you pick another). It can mark a result as untrusted or limit who may see it, and the person running the session can approve a call this would block. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled the same way, so reading a credentials file narrows who can see the result. Without a model, these calls are refused. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
 - Enforcement applies to sessions that start while it is on. Start a new session after you turn it on. The same holds for an [Agent Runtime](/docs/agents/runtime/handoff#hand-off-with-guardrails-on) run: one started while enforcement was off stays unchecked, so a checked session cannot read its results.
-- **Settings → Guardrails** holds four settings: **Enforce the policy**, which you can switch once a policy exists; **Break the glass**, which makes a [`yell`](/docs/reference/archestra-mcp-server#yell) also turn Guardrails off for the session that sends it (on by default); **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and Git sync.
+- **Settings → Guardrails** holds six settings: **Enforce the policy**, which you can switch once a policy exists; **Policy for new sessions**, which can make [new sessions keep a policy snapshot](/docs/agents/guardrails/policies#keep-a-policy-snapshot-for-new-sessions); **Break the glass**, which makes a [`yell`](/docs/reference/archestra-mcp-server#yell) also turn Guardrails off for the session that sends it (on by default); **Annotator model**, the model that sets trust and audience for tool calls no rule covers (we recommend the Sonnet or Luna family); **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and Git sync.
 
 ## Validations
 

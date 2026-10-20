@@ -1468,6 +1468,15 @@ describe("buildChatStopConditions", () => {
 
     expect(stopConditions).toHaveLength(2);
   });
+
+  it("stops at a requested step ceiling below MAX_AGENT_STEPS", async () => {
+    const [stepStop] = buildChatStopConditions(new ToolCallRepeatTracker(), 3);
+    const stepsOf = (n: number) =>
+      ({ steps: Array.from({ length: n }) }) as Parameters<typeof stepStop>[0];
+
+    expect(await stepStop(stepsOf(2))).toBe(false);
+    expect(await stepStop(stepsOf(3))).toBe(true);
+  });
 });
 
 describe("generateConversationTitle", () => {

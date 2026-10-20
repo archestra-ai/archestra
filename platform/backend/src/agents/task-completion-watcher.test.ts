@@ -24,6 +24,59 @@ import type { AgentRunCompletionTarget } from "@/types";
 import { watchTaskCompletion } from "./task-completion-watcher";
 
 describe("watchTaskCompletion", () => {
+  test("a UI continuation preserves Teams routing without reusing the prior turn's placeholder or mute marker", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const original = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const continuation = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const target = {
+      type: "chatops" as const,
+      bindingId: crypto.randomUUID(),
+      threadId: "teams-thread",
+      conversationReference: { conversation: { id: "teams-thread" } },
+      originatingTaskId: original.id,
+      placeholderActivityId: "thinking-message",
+      muteMarkerAtStart: null,
+    };
+    await watchTaskCompletion({
+      taskId: original.id,
+      target,
+      agentName: agent.name,
+    });
+    await watchTaskCompletion({
+      taskId: continuation.id,
+      target,
+      agentName: agent.name,
+    });
+    expect(notifyBindingThread.mock.calls[0][0]).toMatchObject({
+      placeholderActivityId: "thinking-message",
+      muteMarkerAtStart: null,
+    });
+    expect(notifyBindingThread.mock.calls[1][0]).toEqual({
+      taskId: continuation.id,
+      bindingId: target.bindingId,
+      threadId: target.threadId,
+      conversationReference: target.conversationReference,
+      agentName: agent.name,
+      text: "Task finished.",
+    });
+  });
+
   test("delivers an image failure verbatim to its originating thread once", async ({
     makeAgent,
     makeUser,
@@ -85,6 +138,7 @@ describe("watchTaskCompletion", () => {
     await watchTaskCompletion(notification);
 
     expect(notifyBindingThread).toHaveBeenCalledExactlyOnceWith({
+      taskId: task.id,
       bindingId: target.bindingId,
       threadId: target.threadId,
       agentName: agent.name,
@@ -96,7 +150,7 @@ describe("watchTaskCompletion", () => {
     ).toEqual(expect.any(Date));
   });
 
-  test("posts nothing to the thread when the agent chose to stay silent", async ({
+  test("delivers silent completion to the provider so it can clear its status", async ({
     makeAgent,
     makeUser,
   }) => {
@@ -155,7 +209,13 @@ describe("watchTaskCompletion", () => {
       agentName: agent.name,
     });
 
-    expect(notifyBindingThread).not.toHaveBeenCalled();
+    expect(notifyBindingThread).toHaveBeenCalledExactlyOnceWith({
+      taskId: task.id,
+      bindingId: target.bindingId,
+      threadId: target.threadId,
+      agentName: agent.name,
+      text: silence,
+    });
     expect(
       (await AgentRunModel.findByTaskId(task.id))?.completionNotifiedAt,
     ).toEqual(expect.any(Date));
@@ -243,6 +303,7 @@ describe("watchTaskCompletion", () => {
       if (target.type === "chatops") {
         expect(notifyBindingThread).toHaveBeenCalledTimes(1);
         expect(notifyBindingThread).toHaveBeenCalledWith({
+          taskId: task.id,
           bindingId: target.bindingId,
           threadId: target.threadId,
           agentName: agent.name,

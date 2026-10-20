@@ -112,7 +112,7 @@ The agent keeps using its host's tool names. A plugin implements the host lifecy
 | kagent | The entrypoint gates | `host/kagent-gate/code_execution`, `host/kagent-gate/memory_persist` |
 | kagent | The remedy tool | `appa/execute_remedy_plan` |
 
-Claude Code names such as `Bash` and `mcp__github__create_issue` identify precise tools. An unqualified kagent rule such as `read_secret` applies to that native name across MCP servers and kagent's own tools. It does not cover remote-agent delegation. A newly discovered tool can use an existing rule without restarting the trajectory or changing its opening policy.
+Claude Code names such as `Bash` and `mcp__github__create_issue` identify precise tools. An unqualified kagent rule such as `read_secret` applies to that native name across MCP servers and kagent's own tools. It does not cover remote-agent delegation. A newly discovered tool can use an existing rule without restarting the trajectory.
 
 A host that embeds the runtime brings its own tool identification. The adapter identifies every call's canonical id. The runtime spells a tool back through the same adapter. See [Add to your agent](/add-to-agent#how-the-hooks-reach-appa).
 
@@ -127,7 +127,39 @@ delta = { trust = "suspicious" }
 
 This rule identifies `mcp/demo-tools/read_secret`. Deployment-level `[aliases]` maps a policy's namespace to a list of identities the deployment reports. `aliases.mcp` maps a server name to configured connection identities, such as `databricks = ["genie", "sql"]`; every rule under that name then covers each listed connection. `aliases.host` maps a battery's host namespace to the host that serves the same tools, such as `claude-code = ["archestra"]`; every `host/claude-code/...` rule then names `host/archestra/...`. Aliases resolve after composition, so a root rule still matches before a battery rule for the same tool. APPA does not infer a provider from a hostname or server metadata. A server qualifier cannot repair duplicate host dispatch names; the host must distinguish those tools.
 
-kagent derives a default source ID from the exact configured endpoint URL. Native rules do not require that ID. Discovery supplies evidence, not permission: known tools need policy coverage, unavailable sources remain unknown, and later calls still pass runtime enforcement. A trajectory retains its opening policy and accepted identities.
+#### Canonical tools
+
+Different harnesses spell one capability differently. Claude Code runs a shell command as `Bash` with a `command` argument. Codex runs it as `exec_command` with a `cmd` argument. A rule can name the canonical tool `tool/<namespace>/<tool>` once, and `aliases.tool` binds that canonical tool to each client tool:
+
+```toml
+[aliases.tool.coding]
+shell = [
+  { name = "host/claude-code/Bash", args = { command = "command" }, confined = true },
+  { name = "host/codex/exec_command", args = { command = "cmd" } },
+]
+
+[[policy.tool]]
+name = "tool/coding/shell(command:*.env*)"
+delta = { audience = ["self"] }
+```
+
+Composition replaces each `tool/...` rule with one copy per client tool, at the position of the original rule. Each copy names the client tool, so the example gives `host/claude-code/Bash(command:*.env*)` and `host/codex/exec_command(cmd:*.env*)`. `args` maps each canonical argument to the client's name for it. The copy renames every argument that the rule reads: in its selector, in a `$argument` recipient, in an `@provider:.../$argument` placeholder, and in `parameters`. The runtime never rewrites a call. It evaluates the tool and the arguments as the client sent them, so call digests and annotation evidence bind the exact call.
+
+`aliases.mcp` and `aliases.host` then resolve the copies like any other rule. Under `aliases.host = { claude-code = ["archestra"] }`, the first copy names `host/archestra/Bash(command:*.env*)`.
+
+A battery MAY declare `aliases.tool`, and a target MUST be in a namespace that the battery covers. Only the root declares `aliases.mcp` and `aliases.host`. The loader refuses the configuration when:
+
+- a rule reads an argument that one of its targets does not map;
+- one target maps two canonical arguments to one argument;
+- two maps bind the same client tool, after `aliases.mcp` and `aliases.host` resolve it;
+- a map binds a canonical tool to no client tool;
+- a map names a canonical namespace that no rule names, for example a battery whose map names a battery that is not included.
+
+A `tool/...` rule that no map binds is inactive. `confined_results` does not take canonical names. A target that sets `confined = true` adds its client tool to `confined_results`.
+
+An annotator, or a context provider, receives the native call. The `audiences` placeholders and `inputs` of an `[[policy.annotator]]` name native arguments, and a map does not rename them. A code annotator that reads an argument by its canonical name does not find it in a call from a client that uses another name. Its result for that call is what its own code does with a missing argument. A model-backed annotator reads the whole call, so the argument name does not change its input.
+
+kagent derives a default source ID from the exact configured endpoint URL. Native rules do not require that ID. Discovery supplies evidence, not permission: known tools need policy coverage, unavailable sources remain unknown, and later calls still pass runtime enforcement. A trajectory keeps the tool identities it accepted, and decides under its `deployment`'s current policy.
 
 Native names also work in `confined_results`, `assumed_tools`, and `provider_run_tools`. Coverage reports distinguish a rule spanning servers from an observed concrete tool. Overlapping declarations with incompatible provider-run execution settings are rejected.
 
@@ -182,6 +214,8 @@ Use `*` to match any sequence of characters, including an empty sequence:
 | `report.txt` | `report.txt` | `old-report.txt` |
 | `/docs/*` | `/docs/guide.md`, `/docs/setup/install.md` | `/private/guide.md` |
 | `*.md` | `guide.md`, `/docs/guide.md` | `guide.txt` |
+
+`*` also matches `/`, `?` and `#`. Do not put it inside a URL host: `https://*.example.com/*` also matches `https://attacker.test/?x=.example.com/`. End each host with `/` and list each subdomain, as in `https://docs.example.com/*`. OpenAPPA logs a warning at load for a pattern with `*` inside a URL host.
 
 #### Match special characters literally
 
@@ -1037,7 +1071,7 @@ A withhold plan runs the tool and delivers no result Value to the agent. This in
 
 ### Subagent Returns
 
-This section governs a `subagent fork`: a child started by an approved spawn in the parent's `trajectory family`. It does not govern a `root fork`, which opens an independent family from copied context without a spawn dispatch or child-return contract. A root fork retains the source family's opening policy and frozen policy state; it does not select a return-remedy plan. See [Subagent forks and root forks](/how-it-works#subagent-forks-and-root-forks).
+This section governs a `subagent fork`: a child started by an approved spawn in the parent's `trajectory family`. It does not govern a `root fork`, which opens an independent family from copied context without a spawn dispatch or child-return contract. A root fork belongs to the source family's deployment and keeps its frozen policy state; it does not select a return-remedy plan. See [Subagent forks and root forks](/how-it-works#subagent-forks-and-root-forks).
 
 A child agent can read data without exposing it to the parent agent. `context_control = true` declares that the integration keeps the child's data separate and can withhold its answer until OpenAPPA allows it. The parent chooses how the answer will be checked or cleaned before the child starts.
 
@@ -1285,7 +1319,7 @@ The available settings depend on the component's role:
 | `sanitizers` | Exactly one of `url`, `command`, or `builtin`. | Required, except for `attest-schema`. |
 | `annotators` | Exactly one of `url` or `command`. | Required unless the declaration specifies a builtin. |
 | `context` | Exactly one of `url` or `command`. | Optional. Each configured provider is asked about every call that needs a new annotation. |
-| `audience` | Exactly one of `url`, `command`, or `readers`; `selectors` on a `url` or `command` entry; optional `lookup`. | Required for each referenced provider and each `lookup` target. `readers` is allowed only on a `lookup` target. |
+| `audience` | Exactly one of `url`, `command`, or `readers`; `selectors` on a `url` or `command` entry; optional `lookup`. | Required for each referenced provider and each `lookup` target. A non-empty `readers` table is allowed only on a `lookup` target. |
 
 OpenAPPA rejects an external component name that the policy does not declare, or a component that is missing its required implementation. For annotators, `builtin` belongs on `[[policy.annotator]]`, not under `[externals]`.
 

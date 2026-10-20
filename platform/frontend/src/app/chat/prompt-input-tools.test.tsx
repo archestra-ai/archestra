@@ -202,7 +202,8 @@ describe("chat composer typing performance", () => {
   it.each([
     "agent",
     "organization",
-  ] as const)("puts an existing chat's %s-default controls behind More options", (modelSource) => {
+    "user",
+  ] as const)("keeps an existing chat's controls inline when the model source is %s", (modelSource) => {
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -215,13 +216,57 @@ describe("chat composer typing performance", () => {
         conversationId="conv-1"
       />,
     );
+    expect(screen.getByTestId("chat-model-button")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
+  });
+
+  it.each([
+    ["a new chat", undefined],
+    ["an existing chat", "conv-1"],
+  ])("collapses controls for %s when they no longer fit", (_label, conversationId) => {
+    layoutState.isNarrow = true;
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        onApiKeyChange={vi.fn()}
+        agentId="agent-1"
+        modelSource="agent"
+        currentProvider="anthropic"
+        conversationId={conversationId}
+      />,
+    );
     expect(screen.queryByTestId("chat-model-button")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "More options" }));
     expect(screen.getByTestId("chat-setup-menu")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-model-button")).toBeNull();
   });
 
+  it("puts context usage after the model picker while the pickers are inline", () => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+        tokensUsed={12_000}
+        maxContextLength={200_000}
+      />,
+    );
+    const modelButton = screen.getByTestId("chat-model-button");
+    const contextUsage = screen.getByRole("button", { name: "Context usage" });
+    expect(
+      modelButton.compareDocumentPosition(contextUsage) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("keeps context usage in the toolbar once a chat moves its setup into More options", () => {
+    layoutState.isNarrow = true;
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -237,46 +282,10 @@ describe("chat composer typing performance", () => {
     expect(
       screen.getByRole("button", { name: "Context usage" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "More options" }),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("chat-setup-menu")).toBeNull();
-  });
-
-  it("collapses controls for a narrow new chat", () => {
-    layoutState.isNarrow = true;
-    render(
-      <ArchestraPromptInput
-        onSubmit={vi.fn()}
-        status="ready"
-        selectedModel="gpt-4"
-        onModelChange={vi.fn()}
-        onApiKeyChange={vi.fn()}
-        agentId="agent-1"
-        modelSource="agent"
-        currentProvider="anthropic"
-      />,
-    );
-    expect(screen.queryByTestId("chat-model-button")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "More options" }));
-    expect(screen.getByTestId("chat-setup-menu")).toBeInTheDocument();
-    expect(screen.queryByTestId("chat-model-button")).toBeNull();
-  });
-
-  it("restores inline controls when navigating from an existing chat to a new chat", () => {
-    const props = {
-      onSubmit: vi.fn(),
-      status: "ready" as const,
-      selectedModel: "gpt-4",
-      onModelChange: vi.fn(),
-      onApiKeyChange: vi.fn(),
-      agentId: "agent-1",
-    };
-    const { rerender } = render(
-      <ArchestraPromptInput {...props} conversationId="conv-1" />,
-    );
-    expect(screen.queryByTestId("chat-model-button")).toBeNull();
-    rerender(<ArchestraPromptInput {...props} />);
-    expect(screen.getByTestId("chat-model-button")).toBeInTheDocument();
-    expect(screen.getByTestId("api-key-selector")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
   });
 
   it("shows trust and audience as a static session readout", () => {

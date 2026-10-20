@@ -478,4 +478,74 @@ describe("bounded chat roster", () => {
     );
   });
   // SPDX-SnippetEnd
+  test("resumes the chat order from a rank and name cursor", async ({
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const team = await makeTeam(ctx.organizationId, ctx.user.id);
+    await makeTeamMember(team.id, ctx.user.id);
+    const make = (
+      name: string,
+      access: NonNullable<Parameters<typeof makeAgent>[0]>["access"],
+    ) =>
+      makeAgent({
+        organizationId: ctx.organizationId,
+        authorId: ctx.user.id,
+        agentType: "agent",
+        name,
+        access,
+      });
+    await make("Own B", "personal");
+    await make("Own A", "personal");
+    await make("Team B", { teams: [team.id], level: "use" });
+    await make("Team A", { teams: [team.id], level: "use" });
+    await make("Org B", "org");
+    await make("Org A", "org");
+    const all = (await get("/api/agents/chat-roster/page?limit=100")).data as {
+      id: string;
+      name: string;
+    }[];
+    expect(all.map((row) => row.name)).toEqual([
+      "Own A",
+      "Own B",
+      "Team A",
+      "Team B",
+      "Org A",
+      "Org B",
+    ]);
+    // The cursor a page hands out: the last row's rank and name, and its id.
+    const cursorAfter = (index: number, rank: number) =>
+      Buffer.from(
+        JSON.stringify({
+          id: all[index].id,
+          value: JSON.stringify({ rank, name: all[index].name }),
+        }),
+      ).toString("base64url");
+    for (const [index, rank] of [
+      [0, 0],
+      [1, 0],
+      [2, 1],
+      [4, 2],
+    ] as const) {
+      const page = await get(
+        `/api/agents/chat-roster/page?limit=2&cursor=${cursorAfter(index, rank)}`,
+      );
+      expect(page.data.map((row: { id: string }) => row.id)).toEqual(
+        all.slice(index + 1, index + 3).map((row) => row.id),
+      );
+    }
+    // Past the last rank nothing follows.
+    const beyond = Buffer.from(
+      JSON.stringify({
+        id: all[5].id,
+        value: JSON.stringify({ rank: 3, name: "" }),
+      }),
+    ).toString("base64url");
+    expect(
+      (await get(`/api/agents/chat-roster/page?limit=2&cursor=${beyond}`)).data,
+    ).toEqual([]);
+  });
 });

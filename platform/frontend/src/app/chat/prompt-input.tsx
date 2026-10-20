@@ -36,6 +36,7 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { preloadResponseMarkdown } from "@/components/ai-elements/response";
 import { ChatComposerSecurity } from "@/components/chat/chat-composer-security";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
@@ -285,6 +286,7 @@ const PromptInputContent = ({
   onCompactConversation,
   onOpenFiles,
   selectorAgentId,
+  isSelectorAgentResolving,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -314,7 +316,13 @@ const PromptInputContent = ({
 }) => {
   const selectedCredentialId =
     currentConversationChatApiKeyId ?? initialApiKeyId ?? agentLlmApiKeyId;
+  // Waits for the resolved permission: the composer renders before it, and
+  // a role without the grant must not get a 403 from this.
+  const { data: canReadProviderKeys } = useHasPermissions({
+    llmProviderApiKey: ["read"],
+  });
   const { data: credentialOptions } = useAvailableLlmProviderApiKeys({
+    enabled: canReadProviderKeys === true,
     toastOnError: false,
   });
   const rejectedCredential = credentialOptions?.find(
@@ -352,7 +360,9 @@ const PromptInputContent = ({
 
   // /debug needs the conversation below; fetched early so the encrypted-chat gate
   // can read it too.
-  const { data: conversation } = useConversation(conversationId);
+  const { data: conversation } = useConversation(conversationId, {
+    refetchOnMount: false,
+  });
 
   // EncryptedChat is "active" for the composer both while chatting in an encrypted
   // chat and while the new-chat toggle is on. It drives the composer's own
@@ -406,7 +416,7 @@ const PromptInputContent = ({
     .trimStart()
     .startsWith("/");
   const { data: skillsData } = useSkillsPaginated(
-    { limit: 100, forAgentId: agentId ?? undefined },
+    { limit: 100, forAgentId: agentId ?? undefined, includeContent: false },
     {
       enabled: skillSlashCommandsEnabled && !!agentId && isSkillCommandDraft,
     },
@@ -470,9 +480,24 @@ const PromptInputContent = ({
   }, []);
 
   // Restore draft on mount or conversation change
+  const typedBeforeHydration = useRef<
+    { storageKey: string; text: string } | null | undefined
+  >(undefined);
   useEffect(() => {
     isRestored.current = false;
-    const savedDraft = getRestorableDraft(localStorage, storageKey);
+    // The composer is server-rendered, so a fast typist can get text into the
+    // textarea before React hydrates it. The controlled value starts empty
+    // and would overwrite that text on the next render; adopt it instead (it
+    // is newer than any saved draft). Read once, on the first run: a re-run
+    // (Strict Mode, or the same key again) must not lose it either.
+    if (typedBeforeHydration.current === undefined) {
+      const text = textareaRef.current?.value;
+      typedBeforeHydration.current = text ? { storageKey, text } : null;
+    }
+    const savedDraft =
+      typedBeforeHydration.current?.storageKey === storageKey
+        ? typedBeforeHydration.current.text
+        : getRestorableDraft(localStorage, storageKey);
     if (savedDraft) {
       controller.textInput.setInput(savedDraft);
     } else {
@@ -484,7 +509,7 @@ const PromptInputContent = ({
       isRestored.current = true;
     }, 0);
     return () => clearTimeout(timeout);
-  }, [storageKey, controller.textInput.setInput]);
+  }, [storageKey, controller.textInput.setInput, textareaRef]);
 
   // Save draft on change
   useEffect(() => {
@@ -859,6 +884,8 @@ const PromptInputContent = ({
   // menu and ArrowUp navigates it (handled further down).
   const handleTextareaKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      // The reply will need the markdown renderer: start loading it now.
+      void preloadResponseMarkdown();
       if (
         event.key === "Escape" &&
         !isSlashCommandOpen &&
@@ -1093,6 +1120,7 @@ const PromptInputContent = ({
           maxContextLength={maxContextLength}
           agentLlmApiKeyId={agentLlmApiKeyId}
           selectorAgentId={selectorAgentId}
+          isSelectorAgentResolving={isSelectorAgentResolving}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}
@@ -1140,6 +1168,7 @@ const PromptInputContent = ({
                   }
                   status={submitStatus}
                   disabled={isSendBlocked}
+                  onPointerDown={() => void preloadResponseMarkdown()}
                   onClick={(event) => {
                     // While a response is in-flight the button shows Stop; a
                     // click stops the stream instead of submitting the form
@@ -1342,6 +1371,7 @@ const ArchestraPromptInput = ({
   onCompactConversation,
   onOpenFiles,
   selectorAgentId,
+  isSelectorAgentResolving,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1463,6 +1493,7 @@ const ArchestraPromptInput = ({
           onCompactConversation={onCompactConversation}
           onOpenFiles={onOpenFiles}
           selectorAgentId={selectorAgentId}
+          isSelectorAgentResolving={isSelectorAgentResolving}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}

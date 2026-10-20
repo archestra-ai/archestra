@@ -60,10 +60,10 @@ export function OverviewStatusCards() {
     organizationSettings: ["read"],
   });
   const { data: canReadPolicy } = useHasPermissions({
-    openappaPolicy: ["read"],
+    guardrailsPolicy: ["read"],
   });
   const { data: canReadYells } = useHasPermissions({
-    openappaDiagnostics: ["read"],
+    log: ["read"],
   });
   if (!canReadSettings && !canReadPolicy && !canReadYells) return null;
   return (
@@ -250,7 +250,7 @@ function ValidationCard() {
             size="sm"
             variant="outline"
             promptKey="writeValidations"
-            permissions={{ openappaPolicy: ["read", "update"] }}
+            permissions={{ guardrailsPolicy: ["read", "update"] }}
           >
             <MessageCircle />
             <span>Write a validation</span>
@@ -300,7 +300,7 @@ function ValidationCard() {
 
 function YellsCard() {
   const summary = useOpenAppaYellsSummary();
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   return (
     <StatusCard
       icon={
@@ -330,14 +330,10 @@ function YellsCard() {
             </span>
             <span className="text-sm text-muted-foreground">unresolved</span>
           </p>
-          {deployment.data?.breakTheGlassEnabled && summary.data && (
-            <p className="flex items-baseline gap-1.5">
-              <span className="text-lg font-semibold tabular-nums">
-                {summary.data.superyells}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                broke the glass
-              </span>
+          {deployment.data?.breakTheGlassEnabled && (
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <CircleCheck className="size-3.5 text-amber-600 dark:text-amber-400" />
+              <span>Break the glass on</span>
             </p>
           )}
         </div>

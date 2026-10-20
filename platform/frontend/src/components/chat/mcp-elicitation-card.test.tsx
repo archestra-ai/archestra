@@ -1,7 +1,12 @@
 import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { preloadResponseMarkdown } from "@/components/ai-elements/response";
+
+// The markdown renderer is a lazy chunk; once loaded it renders in one pass.
+beforeAll(() => preloadResponseMarkdown());
+
 import type { AskUserGroupMember } from "./ask-user-outcome";
 import { McpElicitationCard } from "./mcp-elicitation-card";
 import {

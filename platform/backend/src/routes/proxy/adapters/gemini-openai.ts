@@ -103,6 +103,17 @@ class GeminiOpenaiResponseAdapter
     return geminiResponseToOpenai(inner, this.ctx) as unknown as GeminiResponse;
   }
 
+  withReplacedText(text: string): GeminiResponse {
+    // Replaced in the inner wire shape (which is what gets logged), then
+    // translated for the client as getOriginalResponse does.
+    const inner = this.inner.withReplacedText?.(text);
+    if (!inner) {
+      throw new Error("Wrapped response adapter cannot replace response text");
+    }
+    this.rewrittenInner = inner;
+    return geminiResponseToOpenai(inner, this.ctx) as unknown as GeminiResponse;
+  }
+
   toRefusalResponse(
     refusalMessage: string,
     contentMessage: string,
@@ -202,6 +213,17 @@ class GeminiOpenaiStreamAdapter
     return this.pendingToolCallEvents;
   }
 
+  wireToolCallId(params: {
+    toolCall: { id: string; name: string };
+    index: number;
+  }): string {
+    return encodeSignedToolCallId({
+      id: params.toolCall.id,
+      name: params.toolCall.name,
+      thoughtSignature: this.toolCallSignatures.get(params.index),
+    });
+  }
+
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
     // The inner (Gemini-shaped) read is a side effect only — it marks the calls
     // as handed over so inner.toProviderResponse() names them — while the wire
@@ -215,11 +237,7 @@ class GeminiOpenaiStreamAdapter
         delta: {
           tool_calls: toolCalls.map((toolCall, index) => ({
             index,
-            id: encodeSignedToolCallId({
-              id: toolCall.id,
-              name: toolCall.name,
-              thoughtSignature: this.toolCallSignatures.get(index),
-            }),
+            id: this.wireToolCallId({ toolCall, index }),
             type: "function" as const,
             function: { name: toolCall.name, arguments: toolCall.arguments },
           })),

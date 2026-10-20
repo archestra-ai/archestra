@@ -195,3 +195,62 @@ describe("ToolModel.findCoverageInventory", () => {
     ).toEqual({ catalogs: [], tools: [] });
   });
 });
+
+describe("openappaCoverageService.rulesForTools", () => {
+  test("names each tool's rule with its TOML, from the root, a battery or the catch-all", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    await seedCoverage({
+      organizationId: organization.id,
+      userId: user.id,
+      fixtures: { makeAgent, makeAgentTool, makeInternalMcpCatalog, makeTool },
+    });
+
+    const rules = await openappaCoverageService.rulesForTools({
+      organizationId: organization.id,
+      toolNames: [
+        "acme__delete_item",
+        "docs__microsoft_docs_search",
+        "acme__nothing_names_this",
+      ],
+    });
+
+    expect(rules.get("acme__delete_item")).toMatchObject({
+      rule: { source: "root", name: "acme__delete_item" },
+      text: [
+        "[[policy.tool]]",
+        'name = "acme__delete_item"',
+        "delta = {}",
+        'forwards = { audience = ["self"] }',
+        'requires = { trust = "trusted" }',
+      ].join("\n"),
+    });
+    // The root's rule for it has a selector, which depends on the arguments;
+    // the included battery's rule names it outright.
+    expect(rules.get("docs__microsoft_docs_search")).toMatchObject({
+      rule: {
+        source: "battery",
+        name: "mcp/microsoft-learn/microsoft_docs_search",
+      },
+      text: [
+        "[[policy.tool]]",
+        'name = "mcp/microsoft-learn/microsoft_docs_search"',
+        'delta = { trust = "suspicious" }',
+        'requires = { audience = { contains = ["public"] } }',
+      ].join("\n"),
+    });
+    expect(rules.get("acme__nothing_names_this")).toMatchObject({
+      rule: { source: "catchall", name: "*" },
+      text: '[[policy.tool]]\nname = "*"\nannotator = "noop"',
+    });
+  });
+});

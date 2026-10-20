@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentConnectorAssignment } from "@/types";
@@ -230,6 +230,41 @@ class AgentConnectorAssignmentModel {
       map.set(row.connectorId, list);
     }
     return map;
+  }
+
+  /** Live org agents assigned to each connector, in one grouped query. */
+  static async countAgentsForConnectors(params: {
+    connectorIds: string[];
+    organizationId: string;
+  }): Promise<Map<string, number>> {
+    if (params.connectorIds.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        connectorId: schema.agentConnectorAssignmentsTable.connectorId,
+        count: count(),
+      })
+      .from(schema.agentConnectorAssignmentsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(
+          schema.agentConnectorAssignmentsTable.agentId,
+          schema.agentsTable.id,
+        ),
+      )
+      .where(
+        and(
+          inArray(
+            schema.agentConnectorAssignmentsTable.connectorId,
+            params.connectorIds,
+          ),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .groupBy(schema.agentConnectorAssignmentsTable.connectorId);
+
+    return new Map(rows.map((row) => [row.connectorId, row.count]));
   }
 
   /**

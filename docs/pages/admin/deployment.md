@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-19
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.50" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.51" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -84,6 +84,20 @@ archestra:
 
 Provide the same database URL to the migration Job and application. The chart runs migrations before rolling out an upgrade. Keep `archestra.migrationJob.enabled` enabled unless your pipeline applies migrations separately.
 
+To verify the database's TLS certificate, mount the CA bundle with `archestra.extraVolumes` and `archestra.extraVolumeMounts` and point the URL at it, for example `?sslmode=verify-full&sslrootcert=/etc/ssl/db/ca.pem`. The web pods, worker pods and migration Job all get these mounts. The migration Job skips `persistentVolumeClaim` volumes, because it runs while the previous pods still hold their claims.
+
+```yaml
+archestra:
+  extraVolumes:
+    - name: db-ca
+      secret:
+        secretName: db-ca-bundle
+  extraVolumeMounts:
+    - name: db-ca
+      mountPath: /etc/ssl/db
+      readOnly: true
+```
+
 For Knowledge Base vector storage, PostgreSQL must have the pgvector extension available and the migration user must be able to create the extension, or an administrator must install it first.
 
 Set `archestra.database.connectionBudget` to size query pools across peak web and worker pods, including rollout overlap. Leave room in PostgreSQL for other clients and reserved connections. Each peak pod needs at least 13 budgeted connections; the chart rejects smaller budgets. A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/reference/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Complete one rollout before starting another.
@@ -102,11 +116,47 @@ The command uses [`ARCHESTRA_DATABASE_URL`](/docs/reference/configuration#ARCHES
 
 The build runs concurrently with interaction writes and consumes database I/O while it scans. It stops after a five-second lock wait or a thirty-minute statement timeout. Rerunning preserves a valid index and rebuilds an invalid index left by an interrupted build. Successful output reports `created`, `already_valid`, or `rebuilt_invalid`.
 
+### Enable Fast Logs User Lists
+
+The logs user picker can keep its most-active ordering without recounting the full log on each cache miss. New installations and upgrades leave this optimization disabled until you activate it.
+
+1. Finish the database migrations and upgrade every web, worker, and other interaction writer. Stop all old binaries before enabling the summary: they do not maintain its counts.
+2. From `/app/backend` in an upgraded application container, run:
+
+   ```bash
+   node dist/standalone-scripts/rebuild-interaction-user-activity.mjs --enable
+   ```
+
+3. Confirm the output reports `ready: true`. Exit code 2 means the bounded run is incomplete; rerun without `--enable` to resume. The background worker also resumes incomplete work every 30 seconds. Until completion, the picker uses the original exact query.
+
+The migrations create small, initially empty summary tables and an append function; they do not scan or change the interaction table. Apply the function migration before starting upgraded writers: missing functions fail the write rather than bypassing count maintenance. Rebuilding reads existing history in user batches without holding write locks during the history scan. Inserts maintain counts in one database statement; retention deletes use a transaction. Writes for the same user serialize.
+
+The server caches the most-active list for at most 30 seconds, including load time. An open picker refreshes every 20 seconds and revalidates when reopened, keeping successful active-page refreshes within the 60-second ranking budget without adding the old five-minute client cache. Network failures and inactive browser tabs can delay refreshes. Explicit search reads current history rather than the ranked cache.
+
+- Before rolling back to an old binary, run the command with `--disable` and wait for it to finish. Disabled writers do not maintain summary balances; a later `--enable` starts a new rebuild.
+- Owner deletion or organization reassignment invalidates the summary. Exact queries remain active while the worker rebuilds it. User deletion removes that user's derived counts; names are joined when the list is loaded.
+- Direct SQL changes to interactions bypass maintenance. Disable the summary before such work, then run with `--enable` afterward. If counts may already have drifted, use `--invalidate` to rebuild while keeping exact fallback active. Do not use `--invalidate` on every resume; it restarts progress.
+- A negative reconciled count or an integer outside JavaScript's safe range stops the rebuild without publishing partial results. Exact fallback remains active while valid summary state is incomplete; unsafe version counters instead reject list requests rather than reuse an ambiguous cache entry. Investigate and repair the accounting fault before retrying with `--invalidate`; repeated retries do not repair inconsistent accounting.
+
 ### Scaling
 
 `archestra.replicaCount` controls web replicas. `archestra.worker.replicaCount` controls separate workers. Enabling `archestra.horizontalPodAutoscaler.enabled` replaces the web replica setting; the default HPA range is 2–10 pods. Worker replicas remain manual. Increase database connection capacity alongside replicas.
 
 Use `archestra.resources` and `archestra.worker.resources` to size pods. Diagnostics storage shared by concurrent pods requires a compatible `ReadWriteMany` volume; check `archestra.diagnostics` in the selected chart's values.
+
+The web and worker pods share `archestra.nodeSelector`, `archestra.tolerations`, `archestra.affinity`, `archestra.topologySpreadConstraints` and `archestra.podAnnotations`.
+
+To survive a zone outage, spread replicas across zones with `archestra.topologySpreadConstraints`. Leave out `labelSelector` and each Deployment counts only its own pods, so web pods and worker pods each spread evenly and can share a zone:
+
+```yaml
+archestra:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+```
+
+For pod anti-affinity, add `matchLabelKeys: [app.kubernetes.io/component]` to the term so web and worker pods are counted separately (Kubernetes 1.31 and later).
 
 ### Accessing the Platform
 

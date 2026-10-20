@@ -150,7 +150,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let events: Array<Record<string, unknown>>;
   let block: boolean;
   let fail: boolean;
-  let failure: string;
+  let failure: Error;
   /** A tool whose annotator gives no answer, as the runtime reports it. */
   let unruled: string | undefined;
   let unregisterAppaPlugin: () => void;
@@ -244,7 +244,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       events = [];
       block = false;
       fail = false;
-      failure = "private native database error";
+      failure = new Error("private native database error");
       unruled = undefined;
       native.initializeOpenappa.mockResolvedValue(undefined);
       // Mirrors the real binding closely enough to be regression coverage: the
@@ -274,7 +274,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             .onConflictDoNothing();
         }
         if (event.event === "tool_call") {
-          if (fail) throw new Error(failure);
+          if (fail) throw failure;
           if (event.tool === unruled)
             throw new Error(
               "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
@@ -1506,6 +1506,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         enabled: false,
         unsupportedClientAction: "bypass",
         breakTheGlassEnabled: true,
+        newSessionPolicy: "live",
+        annotatorModelId: null,
+        annotatorLlmApiKeyId: null,
       });
 
       const response = await post(continuation("msg_made_elsewhere"));
@@ -1731,8 +1734,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test("a refused policy names what to fix and is not a retryable outage", async () => {
     fail = true;
-    failure =
-      'unsupported policy: tool "grain__*" has an invalid qualified identity';
+    failure = Object.assign(
+      new Error(
+        'unsupported policy: tool "grain__*" has an invalid qualified identity',
+      ),
+      { code: "policy_refused" },
+    );
 
     const response = await post(payload(false));
 
@@ -2573,6 +2580,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             enabled: false,
             unsupportedClientAction: "bypass",
             breakTheGlassEnabled: true,
+            newSessionPolicy: "live",
+            annotatorModelId: null,
+            annotatorLlmApiKeyId: null,
           };
         }
         return realGet();

@@ -2437,6 +2437,148 @@ describe("model router proxy routes", () => {
     expect(capturedApiKey).toBeUndefined();
   });
 
+  test.for([
+    {
+      label: "a call the client declared",
+      tools: ["inventory__read"],
+      clientCallName: "inventory__read",
+    },
+    {
+      label: "a call the dispatch repair re-addressed to run_tool",
+      tools: ["archestra__search_tools", "archestra__run_tool"],
+      clientCallName: "archestra__run_tool",
+    },
+  ])("streams $label over Responses with a call_id that keeps Gemini's thought signature", async ({
+    tools,
+    clientCallName,
+  }, { makeAgent, makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "gemini", modelId: "gemini-3.7-flash" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "gemini",
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Gemini Responses Agent",
+      agentType: "llm_proxy",
+    });
+
+    type GeminiStreamRequest = {
+      contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    };
+    const providerRequests: GeminiStreamRequest[] = [];
+    vi.mocked(geminiAdapterFactory.createClient).mockImplementation(
+      () =>
+        ({
+          models: {
+            generateContentStream: async (request: GeminiStreamRequest) => {
+              providerRequests.push(request);
+              const parts =
+                providerRequests.length === 1
+                  ? [
+                      {
+                        functionCall: {
+                          id: "call_read",
+                          name: "inventory__read",
+                          args: { itemId: "item-1" },
+                        },
+                        thoughtSignature: "opaque-thought-signature",
+                      },
+                    ]
+                  : [{ text: "Done" }];
+              return (async function* () {
+                yield {
+                  candidates: [
+                    {
+                      content: { role: "model", parts },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                  usageMetadata: {
+                    promptTokenCount: 12,
+                    candidatesTokenCount: 10,
+                    totalTokenCount: 22,
+                  },
+                  modelVersion: "gemini-3.7-flash",
+                };
+              })();
+            },
+          },
+        }) as never,
+    );
+
+    const sendTurn = (input: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gemini:gemini-3.7-flash",
+          stream: true,
+          input,
+          tools: tools.map((name) => ({
+            type: "function",
+            name,
+            parameters: { type: "object", properties: {} },
+          })),
+        },
+      });
+    const prompt = { role: "user", content: "Read item 1" };
+
+    const firstResponse = await sendTurn([prompt]);
+
+    expect(firstResponse.statusCode, firstResponse.body).toBe(200);
+    // The client reads calls from the item frames and from the completed
+    // envelope; both must name the call_id it will echo back.
+    const clientCalls = firstResponse.body
+      .split("\n")
+      .filter((line) => line.startsWith("data: ") && line !== "data: [DONE]")
+      .map((line) => JSON.parse(line.slice("data: ".length)))
+      .flatMap((event) => [event.item, ...(event.response?.output ?? [])])
+      .filter((item) => item?.type === "function_call");
+    expect(clientCalls.length).toBeGreaterThan(0);
+    const [clientCall] = clientCalls;
+    expect(clientCall.name).toBe(clientCallName);
+    expect(new Set(clientCalls.map((call) => call.call_id))).toEqual(
+      new Set([clientCall.call_id]),
+    );
+
+    const secondResponse = await sendTurn([
+      prompt,
+      {
+        type: "function_call",
+        call_id: clientCall.call_id,
+        name: clientCall.name,
+        arguments: clientCall.arguments,
+      },
+      {
+        type: "function_call_output",
+        call_id: clientCall.call_id,
+        output: "available",
+      },
+    ]);
+
+    expect(secondResponse.statusCode, secondResponse.body).toBe(200);
+    expect(secondResponse.body).toContain("Done");
+    const replayedCall = providerRequests[1]?.contents
+      .find((content) => content.role === "model")
+      ?.parts.find((part) => part.functionCall);
+    expect(replayedCall).toMatchObject({
+      functionCall: { id: "call_read", name: clientCallName },
+      thoughtSignature: "opaque-thought-signature",
+    });
+  });
+
   test("routes provider-qualified model ids to their provider", async ({
     makeAgent,
     makeOrganization,

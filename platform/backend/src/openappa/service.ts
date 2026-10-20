@@ -22,15 +22,13 @@ import { getDatabaseConnectionString } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import {
-  expandCommandExecutionPolicyRules,
-  normalizeCommandExecutionArguments,
-} from "@/openappa/command-normalization";
+import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
@@ -50,9 +48,12 @@ import {
   OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
+  runtimeFailureCode,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
+import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
+import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
@@ -263,15 +264,25 @@ export async function getOpenappaStatus(params: {
   if (!openappaEnabled()) return null;
   try {
     const module = await binding();
-    return await withOpenappaContentEncryption(
-      params.organizationId,
-      params.sessionId,
-      (encryption) =>
-        module.getOpenappaStatus(
+    // Read on the organization's policy line, as a dispatch would decide.
+    const status = await retryWhilePolicyMoved({
+      run: async () => {
+        const policy = await effectivePolicy(params.organizationId);
+        return withOpenappaContentEncryption(
           params.organizationId,
           params.sessionId,
-          encryption,
-        ),
+          (encryption) =>
+            module.getOpenappaStatus(
+              params.organizationId,
+              params.sessionId,
+              policy,
+              encryption,
+            ),
+        );
+      },
+    });
+    return (
+      status && { ...status, policyRevision: status.policyRevision ?? null }
     );
   } catch (error) {
     throw openappaFailure(error);
@@ -331,6 +342,8 @@ export async function executeYell(params: {
   args: { message: string; with_trajectory: boolean };
   /** Break the glass is on, so this yell also turns OpenAPPA off for the session. */
   brokeTheGlass?: boolean;
+  /** The authenticated host saw this call without a proxy reporting receipt. */
+  needsAdmission?: boolean;
 }): Promise<CallToolResult> {
   if (!openappaYellEnabled()) {
     return {
@@ -359,6 +372,53 @@ export async function executeYell(params: {
     superyell: params.brokeTheGlass ?? false,
   });
   try {
+    // Opening a native session just to report would enroll a session that
+    // started outside enforcement. Keep its feedback locally without doing so.
+    // No archive is sent, so there is no delivery attempt to record.
+    if (await startedUnenforced(params.session)) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Report recorded for review in Guardrails → Yells. No diagnostic archive was captured because Guardrails was not enforcing this session.",
+          },
+        ],
+      };
+    }
+    if (params.needsAdmission) {
+      // The native reporter requires a released yell, even when the host can
+      // authenticate its session. Admit this report under its own operation id.
+      const [decision] = await evaluateToolCalls(
+        params.session,
+        [
+          {
+            id: params.toolCallId,
+            name: archestraMcpBranding.getToolName("yell"),
+            arguments: params.args,
+          },
+        ],
+        { canonicalize: (name) => name },
+      );
+      if (decision.kind !== "allow") {
+        await OpenAppaYellModel.recordDelivery({
+          id: record.id,
+          organizationId: record.organizationId,
+          failed: true,
+        });
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                decision.kind === "deny"
+                  ? decision.feedback
+                  : "OpenAPPA did not release the reporting call",
+            },
+          ],
+        };
+      }
+    }
     const result = await captureYellReport({
       id: record.id,
       organizationId: record.organizationId,
@@ -575,10 +635,15 @@ async function withRuntime(
   batchPolicy?: DispatchPolicy,
   session?: OpenAppaSession,
 ) {
-  const policy = batchPolicy ?? (await effectivePolicy(organizationId));
+  let policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
     const module = await binding();
-    const rawResult = await call(module, policy);
+    const rawResult = await retryWhilePolicyMoved({
+      run: async (attempt) => {
+        if (attempt > 0) policy = await effectivePolicy(organizationId);
+        return call(module, policy);
+      },
+    });
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
     throw await dispatchFailure({
@@ -596,12 +661,30 @@ async function dispatchFailure(params: {
   served: string;
   error: unknown;
 }): Promise<ApiError> {
-  const missing = await missingOpeningAnnotator(params.session, params.served);
-  if (missing !== null)
-    return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
-  return openappaFailure(
-    (await rootOnlyRefusal(params.organizationId)) ?? params.error,
-  );
+  // Only a refusal of the policy is explained by the policy; a storage, lease
+  // or uncoded failure is reported as itself.
+  switch (runtimeFailureCode(params.error)) {
+    // An annotator the opening policy routes to is no longer served, so the
+    // runtime has it unregistered.
+    case "annotation_refused":
+    case "policy_unavailable": {
+      const missing = await missingOpeningAnnotator(
+        params.session,
+        params.served,
+      );
+      return openappaFailure(
+        missing === null
+          ? params.error
+          : new OpenappaRetiredAnnotatorError(missing),
+      );
+    }
+    case "policy_refused":
+      return openappaFailure(
+        (await rootOnlyRefusal(params.organizationId)) ?? params.error,
+      );
+    default:
+      return openappaFailure(params.error);
+  }
 }
 
 /**
@@ -659,22 +742,26 @@ async function missingOpeningAnnotator(
  * The organization's effective policy with the credential values the runtime
  * reads for it, or the refusal every dispatch shares.
  *
- * The deployment switch is not read here. Each entry point reads it once at its
+ * The enforcement switch is not read here. Each entry point reads it once at its
  * request boundary, so a turn that began governed finishes under its policy even
- * when the switch turns off mid-request.
+ * when the switch turns off mid-request. The policy for new sessions is read
+ * with every policy read, so a dispatch sees it as it is now, and a dispatch
+ * that cannot read it fails as the policy read does.
  */
 async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const { policy, readable } =
-      await openappaBatteriesService.readForDispatch(organizationId);
+    const [newSessionPolicy, { policy, readable }] = await Promise.all([
+      GuardrailsDeploymentModel.getNewSessionPolicy(),
+      openappaBatteriesService.readForDispatch(organizationId),
+    ]);
     let unreadable: UnreadableCredential[] = [];
     let dispatch: DispatchPolicy | null = null;
     try {
       dispatch = await openappaDeclarations.dispatchPolicy({
         organizationId,
-        content: expandCommandExecutionPolicyRules(policy.content),
+        content: policy.content,
         onUnreadable: (found) => {
           unreadable = found;
         },
@@ -682,7 +769,12 @@ async function effectivePolicy(
     } catch (error) {
       if (!retainedKeyLost({ unreadable, readable })) throw error;
     }
-    if (dispatch && !retainedKeyLost({ unreadable, readable })) return dispatch;
+    if (dispatch && !retainedKeyLost({ unreadable, readable }))
+      return {
+        ...dispatch,
+        compositionHash: policy.contentHash,
+        snapshot: newSessionPolicy === "snapshot",
+      };
     // A credential the policy was composed to read is unreadable now. Compose
     // again first, as a fresh read would have: a kept annotator that needed it
     // is dropped, so its sessions are told to start a new conversation instead
@@ -692,10 +784,14 @@ async function effectivePolicy(
       "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
     );
     const recompiled = await openappaBatteriesService.recompile(organizationId);
-    return await openappaDeclarations.dispatchPolicy({
-      organizationId,
-      content: expandCommandExecutionPolicyRules(recompiled.content),
-    });
+    return {
+      ...(await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: recompiled.content,
+      })),
+      compositionHash: recompiled.contentHash,
+      snapshot: newSessionPolicy === "snapshot",
+    };
   } catch (error) {
     throw openappaFailure(error);
   }
@@ -2385,9 +2481,12 @@ async function peerResponse<T>(
   schema: z.ZodType<T>,
 ): Promise<T> {
   try {
-    const policy = await effectivePolicy(session.organization_id);
     const module = await binding();
-    return schema.parse(JSON.parse(await call(module, policy)));
+    const raw = await retryWhilePolicyMoved({
+      run: async () =>
+        call(module, await effectivePolicy(session.organization_id)),
+    });
+    return schema.parse(JSON.parse(raw));
   } catch (error) {
     throw openappaFailure(error);
   }

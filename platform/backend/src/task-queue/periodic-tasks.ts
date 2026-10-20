@@ -8,6 +8,11 @@ type PeriodicTaskDefinition = {
 };
 
 const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
+  {
+    taskType: "interaction_user_activity_rebuild",
+    intervalSeconds: 30,
+    payload: {},
+  },
   // Runs every 30s (not 60): besides enqueuing due syncs, this task drives
   // connector-run recovery — reaping expired leases, reconciling statuses, and
   // sweeping stalled embeddings — so its cadence is the quantization on how fast
@@ -52,6 +57,11 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   // claims is worth removing promptly, not urgently, and the work is one list
   // call plus a couple per Perforce connector.
   { taskType: "p4_shim_reconcile", intervalSeconds: 300, payload: {} },
+  // Re-syncs provider models for API keys whose TTL has passed (5 minutes for
+  // Ollama and vLLM, so a freshly pulled model shows up within about that) and
+  // refreshes models.dev metadata once a day. The model listing routes only
+  // read, so this tick is what keeps the catalog current.
+  { taskType: "llm_model_sync", intervalSeconds: 60, payload: {} },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
   // Rebuilds the portable BM25 corpus statistics (document frequency, chunk
   // count, mean chunk length) the keyword ranker scores from. A read-only
@@ -105,6 +115,15 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   {
     taskType: "skill_publication_backfill",
     intervalSeconds: 600,
+    payload: {},
+  },
+  // Fills session_preview on interactions written before migration 0562, so
+  // the session list stops rebuilding full requests to show a preview. Runs
+  // are time-bounded, and a short interval keeps a long history moving. Once
+  // every row is done, a run is one empty partial-index read.
+  {
+    taskType: "interaction_session_preview_backfill",
+    intervalSeconds: 60,
     payload: {},
   },
 ];

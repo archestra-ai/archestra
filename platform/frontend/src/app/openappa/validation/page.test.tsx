@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { archestraApiClient } from "@archestra/shared";
+import {
+  archestraApiClient,
+  type OpenAppaValidationProgressMessage,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -23,23 +26,47 @@ import {
   test,
   vi,
 } from "vitest";
+import { PageBackLink } from "@/components/page-back-link";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { formatDate } from "@/lib/utils/date-time";
-import { OpenAppaPageActionSlotContext } from "../_parts/openappa-page-action";
 import {
-  ValidationProvider,
-  validationFileHref,
-} from "./_parts/validation-context";
+  OpenAppaHeaderModeContext,
+  OpenAppaPageActionSlotContext,
+  OpenAppaPageHeaderSlotsContext,
+} from "../_parts/openappa-page-action";
+import { validationFileHref } from "./_parts/validation-context";
 import FilePage from "./file/page";
 import HistoryPage from "./history/page";
+import ValidationLayout from "./layout";
 import NewPage from "./new/page";
 import ValidationPage from "./page";
+
+const socket = vi.hoisted(() => ({
+  subscribers: [] as {
+    type: string;
+    handler: (message: unknown) => void;
+  }[],
+}));
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 vi.mock("next/navigation");
+// The WebSocket is a process boundary: capture subscriptions and push
+// progress messages by hand.
+vi.mock("@/lib/websocket/websocket", () => ({
+  default: {
+    connect: async () => undefined,
+    subscribe: (type: string, handler: (message: unknown) => void) => {
+      const entry = { type, handler };
+      socket.subscribers.push(entry);
+      return () => {
+        socket.subscribers.splice(socket.subscribers.indexOf(entry), 1);
+      };
+    },
+  },
+}));
 vi.mock("next/link", () => ({
   default: function MockLink({
     href,
@@ -139,6 +166,19 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   currentHref = "/openappa/validation";
   sessionStorage.clear();
+  socket.subscribers.length = 0;
+  // jsdom has no matchMedia; ask for reduced motion so terminal output is
+  // printed at once instead of streamed on timers.
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("prefers-reduced-motion"),
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  }));
   vi.mocked(useSession).mockReturnValue({
     data: {
       session: {
@@ -262,22 +302,23 @@ test("file navigation protects unsaved changes and saves bind the loaded version
     }),
     { target: { value: "mcp/files/read {}\nexpect deny\n" } },
   );
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   fireEvent.click(await screen.findByRole("button", { name: "Keep editing" }));
   expect(
     screen.getByRole("textbox", { name: "Policy validation scenario.appa" }),
   ).toHaveValue("mcp/files/read {}\nexpect deny\n");
-  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(saved).toEqual({
       files: [{ ...scenario, content: "mcp/files/read {}\nexpect deny\n" }],
       expectedVersion: "tests-v1",
     }),
   );
+  // Saved and clean: there is nothing left to save.
   await waitFor(() =>
     expect(
-      screen.getByRole("button", { name: "Save validation" }),
-    ).toBeDisabled(),
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument(),
   );
 });
 
@@ -300,10 +341,41 @@ test("a source refresh preserves the active draft and prevents saving against th
   );
   expect(await screen.findByText("Validation source changed")).toBeVisible();
   expect(editor).toHaveValue("unsaved change");
-  expect(
-    screen.getByRole("button", { name: "Save validation" }),
-  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Test draft" })).toBeDisabled();
+});
+
+test("the draft can still be exported when the source changed under it", async () => {
+  // jsdom has no object URLs; the download itself is the browser's job.
+  const createObjectURL = vi.fn((_blob: Blob) => "blob:validation");
+  URL.createObjectURL = createObjectURL;
+  URL.revokeObjectURL = () => undefined;
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  showPage(client);
+  await openValidationFile(scenario.path);
+  fireEvent.change(
+    await screen.findByRole("textbox", {
+      name: "Policy validation scenario.appa",
+    }),
+    { target: { value: "draft to keep" } },
+  );
+  act(() =>
+    client.setQueryData(["openappa-policy-tests", "active"], {
+      ...collection,
+      version: "new-version",
+    }),
+  );
+  expect(await screen.findByText("Validation source changed")).toBeVisible();
+  await userEvent.click(
+    screen.getByRole("button", { name: "More file actions" }),
+  );
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: "Export" }),
+  );
+  expect(createObjectURL).toHaveBeenCalledTimes(1);
+  expect(await createObjectURL.mock.calls[0][0].text()).toBe("draft to keep");
 });
 
 test("a rename save completing after leaving the editor does not navigate back into it", async () => {
@@ -332,13 +404,10 @@ test("a rename save completing after leaving the editor does not navigate back i
   });
   showPage(client);
   await openValidationFile(scenario.path);
-  fireEvent.change(
-    await screen.findByRole("textbox", { name: "Validation filename" }),
-    { target: { value: "renamed.appa" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  await renameFile("renamed.appa");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await started;
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
@@ -381,18 +450,12 @@ test("an older rename completing while a newer history draft is hidden preserves
   });
   currentHref = "/openappa/validation/file?path=scenario.appa";
   const first = showPage(client);
-  fireEvent.change(
-    await screen.findByRole("textbox", { name: "Validation filename" }),
-    { target: { value: "renamed.appa" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  await renameFile("renamed.appa");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await started;
   first.unmount();
   const returned = showPage(client);
-  fireEvent.change(
-    await screen.findByRole("textbox", { name: "Validation filename" }),
-    { target: { value: "newer.appa" } },
-  );
+  await renameFile("newer.appa");
   fireEvent.change(
     await screen.findByRole("textbox", {
       name: "Policy validation newer.appa",
@@ -414,12 +477,10 @@ test("an older rename completing while a newer history draft is hidden preserves
     }),
   ).toHaveValue("newer hidden edit");
   expect(
-    screen.getByRole("textbox", { name: "Validation filename" }),
-  ).toHaveValue("newer.appa");
+    screen.getByRole("button", { name: /^File path newer\.appa\b/ }),
+  ).toBeVisible();
   expect(await screen.findByText("Validation source changed")).toBeVisible();
-  expect(
-    screen.getByRole("button", { name: "Save validation" }),
-  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 });
 
 test("a clean editor reopened during a pending save adopts its completed version before another edit", async () => {
@@ -464,9 +525,9 @@ test("a clean editor reopened during a pending save adopts its completed version
     }),
     { target: { value: "saved change" } },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await started;
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
@@ -478,10 +539,10 @@ test("a clean editor reopened during a pending save adopts its completed version
   finish();
   await waitFor(() => expect(reopened).toHaveValue("saved change"));
   expect(
-    screen.getByRole("button", { name: "Save validation" }),
-  ).toBeDisabled();
+    screen.queryByRole("button", { name: "Save" }),
+  ).not.toBeInTheDocument();
   fireEvent.change(reopened, { target: { value: "newer change" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(submissions[1]).toEqual({
       files: [{ ...scenario, content: "newer change" }],
@@ -533,7 +594,7 @@ test.each([
   fireEvent.change(screen.getByRole("textbox", { name: label }), {
     target: { value: "discard this edit" },
   });
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
@@ -586,7 +647,7 @@ test.each([
   expect(await screen.findByText("Validation source changed")).toBeVisible();
   expect(
     screen.getByRole("button", {
-      name: kind === "file" ? "Save validation" : "Create validation",
+      name: kind === "file" ? "Save" : "Create validation",
     }),
   ).toBeDisabled();
 });
@@ -611,12 +672,12 @@ test("Git editor previews run without local save and are dropped after edits", a
   const editor = await screen.findByRole("textbox", {
     name: "Policy validation scenario.appa",
   });
-  expect(
-    screen.queryByRole("button", { name: "Save validation" }),
-  ).not.toBeInTheDocument();
   fireEvent.change(editor, {
     target: { value: "mcp/files/read {value:1}\nexpect allow\n" },
   });
+  expect(
+    screen.queryByRole("button", { name: "Save" }),
+  ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
   await waitFor(() =>
     expect(payload).toEqual({
@@ -627,14 +688,14 @@ test("Git editor previews run without local save and are dropped after edits", a
       directory: "traces",
     }),
   );
-  await waitFor(() =>
-    expect(screen.getAllByText("Passed").length).toBeGreaterThan(0),
-  );
+  await waitFor(() => expect(runOutput()).toHaveTextContent("PASS"));
+  expect(screen.getByText("Passed")).toBeVisible();
   fireEvent.change(editor, {
     target: { value: "mcp/files/read {}\nexpect deny\n" },
   });
   expect(screen.queryByText("Passed")).not.toBeInTheDocument();
   expect(screen.getByText("Not run")).toBeVisible();
+  expect(runOutput()).toHaveTextContent("No result yet");
 });
 
 test("file previews show draft diagnostics without changing suite results or history", async () => {
@@ -659,7 +720,11 @@ test("file previews show draft diagnostics without changing suite results or his
             ...run.files[0],
             status: "failed",
             steps: [
-              { ...run.files[0].steps[0], expected: "deny", status: "failed" },
+              {
+                ...run.files[0].steps[0],
+                expected: "deny",
+                status: "failed",
+              },
             ],
           },
         ],
@@ -667,18 +732,23 @@ test("file previews show draft diagnostics without changing suite results or his
     }),
   );
   showPage();
-  expect(await findLastRun()).toHaveTextContent("1 of 1 passed");
+  expect(
+    await screen.findByRole("button", { name: "1 passing" }),
+  ).toBeVisible();
   fireEvent.click(screen.getByRole("link", { name: scenario.path }));
   const editor = await screen.findByRole("textbox", {
     name: "Policy validation scenario.appa",
   });
+  // The recorded result shows until a draft test replaces it.
+  await waitFor(() => expect(runOutput()).toHaveTextContent("PASS"));
   fireEvent.change(editor, {
     target: { value: "mcp/files/read {}\nexpect deny\n" },
   });
   const readsBeforePreview = historyReads;
   fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
-  expect(await screen.findByText(/assertions evaluated/)).toBeVisible();
-  expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
+  await waitFor(() => expect(runOutput()).toHaveTextContent("FAIL"));
+  expect(runOutput()).toHaveTextContent("+ Received allow");
+  expect(screen.getByText("Failed")).toBeVisible();
   expect(previewPayload).toEqual({
     files: [{ ...scenario, content: "mcp/files/read {}\nexpect deny\n" }],
     sourceVersion: collection.version,
@@ -686,18 +756,22 @@ test("file previews show draft diagnostics without changing suite results or his
   });
   expect(savedRuns).toBe(0);
   expect(historyReads).toBe(readsBeforePreview);
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
-  expect(await findLastRun()).toHaveTextContent("1 of 1 passed");
-  await openRunHistory();
-  await waitFor(() => expect(screen.getByText("Revision 2")).toBeVisible());
   expect(
-    screen.getAllByRole("button", {
-      name: formatDate({ date: run.createdAt }),
-    }),
-  ).toHaveLength(1);
+    await screen.findByRole("button", { name: "1 passing" }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: /failing$/ }),
+  ).not.toBeInTheDocument();
+  await openRunHistory();
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", { name: /^Open run from / }),
+    ).toHaveLength(1),
+  );
 });
 
 test("file preview failures preserve editor text and can be retried", async () => {
@@ -724,7 +798,7 @@ test("file preview failures preserve editor text and can be retried", async () =
     expect(screen.getByRole("button", { name: "Test draft" })).toBeEnabled(),
   );
   fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
-  expect(await screen.findByText(/assertions evaluated/)).toBeVisible();
+  await waitFor(() => expect(runOutput()).toHaveTextContent("PASS"));
   expect(screen.queryByText("File test could not run")).not.toBeInTheDocument();
 });
 
@@ -753,13 +827,13 @@ test("file preview uses the editor draft and Run all uses persisted files after 
     { target: { value: draft.content } },
   );
   fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
-  await screen.findByText(/assertions evaluated/);
+  await waitFor(() => expect(runOutput()).toHaveTextContent("PASS"));
   expect(submitted).toEqual({
     files: [draft],
     sourceVersion: collection.version,
     directory: "traces",
   });
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
@@ -769,6 +843,7 @@ test("file preview uses the editor draft and Run all uses persisted files after 
       files,
       sourceVersion: collection.version,
       directory: "traces",
+      progressToken: expect.any(String),
     }),
   );
   await waitFor(() =>
@@ -799,10 +874,12 @@ test("invalid files have honest summary and syntax diagnostics before a run", as
   );
   showPage();
   await waitFor(() =>
-    expect(screen.getByText("Invalid tool at line 1")).toBeVisible(),
+    expect(row(scenario.path)).toHaveTextContent("Invalid tool at line 1"),
   );
+  expect(row(scenario.path)).toHaveTextContent("Not run");
   fireEvent.click(screen.getByRole("link", { name: scenario.path }));
-  expect(await screen.findByText("Invalid tool at line 1")).toBeVisible();
+  expect(await screen.findByText("Invalid validation syntax")).toBeVisible();
+  expect(screen.getByText("Invalid tool at line 1")).toBeVisible();
 });
 
 test("repository errors disable inspection and replay without local fallback", async () => {
@@ -827,7 +904,7 @@ test("repository errors disable inspection and replay without local fallback", a
   ).toBeVisible();
   expect(screen.getByRole("button", { name: "Run all" })).toBeDisabled();
   expect(
-    screen.queryByRole("button", { name: "Save validation" }),
+    screen.queryByRole("button", { name: "Save" }),
   ).not.toBeInTheDocument();
   await new Promise((resolve) => setTimeout(resolve, 350));
   expect(inspections).toBe(0);
@@ -886,7 +963,7 @@ test("Git directory configuration lives in source settings; browser refresh stil
   const beforeUnload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(beforeUnload);
   expect(beforeUnload.defaultPrevented).toBe(true);
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
@@ -952,16 +1029,11 @@ test("duplicate filenames block saving until repaired, and a saved rename update
   );
   showPage();
   await openValidationFile("other.appa");
-  const filename = await screen.findByRole("textbox", {
-    name: "Validation filename",
-  });
-  fireEvent.change(filename, { target: { value: scenario.path } });
-  expect(
-    screen.getByRole("button", { name: "Save validation" }),
-  ).toBeDisabled();
+  await renameFile(scenario.path);
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   expect(currentHref).toContain("other.appa");
-  fireEvent.change(filename, { target: { value: "repaired.appa" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  await renameFile("repaired.appa");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(currentHref).toBe("/openappa/validation/file?path=repaired.appa"),
   );
@@ -976,7 +1048,7 @@ test("duplicate filenames block saving until repaired, and a saved rename update
   ).toHaveValue("second contents");
 });
 
-test("the last-run line adds up the searched rows, not just the current page", async () => {
+test("the summary counts every file while search narrows only the table", async () => {
   const files = Array.from({ length: 12 }, (_, i) => ({
     path: `scenario-${String(i + 1).padStart(3, "0")}.appa`,
     content: scenario.content,
@@ -997,37 +1069,27 @@ test("the last-run line adds up the searched rows, not just the current page", a
     ),
   );
   showPage();
-  await waitFor(() =>
-    expect(
-      screen.getByRole("link", { name: "scenario-001.appa" }),
-    ).toBeVisible(),
-  );
-  expect(screen.getAllByText("Page 1 of 2")[0]).toBeVisible();
-  expect(await findLastRun()).toHaveTextContent("6 of 12 passed");
-  fireEvent.click(
-    screen.getAllByRole("button", { name: "Go to next page" })[0],
-  );
-  await waitFor(() =>
-    expect(
-      screen.getByRole("link", { name: "scenario-011.appa" }),
-    ).toBeVisible(),
-  );
-  expect(await findLastRun()).toHaveTextContent("6 of 12 passed");
-  fireEvent.change(screen.getByPlaceholderText("Search validations…"), {
-    target: { value: "scenario-001" },
-  });
-  await waitFor(() =>
-    expect(
-      screen.getByRole("link", { name: "scenario-001.appa" }),
-    ).toBeVisible(),
-  );
-  await waitFor(async () =>
-    expect(await findLastRun()).toHaveTextContent("1 of 1 passed"),
-  );
-  expect(screen.getAllByText("Page 1 of 1")[0]).toBeVisible();
   expect(
-    screen.getAllByRole("button", { name: "Go to next page" })[0],
-  ).toBeDisabled();
+    await screen.findByRole("button", { name: "6 passing" }),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: "6 failing" })).toBeVisible();
+  // Every file is listed: no page holds any of them back.
+  for (const file of files)
+    expect(screen.getByRole("link", { name: file.path })).toBeVisible();
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Search validations" }),
+    {
+      target: { value: "scenario-001" },
+    },
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("link", { name: "scenario-012.appa" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(screen.getByRole("link", { name: "scenario-001.appa" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "6 passing" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "6 failing" })).toBeVisible();
 });
 
 test("status filters keep failures, execution failures and unrun files apart and preserve the URL into detail navigation", async () => {
@@ -1052,63 +1114,71 @@ test("status filters keep failures, execution failures and unrun files apart and
     ),
   );
   showPage();
-  await waitFor(() =>
-    expect(
-      screen.getByRole("link", { name: "not_run.appa" }).closest("tr"),
-    ).toHaveTextContent("Not run"),
-  );
+  await waitFor(() => expect(row("not_run.appa")).toHaveTextContent("Not run"));
   // The run skipped not_run.appa: the summary counts it as not run rather
   // than reporting the run's own totals.
-  expect(await findLastRun()).toHaveTextContent("1 of 3 passed · 1 not run");
+  expect(
+    await screen.findByRole("button", { name: "1 passing" }),
+  ).toBeVisible();
+  for (const name of ["1 failing", "1 cannot run", "1 not run"])
+    expect(screen.getByRole("button", { name })).toBeVisible();
   for (const [value, label] of [
-    ["passed", "Passed"],
-    ["failed", "Failed"],
-    ["cannot_run", "Cannot run"],
+    ["passed", "1 passing"],
+    ["failed", "1 failing"],
+    ["cannot_run", "1 cannot run"],
   ]) {
-    fireEvent.click(
-      screen.getByRole("combobox", { name: "Filter by validation status" }),
-    );
-    fireEvent.click(await screen.findByRole("option", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: label }));
     await waitFor(() =>
       expect(new URLSearchParams(currentHref.split("?")[1]).get("status")).toBe(
         value,
       ),
     );
+    expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     await waitFor(() =>
       expect(screen.getByRole("link", { name: `${value}.appa` })).toBeVisible(),
     );
-    if (value === "cannot_run") {
-      const cannotRun = screen
-        .getByRole("link", { name: "cannot_run.appa" })
-        .closest("tr");
-      expect(cannotRun).toHaveTextContent("Cannot run");
-      expect(cannotRun).toHaveTextContent("Unknown tool in this policy");
-      for (const other of ["passed", "failed", "not_run"])
+    for (const other of ["passed", "failed", "cannot_run", "not_run"])
+      if (other !== value)
         expect(
           screen.queryByRole("link", { name: `${other}.appa` }),
         ).not.toBeInTheDocument();
-    }
   }
+  // The row says why it cannot run instead of hiding it behind the status.
+  const cannotRun = row("cannot_run.appa");
+  expect(cannotRun).toHaveTextContent("Cannot run");
+  expect(cannotRun).toHaveTextContent("Unknown tool in this policy");
   fireEvent.click(screen.getByRole("link", { name: "cannot_run.appa" }));
   // A saved file shows its recorded result without running it again.
   await screen.findByRole("textbox", {
     name: "Policy validation cannot_run.appa",
   });
-  expect(
-    await screen.findByRole("link", {
-      name: `${formatDate({ date: run.createdAt, dateFormat: "MM/dd HH:mm" })} · Manual run`,
-    }),
-  ).toHaveAttribute("href", "/openappa/validation/history");
-  expect(screen.getAllByText("Cannot run").length).toBeGreaterThan(0);
-  expect(screen.getByText("Unknown tool in this policy")).toBeVisible();
+  await waitFor(() =>
+    expect(runOutput()).toHaveTextContent("Unknown tool in this policy"),
+  );
+  expect(runOutput()).toHaveTextContent(
+    formatDate({ date: run.createdAt, dateFormat: "MMM d, HH:mm:ss" }),
+  );
+  expect(screen.getByText("Cannot run")).toBeVisible();
   expect(screen.queryByText("Not run")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Run file" })).toBeEnabled();
-  fireEvent.click(
-    await screen.findByRole("link", { name: "Back to validation" }),
+  await waitFor(() =>
+    expect(
+      screen.getByRole("link", { name: "Back to validations" }),
+    ).toHaveAttribute("href", "/openappa/validation?status=cannot_run"),
   );
+  clickBack();
   expect(new URLSearchParams(currentHref.split("?")[1]).get("status")).toBe(
     "cannot_run",
   );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("link", { name: "passed.appa" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(screen.getByRole("link", { name: "cannot_run.appa" })).toBeVisible();
 });
 
 test("changed inputs retain the historical outcome and show its run time", async () => {
@@ -1116,16 +1186,17 @@ test("changed inputs retain the historical outcome and show its run time", async
   server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json([run])));
   showPage();
   await waitFor(() => {
-    const row = screen.getByRole("link", { name: scenario.path }).closest("tr");
-    expect(row).toHaveTextContent("Passed");
-    expect(row).toHaveTextContent(formatDate({ date: run.createdAt }));
+    const scenarioRow = row(scenario.path);
+    expect(scenarioRow).toHaveTextContent("Passed");
+    expect(
+      within(scenarioRow).getByTitle(formatDate({ date: run.createdAt })),
+    ).toBeVisible();
   });
-  fireEvent.click(
-    screen.getByRole("combobox", { name: "Filter by validation status" }),
+  // The filter came from the URL.
+  expect(screen.getByRole("button", { name: "1 passing" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
   );
-  expect(
-    screen.getAllByRole("option").map((option) => option.textContent),
-  ).toEqual(["All statuses", "Passed", "Failed", "Cannot run", "Not run"]);
 });
 
 test("each file shows its own most recent run when it is absent from the latest suite", async () => {
@@ -1158,39 +1229,33 @@ test("each file shows its own most recent run when it is absent from the latest 
   );
   showPage();
   await waitFor(() => {
-    const olderRow = screen
-      .getByRole("link", { name: older.path })
-      .closest("tr");
+    const olderRow = row(older.path);
     expect(olderRow).toHaveTextContent("Failed");
-    expect(olderRow).toHaveTextContent(formatDate({ date: createdAt }));
+    expect(
+      within(olderRow).getByTitle(formatDate({ date: createdAt })),
+    ).toBeVisible();
     expect(olderRow).toHaveTextContent("Expected deny, received allow");
   });
-  const newerRow = screen
-    .getByRole("link", { name: scenario.path })
-    .closest("tr");
-  expect(newerRow).toHaveTextContent(formatDate({ date: run.createdAt }));
+  const newerRow = row(scenario.path);
+  expect(
+    within(newerRow).getByTitle(formatDate({ date: run.createdAt })),
+  ).toBeVisible();
   expect(newerRow).toHaveTextContent("Passed");
   // The summary adds up both files' newest results, not either run's totals.
-  const lastRun = await findLastRun();
-  expect(lastRun).toHaveTextContent("1 of 2 passed");
-  expect(lastRun).toHaveTextContent(
-    formatDate({ date: run.createdAt, dateFormat: "MM/dd HH:mm" }),
+  expect(screen.getByRole("button", { name: "1 passing" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "1 failing" })).toBeVisible();
+  // The file's last run opens the run that recorded its result.
+  fireEvent.click(
+    within(row(older.path)).getByRole("button", {
+      name: /^older\.appa: last run .*\. Open run$/,
+    }),
   );
-  await userEvent.click(
-    within(
-      screen
-        .getByRole("link", { name: older.path })
-        .closest("tr") as HTMLElement,
-    ).getByRole("button", { name: "Failed: show why" }),
-  );
-  const why = await screen.findByRole("dialog");
-  expect(why).toHaveTextContent("Expected deny, received allow");
-  expect(why).toHaveTextContent(
-    `Manual run · ${formatDate({ date: createdAt, dateFormat: "MM/dd HH:mm" })}`,
+  expect(await findRunPanel()).toHaveTextContent(
+    formatDate({ date: createdAt, dateFormat: "MMM d, yyyy HH:mm:ss" }),
   );
 });
 
-test("page selection can expand across pages and remains stable across filters", async () => {
+test("Run all submits every file even while the table is searched", async () => {
   const files = Array.from({ length: 12 }, (_, i) => ({
     ...scenario,
     path: `scenario-${i + 1}.appa`,
@@ -1214,61 +1279,29 @@ test("page selection can expand across pages and remains stable across filters",
   expect(
     within(pageActions).queryByRole("button", { name: "Add validation" }),
   ).not.toBeInTheDocument();
-  expect(
-    within(pageActions).getByRole("button", { name: "Write a validation" }),
-  ).toBeVisible();
-  expect(
-    within(pageActions).getByRole("button", { name: "Explain validations" }),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "Write validations" }),
-  ).not.toBeInTheDocument();
-  fireEvent.click(
-    screen.getByRole("checkbox", {
-      name: "Select all validations on this page",
+  await userEvent.click(
+    within(pageActions).getByRole("button", {
+      name: "More validation actions",
     }),
   );
-  expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "Select all 12 validations that match the current filters.",
-    }),
-  );
-  expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
-  fireEvent.click(
-    screen.getAllByRole("button", { name: "Go to next page" })[0],
+  expect(
+    await screen.findByRole("menuitem", { name: "Write a validation" }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("menuitem", { name: "Explain validations" }),
+  ).toBeVisible();
+  await userEvent.keyboard("{Escape}");
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Search validations" }),
+    {
+      target: { value: "scenario-12" },
+    },
   );
   await waitFor(() =>
     expect(
-      screen.getByRole("checkbox", { name: "Select scenario-11.appa" }),
-    ).toBeChecked(),
+      screen.queryByRole("link", { name: "scenario-1.appa" }),
+    ).not.toBeInTheDocument(),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Run all" }));
-  await waitFor(() =>
-    expect(submitted).toEqual({
-      files,
-      sourceVersion: collection.version,
-      directory: "traces",
-    }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Clear" }));
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "Select scenario-12.appa" }),
-  );
-  fireEvent.change(screen.getByPlaceholderText("Search validations…"), {
-    target: { value: "scenario-1.appa" },
-  });
-  await screen.findByRole("link", { name: "scenario-1.appa" });
-  expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
-  fireEvent.change(screen.getByPlaceholderText("Search validations…"), {
-    target: { value: "scenario-12" },
-  });
-  await waitFor(() =>
-    expect(
-      screen.getByRole("checkbox", { name: "Select scenario-12.appa" }),
-    ).toBeChecked(),
-  );
-  submitted = undefined;
   expect(
     screen.queryByRole("button", { name: /Run selected/ }),
   ).not.toBeInTheDocument();
@@ -1278,11 +1311,12 @@ test("page selection can expand across pages and remains stable across filters",
       files,
       sourceVersion: collection.version,
       directory: "traces",
+      progressToken: expect.any(String),
     }),
   );
 });
 
-test("bulk local deletion persists immediately after confirmation", async () => {
+test("row deletion persists only after confirmation", async () => {
   const files = [scenario, { ...scenario, path: "keep.appa" }];
   let saved: unknown;
   server.use(
@@ -1297,18 +1331,15 @@ test("bulk local deletion persists immediately after confirmation", async () => 
     }),
   );
   showPage();
-  await screen.findByRole("checkbox", { name: `Select ${scenario.path}` });
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: `Select ${scenario.path}` }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  await screen.findByRole("link", { name: scenario.path });
+  await chooseRowAction(scenario.path, "Delete");
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });
   expect(saved).toBeUndefined();
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   expect(screen.getByRole("link", { name: scenario.path })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  await chooseRowAction(scenario.path, "Delete");
   fireEvent.click(
     within(await screen.findByRole("dialog")).getByRole("button", {
       name: "Delete",
@@ -1320,9 +1351,6 @@ test("bulk local deletion persists immediately after confirmation", async () => 
     ).not.toBeInTheDocument(),
   );
   expect(screen.getByRole("link", { name: "keep.appa" })).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "Save validation" }),
-  ).not.toBeInTheDocument();
   await waitFor(() =>
     expect(saved).toEqual({
       files: [files[1]],
@@ -1334,7 +1362,7 @@ test("bulk local deletion persists immediately after confirmation", async () => 
 test.each([
   { source: "github", canWrite: true },
   { source: "local", canWrite: false },
-])("bulk deletion is absent for $source with write permission $canWrite", async ({
+])("row deletion is absent for $source with write permission $canWrite", async ({
   source,
   canWrite,
 }) => {
@@ -1342,7 +1370,7 @@ test.each([
     (permissions) =>
       ({
         data:
-          canWrite || permissions.openappaPolicy?.includes("update") !== true,
+          canWrite || permissions.guardrailsPolicy?.includes("update") !== true,
       }) as ReturnType<typeof useHasPermissions>,
   );
   server.use(
@@ -1351,10 +1379,9 @@ test.each([
   showPage();
   await screen.findByRole("link", { name: scenario.path });
   expect(
-    screen.queryByRole("checkbox", { name: `Select ${scenario.path}` }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Delete" }),
+    screen.queryByRole("button", {
+      name: `More actions for ${scenario.path}`,
+    }),
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Run all" })).toHaveProperty(
     "disabled",
@@ -1362,7 +1389,7 @@ test.each([
   );
 });
 
-test("last-run summary links to paginated history and returns to the filtered collection", async () => {
+test("last run opens the recorded run in the runner panel; history returns to the filtered collection", async () => {
   currentHref = "/openappa/validation?search=scenario";
   const runs = Array.from({ length: 20 }, (_, i) => ({
     ...run,
@@ -1371,26 +1398,25 @@ test("last-run summary links to paginated history and returns to the filtered co
   }));
   server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json(runs)));
   showPage();
-  const lastRun = await findLastRun();
-  expect(lastRun).toHaveTextContent("1 of 1 passed");
-  expect(lastRun).toHaveTextContent(
-    formatDate({ date: run.createdAt, dateFormat: "MM/dd HH:mm" }),
-  );
-  expect(screen.getAllByRole("table")).toHaveLength(1);
-  expect(screen.queryByText("Revision 20")).not.toBeInTheDocument();
-  fireEvent.click(lastRun);
-  expect(currentHref).toBe("/openappa/validation/history");
-  await waitFor(() => expect(screen.getByText("Revision 20")).toBeVisible());
-  expect(screen.getByText("Revision 11")).toBeVisible();
-  expect(screen.queryByText("Revision 10")).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("link", { name: scenario.path }),
-  ).not.toBeInTheDocument();
+    await screen.findByRole("textbox", { name: "Search validations" }),
+  ).toHaveValue("scenario");
+  fireEvent.click(await findLastRun());
+  // The newest run opens in place; the list stays where it was.
+  const panel = await findRunPanel();
+  expect(panel).toHaveTextContent("REPLAY");
+  expect(panel).toHaveTextContent("policy rev 20");
+  expect(currentHref).toBe("/openappa/validation?search=scenario");
   fireEvent.click(
-    screen.getAllByRole("button", { name: "Go to next page" })[0],
+    within(panel).getByRole("button", { name: "Open run history" }),
   );
-  await waitFor(() => expect(screen.getByText("Revision 10")).toBeVisible());
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  expect(currentHref).toBe("/openappa/validation/history");
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", { name: /^Open run from / }),
+    ).toHaveLength(20),
+  );
+  clickBack();
   await waitFor(() =>
     expect(screen.getByRole("link", { name: scenario.path })).toBeVisible(),
   );
@@ -1398,9 +1424,12 @@ test("last-run summary links to paginated history and returns to the filtered co
     "scenario",
   );
   fireEvent.click(screen.getByRole("link", { name: scenario.path }));
-  fireEvent.click(
-    await screen.findByRole("link", { name: "Back to validation" }),
+  await waitFor(() =>
+    expect(
+      screen.getByRole("link", { name: "Back to validations" }),
+    ).toHaveAttribute("href", "/openappa/validation?search=scenario"),
   );
+  clickBack();
   expect(currentHref).toBe("/openappa/validation?search=scenario");
 });
 
@@ -1408,20 +1437,20 @@ test("empty history stays reachable from the page actions", async () => {
   showPage();
   await screen.findByRole("link", { name: scenario.path });
   expect(
-    screen.queryByRole("link", { name: /^Last run/ }),
+    screen.queryByRole("button", { name: /^Last run/ }),
   ).not.toBeInTheDocument();
   await openRunHistory();
-  expect(await screen.findByText("No runs yet.")).toBeVisible();
+  expect(await screen.findByText("No runs yet")).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: "Go to next page" }),
+    screen.queryByRole("button", { name: /older runs/ }),
   ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   await waitFor(() =>
     expect(screen.getByRole("link", { name: scenario.path })).toBeVisible(),
   );
 });
 
-test("last-run summary adds up the per-file statuses, so a refused policy passes none", async () => {
+test("the summary adds up the per-file statuses, so a refused policy passes none", async () => {
   server.use(
     http.get(endpoint, () =>
       HttpResponse.json({
@@ -1454,23 +1483,23 @@ test("last-run summary adds up the per-file statuses, so a refused policy passes
   );
   showPage();
   // A refused policy decided nothing about any file, so the summary agrees
-  // with the Status column instead of repeating the run's raw counts.
-  expect(await findLastRun()).toHaveTextContent("0 of 3 passed");
-  const row = screen.getByRole("link", { name: scenario.path }).closest("tr");
-  expect(row).toHaveTextContent("Cannot run");
-  expect(row).toHaveTextContent(formatDate({ date: run.createdAt }));
-  expect(row).toHaveTextContent("Missing tool contract");
-  await userEvent.click(
-    within(row as HTMLElement).getByRole("button", {
-      name: "Cannot run: show why",
-    }),
-  );
-  expect(await screen.findByRole("dialog")).toHaveTextContent(
-    "Missing tool contract",
-  );
+  // with the rows instead of repeating the run's raw counts.
+  expect(
+    await screen.findByRole("button", { name: "0 passing" }),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: "3 cannot run" })).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: /failing$/ }),
+  ).not.toBeInTheDocument();
+  const scenarioRow = row(scenario.path);
+  expect(scenarioRow).toHaveTextContent("Cannot run");
+  expect(scenarioRow).toHaveTextContent("Missing tool contract");
+  expect(
+    within(scenarioRow).getByTitle(formatDate({ date: run.createdAt })),
+  ).toBeVisible();
 });
 
-test("an open status explanation stays open when run history refreshes", async () => {
+test("an opened recorded run stays open when run history refreshes", async () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -1487,12 +1516,10 @@ test("an open status explanation stays open when run history refreshes", async (
   let history: unknown[] = [failed];
   server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json(history)));
   showPage(client);
-  await userEvent.click(
-    await screen.findByRole("button", { name: "Failed: show why" }),
-  );
-  const why = await screen.findByRole("dialog");
-  expect(why).toHaveTextContent("Expected deny, received allow");
-  // An unrelated older run arrives; this file's result is unchanged.
+  fireEvent.click(await findLastRun());
+  const panel = await findRunPanel();
+  expect(panel).toHaveTextContent("REPLAY");
+  // An unrelated older run arrives; this run is unchanged.
   history = [
     failed,
     { ...run, id: "older", createdAt: "2026-10-01T10:00:00Z" },
@@ -1505,8 +1532,12 @@ test("an open status explanation stays open when run history refreshes", async (
       client.getQueryData<unknown[]>(["openappa-policy-test-runs"]),
     ).toHaveLength(2),
   );
-  expect(screen.getByRole("dialog")).toBe(why);
-  expect(why).toBeVisible();
+  expect(panel).toBeInTheDocument();
+  expect(
+    screen.getByRole("region", { name: "Validation run panel" }),
+  ).toHaveTextContent(
+    formatDate({ date: run.createdAt, dateFormat: "MMM d, yyyy HH:mm:ss" }),
+  );
 });
 
 test.each([
@@ -1524,12 +1555,17 @@ test.each([
   );
   showPage();
   expect(await screen.findByText("Could not load run history")).toBeVisible();
-  expect(screen.queryByText("No runs yet.")).not.toBeInTheDocument();
+  expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
   failed = false;
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   if (href.endsWith("/history"))
-    await waitFor(() => expect(screen.getByText("Revision 2")).toBeVisible());
-  else expect(await findLastRun()).toHaveTextContent("1 of 1 passed");
+    expect(
+      await screen.findByRole("button", { name: /^Open run from / }),
+    ).toBeVisible();
+  else
+    expect(
+      await screen.findByRole("button", { name: "1 passing" }),
+    ).toBeVisible();
 });
 
 test("the new validation editor creates only after submission", async () => {
@@ -1553,7 +1589,7 @@ test("the new validation editor creates only after submission", async () => {
   );
   expect(submitted).toBeUndefined();
   expect(
-    screen.queryByRole("button", { name: "Save validation" }),
+    screen.queryByRole("button", { name: "Save" }),
   ).not.toBeInTheDocument();
   fireEvent.change(screen.getByRole("textbox", { name: "Filename" }), {
     target: { value: "new.appa" },
@@ -1571,14 +1607,14 @@ test("the new validation editor creates only after submission", async () => {
     expectedVersion: collection.version,
   });
   expect(
-    screen.getByRole("button", { name: "Save validation" }),
-  ).toBeDisabled();
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+    screen.queryByRole("button", { name: "Save" }),
+  ).not.toBeInTheDocument();
+  clickBack();
   await waitFor(() =>
     expect(screen.getByRole("link", { name: "new.appa" })).toBeVisible(),
   );
   expect(
-    screen.queryByRole("button", { name: "Save validation" }),
+    screen.queryByRole("button", { name: "Save" }),
   ).not.toBeInTheDocument();
 });
 
@@ -1663,9 +1699,7 @@ test("file save and deletion preserve the other persisted files", async () => {
     }),
     { target: { value: "saved change" } },
   );
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Save validation" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(submissions).toEqual([
       {
@@ -1679,12 +1713,9 @@ test("file save and deletion preserve the other persisted files", async () => {
       screen.getByRole("textbox", { name: "Policy validation scenario.appa" }),
     ).not.toHaveAttribute("readonly"),
   );
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
-  await screen.findByRole("checkbox", { name: `Select ${scenario.path}` });
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: `Select ${scenario.path}` }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  clickBack();
+  await screen.findByRole("link", { name: scenario.path });
+  await chooseRowAction(scenario.path, "Delete");
   fireEvent.click(
     within(await screen.findByRole("dialog")).getByRole("button", {
       name: "Delete",
@@ -1704,11 +1735,11 @@ test("file save and deletion preserve the other persisted files", async () => {
     await screen.findByRole("textbox", { name: "Policy validation keep.appa" }),
   ).toHaveValue(files[1].content);
   expect(
-    screen.getByRole("button", { name: "Save validation" }),
-  ).toBeDisabled();
+    screen.queryByRole("button", { name: "Save" }),
+  ).not.toBeInTheDocument();
 });
 
-test("history opens the chosen saved run's explanations by row and keyboard", async () => {
+test("history opens the chosen saved run's explanations by column and keyboard", async () => {
   currentHref = "/openappa/validation/history";
   const historical = {
     ...run,
@@ -1746,48 +1777,53 @@ test("history opens the chosen saved run's explanations by row and keyboard", as
     http.get(`${endpoint}/runs`, () => HttpResponse.json([run, historical])),
   );
   showPage();
-  await screen.findByText("Revision 1");
-  // Keyboard first: closing a modal hands focus back on a timer, which could
-  // land after a later focus() and swallow the Enter.
-  screen
-    .getByRole("button", { name: formatDate({ date: historical.createdAt }) })
-    .focus();
-  await userEvent.keyboard("{Enter}");
-  const dialog = await screen.findByRole("dialog", {
-    name: "Validation run details",
+  const column = await screen.findByRole("button", {
+    name: new RegExp(
+      `^Open run from ${escapeRegExp(formatDate({ date: historical.createdAt }))}, policy revision 1`,
+    ),
   });
-  expect(within(dialog).getByText("Unused policy rule")).toBeVisible();
-  const passed = within(dialog).getByRole("region", { name: "passed.appa" });
-  expect(passed).toHaveTextContent("All evaluated assertions matched");
-  const failed = within(dialog).getByRole("region", { name: "failed.appa" });
-  expect(within(failed).getByRole("cell", { name: "deny" })).toBeVisible();
-  expect(within(failed).getByRole("cell", { name: "allow" })).toBeVisible();
-  expect(failed).toHaveTextContent(
+  column.focus();
+  await userEvent.keyboard("{Enter}");
+  const panel = await findRunPanel();
+  expect(panel).toHaveTextContent("Unused policy rule");
+  for (const path of ["passed.appa", "failed.appa", "cannot.appa"])
+    expect(within(panel).getByRole("button", { name: path })).toBeVisible();
+  expect(
+    within(panel).queryByRole("button", { name: scenario.path }),
+  ).not.toBeInTheDocument();
+  expect(panel).toHaveTextContent("expected deny, got allow");
+  fireEvent.click(within(panel).getByRole("tab", { name: /Problems/ }));
+  const problems = within(panel).getByRole("tabpanel", { name: "Problems" });
+  expect(problems).toHaveTextContent(
     "Expected a block but the policy allowed this tool",
   );
-  expect(
-    within(dialog).getByRole("region", { name: "cannot.appa" }),
-  ).toHaveTextContent("Unknown tool in this policy");
-  expect(
-    within(dialog).queryByRole("region", { name: scenario.path }),
-  ).not.toBeInTheDocument();
-  fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" })[0]);
+  expect(problems).toHaveTextContent("Unknown tool in this policy");
+  fireEvent.click(within(panel).getByRole("button", { name: "Close panel" }));
   await waitFor(() =>
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    expect(
+      screen.queryByRole("region", { name: "Validation run panel" }),
+    ).not.toBeInTheDocument(),
   );
-  const historicalRow = screen.getByText("Revision 1").closest("tr");
-  if (!historicalRow) throw new Error("Historical run row missing");
-  fireEvent.click(historicalRow);
-  expect(
-    await screen.findByRole("dialog", { name: "Validation run details" }),
-  ).toBeVisible();
+  // Selecting one file's cell explains that result and opens its run. A file
+  // no longer in the suite is named after its path.
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: `failed, ${formatDate({ date: historical.createdAt })}: Failed`,
+    }),
+  );
+  const why = screen.getByText("Why").closest("div") as HTMLElement;
+  expect(why).toHaveTextContent(
+    "Expected a block but the policy allowed this tool",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Open run" }));
+  expect(await findRunPanel()).toHaveTextContent("Unused policy rule");
 });
 
 test("policy readers cannot select directories or edit files", async () => {
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions) =>
       ({
-        data: permissions.openappaPolicy?.includes("update") !== true,
+        data: permissions.guardrailsPolicy?.includes("update") !== true,
       }) as ReturnType<typeof useHasPermissions>,
   );
   server.use(
@@ -1815,9 +1851,12 @@ test("policy readers cannot select directories or edit files", async () => {
   ).toHaveAttribute("readonly");
   expect(screen.getByText("Managed in GitHub")).toBeVisible();
   expect(screen.getByRole("button", { name: "Run file" })).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: /Rename file$/ }),
+  ).not.toBeInTheDocument();
 });
 
-test("inventory rows open files while selection and compact actions stay independent", async () => {
+test("inventory rows open files while row actions stay independent", async () => {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -1855,13 +1894,6 @@ test("inventory rows open files while selection and compact actions stay indepen
   );
   showPage(client);
   await screen.findByRole("link", { name: scenario.path });
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: `Select ${scenario.path}` }),
-  );
-  expect(currentHref).toBe("/openappa/validation");
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: `Select ${scenario.path}` }),
-  );
   const statusCell = (
     await screen.findAllByRole("cell", { name: /Not run|Passed/ })
   )[0];
@@ -1875,7 +1907,7 @@ test("inventory rows open files while selection and compact actions stay indepen
   ).toBeVisible();
   // Exercise the case where inspection finishes while the editor is open.
   await waitForInspection();
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  clickBack();
   await screen.findByRole("link", { name: scenario.path });
   await waitFor(() =>
     expect(
@@ -1891,50 +1923,50 @@ test("inventory rows open files while selection and compact actions stay indepen
         sourceVersion: collection.version,
         directory: "traces",
         partial: true,
+        progressToken: expect.any(String),
       },
     ]),
   );
-  expect(
-    screen.getByRole("link", { name: scenario.path }).closest("tr"),
-  ).toHaveTextContent("Running");
-  expect(
-    screen.getByRole("link", { name: "other.appa" }).closest("tr"),
-  ).not.toHaveTextContent("Running");
+  // A single run is followed in the runner panel, like Run all.
+  expect(await findRunPanel()).toHaveTextContent("RUN");
+  expect(row(scenario.path)).toHaveTextContent("Running");
+  expect(row("other.appa")).not.toHaveTextContent("Running");
   finishRun();
   await waitFor(() =>
-    expect(
-      screen.getByRole("link", { name: scenario.path }).closest("tr"),
-    ).not.toHaveTextContent("Running"),
+    expect(row(scenario.path)).not.toHaveTextContent("Running"),
   );
   // Navigation keeps the suite provider mounted, so reuse its completed
   // inspection instead of expecting a new mutation after returning to the list.
   await waitForInspection();
-  // A late re-render can still swap the row's actions and close the menu
-  // under load, so open it until Delete is there to click.
-  await waitFor(
-    async () => {
-      if (!screen.queryByRole("menu"))
-        await userEvent.click(
-          screen.getByRole("button", {
-            name: `More actions ${scenario.path}`,
-          }),
-        );
-      expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
-    },
-    { timeout: 5000 },
-  );
-  await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+  await chooseRowAction(scenario.path, "Delete");
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });
   expect(currentHref).toBe("/openappa/validation");
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-  fireEvent.click(screen.getByRole("link", { name: `Edit ${scenario.path}` }));
+});
+
+test("an open runner panel comes back after a page refresh until it is closed", async () => {
+  server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json([run])));
+  const first = showPage();
+  fireEvent.click(await findLastRun());
+  expect(await findRunPanel()).toHaveTextContent("REPLAY");
+  first.unmount();
+
+  const second = showPage();
+  const panel = await findRunPanel();
+  expect(panel).toHaveTextContent("REPLAY");
+  fireEvent.click(within(panel).getByRole("button", { name: "Close panel" }));
+  await waitFor(() =>
+    expect(sessionStorage.getItem("openappa-validation-runner")).toBeNull(),
+  );
+  second.unmount();
+
+  showPage();
+  await screen.findByRole("link", { name: scenario.path });
   expect(
-    await screen.findByRole("textbox", {
-      name: "Policy validation scenario.appa",
-    }),
-  ).toBeVisible();
+    screen.queryByRole("region", { name: "Validation run panel" }),
+  ).not.toBeInTheDocument();
 });
 
 test("failed confirmed deletion retains the file and allows retry", async () => {
@@ -1948,11 +1980,8 @@ test("failed confirmed deletion retains the file and allows retry", async () => 
     }),
   );
   showPage();
-  await screen.findByRole("checkbox", { name: `Select ${scenario.path}` });
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: `Select ${scenario.path}` }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  await screen.findByRole("link", { name: scenario.path });
+  await chooseRowAction(scenario.path, "Delete");
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });
@@ -1976,82 +2005,8 @@ test("failed confirmed deletion retains the file and allows retry", async () => 
   });
 });
 
-/** The compact last-run line beside the filters; it links to run history. */
-function findLastRun() {
-  return screen.findByRole("link", { name: /^Last run/ });
-}
-
-async function openRunHistory() {
-  await userEvent.click(
-    screen.getByRole("button", { name: "More validation actions" }),
-  );
-  await userEvent.click(
-    await screen.findByRole("menuitem", { name: "Run history" }),
-  );
-}
-
-async function openValidationFile(path: string) {
-  await screen.findByRole("link", { name: path });
-  fireEvent.click(screen.getByRole("link", { name: path }));
-  expect(currentHref).toBe(validationFileHref(path));
-}
-
-function showPage(
-  client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  }),
-) {
-  function Routes() {
-    const [href, setHref] = useState(currentHref);
-    const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
-    function navigate(next: string) {
-      currentHref = next;
-      setHref(next);
-    }
-    vi.mocked(useRouter).mockReturnValue({
-      push: navigate,
-      replace: navigate,
-      prefetch: vi.fn(),
-      back: vi.fn(),
-      forward: vi.fn(),
-      refresh: vi.fn(),
-      bfcacheId: "validation-test",
-    } as ReturnType<typeof useRouter>);
-    return (
-      <>
-        <ListReturnUrlTracker />
-        <section aria-label="Validation page actions">
-          <div ref={setActionSlot} />
-        </section>
-        <OpenAppaPageActionSlotContext.Provider value={actionSlot}>
-          <ValidationProvider>
-            {href.startsWith("/openappa/validation/file") ? (
-              <FilePage />
-            ) : href.startsWith("/openappa/validation/new") ? (
-              <NewPage />
-            ) : href.startsWith("/openappa/validation/history") ? (
-              <HistoryPage />
-            ) : (
-              <ValidationPage />
-            )}
-          </ValidationProvider>
-        </OpenAppaPageActionSlotContext.Provider>
-      </>
-    );
-  }
-  return render(
-    <QueryClientProvider client={client}>
-      <TooltipProvider>
-        <Routes />
-      </TooltipProvider>
-    </QueryClientProvider>,
-  );
-}
-
 test("policy change and single-file runs are identified in run history", async () => {
+  const singleAt = "2026-10-05T10:00:00.000Z";
   server.use(
     http.get(`${endpoint}/runs`, () =>
       HttpResponse.json([
@@ -2059,7 +2014,7 @@ test("policy change and single-file runs are identified in run history", async (
         {
           ...run,
           id: "single",
-          createdAt: "2026-10-05T10:00:00.000Z",
+          createdAt: singleAt,
           policyRevision: 1,
           partial: true,
         },
@@ -2067,11 +2022,20 @@ test("policy change and single-file runs are identified in run history", async (
     ),
   );
   showPage();
-  fireEvent.click(await findLastRun());
-  await waitFor(() =>
-    expect(screen.getByText("Policy change run")).toBeVisible(),
+  await screen.findByRole("link", { name: scenario.path });
+  await openRunHistory();
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: `scenario.appa, ${formatDate({ date: run.createdAt })}: Passed`,
+    }),
   );
-  expect(screen.getByText("Single file run")).toBeVisible();
+  expect(runFacts()).toHaveTextContent("Policy save");
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: `scenario.appa, ${formatDate({ date: singleAt })}: Passed`,
+    }),
+  );
+  expect(runFacts()).toHaveTextContent("Manual · single file");
 });
 
 test("a refreshed automatic result replaces an older manual run in the inventory", async () => {
@@ -2102,12 +2066,9 @@ test("a refreshed automatic result replaces an older manual run in the inventory
     client.invalidateQueries({ queryKey: ["openappa-policy-test-runs"] }),
   );
   await waitFor(() => {
-    expect(screen.getByRole("link", { name: /^Last run/ })).toHaveTextContent(
-      "0 of 1 passed",
-    );
-    expect(
-      screen.getByRole("link", { name: scenario.path }).closest("tr"),
-    ).toHaveTextContent("Failed");
+    expect(screen.getByRole("button", { name: "0 passing" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "1 failing" })).toBeVisible();
+    expect(row(scenario.path)).toHaveTextContent("Failed");
   });
 });
 
@@ -2124,19 +2085,294 @@ test("unavailable automatic runs explain the problem in the summary and saved de
   await waitFor(() =>
     expect(screen.getAllByText(message).length).toBeGreaterThan(0),
   );
-  const lastRun = await findLastRun();
-  expect(lastRun).toHaveTextContent("Cannot run");
-  expect(lastRun).not.toHaveTextContent(/passed/);
   expect(screen.getByText("Validation could not run")).toBeVisible();
+  expect(screen.getByRole("button", { name: "0 passing" })).toBeVisible();
   // The run stopped before replaying any file, so no file has a result.
-  const row = screen.getByRole("link", { name: scenario.path }).closest("tr");
-  expect(row).toHaveTextContent("Not run");
-  fireEvent.click(lastRun);
-  await screen.findByText("Revision 2");
-  fireEvent.click(screen.getByText("Revision 2"));
-  const dialog = await screen.findByRole("dialog", {
-    name: "Validation run details",
-  });
-  expect(within(dialog).getByText(message)).toBeVisible();
-  expect(within(dialog).getByText("Cannot run")).toBeVisible();
+  expect(screen.getByRole("button", { name: "1 not run" })).toBeVisible();
+  expect(row(scenario.path)).toHaveTextContent("Not run");
+  fireEvent.click(await findLastRun());
+  const panel = await findRunPanel();
+  expect(panel).toHaveTextContent("ERROR");
+  expect(within(panel).getByText(message)).toBeVisible();
 });
+
+test("Run all follows its own progress events before the run is recorded", async () => {
+  const files = [scenario, { ...scenario, path: "other.appa" }];
+  let submitted: { progressToken?: string } | undefined;
+  let finishRun: () => void = () => undefined;
+  server.use(
+    http.get(endpoint, () => HttpResponse.json({ ...collection, files })),
+    http.post(`${endpoint}/run`, async ({ request }) => {
+      submitted = (await request.json()) as typeof submitted;
+      await new Promise<void>((resolve) => {
+        finishRun = resolve;
+      });
+      return HttpResponse.json({
+        ...run,
+        files: files.map((file) => ({ ...run.files[0], path: file.path })),
+      });
+    }),
+  );
+  showPage();
+  fireEvent.click(await screen.findByRole("button", { name: "Run all" }));
+  const panel = await findRunPanel();
+  await waitFor(() =>
+    expect(submitted?.progressToken).toEqual(expect.any(String)),
+  );
+  const token = submitted?.progressToken as string;
+  expect(panel).toHaveTextContent("2 queued");
+  // Another run's progress is not this run's.
+  pushProgress({
+    token: "someone-else",
+    phase: "file_finished",
+    path: "other.appa",
+    status: "failed",
+    assertionCount: 1,
+    durationMs: 5,
+    steps: [],
+  });
+  expect(
+    within(panel).queryByRole("button", { name: "other.appa" }),
+  ).not.toBeInTheDocument();
+  pushProgress({ token, phase: "started", paths: files.map((f) => f.path) });
+  pushProgress({ token, phase: "file_started", path: scenario.path });
+  pushProgress({
+    token,
+    phase: "file_finished",
+    path: scenario.path,
+    status: "passed",
+    assertionCount: 1,
+    durationMs: 12,
+    steps: [run.files[0].steps[0]] as OpenAppaValidationProgressStep[],
+  });
+  // The file finished while the HTTP request is still open.
+  await waitFor(() =>
+    expect(
+      within(panel).getByRole("button", { name: scenario.path }),
+    ).toBeVisible(),
+  );
+  expect(panel).toHaveTextContent("1 queued");
+  expect(panel).not.toHaveTextContent("All validations match");
+  finishRun();
+  await waitFor(() =>
+    expect(panel).toHaveTextContent(
+      "All validations match the current policy.",
+    ),
+  );
+  expect(
+    within(panel).getByRole("button", { name: "other.appa" }),
+  ).toBeVisible();
+});
+
+test("Run all completes from the recorded run when no progress events arrive", async () => {
+  const files = [scenario, { ...scenario, path: "other.appa" }];
+  server.use(
+    http.get(endpoint, () => HttpResponse.json({ ...collection, files })),
+    http.post(`${endpoint}/run`, () =>
+      HttpResponse.json({
+        ...run,
+        files: [
+          run.files[0],
+          {
+            ...run.files[0],
+            path: "other.appa",
+            status: "failed",
+            steps: [
+              {
+                ...run.files[0].steps[0],
+                expected: "deny",
+                status: "failed",
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+  );
+  showPage();
+  fireEvent.click(await screen.findByRole("button", { name: "Run all" }));
+  const panel = await findRunPanel();
+  await waitFor(() =>
+    expect(panel).toHaveTextContent("1 problem — open the Problems tab"),
+  );
+  for (const path of [scenario.path, "other.appa"])
+    expect(within(panel).getByRole("button", { name: path })).toBeVisible();
+  expect(panel).toHaveTextContent("expected deny, got allow");
+  expect(panel).not.toHaveTextContent("queued");
+});
+
+type OpenAppaValidationProgressStep = Extract<
+  OpenAppaValidationProgressMessage["payload"],
+  { phase: "file_finished" }
+>["steps"][number];
+
+/** Delivers a progress message to every live subscription. */
+function pushProgress(payload: OpenAppaValidationProgressMessage["payload"]) {
+  act(() => {
+    for (const entry of [...socket.subscribers])
+      if (entry.type === "openappa_validation_progress")
+        entry.handler({ type: "openappa_validation_progress", payload });
+  });
+}
+
+/** The inline last-run control in the summary strip; it opens that run. */
+function findLastRun() {
+  return screen.findByRole("button", { name: /^Last run/ });
+}
+
+/** The docked runner panel, once it has slid open. */
+function findRunPanel() {
+  return screen.findByRole("region", { name: "Validation run panel" });
+}
+
+/** The terminal pane under a file's editor. */
+function runOutput() {
+  return screen.getByRole("region", { name: "Run output" });
+}
+
+/** The selected run's facts in the history detail panel. */
+function runFacts() {
+  return screen.getByText("Trigger").closest("dl") as HTMLElement;
+}
+
+function row(path: string) {
+  return screen.getByRole("link", { name: path }).closest("tr") as HTMLElement;
+}
+
+/** The header's back arrow on detail pages, or the new page's own back link. */
+function clickBack() {
+  fireEvent.click(screen.getByRole("link", { name: /^Back to validations?$/ }));
+}
+
+async function renameFile(next: string) {
+  fireEvent.click(
+    await screen.findByRole("button", { name: /^File path .*Rename file$/ }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: "Rename file" });
+  fireEvent.change(within(dialog).getByRole("textbox", { name: "File path" }), {
+    target: { value: next },
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Rename" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "Rename file" }),
+    ).not.toBeInTheDocument(),
+  );
+}
+
+async function chooseRowAction(path: string, action: string) {
+  // A late re-render can still swap the row's actions and close the menu
+  // under load, so open it until the action is there to click.
+  await waitFor(
+    async () => {
+      if (!screen.queryByRole("menu"))
+        await userEvent.click(
+          screen.getByRole("button", { name: `More actions for ${path}` }),
+        );
+      expect(screen.getByRole("menuitem", { name: action })).toBeVisible();
+    },
+    { timeout: 5000 },
+  );
+  await userEvent.click(screen.getByRole("menuitem", { name: action }));
+}
+
+async function openRunHistory() {
+  await userEvent.click(
+    screen.getByRole("button", { name: "More validation actions" }),
+  );
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: "Run history" }),
+  );
+}
+
+async function openValidationFile(path: string) {
+  await screen.findByRole("link", { name: path });
+  fireEvent.click(screen.getByRole("link", { name: path }));
+  expect(currentHref).toBe(validationFileHref(path));
+}
+
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function showPage(
+  client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  }),
+) {
+  function Routes() {
+    const [href, setHref] = useState(currentHref);
+    const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
+    const [title, setTitle] = useState<HTMLSpanElement | null>(null);
+    const [status, setStatus] = useState<HTMLSpanElement | null>(null);
+    const [description, setDescription] = useState<HTMLSpanElement | null>(
+      null,
+    );
+    const [mode, setMode] = useState<{ back: boolean } | null>(null);
+    function navigate(next: string) {
+      currentHref = next;
+      setHref(next);
+    }
+    vi.mocked(useRouter).mockReturnValue({
+      push: navigate,
+      replace: navigate,
+      prefetch: vi.fn(),
+      back: vi.fn(),
+      forward: vi.fn(),
+      refresh: vi.fn(),
+      bfcacheId: "validation-test",
+    } as ReturnType<typeof useRouter>);
+    // Stands in for the Guardrails layout header: a file page, or a page that
+    // asks for it, gets the back arrow to the list.
+    const back = href.startsWith("/openappa/validation/file") || mode?.back;
+    return (
+      <>
+        <ListReturnUrlTracker />
+        <header>
+          {back && (
+            <PageBackLink href="/openappa/validation">
+              Back to validations
+            </PageBackLink>
+          )}
+          <h1>
+            <span ref={setTitle} />
+          </h1>
+          <span ref={setStatus} />
+          <span ref={setDescription} />
+        </header>
+        <section aria-label="Validation page actions">
+          <div ref={setActionSlot} />
+        </section>
+        <OpenAppaPageHeaderSlotsContext.Provider
+          value={{ title, status, description }}
+        >
+          <OpenAppaPageActionSlotContext.Provider value={actionSlot}>
+            <OpenAppaHeaderModeContext.Provider value={setMode}>
+              <ValidationLayout>
+                {href.startsWith("/openappa/validation/file") ? (
+                  <FilePage />
+                ) : href.startsWith("/openappa/validation/new") ? (
+                  <NewPage />
+                ) : href.startsWith("/openappa/validation/history") ? (
+                  <HistoryPage />
+                ) : (
+                  <ValidationPage />
+                )}
+              </ValidationLayout>
+            </OpenAppaHeaderModeContext.Provider>
+          </OpenAppaPageActionSlotContext.Provider>
+        </OpenAppaPageHeaderSlotsContext.Provider>
+      </>
+    );
+  }
+  return render(
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <Routes />
+      </TooltipProvider>
+    </QueryClientProvider>,
+  );
+}

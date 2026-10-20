@@ -139,11 +139,17 @@ export function prepareAppaRequest(params: {
   delegationMarkers?: AppaDelegationMarker[];
   childReturns?: CollectedChildReturns;
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
+  /**
+   * The client's own wire, when a Model Router route translated it to this
+   * one. Turns are counted on it.
+   */
+  clientWire?: { family: AppaWireFamily; body: unknown };
 }): AppaPreparedRequest {
   // A wire family this proxy cannot restore notices on — Gemini, Bedrock,
   // Cohere, native Ollama — is governed in part rather than refused: calls
   // and results are still ruled on, but a notice stays in the history as the
-  // notice call the client ran, and no turn accounting runs.
+  // notice call the client ran, and no turn accounting runs unless a Model
+  // Router route kept the client's own wire to count turns on.
   const family = appaWireFamily(params.interactionType);
   const entries = declaredToolEntries(params.body);
   const declared = entries.map((entry) => entry.tool);
@@ -215,6 +221,13 @@ export function prepareAppaRequest(params: {
       "OpenAPPA cannot govern tool traffic over Azure Responses. Use Azure Chat Completions or disable OpenAPPA for this client.",
     );
   }
+  // Read where they are spread: the body changes on its way there.
+  const turnBoundaries = () =>
+    family
+      ? appaTurnBoundaries({ family, body: params.body })
+      : params.clientWire
+        ? appaTurnBoundaries(params.clientWire)
+        : {};
   let historicalControlToolName: string | undefined;
   let restoredNoticeCallIds: ReadonlySet<string> | undefined;
   let delegation: AppaPreparedRequest["delegation"];
@@ -250,6 +263,11 @@ export function prepareAppaRequest(params: {
         body: params.body,
       }),
     ];
+  } else if (params.delegationMarkers) {
+    // A Model Router route collected these from the client's own wire, and
+    // stripped them there, before translating it to this one.
+    delegation = { markers: params.delegationMarkers };
+    childTrajectoryReceipts = params.childTrajectoryReceipts;
   }
 
   // A tool-free child can still return a value. Proxy-only clients still need
@@ -264,7 +282,7 @@ export function prepareAppaRequest(params: {
     session,
     customTools,
     declaredTools,
-    ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
+    ...turnBoundaries(),
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
     ...(delegation ? { delegation } : {}),
     ...(params.childReturns ? { childReturns: params.childReturns } : {}),
@@ -483,7 +501,7 @@ export function prepareAppaRequest(params: {
     customTools,
     declaredTools,
     ...(defersTools ? { defersTools: true as const } : {}),
-    ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
+    ...turnBoundaries(),
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
     ...(delegation ? { delegation } : {}),
     ...(params.childReturns ? { childReturns: params.childReturns } : {}),

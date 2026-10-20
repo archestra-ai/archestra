@@ -1,9 +1,12 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
+import { DocsPage, getDocsUrl, providerSupportsChat } from "@archestra/shared";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { useOpenAppaSetupState } from "@/app/openappa/_parts/use-openappa-setup-state";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { LlmModelSearchableSelect } from "@/components/llm-model-select";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import {
   Select,
@@ -18,15 +21,20 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
   useGuardrailsDeployment,
+  useUpdateAnnotatorModel,
   useUpdateBreakTheGlassEnabled,
   useUpdateGuardrailsDeployment,
+  useUpdateNewSessionPolicy,
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
+import { useLlmModels } from "@/lib/llm-models.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 
 /** Whether tool calls are checked against the policy at all. */
 export function OpenAppaEnforcementSetting() {
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   const update = useUpdateGuardrailsDeployment();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
@@ -78,11 +86,72 @@ export function OpenAppaEnforcementSetting() {
 }
 
 /**
+ * Which policy a new session decides under: the organization's live policy,
+ * or a snapshot it keeps for life. While the snapshot is selected, no policy
+ * revision is published, so existing live sessions keep their current revision.
+ */
+export function OpenAppaNewSessionPolicySetting() {
+  const deployment = useGuardrailsDeployment({ poll: true });
+  const update = useUpdateNewSessionPolicy();
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  return (
+    <SettingsBlock
+      id="new-session-policy"
+      title="Policy for new sessions"
+      description={
+        deployment.data?.newSessionPolicy === "snapshot"
+          ? "New sessions keep their opening policy. No policy revision is published, so existing live sessions keep their current revision until you select live again. Snapshot sessions keep their policy when live updates resume."
+          : "Live sessions take policy changes at their next tool call. Sessions opened with a snapshot keep it."
+      }
+      control={
+        deployment.data ? (
+          <Select
+            value={deployment.data.newSessionPolicy}
+            disabled={
+              !canManage || !deployment.data.featureEnabled || update.isPending
+            }
+            onValueChange={(value) => {
+              if (value === "live" || value === "snapshot")
+                update.mutate(value);
+            }}
+          >
+            <SelectTrigger
+              aria-label="Policy for new sessions"
+              className="w-full lg:w-80"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              <SelectItem
+                value="live"
+                description="Live sessions use the latest policy."
+              >
+                New sessions reference the live policy
+              </SelectItem>
+              <SelectItem
+                value="snapshot"
+                description="A policy change applies to new sessions only."
+              >
+                New sessions keep a policy snapshot
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <Skeleton className="h-9 w-80" />
+        )
+      }
+    />
+  );
+}
+
+/**
  * Whether a yell also turns OpenAPPA off for the session that sends it, so a
  * stuck agent can get unblocked.
  */
 export function OpenAppaBreakTheGlassSetting() {
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   const update = useUpdateBreakTheGlassEnabled();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
@@ -116,11 +185,146 @@ export function OpenAppaBreakTheGlassSetting() {
 }
 
 /**
+ * The model OpenAPPA's model annotators answer with, such as the default
+ * policy's catch-all for tool calls no rule annotates. Unset, they use the
+ * organization's default model. A key alone is not saved: the setting is
+ * stored once a model is picked for it.
+ */
+export function OpenAppaAnnotatorModelSetting() {
+  const deployment = useGuardrailsDeployment({ poll: true });
+  const update = useUpdateAnnotatorModel();
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  const { data: apiKeys } = useAvailableLlmProviderApiKeys({
+    toastOnError: false,
+  });
+  const [keySelectorOpen, setKeySelectorOpen] = useState(false);
+  // A key picked here but not yet saved with a model; undefined follows the
+  // saved setting.
+  const [pendingKeyId, setPendingKeyId] = useState<string | null>();
+  const savedKeyId = deployment.data?.annotatorLlmApiKeyId ?? null;
+  const keyId = pendingKeyId !== undefined ? pendingKeyId : savedKeyId;
+  const modelId =
+    pendingKeyId !== undefined ? "" : (deployment.data?.annotatorModelId ?? "");
+  const {
+    data: models,
+    isPending: modelsLoading,
+    isPlaceholderData,
+  } = useLlmModels({ apiKeyId: keyId ?? undefined });
+  // Annotators run for whoever's session is checked, so a personal
+  // subscription, which only its owner may use, is never offered.
+  const availableKeys = useMemo(
+    () =>
+      (apiKeys ?? []).filter(
+        (key) =>
+          providerSupportsChat(key.provider) && !isPersonalSubscription(key),
+      ),
+    [apiKeys],
+  );
+  const modelItems = useMemo(
+    () =>
+      !keyId || !models || isPlaceholderData
+        ? []
+        : models.map((model) => ({
+            value: model.dbId,
+            model: model.displayName ?? model.id,
+            modelId: model.id,
+            provider: model.provider,
+            isFree: model.isFree,
+            isBest: model.isBest,
+          })),
+    [keyId, models, isPlaceholderData],
+  );
+  const disabled =
+    !canManage || !deployment.data?.featureEnabled || update.isPending;
+  const save = (selection: {
+    annotatorModelId: string | null;
+    annotatorLlmApiKeyId: string | null;
+  }) =>
+    update.mutate(selection, {
+      onSuccess: () => setPendingKeyId(undefined),
+    });
+  return (
+    <SettingsBlock
+      id="annotator-model"
+      title="Annotator model"
+      description={
+        <>
+          <span className="block">
+            Sets the trust and audience of tool calls your policy has no rule
+            for. For example, a call that reads a secrets file becomes visible
+            only to the person running the session.
+          </span>
+          <span className="mt-2 block">
+            It answers the{" "}
+            <code className="font-mono text-xs">archestra.llm-annotator</code>{" "}
+            annotator, which the starting policy applies to every tool you
+            haven't annotated yourself. Unless you pick a model, it uses the
+            organization's default.
+          </span>
+          <span className="mt-2 block">
+            We recommend a model from the Sonnet or Luna family.
+          </span>
+        </>
+      }
+      control={
+        deployment.data ? (
+          <div className="flex w-full flex-col gap-2 sm:w-80">
+            <LlmProviderApiKeyDropdown
+              availableKeys={availableKeys}
+              selectedApiKeyId={keyId}
+              disabled={disabled}
+              open={keySelectorOpen}
+              onOpenChange={setKeySelectorOpen}
+              onSelectKey={(value) => {
+                setPendingKeyId(value === savedKeyId ? undefined : value);
+                setKeySelectorOpen(false);
+              }}
+              allowOrganizationDefault
+              organizationDefaultSelected={!keyId}
+              onSelectOrganizationDefault={() => {
+                setKeySelectorOpen(false);
+                if (savedKeyId)
+                  save({ annotatorModelId: null, annotatorLlmApiKeyId: null });
+                else setPendingKeyId(undefined);
+              }}
+              triggerVariant="select"
+              triggerAriaLabel="Annotator provider key"
+              triggerClassName="w-full"
+              popoverClassName="w-80"
+            />
+            {keyId ? (
+              <LlmModelSearchableSelect
+                value={modelId}
+                onValueChange={(value) =>
+                  save({ annotatorModelId: value, annotatorLlmApiKeyId: keyId })
+                }
+                options={modelItems}
+                placeholder={
+                  modelsLoading || isPlaceholderData
+                    ? "Loading models..."
+                    : "Select model..."
+                }
+                className="w-full"
+                disabled={disabled || modelsLoading || isPlaceholderData}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <Skeleton className="h-9 w-80" />
+        )
+      }
+    />
+  );
+}
+
+/**
  * What the proxy does with a request the guardrail cannot follow: one from a
  * client with no built-in support that sends no OpenAPPA session headers.
  */
 export function OpenAppaClientCoverageSetting() {
-  const deployment = useGuardrailsDeployment();
+  const deployment = useGuardrailsDeployment({ poll: true });
   const update = useUpdateUnsupportedClientAction();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],

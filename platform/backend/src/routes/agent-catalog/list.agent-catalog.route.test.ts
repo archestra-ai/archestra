@@ -4,12 +4,23 @@ import {
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
-import { AgentPinModel, AgentToolModel } from "@/models";
+import {
+  AgentPinModel,
+  AgentToolModel,
+  ExternalMcpSkillUsageEventModel,
+  McpCatalogSkillModel,
+  PluginModel,
+  PluginSkillUsageEventModel,
+  SkillModel,
+} from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
-import { describe, expect, test } from "@/test";
+import { accessGrants, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { makeAgentCard } from "../a2a-remote-agent/a2a-remote-agent.test-helpers";
 import agentCatalogRoutes from "./agent-catalog.routes";
 
@@ -715,5 +726,118 @@ describe("GET /api/agent-catalog", () => {
         .sort(),
     ).toEqual(["Direct", "Org", "Own", "Role", "Team"]);
     expect(response.json().pagination.total).toBe(5);
+  });
+
+  test("counts native, plugin and MCP activation skills without summarizing their usage", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    config.mcpGateway.skillsEnabled = true;
+    const suffix = crypto.randomUUID().slice(0, 8);
+    // includeTools=false hides explicit assignments, so the count is driven by
+    // the agent's dynamic load_skill availability.
+    const agent = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Skilled ${suffix}`,
+      accessAllTools: true,
+    });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: ctx.organizationId,
+        name: `native-${suffix}`,
+        description: "A native skill",
+        content: "# Native instructions",
+      },
+      files: [],
+      environmentIds: [],
+      ...accessGrants("org"),
+    });
+    const plugin = await PluginModel.create({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      input: {
+        displayName: "Release bundle",
+        description: "Release tooling",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        files: [
+          {
+            path: "skills/release-notes/SKILL.md",
+            content:
+              "---\nname: release-notes\ndescription: Draft release notes.\n---\n# Notes",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+      ...accessGrants("org"),
+    });
+    if (!plugin) throw new Error("failed to create test plugin");
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+    });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      serverType: "remote",
+      scope: "org",
+      ownerId: ctx.user.id,
+    });
+    await McpCatalogSkillModel.syncCatalog({
+      catalogId: catalog.id,
+      generation: (await McpCatalogSkillModel.beginRefresh(catalog.id)) ?? 0,
+      skills: [
+        {
+          uri: "skill://example/triage/SKILL.md",
+          name: "triage",
+          description: "Triage incidents.",
+          frontmatter: { name: "triage", description: "Triage incidents." },
+          resources: null,
+        },
+      ],
+    });
+    PluginSkillUsageEventModel.recordUsage({
+      pluginId: plugin.id,
+      skillPath: "skills/release-notes",
+      userId: ctx.user.id,
+    });
+    ExternalMcpSkillUsageEventModel.recordUsage({
+      mcpServerId: server.id,
+      uri: "skill://example/triage/SKILL.md",
+      userId: ctx.user.id,
+    });
+    await drainBackgroundWork();
+    const pluginSummaries = vi.spyOn(
+      PluginSkillUsageEventModel,
+      "getSummaries",
+    );
+    const externalSummaries = vi.spyOn(
+      ExternalMcpSkillUsageEventModel,
+      "getSummaries",
+    );
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agent-catalog?limit=10&offset=0&sortBy=createdAt&sortDirection=desc&pinned=false&access=mine,shared,org&includeTools=false&name=${suffix}`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({
+        type: "agent",
+        value: expect.objectContaining({
+          id: agent.id,
+          activationSkillsCount: 3,
+        }),
+      }),
+    ]);
+    expect(pluginSummaries).not.toHaveBeenCalled();
+    expect(externalSummaries).not.toHaveBeenCalled();
   });
 });

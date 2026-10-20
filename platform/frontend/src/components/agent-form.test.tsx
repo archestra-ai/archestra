@@ -23,6 +23,7 @@ import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
   useIsKnowledgeBaseConfigured,
   useKnowledgeBases,
+  useKnowledgeBasesByIds,
 } from "@/lib/knowledge/knowledge-base.query";
 import {
   type AgentFormFooterState,
@@ -136,9 +137,11 @@ const {
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
   ),
   saveChannelChangesMock: vi.fn(async () => true),
-  useDelegationTargetAgentsMock: vi.fn((): { data: unknown[] } => ({
-    data: [],
-  })),
+  useDelegationTargetAgentsMock: vi.fn(
+    (): { data: unknown[]; isFetching?: boolean } => ({
+      data: [],
+    }),
+  ),
   useProfileMock: vi.fn(
     (): { data: unknown | null; refetch: ReturnType<typeof vi.fn> } => ({
       data: null,
@@ -414,6 +417,23 @@ vi.mock("@/lib/a2a-remote-agents.query", () => ({
   useSyncAgentA2aDelegations: useSyncAgentA2aDelegationsMock,
 }));
 
+// The environment-conflict check reads the agent's catalogs by id.
+vi.mock("@/lib/mcp/use-mcp-registry-rows-by-ids", () => ({
+  // Answers from the catalog rows each test sets, for the ids asked.
+  useMcpRegistryRowsByIds: (ids: string[]) => {
+    const catalog = useInternalMcpCatalogMock() ?? {};
+    return {
+      data: ((catalog.data ?? []) as Array<{ id: string }>).filter((row) =>
+        ids.includes(row.id),
+      ),
+      isPending: catalog.isPending ?? false,
+      hasLoaded: !(catalog.isPending ?? false),
+      isError: catalog.isError ?? false,
+      refetch: async () => [],
+    };
+  },
+}));
+
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: useInternalMcpCatalogMock,
@@ -456,10 +476,12 @@ vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectors: vi.fn(() => ({ data: [] })),
+  useConnectorsByIds: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: vi.fn(() => ({ data: [] })),
+  useKnowledgeBasesByIds: vi.fn(() => ({ data: [] })),
   useIsKnowledgeBaseConfigured: vi.fn(() => true),
 }));
 
@@ -1159,14 +1181,14 @@ const targetAgent = {
 const panelOf = (node: HTMLElement) =>
   node.closest("section")?.parentElement ?? null;
 
-// The Tools section carries its own Auto/Custom tabs, so the subagent ones have
-// to be reached through their section.
-const subagentModeTab = (name: "All" | "Manual") => {
-  const section = screen
-    .getByRole("heading", { name: "Subagents" })
-    .closest("section") as HTMLElement;
-  return within(section).getByRole("tab", { name });
-};
+// The Tools section carries its own All/Manual cards, so the subagent ones are
+// reached through their own group.
+const subagentAccess = () =>
+  screen.getByRole("radiogroup", { name: "Subagent access" });
+const subagentMode = (name: "All agents" | "Manual") =>
+  within(subagentAccess()).getByRole("radio", {
+    name: new RegExp(`^${name}`),
+  });
 
 describe("AgentForm delegation state", () => {
   beforeEach(() => {
@@ -1379,7 +1401,7 @@ describe("AgentForm delegation state", () => {
       />,
     );
 
-    await user.click(subagentModeTab("Manual"));
+    await user.click(subagentMode("Manual"));
     await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
 
     const option = screen.getByRole("option", { name: /Target Agent/ });
@@ -1401,8 +1423,9 @@ describe("AgentForm delegation state", () => {
     );
     await user.click(screen.getByRole("option", { name: /Target Agent/ }));
     await user.keyboard("{Escape}");
+    expect(subagentMode("All agents")).toBeChecked();
     expect(
-      screen.getByText("All local agents are subagents, except 1 excluded."),
+      within(subagentAccess()).getByText("1 excluded"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
@@ -1410,13 +1433,67 @@ describe("AgentForm delegation state", () => {
       }),
     ).toBeInTheDocument();
 
-    await user.click(subagentModeTab("Manual"));
+    await user.click(subagentMode("Manual"));
     await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
     await user.click(screen.getByRole("option", { name: /Target Agent/ }));
     await user.keyboard("{Escape}");
-    expect(screen.getByText("1 subagent assigned.")).toBeInTheDocument();
+    expect(
+      within(subagentAccess()).getByText("1 assigned"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps assigned subagents on screen while a new pick loads", async () => {
+    const user = userEvent.setup();
+    const newAgent = {
+      ...baseAgent,
+      id: "00000000-0000-4000-8000-000000000003",
+      name: "New Agent",
+    };
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, newAgent],
+    });
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+    await user.click(subagentMode("Manual"));
+    expect(
+      screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
+    const option = screen.getByRole("option", { name: /New Agent/ });
+    // The lookup for the grown id list is in flight and only has the rows it
+    // resolved before.
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent],
+      isFetching: true,
+    });
+    await user.click(option);
+    await user.keyboard("{Escape}");
+
+    expect(
+      within(subagentAccess()).getByText("2 assigned"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading subagent" }),
+    ).toBeInTheDocument();
+
+    // Once the lookup answers, the pending pill becomes the new agent's.
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, newAgent],
+      isFetching: false,
+    });
+    await user.click(subagentMode("All agents"));
+    await user.click(subagentMode("Manual"));
+    expect(
+      screen.queryByRole("status", { name: "Loading subagent" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: `Remove agent ${newAgent.name}` }),
     ).toBeInTheDocument();
   });
 
@@ -1433,12 +1510,12 @@ describe("AgentForm delegation state", () => {
       />,
     );
 
-    await user.click(subagentModeTab("Manual"));
+    await user.click(subagentMode("Manual"));
     await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
     expect(
       screen.getByRole("link", { name: "Create a New Agent" }),
     ).toHaveAttribute("href", "/agents/new");
-    await user.click(subagentModeTab("All"));
+    await user.click(subagentMode("All agents"));
     expect(
       screen.queryByRole("link", { name: "Create a New Agent" }),
     ).not.toBeInTheDocument();
@@ -1490,7 +1567,11 @@ describe("AgentForm delegation state", () => {
         name: /External Research Agent.*A2A/,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("1 subagent assigned.")).toBeInTheDocument();
+    // The outbound agent is not counted among the local subagents.
+    expect(subagentMode("Manual")).toBeChecked();
+    expect(
+      within(subagentAccess()).getByText("1 assigned"),
+    ).toBeInTheDocument();
   });
 
   it("does not replace external assignments after their read fails", async () => {
@@ -1566,7 +1647,7 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
 
-    await screen.findByText("1 subagent assigned.");
+    await within(subagentAccess()).findByText("1 assigned");
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     // The save must complete (reaches the success callback) and persist the
@@ -1597,7 +1678,7 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={baseAgent} />);
 
-    await screen.findByText("1 subagent assigned.");
+    await within(subagentAccess()).findByText("1 assigned");
     await user.click(screen.getByRole("button", { name: /remove agent/i }));
     await user.click(screen.getByRole("button", { name: /update/i }));
 
@@ -1696,7 +1777,7 @@ describe("AgentForm delegation state", () => {
       <AgentForm agentType="agent" agent={baseAgent} />,
     );
 
-    await screen.findByText("1 subagent assigned.");
+    await within(subagentAccess()).findByText("1 assigned");
 
     useProfileMock.mockReturnValue({
       data: { ...baseAgent, description: "Refetched description" },
@@ -1706,7 +1787,9 @@ describe("AgentForm delegation state", () => {
     rerender(<AgentForm agentType="agent" agent={baseAgent} />);
 
     await waitFor(() => {
-      expect(screen.getByText("1 subagent assigned.")).toBeInTheDocument();
+      expect(
+        within(subagentAccess()).getByText("1 assigned"),
+      ).toBeInTheDocument();
     });
   });
 });
@@ -1722,14 +1805,16 @@ const orgSkill = (name: string, id: string) => ({
   environments: [],
 });
 
-// The Tools and Subagents sections carry their own Auto/Custom tabs, so the
-// skill ones have to be reached through their section.
-const skillsModeTab = (name: "All" | "Manual") => {
-  const section = screen
+// The Tools and Subagents sections carry their own All/Manual cards, so the
+// published-skill ones have to be reached through their section.
+const publishedSkillsSection = () =>
+  screen
     .getByRole("heading", { name: "Skills over MCP" })
     .closest("section") as HTMLElement;
-  return within(section).getByRole("tab", { name });
-};
+const publishedSkillsMode = (name: "All skills" | "Manual") =>
+  within(publishedSkillsSection()).getByRole("radio", {
+    name: new RegExp(`^${name}`),
+  });
 
 describe("AgentForm knowledge in Auto mode", () => {
   beforeEach(() => {
@@ -1786,8 +1871,12 @@ describe("AgentForm knowledge in Auto mode", () => {
     const section = (
       await screen.findByRole("heading", { name: "Skills" })
     ).closest("section") as HTMLElement;
-    expect(within(section).getByRole("tab", { name: "All" })).toBeVisible();
-    expect(within(section).getByRole("tab", { name: "Manual" })).toBeVisible();
+    expect(
+      within(section).getByRole("radio", { name: /^All skills/ }),
+    ).toBeVisible();
+    expect(
+      within(section).getByRole("radio", { name: /^Manual/ }),
+    ).toBeVisible();
     expect(useAgentActivationSkillsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: baseAgent.id,
@@ -1851,7 +1940,7 @@ describe("AgentForm knowledge in Auto mode", () => {
     const section = (
       await screen.findByRole("heading", { name: "Skills" })
     ).closest("section") as HTMLElement;
-    await user.click(within(section).getByRole("tab", { name: "Manual" }));
+    await user.click(within(section).getByRole("radio", { name: /^Manual/ }));
     await user.click(
       within(section).getByRole("button", { name: "Add incident-response" }),
     );
@@ -2142,6 +2231,42 @@ describe("AgentForm knowledge in Auto mode", () => {
     );
   });
 
+  it("shows a saved knowledge base the picker's first page does not hold", async () => {
+    // The picker lists a first page of every knowledge base; a source saved on
+    // the record from past that page is read by id so its pill still renders
+    // and can be removed.
+    const savedAgent = {
+      ...baseAgent,
+      accessAllTools: false,
+      knowledgeBaseIds: ["kb-far"],
+    };
+    vi.mocked(useKnowledgeBases).mockReturnValue({
+      data: [{ id: "kb1", name: "Company Handbook", connectors: [] }],
+    } as unknown as ReturnType<typeof useKnowledgeBases>);
+    vi.mocked(useKnowledgeBasesByIds).mockImplementation(
+      (ids) =>
+        ({
+          data: ids.includes("kb-far")
+            ? [{ id: "kb-far", name: "Far Handbook", connectors: [] }]
+            : [],
+        }) as unknown as ReturnType<typeof useKnowledgeBasesByIds>,
+    );
+    useProfileMock.mockReturnValue({ data: savedAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={savedAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const picker = within(section).getByTestId(E2eTestId.AgentKnowledgeSources);
+    expect(
+      within(picker).getAllByTestId(E2eTestId.AgentKnowledgeSourcePill),
+    ).toHaveLength(1);
+    expect(within(picker).getByText("Far Handbook")).toBeVisible();
+    vi.mocked(useKnowledgeBasesByIds).mockReset();
+    vi.mocked(useKnowledgeBasesByIds).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useKnowledgeBasesByIds>);
+  });
+
   it("keeps quiet about knowledge search once it is configured", async () => {
     const autoAgent = { ...baseAgent, accessAllTools: true };
     useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
@@ -2174,7 +2299,7 @@ describe("AgentForm progressive tool loading", () => {
     const user = userEvent.setup();
     render(<AgentForm agentType={agentType} />);
     const tools = await screen.findByTestId(E2eTestId.AgentToolsSection);
-    await user.click(within(tools).getByRole("tab", { name: "Manual" }));
+    await user.click(within(tools).getByRole("radio", { name: /^Manual/ }));
     const section = await screen.findByTestId(
       E2eTestId.AgentToolLoadingSection,
     );
@@ -2205,7 +2330,7 @@ describe("AgentForm progressive tool loading", () => {
     );
     expect(section).toHaveClass("hidden");
     expect(
-      screen.getByText(/Saves context by exposing only search_tools/),
+      screen.getByText(/To save context, the agent sees only/),
     ).toBeVisible();
   });
 
@@ -2452,9 +2577,9 @@ describe("AgentForm published skills", () => {
       within(section).getByRole("button", { name: "View 1 Skill" }),
     );
 
-    const table = screen.getByRole("table");
-    expect(within(table).queryByText("first-skill")).toBeNull();
-    expect(within(table).getByText("second-skill")).toBeVisible();
+    const list = screen.getByRole("list", { name: "Skills" });
+    expect(within(list).queryByText("first-skill")).toBeNull();
+    expect(within(list).getByText("second-skill")).toBeVisible();
   });
 
   it("writes neither skill set when the save changed nothing about them", async () => {
@@ -2478,7 +2603,8 @@ describe("AgentForm published skills", () => {
       <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
     );
 
-    await screen.findByText("1 skill published.");
+    await within(publishedSkillsSection()).findByText("1 assigned");
+    expect(publishedSkillsMode("Manual")).toBeChecked();
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -2498,10 +2624,9 @@ describe("AgentForm published skills", () => {
 
     render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
-    await screen.findByText(
-      /Every organization skill in this environment, with no exceptions\./,
-    );
-    await user.click(skillsModeTab("Manual"));
+    await within(publishedSkillsSection()).findByText("None excluded");
+    expect(publishedSkillsMode("All skills")).toBeChecked();
+    await user.click(publishedSkillsMode("Manual"));
     expect(screen.getByText("Skills over MCP")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /update/i }));
@@ -2530,10 +2655,9 @@ describe("AgentForm published skills", () => {
       <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
     );
 
-    await screen.findByText(
-      /Every organization skill in this environment, with no exceptions\./,
-    );
-    await user.click(skillsModeTab("Manual"));
+    await within(publishedSkillsSection()).findByText("None excluded");
+    expect(publishedSkillsMode("All skills")).toBeChecked();
+    await user.click(publishedSkillsMode("Manual"));
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     await waitFor(() => expect(syncSkills).toHaveBeenCalled());
@@ -2867,7 +2991,9 @@ describe("AgentForm save payload and failure handling", () => {
       );
 
       expect(screen.getByText("Mock Tools Editor")).toBeInTheDocument();
-      expect(screen.queryByRole("tab", { name: "All" })).toBeNull();
+      expect(
+        screen.queryByRole("radiogroup", { name: "Tool access" }),
+      ).toBeNull();
 
       await user.click(screen.getByRole("button", { name: /update/i }));
 
@@ -4881,7 +5007,7 @@ describe("AgentForm save payload and failure handling", () => {
     const section = (
       await screen.findByRole("heading", { name: "Skills" })
     ).closest("section") as HTMLElement;
-    await user.click(within(section).getByRole("tab", { name: "Manual" }));
+    await user.click(within(section).getByRole("radio", { name: /^Manual/ }));
     await user.click(
       within(section).getByRole("button", {
         name: "Add incident-response",

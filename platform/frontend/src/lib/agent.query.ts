@@ -19,11 +19,19 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import {
+  agentCredentialReadinessQueryKey,
+  agentDefaultSuggestedPromptsQueryKey,
+  agentQueryKey,
+  chatAgentsQueryKey,
+} from "@/lib/agent-query-keys";
+import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useOrganization } from "@/lib/organization.query";
+import { inFlightQueryData } from "@/lib/query-in-flight";
 import {
   BOOTSTRAP_QUERY_RETRY,
   flushPersistedQueryCache,
@@ -55,13 +63,6 @@ const {
   pinAgent,
   unpinAgent,
 } = archestraApiSdk;
-
-const chatAgentsQueryKey = [
-  "agents",
-  "chat-roster",
-  "bootstrap",
-  "v3",
-] as const;
 
 async function fetchChatAgents() {
   const { data, error } = await getChatAgentRoster({
@@ -143,6 +144,7 @@ export function useProfilesPaginated(
     ids,
     excludeIds,
     includeTools,
+    includeTotal,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -195,6 +197,7 @@ export function useProfilesPaginated(
         ids,
         excludeIds,
         includeTools,
+        includeTotal,
       },
     ],
     queryFn: async () => {
@@ -222,6 +225,7 @@ export function useProfilesPaginated(
           ids,
           excludeIds,
           includeTools,
+          includeTotal,
         },
       });
       throwOnApiError(error, { toastOnError: false });
@@ -386,7 +390,10 @@ export function useDefaultMcpGateway(params?: {
   return useQuery({
     queryKey: ["mcp-gateways", "default"],
     queryFn: async () => {
-      const { data, error } = await getDefaultMcpGateway();
+      // Callers read the gateway's identity and tool count, never its tools.
+      const { data, error } = await getDefaultMcpGateway({
+        query: { includeTools: false },
+      });
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },
@@ -401,7 +408,7 @@ export function useProfile(
   const queryClient = useQueryClient();
 
   return useQuery({
-    queryKey: ["agents", id],
+    queryKey: agentQueryKey(id),
     queryFn: async () => {
       if (!id) return null;
       const { data, error } = await getAgent({ path: { id } });
@@ -637,7 +644,7 @@ export function usePermanentlyDeleteProfile(entityLabel = "Agent") {
       toast.success(`${entityLabel} permanently deleted`);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       // The detail query for a now-nonexistent id would 404 on its next fetch.
-      queryClient.removeQueries({ queryKey: ["agents", id] });
+      queryClient.removeQueries({ queryKey: agentQueryKey(id) });
     },
   });
 }
@@ -703,7 +710,7 @@ export function useAgentDefaultSuggestedPrompts(
   params: { enabled: boolean },
 ) {
   return useQuery({
-    queryKey: ["agents", agentId, "default-suggested-prompts"],
+    queryKey: agentDefaultSuggestedPromptsQueryKey(agentId),
     queryFn: async () => {
       const { data, error } = await getAgentDefaultSuggestedPrompts({
         path: { id: agentId as string },
@@ -824,11 +831,21 @@ export function useChatAgentReferences(
   return useQuery({
     queryKey: ["agents", "chat-roster", "references", stableIds],
     initialData,
-    queryFn: async () => {
-      const rows: archestraApiTypes.GetChatAgentRosterResponses["200"] = [];
-      for (let offset = 0; offset < stableIds.length; offset += 100) {
+    queryFn: async ({ client }) => {
+      // On a cold load the starting roster is requested at the same moment,
+      // and usually holds these ids already (a saved agent, the default):
+      // wait for it and look up only the ids it does not have.
+      const roster =
+        (await inFlightQueryData<
+          archestraApiTypes.GetChatAgentRosterResponses["200"]
+        >(client, chatAgentsQueryKey)) ?? [];
+      const rows = roster.filter((agent) => stableIds.includes(agent.id));
+      const missingIds = stableIds.filter(
+        (id) => !rows.some((agent) => agent.id === id),
+      );
+      for (let offset = 0; offset < missingIds.length; offset += 100) {
         const { data, error } = await getChatAgentRoster({
-          query: { ids: stableIds.slice(offset, offset + 100) },
+          query: { ids: missingIds.slice(offset, offset + 100) },
         });
         throwOnApiError(error, { toastOnError: false });
         rows.push(...(data ?? []));
@@ -860,14 +877,25 @@ export function useChatAgents(params?: {
   const savedId = getSavedAgent();
   const enabled = params?.enabled ?? true;
   const bootstrap = useChatAgentBootstrap(enabled);
-  const references = useChatAgentReferences(
-    [
-      ...(params?.ids ?? []),
-      organization.data?.defaultAgentId,
-      memberDefault.data,
-      savedId,
-    ],
-    enabled && !organization.isPending && !memberDefault.isPending,
+  // The ids known at mount (the caller's, the saved one) are looked up
+  // alongside the bootstrap, not after the defaults resolve.
+  const referenceIds = [...(params?.ids ?? []), savedId];
+  const references = useChatAgentReferences(referenceIds, enabled);
+  // The bootstrap includes the caller's and the organization's default agents,
+  // so this second lookup only runs for a default it left out: one the caller
+  // cannot use, or a server from before it included them.
+  const knownIds = new Set([
+    ...(bootstrap.data ?? []).map((agent) => agent.id),
+    ...referenceIds,
+  ]);
+  const missingDefaults = bootstrap.data
+    ? [organization.data?.defaultAgentId, memberDefault.data].filter(
+        (id): id is string => !!id && !knownIds.has(id),
+      )
+    : [];
+  const defaultReferences = useChatAgentReferences(
+    missingDefaults,
+    enabled && missingDefaults.length > 0,
   );
   const defaultsFailed =
     (organization.isError && !organization.data) ||
@@ -877,13 +905,24 @@ export function useChatAgents(params?: {
     (bootstrap.isPending ||
       references.isPending ||
       organization.isPending ||
-      memberDefault.isPending);
+      memberDefault.isPending ||
+      defaultReferences.isPending);
   const data = useMemo(() => {
     if (isPending || defaultsFailed || !references.data || !bootstrap.data)
       return undefined;
-    const rows = [...(bootstrap.data ?? []), ...(references.data ?? [])];
+    const rows = [
+      ...(bootstrap.data ?? []),
+      ...(references.data ?? []),
+      ...(defaultReferences.data ?? []),
+    ];
     return [...new Map(rows.map((row) => [row.id, row])).values()];
-  }, [bootstrap.data, references.data, isPending, defaultsFailed]);
+  }, [
+    bootstrap.data,
+    references.data,
+    defaultReferences.data,
+    isPending,
+    defaultsFailed,
+  ]);
   return {
     ...bootstrap,
     data,
@@ -892,14 +931,20 @@ export function useChatAgents(params?: {
     isError:
       bootstrap.isError ||
       references.isError ||
+      defaultReferences.isError ||
       organization.isError ||
       memberDefault.isError,
-    isSuccess: !defaultsFailed && bootstrap.isSuccess && references.isSuccess,
+    isSuccess:
+      !defaultsFailed &&
+      bootstrap.isSuccess &&
+      references.isSuccess &&
+      !defaultReferences.isPending,
     resolveAgent: (id: string) => findCachedChatAgent(client, id),
     refetch: async () =>
       Promise.all([
         bootstrap.refetch(),
         references.refetch(),
+        ...(missingDefaults.length > 0 ? [defaultReferences.refetch()] : []),
         organization.refetch(),
         memberDefault.refetch(),
       ]),
@@ -1010,7 +1055,13 @@ type MemberAgents = {
 /** One read for both of the member's agents, shared by the hooks above. */
 const memberAgentsQuery = {
   queryKey: memberDefaultAgentQueryKey,
-  queryFn: async (): Promise<MemberAgents> => {
+  queryFn: async ({
+    client,
+  }: {
+    client: QueryClient;
+  }): Promise<MemberAgents> => {
+    const seed = await awaitBootstrapSeed(client);
+    if (seed?.memberDefaultAgent) return seed.memberDefaultAgent;
     const { data, error } = await getMemberDefaultAgent();
     throwOnApiError(error, { toastOnError: false });
     return {
@@ -1018,6 +1069,11 @@ const memberAgentsQuery = {
       personalChatAgentId: data?.personalChatAgentId ?? null,
     };
   },
+  // Kept like the organization and permissions the bootstrap seeds alongside
+  // it: restored on refresh and fresh for as long, so reopening the new-chat
+  // page does not ask again. Agent mutations still invalidate it.
+  staleTime: 5 * 60 * 1000,
+  meta: PERSISTED_QUERY_META,
 };
 
 function findCachedChatAgent(client: QueryClient, id: string) {
@@ -1043,7 +1099,7 @@ function findCachedChatAgent(client: QueryClient, id: string) {
 function agentCredentialReadinessQuery(requestedIds: string[]) {
   const ids = [...new Set(requestedIds)].sort();
   return {
-    queryKey: ["agents", "credential-readiness", ids],
+    queryKey: agentCredentialReadinessQueryKey(ids),
     queryFn: async () => {
       const rows: archestraApiTypes.GetAgentCredentialReadinessResponses["200"] =
         [];

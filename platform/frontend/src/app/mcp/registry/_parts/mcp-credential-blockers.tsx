@@ -40,10 +40,12 @@ export function useMcpInstallBlockers(item: {
   localConfig?: {
     environment?: { credentialId?: string | null }[] | null;
   } | null;
+  /** Registry list rows carry the answer instead of the configuration. */
+  bindsCredential?: boolean;
 }): McpCredentialBlocker[] {
-  const bindsCredential = !!item.localConfig?.environment?.some(
-    (env) => env.credentialId,
-  );
+  const bindsCredential =
+    item.bindsCredential ??
+    !!item.localConfig?.environment?.some((env) => env.credentialId);
   const { data } = useMcpCatalogCredentialPreflight({
     catalogId: item.id,
     scope: "personal",

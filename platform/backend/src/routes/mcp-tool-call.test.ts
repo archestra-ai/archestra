@@ -32,6 +32,9 @@ describe("mcp-tool-call routes", () => {
       createdAt?: Date;
       mcpServerName?: string;
       agentId?: string;
+      runId?: string;
+      sessionId?: string;
+      llmToolCallId?: string;
     } = {},
   ) =>
     McpToolCallModel.create({
@@ -43,6 +46,9 @@ describe("mcp-tool-call routes", () => {
       toolResult: { content: [{ type: "text", text: "ok" }] },
       createdAt: overrides.createdAt,
       durationMs: overrides.durationMs,
+      runId: overrides.runId,
+      sessionId: overrides.sessionId,
+      llmToolCallId: overrides.llmToolCallId,
     });
 
   beforeEach(
@@ -433,5 +439,136 @@ describe("mcp-tool-call routes", () => {
     expect(response.json().data.map((row: { id: string }) => row.id)).toEqual([
       targeted.id,
     ]);
+  });
+
+  describe("LLM session links", () => {
+    const listSession = async (sessionId: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/mcp-tool-calls?limit=10&sessionId=${encodeURIComponent(sessionId)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json().data as Array<{
+        id: string;
+        sessionId: string | null;
+        llmToolCallId: string | null;
+      }>;
+    };
+
+    test("lists a session's calls newest first: stored links and calls from a run filed under only that session", async ({
+      makeInteraction,
+    }) => {
+      const session = `session-${crypto.randomUUID()}`;
+      const singleRun = `run-${crypto.randomUUID()}`;
+      const mixedRun = `run-${crypto.randomUUID()}`;
+      await makeInteraction(agentId, { sessionId: session, runId: singleRun });
+      await makeInteraction(agentId, { sessionId: session, runId: mixedRun });
+      await makeInteraction(agentId, { sessionId: "another", runId: mixedRun });
+
+      const stored = await seedCall(currentUser.id, {
+        sessionId: session,
+        llmToolCallId: "toolu_stored",
+        createdAt: new Date("2099-01-01T00:00:01.000Z"),
+      });
+      const viaRun = await seedCall(currentUser.id, {
+        runId: singleRun,
+        createdAt: new Date("2099-01-01T00:00:02.000Z"),
+      });
+      // A run spread over two sessions names neither of them.
+      const ambiguous = await seedCall(currentUser.id, { runId: mixedRun });
+      // Only tool calls follow their run; a handshake of the run does not.
+      await seedCall(currentUser.id, {
+        runId: singleRun,
+        method: "tools/list",
+      });
+      // A stored link wins over the run's.
+      await seedCall(currentUser.id, {
+        runId: singleRun,
+        sessionId: "another",
+      });
+
+      expect(await listSession(session)).toEqual([
+        expect.objectContaining({
+          id: viaRun.id,
+          sessionId: session,
+          llmToolCallId: null,
+        }),
+        expect.objectContaining({
+          id: stored.id,
+          sessionId: session,
+          llmToolCallId: "toolu_stored",
+        }),
+      ]);
+
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/mcp-tool-calls/${viaRun.id}`,
+      });
+      expect(detail.json().sessionId).toBe(session);
+      const ambiguousDetail = await app.inject({
+        method: "GET",
+        url: `/api/mcp-tool-calls/${ambiguous.id}`,
+      });
+      expect(ambiguousDetail.json().sessionId).toBeNull();
+    });
+
+    test("does not resolve a run's session from interactions in another organization", async ({
+      makeAgent,
+      makeInteraction,
+      makeOrganization,
+    }) => {
+      const foreignOrganization = await makeOrganization();
+      const foreignAgent = await makeAgent({
+        organizationId: foreignOrganization.id,
+      });
+      const runId = `run-${crypto.randomUUID()}`;
+      await makeInteraction(foreignAgent.id, { sessionId: "foreign", runId });
+      const row = await seedCall(currentUser.id, { runId });
+
+      expect(await listSession("foreign")).toEqual([]);
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/mcp-tool-calls/${row.id}`,
+      });
+      expect(detail.json().sessionId).toBeNull();
+    });
+
+    test("log:read resolves a run's session only from the caller's own interactions", async ({
+      makeInteraction,
+    }) => {
+      const runId = `run-${crypto.randomUUID()}`;
+      // Another user's turn in the run: its session is not the caller's to see.
+      await makeInteraction(agentId, {
+        sessionId: "their-session",
+        runId,
+        userId: otherUser.id,
+      });
+      const row = await seedCall(limitedUser.id, {
+        runId,
+        createdAt: new Date("2099-01-01T00:00:01.000Z"),
+      });
+      // The session filter never widens the own-logs view either.
+      const theirs = await seedCall(otherUser.id, {
+        sessionId: "their-session",
+        createdAt: new Date("2099-01-01T00:00:02.000Z"),
+      });
+
+      const admin = currentUser;
+      currentUser = limitedUser;
+      expect(await listSession("their-session")).toEqual([]);
+      const ownDetail = await app.inject({
+        method: "GET",
+        url: `/api/mcp-tool-calls/${row.id}`,
+      });
+      expect(ownDetail.statusCode).toBe(200);
+      expect(ownDetail.json().sessionId).toBeNull();
+
+      // log:admin reads every interaction in the organization.
+      currentUser = admin;
+      expect((await listSession("their-session")).map((r) => r.id)).toEqual([
+        theirs.id,
+        row.id,
+      ]);
+    });
   });
 });

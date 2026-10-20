@@ -15,6 +15,7 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_AUTH_COOKIE_PREFIX,
   DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   DEFAULT_CHILD_CHUNK_SIZE_TOKENS,
@@ -2551,7 +2552,8 @@ const config = {
      * uses a distinct prefix.
      */
     cookiePrefix:
-      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() || "archestra",
+      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() ||
+      DEFAULT_AUTH_COOKIE_PREFIX,
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
@@ -3277,6 +3279,15 @@ const config = {
       // sandboxed code can't reach in-cluster ClusterIP services.
       additionalDeniedCidrs: parseEngineDeniedCidrs(
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS,
+      ),
+      // Steers engines onto a dedicated node pool: a key=value list that
+      // becomes each engine's nodeSelector, plus one matching NoSchedule
+      // toleration per entry. Empty (the default) inherits the platform pod's
+      // nodeSelector and tolerations, like MCP server pods.
+      nodeSelector: parseLabelSelector(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR,
+        {},
+        "ARCHESTRA_DAGGER_RUNTIME_ENGINE_NODE_SELECTOR",
       ),
     },
   },

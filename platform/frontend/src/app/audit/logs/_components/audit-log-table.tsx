@@ -1,46 +1,38 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Check, ShieldBan, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
 } from "@/components/filter-bar";
-import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useProfilesPaginated } from "@/lib/agent.query";
-import { useApps } from "@/lib/app.query";
 import {
   type AuditActorType,
   type AuditEventName,
   type AuditLog,
   type AuditOutcome,
   useAuditLog,
+  useAuditLogResourceSearch,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useEnvironments } from "@/lib/environment.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
-import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMemberSearch } from "@/lib/member.query";
-import { useRolesPaginated } from "@/lib/role.query";
-import { useSkillsPaginated } from "@/lib/skills/skill.query";
-import { useTeams } from "@/lib/teams/team.query";
 import { AuditActorCell } from "./audit-actor-cell";
+import {
+  AuditEventCell,
+  AuditRequestCell,
+  AuditTimeCell,
+} from "./audit-event-cells";
 import {
   ACTOR_TYPE_LABEL,
   ALL_ACTIONS,
@@ -50,26 +42,11 @@ import {
   formatResourceType,
   KNOWN_RESOURCE_TYPES,
   OUTCOME_LABEL,
-  resourceDisplayName,
 } from "./audit-log-action-labels";
 import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 const ACTOR_FILTER_LIMIT = 100;
-const ENTITY_FILTER_LIMIT = 100;
 const ALL_VALUE = "all";
-
-// The high-signal types whose names render in the Resource column and whose
-// entities populate the "Filter by resource" picker. Every other type keeps a
-// bare type label in the list; its full identity lives in the detail dialog.
-const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
-  "agent",
-  "app",
-  "environment",
-  "mcpServer",
-  "role",
-  "skill",
-  "team",
-]);
 
 // TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
 // large string-literal union, failing with a spurious "two unrelated ColumnDef
@@ -273,9 +250,11 @@ export function AuditLogTable() {
     resourceId,
   });
 
-  // Server-side search rather than a client filter over the first N members:
-  // an org larger than one page would otherwise silently hide every actor
-  // whose name sorts past the cut-off.
+  // The actor and resource pickers search on the server and load their
+  // options only while open, so a closed picker does not refetch on window
+  // focus. A selection from the URL still loads its label.
+  const [actorPickerOpen, setActorPickerOpen] = useState(false);
+  const [resourcePickerOpen, setResourcePickerOpen] = useState(false);
   const { data: canSeeAllAuditLogs } = useHasPermissions({
     auditLog: ["admin"],
   });
@@ -286,44 +265,11 @@ export function AuditLogTable() {
   } = useMemberSearch({
     limit: ACTOR_FILTER_LIMIT,
     selectedUserIds: actorId ? [actorId] : [],
+    enabled: !!canSeeAllAuditLogs && (actorPickerOpen || !!actorId),
   });
-
-  // Two lifecycle buckets: agents are soft-deleted, so a deleted agent's
-  // history stays reachable through the picker (the audit page is admin-only,
-  // which is also what the deleted bucket requires). The picker shows names
-  // only, so it skips the agents' tool assignments.
-  const { data: activeAgentsResponse } = useProfilesPaginated({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
-    sortBy: "name",
-    sortDirection: "asc",
-    status: "active",
-    includeTools: false,
-  });
-  const { data: deletedAgentsResponse } = useProfilesPaginated({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
-    sortBy: "name",
-    sortDirection: "asc",
-    status: "deleted",
-    includeTools: false,
-  });
-
-  // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.
-  const { data: mcpServers } = useMcpServers();
-  const { data: teams } = useTeams({ includeRelations: false });
-  const { data: rolesResponse } = useRolesPaginated({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
-  });
-  const { data: environmentList } = useEnvironments();
-  const { data: appsResponse } = useApps({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
-  });
-  const { data: skillsResponse } = useSkillsPaginated({
-    limit: ENTITY_FILTER_LIMIT,
-    offset: 0,
+  const resourceSearch = useAuditLogResourceSearch({
+    enabled: resourcePickerOpen,
+    selectedResourceId: resourceId,
   });
 
   const rows = response?.data ?? [];
@@ -340,57 +286,25 @@ export function AuditLogTable() {
   );
 
   const entityOptions = useMemo(() => {
-    // The type goes into `description`: SearchableSelect renders it as a
-    // subtitle and matches it in search, so typing "team" finds all teams.
-    const toOptions = (
-      items: Array<{ id: string; name: string }> | undefined,
-      resourceType: string,
-    ) =>
-      (items ?? [])
-        .map((item) => ({
-          value: item.id,
-          label: item.name,
-          // Single line per option: long machine names truncate with an
-          // ellipsis (full name in the hover title, and search still matches
-          // the full label) so the popover stays scannable.
-          content: (
-            <span className="block truncate" title={item.name}>
-              {item.name}
-            </span>
-          ),
-          description: formatResourceType(resourceType),
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label));
-
-    const deletedAgents = toOptions(deletedAgentsResponse?.data, "agent").map(
-      (option) => ({ ...option, description: "Agent (deleted)" }),
-    );
-    // External catalog apps carry no id (and are not audited) — only owned
-    // apps can be picked.
-    const ownedApps = appsResponse?.data?.filter(
-      (app) => app.source === "owned",
-    );
-    return [
-      { value: ALL_VALUE, label: "All resources" },
-      ...toOptions(activeAgentsResponse?.data, "agent"),
-      ...deletedAgents,
-      ...toOptions(mcpServers, "mcpServer"),
-      ...toOptions(teams, "team"),
-      ...toOptions(rolesResponse?.data, "role"),
-      ...toOptions(environmentList?.environments, "environment"),
-      ...toOptions(ownedApps, "app"),
-      ...toOptions(skillsResponse?.data, "skill"),
-    ];
-  }, [
-    activeAgentsResponse,
-    deletedAgentsResponse,
-    mcpServers,
-    teams,
-    rolesResponse,
-    environmentList,
-    appsResponse,
-    skillsResponse,
-  ]);
+    const { options, selected } = resourceSearch;
+    const listed =
+      selected && !options.some((o) => o.resourceId === selected.resourceId)
+        ? [selected, ...options]
+        : options;
+    return listed.map((option) => ({
+      value: option.resourceId,
+      label: option.name,
+      // Single line per option: long machine names truncate with an ellipsis
+      // (full name in the hover title) so the popover stays scannable. The
+      // type goes into `description`, rendered as a subtitle.
+      content: (
+        <span className="block truncate" title={option.name}>
+          {option.name}
+        </span>
+      ),
+      description: formatResourceType(option.resourceType),
+    }));
+  }, [resourceSearch]);
 
   const actionOptions = useMemo(
     () => [
@@ -434,73 +348,31 @@ export function AuditLogTable() {
     () => [
       {
         id: "resource",
-        header: "Resource",
-        size: 340,
-        minSize: 220,
-        cell: ({ row }) => {
-          const event = row.original;
-          const name =
-            event.resourceType &&
-            LIST_NAME_RESOURCE_TYPES.has(event.resourceType)
-              ? resourceDisplayName(event)
-              : null;
-          const Icon =
-            event.outcome === "success"
-              ? Check
-              : event.outcome === "denied"
-                ? ShieldBan
-                : X;
-          return (
-            <div className="min-w-0 space-y-0.5">
-              <div
-                className="truncate text-xs font-medium"
-                title={name ?? undefined}
-              >
-                {name ?? formatResourceType(event.resourceType ?? "")}
-                {name && (
-                  <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
-                    {formatResourceType(event.resourceType ?? "")}
-                  </span>
-                )}
-              </div>
-              <div className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      role="img"
-                      aria-label={OUTCOME_LABEL[event.outcome]}
-                      className={
-                        event.outcome === "success"
-                          ? "shrink-0 text-muted-foreground"
-                          : "shrink-0 text-destructive"
-                      }
-                    >
-                      <Icon className="size-3" aria-hidden="true" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {OUTCOME_LABEL[event.outcome]}
-                  </TooltipContent>
-                </Tooltip>
-                <span className="truncate">{formatAction(event.action)}</span>
-              </div>
-            </div>
-          );
-        },
+        header: "Event",
+        size: 360,
+        minSize: 280,
+        cell: ({ row }) => <AuditEventCell event={row.original} />,
       },
       {
         id: "actor",
         header: "Actor",
-        size: 200,
-        minSize: 150,
+        size: 272,
+        minSize: 230,
         cell: ({ row }) => <AuditActorCell event={row.original} />,
       },
       {
+        id: "request",
+        header: () => <div className="text-right">Request</div>,
+        size: 112,
+        minSize: 100,
+        cell: ({ row }) => <AuditRequestCell event={row.original} />,
+      },
+      {
         id: "createdAt",
-        header: "Time",
-        size: 154,
-        minSize: 145,
-        cell: ({ row }) => <LogTime timestamp={row.original.createdAt} />,
+        header: () => <div className="text-right">Time</div>,
+        size: 128,
+        minSize: 120,
+        cell: ({ row }) => <AuditTimeCell event={row.original} />,
       },
     ],
     [],
@@ -593,6 +465,14 @@ export function AuditLogTable() {
                   onValueChange={handleEntityChange}
                   placeholder="Filter by resource"
                   items={entityOptions}
+                  pinnedItems={[{ value: ALL_VALUE, label: "All resources" }]}
+                  onSearchQueryChange={resourceSearch.onSearchQueryChange}
+                  onOpenChange={setResourcePickerOpen}
+                  emptyMessage={
+                    resourceSearch.isSearching
+                      ? "Searching…"
+                      : "No matching resources found."
+                  }
                   inactiveValue={ALL_VALUE}
                 />
               ),
@@ -615,6 +495,7 @@ export function AuditLogTable() {
                           { value: ALL_VALUE, label: "All actors" },
                         ]}
                         onSearchQueryChange={onActorSearchChange}
+                        onOpenChange={setActorPickerOpen}
                         emptyMessage={actorEmptyMessage}
                         inactiveValue={ALL_VALUE}
                       />
@@ -643,7 +524,7 @@ export function AuditLogTable() {
 
       <DataTable<AuditLogRow, unknown>
         columns={columns}
-        fixedWidthColumnIds={["actor", "createdAt"]}
+        fixedWidthColumnIds={["actor", "request", "createdAt"]}
         flexibleColumnIds={["resource"]}
         data={rows}
         hideSelectedCount

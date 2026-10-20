@@ -37,6 +37,22 @@ export const LOOPBACK_HOST = "127.0.0.1";
  */
 export const DEFAULT_INTERNAL_API_BASE_URL = `http://${LOOPBACK_HOST}:9000`;
 
+/**
+ * Prefix of the Better Auth cookie names when `ARCHESTRA_AUTH_COOKIE_PREFIX`
+ * is not set. The backend names its cookies with it, and the frontend server
+ * reads the same variable to recognise a session cookie on a document request.
+ */
+export const DEFAULT_AUTH_COOKIE_PREFIX = "archestra";
+
+/**
+ * Names the Better Auth session cookie can carry for `prefix`: the plain name,
+ * and the `__Secure-` variant Better Auth uses when the cookie is Secure.
+ */
+export function getAuthSessionCookieNames(prefix: string): string[] {
+  const name = `${prefix}.session_token`;
+  return [name, `__Secure-${name}`];
+}
+
 /** Default app name used as fallback when organization.appName is not configured */
 export const DEFAULT_APP_NAME = "Archestra";
 export const DEFAULT_APP_FULL_NAME = "Archestra.AI";
@@ -397,16 +413,6 @@ export const VIRTUAL_KEY_HEADER = "X-Archestra-Virtual-Key";
  * This enables session-based grouping in the LLM proxy logs UI.
  */
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
-
-/**
- * Header set on the available-models response while a lazy provider model sync
- * is in flight. Clients refetch until it clears so freshly synced models appear.
- */
-export const LAZY_MODEL_SYNC_STATUS_HEADER = "x-archestra-lazy-model-sync";
-
-/** Sole value of {@link LAZY_MODEL_SYNC_STATUS_HEADER}: a sync is pending. */
-export type LazyModelSyncStatus = "pending";
-export const LAZY_MODEL_SYNC_STATUS_PENDING: LazyModelSyncStatus = "pending";
 
 /**
  * Header name for interaction source.

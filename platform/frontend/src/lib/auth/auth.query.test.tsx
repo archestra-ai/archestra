@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authQueryKeys,
   useDefaultCredentialsEnabled,
+  useHasPagePermissions,
   useHasPermissions,
   usePermissionMap,
   useSession,
@@ -23,6 +24,7 @@ vi.mock("@archestra/shared", async () => {
       getDefaultCredentialsStatus: vi.fn(),
       getUserPermissions: vi.fn(),
       getScopedCapabilities: vi.fn(),
+      getBootstrap: vi.fn(),
     },
   };
 });
@@ -42,6 +44,10 @@ const createWrapper = () => {
 // Clear mocks before each test
 beforeEach(() => {
   vi.clearAllMocks();
+  // No seed unless a test answers bootstrap itself.
+  vi.mocked(archestraApiSdk.getBootstrap).mockResolvedValue({
+    data: undefined,
+  } as Awaited<ReturnType<typeof archestraApiSdk.getBootstrap>>);
   vi.mocked(archestraApiSdk.getScopedCapabilities).mockResolvedValue({
     data: [],
     error: undefined,
@@ -58,6 +64,40 @@ beforeEach(() => {
 });
 
 describe("useSession", () => {
+  it("resolves without waiting for bootstrap, whose seed the permission query then awaits", async () => {
+    let answerBootstrap: (value: unknown) => void = () => undefined;
+    vi.mocked(archestraApiSdk.getBootstrap).mockReturnValue(
+      new Promise<unknown>((resolve) => {
+        answerBootstrap = resolve;
+      }) as ReturnType<typeof archestraApiSdk.getBootstrap>,
+    );
+    const { result } = renderHook(
+      () => ({
+        session: useSession(),
+        permissions: useHasPermissions({ agent: ["read"] }),
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.session.data?.user).toBeTruthy());
+    expect(result.current.permissions.isPending).toBe(true);
+
+    await act(async () => {
+      answerBootstrap({
+        data: {
+          permissions: { agent: ["read"] },
+          scopedCapabilities: [],
+          config: {},
+          organization: null,
+        },
+      });
+    });
+
+    await waitFor(() => expect(result.current.permissions.data).toBe(true));
+    // One wave: the seed answered the permission query.
+    expect(archestraApiSdk.getUserPermissions).not.toHaveBeenCalled();
+  });
+
   it("keeps authenticated navigation visible when a session refresh fails", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -70,7 +110,7 @@ describe("useSession", () => {
     queryClient.setQueryData(authQueryKeys.userPermissions(), {
       project: ["read"],
     });
-    queryClient.setQueryData(["scoped-capabilities"], []);
+    queryClient.setQueryData(authQueryKeys.scopedCapabilities(), []);
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -176,6 +216,59 @@ describe("useDefaultCredentialsEnabled", () => {
     });
 
     expect(result.current.data).toBe(true);
+  });
+
+  it("asks nothing while disabled", async () => {
+    vi.mocked(archestraApiSdk.getDefaultCredentialsStatus).mockClear();
+
+    const { result } = renderHook(
+      () => useDefaultCredentialsEnabled({ enabled: false }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(result.current.data).toBeUndefined();
+    expect(archestraApiSdk.getDefaultCredentialsStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("useHasPagePermissions", () => {
+  it("does not wait for object grants on a page no grant can open", async () => {
+    const userPermissions: Permissions = { auditLog: ["read"] };
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: userPermissions,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+    vi.mocked(archestraApiSdk.getScopedCapabilities).mockReturnValue(
+      new Promise(() => undefined) as never,
+    );
+
+    const { result } = renderHook(
+      () => useHasPagePermissions({ auditLog: ["read"] }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.data).toBe(true);
+    expect(archestraApiSdk.getScopedCapabilities).not.toHaveBeenCalled();
+  });
+
+  it("waits for object grants on a page a grant can open", async () => {
+    vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
+      data: {},
+    } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
+    vi.mocked(archestraApiSdk.getScopedCapabilities).mockReturnValue(
+      new Promise(() => undefined) as never,
+    );
+
+    const { result } = renderHook(
+      () => useHasPagePermissions({ agent: ["read"] }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(archestraApiSdk.getScopedCapabilities).toHaveBeenCalled(),
+    );
+    expect(result.current.isPending).toBe(true);
   });
 });
 
@@ -543,7 +636,7 @@ describe("usePermissionMap", () => {
 
 it("reports only unmet actions while honoring a grant on the requested resource", async () => {
   vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
-    data: { chat: ["read"], openappaDiagnostics: ["read", "admin"] },
+    data: { chat: ["read"], log: ["read", "admin"] },
     error: undefined,
     request: new Request("http://localhost"),
     response: new Response(),
@@ -557,7 +650,7 @@ it("reports only unmet actions while honoring a grant on the requested resource"
         {
           chat: ["read", "create"],
           agent: ["read", "update"],
-          openappaDiagnostics: ["read"],
+          log: ["read"],
         },
         "config-agent",
       ),

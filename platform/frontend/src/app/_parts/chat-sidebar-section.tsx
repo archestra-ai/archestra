@@ -29,6 +29,7 @@ import { useConversationActions } from "@/components/chat/conversation-actions";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { TruncatedText } from "@/components/truncated-text";
@@ -67,6 +68,10 @@ import { TypingText } from "@/components/ui/typing-text";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
+  SIDEBAR_PINNED_RUNS,
+  SIDEBAR_RECENT_RUNS,
+} from "@/lib/agent-runs-query-keys";
+import {
   useCancelAgentRun,
   useDeleteAgentRun,
   useMyAgentRun,
@@ -74,6 +79,7 @@ import {
   useUpdateAgentRun,
 } from "@/lib/agent-runtime.query";
 import {
+  SIDEBAR_PINNED_APPS_QUERY,
   useApps,
   useOpenAppInChat,
   useOpenExternalAppInChat,
@@ -98,6 +104,7 @@ import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import {
+  SIDEBAR_PINNED_PROJECTS_QUERY,
   useCreateProject,
   usePinProject,
   useProjects,
@@ -157,8 +164,8 @@ export function ChatSidebarSection({
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const runsEnabled =
     isAuthenticated && canReadConversation === true && runtimeEnabled;
-  const recentRunsQuery = useMyAgentRuns(runsEnabled, { pinned: false });
-  const pinnedRunsQuery = useMyAgentRuns(runsEnabled, { pinned: true });
+  const recentRunsQuery = useMyAgentRuns(runsEnabled, SIDEBAR_RECENT_RUNS);
+  const pinnedRunsQuery = useMyAgentRuns(runsEnabled, SIDEBAR_PINNED_RUNS);
   const selectedRunId = pathname.startsWith("/chat/runs/")
     ? (pathname.split("/").at(-1) ?? "")
     : "";
@@ -227,12 +234,11 @@ export function ChatSidebarSection({
   // /api/projects requires project:read; skip the fetch for roles without it
   // so the sidebar doesn't 403 (and toast) on every chat page. Only pinned
   // projects are asked for: the sidebar shows none of the others.
-  const { data: pinnedProjectsData } = useProjects({
-    pinned: true,
-    limit: 100,
-    offset: 0,
-    enabled: canReadProjects === true,
-  });
+  const { data: pinnedProjectsData, isLoading: pinnedProjectsLoading } =
+    useProjects({
+      ...SIDEBAR_PINNED_PROJECTS_QUERY,
+      enabled: canReadProjects === true,
+    });
   const pinProjectMutation = usePinProject();
   const pinnedProjects = (pinnedProjectsData?.data ?? []).filter(
     (p) => p.pinnedAt,
@@ -240,7 +246,9 @@ export function ChatSidebarSection({
   // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
   // useApps skips the request for roles without app:read. Only pinned apps
   // are asked for: the full list is far larger and the sidebar shows none of it.
-  const { data: appsData } = useApps({ limit: 100, offset: 0, pinned: true });
+  const { data: appsData, isLoading: pinnedAppsLoading } = useApps(
+    SIDEBAR_PINNED_APPS_QUERY,
+  );
   const pinAppMutation = usePinApp();
   const openAppMutation = useOpenAppInChat();
   const openExternalAppMutation = useOpenExternalAppInChat();
@@ -251,6 +259,15 @@ export function ChatSidebarSection({
     apps: pinnedApps,
     runs,
   });
+  // The Pinned list merges four sources and sorts them by pin time, so drawing
+  // it before every source has answered makes rows pop in and reshuffle as the
+  // slower ones land. The list keeps its skeleton until all of them have.
+  const listLoading =
+    isLoading ||
+    runsLoading ||
+    pinnedRunsQuery.isLoading ||
+    pinnedProjectsLoading ||
+    pinnedAppsLoading;
 
   useEffect(() => {
     if ((editingId || editingRunId) && inputRef.current) {
@@ -259,14 +276,13 @@ export function ChatSidebarSection({
     }
   }, [editingId, editingRunId]);
 
-  const handleSelectConversation = (id: string) => {
+  // Rows are links: the browser follows them (new tab included), and a hover
+  // or focus warms the route first. Clicking only has to close the mobile
+  // sidebar.
+  const handleConversationLinkClick = () => {
     if (isMobile) {
       setOpenMobile(false);
     }
-    const conversation = conversations.find(
-      (conversation) => conversation.id === id,
-    );
-    router.push(conversationHref(conversation ?? { id }));
   };
 
   const handleStartEdit = (id: string, currentTitle: string | null) => {
@@ -412,16 +428,23 @@ export function ChatSidebarSection({
             )}
           >
             <SidebarMenuButton
-              onClick={() => handleSelectConversation(conv.id)}
+              asChild
               isActive={activeTriggerId === conv.scheduledRun.triggerId}
               title={conv.scheduledRun.scheduleName}
               className="cursor-pointer flex-1 min-w-0"
             >
-              <CalendarClock
-                className="h-3.5 w-3.5 shrink-0"
-                aria-label="Scheduled task"
-              />
-              <span className="truncate">{conv.scheduledRun.scheduleName}</span>
+              <IntentPrefetchLink
+                href={conversationHref(conv)}
+                onClick={handleConversationLinkClick}
+              >
+                <CalendarClock
+                  className="h-3.5 w-3.5 shrink-0"
+                  aria-label="Scheduled task"
+                />
+                <span className="truncate">
+                  {conv.scheduledRun.scheduleName}
+                </span>
+              </IntentPrefetchLink>
             </SidebarMenuButton>
             {conv.projectId && conv.projectName && (
               <ProjectBadgeButton
@@ -527,98 +550,105 @@ export function ChatSidebarSection({
             </div>
           ) : (
             <SidebarMenuButton
-              onClick={() => handleSelectConversation(conv.id)}
+              asChild
               isActive={isCurrentConversation}
               className="cursor-pointer flex-1 justify-between"
             >
-              <span className="flex items-center gap-2 min-w-0 flex-1">
-                {conv.encryptedChat && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <EncryptedChatIcon className="h-3.5 w-3.5" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top">Encrypted chat</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {conv.share && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <UsersRound className="h-3.5 w-3.5 shrink-0 text-primary/80" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {getConversationShareTooltip(conv.share.visibility)}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {(hasRecentlyGeneratedTitle || isRegenerating) && (
-                  <AISparkleIcon isAnimating />
-                )}
-                {isRegenerating ? (
-                  <span
-                    key="regenerating"
-                    className="text-muted-foreground text-sm truncate"
-                  >
-                    Generating...
-                  </span>
-                ) : hasRecentlyGeneratedTitle ? (
-                  <span key="typing" className="truncate">
-                    <TypingText
-                      text={
-                        displayTitle.length > MAX_TITLE_LENGTH
-                          ? `${displayTitle.slice(0, MAX_TITLE_LENGTH)}...`
-                          : displayTitle
-                      }
-                      typingSpeed={35}
-                      showCursor
-                      cursorClassName="bg-primary"
-                    />
-                  </span>
-                ) : (
-                  <TruncatedText
-                    message={displayTitle}
-                    maxLength={MAX_TITLE_LENGTH}
-                    className="truncate"
-                    showTooltip={false}
-                  />
-                )}
-              </span>
-              {/* One fixed slot for both, so the spinner and the smaller dot
-                  share a center line down the list. */}
-              {hasIndicator && (
-                <span
-                  className={cn(
-                    "ml-1 flex size-4 shrink-0 items-center justify-center transition-opacity",
-                    // The menu trigger is drawn over this slot while visible.
-                    showChatMenu &&
-                      "group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0",
-                    showChatMenu && isMenuOpen && "opacity-0",
+              <IntentPrefetchLink
+                href={conversationHref(conv)}
+                onClick={handleConversationLinkClick}
+              >
+                <span className="flex items-center gap-2 min-w-0 flex-1">
+                  {conv.encryptedChat && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <EncryptedChatIcon className="h-3.5 w-3.5" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          Encrypted chat
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
-                >
-                  {isGenerating ? (
-                    <Loader2
-                      aria-label="Generating"
-                      data-testid={getChatItemGeneratingIndicatorTestId(
-                        conv.id,
-                      )}
-                      className="size-3.5 animate-spin text-muted-foreground"
-                    />
-                  ) : (
+                  {conv.share && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <UsersRound className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {getConversationShareTooltip(conv.share.visibility)}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {(hasRecentlyGeneratedTitle || isRegenerating) && (
+                    <AISparkleIcon isAnimating />
+                  )}
+                  {isRegenerating ? (
                     <span
-                      role="img"
-                      aria-label="New messages"
-                      data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
-                      className={cn(
-                        "size-2 rounded-full",
-                        ATTENTION_DOT_CLASS.attention,
-                      )}
+                      key="regenerating"
+                      className="text-muted-foreground text-sm truncate"
+                    >
+                      Generating...
+                    </span>
+                  ) : hasRecentlyGeneratedTitle ? (
+                    <span key="typing" className="truncate">
+                      <TypingText
+                        text={
+                          displayTitle.length > MAX_TITLE_LENGTH
+                            ? `${displayTitle.slice(0, MAX_TITLE_LENGTH)}...`
+                            : displayTitle
+                        }
+                        typingSpeed={35}
+                        showCursor
+                        cursorClassName="bg-primary"
+                      />
+                    </span>
+                  ) : (
+                    <TruncatedText
+                      message={displayTitle}
+                      maxLength={MAX_TITLE_LENGTH}
+                      className="truncate"
+                      showTooltip={false}
                     />
                   )}
                 </span>
-              )}
+                {/* One fixed slot for both, so the spinner and the smaller dot
+                  share a center line down the list. */}
+                {hasIndicator && (
+                  <span
+                    className={cn(
+                      "ml-1 flex size-4 shrink-0 items-center justify-center transition-opacity",
+                      // The menu trigger is drawn over this slot while visible.
+                      showChatMenu &&
+                        "group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0",
+                      showChatMenu && isMenuOpen && "opacity-0",
+                    )}
+                  >
+                    {isGenerating ? (
+                      <Loader2
+                        aria-label="Generating"
+                        data-testid={getChatItemGeneratingIndicatorTestId(
+                          conv.id,
+                        )}
+                        className="size-3.5 animate-spin text-muted-foreground"
+                      />
+                    ) : (
+                      <span
+                        role="img"
+                        aria-label="New messages"
+                        data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
+                        className={cn(
+                          "size-2 rounded-full",
+                          ATTENTION_DOT_CLASS.attention,
+                        )}
+                      />
+                    )}
+                  </span>
+                )}
+              </IntentPrefetchLink>
             </SidebarMenuButton>
           )}
           {editingId !== conv.id && conv.projectId && conv.projectName && (
@@ -928,7 +958,7 @@ export function ChatSidebarSection({
                   registry icon for an external one — matching the app's card on
                   the Apps page, down to the glyph each kind falls back to. */}
               <McpCatalogIcon
-                icon={appItem.icon}
+                icon={appItem.iconUrl ?? appItem.icon}
                 size={14}
                 fallback={appItem.source === "owned" ? AppWindow : undefined}
               />
@@ -978,8 +1008,7 @@ export function ChatSidebarSection({
   };
 
   if (
-    !isLoading &&
-    !runsLoading &&
+    !listLoading &&
     conversations.length === 0 &&
     runs.length === 0 &&
     pinnedProjects.length === 0 &&
@@ -1016,7 +1045,7 @@ export function ChatSidebarSection({
 
   return (
     <>
-      {isLoading || runsLoading ? (
+      {listLoading ? (
         <ChatListSkeleton subClass={subClass} />
       ) : (
         <ChatListFadeIn fadeIn={fadeIn}>

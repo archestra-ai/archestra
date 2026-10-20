@@ -190,8 +190,8 @@ function RootPolicySource({
       />
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-3 text-xs text-muted-foreground">
         <span>
-          Saved changes apply to new conversations. Existing conversations keep
-          their original policy.
+          Existing policy snapshots stay pinned. Other conversations follow
+          saved changes while live policy is selected.
         </span>
         <CompositionSummary declarations={declarations} />
       </div>
@@ -283,9 +283,9 @@ function CompositionSummary({
       {notEnforced > 0 && (
         <>
           <span>·</span>
-          {/* Every included battery that is not active is in the Broken group. */}
+          {/* Every included battery with a problem is in the Needs attention group. */}
           <Link
-            href={batteriesHref("broken")}
+            href={batteriesHref("attention")}
             className="inline-flex items-center gap-1 text-destructive underline underline-offset-2 hover:no-underline"
           >
             <TriangleAlert className="size-3.5" />

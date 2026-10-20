@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -52,7 +52,7 @@ The command changes nothing on your computer until you approve it in your browse
 2. Click **Copy** and run the command in a terminal. It prints a code and opens an approval page in your browser.
 3. Check that the code in the browser matches the code in the terminal. Tick **This code matches the code in my terminal** and click **Approve connection**.
 4. Back in the terminal, the installer sets up your client and lists what it set up. When it asks **Sign in now?**, press Enter to sign in to the gateway in your browser.
-5. Open a new terminal and run the command the installer prints last. It starts your client with a first question about the gateway's tools, leaving your other MCP servers alone. Cursor has no command: open Cursor.
+5. When it asks to start your client now, press Enter. Your client starts with a first question about the gateway's tools, leaving your other MCP servers alone. On Windows, or if you answer no, open a new terminal and run the command the installer prints last. Cursor has no command: open Cursor.
 
 ![The browser approval page with a code to match against the terminal](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 
@@ -65,7 +65,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 - **Codex:** if you skipped the sign-in, run `codex mcp login <gateway>`.
 - **Cursor:** quit and reopen Cursor, then sign in to the gateway under **Customize → MCPs**. Setup points Cursor's OpenAI API key settings at the [Model Router](/docs/llm-proxy/model-router) with a virtual key for your model providers. Cursor's model picker then lists only the models the Model Router offers you, such as `anthropic:claude-sonnet-4-6`. Setup switches off Cursor's built-in models. Switch one back on under **Settings → Models**.
 - **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. If setup reports a missing key, add it to `providers.json`. The environment variables printed at the end are optional.
-- **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. If setup adds Archestra model providers to OpenCode, it changes a `model`, `small_model` or agent `model` you set to the same model on Archestra. If Archestra does not offer that model, setup removes the setting, and an agent then uses the session's model. Disconnect restores your settings. Providers you sign in to from OpenCode itself, such as a ChatGPT or Claude subscription or your own key, also go through Archestra and are listed next to the Archestra providers. Restart OpenCode after signing in to one.
+- **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. If setup adds Archestra model providers to OpenCode, it changes a `model`, `small_model` or agent `model` you set to the same model on Archestra. If Archestra does not offer that model, setup removes the setting, and an agent then uses the session's model. Disconnect restores your settings. Providers you sign in to from OpenCode itself, such as a ChatGPT or Claude subscription or your own key, also go through Archestra and are listed next to the Archestra providers. A provider that cannot use your own sign-in, such as a Kimi Code plan, uses an Archestra provider, and its name says which one: "Kimi For Coding (kimi.ai) via Moonshot (Kimi)". Restart OpenCode after signing in to one.
 - **Kilo Code:** if you skipped the sign-in, run `kilo mcp auth <gateway>`. Setup writes its settings to `~/.config/kilo/kilo.json`. If your `kilo.jsonc` already registers the same gateway under another name, setup disables that duplicate and preserves its comments and connection settings. Model settings work as for OpenCode, and the proxy settings turn off providers that do not go through Archestra, such as the Kilo Gateway.
 
 <span id="startup-guard"></span>

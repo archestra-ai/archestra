@@ -189,6 +189,102 @@ describe("SlackProvider quoted message content", () => {
     expect(history[0]?.text).toContain(QUOTED_REPORT);
     expect(history[0]?.text).toContain(QUOTE_REQUEST.trim());
   });
+
+  test("thread history keeps bot messages that carry content only in attachments or blocks", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: inject the Slack API boundary
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              // Alert webhook: empty `text`, everything in a legacy attachment.
+              ts: "1234567890.100000",
+              subtype: "bot_message",
+              bot_id: "B_ALERTS",
+              username: "Alertmanager",
+              text: "",
+              attachments: [
+                {
+                  id: 1,
+                  color: "a30200",
+                  fallback: "[FIRING:1] HighErrorRate api",
+                  title: "[FIRING:1] HighErrorRate api",
+                  title_link: "https://alerts.example.com/alerting/list",
+                  text: "*Alert:* 5xx rate above 5% on api-gateway",
+                  fields: [
+                    { title: "severity", value: "critical", short: true },
+                  ],
+                  footer: "Alertmanager",
+                },
+              ],
+            },
+            {
+              // Block Kit only: section, header, and context — no rich_text.
+              ts: "1234567890.200000",
+              bot_id: "B_DEPLOY",
+              bot_profile: { name: "Deploy Bot" },
+              text: "",
+              blocks: [
+                {
+                  type: "header",
+                  text: { type: "plain_text", text: "Deploy failed" },
+                },
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: "Rollout of *web* halted" },
+                  fields: [{ type: "mrkdwn", text: "*Env:* production" }],
+                },
+                {
+                  type: "context",
+                  elements: [{ type: "mrkdwn", text: "build 4821" }],
+                },
+                {
+                  type: "actions",
+                  elements: [
+                    {
+                      type: "button",
+                      text: { type: "plain_text", text: "Retry" },
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              // `text` present: the attachment repeating it is not appended.
+              ts: "1234567890.300000",
+              bot_id: "B_ALERTS",
+              text: "[RESOLVED] HighErrorRate api",
+              attachments: [
+                {
+                  fallback: "[RESOLVED] HighErrorRate api",
+                  text: "[RESOLVED] HighErrorRate api",
+                },
+              ],
+            },
+            {
+              ts: "1234567890.400000",
+              user: "U_SENDER",
+              text: "<@UBOT123> why did this fire?",
+            },
+          ],
+        }),
+      },
+    };
+
+    const history = await provider.getThreadHistory({
+      channelId: "C12345",
+      workspaceId: "T12345",
+      threadId: "1234567890.100000",
+      excludeMessageId: "1234567890.400000",
+    });
+
+    expect(history.map((message) => message.text)).toEqual([
+      "[FIRING:1] HighErrorRate api\n*Alert:* 5xx rate above 5% on api-gateway\nseverity: critical",
+      "Deploy failed\nRollout of *web* halted\n*Env:* production\nbuild 4821",
+      "[RESOLVED] HighErrorRate api",
+    ]);
+  });
 });
 
 // =============================================================================
@@ -1509,7 +1605,7 @@ describe("SlackProvider.sendReply", () => {
     );
   });
 
-  test("renders a hint as its own subtle context block above the footer", async () => {
+  test("renders the conversation link and hint beneath the answer above the footer", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
@@ -1531,12 +1627,21 @@ describe("SlackProvider.sendReply", () => {
       text: "hi there",
       footer: "🤖 Agent",
       hint: "Started a new conversation",
+      conversationUrl: "https://example.test/chat/runs/session-id",
     });
 
     const { blocks } = postMessage.mock.calls[0][0];
-    // markdown, then the hint context, then the footer as the final block.
     expect(blocks).toEqual([
       { type: "markdown", text: "hi there" },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: "<https://example.test/chat/runs/session-id|Open conversation>",
+          },
+        ],
+      },
       {
         type: "context",
         elements: [

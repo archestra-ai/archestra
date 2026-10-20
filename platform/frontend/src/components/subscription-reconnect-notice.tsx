@@ -6,13 +6,24 @@ import {
   subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import { KeyRound } from "lucide-react";
-import { useState } from "react";
-import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { type ComponentProps, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
+import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 import { cn } from "@/lib/utils/tailwind";
+
+// The key form (react-hook-form and the provider forms) loads when it opens.
+const CreateLlmProviderApiKeyDialog = lazyComponent<
+  ComponentProps<
+    typeof import("@/components/create-llm-provider-api-key-dialog").CreateLlmProviderApiKeyDialog
+  >
+>(() =>
+  import("@/components/create-llm-provider-api-key-dialog").then(
+    (m) => m.CreateLlmProviderApiKeyDialog,
+  ),
+);
 
 type ReconnectCredential = Pick<LlmProviderApiKey, "id" | "name" | "provider"> &
   Partial<Pick<LlmProviderApiKey, "subscriptionKind">>;

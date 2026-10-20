@@ -15,6 +15,9 @@ import {
 } from "@/knowledge-base/acl-tokens";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
+  AgentConnectorAssignmentModel,
+  AgentKnowledgeBaseModel,
+  AgentModel,
   ConnectorRunModel,
   GithubAppConfigModel,
   KbChunkModel,
@@ -1043,6 +1046,116 @@ describe("knowledge base routes", () => {
       expect(kbResult.connectors[0].name).toBe("Listed Connector");
       expect(kbResult.connectors[0].connectorType).toBe("jira");
     });
+
+    test("counts each knowledge base's live agents, with or without the agent list", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const used = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Used KB",
+      });
+      const unused = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Unused KB",
+      });
+      const live = [
+        await makeAgent({ organizationId }),
+        await makeAgent({ organizationId }),
+      ];
+      const deleted = await makeAgent({ organizationId });
+      const elsewhere = await makeAgent({
+        organizationId: (await makeOrganization()).id,
+      });
+      for (const agent of [...live, deleted, elsewhere]) {
+        await AgentKnowledgeBaseModel.assign(agent.id, used.id);
+      }
+      await AgentModel.delete(deleted.id);
+
+      type Row = {
+        id: string;
+        assignedAgents: { id: string }[];
+        assignedAgentCount: number;
+      };
+      const rowsOf = async (query: string): Promise<Map<string, Row>> => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/knowledge-bases?limit=50&offset=0${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        return new Map(
+          response.json().data.map((kb: Row) => [kb.id, kb] as const),
+        );
+      };
+
+      const full = await rowsOf("");
+      expect(
+        full
+          .get(used.id)
+          ?.assignedAgents.map((agent) => agent.id)
+          .sort(),
+      ).toEqual(live.map((agent) => agent.id).sort());
+      expect(full.get(used.id)?.assignedAgentCount).toBe(2);
+
+      const slim = await rowsOf("&includeAssignedAgents=false");
+      expect(slim.get(used.id)).toMatchObject({
+        assignedAgents: [],
+        assignedAgentCount: 2,
+      });
+      expect(slim.get(unused.id)).toMatchObject({
+        assignedAgents: [],
+        assignedAgentCount: 0,
+      });
+    });
+
+    test("ids returns exactly those knowledge bases and composes with search", async () => {
+      const alpha = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Alpha docs",
+      });
+      const beta = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Beta docs",
+      });
+      await KnowledgeBaseModel.create({ organizationId, name: "Gamma docs" });
+
+      const byIds = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases?limit=50&offset=0&ids=${alpha.id},${beta.id}`,
+      });
+      expect(byIds.statusCode).toBe(200);
+      expect(
+        byIds
+          .json()
+          .data.map((kb: { id: string }) => kb.id)
+          .sort(),
+      ).toEqual([alpha.id, beta.id].sort());
+      expect(byIds.json().pagination.total).toBe(2);
+
+      const searched = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases?limit=50&offset=0&ids=${alpha.id},${beta.id}&search=Beta`,
+      });
+      expect(searched.json().data.map((kb: { id: string }) => kb.id)).toEqual([
+        beta.id,
+      ]);
+
+      // The requested rows come back together; page size does not split them.
+      const onePage = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases?limit=1&offset=1&ids=${alpha.id},${beta.id}`,
+      });
+      expect(onePage.json().data).toHaveLength(2);
+
+      // An empty list asks for no rows, not for every row.
+      const none = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-bases?limit=50&offset=0&ids=",
+      });
+      expect(none.statusCode).toBe(200);
+      expect(none.json().data).toEqual([]);
+      expect(none.json().pagination.total).toBe(0);
+    });
   });
 
   describe("PUT /api/knowledge-bases/:id", () => {
@@ -1824,6 +1937,84 @@ describe("knowledge base routes", () => {
       );
       expect(totals.get(withDocuments.id)).toBe(3);
       expect(totals.get(empty.id)).toBe(0);
+    });
+
+    test("counts each connector's live agents, with or without the agent list", async ({
+      makeAgent,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+      const kb = await makeKnowledgeBase(organizationId);
+      const used = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const unused = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      const live = await makeAgent({ organizationId });
+      const deleted = await makeAgent({ organizationId });
+      await AgentConnectorAssignmentModel.assign(live.id, used.id);
+      await AgentConnectorAssignmentModel.assign(deleted.id, used.id);
+      await AgentModel.delete(deleted.id);
+
+      const rowsOf = async (query: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/connectors?limit=50&offset=0${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        return new Map(
+          response
+            .json()
+            .data.map(
+              (connector: {
+                id: string;
+                assignedAgents: { id: string }[];
+                assignedAgentCount: number;
+              }) => [connector.id, connector],
+            ),
+        );
+      };
+
+      const full = await rowsOf("");
+      expect(full.get(used.id)).toMatchObject({
+        assignedAgents: [expect.objectContaining({ id: live.id })],
+        assignedAgentCount: 1,
+      });
+
+      const slim = await rowsOf("&includeAssignedAgents=false");
+      expect(slim.get(used.id)).toMatchObject({
+        assignedAgents: [],
+        assignedAgentCount: 1,
+      });
+      expect(slim.get(unused.id)).toMatchObject({ assignedAgentCount: 0 });
+    });
+
+    test("ids returns exactly those connectors", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
+      const kb = await makeKnowledgeBase(organizationId);
+      const wanted = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      await makeKnowledgeBaseConnector(kb.id, organizationId);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors?limit=50&offset=0&ids=${wanted.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        response.json().data.map((connector: { id: string }) => connector.id),
+      ).toEqual([wanted.id]);
+      expect(response.json().pagination.total).toBe(1);
+
+      // An empty list asks for no rows, not for every row.
+      const none = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=50&offset=0&ids=",
+      });
+      expect(none.statusCode).toBe(200);
+      expect(none.json().data).toEqual([]);
+      expect(none.json().pagination.total).toBe(0);
     });
 
     test("shows permission-sync connectors to members with connector grants", async ({

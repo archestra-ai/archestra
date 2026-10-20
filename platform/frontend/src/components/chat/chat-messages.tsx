@@ -77,12 +77,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import {
-  useCancelChatMcpTask,
-  useConversation,
-  useProfileToolsWithIds,
-} from "@/lib/chat/chat.query";
+import { useCancelChatMcpTask, useConversation } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   getToolErrorText,
@@ -108,8 +105,8 @@ import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import { identifyAskUserGroups } from "./ask-user-groups";
@@ -148,6 +145,7 @@ import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { buildToolIconMap, type ToolIconMap } from "./tool-icon-map";
 import { ToolStatusRow } from "./tool-status-row";
+import { TranscriptWindowEdge, useTranscriptWindow } from "./transcript-window";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
@@ -285,7 +283,20 @@ export function ChatMessages({
   const { data: organization } = useOrganization();
   const appIconLogo = useAppIconLogo();
   const { getToolName, getToolShortName } = useArchestraMcpIdentity();
-  const orchestrator = useMcpInstallOrchestrator();
+  // The install helper loads the registry's issue index, which only an auth
+  // prompt in the transcript reads. Once one has appeared
+  // it stays loaded, so the prompt can flip to connected.
+  const transcriptHasAuthPrompt = useMemo(
+    () => messages.some(messageHasAuthPrompt),
+    [messages],
+  );
+  const [installHelperNeeded, setInstallHelperNeeded] = useState(false);
+  if (transcriptHasAuthPrompt && !installHelperNeeded) {
+    setInstallHelperNeeded(true);
+  }
+  const orchestrator = useMcpInstallOrchestrator({
+    enabled: installHelperNeeded,
+  });
   const nonCompactToolNames = useMemo(
     () =>
       new Set([
@@ -304,9 +315,12 @@ export function ChatMessages({
     [getToolName],
   );
 
-  // Build tool name → icon map from agent tools + catalog data
-  const { data: agentTools } = useProfileToolsWithIds(agentId);
-  const { data: catalogItems } = useInternalMcpCatalog({
+  // Build tool name → icon map from agent tools + catalog data. The agent
+  // detail is already loaded by the chat page and carries no tool schemas.
+  const { data: agent } = useProfile(agentId);
+  const agentTools = agent?.tools;
+  // Names and icons only: the registry's directory, not the full catalog.
+  const { data: catalogItems } = useMcpCatalogDirectory({
     enabled: !!agentId && !!canReadMcpRegistry,
   });
   const toolIconMap = useMemo(
@@ -321,7 +335,9 @@ export function ChatMessages({
   const updateChatMessageMutation = useUpdateChatMessage(conversationId);
   // Resolved once for the whole transcript: an encrypted chat's attachments cannot
   // be copied into a knowledge base, so their chips do not offer it.
-  const { data: messagesConversation } = useConversation(conversationId);
+  const { data: messagesConversation } = useConversation(conversationId, {
+    refetchOnMount: false,
+  });
   const canSaveToKnowledge = isActionAvailableForConversation(
     messagesConversation,
     "saveToKnowledge",
@@ -550,6 +566,17 @@ export function ChatMessages({
     [subagentToolCalls],
   );
 
+  const timelineItems = useMemo(
+    () =>
+      buildMessageTimeline({
+        messages,
+        chatErrors,
+        compactions,
+      }),
+    [messages, chatErrors, compactions],
+  );
+  const transcriptWindow = useTranscriptWindow(timelineItems);
+
   if (
     messages.length === 0 &&
     chatErrors.length === 0 &&
@@ -585,11 +612,6 @@ export function ChatMessages({
     const nextMessage = messages[idx + 1];
     return nextMessage.role !== "assistant";
   });
-  const timelineItems = buildMessageTimeline({
-    messages,
-    chatErrors,
-    compactions,
-  });
   const liveErrorMessage = error ? getInlineErrorMessage(error) : null;
   const hasRenderedLiveError =
     !!error &&
@@ -621,9 +643,17 @@ export function ChatMessages({
           isCompacting={contextCompaction?.isCompacting || isContextCompacting}
           feedback={contextCompactionFeedback}
         />
-        <ConversationContent>
+        <ConversationContent scrollClassName={OPEN_AT_END_SCROLL_CLASS}>
           <div className="@container/chat max-w-4xl mx-auto relative pb-8">
+            <TranscriptWindowEdge
+              hiddenCount={transcriptWindow.start}
+              onShowEarlier={transcriptWindow.showEarlier}
+              deepLinkedMessageId={transcriptWindow.deepLinkedMessageId}
+            />
             {timelineItems.map((item, index) => {
+              // Only the end of a long transcript is mounted (see
+              // useTranscriptWindow); earlier items render on scroll-up.
+              if (index < transcriptWindow.start) return null;
               if (item.kind === "chat-error") {
                 return (
                   <InlineChatError
@@ -661,6 +691,8 @@ export function ChatMessages({
               return (
                 <div
                   key={message.id || idx}
+                  // Deep-link target (#message-<id>, see useTranscriptWindow).
+                  id={message.id ? `message-${message.id}` : undefined}
                   className={cn(isDimmed && "opacity-40 transition-opacity")}
                 >
                   {(() => {
@@ -760,13 +792,7 @@ export function ChatMessages({
                               agentId,
                               earlyToolUiStarts,
                               onSendMessage: (text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                  metadata: {
-                                    createdAt: new Date().toISOString(),
-                                  },
-                                }),
+                                session?.sendOrQueueText(text),
                             }}
                           />
                         );
@@ -1333,13 +1359,7 @@ export function ChatMessages({
                                   : undefined
                               }
                               onSendMessage={(text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                  metadata: {
-                                    createdAt: new Date().toISOString(),
-                                  },
-                                })
+                                session?.sendOrQueueText(text)
                               }
                             />
                           );
@@ -1456,13 +1476,7 @@ export function ChatMessages({
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
                                 onSendMessage={(text) =>
-                                  session?.sendMessage({
-                                    role: "user",
-                                    parts: [{ type: "text", text }],
-                                    metadata: {
-                                      createdAt: new Date().toISOString(),
-                                    },
-                                  })
+                                  session?.sendOrQueueText(text)
                                 }
                                 earlyToolUiData={earlyToolUiStarts[tcId]}
                               />
@@ -1531,13 +1545,7 @@ export function ChatMessages({
                                   tcId ? earlyToolUiStarts[tcId] : undefined
                                 }
                                 onSendMessage={(text) =>
-                                  session?.sendMessage({
-                                    role: "user",
-                                    parts: [{ type: "text", text }],
-                                    metadata: {
-                                      createdAt: new Date().toISOString(),
-                                    },
-                                  })
+                                  session?.sendOrQueueText(text)
                                 }
                                 nestedToolCalls={
                                   tcId &&
@@ -1630,6 +1638,9 @@ export function ChatMessages({
             )}
           </div>
         </ConversationContent>
+        {/* After the scroller: React attaches a host element's ref after its
+            children's layout effects, and before a later sibling's. */}
+        <OpenAtEnd />
         <ChatScrollButton assistantMessageCount={assistantMessageCount} />
         <McpInstallDialogs orchestrator={orchestrator} />
       </Conversation>
@@ -1677,6 +1688,38 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
     default:
       return `part:${JSON.stringify(part)}`;
   }
+}
+
+/**
+ * The transcript in the server's HTML opens at its end: until the page takes
+ * over, its scroller lays out bottom-up, which browsers scroll to the end (the
+ * auto bottom margin keeps a short transcript at the top and collapses once
+ * it overflows). The HTML streams in hidden segments, so a script could not
+ * scroll it, and stick-to-bottom only starts after hydration. The scroller is
+ * `overflow-y-auto` from the HTML on, rather than from stick-to-bottom's mount
+ * effect, so the HTML scrolls it.
+ */
+const OPEN_AT_END_SCROLL_CLASS =
+  "overflow-y-auto [&:not([data-taken-over])]:flex [&:not([data-taken-over])]:flex-col-reverse [&:not([data-taken-over])>*]:shrink-0 [&:not([data-taken-over])>*]:mb-auto";
+
+/**
+ * Hands the scroller to stick-to-bottom as the transcript hydrates: the
+ * bottom-up layout is dropped and the end kept in view, before the first
+ * client paint. This marks the element instead of re-rendering: an update
+ * reaching the transcript's message boundaries before they finish hydrating
+ * would make React discard their server HTML and render them again.
+ */
+function OpenAtEnd() {
+  const { scrollRef } = useStickToBottomContext();
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || "takenOver" in scroller.dataset) return;
+    scroller.dataset.takenOver = "";
+    if (!window.location.hash.startsWith("#message-")) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }, [scrollRef]);
+  return null;
 }
 
 // Re-engage stick-to-bottom when the user sends a new message.
@@ -2521,6 +2564,18 @@ function renderAssistantAuthPart(params: {
   onReauthMcp?: (catalogId: string, serverId: string) => void;
 }) {
   return renderToolAuthPart(params);
+}
+
+/** Whether a message renders an install or re-auth prompt. */
+function messageHasAuthPrompt(message: UIMessage): boolean {
+  return (
+    hasMessageAuthToolError(message) ||
+    (message.role === "assistant" &&
+      (message.parts ?? []).some(
+        (part) =>
+          part.type === "text" && !!resolveAssistantTextAuthState(part.text),
+      ))
+  );
 }
 
 function hasMessageAuthToolError(message: UIMessage): boolean {

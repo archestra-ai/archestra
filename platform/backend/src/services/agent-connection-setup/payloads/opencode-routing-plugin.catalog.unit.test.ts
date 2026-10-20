@@ -17,12 +17,14 @@ let originalFetch: typeof fetch;
 let originalGuard: unknown;
 let originalDirect: unknown;
 let originalDataHome: string | undefined;
+let originalCacheHome: string | undefined;
 let originalHome: string | undefined;
 beforeEach(() => {
   originalFetch = globalThis.fetch;
   originalGuard = globals[fetchGuard];
   originalDirect = globals[directFetch];
   originalDataHome = process.env.XDG_DATA_HOME;
+  originalCacheHome = process.env.XDG_CACHE_HOME;
   originalHome = process.env.HOME;
   delete globals[fetchGuard];
   delete globals[directFetch];
@@ -59,6 +61,8 @@ afterEach(async () => {
   else globals[directFetch] = originalDirect;
   if (originalDataHome === undefined) delete process.env.XDG_DATA_HOME;
   else process.env.XDG_DATA_HOME = originalDataHome;
+  if (originalCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
+  else process.env.XDG_CACHE_HOME = originalCacheHome;
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
   await Promise.all(
@@ -164,24 +168,7 @@ describe("managed catalog plugin", () => {
     const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-v2-"));
     roots.push(root);
     const revision = path.join(root, "revision");
-    await mkdir(path.join(revision, "node_modules", "@opencode", "plugin"), {
-      recursive: true,
-    });
-    await writeFile(
-      path.join(
-        revision,
-        "node_modules",
-        "@opencode",
-        "plugin",
-        "package.json",
-      ),
-      JSON.stringify({ type: "module" }),
-    );
-    await writeFile(
-      path.join(revision, "node_modules", "@opencode", "plugin", "index.js"),
-      `export const Provider = { ID: { make: (id) => id }, Info: { empty: (id) => ({ id, activation: "auto" }) } };
-export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, limit: { context: 1, output: 1 } }) } };`,
-    );
+    await writeFakeOpenCodePluginSdk(revision);
     const keyPath = path.join(root, "managed.key");
     await writeFile(keyPath, "managed-secret\n", { mode: 0o600 });
     await writeFile(
@@ -410,7 +397,204 @@ export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, i
     expect(result.finalAuth).toBe("Bearer native-openai-token");
     expect(result.finalAccount).toBe("acct");
   });
+
+  test("a managed alias keeps the client's provider label and names the catalog provider that serves it", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-labels-"));
+    roots.push(root);
+    process.env.HOME = root;
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    process.env.XDG_CACHE_HOME = path.join(root, "cache");
+    const modelsCache = path.join(root, "cache", "opencode", "models.json");
+    await mkdir(path.dirname(modelsCache), { recursive: true });
+    // The client may still be writing its catalog when the plugin loads.
+    await writeFile(modelsCache, '{"moonshotai": {"name": "Moon');
+    await mkdir(path.join(root, ".archestra"));
+    await writeFile(
+      path.join(root, ".archestra", "opencode-primary.key"),
+      "managed-secret\n",
+    );
+    const revision = path.join(root, "revision");
+    await mkdir(revision);
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: kimiCatalog,
+      }),
+    );
+    const module = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
+    const hooks = await module.ArchestraLlmProxy();
+    const config = () => ({
+      provider: {
+        "kimi-code-plan-cn": { name: "My Kimi plan" },
+      } as Record<string, { name?: string }>,
+    });
+    const names = (cfg: ReturnType<typeof config>) =>
+      Object.fromEntries(
+        Object.entries(cfg.provider).map(([id, entry]) => [id, entry.name]),
+      );
+    const first = config();
+    await hooks.config(first);
+    expect(names(first)).toEqual({
+      ...kimiLabels,
+      moonshotai: "moonshotai via Moonshot (Kimi)",
+      "kimi-code-plan-global": "kimi-code-plan-global via Moonshot (Kimi)",
+    });
+    await writeFile(
+      modelsCache,
+      JSON.stringify({
+        moonshotai: { id: "moonshotai", name: "Moonshot AI", models: {} },
+        "kimi-code-plan-global": {
+          id: "kimi-code-plan-global",
+          name: "Kimi For Coding (kimi.ai)",
+          models: {},
+        },
+      }),
+    );
+    const second = config();
+    await hooks.config(second);
+    expect(names(second)).toEqual(kimiLabels);
+    const third = config();
+    await hooks.config(third);
+    expect(names(third)).toEqual(kimiLabels);
+  });
+
+  test("V2 gives a managed alias the client's provider label and the catalog provider that serves it", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "catalog-plugin-v2-labels-"),
+    );
+    roots.push(root);
+    const revision = path.join(root, "revision");
+    await writeFakeOpenCodePluginSdk(revision);
+    const keyPath = path.join(root, "managed.key");
+    await writeFile(keyPath, "managed-secret\n", { mode: 0o600 });
+    await writeFile(
+      path.join(root, "params.json"),
+      JSON.stringify({
+        routes: {},
+        headers: {},
+        managedKeyPath: keyPath,
+        clientId: "opencode",
+        origin: "https://deployment.example",
+        source: { token: "cru1_test" },
+      }),
+    );
+    const file = path.join(revision, "routing.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPluginV2({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: kimiCatalog,
+      }),
+    );
+    expect(
+      await runProviderNames(file, {
+        moonshotai: "Moonshot AI",
+        "kimi-code-plan-global": "Kimi For Coding (kimi.ai)",
+        "kimi-code-plan-cn": "My Kimi plan",
+      }),
+    ).toEqual(kimiLabels);
+  });
 });
+
+const kimiRoute = "https://deployment.example/v1/kimi/agent";
+const kimiCatalog = {
+  providers: {
+    "archestra-kimi": {
+      name: "Moonshot (Kimi)",
+      npm: "@ai-sdk/openai-compatible" as const,
+      options: { baseURL: kimiRoute },
+      models: { "kimi-k3": { name: "kimi-k3", id: "kimi-k3" } },
+    },
+  },
+  routes: { "archestra-kimi": kimiRoute },
+  twins: {
+    kimi: "archestra-kimi",
+    moonshotai: "archestra-kimi",
+    "kimi-code-plan-global": "archestra-kimi",
+    "kimi-code-plan-cn": "archestra-kimi",
+  },
+};
+// Every row serves the same Archestra models, so only the label tells them
+// apart: the client's own name for the provider (its models.dev entry, else a
+// name the user configured, else the id) and the catalog provider behind it.
+const kimiLabels = {
+  "archestra-kimi": "Moonshot (Kimi)",
+  kimi: "kimi via Moonshot (Kimi)",
+  moonshotai: "Moonshot AI via Moonshot (Kimi)",
+  "kimi-code-plan-global": "Kimi For Coding (kimi.ai) via Moonshot (Kimi)",
+  "kimi-code-plan-cn": "My Kimi plan via Moonshot (Kimi)",
+};
+
+/** The two `@opencode/plugin` SDK constructors the V2 plugin calls. */
+async function writeFakeOpenCodePluginSdk(revision: string) {
+  const sdk = path.join(revision, "node_modules", "@opencode", "plugin");
+  await mkdir(sdk, { recursive: true });
+  await writeFile(
+    path.join(sdk, "package.json"),
+    JSON.stringify({ type: "module", exports: "./index.js" }),
+  );
+  await writeFile(
+    path.join(sdk, "index.js"),
+    `export const Provider = { ID: { make: (id) => id }, Info: { empty: (id) => ({ id, activation: "auto" }) } };
+export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, limit: { context: 1, output: 1 } }) } };`,
+  );
+}
+
+/** Runs the V2 transform twice over providers the client already lists. */
+function runProviderNames(
+  file: string,
+  names: Record<string, string>,
+): Promise<Record<string, string>> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `const plugin = (await import(${JSON.stringify(pathToFileURL(file).href)})).default;
+const providers = new Map(Object.entries(${JSON.stringify(names)}).map(([id, name]) => [id, { provider: { id, name, settings: {}, headers: {} }, models: new Map() }]));
+const editor = {
+  list: () => [...providers.values()],
+  get: (id) => providers.get(id),
+  add: ({ info, models }) => { providers.set(info.id, { provider: info, models: new Map(models.map((model) => [model.id, model])) }); },
+  update: (id, update) => { update(providers.get(id).provider); },
+  models: { set: (id, models) => { providers.get(id).models = new Map(models.map((model) => [model.id, model])); } },
+};
+for (let pass = 0; pass < 2; pass++) await plugin.setup({ provider: { transform: async (callback) => callback(editor) }, session: { hook: async () => {} } });
+console.log(JSON.stringify(Object.fromEntries([...providers].map(([id, record]) => [id, record.provider.name]))));`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("close", (code) => {
+      if (code !== 0) reject(new Error(stderr || stdout));
+      else resolve(JSON.parse(stdout));
+    });
+  });
+}
 
 function run(file: string): Promise<{
   vendor: {
@@ -471,18 +655,7 @@ async function prepareAlias(nativeRouteAllowed: boolean): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "catalog-plugin-alias-"));
   roots.push(root);
   const revision = path.join(root, "revision");
-  await mkdir(path.join(revision, "node_modules", "@opencode", "plugin"), {
-    recursive: true,
-  });
-  await writeFile(
-    path.join(revision, "node_modules", "@opencode", "plugin", "package.json"),
-    JSON.stringify({ type: "module", exports: "./index.js" }),
-  );
-  await writeFile(
-    path.join(revision, "node_modules", "@opencode", "plugin", "index.js"),
-    `export const Provider = { ID: { make: (id) => id }, Info: { empty: (id) => ({ id, activation: "auto" }) } };
-export const Model = { ID: { make: (id) => id }, Info: { default: (providerID, id) => ({ id, modelID: id, providerID, limit: { context: 1, output: 1 } }) } };`,
-  );
+  await writeFakeOpenCodePluginSdk(revision);
   const keyPath = path.join(root, "managed.key");
   await writeFile(keyPath, "managed-secret\n");
   await writeFile(

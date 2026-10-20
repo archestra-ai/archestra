@@ -10,7 +10,9 @@ import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
 import AgentModel from "./agent";
+import InteractionUserActivityModel from "./interaction-user-activity";
 import McpServerModel from "./mcp-server";
+import MemberModel from "./member";
 import RoleCompositionModel from "./role-composition";
 import SkillModel from "./skill";
 
@@ -94,10 +96,11 @@ class UserModel {
    */
   static async getById(id: string) {
     logger.trace("UserModel.getById: fetching user");
-    const [user] = await db
+    const [row] = await db
       .select({
         ...getTableColumns(schema.usersTable),
         organizationId: schema.membersTable.organizationId,
+        membership: getTableColumns(schema.membersTable),
       })
       .from(schema.usersTable)
       .innerJoin(
@@ -107,7 +110,12 @@ class UserModel {
       .where(eq(schema.usersTable.id, id))
       .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
       .limit(1);
-    logger.trace({ found: !!user }, "UserModel.getById: completed");
+    logger.trace({ found: !!row }, "UserModel.getById: completed");
+    if (!row) return row;
+    const { membership, ...user } = row;
+    // The user's first membership is also their first in its organization,
+    // the row MemberModel.getByUserId reads there; a read request keeps it.
+    MemberModel.remember(membership);
     return user;
   }
 
@@ -222,6 +230,7 @@ class UserModel {
     logger.debug("UserModel.delete: deleting user");
 
     if (tx) {
+      await InteractionUserActivityModel.lifecycleFence(tx);
       // Inside a caller's transaction the cleanup MUST run on the same
       // executor: a base-db query under an open transaction deadlocks the
       // single-connection test database, and base-db cleanup would escape the

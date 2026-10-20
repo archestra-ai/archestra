@@ -233,11 +233,11 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   }
 
   getRawToolCallEvents(): string[] {
-    return this.state.toolCalls.flatMap((toolCall, index) => {
+    return this.withWireIds(this.state.toolCalls).flatMap((toolCall, index) => {
       const itemId = `fc_${toolCall.id}`;
       const item = {
         id: itemId,
-        call_id: toolCall.id,
+        call_id: toolCall.wireId ?? toolCall.id,
         type: "function_call",
         name: toolCall.name,
         arguments: toolCall.arguments,
@@ -298,7 +298,7 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
     this.inner.formatToolCallsSSE?.(toolCalls);
     const frames = formatResponsesFunctionCallFrames({
-      toolCalls,
+      toolCalls: this.withWireIds(toolCalls),
       firstOutputIndex: 1,
       nextSequenceNumber: () => this.nextSequenceNumber(),
     });
@@ -479,14 +479,16 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
     if (this.replacedText === null) {
       output.push(
-        ...(toolCallsOverride ?? this.state.toolCalls).map((toolCall) => ({
-          id: toolCall.id,
-          call_id: toolCall.wireId ?? toolCall.id,
-          type: "function_call",
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-          status: "completed",
-        })),
+        ...this.withWireIds(toolCallsOverride ?? this.state.toolCalls).map(
+          (toolCall) => ({
+            id: toolCall.id,
+            call_id: toolCall.wireId ?? toolCall.id,
+            type: "function_call",
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+            status: "completed",
+          }),
+        ),
       );
     }
 
@@ -517,6 +519,24 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
   private nextSequenceNumber(): number {
     this.sequenceNumber += 1;
     return this.sequenceNumber;
+  }
+
+  // The client echoes `call_id` on its next request. When the wrapped adapter
+  // packs more into that id (Gemini's thought signature), it wraps the id the
+  // client would echo anyway, so an OpenAPPA stamp survives inside it.
+  private withWireIds<
+    TToolCall extends { id: string; name: string; wireId?: string },
+  >(toolCalls: TToolCall[]): TToolCall[] {
+    if (!this.inner.wireToolCallId) {
+      return toolCalls;
+    }
+    return toolCalls.map((toolCall, index) => ({
+      ...toolCall,
+      wireId: this.inner.wireToolCallId?.({
+        toolCall: { id: toolCall.wireId ?? toolCall.id, name: toolCall.name },
+        index,
+      }),
+    }));
   }
 
   private toSse(event: unknown): string {

@@ -47,6 +47,7 @@ import {
   openLegacySseStream,
   wantsLegacySseStream,
 } from "./legacy-sse";
+import { gatewayLlmSessionId, gatewayLlmToolCallId } from "./llm-link";
 import {
   clientSupportsInputRequest,
   deriveStatePrincipal,
@@ -59,6 +60,7 @@ import { PendingInboundRequests } from "./pending-inbound-requests";
 import { cachedPendingRequests } from "./pending-inbound-shared";
 import {
   buildDiscoverResult,
+  buildGatewayInstructions,
   extractTraceContext,
   isDiscoverRequest,
   isMethodRemovedForRevision,
@@ -1234,18 +1236,23 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
             runId: readHeader(request, RUN_ID_HEADER),
           }),
         );
+        // One primary-key read, memoized for the rest of this request.
+        const agent = await lookups.gatewayAgent(profileId);
         return {
           jsonrpc: "2.0",
           result: buildDiscoverResult({
             agentId: profileId,
             version: config.api.version,
             revision: resolution.revision,
+            instructions: buildGatewayInstructions(agent?.description),
           }),
           id: (request.body as { id?: string | number })?.id ?? null,
         };
       }
 
       const runId = readHeader(request, RUN_ID_HEADER);
+      const llmSessionId = gatewayLlmSessionId(request);
+      const llmToolCallId = gatewayLlmToolCallId(request.body);
       const tokenAuthContext: TokenAuthContext = {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,
@@ -1266,6 +1273,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         }),
         source: gatewayCallSource(request),
         ...(runId && { runId }),
+        ...(llmSessionId && { llmSessionId }),
+        ...(llmToolCallId && { llmToolCallId }),
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist

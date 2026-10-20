@@ -998,6 +998,15 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "OpenAPPA owns content-addressed policy history",
   },
+  openappaDeploymentsTable: {
+    audited: false,
+    reason:
+      "OpenAPPA moves each organization's policy head when it publishes; derived from the audited policy",
+  },
+  openappaPolicyRevisionsTable: {
+    audited: false,
+    reason: "OpenAPPA owns each organization's published policy revisions",
+  },
   openappaOperationsTable: {
     audited: false,
     reason: "native hook idempotency ledger",
@@ -1063,6 +1072,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "external consult dataset the native runtime appends",
   },
+  openappaLabelChangesTable: {
+    audited: false,
+    reason: "label history dataset the native runtime appends",
+  },
   openappaRootOpeningsTable: {
     audited: false,
     reason:
@@ -1072,6 +1085,34 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "internal completion ledger committed with application data upgrades",
+  },
+  interactionUserActivityTable: {
+    audited: false,
+    reason: "derived log user activity counts",
+  },
+  interactionUserActivityDeltasTable: {
+    audited: false,
+    reason: "transactional rebuild delta balances",
+  },
+  interactionUserActivityStateTable: {
+    audited: false,
+    reason: "internal rebuild readiness and owner revision",
+  },
+  interactionUserActivityUsersTable: {
+    audited: false,
+    reason: "internal per-user rebuild checkpoints",
+  },
+  interactionUserActivityMissingOwnersTable: {
+    audited: false,
+    reason: "internal unresolved owner dependencies",
+  },
+  interactionSessionHeadsTable: {
+    audited: false,
+    reason: "derived newest-interaction index of log sessions",
+  },
+  interactionSessionHeadsBackfillTable: {
+    audited: false,
+    reason: "internal backfill progress marker",
   },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 

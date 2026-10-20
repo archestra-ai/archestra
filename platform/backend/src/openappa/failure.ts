@@ -1,6 +1,7 @@
 import { trace } from "@opentelemetry/api";
 import { z } from "zod";
 import { ApiError } from "@/types/api";
+import { isPolicyMoved } from "./policy-moved";
 
 /**
  * The error every OpenAPPA operation throws when it cannot decide safely.
@@ -12,23 +13,35 @@ import { ApiError } from "@/types/api";
  * id so an operator can find the full cause in the logs.
  *
  * A refused policy fails the same way on every request, so clients are told
- * not to retry it (`x-should-retry: false` on a 500). So does a conversation
- * whose opening policy the runtime cannot reopen (a 409). An unavailable
- * runtime may recover, so it stays a retryable 503.
+ * not to retry it (`x-should-retry: false` on a 500). So do a missing
+ * deployment setting and a request the binding cannot read, and a
+ * conversation whose opening policy the runtime cannot reopen (a 409). An
+ * unavailable runtime may recover, so it stays a retryable 503, as does a
+ * failure that carries no code (the addon did not load, or the host failed).
  */
 export function openappaFailure(error: unknown): ApiError {
-  if (error instanceof ApiError && error.message.startsWith(FAILURE_PREFIX))
-    return error;
+  if (error instanceof OpenappaFailure) return error;
   const failure = classify(error);
   const reference = trace.getActiveSpan()?.spanContext().traceId;
   const message = `${FAILURE_PREFIX}: ${failure.detail}${
     reference ? ` (ref: ${reference})` : ""
   }`;
-  const apiError = new ApiError(failure.statusCode, message);
+  const apiError = new OpenappaFailure(failure.statusCode, message);
   apiError.shouldRetry = failure.statusCode === 503;
   if (failure.statusCode === 503) apiError.retryAfterSeconds = RETRY_AFTER;
   apiError.cause = error;
   return apiError;
+}
+
+/** What {@link openappaFailure} returns: an OpenAPPA failure already classified. */
+class OpenappaFailure extends ApiError {}
+
+/** The class the native binding stamped on `error`, if it carries one. */
+export function runtimeFailureCode(error: unknown): RuntimeFailureCode | null {
+  const code = RuntimeFailureCode.safeParse(
+    error instanceof Error ? (error as { code?: unknown }).code : undefined,
+  );
+  return code.success ? code.data : null;
 }
 
 /**
@@ -108,30 +121,9 @@ const MAX_NAME = 80;
 const POLICY_PAGE = "Guardrails";
 
 /**
- * Opening refusals the runtime reports for the policy text itself (the
- * runtime's `OpenError` variants and the host's composition prefixes). Storage
- * and damage variants are deliberately absent.
- */
-const POLICY_REFUSALS = [
-  /^configuration refused: /,
-  /^builtin modules refused: /,
-  /^policy refused: /,
-  /^unsupported policy: /,
-  /^policy declares reserved tool name /,
-  /^the adapter spells no name for the control tool/,
-  /^the policy names tool /,
-  /^policy names \S+ \S+, which has no \[externals\] binding/,
-  /^\[externals\] binds /,
-  /^annotator \S+ names /,
-  /^root policy: /,
-  /^battery \S+: /,
-  /^a hosted document declares /,
-];
-
-/**
  * The class the native binding stamps on a runtime failure as `error.code`:
- * the runtime's refusal classes, plus the binding's own lease and session
- * failures.
+ * the runtime's refusal classes, plus the binding's own lease, session,
+ * policy-load, storage and input failures.
  */
 const RuntimeFailureCode = z.enum([
   "storage",
@@ -157,16 +149,23 @@ const RuntimeFailureCode = z.enum([
   "lease_lost",
   "held_elsewhere",
   "unstarted_parent",
+  "policy_moved",
+  "policy_refused",
+  "runtime_misconfigured",
+  "pool_exhausted",
+  "replay_busy",
+  "replay_timed_out",
+  "invalid_input",
+  "panicked",
 ]);
 type RuntimeFailureCode = z.infer<typeof RuntimeFailureCode>;
 
 type Failure = { statusCode: 409 | 500 | 503; detail: string };
 
 function classify(error: unknown): Failure {
-  const code = RuntimeFailureCode.safeParse(
-    error instanceof Error ? (error as { code?: unknown }).code : undefined,
-  );
-  if (code.success) return classifyCode(code.data);
+  const code = runtimeFailureCode(error);
+  if (code !== null)
+    return classifyCode(code, error instanceof Error ? error.message : "");
   if (error instanceof OpenappaRetiredAnnotatorError)
     return {
       statusCode: 409,
@@ -182,22 +181,36 @@ function classify(error: unknown): Failure {
       statusCode: 500,
       detail: `${error.message}. An administrator can rebind it on the ${POLICY_PAGE} page.`,
     };
-  const message = error instanceof Error ? error.message : "";
-  if (POLICY_REFUSALS.some((pattern) => pattern.test(message)))
-    return {
-      statusCode: 500,
-      detail: `the organization's guardrails policy was refused (${summarize(message)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
-    };
-  if (message.startsWith("OpenAPPA had no free PostgreSQL connection"))
-    return {
-      statusCode: 503,
-      detail: "the policy runtime has no free database connection.",
-    };
+  // A runtime whose refusal carries no policy-moved class yet reports it in text.
+  if (isPolicyMoved(error)) return POLICY_MOVED;
   return UNAVAILABLE;
 }
 
-function classifyCode(code: RuntimeFailureCode): Failure {
+function classifyCode(code: RuntimeFailureCode, message: string): Failure {
   switch (code) {
+    // The runtime refuses the organization's policy document itself.
+    case "policy_refused":
+      return {
+        statusCode: 500,
+        detail: `the organization's guardrails policy was refused (${summarize(message)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
+      };
+    // The policy needs a setting of this deployment, not of the document.
+    case "runtime_misconfigured":
+      return {
+        statusCode: 500,
+        detail: `the guardrails policy needs a deployment setting this server lacks (${summarize(message)}). The operator of this deployment must set it.`,
+      };
+    // The host sent a request the binding cannot read: a defect, not an outage.
+    case "invalid_input":
+      return {
+        statusCode: 500,
+        detail: "the policy runtime refused a malformed request.",
+      };
+    case "pool_exhausted":
+      return {
+        statusCode: 503,
+        detail: "the policy runtime has no free database connection.",
+      };
     // A stored record of the conversation no longer decodes, so the runtime
     // cannot rebuild its trajectory. Every later request fails the same way.
     case "untrusted_log":
@@ -230,6 +243,11 @@ function classifyCode(code: RuntimeFailureCode): Failure {
         detail:
           "another request of this session took over this operation. Retry the request.",
       };
+    // The organization's policy changed while this request was decided, and
+    // the backend's own retries did not catch up with it. Nothing was
+    // recorded; the retry decides under the current policy.
+    case "policy_moved":
+      return POLICY_MOVED;
     // A retry sent while the first attempt still runs gets that attempt's answer.
     case "held_elsewhere":
       return {
@@ -238,6 +256,9 @@ function classifyCode(code: RuntimeFailureCode): Failure {
           "another request of this session is still working on this operation. Retry the request.",
       };
     case "storage":
+    case "panicked":
+    case "replay_busy":
+    case "replay_timed_out":
     case "inventory_refused":
     case "engine_invariant":
     case "contended":
@@ -259,6 +280,12 @@ function classifyCode(code: RuntimeFailureCode): Failure {
       return code satisfies never;
   }
 }
+
+const POLICY_MOVED: Failure = {
+  statusCode: 503,
+  detail:
+    "the organization's guardrails policy changed while this request was checked. Retry the request.",
+};
 
 const UNAVAILABLE: Failure = {
   statusCode: 503,

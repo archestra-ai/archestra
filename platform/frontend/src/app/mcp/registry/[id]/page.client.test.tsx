@@ -38,6 +38,7 @@ const {
   deleteMutateAsync,
   updateCatalogMutate,
   useResourcePermissions,
+  useCatalogTools,
   stubs,
 } = vi.hoisted(() => {
   const quiet = () => ({
@@ -58,6 +59,14 @@ const {
     deleteMutateAsync: vi.fn(),
     updateCatalogMutate: vi.fn(),
     useResourcePermissions: vi.fn(),
+    useCatalogTools: vi.fn(
+      (
+        ..._args: unknown[]
+      ): {
+        data: Array<{ id: string; name: string; description: string }>;
+        isLoading: boolean;
+      } => ({ data: [], isLoading: false }),
+    ),
     stubs: stubbed,
   };
 });
@@ -87,7 +96,7 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
     {
       useInternalMcpCatalog: (...args: unknown[]) =>
         useInternalMcpCatalog(...args),
-      useCatalogTools: () => ({ data: [], isPending: false }),
+      useCatalogTools: (...args: unknown[]) => useCatalogTools(...args),
       useUpdateInternalMcpCatalogItem: () => ({
         mutate: updateCatalogMutate,
         isPending: false,
@@ -95,6 +104,26 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
     },
   ),
 }));
+
+// By-id and issue-index reads answer from the same fixtures the list mocks
+// hold, so the page sees one consistent registry.
+vi.mock("@/lib/mcp/mcp-registry.query", () => {
+  const catalog = () =>
+    (useInternalMcpCatalog()?.data ?? []) as Array<{ id: string }>;
+  return {
+    useInternalMcpCatalogItem: (id: string | null | undefined) => ({
+      data: catalog().find((item) => item.id === id) ?? null,
+    }),
+    useMcpRegistryIssueIndex: () => ({
+      data: {
+        catalogItems: catalog(),
+        servers: useMcpServers()?.data ?? [],
+      },
+    }),
+    fetchInternalMcpCatalogItem: async (_queryClient: unknown, id: string) =>
+      catalog().find((item) => item.id === id) ?? null,
+  };
+});
 
 vi.mock("@/lib/mcp/mcp-server.query", () =>
   stubs(
@@ -228,7 +257,7 @@ function renderPage(overrides: Record<string, unknown> = {}) {
 }
 
 /** The card whose heading names it. Every card title is one rank. */
-function section(name: string) {
+function section(name: string | RegExp) {
   const heading = screen.getByRole("heading", { name });
   const root = heading.closest("section");
   if (!root) throw new Error(`No section around "${name}"`);
@@ -298,14 +327,20 @@ describe("McpCatalogItemDetailPage overview", () => {
   it("states the Overview facts without a click and keeps installations visible", () => {
     renderPage();
 
-    const overview = section("Overview");
-    expect(overview.getByText("Transport")).toBeVisible();
+    const overview = section("Connection");
+    expect(overview.getByText("Hosting")).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Installations" }),
     ).toBeVisible();
     expect(
       screen.queryByRole("link", { name: "Installations" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not open an app's backing entry, which the registry never lists", () => {
+    renderPage({ serverType: "app" });
+
+    expect(screen.getByText("Server not found")).toBeInTheDocument();
   });
 
   it("names the main page in the tab strip, so a secondary tab has a way back", () => {
@@ -321,10 +356,12 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(usageTab).not.toHaveAttribute("aria-current");
   });
 
-  it("keeps editor-only command and installation prompts out of Overview", () => {
+  it("shows what the server runs, but keeps its environment out of Overview", () => {
     renderPage();
 
-    expect(screen.queryByText("sh -c node server.js --port 8080")).toBeNull();
+    expect(
+      section("Connection").getByText(/-c "node server\.js --port 8080"/),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Environment variables" }),
     ).toBeNull();
@@ -335,7 +372,7 @@ describe("McpCatalogItemDetailPage overview", () => {
   it("shows the deployment facts the wizard asks for", () => {
     renderPage();
 
-    const overview = section("Overview");
+    const overview = section("Connection");
     expect(overview.getByText(/Single-tenant/)).toBeInTheDocument();
     expect(overview.getByText("stdio")).toBeInTheDocument();
     expect(overview.queryByText("Generated")).toBeNull();
@@ -346,7 +383,7 @@ describe("McpCatalogItemDetailPage overview", () => {
       localConfig: { ...localItem.localConfig, transportType: undefined },
     });
 
-    const overview = section("Overview");
+    const overview = section("Connection");
     expect(overview.getByText("stdio")).toBeInTheDocument();
     expect(overview.queryByText(/Streamable HTTP/)).toBeNull();
   });
@@ -365,10 +402,10 @@ describe("McpCatalogItemDetailPage overview", () => {
       },
     });
 
-    const overview = section("Overview");
+    const overview = section("Connection");
     expect(overview.getByText("OAuth 2.1")).toBeInTheDocument();
     expect(
-      overview.getByText("https://tools.example.com/mcp"),
+      overview.getByTitle("https://tools.example.com/mcp"),
     ).toBeInTheDocument();
     // The client id, the secret's state and the endpoints are the wizard's;
     // the row says only how callers authenticate, and never a secret's value.
@@ -398,7 +435,7 @@ describe("McpCatalogItemDetailPage overview", () => {
       "href",
       "/mcp/registry/cat-1/edit?step=configuration",
     );
-    expect(section("Overview").queryByRole("link")).toBeNull();
+    expect(section("Connection").queryByRole("link")).toBeNull();
   });
 
   it("allows template editing before installation without a competing configuration Edit action", () => {
@@ -407,10 +444,9 @@ describe("McpCatalogItemDetailPage overview", () => {
       new URLSearchParams("tab=yaml") as ReturnType<typeof useSearchParams>,
     );
     renderPage();
-    expect(screen.getByRole("link", { name: "K8s YAML" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    // PageLayout renders each tab in a desktop row and a mobile row.
+    const [yamlTab] = screen.getAllByRole("link", { name: "K8s YAML" });
+    expect(yamlTab).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
   });
 
@@ -444,7 +480,7 @@ describe("McpCatalogItemDetailPage overview", () => {
     );
     renderPage();
     expect(screen.queryByRole("link", { name: "K8s YAML" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Connection" })).toBeVisible();
   });
 
   it("hides managed Playwright configuration actions and ignores YAML deep links", () => {
@@ -469,7 +505,32 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByRole("link", { name: /Configuration/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(screen.queryByRole("link", { name: "K8s YAML" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Connection" })).toBeVisible();
+  });
+
+  it("lists Playwright's tools and points to the Inspector to try one", () => {
+    useCatalogTools.mockReturnValue({
+      data: [
+        {
+          id: "tool-1",
+          name: "microsoft__playwright-mcp__browser_navigate",
+          description: "Navigate to a URL",
+        },
+      ],
+      isLoading: false,
+    });
+    vi.mocked(usePathname).mockReturnValue(
+      `/mcp/registry/${PLAYWRIGHT_MCP_CATALOG_ID}`,
+    );
+    renderPage({ id: PLAYWRIGHT_MCP_CATALOG_ID, name: "Playwright" });
+
+    const tools = section(/^Tools/);
+    expect(tools.getByText("browser_navigate")).toBeVisible();
+    expect(tools.getByText("Navigate to a URL")).toBeVisible();
+    expect(tools.getByRole("link", { name: "Inspector" })).toHaveAttribute(
+      "href",
+      `/mcp/registry/${PLAYWRIGHT_MCP_CATALOG_ID}?tab=inspector`,
+    );
   });
 
   it("offers Sign in instead of Dismiss on your own rejected token", async () => {
@@ -855,9 +916,9 @@ describe("McpCatalogItemDetailPage overview", () => {
   it("gives a built-in server an Overview with something in it", () => {
     renderPage({ serverType: "builtin", localConfig: null, toolCount: 12 });
 
-    const overview = section("Overview");
+    const overview = section("Connection");
     expect(overview.getByText("Built into Archestra")).toBeInTheDocument();
-    expect(overview.getByText("12 available")).toBeInTheDocument();
+    expect(overview.getByText("12 tools")).toBeInTheDocument();
   });
 });
 describe("McpCatalogItemDetailPage installations", () => {
@@ -961,18 +1022,17 @@ describe("McpCatalogItemDetailPage installations", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("shows the Permissions tab only to someone who can change them", () => {
+  it("shows access on Overview only to someone who can change it", () => {
     installed([ownInstall()]);
     const { unmount } = renderPage();
-    expect(
-      screen.getAllByRole("link", { name: "Permissions" }).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Access" })).toBeVisible();
+    expect(screen.queryAllByRole("link", { name: "Permissions" })).toEqual([]);
     unmount();
 
     viewAs("member");
     sharedWith("organization", { canManagePermissions: false });
     renderPage();
-    expect(screen.queryAllByRole("link", { name: "Permissions" })).toEqual([]);
+    expect(screen.queryByRole("heading", { name: "Access" })).toBeNull();
   });
 
   it("keeps Usage for someone who manages installations and drops it for a member", () => {
@@ -993,15 +1053,13 @@ describe("McpCatalogItemDetailPage installations", () => {
     installed([ownInstall()]);
     renderPage();
 
-    // The one-row layout, but an editor's heading, count and Permissions tab.
+    // The one-row layout, but an editor's heading, count and access section.
     const heading = screen.getByRole("heading", { name: /Installations/ });
     expect(heading).toHaveTextContent(/^Installations1$/);
     expect(
       screen.getByText(/Running instances of this server/),
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("link", { name: "Permissions" }).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Access" })).toBeVisible();
   });
 
   it("lets someone who manages a remote server pin agents to a service account", async () => {
@@ -1190,6 +1248,8 @@ function sharedWith(
   useResourcePermissions.mockReturnValue({
     data: {
       grants: [{ subject, actions: ["read", "use"] }],
+      inheritedGrants: [],
+      actorSubjects: [],
       effectiveActions: canManagePermissions
         ? ["read", "use", "update", "delete", "manage-permissions"]
         : ["read", "use"],

@@ -24,6 +24,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import {
+  getAgentTypeListPermissionChecker,
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
   isGlobalAdmin,
@@ -33,7 +34,10 @@ import {
 // tests mock `@/auth` wholesale to open up permissions, and these are
 // validation rules (team existence, org ownership, the ≥1-team invariant) that
 // must keep running in those tests rather than silently becoming no-ops.
-import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import type {
+  AgentTypeListPermissionChecker,
+  AgentTypePermissionChecker,
+} from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -50,6 +54,7 @@ import {
   OrganizationModel,
   ProjectModel,
 } from "@/models";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
 import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
@@ -85,6 +90,7 @@ import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
+  type AgentAccessContext,
   AgentActivationSkillPolicyResponseSchema,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
@@ -273,7 +279,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional()
               .describe(
-                "Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'.",
+                "Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.",
+              ),
+            includeTotal: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Count every matching agent for `pagination.total`. Defaults to true. Pass false from lists that never show a total, such as pinned rows. With false, the count is skipped and `hasNext` stays exact. `total` is then a lower bound: the agents up to this page, plus one when more follow.",
               ),
           })
           .merge(PaginationQuerySchema)
@@ -317,6 +332,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           providerApiKeyId,
           pinned,
           includeTools,
+          includeTotal,
           limit,
           offset,
           sortBy,
@@ -331,10 +347,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const effectiveTypes =
         agentTypes || (agentType ? [agentType] : undefined);
 
-      // Single DB query for all permission checks
-      const checker = await getAgentTypePermissionChecker({
+      // A list asks about whole agent types only, so it does not read the
+      // grants of every agent shared with the caller.
+      const checker = await getAgentTypeListPermissionChecker({
         userId: user.id,
         organizationId,
+        // The deleted view asks for delete, every view for read.
+        actions: status === "deleted" ? ["read", "delete"] : ["read"],
       });
 
       const permittedTypes = getPermittedAgentTypesForList({
@@ -380,6 +399,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           providerApiKeyId,
           pinned,
           includeTools,
+          includeTotal,
         },
         user.id,
         isAdmin,
@@ -437,7 +457,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatAgentRoster,
         description:
-          "Get authorized chat agent identities and model references",
+          "Get authorized chat agent identities and model references. With `bootstrap`, the starting roster plus the caller's and the organization's default agents the caller can use.",
         tags: ["Agents"],
         querystring: z.object({
           bootstrap: z
@@ -460,21 +480,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, user, organizationId }, reply) => {
-      const params = await getPermittedAgentRosterOptions({
-        query: {
-          agentType: "agent",
-          excludeBuiltIn: true,
-          includeTools: false,
-          view: "chat",
-        },
-        userId: user.id,
-        organizationId,
-        ids: query.ids,
-      });
+      if (!query.bootstrap || query.ids !== undefined) {
+        return reply.send(
+          await AgentModel.findChatRoster(
+            await getPermittedAgentRosterOptions({
+              query: CHAT_ROSTER_QUERY,
+              userId: user.id,
+              organizationId,
+              ids: query.ids,
+            }),
+          ),
+        );
+      }
       return reply.send(
-        query.bootstrap && query.ids === undefined
-          ? await AgentModel.findChatRosterBootstrap(params)
-          : await AgentModel.findChatRoster(params),
+        await getChatRosterBootstrap({ userId: user.id, organizationId }),
       );
     },
   );
@@ -635,25 +654,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, user, organizationId }, reply) => {
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      const agents = await AgentModel.findAll(
-        user.id,
-        checker.isAdmin("agent"),
-        {
-          agentTypes: ["agent"],
-          excludeBuiltIn: true,
-          onlyEnforcingMissingCredentials: true,
-          includeTools: false,
-          ids: query.ids,
-        },
-      );
-
       return reply.send(
-        await getAgentCredentialReadiness({ agents, userId: user.id }),
+        await getAgentCredentialReadinessForUser({
+          ids: query.ids,
+          userId: user.id,
+          organizationId,
+        }),
       );
     },
   );
@@ -663,15 +669,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetDefaultMcpGateway,
-        description: "Get default MCP Gateway",
+        description:
+          "Get the caller's personal MCP Gateway, creating it on first use.",
         tags: ["MCP Gateway"],
-        response: constructResponseSchema(SelectAgentSchema),
+        querystring: z.object({
+          includeTools: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.",
+            ),
+        }),
+        response: constructResponseSchema(
+          AgentListItemSchema.omit({ pinnedAt: true }),
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ query, user, organizationId }, reply) => {
       const gateway = await AgentModel.ensurePersonalMcpGateway({
-        userId: request.user.id,
-        organizationId: request.organizationId,
+        userId: user.id,
+        organizationId,
+        includeTools: query.includeTools,
       });
       return reply.send(gateway);
     },
@@ -953,14 +971,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const agent = await requireReadableAgent({
-        id,
-        userId: user.id,
-        organizationId,
-      });
       return reply.send(
-        await getDocsSuggestedPrompts({
-          agent,
+        await getAgentDefaultSuggestedPrompts({
+          id,
           userId: user.id,
           organizationId,
         }),
@@ -2802,6 +2815,108 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 export default agentRoutes;
 
+// =============================================================================
+// Reads shared with the new-chat bootstrap (routes/bootstrap.ts). Each returns
+// exactly what its endpoint above sends.
+// =============================================================================
+
+/** `GET /api/agents/chat-roster?bootstrap=true` */
+export async function getChatRosterBootstrap(params: {
+  userId: string;
+  organizationId: string;
+}) {
+  const { userId, organizationId } = params;
+  // The bootstrap also carries the caller's and the organization's
+  // default agents, so a chat page can pick its agent without a second,
+  // dependent roster request for them.
+  const [rosterParams, defaultAgentId, organization] = await Promise.all([
+    getPermittedAgentRosterOptions({
+      query: CHAT_ROSTER_QUERY,
+      userId,
+      organizationId,
+    }),
+    MemberModel.getDefaultAgentId(userId, organizationId),
+    OrganizationModel.getById(organizationId),
+  ]);
+  const defaultIds = [
+    ...new Set(
+      [defaultAgentId, organization?.defaultAgentId].filter(
+        (id): id is string => !!id,
+      ),
+    ),
+  ];
+  const [starting, defaults] = await Promise.all([
+    AgentModel.findChatRosterBootstrap(rosterParams),
+    defaultIds.length > 0
+      ? AgentModel.findChatRoster({
+          ...rosterParams,
+          options: { ...rosterParams.options, ids: defaultIds },
+        })
+      : Promise.resolve([]),
+  ]);
+  return [
+    ...new Map(
+      [...starting, ...defaults].map((agent) => [agent.id, agent]),
+    ).values(),
+  ];
+}
+
+/** `GET /api/agents/credential-readiness` */
+export async function getAgentCredentialReadinessForUser(params: {
+  ids: string[] | undefined;
+  userId: string;
+  organizationId: string;
+}) {
+  const checker = await getAgentTypePermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+
+  const agents = await AgentModel.findAll(
+    params.userId,
+    checker.isAdmin("agent"),
+    {
+      agentTypes: ["agent"],
+      excludeBuiltIn: true,
+      onlyEnforcingMissingCredentials: true,
+      includeTools: false,
+      ids: params.ids,
+    },
+  );
+
+  return getAgentCredentialReadiness({ agents, userId: params.userId });
+}
+
+/** `GET /api/agents/:id` */
+export function getReadableAgent(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}) {
+  return requireReadableAgent(params);
+}
+
+/** `GET /api/agents/:id/default-suggested-prompts` */
+export async function getAgentDefaultSuggestedPrompts(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}) {
+  // Only the agent's own prompts matter here, not the full agent.
+  const agent = await requireReadableAgent({
+    ...params,
+    load: AgentModel.findByIdForAccess,
+  });
+  const suggestedPrompts =
+    (await AgentSuggestedPromptModel.getForAgents([agent.id])).get(agent.id) ??
+    [];
+  return getDocsSuggestedPrompts({
+    agent: { id: agent.id, suggestedPrompts },
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+}
+
 /**
  * Resolve a live agent and enforce the full read-access path shared by
  * GetAgent and the version-history routes: org scoping, per-type RBAC, and —
@@ -2810,13 +2925,19 @@ export default agentRoutes;
  * themselves, so resolving the live agent here (findById excludes deleted
  * rows) is what keeps a deleted agent's history unreachable.
  */
-async function requireReadableAgent(params: {
+async function requireReadableAgent<
+  T extends AgentAccessContext & Pick<Agent, "agentType"> = Agent,
+>(params: {
   id: string;
   userId: string;
   organizationId: string;
-}): Promise<Agent> {
+  /** How to read the agent; the full agent unless the caller needs less. */
+  load?: (id: string) => Promise<T | null>;
+}): Promise<T> {
   // admin lookup first to learn the type, then enforce type-specific RBAC
-  const agent = await AgentModel.findById(params.id, params.userId, true);
+  const agent = params.load
+    ? await params.load(params.id)
+    : ((await AgentModel.findById(params.id, params.userId, true)) as T | null);
   if (!agent || agent.organizationId !== params.organizationId) {
     throw new ApiError(404, "Agent not found");
   }
@@ -2899,7 +3020,7 @@ async function validateConnectorAccess(params: {
 }
 
 function getPermittedAgentTypesForList(params: {
-  checker: AgentTypePermissionChecker;
+  checker: AgentTypePermissionChecker | AgentTypeListPermissionChecker;
   effectiveTypes: AgentType[] | undefined;
   status: "active" | "deleted" | undefined;
 }): AgentType[] | undefined {
@@ -3161,6 +3282,13 @@ const AgentOptionsListQuerySchema = AgentOptionsQuerySchema.extend({
   cursor: z.string().optional(),
 });
 
+/** Types whose `*` read grant lets a roster skip per-row read probes. */
+const WILDCARD_READ_CANDIDATE_TYPES: AgentType[] = [
+  "agent",
+  "profile",
+  "mcp_gateway",
+];
+
 type AgentRosterRequest = {
   query: z.infer<typeof AgentRosterQuerySchema>;
   userId: string;
@@ -3168,6 +3296,14 @@ type AgentRosterRequest = {
   optionsView?: boolean;
   ids?: string[];
 };
+
+/** The chat roster's filter: internal, non-built-in agents, no tools. */
+const CHAT_ROSTER_QUERY = {
+  agentType: "agent",
+  excludeBuiltIn: true,
+  includeTools: false,
+  view: "chat",
+} as const;
 
 async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
   const { userId, organizationId } = params;
@@ -3207,6 +3343,9 @@ async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
     authorization: {
       organizationId,
       baseReadTypes: checker.getAgentTypesWithPermission("read"),
+      wildcardReadTypes: WILDCARD_READ_CANDIDATE_TYPES.filter((agentType) =>
+        checker.allowsScoped({ agentType, agentId: "*", action: "read" }),
+      ),
     },
     // agentTypes takes precedence over agentType
     agentType: agentTypes || permittedTypes ? undefined : agentType,

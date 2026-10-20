@@ -1,371 +1,730 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import { usePathname, useSearchParams } from "next/navigation";
+import {
+  CLAUDE_CLIENT_ID,
+  CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
+  OPENCODE_CLIENT_ID,
+} from "@archestra/shared";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInteraction } from "@/lib/interactions/interaction.query";
-import { ChatPage } from "./page.client";
+import { useFeature } from "@/lib/config/config.query";
+import {
+  useInteraction,
+  useInteractionSessions,
+  useInteractionSummaries,
+  useSessionLineage,
+} from "@/lib/interactions/interaction.query";
+import {
+  useMcpToolCall,
+  useSessionMcpToolCalls,
+} from "@/lib/mcp/mcp-tool-call.query";
+import { useOrganization } from "@/lib/organization.query";
+import type { SessionToolCall } from "./_parts/session-timeline";
+import SessionDetailPage from "./page.client";
 
-// The page renders its own `PageLayout` header, which reads the route and the
-// white-label app name to keep the browser tab title in sync.
 vi.mock("next/navigation");
+
+// The unattributed-user badge interpolates the white-label app name, and the
+// real hook reads it through TanStack Query — which this suite renders without.
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/config/config.query");
+// Model vendor names follow the organization's provider renames.
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteraction: vi.fn(),
+  useInteractionSummaries: vi.fn(),
+  useInteractionSessions: vi.fn(),
+  useSessionLineage: vi.fn(() => ({ data: undefined })),
+  useExportSessionInteractions: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
 }));
 
-/** A persisted knowledge base embedding, as the detail route returns it. */
-const KB_EMBEDDING = {
-  id: "test-interaction-id",
-  type: "openai:embeddings",
-  source: "knowledge:embedding",
-  profileId: null,
-  model: "text-embedding-3-small",
-  inputTokens: 5,
-  outputTokens: 0,
-  createdAt: "2026-07-27T12:48:04.000Z",
-  request: { model: "text-embedding-3-small", input: ["hello"] },
-  response: { object: "list", data: [], model: "text-embedding-3-small" },
-};
+vi.mock("@/lib/mcp/mcp-tool-call.query", () => ({
+  useMcpToolCall: vi.fn(),
+  useSessionMcpToolCalls: vi.fn(),
+}));
+// Server display names come from the installed-server and catalog lists.
+// The session's guardrail records: none here.
+vi.mock("@/lib/openappa/external-consults.query", () => ({
+  useSessionConsults: () => ({ data: [] }),
+}));
+vi.mock("@/lib/openappa/label-changes.query", () => ({
+  useSessionLabelChanges: () => ({ data: [] }),
+}));
+vi.mock("@/lib/openappa-yells.query", () => ({
+  useSessionYells: () => ({ data: undefined }),
+}));
+vi.mock("@/lib/mcp-logs/use-mcp-server-display", () => ({
+  useMcpServerDisplayByName: () => ({
+    servers: [],
+    displayByName: new Map([
+      ["jira", { name: "Jira Cloud", icon: null, catalogId: "jira-catalog" }],
+    ]),
+  }),
+}));
 
-describe("LogDetail encrypted-chat content", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    stubNavigation();
-  });
-
-  function renderInteraction(interaction: Record<string, unknown>) {
-    vi.mocked(useInteraction).mockReturnValue({
-      data: interaction,
-      isPending: false,
-      isLoadingError: false,
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof useInteraction>);
-
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <ChatPage id="test-interaction-id" />
-      </QueryClientProvider>,
-    );
-  }
-
-  it("explains encrypted content instead of rendering the marker", async () => {
-    renderInteraction({
-      ...KB_EMBEDDING,
-      request: {
-        __encryptedChatSealed: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60",
-      },
-      response: {
-        __encryptedChatSealed: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60",
-      },
-    });
-
-    // Only the response accordion is open by default; the raw marker must
-    // never reach the JSON block.
-    expect(await screen.findByText("Encrypted chat content")).toBeVisible();
-    expect(screen.queryByText(/__encryptedChatSealed/)).not.toBeInTheDocument();
-  });
-
-  it("says content was never stored when it was redacted", async () => {
-    renderInteraction({
-      ...KB_EMBEDDING,
-      request: { __redacted: "encrypted_chat" },
-      response: { __redacted: "encrypted_chat" },
-    });
-
-    expect(await screen.findByText("Content not stored")).toBeVisible();
-    expect(screen.queryByText(/__redacted/)).not.toBeInTheDocument();
-  });
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return {
+    ...actual,
+    use: () => ({ id: "test-session" }),
+  };
 });
 
-describe("LogDetail knowledge base connector", () => {
+describe("SessionDetailPage", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    stubNavigation();
-  });
-
-  function renderWith(overrides: {
-    connectorId?: string | null;
-    connectorName?: string | null;
-  }) {
-    vi.mocked(useInteraction).mockReturnValue({
-      data: { ...KB_EMBEDDING, ...overrides },
-      isPending: false,
-      isLoadingError: false,
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof useInteraction>);
-
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <ChatPage id="test-interaction-id" />
-      </QueryClientProvider>,
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
-  }
-
-  it("names the connector the interaction was recorded for", async () => {
-    renderWith({
-      connectorId: "1b6f2d90-4a3c-4e57-b2d8-9c0e1f3a5b74",
-      connectorName: "Docs Web Crawler",
-    });
-
-    expect(await screen.findByText("KB connector")).toBeVisible();
-    expect(screen.getByText("Docs Web Crawler")).toBeVisible();
-  });
-
-  it("falls back when the connector no longer exists", async () => {
-    renderWith({
-      connectorId: "1b6f2d90-4a3c-4e57-b2d8-9c0e1f3a5b74",
-      connectorName: null,
-    });
-
-    expect(await screen.findByText("KB connector")).toBeVisible();
-    expect(screen.getByText("Deleted connector")).toBeVisible();
-  });
-
-  it("omits the row for interactions with no connector recorded", async () => {
-    renderWith({ connectorId: null, connectorName: null });
-
-    // Rows written before connector attribution existed, and non-KB proxy
-    // traffic, must not render an empty or placeholder connector.
-    expect(await screen.findByText("Provider")).toBeVisible();
-    expect(screen.queryByText("KB connector")).not.toBeInTheDocument();
-    expect(screen.queryByText("Deleted connector")).not.toBeInTheDocument();
-  });
-});
-
-describe("LogDetail virtual key", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    stubNavigation();
-  });
-
-  function renderWith(overrides: Record<string, unknown>) {
+    vi.mocked(usePathname).mockReturnValue("/llm/logs/test-session");
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
     vi.mocked(useInteraction).mockReturnValue({
-      data: { ...KB_EMBEDDING, ...overrides },
-      isPending: false,
-      isLoadingError: false,
-      refetch: vi.fn(),
+      data: null,
     } as unknown as ReturnType<typeof useInteraction>);
-
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <ChatPage id="test-interaction-id" />
-      </QueryClientProvider>,
-    );
-  }
-
-  it("names the key behind a virtual-key request and who it stands for", async () => {
-    renderWith({
-      authMethod: "virtual_key",
-      virtualKey: {
-        id: "6b2f1a08-5c9d-4e31-a7b4-2d8e0f5c1a93",
-        name: "demo-admin-laptop",
-        scope: "personal",
-        keyType: "standard",
-        tokenStart: "archestra_ab",
-        ownerUserId: "u-1",
-        ownerUserName: "Demo Admin",
-        teams: [],
-        createdByUserName: "Demo Admin",
-      },
-      passthroughVirtualKey: null,
-    });
-
-    expect(await screen.findByText("Virtual API key")).toBeVisible();
-    expect(screen.getByText("demo-admin-laptop")).toBeVisible();
-    expect(screen.getByText("Virtual key · Demo Admin")).toBeVisible();
+    vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockSessionToolCalls([]);
+    vi.mocked(useMcpToolCall).mockReturnValue({
+      data: undefined,
+      isSuccess: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useMcpToolCall>);
   });
 
-  it("says a shared key stands for nobody rather than leaving it blank", async () => {
-    renderWith({
-      authMethod: "virtual_key",
-      virtualKey: {
-        id: "0f3c7e15-9a2b-4d68-8c31-5e7a9b0d2f46",
-        name: "ci-runners",
-        scope: "org",
-        keyType: "standard",
-        tokenStart: "archestra_cd",
-        ownerUserId: null,
-        ownerUserName: null,
-        teams: [],
-        createdByUserName: "Platform Lead",
-      },
-      passthroughVirtualKey: null,
-    });
+  it("says nothing at all while session interactions are loading", async () => {
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
-    expect(await screen.findByText("ci-runners")).toBeVisible();
+    renderSessionDetailPage();
+
+    // The wait is reported by the sidebar toggle's spinner, the one place the
+    // app says it is loading. What matters here is that the area does not
+    // announce an empty result before the fetch has settled.
+    await waitFor(() => {
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
     expect(
-      screen.getByText(
-        "Virtual key · shared org-wide, created by Platform Lead",
+      screen.queryByText("No requests recorded for this session yet."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a permission-aware unavailable state when the requested session is not visible", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [],
+        pagination: { limit: 1, nextCursor: null, hasNext: false },
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 50,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    expect(
+      await screen.findByText(
+        "You may not have permission to view this session, or it may no longer exist.",
       ),
     ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("Session unavailable");
+    expect(screen.queryByText("Requests")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No requests recorded for this session yet."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Loading session logs…" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("lists the passthrough key first when a request carries both", async () => {
-    renderWith({
-      authMethod: "passthrough_virtual_key",
-      virtualKey: {
-        id: "0f3c7e15-9a2b-4d68-8c31-5e7a9b0d2f46",
-        name: "team-provider-credential",
-        scope: "team",
-        keyType: "standard",
-        tokenStart: "archestra_cd",
-        ownerUserId: null,
-        ownerUserName: null,
-        teams: [{ id: "t-1", name: "Platform" }],
-        createdByUserName: "Platform Lead",
+  it("links a forked session to its parent and a parent to its forks", async () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ sessionId: "test-session" }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+    vi.mocked(useSessionLineage).mockReturnValue({
+      data: {
+        forkedFrom: "parent-session",
+        forks: ["fork-a", "fork-b"],
+        forksTruncated: true,
       },
-      passthroughVirtualKey: {
-        id: "6b2f1a08-5c9d-4e31-a7b4-2d8e0f5c1a93",
-        name: "demo-admin-identity",
-        scope: "personal",
-        keyType: "passthrough",
-        tokenStart: "archestra_ef",
-        ownerUserId: "u-1",
-        ownerUserName: "Demo Admin",
-        teams: [],
-        createdByUserName: "Demo Admin",
-      },
-    });
+    } as unknown as ReturnType<typeof useSessionLineage>);
 
-    const row = (await screen.findByText("Virtual API key")).parentElement;
-    expect(row?.textContent).toMatch(
-      /demo-admin-identity[\s\S]*team-provider-credential/,
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Forked from")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "parent-session" }),
+    ).toHaveAttribute("href", "/llm/logs/parent-session");
+    expect(screen.getByText("Forks")).toBeVisible();
+    expect(screen.getByRole("link", { name: "fork-b" })).toHaveAttribute(
+      "href",
+      "/llm/logs/fork-b",
     );
-    expect(screen.getByText("Passthrough key · Demo Admin")).toBeVisible();
+    expect(screen.getByText("Additional forks not shown")).toBeVisible();
   });
 
-  it("names the teams a team-scoped key is shared with", async () => {
-    renderWith({
-      authMethod: "virtual_key",
-      virtualKey: {
-        id: "3a1d5c92-7e04-4b18-9f26-8c0a4e7b1d35",
-        name: "platform-shared",
-        scope: "team",
-        keyType: "standard",
-        tokenStart: "archestra_gh",
-        ownerUserId: null,
-        ownerUserName: null,
-        teams: [
-          { id: "t-1", name: "Platform" },
-          { id: "t-2", name: "Security" },
+  it("hides fork lineage when OpenAPPA is off", async () => {
+    vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ sessionId: "test-session" }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+    vi.mocked(useSessionLineage).mockReturnValue({
+      data: {
+        forkedFrom: "parent-session",
+        forks: ["fork-a"],
+        forksTruncated: true,
+      },
+    } as unknown as ReturnType<typeof useSessionLineage>);
+
+    renderSessionDetailPage();
+
+    expect(
+      await screen.findByText("No requests recorded for this session yet."),
+    ).toBeVisible();
+    expect(screen.queryByText("Forked from")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fork")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Additional forks not shown"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows cache read/write totals when the session used prompt caching", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          {
+            totalInputTokens: 1250,
+            totalOutputTokens: 430,
+            totalCacheReadTokens: 98000,
+            totalCacheWriteTokens: 12000,
+          },
         ],
-        createdByUserName: "Platform Lead",
       },
-      passthroughVirtualKey: null,
-    });
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
-    expect(await screen.findByText("platform-shared")).toBeVisible();
+    renderSessionDetailPage();
+
+    // The strip shows the cached share at a glance; the split is on hover.
+    // Wide and phone layouts each place the figure, so jsdom sees both.
+    const [cached] = await screen.findAllByText("110K cached");
+    expect(cached).toBeVisible();
+    await userEvent.hover(cached);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(within(tooltip).getByText("98,000")).toBeInTheDocument();
+    expect(within(tooltip).getByText("12,000")).toBeInTheDocument();
+  });
+
+  // Legacy Claude attribution maps to Code; explicit Desktop stays separate.
+  it.each([
+    [CLAUDE_CLIENT_ID, "Claude Code"],
+    [CLAUDE_CODE_CLIENT_ID, "Claude Code"],
+    [CLAUDE_DESKTOP_CLIENT_ID, "Claude Desktop"],
+    [OPENCODE_CLIENT_ID, "OpenCode"],
+  ])("renders the client badge for id '%s'", async (externalAgentId, label) => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ externalAgentIds: [externalAgentId] }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText(label)).toBeVisible();
+  });
+
+  it("shows no Claude badge for non-Claude clients", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ externalAgentIds: ["my-custom-agent"] }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
     expect(
-      screen.getByText("Virtual key · shared with Platform, Security"),
+      await screen.findByText("No requests recorded for this session yet."),
+    ).toBeVisible();
+    expect(screen.queryByText(/^Claude/)).not.toBeInTheDocument();
+  });
+
+  it("labels OpenCode side turns as sub-agent requests", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: { data: [{ externalAgentIds: [OPENCODE_CLIENT_ID] }] },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "title-request",
+            createdAt: "2026-09-19T22:42:41.000Z",
+            externalAgentId: OPENCODE_CLIENT_ID,
+            requestType: "subagent",
+            source: "opencode:subagent",
+            model: "title-model",
+            inputTokens: 10,
+            outputTokens: 2,
+            cost: "0",
+            billingMode: "metered",
+          },
+          {
+            id: "main-request",
+            createdAt: "2026-09-19T22:42:45.000Z",
+            externalAgentId: OPENCODE_CLIENT_ID,
+            requestType: "main",
+            source: "opencode:main",
+            model: "main-model",
+            inputTokens: 20,
+            outputTokens: 4,
+            cost: "0",
+            billingMode: "metered",
+          },
+        ],
+        pagination: { total: 2 },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
+
+    renderSessionDetailPage();
+
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    expect(
+      within(requests).getByRole("button", { name: /^Sub-agent, / }),
+    ).toBeVisible();
+    expect(
+      within(requests).getByRole("button", {
+        name: new RegExp(`^${OPENCODE_CLIENT_ID}, `),
+      }),
     ).toBeVisible();
   });
 
-  it("says so when a team key has no team left on it", async () => {
-    renderWith({
-      authMethod: "virtual_key",
-      virtualKey: {
-        id: "9c4e2b70-1f83-4d5a-b6e9-2a7c0d38f514",
-        name: "orphaned-team-key",
-        scope: "team",
-        keyType: "standard",
-        tokenStart: "archestra_ij",
-        ownerUserId: null,
-        ownerUserName: null,
-        teams: [],
-        createdByUserName: null,
+  it("renders the rows-per-page selector when the session has interactions", async () => {
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 50,
+          total: 120,
+          totalPages: 3,
+          hasNext: true,
+          hasPrev: false,
+        },
       },
-      passthroughVirtualKey: null,
-    });
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
+    renderSessionDetailPage();
+
+    // The paging sits in the requests card's status bar.
     expect(
-      await screen.findByText("Virtual key · team key, no team assigned"),
+      await screen.findByRole("combobox", { name: "Rows per page" }),
     ).toBeVisible();
+    // Fifty rows a page by default.
+    expect(screen.getByText("Page 1 of 3")).toBeVisible();
+    expect(screen.getByText("1–50 of 120")).toBeVisible();
   });
 
-  it("omits the row when no virtual key was used", async () => {
-    renderWith({ authMethod: "provider_key" });
+  it("hides the cache line when the session used no caching", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          {
+            totalInputTokens: 1250,
+            totalOutputTokens: 430,
+            totalCacheReadTokens: 0,
+            totalCacheWriteTokens: 0,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
-    expect(await screen.findByText("Auth method")).toBeVisible();
-    expect(screen.queryByText("Virtual API key")).not.toBeInTheDocument();
-  });
-});
+    renderSessionDetailPage();
 
-describe("LogDetail Metadata only", () => {
-  /** A chat turn stored under Metadata only, as the detail route returns it. */
-  const WITHHELD_CHAT = {
-    id: "test-interaction-id",
-    type: "anthropic:messages",
-    source: "chat",
-    profileId: null,
-    model: "claude-sonnet-5",
-    inputTokens: 1842,
-    outputTokens: 96,
-    createdAt: "2026-10-08T19:52:53.000Z",
-    request: { __redacted: "log_content_policy" },
-    response: { __redacted: "log_content_policy", isError: false },
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    stubNavigation();
+    expect(await screen.findByText(/1\.3K in · 430 out/)).toBeVisible();
+    expect(screen.queryByText(/cached/)).not.toBeInTheDocument();
   });
 
-  function renderWith(interaction: Record<string, unknown>) {
-    vi.mocked(useInteraction).mockReturnValue({
-      data: interaction,
-      isPending: false,
-      isLoadingError: false,
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof useInteraction>);
+  it("states OpenAPPA session identity in the heading when OpenAPPA is on", async () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          {
+            sessionId: "user:abc|ses_chat_1",
+            sessionSource: "conversation",
+            source: "chat",
+            sources: ["chat", "chat:compaction"],
+            conversationTitle: "Weather in Lisbon",
+            profileName: "My Assistant",
+            totalInputTokens: 10,
+            totalOutputTokens: 4,
+            totalCacheReadTokens: 0,
+            totalCacheWriteTokens: 0,
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
-    render(
-      <QueryClientProvider client={createQueryClient()}>
-        <ChatPage id="test-interaction-id" />
-      </QueryClientProvider>,
+    renderSessionDetailPage();
+
+    const trajectory = await screen.findByRole("region", {
+      name: "Trajectory",
+    });
+    // The id is shortened in the row; the full one is on hover.
+    const sessionId = within(trajectory).getByText("user:abc…");
+    await userEvent.hover(sessionId);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "user:abc|ses_chat_1",
     );
-  }
-
-  it("says the tools used were not stored rather than none", async () => {
-    renderWith(WITHHELD_CHAT);
-
-    expect(await screen.findByText("Tools used")).toBeVisible();
-    expect(screen.getByText("Not stored")).toBeVisible();
-    expect(screen.queryByText("None")).not.toBeInTheDocument();
-    expect(screen.queryByText("Result")).not.toBeInTheDocument();
+    expect(screen.getByText("Grouped by")).toBeVisible();
+    expect(screen.getByText("conversation")).toBeVisible();
+    expect(screen.getByText("Sources")).toBeVisible();
   });
 
-  it("shows a failed request as an error without its content", async () => {
-    renderWith({
-      ...WITHHELD_CHAT,
-      response: { __redacted: "log_content_policy", isError: true },
-    });
+  it("labels main-agent and ChatOps rows by profile name while labeling compaction", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [{ profileName: "My Assistant" }],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "int-compact",
+            createdAt: "2026-09-18T10:00:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 1,
+            outputTokens: 1,
+            source: "chat:compaction",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-main",
+            createdAt: "2026-09-18T09:59:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chat",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-slack",
+            createdAt: "2026-09-18T09:58:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:slack",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-teams",
+            createdAt: "2026-09-18T09:57:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:ms-teams",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+          {
+            id: "int-telegram",
+            createdAt: "2026-09-18T09:56:00.000Z",
+            model: "claude-haiku",
+            inputTokens: 2,
+            outputTokens: 2,
+            source: "chatops:telegram",
+            externalAgentId: null,
+            externalAgentIdLabel: null,
+          },
+        ],
+        pagination: { total: 5 },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
-    expect(await screen.findByText("Result")).toBeVisible();
-    expect(screen.getByText("Error")).toBeVisible();
-  });
+    renderSessionDetailPage();
 
-  it("shows a stored provider error as an error too", async () => {
-    renderWith({
-      ...WITHHELD_CHAT,
-      request: { model: "claude-sonnet-5", messages: [] },
-      response: { error: "prompt is too long" },
-    });
-
-    expect(await screen.findByText("Result")).toBeVisible();
-    expect(screen.getByText("Error")).toBeVisible();
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    const rowNames = within(requests)
+      .getAllByRole("button")
+      .map((row) => row.getAttribute("aria-label")?.split(", ")[0]);
+    expect(rowNames.sort()).toEqual([
+      "Chat Compaction",
+      "My Assistant",
+      "My Assistant",
+      "My Assistant",
+      "My Assistant",
+    ]);
+    for (const channel of ["Slack", "MS Teams", "Telegram", "Main"]) {
+      expect(within(requests).queryByText(channel)).not.toBeInTheDocument();
+    }
   });
 });
 
-function createQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
+describe("SessionDetailPage tool calls", () => {
+  beforeEach(() => {
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(usePathname).mockReturnValue("/llm/logs/test-session");
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [{ profileName: "My Assistant", lastInteractionId: null }],
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteraction).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useInteraction>);
+    vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useMcpToolCall).mockReturnValue({
+      data: undefined,
+      isSuccess: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useMcpToolCall>);
+    vi.mocked(useInteractionSummaries).mockReturnValue({
+      data: {
+        data: [
+          sessionRequest({
+            id: "second",
+            createdAt: "2026-09-19T10:00:20.000Z",
+          }),
+          sessionRequest({
+            id: "first",
+            createdAt: "2026-09-19T10:00:05.000Z",
+          }),
+        ],
+        pagination: { total: 2 },
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
   });
+
+  it("lays each tool call between the requests around it and opens it on double-click", async () => {
+    mockSessionToolCalls([
+      sessionToolCall({
+        id: "lookup",
+        createdAt: "2026-09-19T10:00:09.000Z",
+        toolCall: {
+          id: "tc",
+          name: "jira__get_issue",
+          arguments: { key: "OPS-12" },
+        },
+        toolResult: {
+          isError: false,
+          content: [{ type: "text", text: "OPS-12: Rotate keys" }],
+        },
+      }),
+    ]);
+    const user = userEvent.setup();
+
+    renderSessionDetailPage();
+
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    const rows = within(requests).getAllByRole("button");
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
+      expect.stringMatching(/^My Assistant, /),
+      "Tool call get_issue on Jira Cloud, 1.50s",
+      expect.stringMatching(/^My Assistant, /),
+    ]);
+    expect(
+      within(screen.getByRole("list", { name: "Request kinds" })).getByText(
+        "Tool call",
+      ),
+    ).toBeVisible();
+
+    await user.click(rows[1]);
+
+    const overview = screen.getByRole("complementary", {
+      name: "Tool call overview",
+    });
+    expect(within(overview).getByText("Success")).toBeVisible();
+    // The result shows once, in the payload pane beside the overview.
+    expect(
+      within(
+        screen.getByRole("region", { name: "Arguments and result" }),
+      ).getByText("OPS-12: Rotate keys"),
+    ).toBeVisible();
+    expect(within(overview).queryByText("OPS-12: Rotate keys")).toBeNull();
+
+    await user.dblClick(rows[1]);
+    expect(vi.mocked(useRouter)().push).toHaveBeenCalledWith(
+      "/mcp/logs/lookup",
+    );
+  });
+
+  it("collapses a run_tool dispatch into the tool it ran", async () => {
+    mockSessionToolCalls([
+      sessionToolCall({
+        id: "outer",
+        llmToolCallId: "toolu_1",
+        toolCall: { id: "a", name: "archestra__run_tool", arguments: {} },
+      }),
+      sessionToolCall({ id: "inner", llmToolCallId: "toolu_1" }),
+    ]);
+
+    renderSessionDetailPage();
+
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    const toolRows = within(requests).getAllByRole("button", {
+      name: /^Tool call /,
+    });
+    expect(toolRows).toHaveLength(1);
+    expect(toolRows[0]).toHaveAccessibleName(/^Tool call get_issue /);
+  });
+
+  it("preselects the tool call named in the URL", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("toolCall=lookup") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockSessionToolCalls([
+      sessionToolCall({ id: "lookup", createdAt: "2026-09-19T10:00:09.000Z" }),
+    ]);
+
+    renderSessionDetailPage();
+
+    const requests = await screen.findByRole("list", { name: "Requests" });
+    expect(
+      within(requests).getByRole("button", { name: /^Tool call get_issue/ }),
+    ).toHaveAttribute("aria-current", "true");
+    expect(
+      screen.getByRole("complementary", { name: "Tool call overview" }),
+    ).toBeVisible();
+  });
+
+  it("says when the session's tool calls failed to load", async () => {
+    vi.mocked(useSessionMcpToolCalls).mockReturnValue({
+      data: undefined,
+      isSuccess: false,
+      isError: true,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useSessionMcpToolCalls>);
+
+    renderSessionDetailPage();
+
+    expect(await screen.findByText("Tool calls didn't load")).toBeVisible();
+    // The requests themselves still render.
+    expect(
+      within(screen.getByRole("list", { name: "Requests" })).getAllByRole(
+        "button",
+      ),
+    ).toHaveLength(2);
+  });
+});
+
+function mockSessionToolCalls(calls: SessionToolCall[]) {
+  vi.mocked(useSessionMcpToolCalls).mockReturnValue({
+    data: { data: calls, pagination: { hasNext: false } },
+    isSuccess: true,
+    isError: false,
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof useSessionMcpToolCalls>);
 }
 
-function stubNavigation() {
-  vi.mocked(usePathname).mockReturnValue("/llm/logs/test-interaction-id");
-  vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+function sessionRequest(overrides: { id: string; createdAt: string }) {
+  return {
+    requestType: "main",
+    source: "api",
+    model: "claude-sonnet-4-5",
+    inputTokens: 10,
+    outputTokens: 2,
+    cost: "0.001",
+    billingMode: "metered",
+    durationMs: 4_000,
+    externalAgentId: null,
+    ...overrides,
+  };
+}
+
+function sessionToolCall(
+  overrides: Partial<SessionToolCall> & { id: string },
+): SessionToolCall {
+  return {
+    ownerType: "agent",
+    agentId: null,
+    appId: null,
+    mcpServerName: "jira",
+    method: "tools/call",
+    toolCall: { id: "tc", name: "jira__get_issue", arguments: {} },
+    toolResult: { isError: false, content: [] },
+    userId: null,
+    runId: null,
+    authMethod: "session",
+    oauthClientId: null,
+    source: "chat",
+    durationMs: 1_500,
+    createdAt: "2026-09-19T10:00:09.000Z",
+    userName: null,
+    appName: null,
+    sessionId: "test-session",
+    llmToolCallId: null,
+    ...overrides,
+  };
+}
+
+function renderSessionDetailPage() {
+  return render(
+    <SessionDetailPage
+      paramsPromise={Promise.resolve({ id: "test-session" })}
+    />,
   );
 }

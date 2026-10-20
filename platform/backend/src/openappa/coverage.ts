@@ -2,7 +2,6 @@ import { calculatePaginationMeta, parseFullToolName } from "@archestra/shared";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
-import { UNDECLARED_TOOL_ANNOTATOR } from "@/services/guardrails-policy";
 import type { CompositionView } from "@/types/openappa-batteries";
 import type {
   CoverageBatteryFit,
@@ -22,6 +21,7 @@ import { openappaBatteriesService } from "./batteries";
 import {
   type DeployedFile,
   deployedFiles,
+  deployedSource,
   effectiveToolRules,
 } from "./battery-target";
 import { enforcedBattery } from "./composition-view";
@@ -297,6 +297,53 @@ class OpenAppaCoverageService {
         a.mcpServerName.localeCompare(b.mcpServerName),
     );
   }
+
+  /**
+   * The rule the organization's current policy applies to each full tool
+   * name, with the rule's own TOML: the first specific rule that names it,
+   * else the catch-all. Null for a tool no rule reaches. A selector rule
+   * (`name(selector)`) depends on the call's arguments, so it is not picked.
+   */
+  async rulesForTools(params: {
+    organizationId: string;
+    toolNames: string[];
+  }): Promise<Map<string, { rule: CoverageRule; text: string | null } | null>> {
+    const rules = new Map<
+      string,
+      { rule: CoverageRule; text: string | null } | null
+    >();
+    if (params.toolNames.length === 0) return rules;
+    const snapshot = await openappaBatteriesService.coverageSnapshot(
+      params.organizationId,
+    );
+    const { fallback, byMatch, rootContent, viewed } = matchRules(snapshot);
+    for (const toolName of new Set(params.toolNames)) {
+      const matched =
+        byMatch.get(toolName)?.find((entry) => entry.rule.selector === null) ??
+        fallback;
+      if (!matched) {
+        rules.set(toolName, null);
+        continue;
+      }
+      const deployed = matched.rule.batteryEntry
+        ? viewed.get(matched.rule.batteryEntry)
+        : undefined;
+      const source =
+        matched.rule.source === "battery"
+          ? deployed
+            ? deployedSource(deployed)
+            : null
+          : rootContent;
+      rules.set(toolName, {
+        rule: matched.rule,
+        text:
+          source !== null && matched.rule.line !== null
+            ? ruleExcerpt(source, matched.rule.line)
+            : null,
+      });
+    }
+    return rules;
+  }
 }
 
 export const openappaCoverageService = new OpenAppaCoverageService();
@@ -460,32 +507,13 @@ type CoverageVisibility = {
   inventoryCatalogIds?: string[];
 };
 
-/** A rule as it applies to one full tool name, battery rules once per alias target. */
-type Candidate = {
-  rule: CoverageRule;
-  /** The full tool name the rule matches. */
-  match: string;
-  kind: Exclude<CoverageKind, "unlisted">;
-};
-
 /**
- * `catalogId` reads only that catalog's tools. Each tool's row depends on its
- * own catalog and the policy alone, so the rows for that catalog are the same
- * as an organization-wide report's.
+ * Every tool rule the policy composes, indexed by the full tool name it
+ * matches, plus the catch-all a tool no rule names falls to. Root rules come
+ * first in text order, then each battery's in include order, as the runtime
+ * reads them.
  */
-async function buildReport(
-  organizationId: string,
-  visibility?: CoverageVisibility,
-  catalogId?: string,
-): Promise<Report> {
-  const [snapshot, inventory] = await Promise.all([
-    openappaBatteriesService.coverageSnapshot(organizationId),
-    ToolModel.findCoverageInventory(organizationId, {
-      includeAppCatalogs: visibility?.includeAppCatalogs,
-      catalogIds: visibility?.inventoryCatalogIds,
-      catalogId,
-    }),
-  ]);
+function matchRules(snapshot: CoverageSnapshot) {
   const { resolution, rootContent, viewed } = snapshot;
   const { composition } = snapshot;
   // Nothing is enforced only when the root text alone is served. A refusal
@@ -590,6 +618,61 @@ async function buildReport(
     else byMatch.set(entry.match, [entry]);
   }
 
+  return { statusOf, fallbackLine, fallback, byMatch, rootContent, viewed };
+}
+
+type CoverageSnapshot = Awaited<
+  ReturnType<typeof openappaBatteriesService.coverageSnapshot>
+>;
+
+/**
+ * The TOML block that starts at 1-based `line`: its header and every line up
+ * to the next table header, without the comments and blank lines that lead
+ * into that next header.
+ */
+function ruleExcerpt(text: string, line: number): string | null {
+  const lines = text.split("\n");
+  if (line < 1 || line > lines.length) return null;
+  const block = [lines[line - 1]];
+  for (let index = line; index < lines.length; index++) {
+    if (/^\s*\[/.test(lines[index])) break;
+    block.push(lines[index]);
+  }
+  // Comments and blank lines at the end introduce the next block.
+  while (block.length > 1 && /^\s*(#.*)?$/.test(block[block.length - 1]))
+    block.pop();
+  return block.join("\n");
+}
+
+/** A rule as it applies to one full tool name, battery rules once per alias target. */
+type Candidate = {
+  rule: CoverageRule;
+  /** The full tool name the rule matches. */
+  match: string;
+  kind: Exclude<CoverageKind, "unlisted">;
+};
+
+/**
+ * `catalogId` reads only that catalog's tools. Each tool's row depends on its
+ * own catalog and the policy alone, so the rows for that catalog are the same
+ * as an organization-wide report's.
+ */
+async function buildReport(
+  organizationId: string,
+  visibility?: CoverageVisibility,
+  catalogId?: string,
+): Promise<Report> {
+  const [snapshot, inventory] = await Promise.all([
+    openappaBatteriesService.coverageSnapshot(organizationId),
+    ToolModel.findCoverageInventory(organizationId, {
+      includeAppCatalogs: visibility?.includeAppCatalogs,
+      catalogIds: visibility?.inventoryCatalogIds,
+      catalogId,
+    }),
+  ]);
+  const { composition } = snapshot;
+  const { statusOf, fallbackLine, fallback, byMatch } = matchRules(snapshot);
+
   const catalogById = new Map(
     inventory.catalogs.map((catalog) => [catalog.id, catalog]),
   );
@@ -613,16 +696,14 @@ async function buildReport(
     };
     const specific = matched.find((entry) => entry.rule.selector === null);
     const primary = specific ?? fallback;
-    // The default wildcards deliberately add no coverage: noop adds nothing,
-    // and the default model catch-all is what judges a tool no rule names.
-    // Origin and revision do not change this classification.
+    // A noop catch-all adds no coverage: it labels nothing. Any other
+    // catch-all annotator, the default model one included, judges the call.
     const covered =
       primary !== null &&
       primary !== undefined &&
       !(
         primary.rule.source === "catchall" &&
-        primary.rule.annotator !== null &&
-        DEFAULT_CATCH_ALL_ANNOTATORS.has(primary.rule.annotator)
+        primary.rule.annotator === NOOP_ANNOTATOR
       );
     const own: CoverageTool = primary
       ? {
@@ -833,8 +914,5 @@ function page<T>(
 /** A battery rule's name: `mcp/<namespace>/<tool>`. */
 const CANONICAL_RULE_NAME = /^mcp\/([^/]+)\/(.+)$/;
 
-/** The catch-all annotators a default policy routes `*` to. */
-const DEFAULT_CATCH_ALL_ANNOTATORS = new Set([
-  "noop",
-  UNDECLARED_TOOL_ANNOTATOR,
-]);
+/** The annotator that labels nothing; a catch-all routed to it covers no tool. */
+const NOOP_ANNOTATOR = "noop";

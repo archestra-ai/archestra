@@ -13,9 +13,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+import { agentCatalogToolsQueryKey } from "@/lib/agent-query-keys";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
+import { appInteractive } from "@/lib/app-interactive";
+import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
@@ -24,10 +27,15 @@ import {
   deleteTargetFor,
 } from "@/lib/chat/conversation-files";
 import {
+  conversationQueryKey,
+  conversationsQueryKey,
+} from "@/lib/chat/conversations-query-key";
+import {
   ENCRYPTED_CHAT_KEY_HEADER,
   encryptedChatRequestHeaders,
   storeEncryptedChatKey,
 } from "@/lib/chat/encrypted-chat";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -131,22 +139,65 @@ export function mergeUpdatedConversationIntoCache(
   return merged;
 }
 
-export function useConversation(conversationId?: string) {
+/**
+ * How long a loaded conversation (and its Files list) counts as fresh. Changes
+ * arrive by invalidation instead: the end of a turn on this page, the
+ * conversation_updated push for turns elsewhere, and every mutation.
+ */
+const CONVERSATION_STALE_TIME_MS = 30_000;
+
+/** How often a scheduled chat is polled for its seeded prompt, and how long. */
+const SCHEDULE_SEED_POLL_MS = 1_000;
+const SCHEDULE_SEED_MAX_POLLS = 120;
+
+export function useConversation(
+  conversationId?: string,
+  options?: {
+    /**
+     * False for components that only read the conversation the chat page
+     * already loads, so mounting them never starts a request of its own.
+     * Only safe next to the page's own observer of the same conversation,
+     * which refetches a stale entry: alone, such a reader shows a cached
+     * conversation (kept for 10 minutes) without revalidating it.
+     */
+    refetchOnMount?: boolean;
+  },
+) {
   return useQuery({
-    queryKey: ["conversation", conversationId],
-    queryFn: () => (conversationId ? fetchConversation(conversationId) : null),
+    queryKey: conversationQueryKey(conversationId),
+    queryFn: async ({ client }) => {
+      if (!conversationId) return null;
+      // A server-seeded document holds only the end of a long conversation.
+      // The rest is not on screen, so it loads once the page is interactive.
+      const seeded = client.getQueryData<{ olderMessageCount?: number }>(
+        conversationQueryKey(conversationId),
+      );
+      if (seeded?.olderMessageCount) await appInteractive.whenIdle();
+      return fetchConversation(conversationId);
+    },
     enabled: !!conversationId,
-    staleTime: 0, // Always refetch to ensure we have the latest messages
+    // The end of a long conversation is a placeholder for the whole of it.
+    staleTime: (query) =>
+      (query.state.data as { olderMessageCount?: number } | null | undefined)
+        ?.olderMessageCount
+        ? 0
+        : CONVERSATION_STALE_TIME_MS,
+    refetchOnMount: options?.refetchOnMount ?? true,
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
     // The schedule worker links the conversation before registering its stream
-    // and seeding the prompt. Wait for that prompt before attaching to replay.
+    // and seeding the prompt. Wait for that prompt before attaching to replay,
+    // for about two minutes at most: a run that has not seeded by then is
+    // brought in by the conversation_updated push instead. Like every
+    // interval, this one pauses while the tab is hidden.
     refetchInterval: (query) =>
       query.state.data?.origin === "schedule_trigger" &&
       query.state.data.messages.length === 0 &&
-      query.state.data.chatErrors.length === 0
-        ? 1_000
+      query.state.data.chatErrors.length === 0 &&
+      query.state.dataUpdateCount < SCHEDULE_SEED_MAX_POLLS
+        ? SCHEDULE_SEED_POLL_MS
         : false,
+    refetchIntervalInBackground: false,
     retry: false, // Don't retry on error to avoid multiple 404s
   });
 }
@@ -208,10 +259,46 @@ export function useConversationFiles(conversationId?: string) {
       );
     },
     enabled: !!conversationId,
-    staleTime: 0,
+    staleTime: CONVERSATION_STALE_TIME_MS,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+}
+
+/**
+ * Refresh the Files list and the conversation (for a rewritten artifact) when
+ * a turn on this page ends: the status moving from submitted or streaming to
+ * ready. Opening or switching to a conversation is not a turn ending — those
+ * load through the queries themselves.
+ */
+export function useRefreshConversationFilesAfterTurn({
+  conversationId,
+  projectId,
+  status,
+}: {
+  conversationId?: string;
+  projectId?: string | null;
+  status: string;
+}) {
+  const queryClient = useQueryClient();
+  const previous = useRef({ conversationId, status });
+  // Read through a ref: the project id resolving must not count as a change.
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = { conversationId, status };
+    if (!conversationId || before.conversationId !== conversationId) return;
+    const turnEnded =
+      status === "ready" &&
+      (before.status === "streaming" || before.status === "submitted");
+    if (!turnEnded) return;
+    invalidateConversationFileQueries(queryClient, {
+      conversationId,
+      projectId: projectIdRef.current,
+    });
+  }, [conversationId, status, queryClient]);
 }
 
 /** Route a single file to its delete endpoint by source. */
@@ -291,28 +378,44 @@ export function useBulkDeleteConversationFiles(conversationId?: string) {
 export function useConversations({
   enabled = true,
   search,
+  limit,
 }: {
   enabled?: boolean;
   search?: string;
+  /** Recent conversations to load when not searching; pinned ones always come. */
+  limit?: number;
 }) {
+  const queryKey = conversationsQueryKey({ search, limit });
   return useQuery({
-    queryKey: ["conversations", search],
+    queryKey,
     queryFn: async () => {
       const trimmedSearch = search?.trim();
+      // List rows never show the artifact or todo list.
       const { data, error } = await getChatConversations({
-        query: trimmedSearch ? { search: trimmedSearch } : undefined,
+        query: {
+          includeArtifacts: false,
+          ...(trimmedSearch
+            ? { search: trimmedSearch }
+            : { limit: queryKey[2] }),
+        },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
     enabled,
-    staleTime: search ? 0 : 2_000, // No stale time for searches, 2 seconds otherwise
+    // Searches always go to the server. The plain list is kept current by the
+    // conversation_updated push and by every mutation, so it stays fresh across
+    // conversation switches instead of being re-read on each one.
+    staleTime: search ? 0 : 30_000,
     gcTime: 10 * 60 * 1000,
     // Backstop for the conversation_updated websocket push (see
     // useConversationUpdatedCacheSync): if the socket was down when a message
     // landed, refocusing or reconnecting still refreshes the unread indicators.
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+    // The sidebar's list (not a search) comes back on refresh, so its rows
+    // show at once; titles are on screen already and the list revalidates.
+    meta: search ? undefined : PERSISTED_QUERY_META,
   });
 }
 
@@ -352,15 +455,27 @@ export function useMarkConversationRead() {
  */
 export function useKeepViewedConversationRead() {
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const { mutate: markRead } = useMarkConversationRead();
-  const { data: conversations } = useConversations({});
 
   const viewedConversationId = pathname.startsWith("/chat/")
     ? (pathname.split("/").at(-1) ?? undefined)
     : undefined;
-  const isViewedUnread = viewedConversationId
-    ? !!conversations?.find((c) => c.id === viewedConversationId)?.unread
-    : false;
+  // Read the lists the sidebar and palette already hold rather than observing
+  // one: an observer here started a list fetch on every conversation switch.
+  const isViewedUnread = useSyncExternalStore(
+    (onChange) => queryClient.getQueryCache().subscribe(onChange),
+    () =>
+      !!viewedConversationId &&
+      queryClient
+        .getQueriesData<archestraApiTypes.GetChatConversationsResponses["200"]>(
+          { queryKey: ["conversations"] },
+        )
+        .some(([, list]) =>
+          list?.some((c) => c.id === viewedConversationId && c.unread),
+        ),
+    () => false,
+  );
 
   useEffect(() => {
     if (viewedConversationId && isViewedUnread) {
@@ -382,8 +497,16 @@ export function useConversationUpdatedCacheSync(enabled = true) {
     if (!enabled) return;
 
     websocketService.connect();
-    return websocketService.subscribe("conversation_updated", () => {
+    return websocketService.subscribe("conversation_updated", (message) => {
       void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // The conversation itself stays fresh for a while once loaded, so a turn
+      // that finished elsewhere must mark it stale here.
+      void queryClient.invalidateQueries({
+        queryKey: ["conversation", message.payload.conversationId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["conversation-files", message.payload.conversationId],
+      });
     });
   }, [enabled, queryClient]);
 }
@@ -575,11 +698,19 @@ export function useUpdateConversation() {
 export function useMemberDefaultModel() {
   return useQuery({
     queryKey: ["member-default-model"],
-    queryFn: () =>
-      callApi(() => getMemberDefaultModel(), {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.memberDefaultModel) return seed.memberDefaultModel;
+      return callApi(() => getMemberDefaultModel(), {
         modelId: null,
         chatApiKeyId: null,
-      }),
+      });
+    },
+    // Changing the model in chat writes the new default into this query, so
+    // it stays fresh as long as the bootstrap parts seeded with it, and is
+    // restored on refresh like them (two ids, no credential).
+    staleTime: 5 * 60 * 1000,
+    meta: PERSISTED_QUERY_META,
   });
 }
 
@@ -1093,13 +1224,7 @@ export function useHasPlaywrightMcpTools(
   // Only the Playwright catalog's tools: the full list carries every tool's
   // schema and can run to megabytes for a well-equipped agent.
   const toolsQuery = useQuery({
-    queryKey: [
-      "agents",
-      agentId,
-      "tools",
-      "catalog",
-      PLAYWRIGHT_MCP_CATALOG_ID,
-    ],
+    queryKey: agentCatalogToolsQueryKey(agentId, PLAYWRIGHT_MCP_CATALOG_ID),
     queryFn: () =>
       callApi(
         () =>

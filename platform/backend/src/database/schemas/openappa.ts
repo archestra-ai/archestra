@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -19,6 +20,7 @@ import type {
   ExternalConsultOutcome,
   ExternalConsultRole,
 } from "@/types/openappa-external-consults";
+import type { LabelChangeEvent } from "@/types/openappa-label-changes";
 import type { ThreadCall, ThreadTool } from "@/types/openappa-thread-state";
 import type {
   UnenforcedCallReason,
@@ -67,6 +69,58 @@ export const openappaPolicyFilesTable = pgTable("openappa_policy_files", {
   hash: text().primaryKey(),
   bytes: bytea("bytes").notNull(),
 });
+
+// One row per deployment line; Archestra names each organization's line by its
+// id. The head is the policy revision every decided append is fenced at: an
+// append share-locks the row, and a publish moves the head by updating it.
+export const openappaDeploymentsTable = pgTable(
+  "openappa_deployments",
+  {
+    name: text().primaryKey(),
+    head: bigint({ mode: "number" }).notNull(),
+  },
+  (table) => [
+    check("openappa_deployments_head_positive", sql`${table.head} > 0`),
+  ],
+);
+
+// Every revision a deployment published, and the policy file it names.
+export const openappaPolicyRevisionsTable = pgTable(
+  "openappa_policy_revisions",
+  {
+    deployment: text().notNull(),
+    revision: bigint({ mode: "number" }).notNull(),
+    hash: text().notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "openappa_policy_revisions_pk",
+      columns: [table.deployment, table.revision],
+    }),
+    foreignKey({
+      name: "openappa_policy_revisions_deployment_fk",
+      columns: [table.deployment],
+      foreignColumns: [openappaDeploymentsTable.name],
+    }),
+    foreignKey({
+      name: "openappa_policy_revisions_hash_fk",
+      columns: [table.hash],
+      foreignColumns: [openappaPolicyFilesTable.hash],
+    }),
+    check(
+      "openappa_policy_revisions_revision_positive",
+      sql`${table.revision} > 0`,
+    ),
+    index("openappa_policy_revisions_key_idx").on(
+      table.deployment,
+      table.hash,
+      table.revision,
+    ),
+  ],
+);
 
 /** Required by the shared runtime's PostgreSQL store, including embedded hosts. */
 export const openappaHeldPeerMessagesTable = pgTable(
@@ -408,5 +462,46 @@ export const openappaExternalConsultsTable = pgTable(
     ),
     index("openappa_external_consults_created_idx").on(table.createdAt),
     index("openappa_external_consults_root_idx").on(table.root),
+  ],
+);
+
+// One row per change a dispatch made to its root trajectory's label (trust
+// and audience), written by Rust after the dispatch, under the family's lock.
+// What a session trace shows as the label over time; never read by a
+// decision. Sub-agent trajectories reach it when their result returns.
+export const openappaLabelChangesTable = pgTable(
+  "openappa_label_changes",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    root: text().notNull(),
+    sessionId: text("session_id").notNull(),
+    callerId: text("caller_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 })
+      .notNull()
+      .defaultNow(),
+    event: text().$type<LabelChangeEvent>().notNull(),
+    // The runtime's operation id, `call:<id>`, as on external consults.
+    callId: text("call_id"),
+    tool: text(),
+    trustBefore: text("trust_before").notNull(),
+    audienceBefore: text("audience_before").notNull(),
+    trustAfter: text("trust_after").notNull(),
+    audienceAfter: text("audience_after").notNull(),
+    // The organization policy revision the dispatch was decided under, when
+    // the family follows it; the rule that applied is read from it.
+    policyRevision: bigint("policy_revision", { mode: "number" }),
+  },
+  (table) => [
+    index("openappa_label_changes_root_created_idx").on(
+      table.root,
+      table.createdAt,
+    ),
+    index("openappa_label_changes_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
   ],
 );

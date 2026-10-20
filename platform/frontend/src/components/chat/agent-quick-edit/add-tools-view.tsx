@@ -4,7 +4,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Check,
@@ -33,13 +33,16 @@ import {
   useAllProfileTools,
   useUpdateAgentServerTools,
 } from "@/lib/agent-tools.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { isInstallInProgress } from "@/lib/mcp/install-status";
-import {
-  fetchCatalogTools,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import type { McpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import {
+  fetchInternalMcpCatalogItem,
+  type McpRegistryRow,
+  useMcpRegistryPage,
+} from "@/lib/mcp/mcp-registry.query";
 import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
@@ -71,11 +74,11 @@ export function AddToolsView({
   onAdded: (catalogId: string) => void;
   onFailed: (notice: QuickEditNotice) => void;
 }) {
-  const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
-  const allCredentials = useMcpServersGroupedByCatalog();
+  const queryClient = useQueryClient();
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
+    includeToolDetails: false,
     enabled: !!agentId,
   });
   const { catalogName: builtInCatalogName } = useArchestraMcpIdentity();
@@ -85,17 +88,78 @@ export function AddToolsView({
   );
   const addAll = useAddAllServerTools({ agentId, agentName });
 
-  const hasInstallingServers = useMemo(
-    () =>
-      Object.values(allCredentials ?? {}).some((servers) =>
-        servers.some((server) =>
-          isInstallInProgress(server.localInstallationStatus),
-        ),
-      ),
-    [allCredentials],
+  // One page of the registry, searched and filtered on the server, with the
+  // built-in entry; the counts on the filter come from the same query's
+  // totals. Rows carry what this view shows (description, tool count, what
+  // connecting asks for); an action loads the full item by id.
+  const debouncedSearch = useDebouncedValue(search.trim(), 250);
+  const baseQuery = {
+    includeBuiltIn: true,
+    ...(debouncedSearch
+      ? { search: debouncedSearch, searchDescriptions: true }
+      : {}),
+    sortBy: "name" as const,
+    sortDirection: "asc" as const,
+  };
+  const [pollWhileInstalling, setPollWhileInstalling] = useState(false);
+  const page = useMcpRegistryPage(
+    {
+      ...baseQuery,
+      ...(filter === "all"
+        ? {}
+        : {
+            installState:
+              filter === "connected"
+                ? ("installed" as const)
+                : ("not-installed" as const),
+          }),
+      limit: ADD_TOOLS_PAGE_SIZE,
+      offset: 0,
+    },
+    {
+      placeholderScope: `add-tools:${filter}`,
+      // Until an install finishes deploying, so its row turns ready.
+      refetchInterval: pollWhileInstalling ? 2_000 : false,
+    },
   );
-  // Polls while any install is still deploying, so its row turns ready.
-  useMcpServers({ hasInstallingServers });
+  // The counts on the filter come from their own queries, on every tab, so a
+  // tab's label does not change while that tab's page loads; each keeps its
+  // last total across a search until the new one answers.
+  const allTotalQuery = useMcpRegistryPage(
+    { ...baseQuery, limit: 1, offset: 0 },
+    { placeholderScope: "add-tools:total" },
+  );
+  const connectedTotalQuery = useMcpRegistryPage(
+    { ...baseQuery, installState: "installed", limit: 1, offset: 0 },
+    { placeholderScope: "add-tools:connected" },
+  );
+  // The built-in entry is ready to add without an install, but the server
+  // never counts it as installed: whether the search matches it decides the
+  // Connected count, and the Connected tab lists it next to the installed
+  // servers.
+  const builtInQuery = useMcpRegistryPage(
+    {
+      ...baseQuery,
+      catalogIds: [ARCHESTRA_MCP_CATALOG_ID],
+      limit: 1,
+      offset: 0,
+    },
+    { placeholderScope: "add-tools:built-in" },
+  );
+  const builtInPage = builtInQuery.data;
+  const builtInRow = builtInPage?.data[0];
+  const isPending = page.isPending;
+  const pageRows = useMemo(() => {
+    const listed = page.data?.data ?? [];
+    if (filter === "connected") {
+      return builtInRow ? [builtInRow, ...listed] : listed;
+    }
+    if (filter === "not-connected") {
+      return listed.filter((row) => row.id !== ARCHESTRA_MCP_CATALOG_ID);
+    }
+    return listed;
+  }, [page.data, filter, builtInRow]);
+  const pageInstalls = page.data?.installs ?? [];
 
   const assignedCatalogIds = useMemo(() => {
     const ids = new Set<string>();
@@ -107,14 +171,18 @@ export function AddToolsView({
 
   const rows = useMemo(
     () =>
-      catalogItems.map((catalog) => {
-        const servers = allCredentials?.[catalog.id] ?? [];
-        const installing = servers.some((server) =>
-          isInstallInProgress(server.localInstallationStatus),
+      pageRows.map((catalog) => {
+        const installing = pageInstalls.some(
+          (server) =>
+            server.catalogId === catalog.id &&
+            isInstallInProgress(server.localInstallationStatus),
         );
+        // One rule for rows, tabs and counts: connected means the viewer can
+        // use an install (what the server's "installed" filter matches), so
+        // its tools can be added to the agent.
         const connected =
           catalog.serverType === "builtin" ||
-          (servers.length > 0 && !installing);
+          (catalog.install.installedForViewer && !installing);
         return {
           catalog,
           name:
@@ -126,55 +194,76 @@ export function AddToolsView({
           assigned: assignedCatalogIds.has(catalog.id),
         };
       }),
-    [catalogItems, allCredentials, assignedCatalogIds, builtInCatalogName],
+    [pageRows, pageInstalls, assignedCatalogIds, builtInCatalogName],
   );
+  const anyInstalling = rows.some((row) => row.installing);
+  useEffect(() => {
+    setPollWhileInstalling(anyInstalling);
+  }, [anyInstalling]);
 
-  const connectedIds = useMemo(
-    () => rows.filter((row) => row.connected).map((row) => row.catalog.id),
-    [rows],
-  );
-  const toolQueries = useQueries({
-    queries: connectedIds.map((id) => ({
-      queryKey: ["mcp-catalog", id, "tools", "picker"],
-      queryFn: () => fetchCatalogTools(id),
-      staleTime: 60_000,
-    })),
+  // Unknown until its totals answer: a count of the visible rows would be
+  // wrong on every tab but All.
+  const { totalCount, connectedCount, notConnectedCount } = useFilterCounts({
+    all: allTotalQuery,
+    connected: connectedTotalQuery,
+    builtIn: builtInQuery,
   });
-  const toolCountByCatalog = new Map<string, number>();
-  connectedIds.forEach((id, index) => {
-    const data = toolQueries[index]?.data;
-    if (data) toolCountByCatalog.set(id, data.length);
-  });
-
-  const matches = rows.filter((row) => {
-    if (!search) return true;
-    const lower = search.toLowerCase();
-    return (
-      row.name.toLowerCase().includes(lower) ||
-      row.catalog.description?.toLowerCase().includes(lower)
-    );
-  });
-  const connectedCount = matches.filter((row) => row.connected).length;
-  const readyRows = matches
+  const readyRows = rows
     .filter((row) => row.connected && filter !== "not-connected")
     .sort(
-      (a, b) =>
-        readyRank(a, toolCountByCatalog) - readyRank(b, toolCountByCatalog) ||
-        a.name.localeCompare(b.name),
+      (a, b) => readyRank(a) - readyRank(b) || a.name.localeCompare(b.name),
     );
-  const connectRows = matches
+  const connectRows = rows
     .filter((row) => !row.connected && filter !== "connected")
     .sort(
       (a, b) =>
         Number(b.installing) - Number(a.installing) ||
         a.name.localeCompare(b.name),
     );
+  // The page's total counts the built-in entry on the Not connected query
+  // (shown under Connected instead) and leaves it out of the Connected one.
+  const builtInAdjustment = !builtInRow
+    ? 0
+    : filter === "connected"
+      ? 1
+      : filter === "not-connected"
+        ? -1
+        : 0;
+  const unlisted = Math.max(
+    0,
+    (page.data?.pagination.total ?? 0) + builtInAdjustment - rows.length,
+  );
 
-  const handleConnect = (catalog: CatalogItem) => {
-    if (catalog.oauthConfig) {
-      installer.triggerInstallByCatalogId(catalog.id);
+  // The action loading its row's full item: that row's buttons wait, and
+  // the clicked one spins.
+  const [loadingItem, setLoadingItem] = useState<{
+    id: string;
+    action: ItemAction;
+  } | null>(null);
+  /** The full item an action works on, loaded when the action starts. */
+  const withFullItem = async (
+    row: { id: string },
+    action: ItemAction,
+    act: (catalog: CatalogItem) => void,
+  ) => {
+    setLoadingItem({ id: row.id, action });
+    let catalog: CatalogItem | null;
+    try {
+      catalog = await fetchInternalMcpCatalogItem(queryClient, row.id);
+    } catch {
+      // The API error is already toasted.
+      return;
+    } finally {
+      setLoadingItem(null);
+    }
+    if (catalog) act(catalog);
+  };
+
+  const handleConnect = (row: McpRegistryRow) => {
+    if (row.setupNeeds.signIn) {
+      installer.triggerInstallByCatalogId(row.id);
     } else {
-      onConnect(catalog);
+      void withFullItem(row, "connect", onConnect);
     }
   };
 
@@ -203,12 +292,9 @@ export function AddToolsView({
         >
           {(
             [
-              ["all", `All ${matches.length}`],
-              ["connected", `Connected ${connectedCount}`],
-              [
-                "not-connected",
-                `Not connected ${matches.length - connectedCount}`,
-              ],
+              ["all", withCount("All", totalCount)],
+              ["connected", withCount("Connected", connectedCount)],
+              ["not-connected", withCount("Not connected", notConnectedCount)],
             ] as const
           ).map(([value, label]) => (
             <Button
@@ -244,9 +330,13 @@ export function AddToolsView({
             {readyRows.length > 0 && (
               <ServerGroup title="Ready to add">
                 {readyRows.map((row) => {
-                  const count = toolCountByCatalog.get(row.catalog.id);
+                  const count = row.catalog.toolCount;
                   const noTools = count === 0;
                   const adding = addAll.addingCatalogId === row.catalog.id;
+                  const loading =
+                    loadingItem?.id === row.catalog.id
+                      ? loadingItem.action
+                      : null;
                   return (
                     <ServerRow
                       key={row.catalog.id}
@@ -257,9 +347,7 @@ export function AddToolsView({
                         noTools
                           ? "Connected, but the server reports no tools"
                           : joinMeta(
-                              count === undefined
-                                ? undefined
-                                : `${count} ${count === 1 ? "tool" : "tools"}`,
+                              `${count} ${count === 1 ? "tool" : "tools"}`,
                               row.catalog.description,
                             )
                       }
@@ -278,25 +366,41 @@ export function AddToolsView({
                             <Button
                               variant="ghost"
                               size="xs"
-                              disabled={adding}
-                              onClick={() => onChooseTools(row.catalog)}
+                              disabled={adding || !!loading}
+                              onClick={() =>
+                                void withFullItem(
+                                  row.catalog,
+                                  "choose",
+                                  onChooseTools,
+                                )
+                              }
                             >
-                              Choose tools
+                              {loading === "choose" && (
+                                <Loader2 className="animate-spin" />
+                              )}
+                              <span>Choose tools</span>
                             </Button>
                             <Button
                               variant="outline"
                               size="xs"
-                              disabled={adding || count === undefined}
+                              disabled={adding || !!loading}
                               onClick={() =>
-                                addAll.run({
-                                  catalog: row.catalog,
-                                  name: row.name,
-                                  onAdded,
-                                  onFailed,
-                                })
+                                void withFullItem(
+                                  row.catalog,
+                                  "add",
+                                  (catalog) =>
+                                    addAll.run({
+                                      catalog,
+                                      name: row.name,
+                                      onAdded,
+                                      onFailed,
+                                    }),
+                                )
                               }
                             >
-                              {adding && <Loader2 className="animate-spin" />}
+                              {(adding || loading === "add") && (
+                                <Loader2 className="animate-spin" />
+                              )}
                               <span>{adding ? "Adding…" : "Add all"}</span>
                             </Button>
                           </>
@@ -328,15 +432,25 @@ export function AddToolsView({
                       ) : (
                         <Button
                           size="xs"
+                          disabled={loadingItem?.id === row.catalog.id}
                           onClick={() => handleConnect(row.catalog)}
                         >
-                          Connect
+                          {loadingItem?.id === row.catalog.id && (
+                            <Loader2 className="animate-spin" />
+                          )}
+                          <span>Connect</span>
                         </Button>
                       )
                     }
                   />
                 ))}
               </ServerGroup>
+            )}
+            {unlisted > 0 && (
+              <p className="text-center text-xs text-muted-foreground">
+                {unlisted} more {unlisted === 1 ? "server" : "servers"} — search
+                to find {unlisted === 1 ? "it" : "them"}.
+              </p>
             )}
           </>
         )}
@@ -383,12 +497,16 @@ export function ConnectView({
   onCancel: () => void;
   onConnected: () => void;
 }) {
-  const allCredentials = useMcpServersGroupedByCatalog();
+  const allCredentials = useMcpServersGroupedByCatalog({
+    catalogId: catalog.id,
+  });
   const serverCount = allCredentials?.[catalog.id]?.length ?? 0;
   const [attempt, setAttempt] = useState<"idle" | "submitted" | "settled">(
     "idle",
   );
   const startedRef = useRef(false);
+  // Set from a submit until its outcome is handled; see `closeFromForm`.
+  const submittingRef = useRef(false);
 
   // The orchestrator owns which form a catalog needs and its install calls;
   // selecting the catalog here is what fills the inline form below.
@@ -402,11 +520,19 @@ export function ConnectView({
   // the form stays for another try rather than spinning forever.
   useEffect(() => {
     if (attempt === "idle") return;
-    if (serverCount > 0) onConnected();
-    else if (attempt === "settled") setAttempt("idle");
-  }, [attempt, serverCount, onConnected]);
+    if (serverCount > 0) {
+      // The quick-edit renders the same orchestrator's modal dialogs outside
+      // this view, so a form left open here would pop up there.
+      installer.closeInstallForms();
+      onConnected();
+    } else if (attempt === "settled") {
+      submittingRef.current = false;
+      setAttempt("idle");
+    }
+  }, [attempt, serverCount, onConnected, installer]);
 
   const submit = async (install: () => Promise<void>) => {
+    submittingRef.current = true;
     setAttempt("submitted");
     try {
       await install();
@@ -415,11 +541,22 @@ export function ConnectView({
     }
   };
 
+  const cancel = () => {
+    installer.closeInstallForms();
+    onCancel();
+  };
+
+  // The remote form closes itself right after every submit; only a close
+  // outside a submit is the user cancelling.
+  const closeFromForm = () => {
+    if (!submittingRef.current) cancel();
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <QuickEditViewHeader
         backLabel="Add tools"
-        onBack={onCancel}
+        onBack={cancel}
         title={`Connect ${catalog.name}`}
       />
       <Steps
@@ -450,7 +587,7 @@ export function ConnectView({
             <LocalServerInstallDialog
               presentation="inline"
               isOpen
-              onClose={onCancel}
+              onClose={closeFromForm}
               onConfirm={(result) =>
                 submit(() => installer.handleLocalServerInstallConfirm(result))
               }
@@ -462,7 +599,7 @@ export function ConnectView({
           <RemoteServerInstallDialog
             presentation="inline"
             isOpen
-            onClose={onCancel}
+            onClose={closeFromForm}
             onConfirm={(item, result) =>
               submit(() =>
                 installer.handleRemoteServerInstallConfirm(item, result),
@@ -476,7 +613,7 @@ export function ConnectView({
           <NoAuthInstallDialog
             presentation="inline"
             isOpen
-            onClose={onCancel}
+            onClose={closeFromForm}
             onInstall={(result) =>
               submit(() => installer.handleNoAuthConfirm(result))
             }
@@ -512,12 +649,14 @@ export function InstallingView({
   onAdded: (catalogId: string) => void;
   onFailed: (notice: QuickEditNotice) => void;
 }) {
-  const allCredentials = useMcpServersGroupedByCatalog();
+  const allCredentials = useMcpServersGroupedByCatalog({
+    catalogId: catalog.id,
+  });
   const servers = allCredentials?.[catalog.id] ?? [];
   const installing = servers.some((server) =>
     isInstallInProgress(server.localInstallationStatus),
   );
-  useMcpServers({ hasInstallingServers: installing });
+  useMcpServers({ catalogId: catalog.id, hasInstallingServers: installing });
   const failedServer = servers.find(
     (server) => server.localInstallationStatus === "error",
   );
@@ -764,22 +903,15 @@ async function runAdd({
   }
 }
 
-function readyRank(
-  row: { assigned: boolean; catalog: CatalogItem },
-  toolCounts: Map<string, number>,
-) {
+function readyRank(row: { assigned: boolean; catalog: McpRegistryRow }) {
   if (row.assigned) return 1;
-  if (toolCounts.get(row.catalog.id) === 0) return 2;
+  if (row.catalog.toolCount === 0) return 2;
   return 0;
 }
 
-function connectHint(catalog: CatalogItem) {
-  if (catalog.oauthConfig) return "Sign in with your account";
-  const prompted =
-    catalog.localConfig?.environment?.filter((env) => env.promptOnInstallation)
-      .length ?? 0;
-  const userConfig = Object.keys(catalog.userConfig ?? {}).length;
-  const settings = prompted + userConfig;
+function connectHint(catalog: McpRegistryRow) {
+  if (catalog.setupNeeds.signIn) return "Sign in with your account";
+  const settings = catalog.setupNeeds.settings;
   if (settings > 0) {
     return `Needs ${settings} ${settings === 1 ? "setting" : "settings"} to connect`;
   }
@@ -814,7 +946,7 @@ function ServerRow({
   action,
   muted = false,
 }: {
-  catalog: CatalogItem;
+  catalog: Pick<McpRegistryRow, "id" | "icon" | "iconUrl">;
   name: string;
   meta: string;
   action: ReactNode;
@@ -828,7 +960,11 @@ function ServerRow({
       )}
     >
       <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
-        <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={20} />
+        <McpCatalogIcon
+          icon={catalog.iconUrl ?? catalog.icon}
+          catalogId={catalog.id}
+          size={20}
+        />
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{name}</div>
@@ -930,3 +1066,67 @@ function ProgressStep({
     </li>
   );
 }
+
+/** Rows the list shows at a time; a search narrows on the server. */
+const ADD_TOOLS_PAGE_SIZE = 100;
+
+function withCount(label: string, count: number | undefined) {
+  return count === undefined ? label : `${label} ${count}`;
+}
+
+/** A row action that loads the server's full item before it runs. */
+type ItemAction = "choose" | "add" | "connect";
+
+type CountQuery = {
+  data?: { data: unknown[]; pagination: { total: number } };
+  isPlaceholderData?: boolean;
+};
+
+/**
+ * The filter's counts from one search's answers: while any of the three
+ * still shows the previous search's (placeholder) data, the last consistent
+ * counts stay, so a label never mixes two searches. Unknown until the first
+ * full set answers.
+ */
+function useFilterCounts(queries: {
+  all: CountQuery;
+  connected: CountQuery;
+  builtIn: CountQuery;
+}): Partial<FilterCounts> {
+  const { all, connected, builtIn } = queries;
+  const consistent =
+    all.data !== undefined &&
+    connected.data !== undefined &&
+    builtIn.data !== undefined &&
+    !all.isPlaceholderData &&
+    !connected.isPlaceholderData &&
+    !builtIn.isPlaceholderData;
+  let current: FilterCounts | null = null;
+  if (consistent && all.data && connected.data && builtIn.data) {
+    const totalCount = all.data.pagination.total;
+    const connectedCount =
+      connected.data.pagination.total + (builtIn.data.data.length > 0 ? 1 : 0);
+    current = {
+      totalCount,
+      connectedCount,
+      notConnectedCount: Math.max(0, totalCount - connectedCount),
+    };
+  }
+  // The last consistent counts, kept in state set during render (React's
+  // pattern for information from earlier renders), never in a ref.
+  const [last, setLast] = useState<FilterCounts | null>(null);
+  if (
+    current &&
+    (current.totalCount !== last?.totalCount ||
+      current.connectedCount !== last?.connectedCount)
+  ) {
+    setLast(current);
+  }
+  return current ?? last ?? {};
+}
+
+type FilterCounts = {
+  totalCount: number;
+  connectedCount: number;
+  notConnectedCount: number;
+};

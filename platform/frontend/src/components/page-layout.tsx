@@ -58,6 +58,7 @@ export function PageLayout({
   fillContent = false,
   compactHeader = false,
   stackHeaderOnMobile = false,
+  denseContent = false,
 }: {
   children: React.ReactNode;
   /**
@@ -143,6 +144,11 @@ export function PageLayout({
   compactHeader?: boolean;
   /** Give long detail titles the full phone width, with actions below the description. */
   stackHeaderOnMobile?: boolean;
+  /**
+   * Start the content 16px below the header at every width, for dense
+   * detail pages whose first section is a card of its own.
+   */
+  denseContent?: boolean;
 }) {
   const headerSpacing = compactHeader ? COMPACT_HEADER_SPACING : HEADER_SPACING;
   const pathname = usePathname();
@@ -222,7 +228,7 @@ export function PageLayout({
         >
           <div
             className={cn(
-              "mx-auto px-6",
+              "mx-auto px-4 sm:px-6",
               minWidth,
               maxWidth,
               headerSpacing.top,
@@ -301,7 +307,11 @@ export function PageLayout({
                       ? stackHeaderOnMobile
                         ? "sm:flex-nowrap sm:overflow-hidden"
                         : "flex-nowrap overflow-hidden"
-                      : "flex-wrap",
+                      : // A long detail title wraps inside itself; wrapping
+                        // the row would drop it below the back link.
+                        stackHeaderOnMobile
+                        ? "flex-nowrap"
+                        : "flex-wrap",
                   )}
                 >
                   {/* Without an icon the back link leads the title itself;
@@ -393,7 +403,9 @@ export function PageLayout({
                 </div>
 
                 {/* Mobile: Show first N tabs + overflow dropdown */}
-                <div className="flex md:hidden gap-3 mb-0 items-center whitespace-nowrap overflow-x-auto">
+                {/* Same rhythm as the desktop row; the overflow menu sits at the far
+                    end so the visible tabs keep their spacing. */}
+                <div className="flex md:hidden gap-4 mb-0 items-end whitespace-nowrap overflow-x-auto">
                   {mobileVisibleTabs.map((tab) => {
                     const isSelected = tab === selectedTab;
                     return (
@@ -403,7 +415,7 @@ export function PageLayout({
                         onClick={tab.onClick}
                         aria-current={isSelected ? "page" : undefined}
                         className={cn(
-                          "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
+                          "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
                           isSelected
                             ? "text-foreground"
                             : "text-muted-foreground",
@@ -418,70 +430,64 @@ export function PageLayout({
                   })}
 
                   {mobileOverflowTabs.length > 0 && (
-                    <>
-                      <div className="h-5 w-px bg-border shrink-0" />
-                      <Popover
-                        open={overflowOpen}
-                        onOpenChange={setOverflowOpen}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            className={cn(
-                              "relative h-auto cursor-pointer rounded-none px-1 pb-3 text-sm font-medium transition-colors hover:bg-transparent hover:text-foreground flex items-center gap-1",
-                              selectedOverflowTab
-                                ? "text-foreground"
-                                : "text-muted-foreground",
-                            )}
-                          >
-                            {/* Distinct keyed spans so switching between the
-                              label (an element) and "More" (a string) swaps
-                              elements instead of deleting a bare text node —
-                              Chrome page-translate re-parents text nodes into
-                              <font> wrappers and React crashes removing a
-                              re-parented text node (facebook/react#11538). */}
-                            {selectedOverflowTab ? (
-                              <span key="selected-tab">
-                                {selectedOverflowTab.label}
-                              </span>
-                            ) : (
-                              <span key="more">More</span>
-                            )}
-                            <ChevronDown className="h-3.5 w-3.5" />
-                            {selectedOverflowTab && (
-                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          className="w-auto p-1 flex flex-col"
-                          align="end"
+                    <Popover open={overflowOpen} onOpenChange={setOverflowOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className={cn(
+                            "relative ml-auto h-auto cursor-pointer rounded-none px-0 pt-0 pb-3 text-sm font-medium transition-colors hover:bg-transparent dark:hover:bg-transparent hover:text-foreground flex items-center gap-1",
+                            selectedOverflowTab
+                              ? "text-foreground"
+                              : "text-muted-foreground",
+                          )}
                         >
-                          {mobileOverflowTabs.map((tab) => {
-                            const isSelected = tab === selectedTab;
-                            return (
-                              <Link
-                                key={tab.href}
-                                href={tab.href}
-                                aria-current={isSelected ? "page" : undefined}
-                                onClick={(event) => {
-                                  setOverflowOpen(false);
-                                  tab.onClick?.(event);
-                                }}
-                                className={cn(
-                                  "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
-                                  isSelected
-                                    ? "font-medium text-foreground bg-muted"
-                                    : "text-muted-foreground",
-                                )}
-                              >
-                                {tab.label}
-                              </Link>
-                            );
-                          })}
-                        </PopoverContent>
-                      </Popover>
-                    </>
+                          {/* Distinct keyed spans so switching between the
+                            label (an element) and "More" (a string) swaps
+                            elements instead of deleting a bare text node —
+                            Chrome page-translate re-parents text nodes into
+                            <font> wrappers and React crashes removing a
+                            re-parented text node (facebook/react#11538). */}
+                          {selectedOverflowTab ? (
+                            <span key="selected-tab">
+                              {selectedOverflowTab.label}
+                            </span>
+                          ) : (
+                            <span key="more">More</span>
+                          )}
+                          <ChevronDown className="h-3.5 w-3.5" />
+                          {selectedOverflowTab && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-auto p-1 flex flex-col"
+                        align="end"
+                      >
+                        {mobileOverflowTabs.map((tab) => {
+                          const isSelected = tab === selectedTab;
+                          return (
+                            <Link
+                              key={tab.href}
+                              href={tab.href}
+                              aria-current={isSelected ? "page" : undefined}
+                              onClick={(event) => {
+                                setOverflowOpen(false);
+                                tab.onClick?.(event);
+                              }}
+                              className={cn(
+                                "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
+                                isSelected
+                                  ? "font-medium text-foreground bg-muted"
+                                  : "text-muted-foreground",
+                              )}
+                            >
+                              {tab.label}
+                            </Link>
+                          );
+                        })}
+                      </PopoverContent>
+                    </Popover>
                   )}
                 </div>
               </>
@@ -498,7 +504,7 @@ export function PageLayout({
             } as React.CSSProperties
           }
           className={cn(
-            "sticky top-3 z-10 mx-auto mt-6 w-full space-y-2 px-6 empty:hidden md:top-[var(--page-banner-top)]",
+            "sticky top-3 z-10 mx-auto mt-6 w-full space-y-2 px-4 empty:hidden sm:px-6 md:top-[var(--page-banner-top)]",
             maxWidth,
           )}
         />
@@ -523,7 +529,8 @@ export function PageLayout({
               fillContent && "flex min-h-0 flex-1 flex-col",
               minWidth || "min-w-0",
               maxWidth,
-              "px-6 py-6 md:px-6",
+              "px-4 py-4 sm:px-6",
+              !denseContent && "sm:py-6",
             )}
           >
             {children}

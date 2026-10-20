@@ -16,6 +16,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   type PolicyTestCollection,
   type PolicyTestInspection,
+  type PolicyTestRun,
   useInspectOpenAppaPolicyTests,
   useOpenAppaPolicyTestRuns,
   useOpenAppaPolicyTests,
@@ -32,8 +33,10 @@ export function ValidationProvider({ children }: { children: ReactNode }) {
   const sessionQuery = useSession();
   const session = sessionQuery?.data;
   const sessionKey = `${session?.session.id}:${session?.session.activeOrganizationId}`;
-  const { data: canRead } = useHasPermissions({ openappaPolicy: ["read"] });
-  const { data: canWrite } = useHasPermissions({ openappaPolicy: ["update"] });
+  const { data: canRead } = useHasPermissions({ guardrailsPolicy: ["read"] });
+  const { data: canWrite } = useHasPermissions({
+    guardrailsPolicy: ["update"],
+  });
   const source = useOpenAppaPolicyTests(canRead === true);
   if (canRead === false)
     return (
@@ -161,24 +164,53 @@ function useSuite({
       },
     );
   }
-  function runAll() {
-    if (!runnable || !files.length) return;
-    runMutation.mutate({
-      files,
-      sourceVersion: collection.version,
-      directory: collection.directory,
-    });
+  /**
+   * Runs every saved file and records the run. With a `progressToken`, the
+   * server pushes per-file progress for it over the WebSocket.
+   */
+  function runAll(options?: {
+    progressToken?: string;
+    onSettled?: (run: PolicyTestRun | null, error: Error | null) => void;
+  }) {
+    if (!runnable || !files.length) return false;
+    runMutation.mutate(
+      {
+        files,
+        sourceVersion: collection.version,
+        directory: collection.directory,
+        progressToken: options?.progressToken,
+      },
+      {
+        onSuccess: (run) => options?.onSettled?.(run ?? null, null),
+        onError: (error) => options?.onSettled?.(null, error),
+      },
+    );
+    return true;
   }
   /** Runs one saved file and records the result in run history. */
-  function runFile(path: string) {
+  function runFile(
+    path: string,
+    options?: {
+      progressToken?: string;
+      onSettled?: (run: PolicyTestRun | null, error: Error | null) => void;
+    },
+  ) {
     const file = files.find((item) => item.path === path);
-    if (!runnable || !file) return;
-    runMutation.mutate({
-      files: [file],
-      sourceVersion: collection.version,
-      directory: collection.directory,
-      partial: true,
-    });
+    if (!runnable || !file) return false;
+    runMutation.mutate(
+      {
+        files: [file],
+        sourceVersion: collection.version,
+        directory: collection.directory,
+        partial: true,
+        progressToken: options?.progressToken,
+      },
+      {
+        onSuccess: (run) => options?.onSettled?.(run ?? null, null),
+        onError: (error) => options?.onSettled?.(null, error),
+      },
+    );
+    return true;
   }
   const runningPath =
     runMutation.isPending && runMutation.variables?.partial

@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import { ExternalLink, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
@@ -19,12 +18,9 @@ import {
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
 import { cn } from "@/lib/utils/tailwind";
 import { QuickEditFooter, QuickEditViewHeader } from "./view-header";
-
-type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
 export function SubagentsView({
   agentId,
@@ -269,10 +265,11 @@ export function changeSummary(
 }
 
 function AgentToolAvatars({ agentId }: { agentId: string }) {
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [] } = useMcpCatalogDirectory();
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
     skipPagination: true,
+    includeToolDetails: false,
     enabled: !!agentId,
   });
 
@@ -281,7 +278,7 @@ function AgentToolAvatars({ agentId }: { agentId: string }) {
     for (const assignment of assignedToolsData?.data ?? []) {
       if (assignment.tool.catalogId) ids.add(assignment.tool.catalogId);
     }
-    return catalogItems.filter((catalog: CatalogItem) => ids.has(catalog.id));
+    return catalogItems.filter((catalog) => ids.has(catalog.id));
   }, [assignedToolsData, catalogItems]);
 
   if (catalogs.length === 0) return null;

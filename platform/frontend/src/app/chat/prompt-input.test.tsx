@@ -7,6 +7,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { forwardRef, type ReactElement } from "react";
+import { renderToString } from "react-dom/server";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
@@ -85,6 +86,13 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: vi.fn(),
   })),
 });
+
+const { mockPreloadResponseMarkdown } = vi.hoisted(() => ({
+  mockPreloadResponseMarkdown: vi.fn(async () => {}),
+}));
+vi.mock("@/components/ai-elements/response", () => ({
+  preloadResponseMarkdown: mockPreloadResponseMarkdown,
+}));
 
 vi.mock("sonner", () => {
   const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
@@ -977,6 +985,18 @@ describe("ArchestraPromptInput", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("starts loading the reply's markdown renderer on the first key press", () => {
+      mockPreloadResponseMarkdown.mockClear();
+      render(<ArchestraPromptInput {...defaultProps} />);
+      expect(mockPreloadResponseMarkdown).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "h",
+      });
+
+      expect(mockPreloadResponseMarkdown).toHaveBeenCalled();
+    });
+
     it("should reset slash command selection when the menu reopens", () => {
       const onCompactConversation = vi.fn();
       mockControllerState.value = "/";
@@ -1516,7 +1536,7 @@ describe("ArchestraPromptInput", () => {
       render(<ArchestraPromptInput {...defaultProps} />);
 
       expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
-        { limit: 100, forAgentId: defaultProps.agentId },
+        { limit: 100, forAgentId: defaultProps.agentId, includeContent: false },
         { enabled: false },
       );
     });
@@ -1526,8 +1546,9 @@ describe("ArchestraPromptInput", () => {
 
       render(<ArchestraPromptInput {...defaultProps} />);
 
+      // The command menu needs names and descriptions, never SKILL.md bodies.
       expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
-        { limit: 100, forAgentId: defaultProps.agentId },
+        { limit: 100, forAgentId: defaultProps.agentId, includeContent: false },
         { enabled: true },
       );
     });
@@ -1787,6 +1808,30 @@ describe("ArchestraPromptInput", () => {
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(onSubmit).not.toHaveBeenCalled();
     });
+  });
+
+  it("keeps text typed into the server-rendered composer before hydration", () => {
+    // A saved draft is older than what the user just typed.
+    localStorage.setItem(NEW_CHAT_DRAFT_STORAGE_KEY, "an older draft");
+    const ui = (
+      <QueryClientProvider client={queryClient}>
+        <ArchestraPromptInput {...defaultProps} />
+      </QueryClientProvider>
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(ui);
+    document.body.appendChild(container);
+    const textarea = container.querySelector("textarea");
+    if (!textarea) throw new Error("server markup has no textarea");
+    textarea.value = "typed before hydration";
+
+    renderComponent(ui, { container, hydrate: true });
+
+    expect(mockTextInputSetInput).toHaveBeenLastCalledWith(
+      "typed before hydration",
+    );
+    expect(mockTextInputSetInput).not.toHaveBeenCalledWith("an older draft");
+    container.remove();
   });
 
   describe("draft retention on submit", () => {

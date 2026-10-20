@@ -5,6 +5,8 @@ import {
   ROLE_ASSIGNMENT_BLOCKED_CODE,
 } from "@archestra/shared";
 import { adminPermissions } from "@archestra/shared/access-control";
+import { PGlite } from "@electric-sql/pglite";
+import { auth as betterAuth } from "@/auth/better-auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -629,6 +631,58 @@ describe("service account API authentication", () => {
 
     expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     expect(verifyTokenSpy).toHaveBeenCalledOnce();
+  });
+
+  // A service-account token is one indexed lookup by hash. Checking Better
+  // Auth's API keys first cost every service-account request two misses on
+  // the apikey table (each logged as an error), and the token's last_used_at
+  // was rewritten on every request.
+  test("a service-account request skips the API-key lookup and writes last_used_at once a minute", async ({
+    makeCustomRole,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const role = await makeCustomRole(organization.id, {
+      permission: { serviceAccount: ["read"] },
+    });
+    const serviceAccount = await ServiceAccountModel.create({
+      organizationId: organization.id,
+      name: "Crawler automation",
+      role: role.role,
+      createdBy: null,
+    });
+    const serviceToken = await ServiceAccountModel.createToken({
+      serviceAccountId: serviceAccount.id,
+      organizationId: organization.id,
+      name: "Route token",
+    });
+    await runScopedResourcePermissionCutover();
+    const verifyApiKeySpy = vi.spyOn(betterAuth.api, "verifyApiKey");
+    const query = vi.spyOn(PGlite.prototype, "query");
+
+    try {
+      for (let i = 0; i < 2; i++) {
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/service-accounts",
+          headers: {
+            authorization: serviceToken.token,
+          },
+        });
+        expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      }
+
+      expect(verifyApiKeySpy).not.toHaveBeenCalled();
+      const lastUsedWrites = query.mock.calls.filter(
+        ([statement]) =>
+          typeof statement === "string" &&
+          statement.includes('update "service_account_tokens"'),
+      );
+      expect(lastUsedWrites).toHaveLength(1);
+    } finally {
+      verifyApiKeySpy.mockRestore();
+      query.mockRestore();
+    }
   });
 
   // Listing accounts is no longer role-gated — it answers from grants and a

@@ -172,7 +172,7 @@ Every sentence states a fact: what a thing is, or what it does. If it does neith
 8. Do not state what readers assume, that a feature works as named. Document defaults, toggles, and conditions a reader could get wrong.
 9. No emojis. No "Future Considerations" or generic "Best Practices" sections.
 10. Never use real customer names, people, emails, or data. Use fictional, generic examples.
-11. Never say a step needs a role ("you need the Admin role", "only admins can"). Access is RBAC, and custom roles change what each role holds. Name the exact permission instead, linked to its row: [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). For a per-item grant, name the actions and link [Granular Access Control](/docs/admin/access-control#granular-access-control). CI checks the links with `check-docs-permission-links.py`.
+11. Never say a step needs a role ("you need the Admin role", "only admins can"). Access is RBAC, and custom roles change what each role holds. Name the exact permission instead, linked to its row: [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update). For a per-item grant, name the actions and link [Granular Access Control](/docs/admin/access-control#granular-access-control). CI checks the links with `check-docs-permission-links.py`.
 
 Keep each prose paragraph on one source line. Do not hard-wrap. Use only the Markdown and the `:::` directives that [Site Mechanics](references/site-mechanics.md) lists. Never invent admonitions such as `> [!NOTE]` or `:::warning`.
 

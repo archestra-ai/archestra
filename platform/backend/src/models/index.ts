@@ -95,7 +95,6 @@ export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connect
 export { default as LimitModel, LimitValidationService } from "./limit";
 export { default as LlmOauthClientModel } from "./llm-oauth-client";
 export { default as LlmProviderApiKeyModel } from "./llm-provider-api-key";
-export type { ModelSyncState } from "./llm-provider-api-key-model";
 export {
   default as LlmProviderApiKeyModelLinkModel,
   selectionKey,
@@ -123,6 +122,7 @@ export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
 export { default as OAuthRefreshTokenModel } from "./oauth-refresh-token";
 export { default as OpenappaExternalConsultModel } from "./openappa-external-consult";
+export { default as OpenappaLabelChangeModel } from "./openappa-label-change";
 export { default as OpenAppaOperationModel } from "./openappa-operation";
 export { default as OpenAppaSessionModel } from "./openappa-session";
 export { default as OrganizationModel } from "./organization";

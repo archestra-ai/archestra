@@ -17,6 +17,7 @@ import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { type Transaction } from "@/database";
 import {
   AgentModel,
+  AgentTeamModel,
   AgentToolModel,
   AgentVersionModel,
   InternalMcpCatalogModel,
@@ -50,6 +51,14 @@ import {
 } from "@/types";
 import { isUuid } from "@/utils/uuid";
 
+/** One target of `GET /api/agents/:agentId/delegations`. */
+export const AgentDelegationTargetSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  systemPrompt: z.string().nullable(),
+});
+
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/agent-tools",
@@ -64,6 +73,15 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .merge(PaginationQuerySchema)
           .extend({
             skipPagination: z.coerce.boolean().optional(),
+            includeToolDetails: z
+              .preprocess(
+                (val) => val !== "false" && val !== false,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Include each tool's description and parameter schema (default true). False returns null and {} for lightweight lists.",
+              ),
           }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectAgentToolSchema),
@@ -83,6 +101,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerOwnerId,
           excludeArchestraTools,
           skipPagination,
+          includeToolDetails,
         },
         organizationId,
         user,
@@ -108,6 +127,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         isAgentAdmin,
         skipPagination,
+        includeToolDetails,
       });
 
       return reply.send(result);
@@ -539,52 +559,13 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { params: { agentId }, query: { catalogId }, user, organizationId },
       reply,
     ) => {
-      // Fetch the resource first so we can enforce type- and scope-aware access.
-      const agent = await AgentModel.findById(agentId, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, `Agent with ID ${agentId} not found`);
-      }
-
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      try {
-        checker.require(agent.agentType, { action: "read", scope: agent.id });
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      const isAgentTypeAdmin = checker.isAdmin(agent.agentType);
-      if (!isAgentTypeAdmin) {
-        const filteredAgent = await AgentModel.findById(
-          agentId,
-          user.id,
-          false,
-        );
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
-
-      // A catalog id that is not a uuid matches no tool; the column would
-      // reject it.
-      const tools =
-        catalogId && !isUuid(catalogId)
-          ? []
-          : await ToolModel.getToolsByAgent(agentId, catalogId);
-
-      // A user who can only use the agent sees the tools the gateway would
-      // serve them: an assigned tool whose MCP server they cannot access is
-      // left out, as it is from their tools/list.
       return reply.send(
-        isAgentTypeAdmin
-          ? tools
-          : await filterToolsByCallerCatalogAccess(tools, {
-              userId: user.id,
-              organizationId,
-            }),
+        await getAgentToolsForUser({
+          agentId,
+          catalogId,
+          userId: user.id,
+          organizationId,
+        }),
       );
     },
   );
@@ -696,66 +677,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        response: constructResponseSchema(
-          z.array(
-            z.object({
-              id: z.string().uuid(),
-              name: z.string(),
-              description: z.string().nullable(),
-              systemPrompt: z.string().nullable(),
-            }),
-          ),
-        ),
+        response: constructResponseSchema(z.array(AgentDelegationTargetSchema)),
       },
     },
     async ({ params: { agentId }, organizationId, user }, reply) => {
-      // Fetch agent first to determine its type (admin=true to bypass team filter)
-      const agent = await AgentModel.findById(agentId, user.id, true);
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Check read permission for this agent's type (return 404 to avoid leaking existence)
-      try {
-        await requireAgentTypePermission({
+      return reply.send(
+        await getAgentDelegationsForUser({
+          agentId,
           userId: user.id,
           organizationId,
-          agentType: agent.agentType,
-          action: "read",
-        });
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
-      if (agent.agentType === "llm_proxy") {
-        throw new ApiError(400, "LLM proxies cannot have subagents");
-      }
-
-      const admin = await isAgentTypeAdmin({
-        userId: user.id,
-        organizationId,
-        agentType: agent.agentType,
-      });
-
-      // If not admin, verify team access
-      if (!admin) {
-        const filteredAgent = await AgentModel.findById(
-          agentId,
-          user.id,
-          false,
-        );
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-      }
-
-      const delegations = await AgentToolModel.getDelegationTargets(
-        agentId,
-        user.id,
-        admin,
+        }),
       );
-      return reply.send(delegations);
     },
   );
 
@@ -1014,6 +946,119 @@ function mapAgentToolAssignmentErrorCodeToHttpStatus(
 }
 
 export default agentToolRoutes;
+
+// =============================================================================
+// Reads shared with the new-chat bootstrap (routes/bootstrap.ts). Each returns
+// exactly what its endpoint above sends.
+// =============================================================================
+
+/** `GET /api/agents/:agentId/tools` */
+export async function getAgentToolsForUser(params: {
+  agentId: string;
+  catalogId: string | undefined;
+  userId: string;
+  organizationId: string;
+}) {
+  const { agentId, catalogId, userId, organizationId } = params;
+  // Only the access columns: the tools are read on their own below.
+  const agent = await AgentModel.findByIdForAccess(agentId);
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, `Agent with ID ${agentId} not found`);
+  }
+
+  const checker = await getAgentTypePermissionChecker({
+    userId,
+    organizationId,
+  });
+
+  try {
+    checker.require(agent.agentType, { action: "read", scope: agent.id });
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const isAgentTypeAdmin = checker.isAdmin(agent.agentType);
+  if (
+    !isAgentTypeAdmin &&
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId,
+      agentId,
+      isAgentAdmin: false,
+      agentAccessContext: agent,
+    }))
+  ) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  // A catalog id that is not a uuid matches no tool; the column would
+  // reject it.
+  const tools =
+    catalogId && !isUuid(catalogId)
+      ? []
+      : await ToolModel.getToolsByAgent(agentId, catalogId);
+
+  // A user who can only use the agent sees the tools the gateway would
+  // serve them: an assigned tool whose MCP server they cannot access is
+  // left out, as it is from their tools/list.
+  return isAgentTypeAdmin
+    ? tools
+    : await filterToolsByCallerCatalogAccess(tools, {
+        userId,
+        organizationId,
+      });
+}
+
+/** `GET /api/agents/:agentId/delegations` */
+export async function getAgentDelegationsForUser(params: {
+  agentId: string;
+  userId: string;
+  organizationId: string;
+}) {
+  const { agentId, userId, organizationId } = params;
+  // Only the access columns, to learn the type; the targets are read below.
+  const agent = await AgentModel.findByIdForAccess(agentId);
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  // Check read permission for this agent's type (return 404 to avoid leaking existence)
+  try {
+    await requireAgentTypePermission({
+      userId,
+      organizationId,
+      agentType: agent.agentType,
+      action: "read",
+    });
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  // Delegations allowed for agent, mcp_gateway, and profile (not llm_proxy)
+  if (agent.agentType === "llm_proxy") {
+    throw new ApiError(400, "LLM proxies cannot have subagents");
+  }
+
+  const admin = await isAgentTypeAdmin({
+    userId,
+    organizationId,
+    agentType: agent.agentType,
+  });
+
+  // If not admin, verify team access
+  if (
+    !admin &&
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId,
+      agentId,
+      isAgentAdmin: false,
+      agentAccessContext: agent,
+    }))
+  ) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  return AgentToolModel.getDelegationTargets(agentId, userId, admin);
+}
 
 function normalizeBulkAssignmentCredentialResolutionMode(params: {
   assignment: z.infer<typeof BulkAgentToolAssignmentSchema>;

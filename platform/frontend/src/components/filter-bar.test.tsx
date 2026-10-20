@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CompactFilterExtrasProvider,
   FilterBar,
   FilterBarContextualActions,
   FilterSelect,
@@ -253,6 +254,80 @@ describe("compact filters", () => {
       screen.getByRole("button", { name: "Filters (active)" }),
     ).toBeVisible();
     expect(screen.queryByText("Deleted entry")).not.toBeInTheDocument();
+  });
+
+  it("moves secondary actions into the filter popover only when asked", async () => {
+    const onExport = vi.fn();
+    const bar = (tuck: boolean) => (
+      <FilterBar
+        search={<input aria-label="Search" />}
+        tuckActionsWhenCompact={tuck}
+        actions={
+          <button type="button" onClick={onExport}>
+            Export
+          </button>
+        }
+      >
+        <FilterSelect
+          value="all"
+          onValueChange={() => {}}
+          placeholder="Filter by action"
+          items={ITEMS}
+        />
+      </FilterBar>
+    );
+
+    const { rerender } = render(bar(true));
+    expect(
+      screen.queryByRole("button", { name: "Export" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    await userEvent.click(screen.getByRole("button", { name: "Export" }));
+    expect(onExport).toHaveBeenCalledTimes(1);
+
+    rerender(bar(false));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Export" })).toBeVisible();
+  });
+
+  it("moves a page-level control into the filter popover, and back out without a popover to hold it", async () => {
+    const page = (withFilters: boolean) => (
+      <CompactFilterExtrasProvider
+        extras={<button type="button">Any time</button>}
+      >
+        {({ claimed }) => (
+          <>
+            <header>
+              {claimed ? null : <button type="button">Any time</button>}
+            </header>
+            <FilterBar search={<input aria-label="Search" />}>
+              {withFilters ? (
+                <FilterSelect
+                  value="all"
+                  onValueChange={() => {}}
+                  placeholder="Filter by action"
+                  items={ITEMS}
+                />
+              ) : null}
+            </FilterBar>
+          </>
+        )}
+      </CompactFilterExtrasProvider>
+    );
+
+    const { rerender } = render(page(true));
+    expect(
+      screen.queryByRole("button", { name: "Any time" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    expect(screen.getByRole("button", { name: "Any time" })).toBeVisible();
+
+    await userEvent.keyboard("{Escape}");
+    rerender(page(false));
+    expect(screen.getAllByRole("button", { name: "Any time" })).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "Filters" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not show a filter button on search-only lists", () => {

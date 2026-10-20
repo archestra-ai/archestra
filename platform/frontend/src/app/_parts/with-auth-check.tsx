@@ -1,26 +1,14 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { LoadingState } from "@/components/loading";
-import { authQueryKeys, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
+import { errorReporting } from "@/lib/error-reporting";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 import { AuthSurfaceFrame } from "./auth-surface-frame";
-
-type ErrorReportingUser = Parameters<
-  typeof import("@sentry/nextjs").setUser
->[0];
-
-const safeSetErrorReportingUser = (user: ErrorReportingUser) => {
-  void import("@sentry/nextjs")
-    .then(({ setUser }) => {
-      setUser(user);
-    })
-    .catch(() => undefined);
-};
 
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
   return (
@@ -30,6 +18,40 @@ const pathCorrespondsToAnAuthPage = (pathname: string) => {
     pathname?.startsWith("/auth/sign-out")
   );
 };
+
+/**
+ * The developer auto-login loads the document again once it has a session
+ * cookie. The time of the attempt is kept for the tab, so a cookie the browser
+ * did not keep (the reloaded page is signed out again) leads to the sign-in
+ * page instead of another attempt.
+ */
+const DEV_AUTO_LOGIN_ATTEMPTED_AT_KEY = "archestra.dev-auto-login.attempted-at";
+const DEV_AUTO_LOGIN_RETRY_AFTER_MS = 15_000;
+
+function devAutoLoginAttemptedRecently(): boolean {
+  try {
+    const attemptedAt = Number(
+      window.sessionStorage.getItem(DEV_AUTO_LOGIN_ATTEMPTED_AT_KEY),
+    );
+    return (
+      attemptedAt > 0 &&
+      Date.now() - attemptedAt < DEV_AUTO_LOGIN_RETRY_AFTER_MS
+    );
+  } catch {
+    return false;
+  }
+}
+
+function noteDevAutoLoginAttempt() {
+  try {
+    window.sessionStorage.setItem(
+      DEV_AUTO_LOGIN_ATTEMPTED_AT_KEY,
+      String(Date.now()),
+    );
+  } catch {
+    // No storage: the ref in the component still limits this page to one try.
+  }
+}
 
 /**
  * Auth pages that can be accessed regardless of login state.
@@ -49,12 +71,18 @@ const isSpecialAuthPage = (pathname: string) => {
   );
 };
 
-export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
-  children,
-}) => {
+export const WithAuthCheck: React.FC<
+  React.PropsWithChildren<{
+    /**
+     * The document request carried a session cookie (read by the root layout
+     * on the server). Unverified — get-session still decides — but enough to
+     * draw the signed-in app while that request is in flight.
+     */
+    hasSessionCookie?: boolean;
+  }>
+> = ({ children, hasSessionCookie = false }) => {
   const router = useRouter();
   const pathname = usePathname();
-  const queryClient = useQueryClient();
   // useSearchParams is intentionally not used here to avoid the need
   // to wrap whole app in Suspense which causes flickering
   const searchParams =
@@ -76,7 +104,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   const { data: publicConfig, isLoading: isPublicConfigLoading } =
     usePublicConfig();
   const devAutoLoginEnabled = publicConfig?.devAutoLoginEnabled ?? false;
-  const devAutoLoginAttemptedRef = useRef(false);
+  const devAutoLoginRef = useRef<"idle" | "pending" | "failed">("idle");
 
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
@@ -98,14 +126,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   // Set Sentry user context when user is authenticated
   useEffect(() => {
     if (session?.user) {
-      safeSetErrorReportingUser({
+      errorReporting.setUser({
         id: session.user.id,
         email: session.user.email,
         username: session.user.name || session.user.email,
       });
     } else {
       // Clear user context when not authenticated
-      safeSetErrorReportingUser(null);
+      errorReporting.setUser(null);
     }
   }, [session?.user]);
 
@@ -126,20 +154,33 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     } else if (!isAuthPage && !isLoggedIn) {
       const queryString = searchParams.toString();
       const fullPath = `${pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
+      if (devAutoLoginEnabled && devAutoLoginRef.current === "pending") {
+        // An attempt is in flight: it ends in a reload or the redirect below.
+        return;
+      }
       // Developer-only: mint a session server-side instead of showing the login
-      // form. On any failure, fall back to the normal sign-in redirect.
-      if (devAutoLoginEnabled && !devAutoLoginAttemptedRef.current) {
-        devAutoLoginAttemptedRef.current = true;
+      // form, then load the document again with the new cookie. The server
+      // seeds a signed-in document (session, bootstrap, the page's first rows),
+      // so the reloaded page paints complete, as it does for a visitor who
+      // signed in through the form; resolving the session here instead would
+      // load all of that in the browser, with the layout settling as it lands.
+      // On any failure, fall back to the normal sign-in redirect.
+      if (
+        devAutoLoginEnabled &&
+        devAutoLoginRef.current === "idle" &&
+        !devAutoLoginAttemptedRecently()
+      ) {
+        devAutoLoginRef.current = "pending";
         void fetch("/api/auth/dev-auto-login", { method: "POST" })
           .then((res) => {
             if (!res.ok) {
               throw new Error(`dev-auto-login failed: ${res.status}`);
             }
-            return queryClient.invalidateQueries({
-              queryKey: authQueryKeys.session(),
-            });
+            noteDevAutoLoginAttempt();
+            window.location.reload();
           })
           .catch(() => {
+            devAutoLoginRef.current = "failed";
             router.push(
               `/auth/sign-in?redirectTo=${encodeURIComponent(fullPath)}`,
             );
@@ -161,7 +202,6 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     pathname,
     searchParams,
     devAutoLoginEnabled,
-    queryClient,
   ]);
 
   // An unresolved session means we do not yet know whether this person gets
@@ -181,7 +221,16 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   // somewhere else either way; the branch below still catches them the moment
   // the session resolves, and now they are interrupted from a form rather than
   // from a spinner.
+  //
+  // A session cookie changes the odds: the visitor is almost certainly signed
+  // in, so the app renders straight away — on the server too, which puts the
+  // shell and the chat composer in the HTML — while get-session runs in
+  // parallel with the page's own queries. If it says there is no user after
+  // all (an expired or revoked cookie), the branch below swaps the app for the
+  // sign-in redirect; 401s fired in the meantime are not toasted (see
+  // sessionConfirmation in handleApiError).
   if (inProgress && !isAuthPage && !isSpecialAuth) {
+    if (hasSessionCookie) return <>{children}</>;
     return <LoadingState label="Loading…" variant="quiet" />;
   }
 

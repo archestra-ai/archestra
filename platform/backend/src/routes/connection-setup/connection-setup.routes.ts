@@ -1023,10 +1023,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const staticUrl = new URL(
               `${origin}${SKILL_MARKETPLACE_STATIC_PATH}`,
             );
-            // The credential rides as the URL's userinfo, exactly as a share
-            // link's token does today, so `plugin marketplace add` needs no
-            // credential helper and no prompt.
-            staticUrl.username = encodeURIComponent(marketplaceToken);
+            // The URL carries the credential, so `plugin marketplace add`
+            // needs no credential helper and no prompt. The token is the
+            // password, not the username: after the auth retry, some git and
+            // curl versions (git 2.43 with libcurl 8.5, for one) drop a
+            // username that has no password, and the clone fails asking for
+            // a username.
+            staticUrl.username = "token";
+            staticUrl.password = encodeURIComponent(marketplaceToken);
             skills = {
               cloneUrl: staticUrl.toString(),
               marketplaceName: marketplaceRender.marketplaceName,

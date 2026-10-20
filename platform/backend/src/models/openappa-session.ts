@@ -477,6 +477,28 @@ class OpenAppaSessionModel {
   }
 
   /**
+   * The client session id that opened a root: the session at the top of the
+   * family, which sub-agents' trajectories share the root of.
+   */
+  static async rootClientSessionId(params: {
+    organizationId: string;
+    root: string;
+  }): Promise<string | null> {
+    const [row] = await db
+      .select({ sessionId: table.sessionId })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.root, params.root),
+          isNull(table.parentId),
+        ),
+      )
+      .limit(1);
+    return row ? clientSessionId(row.sessionId) : null;
+  }
+
+  /**
    * Returns fork lineage for a client session ID.
    * If callerId is provided, queries only sessions for that caller.
    * When callerId is omitted, the client session ID must resolve to exactly one caller.

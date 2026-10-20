@@ -146,10 +146,7 @@ export function getHumanRulingDisplay({
   if (getToolErrorText({ part, toolResultPart })) return null;
   const ruling = extractMcpHumanRuling(toolResultPart?.output ?? part.output);
   if (!ruling) return null;
-  return {
-    ruling,
-    label: ruling === "deny" ? "Denied by you" : "Approved by you",
-  };
+  return { ruling, label: HUMAN_RULING_LABELS[ruling] };
 }
 
 export function isCompactEligible(params: {
@@ -182,7 +179,7 @@ export function isCompactEligible(params: {
       return false;
     }
 
-    if (parseExpiredAuth(errorText) || parseAuthRequired(errorText)) {
+    if (isAuthErrorText(errorText, toolResultPart ?? part)) {
       return false;
     }
 
@@ -198,10 +195,34 @@ export function isCompactEligible(params: {
 
   const rawOutput = toolResultPart?.output ?? part.output;
   if (typeof rawOutput === "string") {
-    if (parseExpiredAuth(rawOutput) || parseAuthRequired(rawOutput)) {
+    if (isAuthErrorText(rawOutput, toolResultPart ?? part)) {
       return false;
     }
   }
 
   return true;
 }
+
+const HUMAN_RULING_LABELS: Record<McpHumanRuling, string> = {
+  approve: "Approved by you",
+  deny: "Denied by you",
+  superseded: "Policy changed, the agent will ask again",
+};
+
+/**
+ * Whether a tool's error or output text asks the user to (re)authenticate.
+ * Memoized per message part: the transcript re-checks every tool part on
+ * every render, and parts are stable objects while their text is unchanged.
+ */
+function isAuthErrorText(text: string, source: object): boolean {
+  const cached = authErrorTextCache.get(source);
+  if (cached && cached.text === text) return cached.result;
+  const result = !!(parseExpiredAuth(text) || parseAuthRequired(text));
+  authErrorTextCache.set(source, { text, result });
+  return result;
+}
+
+const authErrorTextCache = new WeakMap<
+  object,
+  { text: string; result: boolean }
+>();

@@ -162,14 +162,24 @@ function Header({
   onRenameClick,
   lastRun,
 }: ValidationFileViewProps & { onRenameClick: () => void }) {
-  const slash = filename.lastIndexOf("/");
-  const dir = filename.slice(0, slash + 1);
-  const base = filename.slice(slash + 1);
+  const base = filename.slice(filename.lastIndexOf("/") + 1);
   const title = name && name !== base ? name : base;
-  const path = (
-    <span className="truncate font-mono text-xs">
-      <span>{dir}</span>
-      <span className="text-foreground/80">{base}</span>
+  // The path is not repeated here: the title names the file, and renaming
+  // lives in the "…" menu.
+  const notes = (github || dirty) && (
+    <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
+      {github && (
+        <span className="inline-flex shrink-0 items-center gap-1 text-xs">
+          <LockKeyhole className="size-3" />
+          <span>GitHub</span>
+        </span>
+      )}
+      {dirty && (
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-foreground/80 animate-in fade-in duration-200">
+          <span className="size-1.5 rounded-full bg-primary" />
+          <span>Unsaved</span>
+        </span>
+      )}
     </span>
   );
   return (
@@ -187,35 +197,7 @@ function Header({
             {statusLabel(status)}
           </span>
         }
-        description={
-          <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
-            {onRename ? (
-              <UnstyledButton
-                onClick={onRenameClick}
-                title="Rename file"
-                aria-label={`File path ${filename}. Rename file`}
-                className="group -mx-1 flex min-w-0 items-center gap-1.5 rounded px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {path}
-                <Pencil className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
-              </UnstyledButton>
-            ) : (
-              path
-            )}
-            {github && (
-              <span className="inline-flex shrink-0 items-center gap-1 text-xs">
-                <LockKeyhole className="size-3" />
-                <span>GitHub</span>
-              </span>
-            )}
-            {dirty && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-foreground/80 animate-in fade-in duration-200">
-                <span className="size-1.5 rounded-full bg-primary" />
-                <span>Unsaved</span>
-              </span>
-            )}
-          </span>
-        }
+        description={notes || undefined}
       />
       <OpenAppaPageAction>
         <div className="flex shrink-0 items-center gap-2">
@@ -1150,17 +1132,21 @@ function RenameDialog({
   filename: string;
   onRename: (next: string) => void;
 }) {
-  const [value, setValue] = useState(filename);
+  // Only the name is editable: the folder is where the suite reads
+  // validations from, so moving a file out of it would drop it.
+  const slash = filename.lastIndexOf("/");
+  const dir = filename.slice(0, slash + 1);
+  const stem = filename.slice(slash + 1).replace(/\.appa$/, "");
+  const [value, setValue] = useState(stem);
   useEffect(() => {
-    if (open) setValue(filename);
-  }, [open, filename]);
-  const trimmed = value.trim();
-  const valid =
-    /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.appa$/.test(trimmed) &&
-    !trimmed.split("/").some((part) => part === "." || part === "..");
+    if (open) setValue(stem);
+  }, [open, stem]);
+  const trimmed = value.trim().replace(/\.appa$/, "");
+  const valid = /^[a-zA-Z0-9_.-]+$/.test(trimmed) && !/^\.+$/.test(trimmed);
   const submit = (_e: FormEvent<HTMLFormElement>) => {
     if (!valid) return;
-    if (trimmed !== filename) onRename(trimmed);
+    const next = `${dir}${trimmed}.appa`;
+    if (next !== filename) onRename(next);
     onOpenChange(false);
   };
   return (
@@ -1170,20 +1156,24 @@ function RenameDialog({
           <DialogHeader>
             <DialogTitle>Rename file</DialogTitle>
             <DialogDescription>
-              The file's path in the validation folder. The new name takes
-              effect when you save.
+              The new name takes effect when you save.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-2">
-            <Input
-              autoFocus
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              aria-label="File path"
-              aria-invalid={!valid}
-              className="font-mono"
-              spellCheck={false}
-            />
+            <div className="flex items-center rounded-md border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 dark:bg-input/30">
+              <Input
+                autoFocus
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                aria-label="File name"
+                aria-invalid={!valid}
+                className="min-w-0 flex-1 border-0 bg-transparent font-mono shadow-none focus-visible:ring-0 dark:bg-transparent"
+                spellCheck={false}
+              />
+              <span className="shrink-0 pr-3 font-mono text-sm text-muted-foreground">
+                .appa
+              </span>
+            </div>
             <p
               className={cn(
                 "text-xs",
@@ -1191,11 +1181,11 @@ function RenameDialog({
               )}
             >
               {valid ? (
-                <span>Use “/” for folders. Must end in .appa.</span>
-              ) : (
                 <span>
-                  Use letters, digits, “.”, “_”, “-” and “/”, ending in .appa.
+                  Stays in <span className="font-mono">{dir || "/"}</span>
                 </span>
+              ) : (
+                <span>Use letters, digits, “.”, “_” and “-”.</span>
               )}
             </p>
           </DialogBody>

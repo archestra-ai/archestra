@@ -477,7 +477,7 @@ test("an older rename completing while a newer history draft is hidden preserves
     }),
   ).toHaveValue("newer hidden edit");
   expect(
-    screen.getByRole("button", { name: /^File path newer\.appa\b/ }),
+    screen.getByRole("heading", { level: 1, name: /newer\.appa/ }),
   ).toBeVisible();
   expect(await screen.findByText("Validation source changed")).toBeVisible();
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -1846,9 +1846,26 @@ test("policy readers cannot select directories or edit files", async () => {
   ).toHaveAttribute("readonly");
   expect(screen.getByText("Managed in GitHub")).toBeVisible();
   expect(screen.getByRole("button", { name: "Run file" })).toBeDisabled();
+  await userEvent.click(
+    screen.getByRole("button", { name: "More file actions" }),
+  );
   expect(
-    screen.queryByRole("button", { name: /Rename file$/ }),
+    screen.queryByRole("menuitem", { name: "Rename…" }),
   ).not.toBeInTheDocument();
+  await userEvent.keyboard("{Escape}");
+});
+
+test("renaming edits only the file name, never its folder", async () => {
+  showPage();
+  await openValidationFile(scenario.path);
+  const dialog = await openRenameDialog();
+  const name = within(dialog).getByRole("textbox", { name: "File name" });
+  expect(name).toHaveValue("scenario");
+  const rename = within(dialog).getByRole("button", { name: "Rename" });
+  for (const moved of ["../escaped", "other/scenario", ".."]) {
+    fireEvent.change(name, { target: { value: moved } });
+    expect(rename).toBeDisabled();
+  }
 });
 
 test("inventory rows open files while row actions stay independent", async () => {
@@ -2239,12 +2256,19 @@ function clickBack() {
   fireEvent.click(screen.getByRole("link", { name: /^Back to validations?$/ }));
 }
 
-async function renameFile(next: string) {
-  fireEvent.click(
-    await screen.findByRole("button", { name: /^File path .*Rename file$/ }),
+async function openRenameDialog() {
+  await userEvent.click(
+    await screen.findByRole("button", { name: "More file actions" }),
   );
-  const dialog = await screen.findByRole("dialog", { name: "Rename file" });
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "File path" }), {
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: "Rename…" }),
+  );
+  return screen.findByRole("dialog", { name: "Rename file" });
+}
+
+async function renameFile(next: string) {
+  const dialog = await openRenameDialog();
+  fireEvent.change(within(dialog).getByRole("textbox", { name: "File name" }), {
     target: { value: next },
   });
   fireEvent.click(within(dialog).getByRole("button", { name: "Rename" }));

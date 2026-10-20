@@ -351,7 +351,8 @@ export function PageLayout({
                   <div
                     data-page-description
                     className={cn(
-                      "col-span-full row-start-2 text-sm text-muted-foreground",
+                      // Hidden when a page portals into an empty slot.
+                      "col-span-full row-start-2 text-sm text-muted-foreground has-[>span>span:empty:only-child]:hidden",
                       headerSpacing.description,
                       maxWidthKey === "wizard" &&
                         (stackHeaderOnMobile

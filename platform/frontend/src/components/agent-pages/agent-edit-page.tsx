@@ -284,7 +284,9 @@ function AgentEditor({ agent }: { agent: Agent }) {
                     </Button>
                   )}
                   {!readOnly && (
-                    <span className="text-xs text-muted-foreground">
+                    // Where the buttons stack, the status heads the stack
+                    // instead of splitting the back button from the rest.
+                    <span className="order-first text-center text-xs text-muted-foreground sm:order-none sm:text-left">
                       {isDirty
                         ? "Unsaved changes. Save any time, there is no need to visit the other steps."
                         : "No changes yet."}

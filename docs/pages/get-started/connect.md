@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -52,7 +52,7 @@ The command changes nothing on your computer until you approve it in your browse
 2. Click **Copy** and run the command in a terminal. It prints a code and opens an approval page in your browser.
 3. Check that the code in the browser matches the code in the terminal. Tick **This code matches the code in my terminal** and click **Approve connection**.
 4. Back in the terminal, the installer sets up your client and lists what it set up. When it asks **Sign in now?**, press Enter to sign in to the gateway in your browser.
-5. Open a new terminal and run the command the installer prints last. It starts your client with a first question about the gateway's tools, leaving your other MCP servers alone. Cursor has no command: open Cursor.
+5. When it asks to start your client now, press Enter. Your client starts with a first question about the gateway's tools, leaving your other MCP servers alone. On Windows, or if you answer no, open a new terminal and run the command the installer prints last. Cursor has no command: open Cursor.
 
 ![The browser approval page with a code to match against the terminal](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 

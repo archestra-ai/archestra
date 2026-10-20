@@ -19,6 +19,7 @@ use std::{
     collections::{BTreeMap, HashSet},
     path::Path,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
+    time::Instant,
 };
 
 use crate::deployments::HostCredentials;
@@ -178,13 +179,24 @@ enum Status {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct FileResult {
+pub(crate) struct FileResult {
     path: String,
     assertion_count: usize,
     status: Status,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
     steps: Vec<StepResult>,
+    /// Wall time this file took, from parsing it to its last step.
+    duration_ms: u64,
+}
+
+/// What a replay reports while it works through its files one at a time: each file
+/// starts, then finishes with its result, before the next file starts.
+#[derive(Serialize)]
+#[serde(tag = "phase", rename_all = "snake_case")]
+pub(crate) enum Progress<'a> {
+    FileStarted { path: &'a str },
+    FileFinished(&'a FileResult),
 }
 
 #[derive(Serialize)]
@@ -211,6 +223,7 @@ fn cannot_run(path: String, assertion_count: usize, error: String) -> FileResult
         status: Status::CannotRun,
         error: Some(error),
         steps: Vec::new(),
+        duration_ms: 0,
     }
 }
 
@@ -357,6 +370,7 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
         status,
         error: report.unopened,
         steps,
+        duration_ms: 0,
     }
 }
 
@@ -373,44 +387,30 @@ fn block_reasons(feedback: &str) -> Vec<String> {
         .collect()
 }
 
-pub(crate) async fn run(request: Request) -> Response {
-    run_with(request, crate::policy::defaults()).await
+/// Replay `request`, telling `progress` as each file starts and finishes.
+pub(crate) async fn run(request: Request, progress: impl FnMut(Progress<'_>)) -> Response {
+    run_with(request, crate::policy::defaults(), progress).await
 }
 
 /// [`run`] under `defaults`, the host settings a dispatch compiles with.
-async fn run_with(request: Request, defaults: HostDefaults) -> Response {
+async fn run_with(
+    request: Request,
+    defaults: HostDefaults,
+    mut progress: impl FnMut(Progress<'_>),
+) -> Response {
     let replaying = replay_runtime(&request, defaults);
     let mut files = Vec::with_capacity(request.files.len());
     let mut assertions = 0;
     for file in request.files {
-        let trace = match replay::parse(Path::new(&file.path), &file.content) {
-            Ok(trace) => trace,
-            Err(error) => {
-                // Preserve upstream file/line diagnostics, which may include scenario text.
-                files.push(cannot_run(file.path, 0, error.to_string()));
-                continue;
-            }
-        };
-        assertions += trace.steps.len();
-        let runtime = if trace.steps.is_empty() || assertions > MAX_ASSERTIONS {
-            Err("Scenarios need at least one assertion and at most 1000 assertions per run".into())
-        } else if let Some(step) = trace.steps.iter().find(|step| {
-            step.tool
-                .canonical()
-                .is_some_and(|tool| (crate::adapter::adapter().spell)(tool).is_none())
-        }) {
-            Err(format!(
-                "Line {}: {} cannot be dispatched through the Archestra adapter",
-                step.line, step.tool
-            ))
-        } else {
-            replaying.as_ref().map_err(Clone::clone)
-        };
-        match runtime {
-            // Sequential files cap work and memory; each unique path opens a fresh root.
-            Ok(replaying) => files.extend(replay_trace(replaying, &trace).await),
-            Err(error) => files.push(cannot_run(file.path, trace.steps.len(), error)),
+        progress(Progress::FileStarted { path: &file.path });
+        let started = Instant::now();
+        let mut results = replay_file(&replaying, file, &mut assertions).await;
+        let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        for result in &mut results {
+            result.duration_ms = duration_ms;
+            progress(Progress::FileFinished(result));
         }
+        files.extend(results);
     }
     Response {
         engine_version: ENGINE_VERSION,
@@ -418,9 +418,50 @@ async fn run_with(request: Request, defaults: HostDefaults) -> Response {
     }
 }
 
+/// One file of a run. `assertions` counts the run's assertions so far, against its cap.
+async fn replay_file(
+    replaying: &Result<Replaying, String>,
+    file: File,
+    assertions: &mut usize,
+) -> Vec<FileResult> {
+    let trace = match replay::parse(Path::new(&file.path), &file.content) {
+        Ok(trace) => trace,
+        // Preserve upstream file/line diagnostics, which may include scenario text.
+        Err(error) => return vec![cannot_run(file.path, 0, error.to_string())],
+    };
+    *assertions += trace.steps.len();
+    let runtime = if trace.steps.is_empty() || *assertions > MAX_ASSERTIONS {
+        Err("Scenarios need at least one assertion and at most 1000 assertions per run".into())
+    } else if let Some(step) = trace.steps.iter().find(|step| {
+        step.tool
+            .canonical()
+            .is_some_and(|tool| (crate::adapter::adapter().spell)(tool).is_none())
+    }) {
+        Err(format!(
+            "Line {}: {} cannot be dispatched through the Archestra adapter",
+            step.line, step.tool
+        ))
+    } else {
+        replaying.as_ref().map_err(Clone::clone)
+    };
+    match runtime {
+        // Sequential files cap work and memory; each unique path opens a fresh root.
+        Ok(replaying) => replay_trace(replaying, &trace).await,
+        Err(error) => vec![cannot_run(file.path, trace.steps.len(), error)],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn run(request: Request) -> Response {
+        super::run(request, |_| {}).await
+    }
+
+    async fn run_with(request: Request, defaults: HostDefaults) -> Response {
+        super::run_with(request, defaults, |_| {}).await
+    }
 
     const POLICY: &str = "[policy]\nversion = 2\n\n[[policy.tool]]\nname = 'files__read'\ndelta = { trust = 'suspicious' }\n\n[[policy.tool]]\nname = 'mail__send'\ndelta = {}\nrequires = { trust = 'trusted' }\n";
 
@@ -471,6 +512,53 @@ mod tests {
         assert_eq!(response.files[0].steps.len(), 1);
         assert_eq!(response.files[0].steps[0].actual.as_deref(), Some("allow"));
         assert_eq!(response.files[1].status, Status::Passed);
+    }
+
+    #[tokio::test]
+    async fn progress_reports_each_file_finished_before_the_next_starts() {
+        let mut events = Vec::new();
+        let response = super::run(
+            request(
+                POLICY,
+                &[
+                    ("first.appa", "mcp/files/read {}\nexpect allow"),
+                    ("broken.appa", "not a scenario"),
+                    ("last.appa", "mcp/mail/send {}\nexpect deny"),
+                ],
+            ),
+            |event| events.push(serde_json::to_value(&event).expect("event encodes")),
+        )
+        .await;
+        let order: Vec<_> = events
+            .iter()
+            .map(|event| (event["phase"].as_str(), event["path"].as_str()))
+            .collect();
+        assert_eq!(
+            order,
+            [
+                (Some("file_started"), Some("first.appa")),
+                (Some("file_finished"), Some("first.appa")),
+                (Some("file_started"), Some("broken.appa")),
+                (Some("file_finished"), Some("broken.appa")),
+                (Some("file_started"), Some("last.appa")),
+                (Some("file_finished"), Some("last.appa")),
+            ]
+        );
+        assert_eq!(events[1]["status"], "passed");
+        assert_eq!(events[1]["assertionCount"], 1);
+        assert_eq!(events[1]["steps"][0]["actual"], "allow");
+        assert_eq!(events[3]["status"], "cannot_run");
+        assert_eq!(events[5]["status"], "failed");
+        let encoded = serde_json::to_value(&response).expect("response encodes");
+        for (file, event) in encoded["files"]
+            .as_array()
+            .expect("files")
+            .iter()
+            .zip(events.iter().skip(1).step_by(2))
+        {
+            assert!(file["durationMs"].is_u64(), "{file}");
+            assert_eq!(file["durationMs"], event["durationMs"]);
+        }
     }
 
     #[tokio::test]

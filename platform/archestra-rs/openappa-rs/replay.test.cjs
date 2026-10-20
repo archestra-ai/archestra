@@ -38,6 +38,28 @@ test("native replay returns versioned decisions and refuses a policy naming an e
   assert.ok(unavailable.files[0].error);
 });
 
+test("native replay reports each file's progress to an optional listener", async () => {
+  const events = [];
+  const result = JSON.parse(await replayOpenappaPolicy(JSON.stringify({
+    content,
+    files: [
+      { path: "first.appa", content: "mcp/files/read {}\nexpect allow" },
+      { path: "second.appa", content: "mcp/mail/send {}\nexpect deny" },
+    ],
+  }), (event) => events.push(JSON.parse(event))));
+  // Queued events may land just after the promise settles.
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events.map((event) => [event.phase, event.path]), [
+    ["file_started", "first.appa"],
+    ["file_finished", "first.appa"],
+    ["file_started", "second.appa"],
+    ["file_finished", "second.appa"],
+  ]);
+  assert.equal(events[1].status, "passed");
+  assert.equal(events[3].status, "failed");
+  for (const file of result.files) assert.equal(typeof file.durationMs, "number");
+});
+
 test("native replay rejects duplicate trajectory paths at the host boundary", async () => {
   await assert.rejects(replayOpenappaPolicy(JSON.stringify({
     content,

@@ -506,6 +506,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   );
 
   const closeQuickEdit = () => {
+    // The connect view's form is the installer's; once that view is gone the
+    // install dialogs below would show it as a modal.
+    if (dialogView === "connect") installer.closeInstallForms();
     setCloseGuardOpen(false);
     setEditingAgentId(null);
     setDialogView("settings");

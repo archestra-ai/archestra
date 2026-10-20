@@ -14,7 +14,6 @@ import {
   MessageCircle,
   MoreHorizontal,
   Play,
-  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -25,6 +24,8 @@ import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
+import { filterSearchClass } from "@/components/filter-bar";
+import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -36,7 +37,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -240,7 +240,15 @@ export function ValidationList({
         <>
           {/* Summary strip: the counts are the status filter. */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <div className="-ml-2 flex flex-wrap items-center gap-0.5">
+            <SearchInput
+              value={query}
+              onSearchChange={setQuery}
+              syncQueryParams={false}
+              objectNamePlural="validations"
+              searchFields={["name", "path"]}
+              className={filterSearchClass}
+            />
+            <div className="flex flex-wrap items-center gap-0.5">
               {loading ? (
                 <Skeleton className="ml-2 h-5 w-64" />
               ) : (
@@ -301,22 +309,6 @@ export function ValidationList({
                   </UnstyledButton>
                 </span>
               )}
-            </div>
-
-            <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
-              <div className="relative min-w-0 flex-1 sm:w-52 sm:flex-none">
-                <Search
-                  aria-hidden
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search"
-                  aria-label="Search validations"
-                  className="h-8 pl-8"
-                />
-              </div>
             </div>
           </div>
 

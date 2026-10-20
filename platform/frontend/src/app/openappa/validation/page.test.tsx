@@ -1077,12 +1077,9 @@ test("the summary counts every file while search narrows only the table", async 
   expect(
     screen.getAllByRole("link", { name: /^scenario-\d{3}\.appa$/ }),
   ).toHaveLength(10);
-  fireEvent.change(
-    screen.getByRole("textbox", { name: "Search validations" }),
-    {
-      target: { value: "scenario-001" },
-    },
-  );
+  fireEvent.change(screen.getByPlaceholderText(/Search validations/), {
+    target: { value: "scenario-001" },
+  });
   await waitFor(() =>
     expect(
       screen.queryByRole("link", { name: "scenario-012.appa" }),
@@ -1292,12 +1289,9 @@ test("Run all submits every file even while the table is searched", async () => 
     screen.getByRole("menuitem", { name: "Explain validations" }),
   ).toBeVisible();
   await userEvent.keyboard("{Escape}");
-  fireEvent.change(
-    screen.getByRole("textbox", { name: "Search validations" }),
-    {
-      target: { value: "scenario-12" },
-    },
-  );
+  fireEvent.change(screen.getByPlaceholderText(/Search validations/), {
+    target: { value: "scenario-12" },
+  });
   await waitFor(() =>
     expect(
       screen.queryByRole("link", { name: "scenario-1.appa" }),
@@ -1399,9 +1393,9 @@ test("last run opens the recorded run in the runner panel; history returns to th
   }));
   server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json(runs)));
   showPage();
-  expect(
-    await screen.findByRole("textbox", { name: "Search validations" }),
-  ).toHaveValue("scenario");
+  expect(await screen.findByPlaceholderText(/Search validations/)).toHaveValue(
+    "scenario",
+  );
   fireEvent.click(await findLastRun());
   // The newest run opens in place; the list stays where it was.
   const panel = await findRunPanel();

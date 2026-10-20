@@ -1086,7 +1086,7 @@ function buildSearchHint(params: {
     parts.push(
       limit < MAX_SEARCH_LIMIT
         ? `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max ${MAX_SEARCH_LIMIT}).`
-        : `Showing the top ${limit} of ${matchCount} matches, the most one search returns. Narrow the query to see the others.`,
+        : `Showing the top ${limit} of ${matchCount} matches. One search returns at most ${MAX_SEARCH_LIMIT}, so narrow the query to see the others.`,
     );
   }
 

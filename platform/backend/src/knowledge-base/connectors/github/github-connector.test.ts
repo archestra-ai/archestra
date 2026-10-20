@@ -1343,6 +1343,70 @@ describe("GithubConnector", () => {
     });
   });
 
+  describe("repository file source URLs", () => {
+    async function syncReadmeSourceUrl(
+      config: Record<string, unknown>,
+    ): Promise<string | undefined> {
+      mockListForRepo.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+      mockGetTree.mockResolvedValueOnce({
+        data: { tree: [{ type: "blob", path: "README.md", sha: "sha1" }] },
+      });
+      mockGetContent.mockResolvedValueOnce({
+        data: { content: Buffer.from("# Hello").toString("base64") },
+      });
+
+      const documents = [];
+      for await (const batch of connector.sync({
+        config: { ...config, includeRepositoryFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        documents.push(...batch.documents);
+      }
+      return documents.find((d) => d.metadata.kind === "repository_file")
+        ?.sourceUrl;
+    }
+
+    test("links to the repository's web page reported by GitHub", async () => {
+      mockReposGet.mockResolvedValue({
+        data: {
+          default_branch: "main",
+          html_url: "https://github.com/test-org/my-repo",
+        },
+      });
+
+      await expect(syncReadmeSourceUrl(validConfig)).resolves.toBe(
+        "https://github.com/test-org/my-repo/blob/main/README.md",
+      );
+    });
+
+    test("links to github.com, not the API host, when repo metadata is unavailable", async () => {
+      mockReposGet.mockReset();
+      mockReposGet.mockRejectedValue(new Error("Not found"));
+
+      await expect(syncReadmeSourceUrl(validConfig)).resolves.toBe(
+        "https://github.com/test-org/my-repo/blob/main/README.md",
+      );
+    });
+
+    test("links to the GitHub Enterprise web host when repo metadata is unavailable", async () => {
+      mockReposGet.mockReset();
+      mockReposGet.mockRejectedValue(new Error("Not found"));
+
+      await expect(
+        syncReadmeSourceUrl({
+          ...validConfig,
+          githubUrl: "https://ghe.example.com/api/v3",
+        }),
+      ).resolves.toBe(
+        "https://ghe.example.com/test-org/my-repo/blob/main/README.md",
+      );
+    });
+  });
+
   describe("large repository files", () => {
     async function syncFiles(
       tree: Array<{ path: string; sha: string; size: number }>,

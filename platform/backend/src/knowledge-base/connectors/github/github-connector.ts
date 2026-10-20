@@ -1098,18 +1098,19 @@ async function getRepos(
       // which 404s and gets silently skipped, ingesting nothing.
       const { owner, name } = parseRepoEntry(entry, config.owner);
       let defaultBranch: string | null = null;
+      let htmlUrl = deriveRepoHtmlUrl({
+        githubUrl: config.githubUrl,
+        owner,
+        name,
+      });
       try {
         const response = await octokit.rest.repos.get({ owner, repo: name });
         defaultBranch = response.data.default_branch;
+        htmlUrl = response.data.html_url || htmlUrl;
       } catch {
         // If we can't fetch repo metadata, fall back to null (main→master fallback)
       }
-      repos.push({
-        owner,
-        name,
-        htmlUrl: `${config.githubUrl.replace(/\/api\/v3$/, "").replace(/\/+$/, "")}/${owner}/${name}`,
-        defaultBranch,
-      });
+      repos.push({ owner, name, htmlUrl, defaultBranch });
     }
     return repos;
   }
@@ -1160,6 +1161,26 @@ async function getRepos(
   }
 
   return repos;
+}
+
+/**
+ * Best-effort web URL for a repo when GitHub's own `html_url` is unavailable.
+ * The configured URL is the API base: github.com serves its API from a separate
+ * `api.github.com` host, while GitHub Enterprise Server serves it under
+ * `/api/v3` on the web host.
+ */
+function deriveRepoHtmlUrl(params: {
+  githubUrl: string;
+  owner: string;
+  name: string;
+}): string {
+  const { githubUrl, owner, name } = params;
+  const base = githubUrl.replace(/\/+$/, "").replace(/\/api\/v3$/, "");
+  const webBase = base.replace(
+    /^(https?:\/\/)api\.github\.com$/i,
+    "$1github.com",
+  );
+  return `${webBase}/${owner}/${name}`;
 }
 
 /**

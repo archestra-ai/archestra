@@ -24,12 +24,13 @@ const markdown = preloadableLazy(() => import("./response-markdown"));
 
 /**
  * Fetch the markdown renderer ahead of need — a conversation page calls this
- * as it mounts, and everything else on the first idle callback after the
- * composer hydrates. The new-chat composer never waits for it.
+ * as it mounts, the new-chat composer on the first key or Send press, and
+ * every other page on the first idle callback after it hydrates. The empty
+ * new-chat screen shows no markdown, so it does not load it while idle.
  */
 export const preloadResponseMarkdown = markdown.preload;
 
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && window.location.pathname !== "/chat") {
   void appInteractive.whenIdle().then(preloadResponseMarkdown);
 }
 

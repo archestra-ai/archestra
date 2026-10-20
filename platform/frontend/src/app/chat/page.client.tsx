@@ -1930,11 +1930,9 @@ export function ChatPageContent({
   const isActiveAgentResolving =
     !activeAgentId && (isLoadingConversation || isInitialAgentResolving);
   const promptAgentId = conversation?.agent?.id ?? activeAgentId;
-  const newChatAgentId =
-    activeAgentId ??
-    initialAgentId ??
-    internalAgents.find((agent) => !agent.builtIn)?.id ??
-    null;
+  // The resolved agent only: a stand-in would load another agent's detail
+  // and readiness while the choice resolves.
+  const newChatAgentId = activeAgentId ?? null;
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
@@ -3765,7 +3763,7 @@ export function ChatPageContent({
                         >
                           <div className="w-full">
                             {newChatAgentId && !isInitialRuntimeMode && (
-                              <div className="mb-3">
+                              <div className="mb-3 empty:hidden">
                                 <AgentConnectionNotice
                                   agentId={newChatAgentId}
                                 />

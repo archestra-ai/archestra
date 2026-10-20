@@ -19,6 +19,12 @@ import {
   DEFAULT_SORT_DIRECTION,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import {
+  agentCredentialReadinessQueryKey,
+  agentDefaultSuggestedPromptsQueryKey,
+  agentQueryKey,
+  chatAgentsQueryKey,
+} from "@/lib/agent-query-keys";
 import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
@@ -57,13 +63,6 @@ const {
   pinAgent,
   unpinAgent,
 } = archestraApiSdk;
-
-const chatAgentsQueryKey = [
-  "agents",
-  "chat-roster",
-  "bootstrap",
-  "v3",
-] as const;
 
 async function fetchChatAgents() {
   const { data, error } = await getChatAgentRoster({
@@ -409,7 +408,7 @@ export function useProfile(
   const queryClient = useQueryClient();
 
   return useQuery({
-    queryKey: ["agents", id],
+    queryKey: agentQueryKey(id),
     queryFn: async () => {
       if (!id) return null;
       const { data, error } = await getAgent({ path: { id } });
@@ -645,7 +644,7 @@ export function usePermanentlyDeleteProfile(entityLabel = "Agent") {
       toast.success(`${entityLabel} permanently deleted`);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       // The detail query for a now-nonexistent id would 404 on its next fetch.
-      queryClient.removeQueries({ queryKey: ["agents", id] });
+      queryClient.removeQueries({ queryKey: agentQueryKey(id) });
     },
   });
 }
@@ -711,7 +710,7 @@ export function useAgentDefaultSuggestedPrompts(
   params: { enabled: boolean },
 ) {
   return useQuery({
-    queryKey: ["agents", agentId, "default-suggested-prompts"],
+    queryKey: agentDefaultSuggestedPromptsQueryKey(agentId),
     queryFn: async () => {
       const { data, error } = await getAgentDefaultSuggestedPrompts({
         path: { id: agentId as string },
@@ -1100,7 +1099,7 @@ function findCachedChatAgent(client: QueryClient, id: string) {
 function agentCredentialReadinessQuery(requestedIds: string[]) {
   const ids = [...new Set(requestedIds)].sort();
   return {
-    queryKey: ["agents", "credential-readiness", ids],
+    queryKey: agentCredentialReadinessQueryKey(ids),
     queryFn: async () => {
       const rows: archestraApiTypes.GetAgentCredentialReadinessResponses["200"] =
         [];

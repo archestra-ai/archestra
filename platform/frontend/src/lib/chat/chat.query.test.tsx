@@ -8,9 +8,15 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
+import { conversationsQueryKey } from "@/lib/chat/conversations-query-key";
+import {
+  clearPersistedQueryCache,
+  restorePersistedQueryCache,
+  startPersistingQueryCache,
+  syncPersistedQueryCacheScope,
+} from "@/lib/query-persistence";
 import { handleApiError } from "@/lib/utils/api";
 import {
-  conversationsQueryKey,
   invalidateConversationFileQueries,
   mergeUpdatedConversationIntoCache,
   useClearChatErrors,
@@ -93,6 +99,43 @@ const createWrapper = () => {
 };
 
 describe("useConversations", () => {
+  it("brings the sidebar's list back from the refresh snapshot, but not a search", async () => {
+    clearPersistedQueryCache();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const stop = startPersistingQueryCache(queryClient);
+    const conversations = [makeConversation()];
+    vi.mocked(archestraApiSdk.getChatConversations).mockResolvedValue({
+      data: conversations,
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getChatConversations>>);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const list = renderHook(() => useConversations({}), { wrapper });
+    const search = renderHook(() => useConversations({ search: "x" }), {
+      wrapper,
+    });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(search.result.current.isSuccess).toBe(true));
+    syncPersistedQueryCacheScope(queryClient, "user-1:org-1");
+    // The snapshot writer debounces.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    stop();
+
+    const refreshed = new QueryClient();
+    restorePersistedQueryCache(refreshed);
+
+    expect(refreshed.getQueryData(conversationsQueryKey())).toEqual(
+      JSON.parse(JSON.stringify(conversations)),
+    );
+    expect(
+      refreshed.getQueryData(conversationsQueryKey({ search: "x" })),
+    ).toBeUndefined();
+    clearPersistedQueryCache();
+  });
+
   it("keeps recent chats during a failed refresh and accepts a later empty list", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

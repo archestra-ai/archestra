@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils/tailwind";
 import { TerminalRecordingBlock } from "./terminal-recording-block";
 import {
@@ -198,8 +198,21 @@ export function TerminalPlayback({
     renderRecordingRef.current?.(recording);
   }, [recording]);
 
+  // A recording opens on its latest output, as a terminal does: the first
+  // screen with lines is scrolled to its end. Later updates (more output, a
+  // seek) keep where the reader is.
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const openedAtEnd = useRef(false);
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (openedAtEnd.current || !viewport || !snapshot?.lines.length) return;
+    openedAtEnd.current = true;
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [snapshot]);
+
   return (
     <div
+      ref={viewportRef}
       className="min-h-0 min-w-0 flex-1 overflow-auto bg-slate-950 p-4 pb-2"
       data-testid="terminal-playback-viewport"
     >

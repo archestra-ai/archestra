@@ -51,6 +51,7 @@ import {
   isMcpImageBlock,
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
+import { withOpenAiChatToolCallIds } from "../utils/tool-call-ids";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { createOpenAiCodexClient } from "./openai-codex-client";
 import { toOpenAiStreamUsage } from "./openai-sse-chunk";
@@ -616,7 +617,8 @@ export class OpenAIRequestAdapter
     return {
       ...this.request,
       model: this.getModel(),
-      messages,
+      // After the result updates above, which look up the client's call ids.
+      messages: withOpenAiChatToolCallIds(messages),
     };
   }
 

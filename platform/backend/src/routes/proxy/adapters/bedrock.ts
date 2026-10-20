@@ -34,6 +34,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { wordToolCallId } from "../utils/tool-call-ids";
 import {
   type SamplingParam,
   withSamplingParamFallback,
@@ -552,6 +553,30 @@ function isReasoningContentBlock(
   );
 }
 
+/** Tool-use ids Bedrock accepts; see `wordToolCallId`. */
+function withBedrockToolCallIds(messages: BedrockMessages): BedrockMessages {
+  return messages.map((message) => {
+    if (!Array.isArray(message.content)) return message;
+    let changed = false;
+    const content = message.content.map((block) => {
+      if (isToolUseBlock(block) && block.toolUse.toolUseId) {
+        const toolUseId = wordToolCallId(block.toolUse.toolUseId);
+        if (toolUseId === block.toolUse.toolUseId) return block;
+        changed = true;
+        return { ...block, toolUse: { ...block.toolUse, toolUseId } };
+      }
+      if (isToolResultBlock(block) && block.toolResult.toolUseId) {
+        const toolUseId = wordToolCallId(block.toolResult.toolUseId);
+        if (toolUseId === block.toolResult.toolUseId) return block;
+        changed = true;
+        return { ...block, toolResult: { ...block.toolResult, toolUseId } };
+      }
+      return block;
+    });
+    return changed ? ({ ...message, content } as typeof message) : message;
+  });
+}
+
 /**
  * Check if a content block is a tool result block.
  * Works with both AWS SDK ContentBlock and our internal Zod types.
@@ -747,7 +772,8 @@ class BedrockRequestAdapter
     return {
       ...this.request,
       modelId: this.getModel(),
-      messages,
+      // After the result updates above, which look up the client's call ids.
+      messages: withBedrockToolCallIds(messages),
     };
   }
 

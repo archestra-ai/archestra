@@ -43,6 +43,7 @@ import {
   isImageTooLarge,
   isMcpImageBlock,
 } from "../utils/mcp-image";
+import { wordToolCallId } from "../utils/tool-call-ids";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import {
   type SamplingParam,
@@ -265,6 +266,8 @@ class AnthropicRequestAdapter
     }
 
     messages = this.convertToolResultContent(messages);
+    // After the result updates above, which look up the client's call ids.
+    messages = withAnthropicToolCallIds(messages);
 
     return {
       ...this.request,
@@ -1751,4 +1754,30 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/** Tool-use ids Anthropic accepts; see `wordToolCallId`. */
+function withAnthropicToolCallIds(
+  messages: AnthropicMessages,
+): AnthropicMessages {
+  return messages.map((message) => {
+    if (!Array.isArray(message.content)) return message;
+    let changed = false;
+    const content = message.content.map((block) => {
+      if (block.type === "tool_use") {
+        const id = wordToolCallId(block.id);
+        if (id === block.id) return block;
+        changed = true;
+        return { ...block, id };
+      }
+      if (block.type === "tool_result") {
+        const toolUseId = wordToolCallId(block.tool_use_id);
+        if (toolUseId === block.tool_use_id) return block;
+        changed = true;
+        return { ...block, tool_use_id: toolUseId };
+      }
+      return block;
+    });
+    return changed ? ({ ...message, content } as typeof message) : message;
+  });
 }

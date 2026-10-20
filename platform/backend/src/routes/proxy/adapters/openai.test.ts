@@ -1213,3 +1213,36 @@ describe("execute custom-tool normalization", () => {
     expect((captured.params?.tools as unknown[])[0]).toEqual(nested);
   });
 });
+
+describe("OpenAIRequestAdapter replayed tool-call ids", () => {
+  test("fits a Gemini call id after the result update looked it up", () => {
+    const geminiCallId = `gemsig-${"s".repeat(450)}.gemini-call-read-1`;
+    const request = createMockRequest([
+      { role: "user", content: "Read a.txt" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: geminiCallId,
+            type: "function",
+            function: { name: "read", arguments: "{}" },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: geminiCallId, content: "SECRET" },
+    ]);
+
+    const adapter = openaiAdapterFactory.createRequestAdapter(request);
+    adapter.applyToolResultUpdates({ [geminiCallId]: "sanitized" });
+    const messages = adapter.toProviderRequest().messages;
+
+    const assistant = messages[1] as { tool_calls: Array<{ id: string }> };
+    const id = assistant.tool_calls[0].id;
+    expect(id).toMatch(/^call_[0-9a-f]{32}$/);
+    expect(messages[2]).toMatchObject({ tool_call_id: id });
+    expect(JSON.stringify(messages[2])).toContain("sanitized");
+    expect(JSON.stringify(messages)).not.toContain("SECRET");
+    expect(adapter.getToolResults()[0].id).toBe(geminiCallId);
+  });
+});

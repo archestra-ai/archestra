@@ -152,17 +152,19 @@ const CATALOG_FAILURES = {
   'api-key': ['Codex could not download its model list with its OpenAI API key.', 'Check the key and that this computer can reach api.openai.com (proxy, VPN or firewall)'],
   connectivity: ['Codex could not download its model list.', 'Check that this computer can reach chatgpt.com (proxy, VPN or firewall)'],
 };
+class CatalogFailure extends Error {}
 function catalogError(reason) {
   const [summary, action] = CATALOG_FAILURES[reason];
-  return Object.assign(new Error(summary + ' ' + action + '.'), { summary, action });
+  return Object.assign(new CatalogFailure(summary + ' ' + action + '.'), { summary, action });
 }
 function withNextStep(error, step) {
-  return error.action ? error.summary + ' ' + error.action + ', then ' + step + '.' : error.message;
+  return error instanceof CatalogFailure ? error.summary + ' ' + error.action + ', then ' + step + '.' : error.message;
 }
 // One app-server exchange in a child Node process keeps this helper synchronous;
 // Codex exits at the end of its input before it answers.
 function readCodexAccount(command, args, options) {
   const exchange = ${JSON.stringify(accountReadExchange())};
+  // The exchange gives up after 15 s and stops Codex 3 s later, inside this limit.
   const output = spawnSync(process.execPath, ['-', command, JSON.stringify(args)], { ...options, input: exchange, timeout: 25000 });
   try { return JSON.parse(output.stdout); } catch { return null; }
 }
@@ -435,7 +437,7 @@ if (process.argv[2] === '--setup-only') {
 } else if (process.argv[2] === '--preflight') {
   try { prepareDirectCatalog(process.argv[3], [], false); }
   catch (error) {
-    const next = error.action ? '' : ' Fix the problem above, then start a new installer run.';
+    const next = error instanceof CatalogFailure ? '' : ' Fix the problem above, then start a new installer run.';
     process.stderr.write('Codex setup preflight failed: ' + withNextStep(error, 'start a new installer run') + '\nNo client configuration was changed.' + next + '\n');
     // The cause and the next step are printed; the setup script stops quietly.
     process.exitCode = ${SETUP_STOPPED_EXIT_CODE};

@@ -13,6 +13,10 @@ import {
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import {
+  availableLlmProviderApiKeysQueryKey as availableKeysQueryKey,
+  llmProviderApiKeysQueryKey,
+} from "@/lib/llm-provider-api-keys-query-keys";
 import { inFlightQueryData } from "@/lib/query-in-flight";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
@@ -81,7 +85,7 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
       : [];
 
   return useQuery({
-    queryKey: ["llm-provider-api-keys", search, provider, ...filters],
+    queryKey: llmProviderApiKeysQueryKey(search, provider, filters),
     queryFn: async () => {
       const { data, error } = await getLlmProviderApiKeys({
         query: {
@@ -397,13 +401,6 @@ export function useBulkDeleteLlmProviderApiKeys() {
 }
 
 // ===
-
-function availableKeysQueryKey(
-  provider: SupportedProvider | undefined,
-  includeKeyId: string | undefined,
-) {
-  return ["available-llm-provider-api-keys", provider, includeKeyId] as const;
-}
 
 function listingWithKey(
   state:

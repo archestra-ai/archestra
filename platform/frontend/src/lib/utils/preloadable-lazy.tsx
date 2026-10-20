@@ -13,6 +13,14 @@ export function preloadableLazy<Props>(
 ): {
   Component: ComponentType<Props>;
   preload: () => Promise<void>;
+  /**
+   * Hand over a module a page imported statically, so the component renders
+   * in the same pass on the server and during hydration instead of
+   * suspending. A page whose first screen needs the component calls it as
+   * its module loads.
+   */
+  provide: (module: { default: ComponentType<Props> }) => void;
+  isLoaded: () => boolean;
 } {
   let loaded: { default: ComponentType<Props> } | null = null;
   let loading: Promise<void> | null = null;
@@ -35,7 +43,11 @@ export function preloadableLazy<Props>(
     }
     return preload().then(() => loaded as { default: ComponentType<Props> });
   }) as unknown as ComponentType<Props>;
-  return { Component, preload };
+  const provide = (module: { default: ComponentType<Props> }) => {
+    loaded = module;
+    loading ??= Promise.resolve();
+  };
+  return { Component, preload, provide, isLoaded: () => loaded !== null };
 }
 
 /**
@@ -46,7 +58,11 @@ export function preloadableLazy<Props>(
  */
 export function lazyComponent<Props extends object>(
   load: () => Promise<ComponentType<Props>>,
-): ComponentType<Props> & { preload: () => Promise<void> } {
+): ComponentType<Props> & {
+  preload: () => Promise<void>;
+  provide: (Component: ComponentType<Props>) => void;
+  isLoaded: () => boolean;
+} {
   const view = preloadableLazy<Props>(() =>
     load().then((Component) => ({ default: Component })),
   );
@@ -57,5 +73,10 @@ export function lazyComponent<Props extends object>(
       </Suspense>
     );
   }
-  return Object.assign(LazyComponent, { preload: view.preload });
+  return Object.assign(LazyComponent, {
+    preload: view.preload,
+    provide: (Component: ComponentType<Props>) =>
+      view.provide({ default: Component }),
+    isLoaded: view.isLoaded,
+  });
 }

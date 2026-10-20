@@ -74,7 +74,9 @@ export function GuardrailsPolicyEditor({
               }
               ariaLabel="Policy source file"
               searchPlaceholder="Search included batteries"
-              className="h-8 w-64 max-w-full"
+              // On phones the picker takes its own full-width row under the
+              // view toggle and the guide link, instead of a ragged middle row.
+              className="order-last h-8 w-full sm:order-none sm:w-64"
               pinnedItems={[{ value: "root", label: "Organization policy" }]}
               items={(declarations.data?.batteries ?? []).map((battery) => ({
                 value: battery.entry,
@@ -89,7 +91,7 @@ export function GuardrailsPolicyEditor({
               }))}
             />
           )}
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:gap-x-3">
             {tab === "effective" ? (
               effective.data &&
               (effective.data.lastError !== null ? (
@@ -112,7 +114,21 @@ export function GuardrailsPolicyEditor({
               </>
             ) : (
               <>
-                <Button asChild variant="ghost" size="sm">
+                {policy.data && (
+                  <output className="text-xs text-muted-foreground">
+                    {policy.data.revision === 0
+                      ? "Not yet saved"
+                      : `Revision ${policy.data.revision}`}
+                  </output>
+                )}
+                {/* Last, so on a phone the bare icon sits on the card's edge
+                    above the picker's end rather than floating mid-row. */}
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="-mr-2 w-8 has-[>svg]:px-0 sm:mr-0 sm:w-auto sm:has-[>svg]:px-2.5"
+                >
                   <a
                     href={getDocsUrl(
                       DocsPage.PlatformAiToolGuardrails,
@@ -121,17 +137,10 @@ export function GuardrailsPolicyEditor({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <span>Policy guide</span>
+                    <span className="sr-only sm:not-sr-only">Policy guide</span>
                     <ExternalLink className="size-3.5" />
                   </a>
                 </Button>
-                {policy.data && (
-                  <output className="text-xs text-muted-foreground">
-                    {policy.data.revision === 0
-                      ? "Not yet saved"
-                      : `Revision ${policy.data.revision}`}
-                  </output>
-                )}
               </>
             )}
           </div>
@@ -188,7 +197,7 @@ function RootPolicySource({
             : null
         }
       />
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t px-4 py-3 text-xs text-muted-foreground">
         <span>Conversations follow saved changes.</span>
         <CompositionSummary declarations={declarations} />
       </div>
@@ -268,9 +277,11 @@ function CompositionSummary({
       data-batteries={total}
       data-not-enforced={notEnforced}
       data-stale={stale}
-      className="flex items-center gap-1"
+      // Each part keeps to one line and they wrap as wholes, so a phone
+      // never strands a separator or splits "1 not enforced".
+      className="flex flex-wrap items-center gap-x-3 gap-y-1"
     >
-      <span>
+      <span className={stale ? undefined : "whitespace-nowrap"}>
         {stale
           ? `${compositionNotice(declarations)?.title ?? "The latest revision was refused"} · an earlier composition stays enforced`
           : total === 1
@@ -278,17 +289,14 @@ function CompositionSummary({
             : `${total} batteries compose into this policy`}
       </span>
       {notEnforced > 0 && (
-        <>
-          <span>·</span>
-          {/* Every included battery with a problem is in the Needs attention group. */}
-          <Link
-            href={batteriesHref("attention")}
-            className="inline-flex items-center gap-1 text-destructive underline underline-offset-2 hover:no-underline"
-          >
-            <TriangleAlert className="size-3.5" />
-            <span>{notEnforced} not enforced</span>
-          </Link>
-        </>
+        // Every included battery with a problem is in the Needs attention group.
+        <Link
+          href={batteriesHref("attention")}
+          className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-destructive underline-offset-2 hover:underline"
+        >
+          <TriangleAlert className="size-3.5" />
+          <span>{notEnforced} not enforced</span>
+        </Link>
       )}
     </output>
   );

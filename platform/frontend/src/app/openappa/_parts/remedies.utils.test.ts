@@ -96,7 +96,7 @@ describe("coverChips", () => {
 
   test("a sanitizer gets its one transition", () => {
     expect(coverChips(sanitizer())).toEqual([
-      { lock: "audience", value: "self → public", code: true },
+      { lock: "audience", value: "self → public", code: false },
     ]);
     expect(
       coverChips(
@@ -104,7 +104,7 @@ describe("coverChips", () => {
           permits: { kind: "trust", from: "suspicious", to: "trusted" },
         }),
       ),
-    ).toEqual([{ lock: "trust", value: "suspicious → trusted", code: true }]);
+    ).toEqual([{ lock: "trust", value: "suspicious → trusted", code: false }]);
     expect(coverChips(sanitizer({ permits: null }))).toEqual([]);
   });
 });

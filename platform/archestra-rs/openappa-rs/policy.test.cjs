@@ -103,6 +103,16 @@ const callRead = (n) => ({ event: 'tool_call', operation_id: `call:read-${n}`, t
 const POLICY_MOVED = { code: 'policy_moved', message: 'OpenAPPA published a newer policy revision for this organization; retry the request' };
 const rootOf = (session) => `archestra:${createHash('sha256').update(`${session.organization_id}\n${session.session_id}`).digest('hex')}`;
 
+test('a root text served alone is refused as a policy', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const session = { organization_id: `policy-test-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
+  const rootOnly = 'include = ["batteries/acme/appa.toml"]\n' + allow;
+  await assert.rejects(
+    native.dispatchHook(JSON.stringify({ ...session, event: 'session_start' }), hosted(rootOnly)),
+    { code: 'policy_refused' },
+  );
+});
+
 test('a saved policy decides the next call of an open session and of a new one', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const organization = `policy-test-${randomUUID()}`;

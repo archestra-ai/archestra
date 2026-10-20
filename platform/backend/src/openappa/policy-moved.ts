@@ -4,22 +4,19 @@ import logger from "@/logging";
  * Every open conversation of an organization decides its next call under the
  * organization's current policy revision. A dispatch that carried an older
  * policy, or that was decided while another backend replica published a newer
- * one, appends nothing and fails with `POLICY_MOVED`. Read the policy again and
+ * one, appends nothing and fails with the `policy_moved` code. Read the policy again and
  * dispatch again: the retry decides at the new revision.
  */
 
 /**
  * Whether `error` reports that the organization's policy moved past the one the
  * dispatch carried: the `policy_moved` code the native binding stamps, or, from
- * a runtime that does not class the refusal yet, its fixed text or the
- * runtime's own refusal text.
+ * a runtime that does not class the refusal yet, the runtime's own refusal text.
  */
 export function isPolicyMoved(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   if ((error as { code?: unknown }).code === "policy_moved") return true;
-  return (
-    error.message === POLICY_MOVED || RUNTIME_POLICY_MOVED.test(error.message)
-  );
+  return RUNTIME_POLICY_MOVED.test(error.message);
 }
 
 /**
@@ -70,10 +67,6 @@ const BASE_BACKOFF_MS = 50;
 const MAX_BACKOFF_MS = 500;
 /** Well below any client's request timeout: past it the client retries the 503. */
 const DEADLINE_MS = 2_000;
-
-/** The runtime's report that the organization's policy moved past the dispatch's. */
-const POLICY_MOVED =
-  "OpenAPPA published a newer policy revision for this organization; retry the request";
 
 const RUNTIME_POLICY_MOVED =
   /moved to policy revision \d+ while this event was decided; retry it/;

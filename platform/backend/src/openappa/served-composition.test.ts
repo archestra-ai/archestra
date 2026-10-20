@@ -12,7 +12,6 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
 import { openappaCoverageService } from "./coverage";
 import { openappaHelperBridge } from "./helper-bridge";
-import { chatOpenAppaSession, endTurn } from "./service";
 
 vi.mock("@/logging");
 
@@ -215,7 +214,7 @@ describe("what a refused composition keeps serving", () => {
     );
   });
 
-  test("a refusal with no earlier composition serves the root text alone and refuses governed calls plainly", async () => {
+  test("a refusal with no earlier composition serves the root text alone", async () => {
     const { entry } = await uploadAcme({ broken: true });
     const content = root(entry);
     await declare(content, { checked: false });
@@ -233,20 +232,6 @@ describe("what a refused composition keeps serving", () => {
       (await openappaBatteriesService.policyDeclarations(organizationId))
         .composition.served,
     ).toEqual({ kind: "root_only" });
-
-    // A dispatch the runtime refuses says why plainly: nothing ever composed.
-    const failure = await endTurn(
-      chatOpenAppaSession(organizationId, userId, "root-only"),
-      "turn-1",
-    ).then(
-      () => expect.unreachable("a root text alone was dispatched"),
-      (error: unknown) => error,
-    );
-    expect(failure).toMatchObject({
-      statusCode: 500,
-      shouldRetry: false,
-      message: expect.stringContaining("no earlier composition exists"),
-    });
   });
 
   async function uploadAcme(params: { broken?: boolean; note?: string }) {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { ApiError } from "@/types/api";
 import {
   OpenappaRootOnlyError,
   openappaFailure,
@@ -7,7 +8,8 @@ import {
 
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {
-    const cause = new Error(
+    const cause = runtimeFailure(
+      "policy_refused",
       'unsupported policy: tool "grain__*" has an invalid qualified identity',
     );
 
@@ -24,8 +26,17 @@ describe("openappaFailure", () => {
 
   test("keeps runtime and storage diagnostics out of the message and allows a retry", () => {
     for (const cause of [
-      new Error(
+      runtimeFailure(
+        "storage",
         "storage failure: connect postgresql://app:secret@db.internal/archestra",
+      ),
+      runtimeFailure(
+        "panicked",
+        "OpenAPPA panicked; operation was not released",
+      ),
+      runtimeFailure(
+        "replay_timed_out",
+        "OpenAPPA replay exceeded its 120 second limit",
       ),
       new Error("private native database error"),
       "not even an error",
@@ -86,12 +97,14 @@ describe("openappaFailure", () => {
 
   test("names an exhausted connection pool without its internals", () => {
     const failure = openappaFailure(
-      new Error(
+      runtimeFailure(
+        "pool_exhausted",
         "OpenAPPA had no free PostgreSQL connection in time; retry later",
       ),
     );
 
     expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
     expect(failure.message).toBe(
       "OpenAPPA could not safely complete this operation: the policy runtime has no free database connection.",
     );
@@ -194,10 +207,6 @@ describe("openappaFailure", () => {
         "policy_moved",
         "OpenAPPA published a newer policy revision for this organization; retry the request",
       ),
-      // A runtime that does not class the refusal yet reports it in text.
-      new Error(
-        "OpenAPPA published a newer policy revision for this organization; retry the request",
-      ),
       // The runtime's own refusal, should it reach the host unconverted.
       new Error(
         "OpenAPPA processing interrupted: deployment org-1 moved to policy revision 4 while this event was decided; retry it",
@@ -217,7 +226,8 @@ describe("openappaFailure", () => {
 
   test("strips URL credentials and bounds the detail of a refused policy", () => {
     const failure = openappaFailure(
-      new Error(
+      runtimeFailure(
+        "policy_refused",
         `configuration refused: annotator at https://user:token@example.com/annotate ${"x".repeat(400)}`,
       ),
     );
@@ -228,13 +238,49 @@ describe("openappaFailure", () => {
     expect(failure.message.length).toBeLessThan(420);
   });
 
+  test("a missing deployment setting is not retried and leaks no credential", () => {
+    const failure = openappaFailure(
+      runtimeFailure(
+        "runtime_misconfigured",
+        `annotator judge names the builtin "archestra", but the host supplies no archestra endpoint at https://user:token@example.com ${"x".repeat(400)}`,
+      ),
+    );
+
+    expect(failure.statusCode).toBe(500);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).not.toContain("user:token");
+    expect(failure.message.length).toBeLessThan(500);
+  });
+
+  test("a request the binding cannot read is not retried and its detail stays out", () => {
+    const failure = openappaFailure(
+      runtimeFailure("invalid_input", "invalid session identity: secret-id"),
+    );
+
+    expect(failure.statusCode).toBe(500);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).not.toContain("secret-id");
+  });
+
+  test("a refusal's wording without its code stays a retryable outage", () => {
+    const failure = openappaFailure(
+      new Error("unsupported policy: tool x has an invalid qualified identity"),
+    );
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+  });
+
   test("a policy with no composition that ever opened is refused, not retried", () => {
     for (const cause of [
       new OpenappaRootOnlyError(
         "policy refused: tool mcp/acme/list names annotator nobody.declares",
       ),
       // What the runtime says if a root text alone still reaches it.
-      new Error(
+      runtimeFailure(
+        "policy_refused",
         "a hosted document declares \"include\", which is the host's to declare, not the policy's",
       ),
     ]) {
@@ -250,9 +296,19 @@ describe("openappaFailure", () => {
   });
 
   test("does not wrap a failure twice", () => {
-    const first = openappaFailure(new Error("unsupported policy: x"));
+    const cause = runtimeFailure("policy_refused", "unsupported policy: x");
+    const first = openappaFailure(cause);
 
+    expect(first).toBeInstanceOf(ApiError);
     expect(openappaFailure(first)).toBe(first);
+    expect(first.cause).toBe(cause);
+  });
+
+  test("an ApiError raised elsewhere is classified, not passed through", () => {
+    const failure = openappaFailure(new ApiError(400, "bad request"));
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
   });
 });
 

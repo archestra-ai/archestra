@@ -373,8 +373,10 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 [policy.deployment]
 context_control = true
 
-# A subagent's return that matches the bounded JSON schema its parent declared
-# at the spawn crosses at the parent's trust. Built into the runtime.
+# Lets an agent hand a risky read to a subagent. The subagent must reply in
+# the strict JSON shape the agent asked for, so injected instructions and
+# extra data can't slip back. A reply that fits gets the agent's trust.
+# Built into the runtime.
 [[policy.sanitizer]]
 name = "attest-schema"
 on = ["tool_output"]
@@ -445,7 +447,7 @@ annotator = "${UNDECLARED_TOOL_ANNOTATOR}"
 
 # Review one exact call for any attention mark, trust or audience gap.
 [[policy.authority]]
-name = "hitl"
+name = "human-approval"
 hint = "Ask the person running this session to approve this exact call."
 
 [policy.authority.permits]
@@ -456,7 +458,7 @@ attention = ["*"]
 [externals]
 timeout_ms = 20000
 
-[externals.authorities.hitl]
+[externals.authorities.human-approval]
 builtin = "hitl"
 `;
 }

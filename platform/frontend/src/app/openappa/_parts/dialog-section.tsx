@@ -14,14 +14,16 @@ export function DialogSection({
 }) {
   return (
     <section aria-label={title} className="space-y-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
+      {/* The action shares the title's row only, so the description keeps
+          the full width instead of wrapping in a narrow column beside it. */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-4">
           <h3 className="text-sm font-medium">{title}</h3>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
+          {action}
         </div>
-        {action}
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
       </div>
       {children}
     </section>

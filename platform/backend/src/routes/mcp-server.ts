@@ -1065,7 +1065,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   rawToolName: tool.name,
                   description: tool.description ?? null,
                   parameters: tool.inputSchema,
-                  meta: { _meta: tool._meta, annotations: tool.annotations },
+                  meta: {
+                    _meta: tool._meta,
+                    annotations: tool.annotations,
+                    outputSchema: tool.outputSchema,
+                  },
                   catalogId: capturedCatalogId,
                 }));
 
@@ -1238,7 +1242,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           rawToolName: tool.name,
           description: tool.description ?? null,
           parameters: tool.inputSchema,
-          meta: { _meta: tool._meta, annotations: tool.annotations },
+          meta: {
+            _meta: tool._meta,
+            annotations: tool.annotations,
+            outputSchema: tool.outputSchema,
+          },
           catalogId: catalogItem.id,
         }));
 
@@ -2718,6 +2726,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       inputSchema: tool.inputSchema,
                       _meta: tool._meta,
                       annotations: tool.annotations,
+                      outputSchema: tool.outputSchema,
                     }))
                 : undefined,
           });

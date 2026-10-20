@@ -62,42 +62,72 @@ export function ValidationRunnerProvider({
     [suite.files],
   );
 
-  const startRunAll = useCallback(() => {
-    const progressToken = crypto.randomUUID();
-    const started = suite.runAll({
-      progressToken,
-      onSettled: (run, error) =>
-        setSession((current) =>
-          current?.token === progressToken
-            ? settle(current, run, error)
-            : current,
-        ),
-    });
-    if (!started) return;
-    setSession({
-      key: Date.now(),
-      token: progressToken,
-      mode: "live",
-      paths: suite.files.map((file) => file.path),
-      results: {},
-      fileStartedAt: {},
-      running: null,
-      startedAt: Date.now(),
-      finishedAt: null,
-      run: null,
-      error: null,
-    });
-    setOpen(true);
-  }, [suite]);
+  /** Starts a run of `paths` (every file when omitted) and follows it live. */
+  const startRun = useCallback(
+    (paths?: string[]) => {
+      const progressToken = crypto.randomUUID();
+      const options = {
+        progressToken,
+        onSettled: (run: PolicyTestRun | null, error: Error | null) =>
+          setSession((current) =>
+            current?.token === progressToken
+              ? settle(current, run, error)
+              : current,
+          ),
+      };
+      const started =
+        paths?.length === 1
+          ? suite.runFile(paths[0], options)
+          : suite.runAll(options);
+      if (!started) return;
+      setSession({
+        key: Date.now(),
+        token: progressToken,
+        mode: "live",
+        paths: paths ?? suite.files.map((file) => file.path),
+        results: {},
+        fileStartedAt: {},
+        running: null,
+        startedAt: Date.now(),
+        finishedAt: null,
+        run: null,
+        error: null,
+      });
+      setOpen(true);
+    },
+    [suite],
+  );
+  const startRunAll = useCallback(() => startRun(), [startRun]);
+  const startRunFile = useCallback(
+    (path: string) => startRun([path]),
+    [startRun],
+  );
 
   const openRun = useCallback((run: PolicyTestRun) => {
     setSession(recordedSession(run));
     setOpen(true);
   }, []);
 
+  // Keep the panel across a page refresh: remember which run it shows, and
+  // reopen that run (or the newest one, for a live run cut short) on load.
+  const shownRunId = session && open ? (session.run?.id ?? LATEST_RUN) : null;
+  const runs = suite.history.data;
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    if (restored) writeShownRun(shownRunId);
+  }, [restored, shownRunId]);
+  useEffect(() => {
+    if (restored || !runs) return;
+    setRestored(true);
+    const id = readShownRun();
+    const run =
+      id === LATEST_RUN ? runs[0] : runs.find((item) => item.id === id);
+    if (run) openRun(run);
+  }, [restored, runs, openRun]);
+
   const value = useMemo(
-    () => ({ startRunAll, openRun }),
-    [startRunAll, openRun],
+    () => ({ startRunAll, startRunFile, openRun }),
+    [startRunAll, startRunFile, openRun],
   );
 
   return (
@@ -173,8 +203,29 @@ type ProgressPayload = OpenAppaValidationProgressMessage["payload"];
 
 const ValidationRunnerContext = createContext<{
   startRunAll: () => void;
+  startRunFile: (path: string) => void;
   openRun: (run: PolicyTestRun) => void;
 } | null>(null);
+
+const SHOWN_RUN_KEY = "openappa-validation-runner";
+const LATEST_RUN = "latest";
+
+function readShownRun() {
+  try {
+    return sessionStorage.getItem(SHOWN_RUN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeShownRun(id: string | null) {
+  try {
+    if (id) sessionStorage.setItem(SHOWN_RUN_KEY, id);
+    else sessionStorage.removeItem(SHOWN_RUN_KEY);
+  } catch {
+    // Storage can be unavailable; the panel just won't survive a refresh.
+  }
+}
 
 function applyProgress(session: Session, payload: ProgressPayload): Session {
   if (session.finishedAt !== null) return session;

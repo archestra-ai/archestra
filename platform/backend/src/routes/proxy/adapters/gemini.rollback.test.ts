@@ -1,4 +1,9 @@
-import { FinishReason, type GenerateContentResponse } from "@google/genai";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ApiError,
+  FinishReason,
+  type GenerateContentResponse,
+} from "@google/genai";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type { Gemini } from "@/types";
 import {
@@ -618,6 +623,103 @@ describe("GeminiRequestAdapter", () => {
 });
 
 describe("geminiAdapterFactory", () => {
+  describe("provider errors", () => {
+    const message = "Permission denied for the requested model.";
+    const body = {
+      error: { code: 403, status: "PERMISSION_DENIED", message },
+    };
+
+    test.for([
+      {
+        label: "SDK JSON message",
+        error: new ApiError({ status: 403, message: JSON.stringify(body) }),
+      },
+      { label: "parsed provider body", error: body },
+      {
+        label: "JSON wrapped by an upstream proxy",
+        error: new ApiError({
+          status: 403,
+          message: JSON.stringify({
+            error: {
+              message: JSON.stringify(body),
+              code: 403,
+              status: "Forbidden",
+            },
+          }),
+        }),
+      },
+      { label: "plain SDK message", error: new Error(message) },
+    ])("extracts a readable message from $label", ({ error }) => {
+      expect(geminiAdapterFactory.extractErrorMessage(error)).toBe(message);
+    });
+
+    test("explains a project dunning denial without assuming the balance is too low", () => {
+      const error = new ApiError({
+        status: 403,
+        message: JSON.stringify({
+          error: {
+            code: 403,
+            status: "PERMISSION_DENIED",
+            message:
+              "Lightning dunning decision is deny for project: projects/123456789012",
+          },
+        }),
+      });
+      const extracted = geminiAdapterFactory.extractErrorMessage(error);
+      expect(extracted).toContain(
+        "Google denied access to the configured project",
+      );
+      expect(extracted).toContain("Google AI Studio or Google Cloud Console");
+      expect(extracted).not.toContain("123456789012");
+      expect(geminiAdapterFactory.extractInternalCode(error)).toBeUndefined();
+    });
+
+    test("classifies context overflow inside an SDK JSON message", () => {
+      const error = new ApiError({
+        status: 400,
+        message: JSON.stringify({
+          error: {
+            code: 400,
+            status: "INVALID_ARGUMENT",
+            message:
+              "The input token count (200) exceeds the maximum number of tokens allowed (100).",
+          },
+        }),
+      });
+      expect(geminiAdapterFactory.extractInternalCode(error)).toBe(
+        ArchestraInternalErrorCode.ContextLengthExceeded,
+      );
+    });
+
+    test("does not treat other HTTP errors as project dunning denials", () => {
+      const message =
+        "Lightning dunning decision is deny for project: projects/123456789012";
+      const error = new ApiError({ status: 401, message });
+      expect(geminiAdapterFactory.extractErrorMessage(error)).toBe(message);
+    });
+
+    test.for([
+      new Error("Provider returned malformed JSON: {"),
+      new Error('{"unrelated":"value"}'),
+      new Error('["not", "an", "error"]'),
+      Object.assign(new Error("Provider request failed"), { error: "" }),
+    ])("preserves text that is not an error envelope", (error) => {
+      expect(geminiAdapterFactory.extractErrorMessage(error)).toBe(
+        error.message,
+      );
+    });
+
+    test("bounds traversal of cyclic provider errors", () => {
+      const error: { message: string; error?: unknown } = {
+        message: "Provider request failed",
+      };
+      error.error = error;
+      expect(geminiAdapterFactory.extractErrorMessage(error)).toBe(
+        error.message,
+      );
+    });
+  });
+
   test("uses provider-compatible tool names and restores client names", async () => {
     const clientToolName = "1 report/tool";
     let providerToolName = "";

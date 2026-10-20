@@ -2780,14 +2780,29 @@ const SLACK_MAX_SUGGESTED_PROMPTS = 4;
  * line of the reply.
  */
 function buildTrailingContextBlocks(
-  options: Pick<ChatReplyOptions, "hint" | "footer">,
+  options: Pick<ChatReplyOptions, "hint" | "footer" | "conversationUrl">,
 ) {
-  return [options.hint, options.footer]
-    .filter((text): text is string => Boolean(text))
-    .map((text) => ({
-      type: "context" as const,
-      elements: [{ type: "plain_text" as const, text, emoji: true }],
-    }));
+  return [
+    ...(options.conversationUrl
+      ? [
+          {
+            type: "context" as const,
+            elements: [
+              {
+                type: "mrkdwn" as const,
+                text: `<${options.conversationUrl}|Open conversation>`,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...[options.hint, options.footer]
+      .filter((text): text is string => Boolean(text))
+      .map((text) => ({
+        type: "context" as const,
+        elements: [{ type: "plain_text" as const, text, emoji: true }],
+      })),
+  ];
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -2822,8 +2837,8 @@ function truncateFallbackText(text: string): string {
 
 // Slack rejects chat.postMessage with more than 50 expanded blocks. Each
 // sendReply message reserves slots for context footers (a continuation hint, or
-// the agent footer plus an optional hint — at most 2), so the
-// markdown block's expansion is bounded to 45, keeping the worst case (45 + 2)
+// the agent footer, an optional hint, and a conversation link — at most 3), so the
+// markdown block's expansion is bounded to 45, keeping the worst case (45 + 3)
 // safely under the 50 ceiling against estimator drift.
 const MAX_ESTIMATED_RENDERED_BLOCKS = 45;
 

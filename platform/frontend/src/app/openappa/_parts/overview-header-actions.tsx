@@ -23,7 +23,9 @@ export function OverviewHeaderActions() {
         <Badge
           variant="outline"
           className={cn(
-            "h-8 gap-2 rounded-full px-3 text-[13px]",
+            // On phones the title row only fits the title and Settings, so
+            // the state stays one tap away in Settings rather than here.
+            "hidden h-8 gap-2 rounded-full px-3 text-[13px] sm:inline-flex",
             enabled &&
               "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
           )}

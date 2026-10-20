@@ -41,6 +41,7 @@ import {
 import {
   OpenappaRootOnlyError,
   openappaFailure,
+  runtimeFailureCode,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
@@ -633,7 +634,23 @@ async function withRuntime(
     });
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw openappaFailure((await rootOnlyRefusal(organizationId)) ?? error);
+    throw await dispatchFailure({ organizationId, error });
+  }
+}
+
+async function dispatchFailure(params: {
+  organizationId: string;
+  error: unknown;
+}): Promise<ApiError> {
+  // Only a refusal of the policy is explained by the policy; a storage, lease
+  // or uncoded failure is reported as itself.
+  switch (runtimeFailureCode(params.error)) {
+    case "policy_refused":
+      return openappaFailure(
+        (await rootOnlyRefusal(params.organizationId)) ?? params.error,
+      );
+    default:
+      return openappaFailure(params.error);
   }
 }
 

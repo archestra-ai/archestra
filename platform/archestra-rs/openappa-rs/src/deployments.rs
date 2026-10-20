@@ -24,6 +24,8 @@ use std::{
     sync::{Arc, Mutex, PoisonError},
 };
 
+use crate::{BindingFailure, Fault, policy::open_fault};
+
 /// The credential values the host resolved for one organization's policy, variable →
 /// value. Secrets: nothing here is logged or formatted.
 #[derive(Clone, Default)]
@@ -60,13 +62,21 @@ pub(crate) enum DeploymentError {
     /// The dispatch carries a policy the organization has since recomposed, and the
     /// line's head names another one: publishing it would roll the line back.
     Superseded,
-    Failed(String),
+    Failed(Fault),
 }
 
-impl From<String> for DeploymentError {
-    fn from(reason: String) -> Self {
-        DeploymentError::Failed(reason)
+impl From<Fault> for DeploymentError {
+    fn from(fault: Fault) -> Self {
+        DeploymentError::Failed(fault)
     }
+}
+
+fn storage(error: impl ToString) -> Fault {
+    Fault::binding(BindingFailure::Storage, error)
+}
+
+fn panicked(error: tokio::task::JoinError) -> Fault {
+    Fault::binding(BindingFailure::Panicked, error)
 }
 
 /// The deployment an organization's dispatches are pinned to, and what it was
@@ -161,7 +171,7 @@ impl Deployments {
         store: &Arc<LogStore>,
         organization_id: &str,
         stale: &PublishedDeployment,
-    ) -> Result<Option<PublishedDeployment>, String> {
+    ) -> Result<Option<PublishedDeployment>, Fault> {
         let Some(pinned) = self
             .held(organization_id)
             .filter(|pinned| pinned.published.revision() == stale.revision())
@@ -172,8 +182,8 @@ impl Deployments {
         let (runtime, store) = (runtime.clone(), store.clone());
         let line = DeploymentName::new(organization_id);
         let (key, prepared) = (pinned.key.clone(), pinned.prepared.clone());
-        let head = tokio::task::spawn_blocking(move || -> Result<_, String> {
-            let Some(head) = store.head(&line).map_err(|error| error.to_string())? else {
+        let head = tokio::task::spawn_blocking(move || -> Result<_, Fault> {
+            let Some(head) = store.head(&line).map_err(storage)? else {
                 return Ok(None);
             };
             if head.key.as_str() != &*key {
@@ -182,7 +192,7 @@ impl Deployments {
             pin_existing(&runtime, &line, &prepared, &head).map(Some)
         })
         .await
-        .map_err(|error| error.to_string())??;
+        .map_err(panicked)??;
         let Some(published) = head else {
             self.forget(organization_id, &pinned);
             return Ok(None);
@@ -228,7 +238,7 @@ impl Deployments {
             prepare(&runtime, &store, &organization, &policy, agent_yell)
         })
         .await
-        .map_err(|error| DeploymentError::Failed(error.to_string()))??;
+        .map_err(panicked)??;
         self.by_organization
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -287,11 +297,9 @@ fn prepare(
     } = compiled(&policy.content, &policy.credentials)?;
     config.reporting.agent_yell = agent_yell;
     let key = policy_file_key(config.policy_file().bytes());
-    let prepared = runtime
-        .prepare_deployment(config)
-        .map_err(|error| error.to_string())?;
+    let prepared = runtime.prepare_deployment(config).map_err(open_fault)?;
     let line = DeploymentName::new(organization_id);
-    let head = store.head(&line).map_err(|error| error.to_string())?;
+    let head = store.head(&line).map_err(storage)?;
     if let Some(composition) = &policy.composition {
         let publishes = head.as_ref().is_none_or(|head| head.key.as_str() != key);
         if publishes && !stored_composition(store, organization_id, composition)? {
@@ -302,7 +310,7 @@ fn prepare(
         .publish_if_head(&line, &prepared, head.map(|head| head.revision))
         .map_err(|error| match error {
             OpenError::PolicyHeadMoved { .. } => DeploymentError::Superseded,
-            error => DeploymentError::Failed(error.to_string()),
+            error => DeploymentError::Failed(open_fault(error)),
         })?;
     let pinned = Pinned {
         content: policy.content.as_str().into(),
@@ -320,15 +328,15 @@ fn pin_existing(
     line: &DeploymentName,
     prepared: &PreparedDeployment,
     head: &PolicyHead,
-) -> Result<PublishedDeployment, String> {
+) -> Result<PublishedDeployment, Fault> {
     runtime
         .at_revision(line, prepared, head.revision)
-        .map_err(|error| error.to_string())
+        .map_err(open_fault)
 }
 
 /// `content` compiled with the credential values it looks up, every variable it
 /// looked up in order, and the digest of their answers.
-fn compiled(content: &str, credentials: &HostCredentials) -> Result<CompiledPolicy, String> {
+fn compiled(content: &str, credentials: &HostCredentials) -> Result<CompiledPolicy, Fault> {
     let asked = RefCell::new(Vec::<(String, Option<String>)>::new());
     let config = crate::policy::compile(content, |var| {
         let answer = credentials.lookup(var);
@@ -356,18 +364,16 @@ fn stored_composition(
     store: &LogStore,
     organization_id: &str,
     composition: &str,
-) -> Result<bool, String> {
+) -> Result<bool, Fault> {
     let organization_id = organization_id.to_owned();
-    let stored = crate::Sql(store)
-        .with_client(move |client| {
-            Ok(client
-                .query_opt(
-                    "SELECT content_hash FROM openappa_effective_policies WHERE organization_id = $1",
-                    &[&organization_id],
-                )?
-                .map(|row| row.get::<_, String>(0)))
-        })
-        .map_err(|error| error.to_string())?;
+    let stored = crate::Sql(store).with_client(move |client| {
+        Ok(client
+            .query_opt(
+                "SELECT content_hash FROM openappa_effective_policies WHERE organization_id = $1",
+                &[&organization_id],
+            )?
+            .map(|row| row.get::<_, String>(0)))
+    })?;
     Ok(stored.is_none_or(|stored| stored == composition))
 }
 
@@ -480,7 +486,7 @@ mod tests {
         block_on(deployments.deployment(runtime, &runtime.store, organization, policy, false))
             .map_err(|error| match error {
                 DeploymentError::Superseded => "superseded".to_owned(),
-                DeploymentError::Failed(reason) => reason,
+                DeploymentError::Failed(fault) => fault.message,
             })
     }
 

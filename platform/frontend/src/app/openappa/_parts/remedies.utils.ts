@@ -50,13 +50,13 @@ function sanitizerChips(sanitizer: Sanitizer): CoverChip[] {
   if (!permits) return [];
   if (permits.kind === "trust")
     return [
-      { lock: "trust", value: `${permits.from} → ${permits.to}`, code: true },
+      { lock: "trust", value: `${permits.from} → ${permits.to}`, code: false },
     ];
   return [
     {
       lock: "audience",
       value: `${permits.from.join(", ")} → ${permits.to.join(", ")}`,
-      code: true,
+      code: false,
     },
   ];
 }

@@ -140,6 +140,7 @@ export const CacheKey = {
   SlackThreadMuted: "slack-thread-muted",
   /** Per-channel "answer all messages" flag, briefly cached to spare the gate a DB read per message */
   ChatOpsChannelAnswerAll: "chatops-channel-answer-all",
+  ChatOpsReplyAnchor: "chatops-reply-anchor",
   /** MS Teams thread-format team id → aadGroupId, so the gate resolves it without a Bot Framework call per message */
   TeamsTeamAadGroupId: "teams-team-aad-group-id",
   /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */

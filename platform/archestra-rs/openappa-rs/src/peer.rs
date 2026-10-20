@@ -10,16 +10,16 @@ use appa_eventlog::{
 use appa_runtime::api::{
     EmbeddedPeerArrival, EmbeddedPeerError, EmbeddedPeerId, EmbeddedPeerNotice,
 };
-use appa_runtime_api::{Actor, HookDecision, PeerDigest, ProposedCall, TrajectoryId};
+use appa_runtime_api::{Actor, HookDecision, PeerDigest, ProposedCall, RefusalClass, TrajectoryId};
 use futures_util::FutureExt;
 use napi_derive::napi;
 use serde::Deserialize;
 use serde_json::{Value, json, value::RawValue};
 
 use super::{
-    DispatchPolicy, Failure, SessionKey, Sql, State, canonical_tool, completion_error, error,
-    failure, held_elsewhere, initialized, lease, lease_lost, read_completed_operation,
-    recorded_call, required, session_actor,
+    DispatchPolicy, Failure, SessionKey, Sql, State, canonical_tool, failure, held_elsewhere,
+    initialized, invalid_input, invariant, lease, lease_lost, panicked, read_completed_operation,
+    receipt_failure, recorded_call, required, session_actor, sql_failure, storage,
 };
 
 const BODY_LIMIT: usize = 64 * 1024;
@@ -54,7 +54,7 @@ enum PeerKind {
 }
 
 async fn peer_call(input: String, policy: DispatchPolicy, kind: PeerKind) -> napi::Result<String> {
-    let parsed: PeerInput = serde_json::from_str(&input).map_err(error)?;
+    let parsed: PeerInput = serde_json::from_str(&input).map_err(invalid_input)?;
     validate_actor(&parsed)?;
     let result = std::panic::AssertUnwindSafe(execute(parsed, policy.into(), kind))
         .catch_unwind()
@@ -62,7 +62,7 @@ async fn peer_call(input: String, policy: DispatchPolicy, kind: PeerKind) -> nap
     match result {
         Ok(Ok(value)) => Ok(value.to_string()),
         Ok(Err(error)) => Err(error),
-        Err(_) => Err(error(
+        Err(_) => Err(panicked(
             "OpenAPPA panicked; the peer message was not released",
         )),
     }
@@ -169,14 +169,14 @@ async fn send(
     let call_id = operation
         .strip_prefix("peer_send:")
         .filter(|id| !id.is_empty())
-        .ok_or_else(|| error("peer send operation_id must be peer_send:<call-id>"))?;
+        .ok_or_else(|| invalid_input("peer send operation_id must be peer_send:<call-id>"))?;
     if call_id.chars().any(char::is_control) || operation.len() > 1024 {
-        return Err(error("invalid peer send operation"));
+        return Err(invalid_input("invalid peer send operation"));
     }
     let value = input
         .value
         .as_deref()
-        .ok_or_else(|| error("missing peer message"))?;
+        .ok_or_else(|| invalid_input("missing peer message"))?;
     if value.is_empty() {
         return Ok(denied(
             "OpenAPPA did not send this message: the body is empty.",
@@ -234,7 +234,7 @@ async fn send(
                 "OpenAPPA did not send this message: the operation id was already used for a different message.",
             ));
         }
-        Err(reason) => return Err(error(reason)),
+        Err(reason) => return Err(receipt_failure(reason)),
     }
     let notice = match state.runtime.send_embedded_peer(
         &actor.root,
@@ -250,7 +250,7 @@ async fn send(
             state
                 .store
                 .complete_operation(key, decision.clone(), receipts.owner())
-                .map_err(completion_error)?;
+                .map_err(receipt_failure)?;
             return Ok(decision);
         }
         Err(reason) => return Err(peer_failure(reason)),
@@ -259,7 +259,7 @@ async fn send(
     state
         .store
         .complete_operation(key, decision.clone(), receipts.owner())
-        .map_err(completion_error)?;
+        .map_err(receipt_failure)?;
     Ok(decision)
 }
 
@@ -310,7 +310,7 @@ async fn admit(
     ) {
         Ok(EmbeddedPeerArrival::Direct { id, body }) => {
             if body.is_empty() {
-                return Err(error(
+                return Err(invariant(
                     "OpenAPPA returned an empty body for direct peer admission. No content was delivered. Check the peer inbox receipt and runtime storage.",
                 ));
             }
@@ -337,7 +337,7 @@ async fn list(
         return Ok(json!({ "notices": list_notices(state, pg, input, actor).await? }));
     };
     if tool_call_id.len() > 1024 || tool_call_id.chars().any(char::is_control) {
-        return Err(error("invalid tool call identity"));
+        return Err(invalid_input("invalid tool call identity"));
     }
     let operation = format!("peer_list:{tool_call_id}");
     let key = peer_operation_key(input, operation);
@@ -362,12 +362,12 @@ async fn list(
             state
                 .store
                 .complete_operation(key, decision.clone(), receipts.owner())
-                .map_err(completion_error)?;
+                .map_err(receipt_failure)?;
             decision
         }
         Ok(PeerClaim::Held) => return Err(held_elsewhere()),
         Err(ReceiptError::InputMismatch) => return Ok(withheld_peer_list()),
-        Err(reason) => return Err(error(reason)),
+        Err(reason) => return Err(receipt_failure(reason)),
     };
     let result_key = peer_result_key(input, tool_call_id);
     let approved = decision
@@ -405,10 +405,10 @@ async fn list(
                 reason,
                 ReceiptError::NotPending | ReceiptError::CompletionMismatch
             ) {
-                return Err(completion_error(reason));
+                return Err(receipt_failure(reason));
             }
         }
-        Err(reason) => return Err(error(reason)),
+        Err(reason) => return Err(receipt_failure(reason)),
     }
     Ok(decision)
 }
@@ -463,11 +463,11 @@ async fn read(
 ) -> napi::Result<Value> {
     let tool_call_id = required(&input.tool_call_id, "tool_call_id")?;
     if tool_call_id.len() > 1024 || tool_call_id.chars().any(char::is_control) {
-        return Err(error("invalid tool call identity"));
+        return Err(invalid_input("invalid tool call identity"));
     }
     let message_id = required(&input.message_id, "message_id")?;
     if message_id.len() > MESSAGE_ID_LIMIT || message_id.chars().any(char::is_control) {
-        return Err(error("invalid peer message id"));
+        return Err(invalid_input("invalid peer message id"));
     }
     let tool = required(&input.tool, "tool")?;
     let result_key = peer_result_key(input, tool_call_id);
@@ -476,9 +476,10 @@ async fn read(
     {
         return Ok(done);
     }
-    let id = EmbeddedPeerId::parse(message_id).map_err(|_| error("invalid peer message id"))?;
-    let arguments =
-        RawValue::from_string(json!({ "message_id": message_id }).to_string()).map_err(error)?;
+    let id =
+        EmbeddedPeerId::parse(message_id).map_err(|_| invalid_input("invalid peer message id"))?;
+    let arguments = RawValue::from_string(json!({ "message_id": message_id }).to_string())
+        .map_err(invariant)?;
     let outcome = match state
         .runtime
         .read_embedded_peer(
@@ -494,13 +495,13 @@ async fn read(
         .await
     {
         Ok(outcome) => outcome,
-        Err(EmbeddedPeerError::Refused(feedback)) => return Err(error(feedback)),
+        Err(EmbeddedPeerError::Refused(feedback)) => return Err(peer_refused(feedback)),
         Err(reason) => return Err(peer_failure(reason)),
     };
     match &outcome.decision {
         HookDecision::DeliverValue { value } | HookDecision::ReplaceOutput { output: value } => {
             if value.is_empty() {
-                return Err(error(
+                return Err(invariant(
                     "OpenAPPA returned an empty body for an admitted peer read",
                 ));
             }
@@ -547,14 +548,14 @@ async fn read(
             retain_denial(state, receipts, input, &actor.root, tool_call_id, &decision).await?;
             Ok(decision)
         }
-        HookDecision::Ack => Err(error(
+        HookDecision::Ack => Err(invariant(
             "OpenAPPA acknowledged a peer read without binding its stored label",
         )),
         HookDecision::Refuse { class, detail } => Err(failure(
             Failure::Refused(*class),
             format!("OpenAPPA refused the peer read: {detail}"),
         )),
-        _ => Err(error("unexpected peer read decision")),
+        _ => Err(invariant("unexpected peer read decision")),
     }
 }
 
@@ -605,13 +606,13 @@ async fn journal_processed(
             }
             if denial_receipt(&stored) && admitted_read(decision) {
                 if !replace_denial_receipt(state, result_key, approved, decision)? {
-                    return Err(error(
+                    return Err(storage(
                         "OpenAPPA could not replace the peer-read denial receipt",
                     ));
                 }
                 return Ok(());
             }
-            Err(error(
+            Err(invariant(
                 "OpenAPPA will not replace a processed result that is not a peer-read denial",
             ))
         }
@@ -628,10 +629,10 @@ async fn journal_processed(
                     decision.clone(),
                     receipts.owner(),
                 )
-                .map_err(completion_error)
+                .map_err(receipt_failure)
         }
         Ok(appa_eventlog::ProcessedResultClaim::Held) => Err(held_elsewhere()),
-        Err(reason) => Err(error(reason)),
+        Err(reason) => Err(receipt_failure(reason)),
     }
 }
 
@@ -664,7 +665,7 @@ fn replace_denial_receipt(
             )?)
         })
         .map(|updated| updated > 0)
-        .map_err(error)
+        .map_err(sql_failure)
 }
 
 fn denial_receipt(decision: &Value) -> bool {
@@ -706,12 +707,12 @@ async fn retain_denial(
         Ok(PeerClaim::Work) => {}
         Ok(PeerClaim::Held) => return Err(held_elsewhere()),
         Err(ReceiptError::InputMismatch) => return Ok(()),
-        Err(reason) => return Err(error(reason)),
+        Err(reason) => return Err(receipt_failure(reason)),
     }
     state
         .store
         .complete_operation(key, decision.clone(), receipts.owner())
-        .map_err(completion_error)
+        .map_err(receipt_failure)
 }
 
 fn read_result(text: &str, is_error: bool) -> Value {
@@ -815,7 +816,7 @@ fn completed_decision(
             )?
             .and_then(|row| row.get::<_, Option<Value>>(0)))
     })
-    .map_err(error)
+    .map_err(sql_failure)
 }
 
 fn notice_of(
@@ -826,7 +827,7 @@ fn notice_of(
     let sender = session_for_trajectory(pg, &input.organization_id, notice.sender.as_str())?;
     let recipient = session_for_trajectory(pg, &input.organization_id, notice.recipient.as_str())?;
     let (Some(sender), Some(recipient)) = (sender, recipient) else {
-        return Err(error(format!(
+        return Err(storage(format!(
             "OpenAPPA peer notice names a session this organization has not started ({}/{})",
             notice.sender.as_str(),
             notice.recipient.as_str(),
@@ -860,12 +861,17 @@ fn unverified() -> Value {
     json!({ "kind": "unverified" })
 }
 
+/// The runtime refused a peer message; its feedback is the message.
+fn peer_refused(feedback: String) -> napi::Error {
+    failure(Failure::Refused(RefusalClass::PeerMessage), feedback)
+}
+
 fn peer_failure(reason: EmbeddedPeerError) -> napi::Error {
     match reason {
         EmbeddedPeerError::Storage(detail) => {
-            error(format!("OpenAPPA peer storage failed: {detail}"))
+            storage(format!("OpenAPPA peer storage failed: {detail}"))
         }
-        EmbeddedPeerError::Refused(feedback) => error(feedback),
+        EmbeddedPeerError::Refused(feedback) => peer_refused(feedback),
     }
 }
 
@@ -899,25 +905,23 @@ fn current_trajectory(actor: &Actor) -> &TrajectoryId {
 
 fn acting_root(pg: &Sql<'_>, input: &PeerInput) -> napi::Result<String> {
     let key = SessionKey::new(&input.organization_id, &input.session_id);
-    let root = pg
-        .with_client(move |client| {
-            Ok(client
-                .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                    &[&key.organization_id, &key.actor],
-                )?
-                .map(|row| row.get::<_, String>(0)))
-        })
-        .map_err(error)?;
-    root.ok_or_else(|| error("OpenAPPA session has not started"))
+    let root = pg.with_client(move |client| {
+        Ok(client
+            .query_opt(
+                "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                &[&key.organization_id, &key.actor],
+            )?
+            .map(|row| row.get::<_, String>(0)))
+    })?;
+    root.ok_or_else(|| invalid_input("OpenAPPA session has not started"))
 }
 
 fn acting_actor(pg: &crate::Sql<'_>, input: &PeerInput, root: &str) -> napi::Result<Actor> {
     let Some(row) = session_by_id(pg, &input.organization_id, &input.session_id)? else {
-        return Err(error("OpenAPPA session has not started"));
+        return Err(invalid_input("OpenAPPA session has not started"));
     };
     if row.root != root || row.parent_id.as_deref() != input.parent_id.as_deref() {
-        return Err(error("session identity changed"));
+        return Err(invalid_input("session identity changed"));
     }
     Ok(Actor {
         root: TrajectoryId(root.to_owned()),
@@ -945,7 +949,7 @@ fn resolve_recipient(
     }
     let rows = sessions_by_id(pg, &input.organization_id, session_id)?;
     if rows.len() > 1 {
-        return Err(error("recipient session identity is ambiguous"));
+        return Err(invalid_input("recipient session identity is ambiguous"));
     }
     if let Some(row) = rows.into_iter().next() {
         if row.root != root {
@@ -1048,7 +1052,7 @@ fn allowed_spawn_binding(
             .filter(|binding| !binding.is_empty())
             .map(str::to_owned))
     })
-    .map_err(error)
+    .map_err(sql_failure)
 }
 
 struct SessionRow {
@@ -1065,7 +1069,7 @@ fn session_by_id(
 ) -> napi::Result<Option<SessionRow>> {
     let mut rows = sessions_by_id(pg, organization_id, session_id)?;
     if rows.len() > 1 {
-        return Err(error("session identity is ambiguous"));
+        return Err(invalid_input("session identity is ambiguous"));
     }
     Ok(rows.pop())
 }
@@ -1088,26 +1092,24 @@ fn session_for_trajectory(
     }
     let organization_id = organization_id.to_owned();
     let trajectory = trajectory.to_owned();
-    let rows = pg
-        .with_client(move |client| {
-            Ok(client
-                .query(
-                    "SELECT actor, root, parent_id, session_id FROM openappa_sessions \
+    let rows = pg.with_client(move |client| {
+        Ok(client
+            .query(
+                "SELECT actor, root, parent_id, session_id FROM openappa_sessions \
                      WHERE organization_id = $1 AND root = $2 AND parent_id IS NULL",
-                    &[&organization_id, &trajectory],
-                )?
-                .into_iter()
-                .map(|row| SessionRow {
-                    actor: row.get(0),
-                    root: row.get(1),
-                    parent_id: row.get(2),
-                    session_id: row.get(3),
-                })
-                .collect::<Vec<_>>())
-        })
-        .map_err(error)?;
+                &[&organization_id, &trajectory],
+            )?
+            .into_iter()
+            .map(|row| SessionRow {
+                actor: row.get(0),
+                root: row.get(1),
+                parent_id: row.get(2),
+                session_id: row.get(3),
+            })
+            .collect::<Vec<_>>())
+    })?;
     if rows.len() > 1 {
-        return Err(error("session root identity is ambiguous"));
+        return Err(invalid_input("session root identity is ambiguous"));
     }
     Ok(rows.into_iter().next())
 }
@@ -1119,26 +1121,24 @@ fn session_by_actor(
 ) -> napi::Result<Option<SessionRow>> {
     let organization_id = organization_id.to_owned();
     let actor = actor.to_owned();
-    let rows = pg
-        .with_client(move |client| {
-            Ok(client
-                .query(
-                    "SELECT actor, root, parent_id, session_id FROM openappa_sessions \
+    let rows = pg.with_client(move |client| {
+        Ok(client
+            .query(
+                "SELECT actor, root, parent_id, session_id FROM openappa_sessions \
                      WHERE organization_id = $1 AND actor = $2",
-                    &[&organization_id, &actor],
-                )?
-                .into_iter()
-                .map(|row| SessionRow {
-                    actor: row.get(0),
-                    root: row.get(1),
-                    parent_id: row.get(2),
-                    session_id: row.get(3),
-                })
-                .collect::<Vec<_>>())
-        })
-        .map_err(error)?;
+                &[&organization_id, &actor],
+            )?
+            .into_iter()
+            .map(|row| SessionRow {
+                actor: row.get(0),
+                root: row.get(1),
+                parent_id: row.get(2),
+                session_id: row.get(3),
+            })
+            .collect::<Vec<_>>())
+    })?;
     if rows.len() > 1 {
-        return Err(error("session actor identity is ambiguous"));
+        return Err(invalid_input("session actor identity is ambiguous"));
     }
     Ok(rows.into_iter().next())
 }
@@ -1166,7 +1166,7 @@ fn sessions_by_id(
             })
             .collect())
     })
-    .map_err(error)
+    .map_err(sql_failure)
 }
 
 fn validate_actor(input: &PeerInput) -> napi::Result<()> {
@@ -1193,7 +1193,7 @@ fn bounded_tool(raw: Option<&str>) -> napi::Result<Option<String>> {
 
 fn opaque_id(value: &str, name: &str, limit: usize) -> napi::Result<()> {
     if value.is_empty() || value.len() > limit || value.chars().any(char::is_control) {
-        return Err(error(format!("invalid {name} identity")));
+        return Err(invalid_input(format!("invalid {name} identity")));
     }
     Ok(())
 }

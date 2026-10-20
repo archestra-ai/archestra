@@ -328,6 +328,7 @@ const EXPECTATIONS: [string, string][] = [
   ["allow", "The call runs"],
   ["deny", "The call is refused"],
   ["withhold", "The call runs but its result is held back"],
+  ["authority human-approval", "The call needs a person's approval"],
   ["authority hitl", "The call needs a person's approval"],
   ["authority", "The call needs an authority's approval"],
   ["sanitizer", "The call's result must be cleaned first"],

@@ -1,7 +1,11 @@
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { isShellSeedRoute, SHELL_SEED_HEADER } from "@/lib/auth/shell-seed";
+import {
+  isShellSeedRoute,
+  SHELL_SEED_HEADER,
+  SHELL_SEED_SEARCH_HEADER,
+} from "@/lib/auth/shell-seed";
 
 export function proxy(req: NextRequest) {
   // Redirect root to /chat before any client components render
@@ -65,8 +69,10 @@ export function proxy(req: NextRequest) {
   const headers = new Headers(req.headers);
   if (rendersFirstPageOnServer(req)) {
     headers.set(SHELL_SEED_HEADER, req.nextUrl.pathname);
+    headers.set(SHELL_SEED_SEARCH_HEADER, req.nextUrl.search);
   } else {
     headers.delete(SHELL_SEED_HEADER);
+    headers.delete(SHELL_SEED_SEARCH_HEADER);
   }
   return NextResponse.next({ request: { headers } });
 }
@@ -83,7 +89,7 @@ export function proxy(req: NextRequest) {
 function rendersFirstPageOnServer(req: NextRequest) {
   return (
     req.method === "GET" &&
-    isShellSeedRoute(req.nextUrl.pathname) &&
+    isShellSeedRoute(req.nextUrl.pathname, req.nextUrl.search) &&
     req.headers.get("sec-fetch-dest") === "document"
   );
 }

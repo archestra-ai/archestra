@@ -20,8 +20,8 @@ import {
   useSavedBrowserLogins,
   useSignOutBrowserLogin,
 } from "@/lib/browser-storage-state.query";
-import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { formatBytes } from "@/lib/utils/format-bytes";
 
 /**
  * Admin view of the Playwright browser logins saved per user. Each user's

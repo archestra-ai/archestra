@@ -1557,7 +1557,9 @@ export function ConnectCommandPanel({
             {commandStatus}
           </output>
           <CreditWarningNotice warning={result?.creditWarning} />
+          {/* Notices about model routing wait for the lists they describe. */}
           {hasRunnableAnything &&
+            !choicesLoading &&
             (primaryRoutingBlocked && canAttribute === false ? (
               <InlineNotice variant="info">
                 <InlineNoticeText>
@@ -1606,7 +1608,7 @@ export function ConnectCommandPanel({
                 : "border-terminal-edge bg-terminal shadow-sm dark:shadow-lg",
             )}
           >
-            {!hasRunnableAnything ? (
+            {!hasRunnableAnything && !choicesLoading ? (
               <div className="px-5 py-4 text-sm text-muted-foreground">
                 No selected resource can be configured for this client and
                 operating system. Choose another platform or add a connection

@@ -785,6 +785,29 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/mcp-gateways/default", makeAgent()),
   ...getJson("/api/llm-proxy", makeAgent()),
 
+  // The connection approval page an installer opens (/connection with a
+  // connectRequest): its request, the skill names it lists, and the setup it
+  // prepares (on the server with the document, else in the browser).
+  ...getJson("/api/client-connections/:id", {
+    clientId: "opencode",
+    platform: "linux",
+    exclude: [],
+    gateway: null,
+    plugins: null,
+    deviceName: "test-laptop",
+    userCode: "ABCD-1234",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  }),
+  ...getJson("/api/skills/names", { data: [], total: 0 }),
+  ...postJson("/api/connection-setups", {
+    id: "setup-1",
+    command:
+      "curl -fsSL 'http://localhost:9000/api/connection-setups/tok' | bash",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    tokenStart: "tok",
+    plugins: [],
+  }),
+
   // The static marketplace (the primary install path in the /connection step).
   ...getJson("/api/skill-marketplace", skillMarketplaceSeed),
 

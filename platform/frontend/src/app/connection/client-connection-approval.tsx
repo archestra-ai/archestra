@@ -140,8 +140,9 @@ export function ClientConnectionApproval({
           <div className="flex h-5 items-center">
             <Skeleton className="h-4 w-72" />
           </div>
-          <output className="sr-only">Loading connection request…</output>
         </div>
+        {/* Outside the spaced column, so it adds no gap. */}
+        <output className="sr-only">Loading connection request…</output>
         <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-4 py-3 sm:px-5">
           <Skeleton className="h-8 w-44" />
           <Skeleton className="h-8 w-16" />

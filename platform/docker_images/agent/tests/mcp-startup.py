@@ -252,10 +252,16 @@ class StartupTest(unittest.TestCase):
                         env["ARCHESTRA_AGENT_RUNTIME_CONTINUE"] = "1"
                         env["ARCHESTRA_AGENT_RUNTIME_TASK"] = "Call each recovery tool again, then reply STARTUP_OK."
                         if image_followup:
-                            # A real PNG makes Claude resolve the pasted path
-                            # asynchronously before it can submit the draft.
+                            # Delay the real PNG read beyond the submit buffer,
+                            # independent of machine speed. Claude must finish
+                            # its asynchronous paste before receiving Enter.
                             image = home / "screenshot.png"
-                            image.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="))
+                            os.mkfifo(image)
+                            def feed_image():
+                                with image.open("wb") as stream:
+                                    time.sleep(5)
+                                    stream.write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="))
+                            threading.Thread(target=feed_image, daemon=True).start()
                             env["ARCHESTRA_AGENT_RUNTIME_TASK"] += "\n\nAttached files are available for this run:\n- " + str(image)
                         server.requests.clear()
                         server.calls.clear()

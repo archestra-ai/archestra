@@ -192,6 +192,9 @@ export const CompositionViewSchema = z.object({
       rootRevision: z.number().int(),
       composedAt: z.coerce.date(),
     }),
+    // The latest attempt was refused and the earlier composition stays
+    // enforced. A composition kept this way is not a policy snapshot: every
+    // conversation still follows the deployment.
     z.object({
       kind: z.literal("previous"),
       rootRevision: z.number().int().nullable(),

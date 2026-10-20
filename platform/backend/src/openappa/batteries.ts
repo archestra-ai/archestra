@@ -66,7 +66,7 @@ import {
   compositionView,
   enforcedBattery,
   helperOwner,
-  servedSnapshot,
+  servedRecord,
 } from "./composition-view";
 import {
   addedGrants,
@@ -1245,7 +1245,7 @@ class OpenAppaBatteriesService {
           }));
     }
     return values(accepted, null, (contentHash) =>
-      servedSnapshot({
+      servedRecord({
         batteries: planned,
         installs: params.installs,
         contentHash,

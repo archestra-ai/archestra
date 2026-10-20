@@ -6,6 +6,7 @@ import {
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
@@ -1195,6 +1196,83 @@ const registry = defineArchestraTools([
         );
       } catch (error) {
         return catchError(error, "canceling the run");
+      }
+    },
+  }),
+
+  defineArchestraTool({
+    shortName: TOOL_POST_RUN_MESSAGE_SHORT_NAME,
+    title: "Post Run Message",
+    description:
+      "Post a brief progress update to the Slack thread an active Agent Runtime run reports to. " +
+      "Use when there is meaningful progress, a change of plan, or a long wait to explain. " +
+      "Read the current task_id from ARCHESTRA_AGENT_RUNTIME_TASK_ID. " +
+      "The final answer is posted automatically; do not repeat it here.",
+    schema: z.object({
+      task_id: z.string().uuid(),
+      message: z.string().trim().min(1).max(2_000),
+    }),
+    handler: async ({ args, context }) => {
+      try {
+        const actor = requireActor(context);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+        });
+        if ("error" in task) return errorResult(task.error);
+
+        const session = await AgentRunModel.findByTaskId(task.row.id);
+        if (!session || session.actorUserId !== actor.id) {
+          return errorResult(
+            "Only the person the runtime run acts as can post updates for it.",
+          );
+        }
+        if (session.endedAt || task.row.state !== "TASK_STATE_WORKING") {
+          return errorResult(
+            "This runtime run is not active. No message was posted.",
+          );
+        }
+        const access = await protectedFileAccess({
+          context,
+          actor,
+          taskId: task.row.id,
+        });
+        if (access.kind === "error") return access.result;
+        if (access.kind === "parent") {
+          return errorResult(
+            "A protected runtime cannot post updates from another session.",
+          );
+        }
+        const target = session.completionTarget;
+        if (!target || target.type !== "chatops") {
+          return errorResult(
+            "This runtime run does not report to a Slack thread.",
+          );
+        }
+        const agent = await AgentModel.findById(session.agentId);
+        const { chatOpsManager } = await import(
+          "@/agents/chatops/chatops-manager"
+        );
+        const sent = await chatOpsManager.notifyBindingThread({
+          taskId: task.row.id,
+          bindingId: target.bindingId,
+          threadId: target.threadId,
+          pinnedAgentId: target.pinnedAgentId,
+          agentName: agent?.name,
+          text: args.message,
+          progress: true,
+          ...(target.originatingTaskId === task.row.id && {
+            muteMarkerAtStart: target.muteMarkerAtStart,
+          }),
+        });
+        return structuredSuccessResult(
+          { sent, task_id: task.row.id },
+          sent
+            ? "Progress update posted to the run's Slack thread."
+            : "No update was posted because the thread is muted or the message requests silence.",
+        );
+      } catch (error) {
+        return catchError(error, "posting the run update");
       }
     },
   }),

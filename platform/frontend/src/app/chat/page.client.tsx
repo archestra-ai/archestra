@@ -3250,7 +3250,7 @@ export function ChatPageContent({
       appFilesRevisions={appFilesRevisions}
       onAppModelContext={handleAppModelContext}
     >
-      <div className="flex flex-col h-full w-full min-h-0">
+      <div className="flex flex-col h-full w-full min-h-0 bg-[#39ff14]">
         <ChatStatusAnnouncer status={status} />
         {/* Full-width top bar: title + the Files/Browser/Apps tab strip. It
             sits above the [chat | panel] split so the panel's resize divider

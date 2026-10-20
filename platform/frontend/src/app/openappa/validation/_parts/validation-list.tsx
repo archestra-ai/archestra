@@ -1,5 +1,6 @@
 "use client";
 
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   CircleAlert,
   CircleCheck,
@@ -24,7 +25,9 @@ import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,14 +38,6 @@ import {
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
@@ -137,6 +132,89 @@ export function ValidationList({
         row.path.toLowerCase().includes(needle),
     )
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+
+  const columns: ColumnDef<Row>[] = [
+    {
+      id: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <NameCell
+          row={row.original}
+          running={suite.runningPath === row.original.path}
+        />
+      ),
+    },
+    {
+      id: "lastRun",
+      header: "Last run",
+      size: 110,
+      cell: ({ row }) => {
+        const { runAt, runId, name } = row.original;
+        if (suite.runningPath === row.original.path)
+          return <span className="text-muted-foreground">Running…</span>;
+        if (!runAt || !runId)
+          return <span className="text-muted-foreground">Never</span>;
+        return (
+          <RowClickShield>
+            <UnstyledButton
+              onClick={() => openRun(runId)}
+              title={formatDate({ date: runAt })}
+              aria-label={`${name}: last run ${formatCompactRelativeTime(runAt)}. Open run`}
+              className="text-muted-foreground tabular-nums underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {formatCompactRelativeTime(runAt)}
+            </UnstyledButton>
+          </RowClickShield>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      size: 100,
+      enableHiding: false,
+      cell: ({ row }) => {
+        const { path, name } = row.original;
+        const running = suite.runningPath === path;
+        return (
+          <RowClickShield>
+            <TableRowActions
+              itemName={name}
+              actions={[
+                {
+                  icon: running ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  ),
+                  label: "Run",
+                  permissions: { guardrailsPolicy: ["update"] },
+                  disabled: !suite.runnable,
+                  disabledTooltip: suite.busy
+                    ? "Wait for the current run to finish"
+                    : "Refresh the page to run",
+                  onClick: () => runFile(path),
+                },
+                ...(requestDelete
+                  ? [
+                      {
+                        icon: <Trash2 className="h-4 w-4" />,
+                        label: "Delete",
+                        variant: "destructive" as const,
+                        permissions: { guardrailsPolicy: ["update"] },
+                        disabled: !canDelete,
+                        disabledTooltip: "Wait for the current run to finish",
+                        onClick: () => requestDelete([path]),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </RowClickShield>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="-mt-2 space-y-4">
@@ -242,189 +320,33 @@ export function ValidationList({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="h-9 w-10 pr-0 pl-4 md:pr-0">
-                    <span className="sr-only">Status</span>
-                  </TableHead>
-                  <TableHead className="h-9 text-xs font-medium text-muted-foreground">
-                    Validation
-                  </TableHead>
-                  <TableHead className="h-9 w-[76px] text-xs font-medium text-muted-foreground sm:w-24">
-                    Last run
-                  </TableHead>
-                  <TableHead className="h-9 w-[72px]">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visible.map((row, index) => {
-                  const running = suite.runningPath === row.path;
-                  const href = validationFileHref(row.path);
-                  const tone = row.reason ? REASON_TONE[row.status] : null;
-                  return (
-                    <TableRow
-                      key={row.path}
-                      className="group animate-in cursor-pointer fade-in duration-300"
-                      style={{
-                        animationDelay: `${Math.min(index, 12) * 25}ms`,
-                        animationFillMode: "both",
-                      }}
-                      onClick={(event) =>
-                        openRowOnPlainClick(event, () => router.push(href))
-                      }
-                    >
-                      <TableCell className="py-3 pr-0 pl-4 align-top md:pr-0">
-                        <div className="flex h-5 items-center">
-                          <StatusGlyph
-                            status={running ? "running" : row.status}
-                            className="size-4"
-                          />
-                          <span className="sr-only">
-                            {running ? "Running" : statusLabel(row.status)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="min-w-0 py-3">
-                        <RowClickShield>
-                          <Link
-                            href={href}
-                            className="block truncate text-sm leading-5 font-medium hover:underline hover:underline-offset-4"
-                          >
-                            {row.name}
-                          </Link>
-                        </RowClickShield>
-                        {row.reason && tone ? (
-                          <p
-                            className={cn("mt-0.5 truncate text-xs", tone)}
-                            title={row.reasonFull || row.reason}
-                          >
-                            {row.line !== null && (
-                              <span className="font-mono opacity-80">
-                                L{row.line}
-                              </span>
-                            )}
-                            {row.line !== null && (
-                              <span aria-hidden className="px-1 opacity-50">
-                                ·
-                              </span>
-                            )}
-                            {row.reason}
-                          </p>
-                        ) : (
-                          <p
-                            className="mt-0.5 truncate font-mono text-xs text-muted-foreground/80"
-                            title={row.path}
-                          >
-                            {row.path}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-3 align-top">
-                        {!running && row.runAt && row.runId ? (
-                          <RowClickShield className="flex h-5 items-center">
-                            <UnstyledButton
-                              onClick={() => row.runId && openRun(row.runId)}
-                              title={formatDate({ date: row.runAt })}
-                              aria-label={`${row.name}: last run ${formatCompactRelativeTime(row.runAt)}. Open run`}
-                              className="truncate text-xs leading-5 text-muted-foreground tabular-nums underline-offset-4 hover:text-foreground hover:underline"
-                            >
-                              {formatCompactRelativeTime(row.runAt)}
-                            </UnstyledButton>
-                          </RowClickShield>
-                        ) : (
-                          <span className="block h-5 truncate text-xs leading-5 text-muted-foreground tabular-nums">
-                            {running ? "Running…" : "Never"}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-2.5 pr-3 align-top md:pr-3">
-                        <RowClickShield
-                          className={cn(
-                            "flex justify-end gap-0.5 transition-opacity",
-                            running
-                              ? "opacity-100"
-                              : "opacity-0 group-hover:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100 [@media(hover:none)]:opacity-100",
-                          )}
-                        >
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            aria-label={`Run ${row.name}`}
-                            title={
-                              suite.runnable
-                                ? "Run this validation"
-                                : suite.busy
-                                  ? "Wait for the current run to finish"
-                                  : "Running needs policy update permission"
-                            }
-                            disabled={!suite.runnable}
-                            onClick={() => runFile(row.path)}
-                          >
-                            {running ? (
-                              <Loader2 className="animate-spin" />
-                            ) : (
-                              <Play />
-                            )}
-                          </Button>
-                          {requestDelete && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="icon-xs"
-                                  variant="ghost"
-                                  aria-label={`More actions for ${row.name}`}
-                                >
-                                  <MoreHorizontal />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  disabled={!canDelete}
-                                  onSelect={() => requestDelete([row.path])}
-                                >
-                                  <Trash2 />
-                                  <span>Delete</span>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </RowClickShield>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {visible.length === 0 && (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={4} className="py-10 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        {needle
-                          ? `No validations match “${query.trim()}”.`
-                          : filter === "all"
-                            ? "No validations."
-                            : EMPTY_FILTER[filter]}
-                      </p>
-                      <Button
-                        size="xs"
-                        variant="link"
-                        className="mt-1"
-                        onClick={() => {
-                          setQueryState("");
-                          updateQuery({ status: null, search: "" });
-                        }}
-                      >
-                        Show all
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <DataTable
+            columns={columns}
+            data={visible}
+            getRowId={(row) => row.path}
+            onRowClick={(row, event) =>
+              openRowOnPlainClick(event, () =>
+                router.push(validationFileHref(row.path)),
+              )
+            }
+            hidePaginationWhenSinglePage
+            tableClassName="min-w-[560px]"
+            fixedWidthColumnIds={["lastRun", "actions"]}
+            flexibleColumnIds={["name"]}
+            hasActiveFilters={Boolean(needle) || filter !== "all"}
+            onClearFilters={() => {
+              setQueryState("");
+              updateQuery({ status: null, search: "" });
+            }}
+            filteredEmptyMessage={
+              needle
+                ? `No validations match “${query.trim()}”.`
+                : filter === "all"
+                  ? "No validations."
+                  : EMPTY_FILTER[filter]
+            }
+            emptyMessage="No validations yet."
+          />
         </>
       )}
     </div>
@@ -570,6 +492,56 @@ function EmptySuite() {
           <Info />
           <span>Explain validations</span>
         </OpenAppaChatButton>
+      </div>
+    </div>
+  );
+}
+
+function NameCell({ row, running }: { row: Row; running: boolean }) {
+  const tone = row.reason ? REASON_TONE[row.status] : null;
+  return (
+    <div className="flex min-w-0 items-start gap-2.5">
+      <span className="flex h-5 shrink-0 items-center">
+        <StatusGlyph
+          status={running ? "running" : row.status}
+          className="size-4"
+        />
+        <span className="sr-only">
+          {running ? "Running" : statusLabel(row.status)}
+        </span>
+      </span>
+      <div className="min-w-0">
+        <RowClickShield>
+          <Link
+            href={validationFileHref(row.path)}
+            className="block truncate font-medium hover:underline hover:underline-offset-4"
+          >
+            {row.name}
+          </Link>
+        </RowClickShield>
+        {row.reason && tone ? (
+          <p
+            className={cn("mt-0.5 truncate text-xs", tone)}
+            title={row.reasonFull || row.reason}
+          >
+            {row.line !== null && (
+              <span className="font-mono opacity-80">L{row.line}</span>
+            )}
+            {row.line !== null && (
+              <span aria-hidden className="px-1 opacity-50">
+                ·
+              </span>
+            )}
+            {row.reason}
+          </p>
+        ) : (
+          <p
+            className="mt-0.5 truncate font-mono text-xs text-muted-foreground/80"
+            title={row.path}
+          >
+            {row.path}
+          </p>
+        )}
       </div>
     </div>
   );

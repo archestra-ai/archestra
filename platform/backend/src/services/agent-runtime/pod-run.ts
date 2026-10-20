@@ -75,6 +75,7 @@ async function startAgentRunSession(params: {
   projectId?: string | null;
   completionTarget?: AgentRunCompletionTarget;
   task?: string | null;
+  title?: string;
   runMode: "interactive" | "one_shot";
   modelId: string | null;
   llmApiKeyId: string | null;
@@ -183,9 +184,10 @@ async function startAgentRunSession(params: {
   // objects, so a crash between the two must leave a record, not an orphan.
   const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
   const placeholderTitle =
-    resumeWithoutPrompt && priorRun
+    params.title ??
+    (resumeWithoutPrompt && priorRun
       ? priorRun.title
-      : toPlaceholderTitle(params.task ?? "Run");
+      : toPlaceholderTitle(params.task ?? "Run"));
   const session = await AgentRunModel.create({
     id: runId,
     organizationId: params.organizationId,
@@ -205,7 +207,7 @@ async function startAgentRunSession(params: {
     completionTarget: params.completionTarget,
   });
 
-  if (!resumeWithoutPrompt) {
+  if (params.title === undefined && !resumeWithoutPrompt) {
     trackBackgroundWork(
       generateAgentRunTitle({
         taskId: params.taskId,
@@ -392,6 +394,7 @@ export async function runTaskInAgentRuntime(params: {
   projectId?: string | null;
   completionTarget?: AgentRunCompletionTarget;
   task?: string | null;
+  title?: string;
   runMode: "interactive" | "one_shot";
   modelId: string | null;
   llmApiKeyId: string | null;

@@ -5,6 +5,7 @@ import {
   type MessagingChannelId,
   providerDisplayNames,
   type ResourceVisibilityScope,
+  toPlaceholderTitle,
 } from "@archestra/shared";
 import type { UIMessageChunk } from "ai";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
@@ -1785,6 +1786,7 @@ export class ChatOpsManager {
       },
       provider,
       fullMessage,
+      cleanedMessageText: params.cleanedMessageText,
       sessionSetup,
       sendReply: params.sendReply,
       userId: params.userId,
@@ -2592,6 +2594,7 @@ export class ChatOpsManager {
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     fullMessage: string;
+    cleanedMessageText?: string;
     sessionSetup?: string;
     ephemeralExecutionPrefix?: string;
     sendReply: boolean;
@@ -2709,6 +2712,12 @@ export class ChatOpsManager {
         },
         systemParams: {
           resumeFromTaskId,
+          runtimeTitle:
+            resumeFromTaskId && previous
+              ? previous.run.title
+              : toPlaceholderTitle(
+                  `${CHATOPS_PROVIDER_LABELS[provider.providerId]}: ${params.cleanedMessageText || message.text || "New chat"}`,
+                ),
           sessionId: buildChatOpsSessionId(
             provider.providerId,
             message.channelId,

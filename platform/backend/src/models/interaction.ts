@@ -117,6 +117,23 @@ const SESSION_SCAN_MAX_ROWS = 20_000;
  */
 const GUARDRAIL_SKIP_SCAN_ROWS = 200;
 
+/** Rows per UPDATE when the session-preview backfill stores previews. */
+const SESSION_PREVIEW_UPDATE_ROWS = 50;
+
+/** A thread's row as fillThreadSessionPreviews loads it (raw SQL, snake_case). */
+type ThreadPreviewRow = {
+  id: string;
+  parent_id: string | null;
+  thread_id: string | null;
+  request_shared_prefix: number | null;
+  request: unknown;
+  source: InteractionSource | null;
+  session_source: string | null;
+  type: string;
+  encrypted_chat_conversation_id: string | null;
+  missing: boolean;
+};
+
 /**
  * Session totals keyed by filter set (see getSessions). Per-pod and in-process
  * on purpose: the value is cheap to recompute on a miss, so it is not worth a
@@ -1739,19 +1756,32 @@ class InteractionModel {
   static async findRowsMissingSessionPreview(params: {
     before: { createdAt: string; id: string } | null;
     limit: number;
-  }): Promise<Array<{ id: string; createdAt: string; requestBytes: number }>> {
+  }): Promise<
+    Array<{
+      id: string;
+      createdAt: string;
+      requestBytes: number;
+      sessionId: string | null;
+      threadId: string | null;
+    }>
+  > {
     const before = params.before
       ? sql`AND (created_at, id) < (${params.before.createdAt}::timestamp, ${params.before.id}::uuid)`
       : sql``;
     // Matches the predicate and key order of the partial index built in
     // database/index-maintenance.ts, so this walks only the rows still to do.
+    // session_id and thread_id tell the caller which rows are delta-encoded
+    // and belong to which thread (see fillThreadSessionPreviews).
     const { rows } = await db.execute<{
       id: string;
       created_at: string;
       request_bytes: number | null;
+      session_id: string | null;
+      thread_id: string | null;
     }>(sql`
       SELECT id, created_at::text AS created_at,
-             pg_column_size(request) AS request_bytes
+             pg_column_size(request) AS request_bytes,
+             session_id, thread_id
       FROM interactions
       WHERE session_preview IS NULL
         AND encrypted_chat_conversation_id IS NULL
@@ -1763,6 +1793,8 @@ class InteractionModel {
       id: row.id,
       createdAt: row.created_at,
       requestBytes: Number(row.request_bytes ?? 0),
+      sessionId: row.session_id,
+      threadId: row.thread_id,
     }));
   }
 
@@ -1771,11 +1803,15 @@ class InteractionModel {
    * so the session list stops rebuilding it on every read.
    *
    * It is derived exactly as {@link create} derives it: flags from the stored
-   * (possibly delta-encoded) request, the last-user-message text from the full
-   * reconstructed request. That is also exactly what the list computes for a row
-   * without one, so filling it changes no output, only the cost. A row that
-   * already has a preview is never overwritten, which keeps concurrent runs
-   * harmless.
+   * request, the last-user-message text from the full request. That is also
+   * exactly what the list computes for a row without one, so filling it
+   * changes no output, only the cost. A row that already has a preview is
+   * never overwritten, which keeps concurrent runs harmless.
+   *
+   * Meant for rows that store their whole request. A delta-encoded row is
+   * reconstructed here too, but each one loads and folds its entire chain;
+   * the backfill sends those rows through {@link fillThreadSessionPreviews},
+   * which folds a thread once.
    *
    * Returns how many rows were filled.
    */
@@ -1818,9 +1854,201 @@ class InteractionModel {
         processedRequest: null,
       })),
     );
+    const responses = await InteractionModel.titleResponsesFor(rows);
+    return InteractionModel.storeSessionPreviews(
+      rows.map((row) =>
+        InteractionModel.sessionPreviewValue(
+          row,
+          reconstructed.get(row.id)?.request ?? row.request,
+          responses.get(row.id) ?? null,
+        ),
+      ),
+    );
+  }
 
-    // Only a title-generation turn reads its response, for the title text.
-    // Responses can dwarf requests, so the rest are never loaded.
+  /**
+   * Fill the previews of every row of one delta-encoded thread that still
+   * lacks one, in a single pass over the thread.
+   *
+   * A delta row stores only the messages new since its parent, so its preview
+   * needs the request folded from its ancestors. Filling such rows a chunk at
+   * a time, as {@link fillSessionPreviews} does, loads the chain of every row
+   * in the chunk and folds one whole conversation per row; on Claude Code
+   * sessions of hundreds of turns that exhausted the worker's heap. Here the
+   * rows still missing a preview and every ancestor they fold from are loaded
+   * once, and each row is folded from its parent's fold, so what is held is
+   * those stored suffixes plus one fold at a time.
+   *
+   * Ancestors are loaded whether or not they have a preview: a row written by
+   * a pod on the previous build during the rollout that introduced previews
+   * can sit between two rows that have one. A thread whose loaded rows exceed
+   * `storedBytesLimit` (compressed, as `pg_column_size` reports) is left
+   * alone, and its rows keep deriving the preview on read. A row that cannot
+   * be read fails together with its descendants, which cannot be folded
+   * without it; the rest of the thread is filled.
+   */
+  static async fillThreadSessionPreviews(params: {
+    sessionId: string;
+    threadId: string;
+    storedBytesLimit: number;
+  }): Promise<{
+    filled: number;
+    failed: number;
+    skipped: boolean;
+    storedBytes: number;
+  }> {
+    // The rows to fill plus the ancestors their folds need, each once.
+    const chain = sql`
+      WITH RECURSIVE chain AS (
+        SELECT id, parent_id FROM interactions
+        WHERE session_id = ${params.sessionId}
+          AND thread_id = ${params.threadId}
+          AND session_preview IS NULL
+          AND encrypted_chat_conversation_id IS NULL
+        UNION
+        SELECT i.id, i.parent_id FROM interactions i
+        JOIN chain c ON i.id = c.parent_id
+      )
+    `;
+    const {
+      rows: [size],
+    } = await db.execute<{
+      rows: number;
+      missing: number;
+      bytes: string | number;
+    }>(sql`
+      ${chain}
+      SELECT count(*)::int AS rows,
+             count(*) FILTER (WHERE i.session_preview IS NULL)::int AS missing,
+             COALESCE(SUM(pg_column_size(i.request)), 0) AS bytes
+      FROM chain c JOIN interactions i ON i.id = c.id
+    `);
+    const storedBytes = Number(size?.bytes ?? 0);
+    const missing = Number(size?.missing ?? 0);
+    if (missing === 0) {
+      return { filled: 0, failed: 0, skipped: false, storedBytes };
+    }
+    if (storedBytes > params.storedBytesLimit) {
+      return { filled: 0, failed: missing, skipped: true, storedBytes };
+    }
+
+    const { rows } = await db.execute<ThreadPreviewRow>(sql`
+      ${chain}
+      SELECT i.id, i.parent_id, i.thread_id, i.request_shared_prefix, i.request,
+             i.source, i.session_source, i.type, i.encrypted_chat_conversation_id,
+             (i.session_preview IS NULL) AS missing
+      FROM chain c JOIN interactions i ON i.id = c.id
+      ORDER BY i.created_at, i.id
+    `);
+    const values = InteractionModel.threadSessionPreviewValues(
+      rows,
+      await InteractionModel.titleResponsesFor(
+        rows.map((row) => ({
+          id: row.id,
+          source: row.source,
+          request: row.request,
+        })),
+      ),
+    );
+    // Counted from the rows as loaded, not from the sizing query: a
+    // concurrent run can fill rows between the two.
+    const targets = rows.filter((row) => row.missing).length;
+    const filled = await InteractionModel.storeSessionPreviews(values);
+    return {
+      filled,
+      failed: targets - values.length,
+      skipped: false,
+      storedBytes,
+    };
+  }
+
+  /**
+   * The previews of a thread's rows that lack one, folded from the loaded
+   * rows. Kept apart from the write so the rows can be collected before it.
+   */
+  private static threadSessionPreviewValues(
+    rows: ThreadPreviewRow[],
+    responses: Map<string, unknown>,
+  ): Array<{ id: string; sessionPreview: unknown }> {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const unreadable = new Set<string>();
+    for (const row of rows) {
+      try {
+        readInteractionRow(row);
+      } catch (error) {
+        unreadable.add(row.id);
+        logger.warn(
+          { err: error, interactionId: row.id },
+          "Could not read an interaction while filling its thread's session previews; it and its descendants keep deriving the preview on read",
+        );
+      }
+    }
+    // SPDX-SnippetEnd
+    // A row below an unreadable one cannot be folded either. Resolved by
+    // walking parents, so the result does not depend on row order.
+    const broken = new Map<string, boolean>();
+    const isBroken = (id: string): boolean => {
+      const known = broken.get(id);
+      if (known !== undefined) return known;
+      const row = byId.get(id);
+      const result =
+        row !== undefined &&
+        (unreadable.has(id) ||
+          (row.parent_id !== null &&
+            byId.has(row.parent_id) &&
+            isBroken(row.parent_id)));
+      broken.set(id, result);
+      return result;
+    };
+    const readable = rows.filter((row) => !isBroken(row.id));
+
+    const values: Array<{ id: string; sessionPreview: unknown }> = [];
+    InteractionDeltaManager.foldLoadedRows(
+      readable.map((row) => ({
+        id: row.id,
+        parentId: row.parent_id,
+        threadId: row.thread_id,
+        requestSharedPrefix: row.request_shared_prefix,
+        request: row.request,
+      })),
+      readable.filter((row) => row.missing).map((row) => row.id),
+      (id, request) => {
+        const row = byId.get(id);
+        if (!row) return;
+        values.push(
+          InteractionModel.sessionPreviewValue(
+            {
+              id: row.id,
+              source: row.source,
+              sessionSource: row.session_source,
+              type: row.type,
+              request: row.request,
+            },
+            request,
+            responses.get(id) ?? null,
+          ),
+        );
+      },
+    );
+    return values;
+  }
+
+  /**
+   * The responses of the title-generation turns among `rows`, by id. Only
+   * those turns read their response (for the title text); responses can
+   * dwarf requests, so the rest are never loaded.
+   */
+  private static async titleResponsesFor(
+    rows: Array<{
+      id: string;
+      source: InteractionSource | null;
+      request: unknown;
+    }>,
+  ): Promise<Map<string, unknown>> {
+    const t = schema.interactionsTable;
     const titleIds = rows
       .filter(
         (row) =>
@@ -1831,51 +2059,90 @@ class InteractionModel {
       )
       .map((row) => row.id);
     const responses = new Map<string, unknown>();
-    if (titleIds.length > 0) {
-      const titles = await db
-        .select({
-          id: t.id,
-          response: t.response,
-          encryptedChatConversationId: t.encryptedChatConversationId,
-        })
-        .from(t)
-        .where(inArray(t.id, titleIds));
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      for (const title of titles) {
-        readInteractionRow(title);
-        responses.set(title.id, title.response);
-      }
-      // SPDX-SnippetEnd
+    if (titleIds.length === 0) return responses;
+    const titles = await db
+      .select({
+        id: t.id,
+        response: t.response,
+        encryptedChatConversationId: t.encryptedChatConversationId,
+      })
+      .from(t)
+      .where(inArray(t.id, titleIds));
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    for (const title of titles) {
+      readInteractionRow(title);
+      responses.set(title.id, title.response);
     }
+    // SPDX-SnippetEnd
+    return responses;
+  }
 
-    const values = rows.map((row) => {
-      const preview = buildSessionPreview(
-        {
-          source: row.source,
-          sessionSource: row.sessionSource,
-          type: row.type,
-          request: reconstructed.get(row.id)?.request ?? row.request,
-          response: responses.get(row.id) ?? null,
-        } as InsertInteraction,
-        row.request,
-      );
-      const { sessionPreview } = encryptInteractionContent(
-        { sessionPreview: preview },
-        null,
-      );
-      return sql`(${row.id}::uuid, ${JSON.stringify(sessionPreview)}::jsonb)`;
-    });
+  /**
+   * The stored form of the preview a row would have been written with: built
+   * as {@link create} builds it, from the full request and the stored
+   * (possibly delta-encoded) one, then encrypted like any content column.
+   */
+  private static sessionPreviewValue(
+    row: {
+      id: string;
+      source: InteractionSource | null;
+      sessionSource: string | null;
+      type: string;
+      request: unknown;
+    },
+    fullRequest: unknown,
+    response: unknown,
+  ): { id: string; sessionPreview: unknown } {
+    const preview = buildSessionPreview(
+      {
+        source: row.source,
+        sessionSource: row.sessionSource,
+        type: row.type,
+        request: fullRequest,
+        response,
+      } as InsertInteraction,
+      row.request,
+    );
+    const { sessionPreview } = encryptInteractionContent(
+      { sessionPreview: preview },
+      null,
+    );
+    return { id: row.id, sessionPreview };
+  }
 
-    const { rows: filled } = await db.execute<{ id: string }>(sql`
-      UPDATE interactions AS i
-      SET session_preview = v.preview
-      FROM (VALUES ${sql.join(values, sql`, `)}) AS v(id, preview)
-      WHERE i.id = v.id AND i.session_preview IS NULL
-      RETURNING i.id
-    `);
-    return filled.length;
+  /**
+   * Write previews for rows that still have none, a bounded VALUES list at a
+   * time. Returns how many rows were filled; a row filled meanwhile by a
+   * concurrent run is left as it is.
+   */
+  private static async storeSessionPreviews(
+    values: Array<{ id: string; sessionPreview: unknown }>,
+  ): Promise<number> {
+    let filled = 0;
+    for (
+      let offset = 0;
+      offset < values.length;
+      offset += SESSION_PREVIEW_UPDATE_ROWS
+    ) {
+      const chunk = values.slice(offset, offset + SESSION_PREVIEW_UPDATE_ROWS);
+      const { rows } = await db.execute<{ id: string }>(sql`
+        UPDATE interactions AS i
+        SET session_preview = v.preview
+        FROM (VALUES ${sql.join(
+          chunk.map(
+            (value) =>
+              sql`(${value.id}::uuid, ${JSON.stringify(value.sessionPreview)}::jsonb)`,
+          ),
+          sql`, `,
+        )}) AS v(id, preview)
+        WHERE i.id = v.id AND i.session_preview IS NULL
+        RETURNING i.id
+      `);
+      filled += rows.length;
+    }
+    return filled;
   }
 
   /**

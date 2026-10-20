@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   DEFAULT_APP_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
@@ -69,6 +70,7 @@ import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
   AgentWorkspaceStateSchema,
+  ApiError,
 } from "@/types";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
@@ -410,6 +412,19 @@ const ListAgentRunsOutputSchema = z.object({
 /** How much artifact text get_run inlines; the tail is the useful end. */
 const MAX_INLINED_OUTPUT_CHARS = 20_000;
 const MAX_LISTED_RUNS = 50;
+// Bounded by the API body limit (a base64 payload plus JSON-RPC envelope must
+// fit in one request) and by what a channel thread can reasonably hold. A file
+// read from the workspace by path is held to the same cap.
+const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
+const RunFileNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
+    "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+  );
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -1205,23 +1220,37 @@ const registry = defineArchestraTools([
     description:
       "Upload a file into the messaging-channel thread a run reports to — a demo recording, " +
       "for example — so it renders natively there (Slack plays video uploads inline). Only " +
-      "runs delegated from a bound messaging channel have such a thread.",
+      "runs delegated from a bound messaging channel have such a thread. " +
+      "From inside the run, pass path: the file is read from the run's own workspace, so its bytes never enter the conversation. " +
+      "Pass content_base64 only for a small file that is not in the workspace. Exactly one of the two is required. " +
+      `Files up to ${MAX_RUN_FILE_BYTES / 1024 / 1024} MB.`,
     schema: z.object({
       task_id: z.string().uuid(),
-      filename: z
+      path: z
         .string()
-        .trim()
         .min(1)
-        .max(120)
-        .regex(
-          /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
-          "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+        .max(4096)
+        .optional()
+        .describe(
+          "Workspace-relative path of the file in the run's own workspace, for example demo/demo.mp4. Paths are relative to /home/node/workspace.",
         ),
-      content_base64: z.string().min(1),
+      filename: RunFileNameSchema.optional().describe(
+        "Name shown in the thread. Defaults to the last part of path; required with content_base64.",
+      ),
+      content_base64: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("The file's bytes, base64-encoded, when there is no path."),
       comment: z.string().trim().max(2_000).optional(),
     }),
     handler: async ({ args, context }) => {
       try {
+        if ((args.path === undefined) === (args.content_base64 === undefined)) {
+          return errorResult(
+            "Pass exactly one of path or content_base64. Prefer path for a file in the run's workspace.",
+          );
+        }
         const actor = requireActor(context);
         const task = await requireAccessibleTask({
           taskId: args.task_id,
@@ -1260,15 +1289,9 @@ const registry = defineArchestraTools([
           );
         }
 
-        const data = Buffer.from(args.content_base64, "base64");
-        if (data.length === 0) {
-          return errorResult("content_base64 decoded to an empty file.");
-        }
-        if (data.length > MAX_RUN_FILE_BYTES) {
-          return errorResult(
-            `The file is ${Math.round(data.length / 1024 / 1024)}MB; keep run files under ${Math.round(MAX_RUN_FILE_BYTES / 1024 / 1024)}MB.`,
-          );
-        }
+        const file = await runFileToPost({ actor, taskId: task.row.id, args });
+        if ("error" in file) return errorResult(file.error);
+        const { filename, data } = file;
 
         const { chatOpsManager } = await import(
           "@/agents/chatops/chatops-manager"
@@ -1277,7 +1300,7 @@ const registry = defineArchestraTools([
           bindingId: target.bindingId,
           threadId: target.threadId,
           pinnedAgentId: target.pinnedAgentId,
-          filename: args.filename,
+          filename,
           data,
           comment: args.comment,
         });
@@ -1292,9 +1315,81 @@ const registry = defineArchestraTools([
   }),
 ]);
 
-// Bounded by the API body limit (the base64 payload plus JSON-RPC envelope
-// must fit in one request) and by what a channel thread can reasonably hold.
-const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
+/**
+ * The name and bytes `post_run_file` uploads. A path is read from the run's
+ * own workspace through the transfer helper, which refuses traversal,
+ * symlinks and anything that is not a regular file. The file is pinned first,
+ * so its size is checked before any byte is read and the bytes read are the
+ * pinned version's.
+ */
+async function runFileToPost(params: {
+  actor: A2AActor;
+  taskId: string;
+  args: { path?: string; filename?: string; content_base64?: string };
+}): Promise<{ filename: string; data: Buffer } | { error: string }> {
+  const { args } = params;
+  if (args.path === undefined) {
+    if (!args.filename) {
+      return { error: "Pass filename with content_base64." };
+    }
+    const data = Buffer.from(args.content_base64 ?? "", "base64");
+    if (data.length === 0) {
+      return { error: "content_base64 decoded to an empty file." };
+    }
+    if (data.length > MAX_RUN_FILE_BYTES)
+      return { error: tooLarge(data.length) };
+    return { filename: args.filename, data };
+  }
+  const filename = RunFileNameSchema.safeParse(
+    args.filename ?? path.posix.basename(args.path),
+  );
+  if (!filename.success) {
+    return {
+      error: `The file name ${JSON.stringify(path.posix.basename(args.path))} is not a plain file name. Pass filename (letters, digits, dot, dash, underscore, space).`,
+    };
+  }
+  const where = { actor: params.actor, taskId: params.taskId };
+  try {
+    const snapshot = await workspaceTransferTickets.pinFile({
+      ...where,
+      path: args.path,
+    });
+    try {
+      if (snapshot.size === 0) {
+        return { error: `${args.path} is empty in the run's workspace.` };
+      }
+      if (snapshot.size > MAX_RUN_FILE_BYTES) {
+        return { error: tooLarge(snapshot.size) };
+      }
+      const data = await workspaceTransferTickets.readPinned({
+        ...where,
+        snapshot,
+      });
+      return { filename: filename.data, data };
+    } finally {
+      await workspaceTransferTickets
+        .discardExport({ ...where, transferId: snapshot.transferId })
+        .catch((error) =>
+          logger.warn(
+            { err: error, taskId: params.taskId },
+            "Could not release a run file pinned for posting",
+          ),
+        );
+    }
+  } catch (error) {
+    // The helper's refusals name the path rule that failed, never file bytes.
+    if (error instanceof ApiError && error.statusCode < 500) {
+      return {
+        error: `Could not read ${args.path} from the run's workspace: ${error.message}`,
+      };
+    }
+    throw error;
+  }
+}
+
+function tooLarge(bytes: number): string {
+  return `The file is ${Math.round(bytes / 1024 / 1024)}MB; keep run files under ${Math.round(MAX_RUN_FILE_BYTES / 1024 / 1024)}MB.`;
+}
 
 /** Quote a value for a POSIX shell so a path or token cannot break the command
  * the model is told to run. */

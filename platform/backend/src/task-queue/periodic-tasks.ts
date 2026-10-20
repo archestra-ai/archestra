@@ -126,6 +126,16 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 60,
     payload: {},
   },
+  // Records each MCP installation's own tool descriptions for installations
+  // that predate them (or never synced since), so callers stop being served
+  // another installation's text. A tick rather than a boot-only run, so an
+  // installation that was unreachable or asleep is retried later. One empty
+  // read once complete.
+  {
+    taskType: "mcp_tool_description_backfill",
+    intervalSeconds: 1800,
+    payload: {},
+  },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

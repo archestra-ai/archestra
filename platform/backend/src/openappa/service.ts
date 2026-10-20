@@ -295,11 +295,11 @@ export async function declareOpenappaInstalls(): Promise<void> {
   if (!openappaEnabled()) return;
   try {
     const summary = await declareExistingInstalls();
-    logger.info(summary, "Declared the legacy OpenAPPA battery installs");
+    logger.info(summary, "OpenAPPA declared the legacy battery installs");
   } catch (error) {
     logger.error(
       { err: error },
-      "Declaring the legacy OpenAPPA battery installs failed; the periodic recompile will delete every install row the policy text does not declare",
+      "OpenAPPA could not declare the legacy battery installs; the periodic recompile will delete every install row the policy text does not declare",
     );
   }
   try {
@@ -307,7 +307,7 @@ export async function declareOpenappaInstalls(): Promise<void> {
   } catch (error) {
     logger.error(
       { err: error },
-      "Seeding the OpenAPPA credential bindings from the policy text failed; the text still binds its own variables",
+      "OpenAPPA could not seed the credential bindings from the policy text; the text still binds its own variables",
     );
   }
 }
@@ -322,7 +322,7 @@ export async function recompileAllOnStart(): Promise<void> {
   try {
     await openappaBatteriesService.recompileAll();
   } catch (error) {
-    logger.error({ err: error }, "Recomposing the OpenAPPA policies failed");
+    logger.error({ err: error }, "OpenAPPA could not recompose the policies");
   }
 }
 
@@ -824,7 +824,10 @@ export async function startRuntimeChild(params: {
   spawnCallId?: string;
 }): Promise<{ contract?: string }> {
   if (!params.session.parent_id) {
-    throw new ApiError(409, "A protected runtime requires its bound parent");
+    throw new ApiError(
+      409,
+      "OpenAPPA requires the bound parent of a protected runtime",
+    );
   }
   const decision = await dispatch(params.session, {
     event: "session_start",
@@ -1380,7 +1383,7 @@ export async function evaluateToolCalls(
               toolCallId: admitted[index],
               sessionId: session.session_id,
             },
-            "Failed to cancel OpenAPPA admitted call during batch failure cleanup",
+            "OpenAPPA could not cancel an admitted call during batch failure cleanup",
           );
         }
       }
@@ -1494,7 +1497,7 @@ export async function cancelCalls(
           toolCallId: ids[index],
           sessionId: session.session_id,
         },
-        "Failed to cancel OpenAPPA admitted call",
+        "OpenAPPA could not cancel an admitted call",
       );
     }
   }
@@ -1880,7 +1883,7 @@ export async function loadChildReturns(params: {
   } catch (error) {
     logger.warn(
       { err: error, parentSessionId: params.parentSessionId },
-      "Failed to load OpenAPPA child returns",
+      "OpenAPPA could not load child returns",
     );
     throw openappaFailure(error);
   }
@@ -1907,7 +1910,7 @@ export async function loadChildAddresses(params: {
   } catch (error) {
     logger.warn(
       { err: error, childSessionId: params.childSessionId },
-      "Failed to load OpenAPPA child addresses",
+      "OpenAPPA could not load child addresses",
     );
     throw openappaFailure(error);
   }
@@ -2153,7 +2156,7 @@ export async function loadOfferReview(params: {
   } catch (error) {
     logger.warn(
       { err: error, offerId: params.offerId },
-      "Failed to load OpenAPPA offer review",
+      "OpenAPPA could not load the offer review",
     );
     throw openappaFailure(error);
   }
@@ -2161,10 +2164,7 @@ export async function loadOfferReview(params: {
 
 function validateReturnContract(text: string): void {
   if (Buffer.byteLength(text, "utf8") > 64 * 1024) {
-    throw new ApiError(
-      413,
-      "The OpenAPPA child return contract exceeds 64 KiB",
-    );
+    throw new ApiError(413, "OpenAPPA child return contract exceeds 64 KiB");
   }
 }
 

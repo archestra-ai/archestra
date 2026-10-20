@@ -558,7 +558,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       .catch((error) => {
         logger.warn(
           { organizationId, error },
-          "A pulled APPA policy could not be checked",
+          "OpenAPPA could not check a pulled policy",
         );
         return { valid: false, errors: [] };
       });
@@ -591,7 +591,7 @@ export async function syncAppaGithubPolicy(organizationId: string) {
     if (!published) {
       logger.info(
         { organizationId },
-        "An APPA GitHub pull was discarded: the source changed while it downloaded",
+        "OpenAPPA discarded a GitHub pull: the source changed while it downloaded",
       );
       return;
     }
@@ -624,7 +624,7 @@ async function queuePolicyValidation(
   } catch {
     logger.warn(
       { organizationId },
-      "Could not queue informational validation after a policy change",
+      "OpenAPPA could not queue informational validation after a policy change",
     );
   }
 }

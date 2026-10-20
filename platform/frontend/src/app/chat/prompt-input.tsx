@@ -1030,7 +1030,7 @@ const PromptInputContent = ({
         becomes its live terminal when ready.
       </span>
     </div>
-  ) : encryptedChatActive && !conversationId ? (
+  ) : encryptedChatActive ? (
     <div
       data-testid={E2eTestId.EncryptedChatNotice}
       className={cn(
@@ -1315,14 +1315,14 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {conversationId && !runtimeMode ? (
+      {!runtimeMode ? (
         <ChatComposerSecurity
-          key={conversationId}
+          key={conversationId ?? "new"}
           conversationId={conversationId}
-          encrypted={encryptedChatActive}
-          privacyDetails={privacyDetails}
         >
+          {!drawerBelow && drawer}
           {composer}
+          {drawerBelow && drawer}
         </ChatComposerSecurity>
       ) : (
         <>

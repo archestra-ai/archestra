@@ -7,6 +7,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  YELL_RESULT_GUARDRAILS_OFF,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -1466,9 +1467,6 @@ const PREVIEW_APPROVAL_INSTRUCTION =
 /** What a yell tells the agent when break the glass is off. */
 const YELL_RESULT_GUARDRAILS_UNCHANGED =
   "Guardrails are unchanged for this session.";
-/** What a yell tells the agent when break the glass turned OpenAPPA off. */
-const YELL_RESULT_GUARDRAILS_OFF =
-  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
 
 function textParts(result: CallToolResult): string[] {
   return result.content.flatMap((part) =>

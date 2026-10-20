@@ -52,13 +52,17 @@ describe("GET /api/organization/members/signup-status", () => {
     await makeAccount(signedUp.id);
     const provisioned = await makeUser({ email: "provisioned@example.com" });
     await makeMember(provisioned.id, ctx.organizationId);
+    // Explicit times: two inserts can share a timestamp, which would make
+    // "newest" a tie.
     await makeInvitation(ctx.organizationId, ctx.user.id, {
       email: provisioned.email,
       status: "auto-provisioned:ms-teams",
+      createdAt: new Date("2026-01-01T00:00:00Z"),
     });
     const invited = await makeInvitation(ctx.organizationId, ctx.user.id, {
       email: provisioned.email,
       status: "auto-provisioned:slack",
+      createdAt: new Date("2026-01-02T00:00:00Z"),
     });
     const noInvitation = await makeUser();
     await makeMember(noInvitation.id, ctx.organizationId);

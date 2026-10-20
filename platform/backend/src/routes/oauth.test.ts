@@ -640,6 +640,7 @@ describe("OAuth helper functions", () => {
           return {
             ok: true,
             json: async () => ({
+              issuer: "https://auth.example.com",
               authorization_endpoint:
                 "https://auth.example.com/oauth2/authorize",
               token_endpoint: "https://auth.example.com/oauth2/token",
@@ -671,6 +672,123 @@ describe("OAuth helper functions", () => {
       ]);
 
       globalThis.fetch = originalFetch;
+    });
+
+    test("skips authorization server metadata issued for a different issuer", async () => {
+      const issuer = "https://login.example.com/tenant-a/v2.0";
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (
+          url ===
+          "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              resource: "https://mcp.example.com/mcp",
+              authorization_servers: [issuer],
+            }),
+          };
+        }
+        // The host root answers the RFC 8414 root fallback with metadata for
+        // its own issuer, which has no registration endpoint.
+        if (
+          url ===
+          "https://login.example.com/.well-known/oauth-authorization-server"
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              issuer: "https://login.example.com",
+              authorization_endpoint: "https://login.example.com/authorize",
+              token_endpoint: "https://login.example.com/token",
+            }),
+          };
+        }
+        if (url === `${issuer}/.well-known/openid-configuration`) {
+          return {
+            ok: true,
+            json: async () => ({
+              issuer,
+              authorization_endpoint: `${issuer}/authorize`,
+              token_endpoint: `${issuer}/token`,
+              registration_endpoint: `${issuer}/register`,
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as Mock;
+      globalThis.fetch = fetchMock;
+
+      const endpoints = await discoverOAuthEndpoints({
+        server_url: "https://mcp.example.com/mcp",
+        supports_resource_metadata: true,
+      });
+
+      expect(endpoints).toMatchObject({
+        authorizationEndpoint: `${issuer}/authorize`,
+        tokenEndpoint: `${issuer}/token`,
+        registrationEndpoint: `${issuer}/register`,
+        issuer,
+      });
+    });
+
+    test("accepts an issuer that differs from the discovery URL only by a trailing slash", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          issuer: "https://auth.example.com/",
+          authorization_endpoint: "https://auth.example.com/authorize",
+          token_endpoint: "https://auth.example.com/token",
+          registration_endpoint: "https://auth.example.com/register",
+        }),
+      }) as Mock;
+      globalThis.fetch = fetchMock;
+
+      const endpoints = await discoverOAuthEndpoints({
+        server_url: "https://auth.example.com",
+        supports_resource_metadata: false,
+      });
+
+      expect(endpoints.registrationEndpoint).toBe(
+        "https://auth.example.com/register",
+      );
+      // The first candidate matched, so discovery stopped there.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("falls back to the first valid metadata when no candidate matches the discovery URL", async () => {
+      // Servers without protected resource metadata are discovered from the
+      // MCP URL itself, which is not an issuer; their metadata lives at the
+      // origin and must keep working.
+      globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+        if (
+          String(input) ===
+          "https://mcp.example.com/.well-known/oauth-authorization-server"
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              issuer: "https://mcp.example.com",
+              authorization_endpoint: "https://mcp.example.com/authorize",
+              token_endpoint: "https://mcp.example.com/token",
+              registration_endpoint: "https://mcp.example.com/register",
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as Mock;
+
+      const endpoints = await discoverOAuthEndpoints({
+        server_url: "https://mcp.example.com/mcp",
+        supports_resource_metadata: false,
+      });
+
+      expect(endpoints).toMatchObject({
+        authorizationEndpoint: "https://mcp.example.com/authorize",
+        registrationEndpoint: "https://mcp.example.com/register",
+        issuer: "https://mcp.example.com",
+      });
     });
 
     test("falls back to explicit endpoints when discovery fails", async () => {

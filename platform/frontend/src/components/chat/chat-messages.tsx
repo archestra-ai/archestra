@@ -576,6 +576,12 @@ export function ChatMessages({
     [messages, chatErrors, compactions],
   );
   const transcriptWindow = useTranscriptWindow(timelineItems);
+  // True for the first render, which hydrates the server's HTML.
+  const [transcriptFromHtml, setTranscriptFromHtml] = useState(true);
+  const takeOverTranscript = useCallback(
+    () => setTranscriptFromHtml(false),
+    [],
+  );
 
   if (
     messages.length === 0 &&
@@ -638,12 +644,20 @@ export function ChatMessages({
         className="h-full"
         resize={instantResize || initialLoad ? "instant" : "smooth"}
       >
+        <OpenAtEnd
+          fromHtml={transcriptFromHtml}
+          onTakenOver={takeOverTranscript}
+        />
         <ScrollToBottomOnSubmit status={status} />
         <ScrollToBottomOnContextCompaction
           isCompacting={contextCompaction?.isCompacting || isContextCompacting}
           feedback={contextCompactionFeedback}
         />
-        <ConversationContent>
+        <ConversationContent
+          scrollClassName={
+            transcriptFromHtml ? OPEN_AT_END_SCROLL_CLASS : undefined
+          }
+        >
           <div className="@container/chat max-w-4xl mx-auto relative pb-8">
             <TranscriptWindowEdge
               hiddenCount={transcriptWindow.start}
@@ -1685,6 +1699,40 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
     default:
       return `part:${JSON.stringify(part)}`;
   }
+}
+
+/**
+ * The transcript in the server's HTML opens at its end: until the page takes
+ * over, its scroller lays out bottom-up, which browsers scroll to the end
+ * (`justify-end` keeps a short transcript at the top). The HTML streams in
+ * hidden segments, so a script could not scroll it; stick-to-bottom only
+ * starts after hydration.
+ */
+const OPEN_AT_END_SCROLL_CLASS = "flex flex-col-reverse justify-end";
+
+/**
+ * Hands the scroller to stick-to-bottom before the first client paint: the
+ * bottom-up layout is dropped and the end kept in view.
+ */
+function OpenAtEnd({
+  fromHtml,
+  onTakenOver,
+}: {
+  fromHtml: boolean;
+  onTakenOver: () => void;
+}) {
+  const { scrollRef } = useStickToBottomContext();
+  useLayoutEffect(() => {
+    if (fromHtml) {
+      onTakenOver();
+      return;
+    }
+    const scroller = scrollRef.current;
+    if (scroller && !window.location.hash.startsWith("#message-")) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+  }, [fromHtml, onTakenOver, scrollRef]);
+  return null;
 }
 
 // Re-engage stick-to-bottom when the user sends a new message.

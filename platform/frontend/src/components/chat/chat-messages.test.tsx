@@ -37,6 +37,7 @@ vi.mock("@/components/ai-elements/conversation", () => ({
 vi.mock("use-stick-to-bottom", () => ({
   useStickToBottomContext: () => ({
     isAtBottom: true,
+    scrollRef: { current: null },
     scrollToBottom: vi.fn(),
     stopScroll: vi.fn(),
   }),

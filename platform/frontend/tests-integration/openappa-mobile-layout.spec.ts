@@ -1,3 +1,4 @@
+import { makeAgent } from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
 
 // Real browser layout: jsdom cannot see a title squeezed into a narrow
@@ -94,10 +95,21 @@ for (const width of [320, 375]) {
             },
           },
         },
+        { method: "get", url: "/api/agents/chat-roster", body: [APPA_KEEPER] },
+        {
+          method: "get",
+          url: `/api/agents/${APPA_KEEPER.id}`,
+          body: APPA_KEEPER,
+        },
+        {
+          method: "get",
+          url: "/api/members/default-model",
+          body: { modelId: null, chatApiKeyId: null },
+        },
       ]);
     });
 
-    test("the Overview title keeps one line and its actions sit below the description", async ({
+    test("the Overview header keeps its title on one line with Settings beside it", async ({
       page,
     }) => {
       await page.goto("/openappa");
@@ -113,15 +125,60 @@ for (const width of [320, 375]) {
       );
       expect(Math.round(lines)).toBe(1);
 
-      const header = page.locator("[data-page-header]");
-      const description = await header
-        .locator("[data-page-description]")
+      const settings = page.getByRole("link", { name: "Settings" });
+      const title = await heading.boundingBox();
+      const button = await settings.boundingBox();
+      if (!title || !button) throw new Error("Missing header parts");
+      expect(button.y).toBeLessThan(title.y + title.height);
+      expect(button.x).toBeGreaterThanOrEqual(title.x + title.width);
+      expect(button.x + button.width).toBeLessThanOrEqual(width);
+      // Phones leave the enforcement state to Settings.
+      await expect(page.getByText(/^Enforcement (on|off)$/)).toBeHidden();
+    });
+
+    test("the Overview folds the chat prompts into an Ask menu and keeps its spacing even", async ({
+      page,
+    }) => {
+      await page.goto("/openappa");
+      const chat = page.getByRole("link", { name: "Chat with APPA Keeper" });
+      await expect(chat).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Explain my policy" }),
+      ).toBeHidden();
+      await page.getByRole("button", { name: "Ask" }).click();
+      const items = page.getByRole("menuitem");
+      await expect(items).toHaveText([
+        "Explain OpenAPPA guardrails",
+        "Explain my policy",
+        "Review risky calls",
+        "Help me make a change",
+        "Validate my policy",
+      ]);
+      await expect(items.first()).toHaveAttribute("href", /\/chat/);
+      await page.keyboard.press("Escape");
+
+      // The strip sits as far from the section below it as from the header.
+      const header = await page.locator("[data-page-header]").boundingBox();
+      const strip = await chat
+        .locator("xpath=ancestor::*[@data-slot='card'][1]")
         .boundingBox();
-      const actions = await header.locator("[data-page-actions]").boundingBox();
-      if (!description || !actions) throw new Error("Missing header parts");
-      expect(actions.y).toBeGreaterThanOrEqual(
-        description.y + description.height,
+      const section = page.getByRole("heading", {
+        level: 2,
+        name: "How your policy decides",
+      });
+      const sectionBox = await section.boundingBox();
+      const viewPolicy = await page
+        .getByRole("link", { name: "View policy" })
+        .boundingBox();
+      if (!header || !strip || !sectionBox || !viewPolicy)
+        throw new Error("Missing overview parts");
+      expect(sectionBox.y - (strip.y + strip.height)).toBeCloseTo(
+        strip.y - (header.y + header.height),
+        0,
       );
+      // "View policy" rides the section heading's row.
+      expect(viewPolicy.y).toBeLessThan(sectionBox.y + sectionBox.height);
+      expect(viewPolicy.x).toBeGreaterThan(sectionBox.x + sectionBox.width);
     });
 
     test("a selected overflow tab fits the tab row instead of scrolling it", async ({
@@ -176,3 +233,11 @@ for (const width of [320, 375]) {
     });
   });
 }
+
+const APPA_KEEPER = makeAgent({
+  id: "openappa-configuration-agent",
+  scope: "org",
+  builtIn: true,
+  builtInAgentConfig: { name: "openappa-configuration-agent" },
+  authorId: null,
+});

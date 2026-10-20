@@ -94079,6 +94079,7 @@ export type RunOpenAppaPolicyTestsData = {
         sourceVersion: string;
         directory?: string;
         partial?: boolean;
+        progressToken?: string;
     };
     path?: never;
     query?: never;
@@ -94179,6 +94180,7 @@ export type RunOpenAppaPolicyTestsResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;
@@ -94299,6 +94301,7 @@ export type GetOpenAppaPolicyTestRunsResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;
@@ -94423,6 +94426,7 @@ export type PreviewOpenAppaPolicyTestResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;

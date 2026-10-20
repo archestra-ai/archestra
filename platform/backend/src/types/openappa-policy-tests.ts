@@ -68,6 +68,8 @@ export const PolicyTestResultSchema = z.object({
   status: z.enum(["passed", "failed", "cannot_run"]),
   error: z.string().nullable().optional(),
   contentHash: z.string(),
+  /** Wall time replay spent on the file; absent on runs recorded before it was measured. */
+  durationMs: z.number().int().nonnegative().optional(),
   steps: z.array(
     z.object({
       line: z.number().int().nonnegative(),
@@ -115,9 +117,15 @@ export const RunPolicyTestsSchema = z.strictObject({
   directory: PolicyTestDirectorySchema.default("traces"),
   /** Run only these saved files instead of the whole suite. */
   partial: z.boolean().optional(),
+  /**
+   * Set to stream this run's progress to the requesting user's open sockets as
+   * `openappa_validation_progress` messages carrying this token.
+   */
+  progressToken: z.string().uuid().optional(),
 });
 export const PreviewPolicyTestSchema = RunPolicyTestsSchema.omit({
   partial: true,
+  progressToken: true,
 }).extend({
   files: PolicyTestFilesSchema.refine(
     (files) => files.length === 1,

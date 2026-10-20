@@ -594,6 +594,45 @@ export type ConversationUpdatedMessage = {
   };
 };
 
+/** One replayed assertion in a live validation run. */
+export type OpenAppaValidationProgressStep = {
+  line: number;
+  tool: string;
+  expected: string;
+  actual: string | null;
+  status: "passed" | "failed" | "cannot_run";
+  error?: string | null;
+};
+
+/**
+ * Progress of one validation run, pushed to the user who started it while
+ * replay works through the files one at a time. `token` is the id the client
+ * sent with the run request, so a page only follows the run it started.
+ */
+export type OpenAppaValidationProgressMessage = {
+  type: "openappa_validation_progress";
+  payload:
+    | { token: string; phase: "started"; paths: string[] }
+    | { token: string; phase: "file_started"; path: string }
+    | {
+        token: string;
+        phase: "file_finished";
+        path: string;
+        status: "passed" | "failed" | "cannot_run";
+        assertionCount: number;
+        durationMs: number;
+        error?: string | null;
+        steps: OpenAppaValidationProgressStep[];
+      }
+    | {
+        token: string;
+        phase: "finished";
+        /** The recorded run, or null when the run could not be recorded. */
+        runId: string | null;
+        error?: string;
+      };
+};
+
 export type ServerWebSocketMessage =
   | BrowserScreenshotMessage
   | BrowserNavigateResultMessage
@@ -625,6 +664,7 @@ export type ServerWebSocketMessage =
   | McpServersChangedMessage
   | WebSocketReadyMessage
   | ConversationUpdatedMessage
+  | OpenAppaValidationProgressMessage
   | ErrorMessage;
 
 /**

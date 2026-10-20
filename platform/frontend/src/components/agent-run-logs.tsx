@@ -9,7 +9,9 @@ import { FileX2, TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
+import { Button } from "@/components/ui/button";
 import type { AgentRun } from "@/lib/agent-runtime.query";
+import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
 import websocketService from "@/lib/websocket/websocket";
 
 export function AgentRunLogs({
@@ -33,6 +35,12 @@ export function AgentRunLogs({
     source: "full" | "tail";
     truncated: boolean;
   }>();
+  // An ended run opens on the end of its recording: replaying a long one in
+  // full costs seconds of main thread and, for the longest, the tab. The rest
+  // loads on request.
+  const [fullRecording, setFullRecording] = useState(false);
+  const [omittedBytes, setOmittedBytes] = useState(0);
+  const requestTail = Boolean(run.endedAt) && !fullRecording;
 
   useEffect(() => {
     let receivedOutput = false;
@@ -69,6 +77,7 @@ export function AgentRunLogs({
         payload: {
           runId: logId,
           ...(includeSessionHistory ? { includeSessionHistory: true } : {}),
+          ...(requestTail ? { tailBytes: RECORDING_TAIL_BYTES } : {}),
         },
       });
     };
@@ -76,6 +85,7 @@ export function AgentRunLogs({
     setError(undefined);
     setIsStreaming(!run.endedAt);
     setHistoryLoaded(!run.endedAt);
+    setOmittedBytes(0);
     setRetainedStatus(undefined);
     websocketService.connect();
     const subscriptions = [
@@ -119,6 +129,7 @@ export function AgentRunLogs({
             flush();
             setIsStreaming(false);
             setHistoryLoaded(true);
+            setOmittedBytes(message.payload.omittedBytes ?? 0);
             if (message.payload.source) {
               setRetainedStatus({
                 source: message.payload.source,
@@ -139,14 +150,17 @@ export function AgentRunLogs({
         payload: { runId: logId },
       });
     };
-  }, [run.endedAt, logId, includeSessionHistory]);
+  }, [run.endedAt, logId, includeSessionHistory, requestTail]);
 
   return (
     <DeploymentLogPanel
       title={title}
       content={terminalContent}
       contentRenderer={(output) => (
-        <TerminalRecording key={run.taskId} content={output} />
+        <TerminalRecording
+          key={`${run.taskId}:${fullRecording}`}
+          content={output}
+        />
       )}
       error={error}
       emptyIcon={run.endedAt && historyLoaded ? FileX2 : TerminalSquare}
@@ -177,7 +191,19 @@ export function AgentRunLogs({
             <span>Streaming</span>
           </div>
         ) : terminalContent ? (
-          <RetainedTranscriptStatus status={retainedStatus} />
+          <div className="flex items-center gap-3">
+            {omittedBytes > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 font-mono text-xs text-slate-300"
+                onClick={() => setFullRecording(true)}
+              >
+                Load full recording ({formatBytes(omittedBytes)} more)
+              </Button>
+            )}
+            <RetainedTranscriptStatus status={retainedStatus} />
+          </div>
         ) : null
       }
     />
@@ -187,6 +213,8 @@ export function AgentRunLogs({
 const EMPTY_LOG_RETRY_LIMIT = 3;
 const EMPTY_LOG_RETRY_DELAY_MS = 250;
 const LIVE_FLUSH_MS = 100;
+/** How much of an ended run's recording opens first. */
+const RECORDING_TAIL_BYTES = 2 * 1024 * 1024;
 const HISTORY_IDLE_FLUSH_MS = 500;
 
 function RetainedTranscriptStatus({

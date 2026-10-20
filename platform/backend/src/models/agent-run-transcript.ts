@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AgentRunReadableTranscriptChunk,
@@ -62,6 +62,91 @@ export default class AgentRunTranscriptModel {
       transcript,
       chunks: chunks.map((chunk) => normalizeByteaField(chunk, "data")),
     };
+  }
+
+  /**
+   * A complete recording's header and its last chunks, enough for about
+   * `maxBytes` of output, without reading the earlier chunks' data. Null when
+   * nothing is stored.
+   */
+  static async findTailByRunId(params: {
+    runId: string;
+    maxBytes: number;
+  }): Promise<{
+    transcript: AgentRunTranscript;
+    chunks: AgentRunTranscriptChunk[];
+    firstSequence: number;
+  } | null> {
+    const [transcript] = await db
+      .select()
+      .from(schema.agentRunTranscriptsTable)
+      .where(eq(schema.agentRunTranscriptsTable.runId, params.runId))
+      .limit(1);
+    if (!transcript) return null;
+    const sizes = await db
+      .select({
+        sequence: schema.agentRunTranscriptChunksTable.sequence,
+        uncompressedBytes:
+          schema.agentRunTranscriptChunksTable.uncompressedBytes,
+      })
+      .from(schema.agentRunTranscriptChunksTable)
+      .where(eq(schema.agentRunTranscriptChunksTable.runId, params.runId))
+      .orderBy(desc(schema.agentRunTranscriptChunksTable.sequence));
+    let firstSequence = sizes.at(-1)?.sequence ?? 0;
+    let bytes = 0;
+    for (const size of sizes) {
+      firstSequence = size.sequence;
+      bytes += size.uncompressedBytes;
+      if (bytes >= params.maxBytes) break;
+    }
+    const chunks = await db
+      .select()
+      .from(schema.agentRunTranscriptChunksTable)
+      .where(
+        and(
+          eq(schema.agentRunTranscriptChunksTable.runId, params.runId),
+          gte(schema.agentRunTranscriptChunksTable.sequence, firstSequence),
+        ),
+      )
+      .orderBy(asc(schema.agentRunTranscriptChunksTable.sequence));
+    return {
+      transcript,
+      chunks: chunks.map((chunk) => normalizeByteaField(chunk, "data")),
+      firstSequence,
+    };
+  }
+
+  /** Stored recording sizes by run id, for the runs that have one. */
+  static async findSizesByRunIds(
+    runIds: string[],
+  ): Promise<Map<string, number>> {
+    if (runIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        runId: schema.agentRunTranscriptsTable.runId,
+        uncompressedBytes: schema.agentRunTranscriptsTable.uncompressedBytes,
+      })
+      .from(schema.agentRunTranscriptsTable)
+      .where(inArray(schema.agentRunTranscriptsTable.runId, runIds));
+    return new Map(rows.map((row) => [row.runId, row.uncompressedBytes]));
+  }
+
+  /** One stored chunk of a recording, or null. */
+  static async findChunk(params: {
+    runId: string;
+    sequence: number;
+  }): Promise<AgentRunTranscriptChunk | null> {
+    const [chunk] = await db
+      .select()
+      .from(schema.agentRunTranscriptChunksTable)
+      .where(
+        and(
+          eq(schema.agentRunTranscriptChunksTable.runId, params.runId),
+          eq(schema.agentRunTranscriptChunksTable.sequence, params.sequence),
+        ),
+      )
+      .limit(1);
+    return chunk ? normalizeByteaField(chunk, "data") : null;
   }
 
   static async replaceReadable(

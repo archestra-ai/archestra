@@ -24,6 +24,7 @@ import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
   AgentRunModel,
+  AgentRunTranscriptModel,
   McpServerModel,
   ProjectAccessModel,
   ProjectModel,
@@ -280,6 +281,7 @@ export class WebSocketService {
         message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
         clientContext,
         message.payload.includeSessionHistory ?? false,
+        message.payload.tailBytes,
       );
     },
     unsubscribe_agent_run_logs: (ws) => {
@@ -713,6 +715,7 @@ export class WebSocketService {
     lines: number,
     clientContext: WebSocketClientContext,
     includeSessionHistory = false,
+    tailBytes?: number,
   ): Promise<void> {
     this.unsubscribeAgentRunLogs(ws);
     const abortController = new AbortController();
@@ -753,6 +756,24 @@ export class WebSocketService {
       return;
     }
 
+    // An ended run's recording can open on its end: the start of its last
+    // turn and any earlier turns are left out and counted, for the viewer to
+    // load on request. Without a complete stored recording, the full path
+    // below sends what was retained.
+    if (session.endedAt && tailBytes) {
+      await this.refreshRetainedTranscript({ session, runId });
+      if (abortController.signal.aborted) return;
+      const sent = await this.streamAgentRunTail({
+        ws,
+        runId,
+        session,
+        tailBytes,
+        includeSessionHistory,
+        signal: abortController.signal,
+      });
+      if (sent || abortController.signal.aborted) return;
+    }
+
     let history = { complete: true, bytes: 0 };
     try {
       if (includeSessionHistory) {
@@ -779,26 +800,7 @@ export class WebSocketService {
     if (abortController.signal.aborted) return;
 
     if (session.endedAt) {
-      if (session.virtualApiKeyId) {
-        const backend = resolveAgentRuntimeBackendDriver(session.backend);
-        const output = new AgentRuntimeOutputCapture({ backend, session });
-        try {
-          await output.recoverSnapshot(AbortSignal.timeout(30_000));
-          if (output.observedTranscriptBytes > 0) {
-            await agentRunTranscriptStore.persist({
-              runId: session.id,
-              transcript: output.completeTranscript,
-              observedBytes: output.observedTranscriptBytes,
-              readableTranscript: output.readableTranscript,
-            });
-          }
-        } catch (error) {
-          logger.warn(
-            { error, runId },
-            "Could not refresh retained terminal output",
-          );
-        }
-      }
+      if (!tailBytes) await this.refreshRetainedTranscript({ session, runId });
       const decoder = new StringDecoder("utf8");
       const transcript = await agentRunTranscriptStore
         .stream({
@@ -915,6 +917,112 @@ export class WebSocketService {
         },
       });
       this.unsubscribeAgentRunLogs(ws);
+    }
+  }
+
+  /**
+   * Re-read a run's output from its workspace and store it, for a run whose
+   * terminal stays attachable (it keeps its key) and may have written more
+   * since it ended.
+   */
+  private async refreshRetainedTranscript(params: {
+    session: AgentRunRecord;
+    runId: string;
+  }): Promise<void> {
+    const { session, runId } = params;
+    if (!session.virtualApiKeyId) return;
+    const backend = resolveAgentRuntimeBackendDriver(session.backend);
+    const output = new AgentRuntimeOutputCapture({ backend, session });
+    try {
+      await output.recoverSnapshot(AbortSignal.timeout(30_000));
+      if (output.observedTranscriptBytes > 0) {
+        await agentRunTranscriptStore.persist({
+          runId: session.id,
+          transcript: output.completeTranscript,
+          observedBytes: output.observedTranscriptBytes,
+          readableTranscript: output.readableTranscript,
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        { error, runId },
+        "Could not refresh retained terminal output",
+      );
+    }
+  }
+
+  /**
+   * Send the end of an ended run's complete recording and close the stream.
+   * False, having sent nothing, when no complete recording is stored.
+   */
+  private async streamAgentRunTail(params: {
+    ws: WebSocket;
+    runId: string;
+    session: AgentRunRecord;
+    tailBytes: number;
+    includeSessionHistory: boolean;
+    signal: AbortSignal;
+  }): Promise<boolean> {
+    const { ws, runId, session, signal } = params;
+    const decoder = new StringDecoder("utf8");
+    const send = (logs: string) => {
+      if (logs && !signal.aborted)
+        this.sendToClient(ws, {
+          type: "agent_run_logs",
+          payload: { runId, logs },
+        });
+    };
+    const tail = await agentRunTranscriptStore
+      .streamTail({
+        runId: session.id,
+        maxBytes: params.tailBytes,
+        onChunk: (chunk) => send(decoder.write(chunk)),
+      })
+      .catch((error) => {
+        logger.warn(
+          { error, sessionId: session.id, taskId: session.taskId },
+          "Could not read the end of the Agent run transcript",
+        );
+        return null;
+      });
+    if (!tail || signal.aborted) return Boolean(tail);
+    send(decoder.end());
+    const historyBytes = params.includeSessionHistory
+      ? await this.sessionHistoryBytes(session)
+      : 0;
+    if (signal.aborted) return true;
+    this.sendToClient(ws, {
+      type: "agent_run_logs_ended",
+      payload: {
+        runId,
+        source: "full",
+        truncated: false,
+        totalBytes: tail.uncompressedBytes + historyBytes,
+        omittedBytes: tail.omittedBytes + historyBytes,
+      },
+    });
+    this.unsubscribeAgentRunLogs(ws);
+    return true;
+  }
+
+  /** The stored size of a session's earlier turns. */
+  private async sessionHistoryBytes(session: AgentRunRecord): Promise<number> {
+    let afterId: string | undefined;
+    let bytes = 0;
+    for (;;) {
+      const turns = await AgentRunModel.listPreviousTurns({
+        run: session,
+        afterId,
+      });
+      if (!turns.length) return bytes;
+      const sizes = await AgentRunTranscriptModel.findSizesByRunIds(
+        turns.map((turn) => turn.id),
+      );
+      for (const turn of turns) {
+        bytes +=
+          sizes.get(turn.id) ?? Buffer.byteLength(turn.logs ?? "", "utf8");
+      }
+      afterId = turns.at(-1)?.id;
     }
   }
 

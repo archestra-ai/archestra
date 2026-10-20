@@ -68,6 +68,47 @@ export const agentRunTranscriptStore = {
     };
   },
 
+  /**
+   * The end of a complete recording: whole stored chunks from the last one
+   * back until about `maxBytes`, starting after the first line break so
+   * playback does not begin inside an escape sequence or character. The last
+   * terminal size the omitted part set is sent first, so the tail replays at
+   * the recorded geometry. Null when nothing complete is stored.
+   */
+  async streamTail(params: {
+    runId: string;
+    maxBytes: number;
+    onChunk: (chunk: Buffer) => void;
+  }): Promise<{ uncompressedBytes: number; omittedBytes: number } | null> {
+    const stored = await AgentRunTranscriptModel.findTailByRunId(params);
+    if (!stored?.transcript.isComplete) return null;
+    const total = stored.transcript.uncompressedBytes;
+    if (stored.firstSequence === 0) {
+      for (const chunk of stored.chunks) {
+        params.onChunk(await gunzipAsync(chunk.data));
+      }
+      return { uncompressedBytes: total, omittedBytes: 0 };
+    }
+
+    const marker = await findLastSizeMarker({
+      runId: params.runId,
+      beforeSequence: stored.firstSequence,
+    });
+    let sent = 0;
+    for (const [index, chunk] of stored.chunks.entries()) {
+      let data = await gunzipAsync(chunk.data);
+      if (index === 0) {
+        const lineBreak = data.indexOf(0x0a);
+        data =
+          lineBreak === -1 ? Buffer.alloc(0) : data.subarray(lineBreak + 1);
+        if (marker) params.onChunk(Buffer.from(marker, "latin1"));
+      }
+      sent += data.length;
+      params.onChunk(data);
+    }
+    return { uncompressedBytes: total, omittedBytes: total - sent };
+  },
+
   async streamReadable(params: {
     runId: string;
     onChunk: (chunk: Buffer) => void;
@@ -112,6 +153,53 @@ async function compressChunks(params: { runId: string; data: Buffer }) {
     });
   }
   return chunks;
+}
+
+/** The size marker a recording carries when its terminal resizes. */
+const SIZE_MARKER_START = "\u001b]777;archestra-terminal-size=";
+const BELL = "\u0007";
+const STRING_TERMINATOR = "\u001b\\";
+
+/**
+ * The last size marker in a recording's chunks before `beforeSequence`,
+ * reading back from the nearest; null when the recording sets none there.
+ */
+async function findLastSizeMarker(params: {
+  runId: string;
+  beforeSequence: number;
+}): Promise<string | null> {
+  for (let sequence = params.beforeSequence - 1; sequence >= 0; sequence--) {
+    const chunk = await AgentRunTranscriptModel.findChunk({
+      runId: params.runId,
+      sequence,
+    });
+    if (!chunk) return null;
+    const marker = lastSizeMarker(
+      (await gunzipAsync(chunk.data)).toString("latin1"),
+    );
+    if (marker) return marker;
+  }
+  return null;
+}
+
+/** The last complete size marker in `text` (`…=<cols>x<rows>` and its end). */
+function lastSizeMarker(text: string): string | null {
+  let start = text.lastIndexOf(SIZE_MARKER_START);
+  while (start !== -1) {
+    const rest = text.slice(start + SIZE_MARKER_START.length);
+    const size = /^\d+x\d+/.exec(rest)?.[0];
+    if (size) {
+      const after = rest.slice(size.length);
+      const end = after.startsWith(BELL)
+        ? BELL
+        : after.startsWith(STRING_TERMINATOR)
+          ? STRING_TERMINATOR
+          : null;
+      if (end) return `${SIZE_MARKER_START}${size}${end}`;
+    }
+    start = start === 0 ? -1 : text.lastIndexOf(SIZE_MARKER_START, start - 1);
+  }
+  return null;
 }
 
 function parseReadableTranscript(value?: string | null) {

@@ -1,5 +1,11 @@
 import type { ServerWebSocketMessage } from "@archestra/shared";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 
@@ -54,6 +60,52 @@ describe("AgentRunLogs", () => {
 
     // Each render replays the whole recording, so the frames make one.
     expect(new Set(playbackContents)).toEqual(new Set(["one\ntwo\nthree\n"]));
+  });
+
+  it("opens an ended run on the end of its recording and loads the rest on request", () => {
+    render(<AgentRunLogs run={completedRun} />);
+    expect(socket.send).toHaveBeenLastCalledWith({
+      type: "subscribe_agent_run_logs",
+      payload: { runId: "task-1", tailBytes: 2 * 1024 * 1024 },
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "the end of the run" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: "task-1",
+        source: "full",
+        truncated: false,
+        totalBytes: 5 * 1024 * 1024,
+        omittedBytes: 3 * 1024 * 1024,
+      },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load full recording (3.0 MB more)" }),
+    );
+
+    expect(socket.send).toHaveBeenLastCalledWith({
+      type: "subscribe_agent_run_logs",
+      payload: { runId: "task-1" },
+    });
+    expect(screen.getByText("Loading recording")).toBeInTheDocument();
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "the whole run" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full", truncated: false },
+    });
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "the whole run",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Load full recording/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders a history whose end message never comes once it goes quiet", () => {
@@ -184,7 +236,7 @@ describe("AgentRunLogs", () => {
     await waitFor(() => expect(socket.send).toHaveBeenCalledTimes(2));
     expect(socket.send).toHaveBeenLastCalledWith({
       type: "subscribe_agent_run_logs",
-      payload: { runId: "task-1" },
+      payload: { runId: "task-1", tailBytes: 2 * 1024 * 1024 },
     });
 
     emit({

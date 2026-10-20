@@ -243,3 +243,107 @@ tests:
           content:
             name: diagnostics
           any: true
+
+  - it: mounts archestra.extraVolumes such as a database CA bundle
+    set:
+      archestra.migrationJob.env:
+        NODE_EXTRA_CA_CERTS: /etc/ssl/db/ca.pem
+      archestra.extraVolumes:
+        - name: db-ca
+          secret:
+            secretName: db-ca-bundle
+      archestra.extraVolumeMounts:
+        - name: db-ca
+          mountPath: /etc/ssl/db
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: db-ca
+            secret:
+              secretName: db-ca-bundle
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: db-ca
+            mountPath: /etc/ssl/db
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_EXTRA_CA_CERTS
+            value: /etc/ssl/db/ca.pem
+
+  - it: keeps the vault volume alongside archestra.extraVolumes
+    set:
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+      archestra.extraVolumes:
+        - name: db-ca
+          configMap:
+            name: db-ca-bundle
+      archestra.extraVolumeMounts:
+        - name: db-ca
+          mountPath: /etc/ssl/db
+          readOnly: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 2
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: vault-secrets
+            mountPath: /vault/secrets
+            readOnly: true
+
+  - it: skips PVC-backed archestra.extraVolumes and their mounts
+    set:
+      archestra.extraVolumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: app-data
+        - name: db-ca
+          secret:
+            secretName: db-ca-bundle
+      archestra.extraVolumeMounts:
+        - name: app-data
+          mountPath: /data
+        - name: db-ca
+          mountPath: /etc/ssl/db
+          readOnly: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: db-ca
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: db-ca
+
+  - it: renders no volumes when the only extra volume is PVC-backed
+    set:
+      archestra.extraVolumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: app-data
+      archestra.extraVolumeMounts:
+        - name: app-data
+          mountPath: /data
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts

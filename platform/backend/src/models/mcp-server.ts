@@ -2295,6 +2295,7 @@ class McpServerModel {
       inputSchema: Record<string, unknown>;
       _meta?: Record<string, unknown>;
       annotations?: Record<string, unknown>;
+      outputSchema?: Record<string, unknown>;
     }>
   > {
     // Get catalog information if this server was installed from a catalog
@@ -2336,6 +2337,7 @@ class McpServerModel {
         inputSchema: tool.inputSchema,
         _meta: tool._meta,
         annotations: tool.annotations,
+        outputSchema: tool.outputSchema,
       }));
     } catch (error) {
       logger.error(

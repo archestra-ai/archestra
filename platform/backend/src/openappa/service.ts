@@ -48,6 +48,7 @@ import {
   OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
+  runtimeFailureCode,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
@@ -660,9 +661,31 @@ async function dispatchFailure(params: {
   served: string;
   error: unknown;
 }): Promise<ApiError> {
-  const missing = await missingOpeningAnnotator(params.session, params.served);
-  if (missing !== null)
-    return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
+  switch (runtimeFailureCode(params.error)) {
+    // An operational fault is reported as itself: the stored policy does not
+    // explain it.
+    case "storage":
+    case "pool_exhausted":
+    case "panicked":
+    case "lease_lost":
+    case "held_elsewhere":
+    case "policy_moved":
+    case "replay_busy":
+    case "replay_timed_out":
+      return openappaFailure(params.error);
+    // An annotator the opening policy routes to is no longer served, so the
+    // runtime has it unregistered.
+    case "annotation_refused":
+    case "policy_unavailable": {
+      const missing = await missingOpeningAnnotator(
+        params.session,
+        params.served,
+      );
+      if (missing !== null)
+        return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
+      break;
+    }
+  }
   return openappaFailure(
     (await rootOnlyRefusal(params.organizationId)) ?? params.error,
   );

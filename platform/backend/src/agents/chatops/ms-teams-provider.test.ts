@@ -1554,15 +1554,9 @@ describe("buildApprovalDecisionCard", () => {
 // Inline images in thread history
 // =============================================================================
 
-describe("MSTeamsProvider inline images in thread history", () => {
-  const TEAM_ID = "33333333-3333-4333-8333-333333333333";
-  const CHANNEL_ID = "19:history@thread.tacv2";
-  const HOSTED_CONTENT_URL = `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/${CHANNEL_ID}/messages/root-1/hostedContents/aWQ9eF8w/$value`;
-  const PNG_BYTES = Buffer.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01,
-  ]);
-
-  const server = useMswServer(
+/** Entra endpoints the Graph app credential talks to, answering with fixed tokens. */
+function graphAuthHandlers() {
+  return [
     http.get(
       "https://login.microsoftonline.com/:tenant/v2.0/.well-known/openid-configuration",
       ({ params }) =>
@@ -1595,7 +1589,18 @@ describe("MSTeamsProvider inline images in thread history", () => {
         });
       },
     ),
-  );
+  ];
+}
+
+describe("MSTeamsProvider inline images in thread history", () => {
+  const TEAM_ID = "33333333-3333-4333-8333-333333333333";
+  const CHANNEL_ID = "19:history@thread.tacv2";
+  const HOSTED_CONTENT_URL = `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/${CHANNEL_ID}/messages/root-1/hostedContents/aWQ9eF8w/$value`;
+  const PNG_BYTES = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01,
+  ]);
+
+  const server = useMswServer(...graphAuthHandlers());
 
   test("a screenshot pasted into an earlier thread message is delivered with the Graph token", async () => {
     server.use(
@@ -1798,5 +1803,304 @@ describe("MSTeamsProvider agent-selection card attachments", () => {
 
     expect(data.pendingAttachmentsKey).toBeUndefined();
     expect(data.originalMessageText).toBe("hello");
+  });
+});
+
+describe("MSTeamsProvider files sent in Teams messages", () => {
+  const TEAM_ID = "33333333-3333-4333-8333-333333333333";
+  const CHANNEL_ID = "19:files@thread.tacv2";
+  const CHAT_ID = "19:group-chat@thread.v2";
+  const PDF_BYTES = Buffer.from("%PDF-1.7 test document");
+  const server = useMswServer(...graphAuthHandlers());
+
+  function makeGraphProvider(): MSTeamsProvider {
+    return new MSTeamsProvider({
+      enabled: true,
+      appId: "22222222-2222-4222-8222-222222222222",
+      appSecret: "test-secret",
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      graphTenantId: "11111111-1111-4111-8111-111111111111",
+      graphClientId: "22222222-2222-4222-8222-222222222222",
+      graphClientSecret: "test-secret",
+    });
+  }
+
+  /** Graph's site, library and file endpoints for one SharePoint file. */
+  function sharePointFile(params: {
+    host: string;
+    sitePath: string;
+    libraryUrl: string;
+    itemPath: string;
+    status?: number;
+  }) {
+    return [
+      http.get(
+        "https://graph.microsoft.com/v1.0/sites/:host/:kind/:name",
+        ({ request }) => {
+          if (request.headers.get("authorization") !== "Bearer graph-token") {
+            return new HttpResponse(null, { status: 401 });
+          }
+          if (params.status)
+            return new HttpResponse(null, { status: params.status });
+          const path = decodeURIComponent(new URL(request.url).pathname);
+          return path === `/v1.0/sites/${params.host}:/${params.sitePath}`
+            ? HttpResponse.json({ id: "site-1" })
+            : new HttpResponse(null, { status: 404 });
+        },
+      ),
+      http.get("https://graph.microsoft.com/v1.0/sites/site-1/drives", () =>
+        HttpResponse.json({
+          value: [
+            {
+              id: "drive-other",
+              webUrl: `https://${params.host}/${params.sitePath}/Other`,
+            },
+            { id: "drive-1", webUrl: params.libraryUrl },
+          ],
+        }),
+      ),
+      http.get(
+        "https://graph.microsoft.com/v1.0/drives/drive-1/:root/:folder/:file/content",
+        ({ request }) => {
+          const path = decodeURIComponent(new URL(request.url).pathname);
+          return request.headers.get("authorization") ===
+            "Bearer graph-token" &&
+            path === `/v1.0/drives/drive-1/root:/${params.itemPath}:/content`
+            ? new HttpResponse(PDF_BYTES, {
+                headers: { "content-type": "application/octet-stream" },
+              })
+            : new HttpResponse(null, { status: 404 });
+        },
+      ),
+    ];
+  }
+
+  test("a file sent in a direct message is downloaded from its pre-signed link", async () => {
+    server.use(
+      // The page URL needs a SharePoint login the bot does not have.
+      http.get(
+        "https://contoso-my.sharepoint.com/personal/:user/:library/:folder/:file",
+        () => new HttpResponse(null, { status: 403 }),
+      ),
+      http.get(
+        "https://contoso-my.sharepoint.com/download.aspx",
+        ({ request }) =>
+          request.headers.get("authorization")
+            ? new HttpResponse(null, { status: 400 })
+            : new HttpResponse(PDF_BYTES, {
+                headers: { "content-type": "application/octet-stream" },
+              }),
+      ),
+    );
+    const provider = createProvider();
+
+    const message = await provider.parseWebhookNotification(
+      makeActivity({
+        text: "summarize this",
+        conversation: { id: "a:dm-1", conversationType: "personal" },
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.teams.file.download.info",
+            contentUrl:
+              "https://contoso-my.sharepoint.com/personal/alice_contoso_com/Documents/Microsoft Teams Chat Files/report.pdf",
+            name: "report.pdf",
+            content: {
+              downloadUrl:
+                "https://contoso-my.sharepoint.com/download.aspx?UniqueId=abc&tempauth=signed",
+              uniqueId: "abc",
+              fileType: "pdf",
+            },
+          },
+        ],
+      }),
+      {},
+    );
+
+    expect(message?.attachments).toEqual([
+      {
+        contentType: "application/pdf",
+        contentBase64: PDF_BYTES.toString("base64"),
+        name: "report.pdf",
+      },
+    ]);
+  });
+
+  test("a file sent in a channel thread is read from SharePoint with the Graph token", async () => {
+    server.use(
+      http.get(
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/root-1/replies/reply-1`,
+        () =>
+          HttpResponse.json({
+            id: "reply-1",
+            attachments: [
+              {
+                id: "att-1",
+                contentType: "reference",
+                contentUrl:
+                  "https://contoso.sharepoint.com/sites/Engineering/Shared%20Documents/General/Design%20spec.pdf",
+                name: "Design spec.pdf",
+              },
+            ],
+          }),
+      ),
+      ...sharePointFile({
+        host: "contoso.sharepoint.com",
+        sitePath: "sites/Engineering",
+        libraryUrl:
+          "https://contoso.sharepoint.com/sites/Engineering/Shared%20Documents",
+        itemPath: "General/Design spec.pdf",
+      }),
+    );
+    const provider = makeGraphProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles({
+      messageId: "reply-1",
+      channelId: CHANNEL_ID,
+      workspaceId: TEAM_ID,
+      threadId: "root-1",
+      senderId: "user-1",
+      senderName: "Alice",
+      text: "",
+      rawText: "",
+      timestamp: new Date(),
+      isThreadReply: true,
+      metadata: { conversationType: "channel" },
+    });
+
+    expect(outcomes).toEqual([
+      {
+        status: "delivered",
+        attachment: {
+          contentType: "application/pdf",
+          contentBase64: PDF_BYTES.toString("base64"),
+          name: "Design spec.pdf",
+        },
+      },
+    ]);
+  });
+
+  test("a file sent in a group chat is read from the sender's OneDrive", async () => {
+    server.use(
+      http.get(
+        "https://graph.microsoft.com/v1.0/chats/:chatId/messages/msg-1",
+        () =>
+          HttpResponse.json({
+            id: "msg-1",
+            attachments: [
+              {
+                id: "att-1",
+                contentType: "reference",
+                contentUrl:
+                  "https://contoso-my.sharepoint.com/personal/alice_contoso_com/Documents/Microsoft%20Teams%20Chat%20Files/report.pdf",
+                name: "report.pdf",
+              },
+            ],
+          }),
+      ),
+      ...sharePointFile({
+        host: "contoso-my.sharepoint.com",
+        sitePath: "personal/alice_contoso_com",
+        libraryUrl:
+          "https://contoso-my.sharepoint.com/personal/alice_contoso_com/Documents",
+        itemPath: "Microsoft Teams Chat Files/report.pdf",
+      }),
+    );
+    const provider = makeGraphProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles({
+      messageId: "msg-1",
+      channelId: CHAT_ID,
+      workspaceId: null,
+      senderId: "user-1",
+      senderName: "Alice",
+      text: "what's in this?",
+      rawText: "what's in this?",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: { conversationType: "groupChat" },
+    });
+
+    expect(outcomes).toEqual([
+      {
+        status: "delivered",
+        attachment: {
+          contentType: "application/pdf",
+          contentBase64: PDF_BYTES.toString("base64"),
+          name: "report.pdf",
+        },
+      },
+    ]);
+  });
+
+  test("without a Graph file permission the file is reported as not downloaded", async () => {
+    server.use(
+      http.get(
+        "https://graph.microsoft.com/v1.0/chats/:chatId/messages/msg-1",
+        () =>
+          HttpResponse.json({
+            id: "msg-1",
+            attachments: [
+              {
+                contentType: "reference",
+                contentUrl:
+                  "https://contoso-my.sharepoint.com/personal/alice_contoso_com/Documents/Microsoft%20Teams%20Chat%20Files/report.pdf",
+                name: "report.pdf",
+              },
+            ],
+          }),
+      ),
+      ...sharePointFile({
+        host: "contoso-my.sharepoint.com",
+        sitePath: "personal/alice_contoso_com",
+        libraryUrl:
+          "https://contoso-my.sharepoint.com/personal/alice_contoso_com/Documents",
+        itemPath: "Microsoft Teams Chat Files/report.pdf",
+        status: 403,
+      }),
+    );
+    const provider = makeGraphProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles({
+      messageId: "msg-1",
+      channelId: CHAT_ID,
+      workspaceId: null,
+      senderId: "user-1",
+      senderName: "Alice",
+      text: "what's in this?",
+      rawText: "what's in this?",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: { conversationType: "groupChat" },
+    });
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "report.pdf", reason: "download_failed" },
+      },
+    ]);
+  });
+
+  test("a direct message has no Graph files to read", async () => {
+    const provider = makeGraphProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles({
+      messageId: "msg-1",
+      channelId: "a:dm-1",
+      workspaceId: null,
+      senderId: "user-1",
+      senderName: "Alice",
+      text: "hi",
+      rawText: "hi",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: { conversationType: "personal" },
+    });
+
+    expect(outcomes).toEqual([]);
   });
 });

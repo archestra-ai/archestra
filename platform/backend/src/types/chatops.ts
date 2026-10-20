@@ -664,6 +664,16 @@ export interface ChatOpsProvider {
   downloadFiles(files: ChatThreadMessageFile[]): Promise<ThreadFileOutcome[]>;
 
   /**
+   * Download files of the incoming message that the platform does not put on
+   * the message itself (MS Teams channels and group chats keep them in
+   * SharePoint). Called only for a message the bot is answering.
+   * @returns One outcome per file found on the message
+   */
+  downloadMessageFiles?(
+    message: IncomingChatMessage,
+  ): Promise<ThreadFileOutcome[]>;
+
+  /**
    * Discover all channels in a workspace/team.
    * Used to auto-populate channel bindings so admins can assign agents from the UI.
    * @param context - Provider-specific context (e.g., TurnContext for MS Teams)

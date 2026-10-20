@@ -2,7 +2,7 @@
 title: MS Teams
 description: Connect Archestra agents to Microsoft Teams channels
 order: 4
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -90,8 +90,27 @@ They come first, before the agent's own instructions. They add to what the agent
 - **Memory:** in a channel, the agent reads the thread. In a direct message or group chat, Archestra keeps the history. See [Conversation History](/docs/agents/triggers-and-channels#conversation-history).
 - **New people:** someone who messages the bot without an Archestra account gets one. It has the organization's default role for new users, set in **Settings → Auth**. Find these accounts in **Settings → Users**.
 - **Welcome message:** the bot DMs a new person a sign-up link, or a sign-in link when you use [SSO](/docs/admin/identity/sso). To turn it off, set [`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED).
-- **Files:** the agent reads images, PDFs, and text files such as CSV, JSON, and Markdown. With a [code sandbox](/docs/agents#code-sandbox), it can open other files too, such as ZIP archives.
-- **File limits:** 20 files per message, 10 MB per file, 25 MB in total. Archestra skips larger files without a warning.
+- **Files:** the agent reads images, PDFs, and text files such as CSV, JSON, and Markdown. With a [code sandbox](/docs/agents#code-sandbox), it can open other files too, such as ZIP archives. Files in channels and group chats need [Microsoft Graph access](#read-files-in-channels-and-group-chats).
+- **File limits:** 20 files per message, 10 MB per file, 25 MB in total. When a file is too large or cannot be read, the agent says so.
+
+## Read Files in Channels and Group Chats
+
+Send the bot a PDF or a spreadsheet in a channel, and the agent reads it. Teams keeps those files in SharePoint, so the bot's app needs a Microsoft Graph permission to open them. Images and direct-message files work without it.
+
+An Entra admin grants the permission once:
+
+1. In the [Microsoft Entra admin center](https://entra.microsoft.com/), go to **App registrations** and open the bot's app. Its client ID is the bot's Microsoft App ID.
+2. Go to **API permissions**, click **Add a permission**, and pick **Microsoft Graph → Application permissions**.
+3. Add one permission, then click **Grant admin consent**:
+   - `Files.Read.All` reads files in every channel and group chat.
+   - `Sites.Selected` reads only the SharePoint sites you choose. Then [grant the app read access](https://learn.microsoft.com/en-us/graph/permissions-selected-overview) to each team's site.
+
+To check, mention the bot in a channel with a PDF attached and ask about it. The agent answers from the file.
+
+What to know:
+
+- `Sites.Selected` covers channels only. A group chat file sits in the sender's OneDrive, which needs `Files.Read.All`.
+- The Teams app manifest does not change. Teams has no app-level permission for files.
 
 ## Troubleshooting
 

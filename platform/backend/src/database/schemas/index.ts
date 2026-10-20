@@ -135,6 +135,7 @@ export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";
+export { default as interactionBillingTable } from "./interaction-billing";
 export {
   interactionSessionHeadsBackfillTable,
   interactionSessionHeadsTable,
@@ -177,6 +178,7 @@ export { default as knowledgeBaseLabelsTable } from "./knowledge-base-label";
 export { default as labelKeysTable } from "./label-key";
 export { default as labelValuesTable } from "./label-value";
 export { default as limitsTable } from "./limit";
+export { default as limitBillingUsageTable } from "./limit-billing-usage";
 export { default as limitLabelsTable } from "./limit-label";
 export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";

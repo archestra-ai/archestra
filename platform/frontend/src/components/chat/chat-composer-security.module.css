@@ -1,0 +1,140 @@
+/* APPA sits behind the composer's top edge; the 30px window above the edge
+   is all that shows. Each mood is a pose: how far it rises and how it tilts. */
+.appa {
+  transform-origin: 50% 100%;
+  transition: transform 200ms ease-out;
+}
+
+.calm {
+  transform: translateY(14px) rotate(14deg);
+}
+
+.calm:hover,
+.calm[aria-expanded="true"] {
+  transform: translateY(8px) rotate(6deg);
+}
+
+.suspicious {
+  transform: translateY(2px) rotate(-10deg);
+}
+
+.suspicious:hover,
+.suspicious[aria-expanded="true"] {
+  transform: translateY(-3px) rotate(-5deg);
+}
+
+.off {
+  transform: translateY(16px) rotate(14deg);
+}
+
+.off:hover,
+.off[aria-expanded="true"] {
+  transform: translateY(10px) rotate(6deg);
+}
+
+/* Guardrails don't check this chat: slumped low, head on the edge. */
+.asleep {
+  transform: translateY(17px) rotate(22deg);
+}
+
+.asleep:hover,
+.asleep[aria-expanded="true"] {
+  transform: translateY(12px) rotate(14deg);
+}
+
+/* The glass was broken: head and shades over the edge, leaning back. Low
+   enough that the tilted ears stay inside the window. */
+.shades {
+  transform: translateY(10px) rotate(-10deg);
+}
+
+.shades:hover,
+.shades[aria-expanded="true"] {
+  transform: translateY(6px) rotate(-6deg);
+}
+
+/* The sleeping mark's z's rise a little and fade, then start over. */
+.zzz {
+  animation: zzz-drift 2.8s ease-in-out infinite;
+}
+
+@keyframes zzz-drift {
+  0% {
+    transform: translate(0, 3px);
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(2px, -3px);
+    opacity: 0.35;
+  }
+}
+
+/* Trust dropped: duck, pop up leaning the other way, settle. Plays once. */
+.pop {
+  animation: appa-pop 360ms ease-out;
+}
+
+.leaving {
+  animation: appa-leave 360ms steps(1) forwards;
+}
+
+.arriving {
+  opacity: 0;
+  animation: appa-arrive 360ms steps(1) forwards;
+}
+
+@keyframes appa-pop {
+  0% {
+    transform: translateY(14px) rotate(14deg);
+  }
+  22% {
+    transform: translateY(26px) rotate(14deg);
+  }
+  61% {
+    transform: translateY(-6px) rotate(-16deg);
+  }
+  100% {
+    transform: translateY(2px) rotate(-10deg);
+  }
+}
+
+@keyframes appa-leave {
+  0% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes appa-arrive {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appa {
+    transition: none;
+  }
+  .pop,
+  .leaving,
+  .arriving {
+    animation-duration: 1ms;
+  }
+  .zzz {
+    animation: none;
+  }
+}

@@ -222,6 +222,14 @@ export const TOOL_SET_APP_LABELS_SHORT_NAME = "set_app_labels";
 export const TOOL_SET_APP_LOCK_SHORT_NAME = "set_app_lock";
 export const TOOL_VALIDATE_APP_SHORT_NAME = "validate_app";
 export const TOOL_PUBLISH_APP_SHORT_NAME = "publish_app";
+export const TOOL_YELL_SHORT_NAME = "yell";
+/**
+ * What a yell tells the agent when break the glass turned OpenAPPA off. The
+ * chat composer reads it in the yell's result to show that guardrails no
+ * longer apply to the chat, so the wording is shared, not copied.
+ */
+export const YELL_RESULT_GUARDRAILS_OFF =
+  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
 export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
 export const TOOL_PREVIEW_APP_TOOL_SHORT_NAME = "preview_app_tool";
 export const TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME = "get_app_diagnostics";

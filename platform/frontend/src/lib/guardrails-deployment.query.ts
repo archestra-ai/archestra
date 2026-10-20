@@ -85,28 +85,6 @@ export function useUpdateUnsupportedClientAction() {
   });
 }
 
-export function useUpdateNewSessionPolicy() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      newSessionPolicy: archestraApiTypes.GetGuardrailsDeploymentResponses[200]["newSessionPolicy"],
-    ) => {
-      const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
-        body: { newSessionPolicy },
-      });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      client.setQueryData(queryKey, data);
-      client.invalidateQueries({ queryKey });
-    },
-  });
-}
-
 export function useUpdateBreakTheGlassEnabled() {
   const client = useQueryClient();
   return useMutation({

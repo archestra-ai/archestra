@@ -1446,11 +1446,6 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: `true`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`** - Days an annotator removed from the policy keeps working for conversations that started before the change.
-  - Default: `30`
-  - Values: `0`–`3650` days. `0` keeps it for as long as such a policy is stored. Any other value stops startup.
-  - The time counts from the last activity of any conversation that uses it. After that, such a conversation is told to start a new one when it next needs the annotator.
-
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`
   - Values: `1`–`64`

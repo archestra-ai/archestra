@@ -4,7 +4,6 @@ import { Editor } from "@/components/editor";
 import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import {
   useEffectivePolicy,
   usePolicyDeclarations,
@@ -25,7 +24,6 @@ import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 export function EffectivePolicyView() {
   const effective = useEffectivePolicy();
   const declarations = usePolicyDeclarations();
-  const deployment = useGuardrailsDeployment();
   if (effective.isPending)
     return <Skeleton className="h-[65vh] w-full rounded-t-none" />;
   if (effective.isError || !effective.data)
@@ -36,8 +34,7 @@ export function EffectivePolicyView() {
         onRetry={() => effective.refetch()}
       />
     );
-  const { content, contentHash, rootRevision, lastError, retained } =
-    effective.data;
+  const { content, contentHash, rootRevision, lastError } = effective.data;
   const { served, refusal } = compositionOf(effective.data);
   const hash = contentHash.slice(0, 12);
   // A battery the host holds back folds in as the empty stub, which the
@@ -104,34 +101,6 @@ export function EffectivePolicyView() {
           </InlineNotice>
         </div>
       )}
-      {retained &&
-        served.kind !== "root_only" &&
-        (retained.kept.length > 0 || retained.inactive.length > 0) && (
-          <div className="border-b px-4 py-3">
-            <InlineNotice
-              variant="info"
-              data-testid="effective-policy-retained"
-            >
-              <span className="font-medium">{retainedTitle(retained)}</span>
-              <InlineNoticeText>
-                {retained.kept.map((annotator) => (
-                  <span key={annotator.name} className="block">
-                    {keptLine(annotator, retained.horizonDays)}
-                  </span>
-                ))}
-                {retained.inactive.length > 0 && (
-                  <span className="block">{inactiveLine(retained)}</span>
-                )}
-                {!retained.livenessKnown && (
-                  <span className="block">
-                    Conversation activity could not be read, so each is kept
-                    until the next check.
-                  </span>
-                )}
-              </InlineNoticeText>
-            </InlineNotice>
-          </div>
-        )}
       <Editor
         height="min(50vh, 560px)"
         language="ini"
@@ -162,12 +131,6 @@ export function EffectivePolicyView() {
             )} · open conversations follow it`}
           </span>
         )}
-        {deployment.data?.newSessionPolicy === "snapshot" && (
-          <span className="block">
-            New sessions keep a policy snapshot: a policy change reaches new
-            sessions only, and no new revision is published
-          </span>
-        )}
       </div>
     </div>
   );
@@ -176,46 +139,4 @@ export function EffectivePolicyView() {
 /** How a refused attempt is named: its revision, or the latest one for a row marked stale. */
 function refused(revision: number | null): string {
   return revision === null ? "The latest revision" : `Revision ${revision}`;
-}
-
-/** One kept annotator: what answers it, who still needs it, and until when. */
-function keptLine(
-  annotator: {
-    name: string;
-    binding: string;
-    liveRoots: number;
-    retiresAt: string | null;
-  },
-  horizonDays: number,
-): string {
-  const conversations =
-    annotator.liveRoots === 1
-      ? "1 active conversation"
-      : `${annotator.liveRoots} active conversations`;
-  const until =
-    horizonDays === 0
-      ? "kept while a policy that needs it is stored"
-      : annotator.retiresAt
-        ? `kept until ${formatDate({ date: annotator.retiresAt, dateFormat: "MMM d, yyyy" })} unless one is active again`
-        : "kept until activity can be read";
-  return `${annotator.name} (${annotator.binding}): ${conversations}, ${until}.`;
-}
-
-type Retained = {
-  horizonDays: number;
-  kept: unknown[];
-  inactive: { name: string }[];
-};
-
-function retainedTitle(retained: Retained): string {
-  return retained.kept.length > 0
-    ? "Kept for conversations that started under an earlier policy"
-    : "No longer kept for earlier conversations";
-}
-
-/** The annotators no conversation needed within the horizon. */
-function inactiveLine(retained: Retained): string {
-  const names = retained.inactive.map(({ name }) => name).join(", ");
-  const lead = retained.kept.length > 0 ? "No longer kept: " : "";
-  return `${lead}${names}, unused by any conversation for ${retained.horizonDays} days.`;
 }

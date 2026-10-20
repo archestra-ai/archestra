@@ -154,8 +154,6 @@ function GuardrailPeek({ conversationId }: { conversationId?: string }) {
 
   const Icon = MOOD_ICON[mood];
   const copy = MOOD_COPY[mood];
-  // A session that keeps the policy it opened with has no revision to name.
-  const snapshot = status?.policyRevision === null;
   const label = status
     ? `Guardrails: trust ${status.trust}, audience ${status.audience}`
     : copy.title;
@@ -169,22 +167,13 @@ function GuardrailPeek({ conversationId }: { conversationId?: string }) {
     >
       {status && (
         <output
-          aria-label={`Trust: ${status.trust}; audience: ${status.audience}${
-            typeof status.policyRevision === "number"
-              ? `; policy revision: ${status.policyRevision}`
-              : snapshot
-                ? "; policy snapshot"
-                : ""
-          }`}
+          aria-label={`Trust: ${status.trust}; audience: ${status.audience}; policy revision: ${status.policyRevision}`}
           className="sr-only"
         >
           {/* The labels as text too, worded as in the panel, so the readout
               holds them and not only its name. */}
           <span>{`trust:${status.trust} audience:${status.audience}`}</span>
-          {typeof status.policyRevision === "number" && (
-            <span>{` revision:${status.policyRevision}`}</span>
-          )}
-          {snapshot && <span> policy snapshot</span>}
+          <span>{` revision:${status.policyRevision}`}</span>
         </output>
       )}
       {/* The z's sit outside the clipped window, over APPA's right ear. */}
@@ -268,17 +257,10 @@ function GuardrailPeek({ conversationId }: { conversationId?: string }) {
               <div className="border-t py-1 font-mono text-[11px] leading-4 text-muted-foreground">
                 <LabelRow name="trust" value={status.trust} />
                 <LabelRow name="audience" value={status.audience} />
-                {typeof status.policyRevision === "number" && (
-                  <LabelRow
-                    name="revision"
-                    value={String(status.policyRevision)}
-                  />
-                )}
-                {snapshot && (
-                  <div className="px-3 py-1.5 font-medium text-foreground">
-                    policy snapshot
-                  </div>
-                )}
+                <LabelRow
+                  name="revision"
+                  value={String(status.policyRevision)}
+                />
               </div>
             )}
           </PopoverContent>

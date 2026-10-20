@@ -2,7 +2,6 @@ import { describe, expect, test, vi } from "vitest";
 import logger from "@/logging";
 import { ApiError } from "@/types/api";
 import {
-  OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
   unansweredAnnotationNotice,
@@ -184,15 +183,18 @@ describe("openappaFailure", () => {
     expect(failure.cause).toBe(cause);
   });
 
-  test("a session whose annotator the policy retired is not retried", () => {
-    const cause = new OpenappaRetiredAnnotatorError("jev.tool-call");
+  test("a conversation opened under the earlier policy model is refused once, not retried", () => {
+    const cause = runtimeFailure(
+      "legacy_family",
+      "this trajectory family was opened before live policy revisions; open a new one",
+    );
     const failure = openappaFailure(cause);
 
     expect(failure.statusCode).toBe(409);
     expect(failure.shouldRetry).toBe(false);
     expect(failure.retryAfterSeconds).toBeUndefined();
     expect(failure.message).toBe(
-      'OpenAPPA could not safely complete this operation: this conversation started under a policy that no longer declares annotator "jev.tool-call". Start a new conversation, or an administrator can declare "jev.tool-call" again on the Guardrails page.',
+      "OpenAPPA could not safely complete this operation: This conversation was opened under an earlier policy model. Start a new conversation.",
     );
     expect(failure.cause).toBe(cause);
   });

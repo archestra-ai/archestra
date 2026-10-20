@@ -198,10 +198,7 @@ function RootPolicySource({
         }
       />
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t px-4 py-3 text-xs text-muted-foreground">
-        <span>
-          Existing policy snapshots stay pinned. Other conversations follow
-          saved changes while live policy is selected.
-        </span>
+        <span>Conversations follow saved changes.</span>
         <CompositionSummary declarations={declarations} />
       </div>
     </div>

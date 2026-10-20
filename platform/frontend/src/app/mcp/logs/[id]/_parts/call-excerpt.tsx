@@ -8,7 +8,6 @@ import {
   Waypoints,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { RequestDetails } from "@/app/llm/logs/[id]/_parts/request-details";
@@ -16,7 +15,6 @@ import { RequestWaterfall } from "@/app/llm/logs/[id]/_parts/request-waterfall";
 import {
   type InteractionSummary,
   type Timeline,
-  type TimelineSpan,
   toolCallSpanKey,
 } from "@/app/llm/logs/[id]/_parts/session-timeline";
 import {
@@ -27,10 +25,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useInteractionSummaries } from "@/lib/interactions/interaction.query";
-import {
-  llmRequestHref,
-  llmSessionHref,
-} from "@/lib/interactions/llm-log-links";
+import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import {
   useMcpToolCalls,
   useSessionMcpToolCalls,
@@ -340,7 +335,6 @@ function ExcerptCard({
   status: ReactNode;
   emptyNote?: string | null;
 }) {
-  const router = useRouter();
   const { displayByName: serverDisplayByName } = useMcpServerDisplayByName();
   const selfKey = toolCallSpanKey(call.id);
   const spans = timeline?.spans ?? [];
@@ -357,14 +351,6 @@ function ExcerptCard({
     if (spans.length === 0) return;
     const next = Math.min(spans.length - 1, Math.max(0, selectedIndex + delta));
     setPickedKey(spans[next].key);
-  };
-  const openSpan = (span: TimelineSpan) => {
-    if (span.key === selfKey) return;
-    router.push(
-      span.type === "request"
-        ? llmRequestHref(span.row)
-        : `/mcp/logs/${span.call.id}`,
-    );
   };
 
   return (
@@ -385,7 +371,6 @@ function ExcerptCard({
         highlightedKey={selfKey}
         revealHighlighted={false}
         onSelect={setPickedKey}
-        onOpen={openSpan}
         pagination={null}
         totalRequests={spans.length}
         title={title}

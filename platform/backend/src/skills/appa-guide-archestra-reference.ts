@@ -72,7 +72,7 @@ A battery governs calls only when \`effective.batteries\` marks it \`active\`. R
 
 ## Approvals and remedies
 
-The default \`hitl\` authority covers every attention mark but \`blocked\`, data below \`trusted\`, and a missing \`public\` audience. Require \`human-approval\` for potentially destructive actions or publishing/sharing outside the company; do not add it to every tool call.
+The default \`human-approval\` authority covers every attention mark but \`blocked\`, data below \`trusted\`, and a missing \`public\` audience. Require \`human-approval\` for potentially destructive actions or publishing/sharing outside the company; do not add it to every tool call.
 
 An approval needs an authority whose permits cover the requirement, and a review channel. Do not invent an authority. When a ruling offers a remedy, call \`archestra__execute_remedy_plan\` with the exact \`offer_id\`; it requests the review itself when the policy requires one, or returns the review to ask with \`archestra__ask_user\`.
 

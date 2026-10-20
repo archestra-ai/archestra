@@ -127,7 +127,7 @@ export function GuardrailsPolicyEditor({
                   asChild
                   variant="ghost"
                   size="sm"
-                  className="-mr-2 size-8 has-[>svg]:px-0 sm:mr-0 sm:size-auto sm:has-[>svg]:px-2.5"
+                  className="-mr-2 w-8 has-[>svg]:px-0 sm:mr-0 sm:w-auto sm:has-[>svg]:px-2.5"
                 >
                   <a
                     href={getDocsUrl(

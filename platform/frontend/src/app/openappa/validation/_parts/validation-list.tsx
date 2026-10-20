@@ -392,9 +392,15 @@ function HeaderActions({ runAll }: { runAll: () => void }) {
   });
   return (
     <div className="flex items-center gap-2">
-      <Button size="sm" disabled={!runnable || !files.length} onClick={runAll}>
+      {/* Icon-only on phones, so both actions fit beside the title. */}
+      <Button
+        size="sm"
+        disabled={!runnable || !files.length}
+        onClick={runAll}
+        className="w-8 has-[>svg]:px-0 sm:w-auto sm:has-[>svg]:px-2.5"
+      >
         {runningAll ? <Loader2 className="animate-spin" /> : <Play />}
-        <span>Run all</span>
+        <span className="sr-only sm:not-sr-only">Run all</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

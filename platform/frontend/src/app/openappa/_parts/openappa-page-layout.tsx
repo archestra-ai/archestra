@@ -136,10 +136,6 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         )
       }
       documentTitle={fileDetail ? "Validation" : page.title}
-      // The title carries the Beta badge. Overview's one Settings button fits
-      // beside it; wider action sets (Run all and its menu) would break the
-      // title mid-word, so on a phone they drop under the description.
-      stackHeaderOnMobile={pathname !== "/openappa"}
       backLink={
         fileDetail || requestedMode?.back ? (
           <PageBackLink href="/openappa/validation">

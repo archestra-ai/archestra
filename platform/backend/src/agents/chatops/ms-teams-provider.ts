@@ -79,6 +79,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   private adapter: CloudAdapter | null = null;
   private authorize: ReturnType<typeof authorizeJWT> | null = null;
   private graphClient: GraphServiceClient | null = null;
+  private graphCredential: ClientSecretCredential | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private config: MsTeamsDbConfig;
 
@@ -156,10 +157,11 @@ class MSTeamsProvider implements ChatOpsProvider {
         graph.clientSecret,
       );
       const authProvider = new AzureIdentityAuthenticationProvider(credential, [
-        "https://graph.microsoft.com/.default",
+        GRAPH_DEFAULT_SCOPE,
       ]);
       const requestAdapter = new GraphRequestAdapter(authProvider);
       this.graphClient = createGraphServiceClient(requestAdapter);
+      this.graphCredential = credential;
       logger.info("[MSTeamsProvider] Graph client initialized");
     } else {
       logger.info(
@@ -172,6 +174,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     this.adapter = null;
     this.authorize = null;
     this.graphClient = null;
+    this.graphCredential = null;
     this.eventHandler = null;
     logger.info("[MSTeamsProvider] Cleaned up");
   }
@@ -1366,7 +1369,8 @@ class MSTeamsProvider implements ChatOpsProvider {
   async downloadFiles(
     files: ChatThreadMessageFile[],
   ): Promise<ThreadFileOutcome[]> {
-    // No serviceUrl for history messages — Azure Blob URLs are pre-authenticated
+    // No serviceUrl for history messages: Azure Blob URLs are pre-authenticated
+    // and Graph hosted-content images authenticate with the Graph app token.
     return this.downloadTeamsFiles(
       files.map((f) => ({
         contentType: f.mimetype,
@@ -1391,6 +1395,8 @@ class MSTeamsProvider implements ChatOpsProvider {
    * Blob Storage URLs. Files shared from SharePoint/OneDrive may require a Bearer token.
    * When the contentUrl hostname matches the Bot Framework serviceUrl, we authenticate
    * using client credentials (appId/appSecret) to obtain a Bot Connector token.
+   * Images pasted inline into a message reach thread history only as Graph
+   * hosted-content URLs, which take the Graph app token instead.
    */
   private async downloadTeamsFiles(
     files: TeamsFileAttachment[],
@@ -1452,7 +1458,15 @@ class MSTeamsProvider implements ChatOpsProvider {
       try {
         // Determine if the URL needs authentication (same host as serviceUrl)
         const headers: Record<string, string> = {};
-        if (serviceUrl && needsBotAuth(attachment.contentUrl, serviceUrl)) {
+        if (isGraphUrl(attachment.contentUrl)) {
+          const graphToken = await this.getGraphToken();
+          if (graphToken) {
+            headers.Authorization = `Bearer ${graphToken}`;
+          }
+        } else if (
+          serviceUrl &&
+          needsBotAuth(attachment.contentUrl, serviceUrl)
+        ) {
           if (!botToken) {
             botToken = await this.getBotConnectorToken();
           }
@@ -1603,6 +1617,25 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     return outcomes;
+  }
+
+  /**
+   * Graph app token for hosted-content downloads. The credential caches and
+   * refreshes the token itself, so this does not hold one.
+   */
+  private async getGraphToken(): Promise<string | null> {
+    if (!this.graphCredential) return null;
+    try {
+      const accessToken =
+        await this.graphCredential.getToken(GRAPH_DEFAULT_SCOPE);
+      return accessToken?.token ?? null;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Error obtaining Graph token for attachment download",
+      );
+      return null;
+    }
   }
 
   /**
@@ -1770,19 +1803,23 @@ class MSTeamsProvider implements ChatOpsProvider {
         .map((msg) => {
           const isUserMessage = Boolean(msg.from?.user);
 
-          // Extract file attachment metadata from Graph API ChatMessage.attachments
-          const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
-            .filter(
-              (a) =>
-                a.contentUrl &&
-                a.contentType &&
-                !a.contentType.startsWith("application/vnd.microsoft.card."),
-            )
-            .map((a) => ({
-              url: a.contentUrl as string,
-              mimetype: a.contentType as string,
-              name: a.name ?? undefined,
-            }));
+          // Extract file attachment metadata from Graph API ChatMessage.attachments,
+          // plus images pasted inline: Graph lists those only in the HTML body.
+          const files: ChatThreadMessageFile[] = [
+            ...(msg.attachments ?? [])
+              .filter(
+                (a) =>
+                  a.contentUrl &&
+                  a.contentType &&
+                  !a.contentType.startsWith("application/vnd.microsoft.card."),
+              )
+              .map((a) => ({
+                url: a.contentUrl as string,
+                mimetype: a.contentType as string,
+                name: a.name ?? undefined,
+              })),
+            ...extractHostedContentImages(msg.body?.content ?? undefined),
+          ];
 
           return {
             messageId: msg.id as string,
@@ -2030,7 +2067,8 @@ function isAllowedTeamsFileHost(
     const hostname = new URL(contentUrl).hostname;
     if (
       hostname.endsWith(".blob.core.windows.net") ||
-      hostname.endsWith(".sharepoint.com")
+      hostname.endsWith(".sharepoint.com") ||
+      isGraphUrl(contentUrl)
     ) {
       return true;
     }
@@ -2044,6 +2082,39 @@ function isAllowedTeamsFileHost(
     return false;
   }
 }
+
+const GRAPH_DEFAULT_SCOPE = "https://graph.microsoft.com/.default";
+
+/** An https URL on the Microsoft Graph host, the only one the Graph token may reach. */
+function isGraphUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === "https:" && parsed.hostname === "graph.microsoft.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Images pasted inline into a message, read from its Graph HTML body. Graph
+ * never lists them in `attachments`: each is an `<img>` pointing at the
+ * message's hosted content, so thread history would otherwise drop them.
+ */
+function extractHostedContentImages(html?: string): ChatThreadMessageFile[] {
+  if (!html) return [];
+  const files: ChatThreadMessageFile[] = [];
+  for (const match of html.matchAll(/<img\b[^>]*?\bsrc="([^"]+)"/gi)) {
+    const url = match[1].replaceAll("&amp;", "&");
+    if (isGraphUrl(url) && HOSTED_CONTENT_PATH.test(new URL(url).pathname)) {
+      files.push({ url, mimetype: "image/*" });
+    }
+  }
+  return files;
+}
+
+const HOSTED_CONTENT_PATH = /\/hostedContents\/[^/]+\/\$value$/;
 
 function safeHostname(url: string): string {
   try {

@@ -1540,3 +1540,145 @@ describe("buildApprovalDecisionCard", () => {
     expect(card.body[0].text).toBe("Denied");
   });
 });
+
+// =============================================================================
+// Inline images in thread history
+// =============================================================================
+
+describe("MSTeamsProvider inline images in thread history", () => {
+  const TEAM_ID = "33333333-3333-4333-8333-333333333333";
+  const CHANNEL_ID = "19:history@thread.tacv2";
+  const HOSTED_CONTENT_URL = `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/${CHANNEL_ID}/messages/root-1/hostedContents/aWQ9eF8w/$value`;
+  const PNG_BYTES = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01,
+  ]);
+
+  const server = useMswServer(
+    http.get(
+      "https://login.microsoftonline.com/:tenant/v2.0/.well-known/openid-configuration",
+      ({ params }) =>
+        HttpResponse.json({
+          authorization_endpoint: `https://login.microsoftonline.com/${params.tenant}/oauth2/v2.0/authorize`,
+          token_endpoint: `https://login.microsoftonline.com/${params.tenant}/oauth2/v2.0/token`,
+          issuer: `https://login.microsoftonline.com/${params.tenant}/v2.0`,
+          jwks_uri: `https://login.microsoftonline.com/${params.tenant}/discovery/v2.0/keys`,
+        }),
+    ),
+    http.get(
+      "https://login.microsoftonline.com/common/discovery/instance",
+      () =>
+        HttpResponse.json({
+          tenant_discovery_endpoint:
+            "https://login.microsoftonline.com/tenant/v2.0/.well-known/openid-configuration",
+          metadata: [],
+        }),
+    ),
+    http.post(
+      "https://login.microsoftonline.com/:tenant/oauth2/v2.0/token",
+      async ({ request }) => {
+        const scope = new URLSearchParams(await request.text()).get("scope");
+        return HttpResponse.json({
+          token_type: "Bearer",
+          access_token: scope?.includes("graph.microsoft.com")
+            ? "graph-token"
+            : "connector-token",
+          expires_in: 3600,
+        });
+      },
+    ),
+  );
+
+  test("a screenshot pasted into an earlier thread message is delivered with the Graph token", async () => {
+    server.use(
+      http.get(
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/root-1`,
+        () =>
+          HttpResponse.json({
+            id: "root-1",
+            from: { user: { id: "user-1", displayName: "Alice" } },
+            createdDateTime: "2026-10-20T10:00:00Z",
+            body: {
+              contentType: "html",
+              content: `<p><at id="0">TestBot</at></p><p><img src="${HOSTED_CONTENT_URL}" alt="image"></p><p>what does this show?</p>`,
+            },
+            attachments: [],
+          }),
+      ),
+      http.get(
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/root-1/replies`,
+        () => HttpResponse.json({ value: [] }),
+      ),
+      http.get(
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/root-1/hostedContents/aWQ9eF8w/$value`,
+        ({ request }) =>
+          request.headers.get("authorization") === "Bearer graph-token"
+            ? new HttpResponse(PNG_BYTES, {
+                headers: { "content-type": "image/png" },
+              })
+            : new HttpResponse(null, { status: 401 }),
+      ),
+    );
+    const provider = new MSTeamsProvider({
+      enabled: true,
+      appId: "22222222-2222-4222-8222-222222222222",
+      appSecret: "test-secret",
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      graphTenantId: "11111111-1111-4111-8111-111111111111",
+      graphClientId: "22222222-2222-4222-8222-222222222222",
+      graphClientSecret: "test-secret",
+    });
+    await provider.initialize();
+
+    const history = await provider.getThreadHistory({
+      channelId: CHANNEL_ID,
+      workspaceId: TEAM_ID,
+      threadId: "root-1",
+      excludeMessageId: "reply-1",
+    });
+    expect(history).toHaveLength(1);
+    expect(history[0].text).toContain("what does this show?");
+
+    const outcomes = await provider.downloadFiles(history[0].files ?? []);
+
+    expect(outcomes).toEqual([
+      {
+        status: "delivered",
+        attachment: {
+          contentType: "image/png",
+          contentBase64: PNG_BYTES.toString("base64"),
+        },
+      },
+    ]);
+  });
+
+  test("only Graph hosted-content images are taken from a message body", () => {
+    const provider = createProvider();
+    const body = [
+      `<img src="${HOSTED_CONTENT_URL}">`,
+      // Same image as the asyncgw object, which the bot cannot authenticate to
+      '<img src="https://ca-prod.asyncgw.teams.microsoft.com/v1/objects/0-eca/views/imgo">',
+      // Look-alike host must never receive the Graph token
+      `<img src="${HOSTED_CONTENT_URL.replace("graph.microsoft.com", "graph.microsoft.com.evil.example")}">`,
+      '<img src="https://graph.microsoft.com/v1.0/me/photo/$value">',
+      "<p>see above</p>",
+    ].join("");
+
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — invoke private method
+    const result = (provider as any).convertToThreadMessages(
+      [
+        {
+          id: "msg-1",
+          from: { user: { id: "user-1", displayName: "Alice" } },
+          body: { contentType: "html", content: body },
+          createdDateTime: new Date().toISOString(),
+          attachments: [],
+        },
+      ],
+      undefined,
+    );
+
+    expect(result[0].files).toEqual([
+      { url: HOSTED_CONTENT_URL, mimetype: "image/*" },
+    ]);
+  });
+});

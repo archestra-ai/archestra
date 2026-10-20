@@ -621,16 +621,31 @@ fn warm_base_user_setup(py_requirements: &str) -> String {
     )
 }
 
-/// root-level exec closing a skill mount. bytecode is hash-checked because
-/// file timestamps in Dagger layers say nothing about content; a skill with
-/// invalid python, or a base without python3, still mounts. binaries are
-/// absolute and python isolated: this runs as root over a sandbox-writable
-/// PATH, cwd and PYTHONPATH.
-fn skill_mount_setup(root: &str) -> String {
-    let root = shell_quote(root);
-    format!(
-        "/usr/local/bin/python3 -I -S -c \"import compileall, py_compile, sys; compileall.compile_dir(sys.argv[1], quiet=2, invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH)\" {root} >/dev/null 2>&1; /bin/chown -R {SKILL_SANDBOX_USER} {root}"
-    )
+/// root-level exec closing a skill mount: hands the tree to the sandbox user,
+/// then precompiles the snapshot's python as that user, so the bytecode lands
+/// in this cached layer. only snapshot files are compiled, never whatever the
+/// sandbox left under the root, and dropping to the sandbox user keeps root
+/// from reading through planted symlinks. bytecode is hash-checked because
+/// Dagger layer mtimes say nothing about content. compilation is best-effort:
+/// invalid python, or a base without python3 or setpriv, still mounts.
+fn skill_mount_setup(root: &str, py_files: &[String]) -> String {
+    let chown = format!("/bin/chown -R {SKILL_SANDBOX_USER} {}", shell_quote(root));
+    let Some((uid, gid)) = SKILL_SANDBOX_USER.split_once(':') else {
+        return chown;
+    };
+    match py_files {
+        [] => chown,
+        files => {
+            let files = files
+                .iter()
+                .map(|f| shell_quote(f))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!(
+                "{chown} && {{ /usr/bin/setpriv --reuid={uid} --regid={gid} --clear-groups python3 -I -S -c \"import compileall, py_compile, sys; [compileall.compile_file(p, quiet=2, invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH) for p in sys.argv[1:]]\" {files} >/dev/null 2>&1 || true; }}"
+            )
+        }
+    }
 }
 
 /// The root-level setup exec, run before `with_user` drops to the sandbox user.
@@ -908,15 +923,21 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
                         container = checkpoint(client, container).await?;
                     }
                 }
-                // precompile the skill's python into this cached layer (each run's
-                // container is discarded, so bytecode written at run time never
-                // persists), then chown the tree; with_new_file writes as root.
+                // chown the tree (with_new_file writes as root) and precompile the
+                // skill's python into this cached layer: each run's container is
+                // discarded, so bytecode written at run time never persists.
+                let py_files: Vec<String> = mount
+                    .files
+                    .iter()
+                    .filter(|file| file.path.ends_with(".py"))
+                    .map(|file| format!("{root}/{}", file.path))
+                    .collect();
                 container = container
                     .with_user("root")
                     .with_exec(vec![
                         "/bin/sh".to_string(),
                         "-c".to_string(),
-                        skill_mount_setup(&root),
+                        skill_mount_setup(&root, &py_files),
                     ])
                     .with_user(SKILL_SANDBOX_USER);
                 let mut links = SKILL_MOUNT_CHOWN_CHAIN_LINKS;

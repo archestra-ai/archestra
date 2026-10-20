@@ -711,6 +711,12 @@ export function ConnectCommandPanel({
   });
   const latestKeyRef = useRef(inputsKey);
   latestKeyRef.current = inputsKey;
+  // The payload of the setup in `result`, so an effect run with the same
+  // payload keeps it instead of preparing it again.
+  const preparedKeyRef = useRef<string | null>(null);
+  // Whether a preparation has started. The first starts at once; later ones
+  // wait for the user to stop changing the selection.
+  const preparationStartedRef = useRef(false);
 
   const runGeneration = useCallback(
     async (key: string) => {
@@ -761,6 +767,7 @@ export function ConnectCommandPanel({
         ...(inputs.pluginIds ? { pluginIds: inputs.pluginIds } : {}),
       });
       if (latestKeyRef.current !== key) return; // stale response
+      preparedKeyRef.current = created ? key : null;
       setResult(created);
       setFailure(
         created ? null : (refusalRef.current ?? "the server gave no reason"),
@@ -770,8 +777,6 @@ export function ConnectCommandPanel({
   );
 
   useEffect(() => {
-    setResult(null);
-    setFailure(null);
     // Don't try to generate a command until the setup can actually be produced:
     // not before a per-user account is connected, not for a virtual key that
     // has no provider key to mint from, and not for a selection over a delivery
@@ -786,11 +791,23 @@ export function ConnectCommandPanel({
       selectionProblem !== null ||
       (primaryRoutingBlocked && canAttribute === undefined)
     ) {
+      preparedKeyRef.current = null;
+      setResult(null);
+      setFailure(null);
       return;
     }
-    const timer = setTimeout(() => {
-      void runGeneration(inputsKey);
-    }, 350);
+    // The same payload as the prepared setup: keep it, and Approve stays on.
+    if (preparedKeyRef.current === inputsKey) return;
+    preparedKeyRef.current = null;
+    setResult(null);
+    setFailure(null);
+    const timer = setTimeout(
+      () => {
+        preparationStartedRef.current = true;
+        void runGeneration(inputsKey);
+      },
+      preparationStartedRef.current ? 350 : 0,
+    );
     return () => clearTimeout(timer);
   }, [
     inputsKey,

@@ -279,6 +279,61 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("prepares the first setup at once, and a changed selection after the user stops changing it", async () => {
+    // This test is about the debounce itself: use the real interval.
+    restoreTimer();
+    const gateways = [
+      { id: "g1", name: "My Gateway", agentType: "mcp_gateway" as const },
+      { id: "g2", name: "Team Gateway", agentType: "mcp_gateway" as const },
+    ];
+    const view = renderPanel({ mcpGateways: gateways });
+
+    // No debounce on the first preparation: its inputs are already complete.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({ mcpGateways: gateways, mcpGatewayId: "g2" })}
+      />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ mcpGatewayId: "g2" }),
+      ),
+    );
+    expect(createSetupMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a prepared approval when the page re-renders with the same setup", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectRequest=demo&platform=macos") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const view = renderPanel();
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.queryByTestId("approve-connection-progress")).toBeNull(),
+    );
+
+    // A permission read that lands later re-runs the preparation, but the
+    // payload it would send is the same one.
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: "llmVirtualKey" in permissions ? false : true,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    view.rerender(<ConnectCommandPanel {...renderPanelProps()} />);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(createSetupMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("approve-connection-progress")).toBeNull();
+  });
+
   it("waits for shared skills before generating an approvable setup", async () => {
     skillNamesMock.mockReturnValue({ data: undefined, isPending: true });
     const view = renderPanel({ client: findClient("cursor") });

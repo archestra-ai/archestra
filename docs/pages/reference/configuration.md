@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 1
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -558,6 +558,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
 
 ## LLM Proxy
 
+- **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
+  - Default: `off`
+  - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
+  - Set it on both web and worker pods. Requests retain their starting mode. See [Roll Out Usage Accounting](/docs/admin/usage-accounting).
+
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`
   - See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
@@ -879,7 +884,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Setting it enables the code sandbox. Agents bound to an [environment](/docs/admin/environments) still run on that environment's managed engine.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for sandbox containers.
-  - Default: `ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim`
+  - Default: `ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim`
   - Values: a Debian-based image
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Skips the per-sandbox package install because [`ARCHESTRA_DAGGER_RUNTIME_IMAGE`](/docs/reference/configuration#ARCHESTRA_DAGGER_RUNTIME_IMAGE) is a pre-built sandbox base image.
@@ -1271,13 +1276,13 @@ See [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams) for setup.
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`** - Microsoft Entra tenant ID of a single-tenant bot.
   - Default: unset (multi-tenant bot)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Tenant ID for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Tenant ID for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Client ID for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Client ID for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Client secret for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Client secret for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET)
 
 ### Slack
@@ -1453,11 +1458,6 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally. They also go to the shared OpenAPPA reporting service when [`ARCHESTRA_ANALYTICS`](/docs/reference/configuration#ARCHESTRA_ANALYTICS) is enabled.
   - Default: `true`
   - Values: `true`, `false`
-
-- **`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`** - Days an annotator removed from the policy keeps working for conversations that started before the change.
-  - Default: `30`
-  - Values: `0`–`3650` days. `0` keeps it for as long as such a policy is stored. Any other value stops startup.
-  - The time counts from the last activity of any conversation that uses it. After that, such a conversation is told to start a new one when it next needs the annotator.
 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`

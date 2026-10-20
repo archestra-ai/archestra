@@ -92,7 +92,7 @@ describe("OpenAPPA opaque compaction carrier", () => {
     };
 
     expect(() => unwrapCompactionCarriersFromRequest(request)).toThrow(
-      "Too many OpenAI compaction carriers",
+      "OpenAPPA received too many OpenAI compaction carriers",
     );
   });
 
@@ -111,7 +111,7 @@ describe("OpenAPPA opaque compaction carrier", () => {
         { type: "compaction", encrypted_content: "cipher" },
         "x".repeat(64 * 1024 + 1),
       ),
-    ).toThrow("Invalid OpenAPPA compaction context");
+    ).toThrow("OpenAPPA received an invalid compaction context");
   });
 });
 

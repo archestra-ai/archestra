@@ -17,16 +17,11 @@ crate-type = ["cdylib"]
 # battery lists (#691), loopback requests staying local (#692),
 # parallel subagent spawns waiting for the earlier bind (#694), and plain
 # errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
-# and the generic coding battery (#697); then v0.36.0: retained PostgreSQL
-# error diagnostics (#700) and the refusal class on every host (#699); and
-# the coding battery without the redact-secrets sanitizer (#707), config
-# fragments composed through one Composition (#705), label-guide trust for
-# installed dependencies and checkout history (#708), and an annotation
-# answer schema within Anthropic's grammar limit (#709).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6940001b77325a5e59e45820fde90d7440d1d42c", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6940001b77325a5e59e45820fde90d7440d1d42c" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6940001b77325a5e59e45820fde90d7440d1d42c", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6940001b77325a5e59e45820fde90d7440d1d42c" }
+# and the generic coding battery (#697).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

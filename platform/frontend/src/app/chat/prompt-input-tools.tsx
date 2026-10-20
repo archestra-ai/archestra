@@ -590,7 +590,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             collisionPadding={12}
             className="w-96 max-w-[calc(100vw-1.5rem)] space-y-2 text-sm"
           >
-            <p className="font-medium">Encrypted chats</p>
+            <p className="font-medium">Encrypted chats (not configured)</p>
             <p className="text-muted-foreground">
               Some conversations shouldn&apos;t be visible to the team that runs{" "}
               {appName} — for example, sensitive discussions among senior

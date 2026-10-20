@@ -3,6 +3,7 @@ import {
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_POST_RUN_FILE_FULL_NAME,
+  TOOL_POST_RUN_MESSAGE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
@@ -937,6 +938,32 @@ describe("run tools", () => {
       comment: "demo recording",
     });
     upload.mockRestore();
+  });
+
+  test("post_run_message refuses another actor's run and a finished turn", async ({
+    makeUser,
+  }) => {
+    const other = await makeUser();
+    const foreign = await seedChatopsTask({
+      actorUserId: other.id,
+      withTarget: true,
+    });
+    const own = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+    });
+    await A2ATaskModel.updateState(own.id, "TASK_STATE_COMPLETED");
+    for (const task of [foreign, own]) {
+      const result = await executeArchestraTool(
+        TOOL_POST_RUN_MESSAGE_FULL_NAME,
+        { task_id: task.id, message: "Working on it." },
+        context,
+      );
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(
+        task === foreign ? "Run not found" : "not active",
+      );
+    }
   });
 
   test("post_run_file refuses a run with no messaging-channel thread", async () => {

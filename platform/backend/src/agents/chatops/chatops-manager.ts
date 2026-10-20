@@ -5,6 +5,8 @@ import {
   type MessagingChannelId,
   providerDisplayNames,
   type ResourceVisibilityScope,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
+  toPlaceholderTitle,
 } from "@archestra/shared";
 import type { UIMessageChunk } from "ai";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
@@ -18,6 +20,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   A2AContextModel,
+  A2ATaskModel,
   AgentModel,
   AgentRunModel,
   AgentWorkspaceModel,
@@ -105,7 +108,11 @@ import {
   THREAD_MUTE_HINT,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
-import { sendRuntimeReplyWithAnchor } from "./runtime-reply-anchor";
+import {
+  assertRuntimeAcknowledgementSettled,
+  sendRuntimeReplyWithAnchor,
+  startRuntimeAcknowledgement,
+} from "./runtime-reply-anchor";
 import SlackProvider from "./slack-provider";
 import TelegramProvider from "./telegram-provider";
 import {
@@ -282,25 +289,35 @@ export class ChatOpsManager {
     conversationReference?: Record<string, unknown>;
     placeholderActivityId?: string;
     muteMarkerAtStart?: string | null;
-  }): Promise<void> {
+    progress?: boolean;
+  }): Promise<boolean> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
+      if (params.progress)
+        throw new Error("The run's Slack binding no longer exists.");
       logger.warn(
         { bindingId: params.bindingId },
         "[ChatOps] notifyBindingThread: binding no longer exists",
       );
-      return;
+      return false;
+    }
+    if (params.progress && binding.provider !== "slack") {
+      throw new Error(
+        "Progress updates are only supported for Slack runtime runs.",
+      );
     }
     const provider = this.providerForBinding(
       binding.provider,
       params.pinnedAgentId,
     );
     if (!provider?.isConfigured()) {
+      if (params.progress)
+        throw new Error("The run's Slack provider is not configured.");
       logger.warn(
         { bindingId: params.bindingId, provider: binding.provider },
         "[ChatOps] notifyBindingThread: provider not configured",
       );
-      return;
+      return false;
     }
     const run = params.taskId
       ? await AgentRunModel.findByTaskId(params.taskId)
@@ -308,6 +325,8 @@ export class ChatOpsManager {
     const workspace = run
       ? await AgentWorkspaceModel.findByWorkloadName(run.workloadName)
       : null;
+    if (params.taskId && !params.progress)
+      await assertRuntimeAcknowledgementSettled(params.taskId);
     const metadata = {
       conversationReference: params.conversationReference,
       placeholderActivityId: params.placeholderActivityId,
@@ -317,7 +336,7 @@ export class ChatOpsManager {
         !params.text.trim() ||
         params.text.includes(CHATOPS_NO_REPLY_SENTINEL)
       )
-        return;
+        return false;
       if (
         params.muteMarkerAtStart !== undefined &&
         (await this.threadMutedSinceStart(
@@ -330,15 +349,15 @@ export class ChatOpsManager {
           params.muteMarkerAtStart,
         ))
       )
-        return;
+        return false;
       const nativeRuntimeReply =
         !!run &&
         (binding.provider === "slack" || binding.provider === "ms-teams");
       const conversationUrl = params.taskId
         ? agentRunUrl(workspace?.id ?? params.taskId)
         : undefined;
-      const send = (includeAnchor: boolean) =>
-        provider.sendReply({
+      const send = async (includeAnchor: boolean) => {
+        const messageId = await provider.sendReply({
           // Saved metadata preserves detached Teams routing and placeholder replacement.
           originalMessage: {
             messageId: `notify-${params.bindingId}-${Date.now()}`,
@@ -366,21 +385,29 @@ export class ChatOpsManager {
               : undefined,
           conversationReference: params.conversationReference,
         });
+        if (params.progress && !messageId) {
+          throw new Error("Slack did not confirm the progress update.");
+        }
+        return messageId;
+      };
       if (nativeRuntimeReply && conversationUrl) {
         await sendRuntimeReplyWithAnchor({
           organizationId: binding.organizationId,
           bindingId: binding.id,
           threadId: params.threadId,
           providerScope: provider.stateScope,
+          ...(params.progress && { anchorOptional: true }),
           send,
         });
       } else {
         await send(true);
       }
+      return true;
     } finally {
       try {
         if (
           params.taskId &&
+          !params.progress &&
           (binding.provider !== "slack" ||
             (
               await AgentRunModel.listCancelableInChatOpsThread({
@@ -1043,6 +1070,30 @@ export class ChatOpsManager {
     });
   }
 
+  private async addPlatformMessageFiles(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+  }): Promise<void> {
+    const { provider, message } = params;
+    if (!provider.downloadMessageFiles) return;
+    const outcomes = await provider.downloadMessageFiles(message);
+    const delivered = outcomes.flatMap((o) =>
+      o.status === "delivered" ? [o.attachment] : [],
+    );
+    const skipped = outcomes.flatMap((o) =>
+      o.status === "skipped" ? [o.skipped] : [],
+    );
+    if (delivered.length > 0) {
+      message.attachments = [...(message.attachments ?? []), ...delivered];
+    }
+    if (skipped.length > 0) {
+      message.skippedAttachments = [
+        ...(message.skippedAttachments ?? []),
+        ...skipped,
+      ];
+    }
+  }
+
   private async processMessageWithAdmission(
     params: Parameters<ChatOpsManager["processMessage"]>[0],
     onPendingUserAdmission: (id: string) => void,
@@ -1072,6 +1123,19 @@ export class ChatOpsManager {
 
     if (!binding) {
       return { success: true, error: "NO_BINDING" };
+    }
+
+    // Files the platform keeps off the message (Teams channel and group-chat
+    // files live in SharePoint) are read only now, once per answered message.
+    await this.addPlatformMessageFiles({ provider, message });
+    // A Teams channel message can look empty until its files are read; one
+    // that is still empty has nothing to answer.
+    if (
+      !message.text.trim() &&
+      !message.attachments?.length &&
+      !message.skippedAttachments?.length
+    ) {
+      return { success: true };
     }
 
     // "@router list": the agents this person can reach with "Agent > message".
@@ -1752,6 +1816,11 @@ export class ChatOpsManager {
     ].join("\n\n");
     const fullMessage = [
       `Current message: ${message.messageId}; sender: ${message.senderId}.`,
+      ...(provider.providerId === "slack"
+        ? [
+            `You can send concise updates to this Slack thread before your turn ends: for meaningful progress, a change of plan, a long wait, or to notify the user that input or approval is needed. Use ${archestraMcpBranding.getToolName(TOOL_POST_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable. If needed, discover it through the gateway's tool search. Sending a message does not end the turn or wait for a reply; collect input and approvals through the available question or approval interface. Avoid narrating every action. Your final answer is posted automatically; do not send it with this tool.`,
+          ]
+        : []),
       ...(isGroup
         ? [
             `Directly @mentioned: ${message.metadata?.botMentioned === true ? "yes" : "no"}.`,
@@ -1785,6 +1854,7 @@ export class ChatOpsManager {
       },
       provider,
       fullMessage,
+      cleanedMessageText: params.cleanedMessageText,
       sessionSetup,
       sendReply: params.sendReply,
       userId: params.userId,
@@ -2581,8 +2651,8 @@ export class ChatOpsManager {
 
   /**
    * Start a durable run in the Agent's runtime. The run posts its result to
-   * this thread when it settles. Slack and Teams use provider status while
-   * other providers acknowledge startup. A
+   * this thread when it settles. Addressed Slack requests receive the session
+   * link as soon as it is accessible; provider status tracks execution. A
    * follow-up from the same person continues their latest workspace for the
    * thread, so the work carries over between messages.
    */
@@ -2592,6 +2662,7 @@ export class ChatOpsManager {
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     fullMessage: string;
+    cleanedMessageText?: string;
     sessionSetup?: string;
     ephemeralExecutionPrefix?: string;
     sendReply: boolean;
@@ -2696,6 +2767,12 @@ export class ChatOpsManager {
             | undefined,
         }),
       };
+      let acknowledgementDelivery = Promise.resolve();
+      const acknowledgeSession =
+        sendReply &&
+        provider.providerId === "slack" &&
+        (message.metadata?.conversationType === "personal" ||
+          message.metadata?.botMentioned === true);
       const task = await startDetachedAgentTask({
         actor,
         agentId: agent.id,
@@ -2709,6 +2786,12 @@ export class ChatOpsManager {
         },
         systemParams: {
           resumeFromTaskId,
+          runtimeTitle:
+            resumeFromTaskId && previous
+              ? previous.run.title
+              : toPlaceholderTitle(
+                  `${CHATOPS_PROVIDER_LABELS[provider.providerId]}: ${params.cleanedMessageText || message.text || "New chat"}`,
+                ),
           sessionId: buildChatOpsSessionId(
             provider.providerId,
             message.channelId,
@@ -2718,12 +2801,54 @@ export class ChatOpsManager {
           routeCategory: RouteCategory.CHATOPS,
           completionTarget,
           ephemeralExecutionPrefix,
+          ...(acknowledgeSession && {
+            onRuntimeSessionCreated: async ({ taskId, workspaceId }) => {
+              const acknowledgement = await startRuntimeAcknowledgement({
+                taskId,
+                send: async () => {
+                  if (
+                    (await this.threadMutedSinceStart(
+                      threadKey,
+                      muteMarkerAtStart,
+                    )) ||
+                    (await A2ATaskModel.findById(taskId))?.state ===
+                      "TASK_STATE_CANCELED"
+                  )
+                    return;
+                  await sendRuntimeReplyWithAnchor({
+                    organizationId: binding.organizationId,
+                    bindingId: binding.id,
+                    threadId,
+                    providerScope: provider.stateScope,
+                    anchorOptional: true,
+                    send: (includeAnchor) =>
+                      provider.sendReply({
+                        originalMessage: message,
+                        text: "I'm on it.",
+                        conversationUrl: agentRunUrl(workspaceId),
+                        footer: includeAnchor
+                          ? buildAgentFooter(agent.name)
+                          : undefined,
+                        hint:
+                          includeAnchor &&
+                          message.metadata?.conversationType !== "personal"
+                            ? THREAD_MUTE_HINT
+                            : undefined,
+                        bestEffort: true,
+                      }),
+                  });
+                },
+              });
+              acknowledgementDelivery = acknowledgement.delivery;
+            },
+          }),
         },
       });
       void watchTaskCompletion({
         taskId: task.id,
         agentName: agent.name,
         target: completionTarget,
+        beforeDelivery: () => acknowledgementDelivery,
       }).catch((error) => {
         logger.warn(
           { error: errorMessage(error), taskId: task.id },

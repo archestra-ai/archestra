@@ -1,5 +1,59 @@
 # Changelog
 
+## [1.4.0-rc.54](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.53...platform-v1.4.0-rc.54) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **openappa:** remove policy snapshots and the kept-annotator machinery ([#9327](https://github.com/archestra-ai/archestra/issues/9327))
+* **sandbox:** precompile sandbox Python bytecode and move the base to Python 3.14 ([#9322](https://github.com/archestra-ai/archestra/issues/9322))
+
+### Features
+
+* **chat:** show guardrail status as APPA peeking over the composer ([#9328](https://github.com/archestra-ai/archestra/issues/9328)) ([320eae5](https://github.com/archestra-ai/archestra/commit/320eae5fa12a6647c3bee693d6f58548b73ee287))
+* **openappa:** remove policy snapshots and the kept-annotator machinery ([#9327](https://github.com/archestra-ai/archestra/issues/9327)) ([d4a1474](https://github.com/archestra-ai/archestra/commit/d4a14740833bafd892921e35d2bba515b18b8c4c))
+
+
+### Bug Fixes
+
+* **chatops:** acknowledge runtime sessions when their chat is accessible ([#9335](https://github.com/archestra-ai/archestra/issues/9335)) ([1cb4cf6](https://github.com/archestra-ai/archestra/commit/1cb4cf610db8a4f717663e0f3ecc6a999bf57b98))
+* **chatops:** keep runtime chat titles meaningful and stable ([#9326](https://github.com/archestra-ai/archestra/issues/9326)) ([32e5142](https://github.com/archestra-ai/archestra/commit/32e5142da65148d9f363f7b536908516b26c2d56))
+* **connect:** name the cause when the Codex preflight cannot refresh its model list ([#9336](https://github.com/archestra-ai/archestra/issues/9336)) ([5dc8334](https://github.com/archestra-ai/archestra/commit/5dc8334dc607c8339cb2567fc4c76eee55d67c80))
+* **deps:** bump vite to 7.3.7 for CVE-2026-112942 ([#9341](https://github.com/archestra-ai/archestra/issues/9341)) ([0b57d9b](https://github.com/archestra-ai/archestra/commit/0b57d9b0a5403da54edbc32ef49302b24000690e))
+* **llm-proxy:** settle complete billable inference usage ([#9333](https://github.com/archestra-ai/archestra/issues/9333)) ([16c080c](https://github.com/archestra-ai/archestra/commit/16c080ca87e3f689f9720d5a552f0e38b45f23a2))
+* **mcp:** describe tools the way the caller's own installation does ([#9320](https://github.com/archestra-ai/archestra/issues/9320)) ([592f842](https://github.com/archestra-ai/archestra/commit/592f842863df8aa4c002b2c7d687bbfc28059e79))
+
+
+### Performance Improvements
+
+* **sandbox:** precompile sandbox Python bytecode and move the base to Python 3.14 ([#9322](https://github.com/archestra-ai/archestra/issues/9322)) ([da49222](https://github.com/archestra-ai/archestra/commit/da4922280a646cc26007781f60d7984017485585))
+
+
+### Dependencies
+
+* **rust:** bump webpki crates for RUSTSEC-2026-0381/0382/0383 ([#9338](https://github.com/archestra-ai/archestra/issues/9338)) ([527a951](https://github.com/archestra-ai/archestra/commit/527a951683546bf892874d0ad955baa963f71eba))
+
+## [1.4.0-rc.53](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.52...platform-v1.4.0-rc.53) (2026-10-20)
+
+
+### Bug Fixes
+
+* **chat:** fade overflowing sidebar titles instead of an ellipsis ([#9321](https://github.com/archestra-ai/archestra/issues/9321)) ([4ba3b8e](https://github.com/archestra-ai/archestra/commit/4ba3b8e8eae62e9659cce6c3a41ba21de77e5af4))
+* **logs:** fold a thread's session previews chunk by chunk ([#9308](https://github.com/archestra-ai/archestra/issues/9308)) ([985dfa9](https://github.com/archestra-ai/archestra/commit/985dfa925aac4d713e59ec20c2bf25c53f1b0b4f))
+* **oauth:** explain an expired consent request instead of asking to try again ([#9317](https://github.com/archestra-ai/archestra/issues/9317)) ([0592ce7](https://github.com/archestra-ai/archestra/commit/0592ce7ace054cc0a589d98877883a958847b066))
+* **openappa:** don't offer Clear for the Resolved yells view ([#9307](https://github.com/archestra-ai/archestra/issues/9307)) ([d3f2451](https://github.com/archestra-ai/archestra/commit/d3f2451164c878cf3bc46be25d40a9856abebe91))
+* **openappa:** log failure causes and prefix runtime errors with OpenAPPA ([#9325](https://github.com/archestra-ai/archestra/issues/9325)) ([155e2d5](https://github.com/archestra-ai/archestra/commit/155e2d58c41aeae6493e19d296270254fccdaf24))
+
+
+### Performance Improvements
+
+* **connection:** seed the approval page and its first setup on the server ([#9316](https://github.com/archestra-ai/archestra/issues/9316)) ([b23c283](https://github.com/archestra-ai/archestra/commit/b23c2832aa797f02436a6e503914ce351e129a35))
+
+
+### Documentation
+
+* **openappa:** restructure the Guardrails docs and fix stale claims ([#9310](https://github.com/archestra-ai/archestra/issues/9310)) ([e3c9f3b](https://github.com/archestra-ai/archestra/commit/e3c9f3b13dd53f910fc29598ddc6277fef348616))
+
 ## [1.4.0-rc.52](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.51...platform-v1.4.0-rc.52) (2026-10-20)
 
 

@@ -9,7 +9,7 @@ import {
   buildWindowsStartupGuardUnshadowSection,
 } from "../guard/startup-guard.windows";
 import { CODEX_SETUP_PREFLIGHT } from "../payloads/codex-setup-preflight";
-import type { SetupScriptContext } from "../types";
+import { SETUP_STOPPED_EXIT_CODE, type SetupScriptContext } from "../types";
 import { psq, sh } from "./quoting";
 
 /**
@@ -71,7 +71,7 @@ try {`,
 /** Shared lifecycle: run Node preflight before unshadowing or changing client state. */
 function codexPreflightBash(ctx: SetupScriptContext): string {
   return `say 'Checking Codex compatibility before changing client configuration'
-archestra_codex_recovery=$(node -e ${sh(CODEX_SETUP_PREFLIGHT)} -- "$(command -v codex)" ${sh(ctx.proxy ? "proxy" : "no-proxy")})
+archestra_codex_recovery=$(node -e ${sh(CODEX_SETUP_PREFLIGHT)} -- "$(command -v codex)" ${sh(ctx.proxy ? "proxy" : "no-proxy")}) || exit $?
 archestra_codex_setup_complete=0
 archestra_codex_setup_exit() {
   local status=$?
@@ -94,5 +94,10 @@ ${CODEX_SETUP_PREFLIGHT}
 '@
 # Use stdin so Windows does not have to quote the embedded JavaScript.
 $archCodexRecovery = $archCodexPreflight | & node - $archCodexExe.Source ${psq(ctx.proxy ? "proxy" : "no-proxy")}
+# This status means the preflight printed what failed and what to do, and
+# nothing has changed yet: stop without an error record that repeats it. A
+# pasted irm | iex runs in the user's own session: return to the prompt there
+# rather than close it.
+if ($LASTEXITCODE -eq ${SETUP_STOPPED_EXIT_CODE}) { if ($PSCommandPath) { exit ${SETUP_STOPPED_EXIT_CODE} }; return }
 if ($LASTEXITCODE -ne 0) { throw 'Codex preflight failed. No client configuration was changed. Start a new installer run after fixing the error above.' }`;
 }

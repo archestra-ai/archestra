@@ -1,17 +1,13 @@
 /**
- * Roots an earlier OpenAPPA engine opened keep deciding after an engine bump.
+ * Roots an earlier OpenAPPA engine opened are refused once, under a code the
+ * host classifies, and the organization's next conversation follows its line.
  *
  * Each fixture holds the rows one engine wrote for a root it opened, with one
  * released call: v1 by OpenAPPA 0.32 (policy identity v1), v2 by OpenAPPA 0.34
  * (policy identity v2), and `pinned` by the last pin before policy revisions
- * (`fixtures/record-pinned-family.cjs` records it). The opening record names
- * the policy by the identity the opening engine computed. A bump whose engine
- * no longer recognizes that identity fails here, instead of failing every open
- * conversation of a deployment the next time Guardrails enforcement is on.
- *
- * Every such root is a pinned family: it keeps its opening policy until it
- * ends, and nothing stamps its batches with a policy revision. A conversation
- * the same organization opens now follows the organization's current revision.
+ * (`fixtures/record-pinned-family.cjs` records it). Every such root is a legacy
+ * family: it opened pinned to its opening policy, and no view serves that
+ * policy any more.
  */
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
@@ -37,7 +33,7 @@ name = "publish"
 delta = {}
 requires = { trust = "trusted" }
 `;
-// A later revision: a root that opened under `opening` decides under its own stored file.
+// A later revision, which the organization's next conversation follows.
 const revised = `${opening}
 [[policy.tool]]
 name = "archive"
@@ -85,44 +81,27 @@ for (const [version, openedBy] of [
   ['v2', 'the v2 policy identity'],
   ['pinned', 'the last pin before policy revisions'],
 ]) {
-  test(`continues a root ${openedBy} opened`, { skip: !databaseUrl, timeout: 60000 }, async () => {
+  test(`refuses a root ${openedBy} opened, and the next conversation follows`, { skip: !databaseUrl, timeout: 60000 }, async () => {
     const fixture = require(`./fixtures/opening-identity-${version}.json`);
-    const pg = new Client({ connectionString: databaseUrl });
-    await pg.connect();
-    try {
-      // One transaction, so a failed insert leaves no half-restored root behind.
-      await pg.query('BEGIN');
-      await restore(pg, fixture);
-      await pg.query('COMMIT');
-    } catch (error) {
-      await pg.query('ROLLBACK');
-      throw error;
-    } finally {
-      await pg.end();
-    }
+    await restored(fixture);
     await native.initializeOpenappa(databaseUrl, 4);
     const session = {
       organization_id: fixture.organization_id,
       caller_id: fixture.caller_id,
       session_id: fixture.session_id,
     };
-    const dispatch = async (event, content) =>
-      JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(content)));
+    const dispatch = (event) => native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(revised));
+    const events = await eventCount(fixture.root);
 
-    // Served policy unchanged: the deployment's own engine decides.
-    const read = await dispatch({ event: 'tool_call', operation_id: 'call:r2', tool: 'read', arguments: {} }, opening);
-    assert.equal(read.decision, 'allow_call');
-    const result = await dispatch({ event: 'tool_result', tool_call_id: 'r2', output: 'ok', outcome: 'success' }, opening);
-    assert.equal(result.decision, 'ack');
-    // Served policy revised: the root decides under its stored opening policy.
-    const later = await dispatch({ event: 'tool_call', operation_id: 'call:r3', tool: 'publish', arguments: {} }, revised);
-    assert.equal(later.decision, 'allow_call');
-    // Only the revised policy declares `archive`: this root refuses it, while a
-    // conversation the organization opens now follows the revision and runs it.
-    await assert.rejects(
-      dispatch({ event: 'tool_call', operation_id: 'call:r4', tool: 'archive', arguments: {} }, revised),
-      /not declared in this policy/,
-    );
+    await assert.rejects(dispatch({ event: 'tool_call', operation_id: 'call:r2', tool: 'read', arguments: {} }), {
+      code: 'legacy_family',
+    });
+    // Not retryable: the same call is refused again, and nothing was appended either time.
+    await assert.rejects(dispatch({ event: 'tool_call', operation_id: 'call:r2', tool: 'read', arguments: {} }), {
+      code: 'legacy_family',
+    });
+    assert.equal(await eventCount(fixture.root), events);
+
     const fresh = { ...session, session_id: randomUUID() };
     const hook = async (event) =>
       JSON.parse(await native.dispatchHook(JSON.stringify({ ...fresh, ...event }), hosted(revised)));
@@ -131,47 +110,55 @@ for (const [version, openedBy] of [
       (await hook({ event: 'tool_call', operation_id: 'call:a1', tool: 'archive', arguments: {} })).decision,
       'allow_call',
     );
-
-    const stamped = async (root) => {
-      const pg = new Client({ connectionString: databaseUrl });
-      await pg.connect();
-      try {
-        const { rows } = await pg.query('SELECT payload FROM openappa_events WHERE root = $1 AND seq > 0', [root]);
-        return rows.map((row) => row.payload.toString('utf8').includes('"BasisAdvanced"'));
-      } finally {
-        await pg.end();
-      }
-    };
-    assert.ok(
-      (await stamped(fixture.root)).every((stamp) => !stamp),
-      'a pinned family takes no policy revision stamp',
-    );
-    const lookup = new Client({ connectionString: databaseUrl });
-    await lookup.connect();
-    const freshRoot = (
-      await lookup
-        .query('SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2', [
-          fresh.organization_id,
-          fresh.session_id,
-        ])
-        .finally(() => lookup.end())
-    ).rows[0].root;
-    assert.ok((await stamped(freshRoot)).some((stamp) => stamp), 'a following family stamps its decided batches');
+    const status = await native.getOpenappaStatus(fresh.organization_id, fresh.session_id, hosted(revised));
+    assert.equal(typeof status.policyRevision, 'number');
+    // The legacy conversation reports no status: its next call is refused instead.
+    assert.equal((await native.getOpenappaStatus(session.organization_id, session.session_id, hosted(revised))) ?? null, null);
+    assert.equal(await eventCount(fixture.root), events);
   });
 }
 
 test('refuses a root whose stored batch no longer decodes, under a code the host classifies', { skip: !databaseUrl, timeout: 60000 }, async () => {
-  const fixture = require('./fixtures/opening-identity-v2.json');
+  await native.initializeOpenappa(databaseUrl, 4);
+  const session = { organization_id: `undecodable-${randomUUID()}`, caller_id: 'user:owner', session_id: randomUUID() };
+  const dispatch = async (event) =>
+    JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(opening)));
+  assert.equal((await dispatch({ event: 'session_start' })).decision, 'ack');
+  assert.equal((await dispatch({ event: 'tool_call', operation_id: 'call:r1', tool: 'read', arguments: {} })).decision, 'allow_call');
+  const pg = new Client({ connectionString: databaseUrl });
+  await pg.connect();
+  try {
+    const { root } = (
+      await pg.query('SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2', [
+        session.organization_id,
+        session.session_id,
+      ])
+    ).rows[0];
+    // A batch in an encoding this engine no longer reads, as an earlier engine could leave it.
+    await pg.query(
+      'INSERT INTO openappa_events (root, seq, payload) SELECT root, max(seq) + 1, $2 FROM openappa_events WHERE root = $1 GROUP BY root',
+      [root, Buffer.from('[{"Return":null}]')],
+    );
+  } finally {
+    await pg.end();
+  }
+
+  await assert.rejects(
+    native.dispatchHook(
+      JSON.stringify({ ...session, event: 'tool_call', operation_id: 'call:undecodable', tool: 'read', arguments: {} }),
+      hosted(opening),
+    ),
+    { code: 'untrusted_log' },
+  );
+});
+
+/** Restore `fixture`'s rows in one transaction, so a failed insert leaves no half-restored root behind. */
+async function restored(fixture) {
   const pg = new Client({ connectionString: databaseUrl });
   await pg.connect();
   try {
     await pg.query('BEGIN');
     await restore(pg, fixture);
-    // A batch in an encoding this engine no longer reads, as an earlier engine could leave it.
-    await pg.query(
-      'INSERT INTO openappa_events (root, seq, payload) SELECT root, max(seq) + 1, $2 FROM openappa_events WHERE root = $1 GROUP BY root',
-      [fixture.root, Buffer.from('[{"Return":null}]')],
-    );
     await pg.query('COMMIT');
   } catch (error) {
     await pg.query('ROLLBACK');
@@ -179,16 +166,14 @@ test('refuses a root whose stored batch no longer decodes, under a code the host
   } finally {
     await pg.end();
   }
-  await native.initializeOpenappa(databaseUrl, 4);
-  const event = {
-    organization_id: fixture.organization_id,
-    caller_id: fixture.caller_id,
-    session_id: fixture.session_id,
-    event: 'tool_call',
-    operation_id: 'call:undecodable',
-    tool: 'read',
-    arguments: {},
-  };
+}
 
-  await assert.rejects(native.dispatchHook(JSON.stringify(event), hosted(opening)), { code: 'untrusted_log' });
-});
+async function eventCount(root) {
+  const pg = new Client({ connectionString: databaseUrl });
+  await pg.connect();
+  try {
+    return (await pg.query('SELECT count(*)::int AS n FROM openappa_events WHERE root = $1', [root])).rows[0].n;
+  } finally {
+    await pg.end();
+  }
+}

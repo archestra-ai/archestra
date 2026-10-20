@@ -3,7 +3,7 @@ title: Hand Off Work
 description: Hand a task from your coding agent to Agent Runtime, then bring the result back
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,6 +30,28 @@ The skill drives these tools on the [MCP Gateway](/docs/mcp/gateway). You can al
 - **Read or write files** without starting a turn: [`read_workspace_file`](/docs/reference/archestra-mcp-server#read_workspace_file) and [`write_workspace_file`](/docs/reference/archestra-mcp-server#write_workspace_file).
 
 Only the person who started a run can steer it or use its files.
+
+## Post a Worker's File to Slack
+
+The agent answering in Slack can retrieve a worker's recording or document and post it with its own bot identity. Add this instruction to the foreground agent's prompt:
+
+```text
+When a worker produces a file the user asked to receive in this Slack thread:
+1. Ask the worker to save it under /home/node/workspace and return its run ID
+   and workspace-relative path.
+2. Call transfer_workspace_file with direction "download", that run ID and
+   path, and a local_path under /home/sandbox/artifacts/.
+3. If the transfer is pending, wait and retry. Once authorized, use run_command
+   to create the destination directory and execute the returned download command.
+4. After the download succeeds, call post_thread_file with the sandbox path
+   and an optional comment. Report delivery only after the tool returns success.
+If a pause or a new turn leaves the current sandbox without the file, repeat
+the transfer and download before posting.
+If guardrails refuse transfer or publication, follow the ruling; copying a
+file does not grant permission to share it.
+```
+
+The foreground agent needs [`transfer_workspace_file`](/docs/reference/archestra-mcp-server#transfer_workspace_file), [`run_command`](/docs/reference/archestra-mcp-server#run_command), and [`post_thread_file`](/docs/reference/archestra-mcp-server#post_thread_file). Posting uses the current Slack thread automatically. It accepts files up to 40 MiB, or the deployment's lower sandbox file limit. The existing [`post_run_file`](/docs/reference/archestra-mcp-server#post_run_file) tool remains for uploads associated with a runtime run.
 
 ## Hand Off With Guardrails On
 

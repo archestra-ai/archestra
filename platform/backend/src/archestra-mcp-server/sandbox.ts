@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
   MAX_PROJECT_UPLOAD_BYTES,
@@ -6,6 +7,7 @@ import {
   TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
+  TOOL_POST_THREAD_FILE_SHORT_NAME,
   TOOL_READ_FILE_RAW_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
@@ -802,6 +804,122 @@ const registry = defineArchestraTools([
         );
       } catch (error) {
         return handleRuntimeError(error, resolved.sandboxId, "run_command");
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_POST_THREAD_FILE_SHORT_NAME,
+    title: "Post Thread File",
+    description:
+      "Post a file from this conversation's sandbox to its current messaging-channel " +
+      "thread as the agent's bot. Use this after a worker produces a deliverable: " +
+      "transfer_workspace_file authorizes the download, then run its returned command " +
+      "with run_command to place the file in this sandbox before posting. " +
+      "Pass the sandbox path, not a worker path, run ID, URL, or base64 bytes. " +
+      "The destination comes from the current conversation and cannot be overridden. " +
+      "Requires a messaging-channel conversation with file-upload support. Maximum 40 MiB " +
+      "(or the deployment's lower sandbox file limit). If the file is missing after an " +
+      "approval pause or a new turn, repeat the transfer into the current sandbox. " +
+      "Only report delivery after success.",
+    schema: z.strictObject({
+      path: z
+        .string()
+        .min(1)
+        .max(4096)
+        .describe("Path to the file in this conversation's sandbox."),
+      target: z
+        .strictObject({
+          id: z
+            .string()
+            .uuid()
+            .describe("An existing sandbox id from this conversation."),
+        })
+        .optional()
+        .describe(
+          "Omit for the current sandbox, or select another sandbox owned by this conversation.",
+        ),
+      filename: z
+        .string()
+        .trim()
+        .min(1)
+        .max(120)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._ -]*$/, "Use a plain file name.")
+        .optional()
+        .describe("Upload filename. Defaults to the file's basename."),
+      comment: z
+        .string()
+        .trim()
+        .max(2_000)
+        .optional()
+        .describe("Message to accompany the file."),
+    }),
+    outputSchema: z.object({
+      success: z
+        .literal(true)
+        .describe("The messaging provider confirmed the upload."),
+      filename: z.string().describe("The uploaded file name."),
+      sizeBytes: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("Number of bytes uploaded."),
+    }),
+    async handler({ args, context }) {
+      const guard = ensureRuntimeUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+      // Only server-supplied ChatOps context may select the destination. An
+      // app or stateless MCP client cannot turn a sandbox id into posting rights.
+      if (
+        context.appId ||
+        !context.chatOpsBindingId ||
+        !context.chatOpsThreadId ||
+        (!context.conversationId && !context.isolationKey)
+      ) {
+        return errorResult(
+          "This tool requires a current messaging-channel conversation.",
+        );
+      }
+      const resolved = await resolveTarget({
+        target: args.target,
+        userCtx: guard.userCtx,
+        context,
+      });
+      if ("error" in resolved) return errorResult(resolved.error);
+      try {
+        const artifact = await skillSandboxRuntimeService.readArtifact({
+          sandboxId: resolved.sandboxId,
+          caller: { ...guard.userCtx, agentId: context.agent.id },
+          path: args.path,
+          maxBytes: 40 * 1024 * 1024,
+          environment: await resolveEnvironmentTarget(context),
+        });
+        if (artifact.data.length === 0)
+          return errorResult("Cannot post an empty file.");
+        const filename = args.filename ?? path.posix.basename(artifact.path);
+        const { chatOpsManager } = await import(
+          "@/agents/chatops/chatops-manager"
+        );
+        await chatOpsManager.uploadFileToBindingThread({
+          bindingId: context.chatOpsBindingId,
+          threadId: context.chatOpsThreadId,
+          pinnedAgentId: context.chatOpsPinnedAgentId,
+          filename,
+          data: artifact.data,
+          comment: args.comment,
+        });
+        return structuredSuccessResult(
+          { success: true, filename, sizeBytes: artifact.data.length },
+          withStagingNotices(
+            "File posted to the current thread.",
+            artifact.stagingNotices,
+          ),
+        );
+      } catch (error) {
+        return handleRuntimeError(
+          error,
+          resolved.sandboxId,
+          "post_thread_file",
+        );
       }
     },
   }),

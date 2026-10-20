@@ -217,42 +217,23 @@ class SkillSandboxRuntimeService {
     });
   }
 
+  /** Read sandbox bytes for a server-side delivery without persisting a file. */
+  async readArtifact(params: ReadSandboxArtifactParams) {
+    this.ensureEnabled();
+    return this.runWithSandbox(params.sandboxId, (sandbox) =>
+      this.readSandboxArtifact(sandbox, params),
+    );
+  }
+
   async exportArtifact(params: ExportArtifactParams): Promise<ArtifactRef> {
     this.ensureEnabled();
 
     return this.runWithSandbox(params.sandboxId, async (sandbox) => {
-      const { stagingNotices, replayEntries } = await this.prepareExecution(
-        sandbox,
-        params.caller,
-      );
-      const resolvedPath = resolveArtifactPath({
-        path: params.path,
-        defaultCwd: sandbox.defaultCwd,
-      });
-
-      let artifact: Awaited<
-        ReturnType<typeof sandboxRuntimeService.readArtifact>
-      >;
-      try {
-        artifact = await sandboxRuntimeService.readArtifact({
-          replayEntries,
-          path: resolvedPath,
-          defaultCwd: sandbox.defaultCwd,
-          environment: params.environment,
-          // must match runCommand's limit: the command supervisor takes
-          // `--out-cap <outputBytesLimit>` in each replayed exec, so a mismatch
-          // here invalidates Dagger's per-replay layer cache.
-          outputBytesLimit: config.skillsSandbox.outputBytesLimit,
-          fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
-          spoolRoot: SANDBOX_UPLOAD_SPOOL_ROOT,
-          cpuSeconds: config.skillsSandbox.cpuLimit,
-          memoryBytes: config.skillsSandbox.memoryLimit,
-        });
-      } catch (error) {
-        throw this.toSkillError(error);
-      }
-
-      const data = Buffer.from(artifact.dataBase64, "base64");
+      const {
+        data,
+        path: resolvedPath,
+        stagingNotices,
+      } = await this.readSandboxArtifact(sandbox, params);
       const mimeType = resolveArtifactMime({
         buffer: data,
         claimed: params.mimeType,
@@ -610,6 +591,45 @@ class SkillSandboxRuntimeService {
         { error, conversationId: params.conversationId },
         "[SkillSandbox] upload-time attachment staging failed",
       );
+    }
+  }
+
+  private async readSandboxArtifact(
+    sandbox: SkillSandbox,
+    params: ReadSandboxArtifactParams,
+  ) {
+    const { stagingNotices, replayEntries } = await this.prepareExecution(
+      sandbox,
+      params.caller,
+    );
+    const resolvedPath = resolveArtifactPath({
+      path: params.path,
+      defaultCwd: sandbox.defaultCwd,
+    });
+    const limit = Math.min(
+      config.skillsSandbox.artifactBytesLimit,
+      params.maxBytes ?? config.skillsSandbox.artifactBytesLimit,
+    );
+    try {
+      const artifact = await sandboxRuntimeService.readArtifact({
+        replayEntries,
+        path: resolvedPath,
+        defaultCwd: sandbox.defaultCwd,
+        environment: params.environment,
+        // Match runCommand's output cap to preserve the replay layer cache.
+        outputBytesLimit: config.skillsSandbox.outputBytesLimit,
+        fileSizeLimitBytes: limit,
+        spoolRoot: SANDBOX_UPLOAD_SPOOL_ROOT,
+        cpuSeconds: config.skillsSandbox.cpuLimit,
+        memoryBytes: config.skillsSandbox.memoryLimit,
+      });
+      const data = Buffer.from(artifact.dataBase64, "base64");
+      if (data.length > limit) {
+        throw new SkillSandboxError(`File exceeds the ${limit} byte limit.`);
+      }
+      return { data, path: resolvedPath, stagingNotices };
+    } catch (error) {
+      throw this.toSkillError(error);
     }
   }
 
@@ -1223,3 +1243,11 @@ export const __internals = {
   sanitizeAttachmentName,
   shouldRecordOnFailure,
 };
+
+interface ReadSandboxArtifactParams {
+  sandboxId: SandboxId;
+  caller: SandboxCaller;
+  path: string;
+  environment?: ExportArtifactParams["environment"];
+  maxBytes?: number;
+}

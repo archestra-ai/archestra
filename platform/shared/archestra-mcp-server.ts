@@ -191,6 +191,7 @@ export const TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME =
 // handoff can carry the CLI auth the local session was using. Personal scope
 // only, and only for Agents that opted in to accepting client-supplied values.
 export const TOOL_TRANSFER_CREDENTIAL_SHORT_NAME = "transfer_credential";
+export const TOOL_POST_THREAD_FILE_SHORT_NAME = "post_thread_file";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 // persistent files: produced by agents, scoped to a conversation (or a project)
@@ -368,6 +369,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_POST_THREAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
@@ -603,6 +605,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   delete_workspace: "tasks",
   transfer_credential: "tasks",
   download_file: "skill_sandbox",
+  post_thread_file: "skill_sandbox",
   upload_file: "skill_sandbox",
 
   search_files: "files",
@@ -793,6 +796,8 @@ export const TOOL_CANCEL_RUN_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_RUN_SHORT_NAME}` as const;
 export const TOOL_POST_RUN_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_RUN_FILE_SHORT_NAME}` as const;
+export const TOOL_POST_THREAD_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_THREAD_FILE_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DOWNLOAD_FILE_SHORT_NAME}` as const;
 export const TOOL_UPLOAD_FILE_FULL_NAME =
@@ -967,6 +972,7 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_POST_THREAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 

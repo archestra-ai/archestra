@@ -2269,6 +2269,11 @@ const config = {
   websocket: {
     path: "/ws",
   },
+  mcpOAuth: {
+    // Deployment-operator opt-in; compatibility must remain the default.
+    enforceOutboundValidation:
+      process.env.ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION === "true",
+  },
   mcpGateway: {
     endpoint: "/v1/mcp",
     /**

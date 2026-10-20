@@ -214,11 +214,12 @@ async function readShellQueries(params: {
 
 /**
  * The connection approval page's reads, each from its own endpoint, in
- * parallel: the installer's request, the default gateway and the gateway
- * list, the LLM Proxy, the skill names, the plugins, the provider keys and
- * the models. The organization's connection settings (in the bootstrap) say
- * which of the optional parts the page shows. The gateways the page names by
- * id are read once the default gateway is known. A part the viewer may not
+ * parallel and alongside the bootstrap: the installer's request, the default
+ * gateway and the gateway list, the LLM Proxy, the skill names, the plugins,
+ * the provider keys and the models. The organization's connection settings
+ * (in the bootstrap) say which of the optional parts the page shows. The
+ * gateways the page names by id are read once the default gateway and the
+ * admin default are known. A part the viewer may not
  * read is left out, and its query loads in the browser.
  */
 async function readConnectionApproval(options: {
@@ -228,12 +229,12 @@ async function readConnectionApproval(options: {
   search: string | null;
   bootstrap: Promise<{ data?: ShellSeed["bootstrap"] }>;
 }): Promise<ShellSeed["queries"]> {
-  const { data: bootstrap } = await options.bootstrap.catch(() => ({
-    data: undefined,
-  }));
-  const organization = bootstrap?.organization;
-  if (!organization) return [];
   const sdk = { headers: options.headers, signal: options.signal };
+  // The organization's settings choose the optional parts and name the admin
+  // default gateway; the other reads start alongside the bootstrap.
+  const organizationRead = options.bootstrap
+    .then(({ data }) => data?.organization)
+    .catch(() => undefined);
   const urlGatewayId = new URLSearchParams(options.search ?? "").get(
     "gatewayId",
   );
@@ -243,7 +244,11 @@ async function readConnectionApproval(options: {
       query: { includeTools: false },
     }),
   );
-  const referencesRead = defaultGatewayRead.then(async (defaultGateway) => {
+  const referencesRead = Promise.all([
+    defaultGatewayRead,
+    organizationRead,
+  ]).then(async ([defaultGateway, organization]) => {
+    if (!organization) return undefined;
     const ids = [
       ...new Set(
         [
@@ -276,6 +281,7 @@ async function readConnectionApproval(options: {
     plugins,
     availableApiKeys,
     models,
+    organization,
   ] = await Promise.all([
     readValue(
       archestraApiSdk.getClientConnection({
@@ -291,18 +297,27 @@ async function readConnectionApproval(options: {
         query: CONNECTION_GATEWAY_PAGE_QUERY,
       }),
     ),
-    organization.connectionLlmProxyEnabled
-      ? readValue(archestraApiSdk.getLlmProxy(sdk))
-      : undefined,
-    organization.connectionSkillsEnabled
-      ? readValue(archestraApiSdk.getSkillNames(sdk))
-      : undefined,
-    organization.connectionPluginsEnabled
-      ? readValue(archestraApiSdk.getPlugins({ ...sdk, query: {} }))
-      : undefined,
+    organizationRead.then((organization) =>
+      organization?.connectionLlmProxyEnabled
+        ? readValue(archestraApiSdk.getLlmProxy(sdk))
+        : undefined,
+    ),
+    organizationRead.then((organization) =>
+      organization?.connectionSkillsEnabled
+        ? readValue(archestraApiSdk.getSkillNames(sdk))
+        : undefined,
+    ),
+    organizationRead.then((organization) =>
+      organization?.connectionPluginsEnabled
+        ? readValue(archestraApiSdk.getPlugins({ ...sdk, query: {} }))
+        : undefined,
+    ),
     readValue(archestraApiSdk.getAvailableLlmProviderApiKeys(sdk)),
     readValue(archestraApiSdk.getLlmModels(sdk)),
+    organizationRead,
   ]);
+  // Without the organization the page cannot render past its settings check.
+  if (!organization) return [];
   return connectionApprovalSeedQueries({
     connectRequest: options.connectRequest,
     request,

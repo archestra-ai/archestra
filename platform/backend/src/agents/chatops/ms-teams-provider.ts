@@ -1433,9 +1433,10 @@ class MSTeamsProvider implements ChatOpsProvider {
    * Download the files of a channel or group-chat message. Teams does not put
    * them on the bot's activity: each is a SharePoint `reference` attachment
    * that only Graph returns. Reading the message uses the app's RSC message
-   * permission; reading the file needs a Graph application permission on
-   * the app (`Files.Read.All`, or `Sites.Selected` with a read grant on the
-   * team's site), and without one the file comes back as skipped.
+   * permission; reading the file needs the app's Graph `Sites.Selected`
+   * permission plus a read grant on the team's site, and without one the
+   * file comes back as skipped. Group-chat files sit in each sender's
+   * OneDrive, which a site grant does not cover.
    */
   async downloadMessageFiles(
     message: IncomingChatMessage,
@@ -1522,7 +1523,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       if (location.status === 401 || location.status === 403) {
         logger.warn(
           { host: safeHostname(fileUrl), status: location.status },
-          "[MSTeamsProvider] Graph denied a Teams file. Grant the app Files.Read.All, or Sites.Selected with read access to this site",
+          "[MSTeamsProvider] Graph denied a Teams file. Grant the app Sites.Selected and read access to this site",
         );
       }
       return new Response(null, { status: location.status });

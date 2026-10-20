@@ -279,8 +279,9 @@ function DetailPanel({
     ? "run_error"
     : (file?.status ?? "absent");
   const failing = file?.steps.find((s) => s.status !== "passed");
-  const why = digest(
-    run.executionError ?? failing?.error ?? file?.error ?? null,
+  const why = withStepReasons(
+    digest(run.executionError ?? failing?.error ?? file?.error ?? null),
+    run.executionError ? undefined : failing?.reasons,
   );
   const reasons = why
     ? why.reasons.length
@@ -1171,3 +1172,20 @@ function InlineCode({ text }: { text: string }) {
 
 const SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index);
 const SKELETON_COLUMNS = Array.from({ length: 10 }, (_, index) => index);
+
+/**
+ * Prefer the reasons replay recorded for a blocked step; runs recorded before
+ * replay kept them have only the engine's text to read them from.
+ */
+function withStepReasons<T extends { reasons: string[] }>(
+  why: T | null,
+  reasons: string[] | undefined,
+): T | null {
+  return why && reasons?.length
+    ? { ...why, reasons: reasons.map(capitalize) }
+    : why;
+}
+
+function capitalize(s: string) {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}

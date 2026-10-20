@@ -602,6 +602,8 @@ export type OpenAppaValidationProgressStep = {
   actual: string | null;
   status: "passed" | "failed" | "cannot_run";
   error?: string | null;
+  /** Why a blocked call was blocked. */
+  reasons?: string[];
 };
 
 /**

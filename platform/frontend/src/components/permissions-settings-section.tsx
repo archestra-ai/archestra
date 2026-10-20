@@ -13,16 +13,24 @@ import { SettingsSection } from "@/components/settings-section";
  */
 export function PermissionsSettingsSection({
   audience,
+  lockedReason,
   children,
 }: {
   /** What the grants add up to; null where there is no single object. */
   audience: ResourceVisibilityScope | null;
+  /** Why the viewer cannot change the grants; null when they can. */
+  lockedReason?: string | null;
   children: ReactNode;
 }) {
   return (
     <SettingsSection>
       <div className="space-y-2">
-        {audience && <AccessAudienceHeader audience={audience} />}
+        {audience && (
+          <AccessAudienceHeader
+            audience={audience}
+            lockedReason={lockedReason}
+          />
+        )}
         {children}
       </div>
     </SettingsSection>

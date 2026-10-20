@@ -115,6 +115,8 @@ export interface ChatPromptInputToolsProps {
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
+  /** The agent is still being decided; the selector shows a placeholder */
+  isSelectorAgentResolving?: boolean;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
@@ -194,6 +196,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onOpenFiles,
   agentLlmApiKeyId,
   selectorAgentId,
+  isSelectorAgentResolving = false,
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
@@ -629,6 +632,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <InitialAgentSelector
               currentAgentId={selectorAgentId}
               onAgentChange={handleAgentChange}
+              isAgentResolving={isSelectorAgentResolving}
             />
           )}
           {!runtimeMode &&

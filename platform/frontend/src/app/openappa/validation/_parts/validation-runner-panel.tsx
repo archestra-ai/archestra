@@ -1307,7 +1307,7 @@ function buildProblems(run: RunInfo | null, files: SimFile[]): ProblemGroup[] {
     if (file.status !== "failed" && file.status !== "cannot_run") continue;
     const step = file.steps.find((s) => s.status !== "passed");
     const raw = step?.error ?? file.error ?? "";
-    const why = raw ? digest(raw) : null;
+    const why = withStepReasons(raw ? digest(raw) : null, step?.reasons);
     const problems: Problem[] = [];
     if (step && step.status === "failed") {
       problems.push({
@@ -1516,4 +1516,17 @@ function useContentRect() {
     };
   }, []);
   return rect;
+}
+
+/**
+ * Prefer the reasons replay recorded for a blocked step; runs recorded before
+ * replay kept them have only the engine's text to read them from.
+ */
+function withStepReasons<T extends { reasons: string[] }>(
+  why: T | null,
+  reasons: string[] | undefined,
+): T | null {
+  return why && reasons?.length
+    ? { ...why, reasons: reasons.map(capitalize) }
+    : why;
 }

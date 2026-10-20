@@ -723,8 +723,11 @@ function useRows(): Row[] {
         status === "failed" || status === "cannot_run"
           ? state?.error || inspection
           : inspection;
-      const why = error ? digest(error) : null;
       const step = status === "failed" ? failedStep : null;
+      const why = withStepReasons(
+        step?.error ? digest(step.error) : error ? digest(error) : null,
+        step?.reasons,
+      );
       const mismatch = step
         ? `Expected ${step.expected}, got ${step.actual ?? "no decision"}`
         : null;
@@ -831,3 +834,16 @@ const DOT_COLOR: Record<ResultStatus, string> = {
   failed: "bg-red-500 dark:bg-red-400",
   cannot_run: "bg-yellow-500 dark:bg-yellow-400",
 };
+
+/**
+ * Prefer the reasons replay recorded for a blocked step; runs recorded before
+ * replay kept them have only the engine's text to read them from.
+ */
+function withStepReasons<T extends { reasons: string[] }>(
+  why: T | null,
+  reasons: string[] | undefined,
+): T | null {
+  return why && reasons?.length
+    ? { ...why, reasons: reasons.map(capitalize) }
+    : why;
+}

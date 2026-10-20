@@ -62,8 +62,8 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import { slackAppFactory } from "./slack-app-factory";
-import { slackMessageText } from "./slack-message-text";
-import { SlackReplyStream } from "./slack-reply-stream";
+import { slackMessageText, slackThreadMessageText } from "./slack-message-text";
+import { SlackReplyStream, updatePausedTasks } from "./slack-reply-stream";
 import {
   EventDedupMap,
   errorMessage,
@@ -872,6 +872,15 @@ class SlackProvider implements ChatOpsProvider {
       // Replacing the blocks removes the buttons, so no one clicks twice.
       blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
     });
+    if (options.pausedToolCall) {
+      await updatePausedTasks({
+        client: this.client,
+        channelId: options.channelId,
+        threadTs: options.pausedToolCall.threadId,
+        taskIds: [options.pausedToolCall.toolCallId],
+        outcome: options.approved ? "approved" : "declined",
+      });
+    }
   }
 
   async sendAgentSelectionCard(params: {
@@ -1023,7 +1032,7 @@ class SlackProvider implements ChatOpsProvider {
       // Trim to the requested limit
       const trimmedMessages = allMessages.slice(0, limit).map((message) => ({
         ...message,
-        text: slackMessageText(message),
+        text: slackThreadMessageText(message),
       }));
 
       // Keep text-less USER messages that carry downloadable files: a

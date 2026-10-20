@@ -14,6 +14,7 @@ import { archestraAudience } from "./archestra-audience";
 import { deployedFromRow } from "./battery-target";
 import { servedHelperSource } from "./composition-view";
 import { openappaDeclarations } from "./declarations";
+import { draftHelperSource } from "./draft-helper-sources";
 
 /**
  * The last line a helper wrote to stderr, safe as a header value. Untrusted:
@@ -211,7 +212,8 @@ class OpenAppaHelperBridge {
    * the refused plan, so the enforced composition's record answers: its
    * package, target and credential keys, even for a row the refused plan
    * deleted. Otherwise the row answers, and a deleted row takes its helper
-   * endpoint with it.
+   * endpoint with it. A draft replay's battery has no row; the source it
+   * registered answers while that replay runs.
    */
   private async helperSource(installId: string): Promise<{
     id: string;
@@ -221,6 +223,8 @@ class OpenAppaHelperBridge {
     target: "multi-user" | null;
     credentialBindings: Record<string, string>;
   } | null> {
+    const draft = draftHelperSource(installId);
+    if (draft) return draft;
     const row = await OpenAppaBatteryInstallModel.findById(installId);
     const stored = row
       ? await OpenAppaEffectivePolicyModel.findServed(row.organizationId)

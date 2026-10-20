@@ -511,6 +511,21 @@ tests:
           path: spec.template.spec.initContainers[1].image
           value: docker.io/library/busybox:1.36
 
+  - it: gives wait-for-postgres the envFrom sources that supply the database URL
+    documentIndex: 1
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.envFrom:
+        - secretRef:
+            name: external-db-env
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].envFrom
+          value:
+            - secretRef:
+                name: external-db-env
+
   - it: should allow overriding the wait-for-postgres image
     documentIndex: 1
     set:

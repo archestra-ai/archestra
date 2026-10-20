@@ -245,7 +245,7 @@ test("the editor footer counts the composed batteries and the unenforced ones", 
   expect(summary).not.toHaveAttribute("data-failed");
   expect(
     within(summary).getByRole("link", { name: "1 not enforced" }),
-  ).toHaveAttribute("href", "/openappa/batteries?status=broken");
+  ).toHaveAttribute("href", "/openappa/batteries?status=attention");
 });
 
 test("a refusal that keeps an earlier composition says which one stays enforced", async () => {

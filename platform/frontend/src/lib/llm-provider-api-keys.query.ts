@@ -4,10 +4,16 @@ import {
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import { inFlightQueryData } from "@/lib/query-in-flight";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
@@ -40,6 +46,8 @@ type LlmProviderApiKeysQueryParams = Partial<LlmProviderApiKeysQuery> & {
    */
   toastOnError?: boolean;
 };
+type AvailableLlmProviderApiKeys =
+  archestraApiTypes.GetAvailableLlmProviderApiKeysResponses["200"];
 type AvailableLlmProviderApiKeysParams =
   Partial<AvailableLlmProviderApiKeysQuery> & {
     enabled?: boolean;
@@ -159,10 +167,32 @@ export function useAvailableLlmProviderApiKeys(
   const provider = params?.provider;
   const includeKeyId = params?.includeKeyId;
   const toastOnError = params?.toastOnError;
+  const client = useQueryClient();
+  // With `includeKeyId`, the server adds that key to the same list only when
+  // the list lacks it. When the plain list already holds it, both answers are
+  // the same list: reuse it rather than ask for it again.
+  const listedWithKey = () =>
+    includeKeyId
+      ? listingWithKey(
+          client.getQueryState<AvailableLlmProviderApiKeys>(
+            availableKeysQueryKey(provider, undefined),
+          ),
+          includeKeyId,
+        )
+      : undefined;
 
   return useQuery({
-    queryKey: ["available-llm-provider-api-keys", provider, includeKeyId],
-    queryFn: async () => {
+    queryKey: availableKeysQueryKey(provider, includeKeyId),
+    initialData: () => listedWithKey()?.data,
+    initialDataUpdatedAt: () => listedWithKey()?.dataUpdatedAt,
+    queryFn: async ({ client }) => {
+      if (includeKeyId) {
+        const listed = await inFlightQueryData<AvailableLlmProviderApiKeys>(
+          client,
+          availableKeysQueryKey(provider, undefined),
+        );
+        if (listed?.some((key) => key.id === includeKeyId)) return listed;
+      }
       const query: Partial<AvailableLlmProviderApiKeysQuery> = {};
       if (provider) {
         query.provider = provider;
@@ -179,6 +209,19 @@ export function useAvailableLlmProviderApiKeys(
     },
     enabled: params?.enabled,
   });
+}
+
+/**
+ * The viewer's only usable key, when the cached list of usable keys holds
+ * exactly one; otherwise undefined.
+ */
+export function soleAvailableLlmProviderApiKeyId(
+  client: QueryClient,
+): string | undefined {
+  const keys = client.getQueryData<AvailableLlmProviderApiKeys>(
+    availableKeysQueryKey(undefined, undefined),
+  );
+  return keys?.length === 1 ? keys[0].id : undefined;
 }
 
 export function useCreateLlmProviderApiKey() {
@@ -351,4 +394,22 @@ export function useBulkDeleteLlmProviderApiKeys() {
       queryClient.invalidateQueries({ queryKey: ["llm-oauth-clients"] });
     },
   });
+}
+
+// ===
+
+function availableKeysQueryKey(
+  provider: SupportedProvider | undefined,
+  includeKeyId: string | undefined,
+) {
+  return ["available-llm-provider-api-keys", provider, includeKeyId] as const;
+}
+
+function listingWithKey(
+  state:
+    | { data?: AvailableLlmProviderApiKeys; dataUpdatedAt: number }
+    | undefined,
+  keyId: string,
+) {
+  return state?.data?.some((key) => key.id === keyId) ? state : undefined;
 }

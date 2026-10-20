@@ -208,8 +208,11 @@ archestra:
     # archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST and grant the
     # platform ServiceAccount pods/exec in that engine's namespace.
 
-  # Additional volumes to mount into the platform and worker pods
+  # Additional volumes to mount into the platform and worker pods, and into the
+  # migration Job (except persistentVolumeClaim volumes, which the Job skips
+  # because it runs while web/worker pods still hold their claims).
   # Useful for mounting credential files such as a Vertex AI service account key
+  # or a database CA bundle
   # Example:
   #   extraVolumes:
   #     - name: vertex-ai-credentials
@@ -220,7 +223,8 @@ archestra:
   #             path: vertex-ai-key.json
   extraVolumes: []
 
-  # Additional volume mounts for the platform and worker containers
+  # Additional volume mounts for the platform and worker containers, and the
+  # migration Job (mounts of skipped persistentVolumeClaim volumes are dropped)
   # Example:
   #   extraVolumeMounts:
   #     - name: vertex-ai-credentials

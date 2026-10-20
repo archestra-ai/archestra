@@ -268,8 +268,10 @@ it("opens a linked tool call on its page without drawing another page first", as
     ),
   );
   // The first page was never drawn: the trace waited for the link's page.
+  // A render after the push may already show page 2, so look for page 1's
+  // rows rather than for no list at all.
   expect(
-    screen.queryByRole("list", { name: "Requests" }),
+    screen.queryByRole("button", { name: /^Test Agent, Model 0,/ }),
   ).not.toBeInTheDocument();
   await rerender();
 

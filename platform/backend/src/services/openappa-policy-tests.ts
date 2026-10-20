@@ -10,6 +10,10 @@ import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
 import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
+import {
+  type DraftHelperSource,
+  withDraftHelperSources,
+} from "@/openappa/draft-helper-sources";
 import { OpenappaCredentialError } from "@/openappa/failure";
 import {
   githubPolicyTestVersion,
@@ -207,21 +211,33 @@ async function replayCredentials(
     throw error;
   }
 }
+type EvaluateParams = {
+  organizationId: string;
+  userId: string | null;
+  files: PolicyTestFile[];
+  sourceVersion: string;
+  directory: string;
+  proposedPolicy?: { content: string; expectedRevision: number };
+  /**
+   * Told as each file starts and finishes, in order. Every file of the run
+   * finishes before this returns, including ones that could not run.
+   */
+  onProgress?: (event: PolicyTestProgressEvent) => void;
+};
+
 async function evaluateOpenAppaPolicyTests(
-  params: {
-    organizationId: string;
-    userId: string | null;
-    files: PolicyTestFile[];
-    sourceVersion: string;
-    directory: string;
-    proposedPolicy?: { content: string; expectedRevision: number };
-    /**
-     * Told as each file starts and finishes, in order. Every file of the run
-     * finishes before this returns, including ones that could not run.
-     */
-    onProgress?: (event: PolicyTestProgressEvent) => void;
-  },
+  params: EvaluateParams,
   loadedCollection?: PolicyTestCollection,
+) {
+  return withDraftHelperSources((registerDraftHelper) =>
+    evaluateWithDraftHelpers(params, loadedCollection, registerDraftHelper),
+  );
+}
+
+async function evaluateWithDraftHelpers(
+  params: EvaluateParams,
+  loadedCollection: PolicyTestCollection | undefined,
+  registerDraftHelper: (source: DraftHelperSource) => string,
 ) {
   enabled();
   const collection =
@@ -262,6 +278,17 @@ async function evaluateOpenAppaPolicyTests(
         organizationId: params.organizationId,
         resolution: bound.resolution,
       }));
+    // A draft's batteries have no install rows. Only a caller who may change
+    // the policy has their helpers run, with the credentials the draft binds;
+    // anyone else replays them unanswered.
+    const consultsHelpers =
+      params.userId !== null &&
+      (await userHasPermission(
+        params.userId,
+        params.organizationId,
+        "guardrailsPolicy",
+        "update",
+      ));
     const composed =
       bound && deployed
         ? await openappaDeclarations.composeForCheck({
@@ -275,6 +302,23 @@ async function evaluateOpenAppaPolicyTests(
                 deployed,
               }),
             ),
+            ...(consultsHelpers
+              ? {
+                  helperOwner: (entry, battery) =>
+                    registerDraftHelper({
+                      organizationId: params.organizationId,
+                      batteryName: entry.name,
+                      packageHash: entry.packageHash,
+                      target: battery.target?.name ?? null,
+                      credentialBindings: Object.fromEntries(
+                        battery.credentials.flatMap((variable) => {
+                          const key = bound.resolution.credentials[variable];
+                          return key ? [[variable, key]] : [];
+                        }),
+                      ),
+                    }),
+                }
+              : {}),
           })
         : null;
     const content = composed?.content ?? policyContent;

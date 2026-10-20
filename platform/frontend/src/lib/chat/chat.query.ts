@@ -16,6 +16,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
+import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
@@ -28,6 +29,7 @@ import {
   encryptedChatRequestHeaders,
   storeEncryptedChatKey,
 } from "@/lib/chat/encrypted-chat";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -690,14 +692,19 @@ export function useUpdateConversation() {
 export function useMemberDefaultModel() {
   return useQuery({
     queryKey: ["member-default-model"],
-    queryFn: () =>
-      callApi(() => getMemberDefaultModel(), {
+    queryFn: async ({ client }) => {
+      const seed = await awaitBootstrapSeed(client);
+      if (seed?.memberDefaultModel) return seed.memberDefaultModel;
+      return callApi(() => getMemberDefaultModel(), {
         modelId: null,
         chatApiKeyId: null,
-      }),
+      });
+    },
     // Changing the model in chat writes the new default into this query, so
-    // remounts and refocuses within 30 s need no request.
-    staleTime: 30_000,
+    // it stays fresh as long as the bootstrap parts seeded with it, and is
+    // restored on refresh like them (two ids, no credential).
+    staleTime: 5 * 60 * 1000,
+    meta: PERSISTED_QUERY_META,
   });
 }
 

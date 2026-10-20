@@ -4,10 +4,12 @@ import {
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
+import db, { schema } from "@/database";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
-import { ApiError } from "@/types";
+import { type AgentType, ApiError } from "@/types";
 import {
+  getAgentTypeListPermissionChecker,
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,
@@ -593,3 +595,121 @@ describe("scoped agent authority", () => {
     expect(checker.hasAnyAdminPermission()).toBe(false);
   });
 });
+
+describe("getAgentTypeListPermissionChecker", () => {
+  test("answers every list question as the full checker does, without reading shared agents", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await db.transaction((tx) =>
+      ResourcePermissionPolicyModel.initializeOrganization({
+        tx,
+        organizationId: org.id,
+      }),
+    );
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+    const author = await makeUser();
+    await makeMember(author.id, org.id, { role: MEMBER_ROLE_NAME });
+    const teamReader = await makeUser();
+    await makeMember(teamReader.id, org.id, { role: MEMBER_ROLE_NAME });
+    const team = await makeTeam(org.id, teamReader.id);
+    await makeTeamMember(team.id, teamReader.id);
+    const viewer = await makeUser();
+    await makeMember(viewer.id, org.id, { role: MEMBER_ROLE_NAME });
+    const roleReader = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { mcpGateway: ["read"] },
+    });
+    await makeMember(roleReader.id, org.id, { role: role.role });
+    const outsider = await makeUser();
+    await makeMember(outsider.id, org.id, { role: MEMBER_ROLE_NAME });
+
+    // The author owns a gateway (every action on it), the team reads a
+    // profile, the viewer reads an agent, and the organization reads an
+    // agent: grants of every kind on single agents.
+    await makeAgent({
+      organizationId: org.id,
+      authorId: author.id,
+      agentType: "mcp_gateway",
+      access: "personal",
+    });
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "profile",
+      access: { teams: [team.id], level: "use" },
+    });
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      access: { users: [viewer.id], preset: "view" },
+    });
+    await makeAgent({ organizationId: org.id, agentType: "agent" });
+    // A scope that names no agent and is not `*` grants nothing.
+    await db.insert(schema.resourcePermissionPoliciesTable).values({
+      organizationId: org.id,
+      resource: "mcpGateway",
+      scope: "not-an-agent-id",
+      grants: [
+        {
+          subject: { type: "user", id: outsider.id },
+          actions: ["read", "delete"],
+        },
+      ] as never,
+    });
+
+    const types: AgentType[] = ["agent", "profile", "mcp_gateway"];
+    for (const caller of [
+      admin,
+      author,
+      teamReader,
+      viewer,
+      roleReader,
+      outsider,
+    ]) {
+      const context = { userId: caller.id, organizationId: org.id };
+      const full = await getAgentTypePermissionChecker(context);
+      const list = await getAgentTypeListPermissionChecker({
+        ...context,
+        actions: ["read", "delete"],
+      });
+      const answers = (checker: typeof list) => ({
+        hasAnyAdminPermission: checker.hasAnyAdminPermission(),
+        byType: types.map((type) => ({
+          type,
+          isAdmin: checker.isAdmin(type),
+          requireRead: requires(() => checker.require(type, "read")),
+          requireDelete: requires(() => checker.require(type, "delete")),
+        })),
+        withRead: checker.getAgentTypesWithPermission("read"),
+        withDelete: checker.getAgentTypesWithPermission("delete"),
+        scopedRead: checker.getAgentTypesWithScopedPermission("read"),
+        scopedDelete: checker.getAgentTypesWithScopedPermission("delete"),
+      });
+      expect(answers(list), caller.email).toEqual(
+        answers({
+          ...full,
+          getAgentTypesWithScopedPermission: (action) =>
+            full.getAgentTypesWithScopedPermission?.(action) ?? [],
+        }),
+      );
+    }
+  });
+});
+
+/** Whether a `require` check passes; any other error fails the test. */
+function requires(check: () => void): boolean {
+  try {
+    check();
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode === 403) return false;
+    throw error;
+  }
+}

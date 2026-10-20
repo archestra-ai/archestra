@@ -792,13 +792,7 @@ export function ChatMessages({
                               agentId,
                               earlyToolUiStarts,
                               onSendMessage: (text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                  metadata: {
-                                    createdAt: new Date().toISOString(),
-                                  },
-                                }),
+                                session?.sendOrQueueText(text),
                             }}
                           />
                         );
@@ -1365,13 +1359,7 @@ export function ChatMessages({
                                   : undefined
                               }
                               onSendMessage={(text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                  metadata: {
-                                    createdAt: new Date().toISOString(),
-                                  },
-                                })
+                                session?.sendOrQueueText(text)
                               }
                             />
                           );
@@ -1488,13 +1476,7 @@ export function ChatMessages({
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
                                 onSendMessage={(text) =>
-                                  session?.sendMessage({
-                                    role: "user",
-                                    parts: [{ type: "text", text }],
-                                    metadata: {
-                                      createdAt: new Date().toISOString(),
-                                    },
-                                  })
+                                  session?.sendOrQueueText(text)
                                 }
                                 earlyToolUiData={earlyToolUiStarts[tcId]}
                               />
@@ -1563,13 +1545,7 @@ export function ChatMessages({
                                   tcId ? earlyToolUiStarts[tcId] : undefined
                                 }
                                 onSendMessage={(text) =>
-                                  session?.sendMessage({
-                                    role: "user",
-                                    parts: [{ type: "text", text }],
-                                    metadata: {
-                                      createdAt: new Date().toISOString(),
-                                    },
-                                  })
+                                  session?.sendOrQueueText(text)
                                 }
                                 nestedToolCalls={
                                   tcId &&

@@ -633,7 +633,7 @@ function outputRows({
         ),
       });
     }
-    const why = raw ? digest(raw) : null;
+    const why = withStepReasons(raw ? digest(raw) : null, firstBad?.reasons);
     if (why) {
       rows.push({ key: "gap-3", node: <div className="h-2" /> });
       if (why.reasons.length > 0) {
@@ -1368,3 +1368,20 @@ const STATUS_TINT: Record<FileStatus, string> = {
 
 type PolicyTestFileResult = PolicyTestRun["files"][number];
 type PolicyTestStep = PolicyTestFileResult["steps"][number];
+
+/**
+ * Prefer the reasons replay recorded for a blocked step; runs recorded before
+ * replay kept them have only the engine's text to read them from.
+ */
+function withStepReasons<T extends { reasons: string[] }>(
+  why: T | null,
+  reasons: string[] | undefined,
+): T | null {
+  return why && reasons?.length
+    ? { ...why, reasons: reasons.map(capitalize) }
+    : why;
+}
+
+function capitalize(s: string) {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}

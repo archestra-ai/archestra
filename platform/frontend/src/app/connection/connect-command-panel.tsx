@@ -94,6 +94,7 @@ import {
   ConnectionConsentOptions,
   type ConsentProxyMode,
 } from "./connection-consent-options";
+import { GatewayLink } from "./gateway-link";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -212,6 +213,9 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
+  // Once the terminal's request is approved or denied, its setup is fixed, so
+  // the options to change it go away.
+  const [connectRequestDecided, setConnectRequestDecided] = useState(false);
   const [downloadRequested, setDownloadRequested] = useState(false);
   const preparationEnabled = variant !== "download" || downloadRequested;
   // Optional portions start from the Connect page choices and remain editable.
@@ -1195,7 +1199,10 @@ export function ConnectCommandPanel({
                 detail={<GatewayServersSummary gatewayId={gateway.id} />}
               >
                 Connect{" "}
-                <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
+                <GatewayLink
+                  gateway={gateway}
+                  className="font-medium text-foreground"
+                />{" "}
                 for tools
               </SetupSummaryRow>
             )}
@@ -1375,7 +1382,7 @@ export function ConnectCommandPanel({
         }
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
-        {!showSetupSummary && connectRequest && (
+        {!showSetupSummary && connectRequest && !connectRequestDecided && (
           <ConnectionConsentOptions
             open={customizing}
             onOpenChange={setCustomizing}
@@ -1613,8 +1620,11 @@ export function ConnectCommandPanel({
                 }
                 clientId={client.id}
                 platform={setupPlatform}
-                gatewaySelected={!!gateway}
-                gatewayName={oauthServerName}
+                gateway={
+                  gateway ? { id: gateway.id, name: gateway.name } : null
+                }
+                mcpServerName={oauthServerName}
+                onDecided={() => setConnectRequestDecided(true)}
                 proxySelected={proxyActive}
                 skillsSelected={skillsEligible && includeSkills}
               />

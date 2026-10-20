@@ -57,6 +57,13 @@ export interface ChatSession {
   sendMessage: (
     message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
   ) => void;
+  /**
+   * Send a text message from a tool card (credential cards, MCP Apps). While
+   * the conversation is busy — a turn in flight, a compaction, or messages
+   * already waiting — it joins the queue instead, so it is never lost to a
+   * racing send.
+   */
+  sendOrQueueText: (text: string) => void;
   /** Re-run the assistant turn for a user message, optionally with edited text. */
   regenerateUserMessage: (args: {
     messageId: string;

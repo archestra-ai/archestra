@@ -208,6 +208,9 @@ struct StepResult {
     status: Status,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    /// Why a blocked call was blocked: the reasons its feedback lists under `Why:`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    reasons: Vec<String>,
     /// The call ran as proposed, or once the model accepted the narrowing it makes.
     #[serde(skip)]
     released: bool,
@@ -355,6 +358,7 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
                 expected,
                 actual,
                 status,
+                reasons: error.as_deref().map(block_reasons).unwrap_or_default(),
                 error,
                 released,
             }
@@ -368,6 +372,19 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
         steps,
         duration_ms: 0,
     }
+}
+
+/// The reasons a block's feedback lists under its `Why:` heading, one per `  - ` bullet.
+/// The rest of the feedback (the remedies and advice) speaks to the model, not to
+/// someone reading a validation result.
+fn block_reasons(feedback: &str) -> Vec<String> {
+    feedback
+        .lines()
+        .skip_while(|line| *line != "Why:")
+        .skip(1)
+        .map_while(|line| line.strip_prefix("  - "))
+        .map(str::to_string)
+        .collect()
 }
 
 /// Replay `request`, telling `progress` as each file starts and finishes.
@@ -542,6 +559,41 @@ mod tests {
             assert!(file["durationMs"].is_u64(), "{file}");
             assert_eq!(file["durationMs"], event["durationMs"]);
         }
+    }
+
+    #[tokio::test]
+    async fn a_blocked_mismatch_lists_why_the_call_was_blocked() {
+        let response = run(request(
+            POLICY,
+            &[(
+                "blocked.appa",
+                "mcp/files/read {}\nexpect allow\nmcp/mail/send {}\nexpect allow",
+            )],
+        ))
+        .await;
+        let step = &response.files[0].steps[1];
+        assert_eq!(step.status, Status::Failed);
+        assert_eq!(step.actual.as_deref(), Some("deny"));
+        assert!(
+            step.error
+                .as_deref()
+                .is_some_and(|text| text.contains("Why:"))
+        );
+        assert_eq!(step.reasons.len(), 1, "{:?}", step.reasons);
+        assert!(step.reasons[0].contains("trusted"), "{:?}", step.reasons);
+    }
+
+    #[test]
+    fn block_reasons_reads_only_the_why_bullets() {
+        let feedback = "[appa] Blocked: mail__send cannot run yet.\n\nWhy:\n  - trust is suspicious, below the required floor trusted\n  - readers are outside the audience\n\nContinue:\n  - Submit for approval:";
+        assert_eq!(
+            block_reasons(feedback),
+            [
+                "trust is suspicious, below the required floor trusted",
+                "readers are outside the audience"
+            ]
+        );
+        assert!(block_reasons("Blocked by the session start").is_empty());
     }
 
     #[tokio::test]

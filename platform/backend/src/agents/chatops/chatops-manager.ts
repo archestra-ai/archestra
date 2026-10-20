@@ -3355,12 +3355,12 @@ export class ChatOpsManager {
         return;
       }
 
+      const approval =
+        await A2ATaskApprovalRequestModel.findByTaskIdAndApprovalId({
+          taskId: decision.taskId,
+          approvalId: decision.approvalId,
+        });
       if (openappaReview.status === "not_openappa") {
-        const approval =
-          await A2ATaskApprovalRequestModel.findByTaskIdAndApprovalId({
-            taskId: decision.taskId,
-            approvalId: decision.approvalId,
-          });
         const isRequester = approval?.reviewerUserId
           ? approval.reviewerUserId === user.id &&
             approval.chatChannelId === decision.channelId
@@ -3391,6 +3391,7 @@ export class ChatOpsManager {
       }
 
       const originalMessage = decision.originalMessage as IncomingChatMessage;
+      const threadId = decision.threadTs ?? originalMessage.threadId;
 
       if (provider.setTypingStatus) {
         await provider
@@ -3414,6 +3415,12 @@ export class ChatOpsManager {
             decidedByUserId: decision.userId,
             decidedByName: decision.userName,
           }),
+          // The resumed run answers in a new message; the paused reply's task
+          // card would otherwise keep its pre-approval state.
+          ...(approval &&
+            threadId && {
+              pausedToolCall: { threadId, toolCallId: approval.toolCallId },
+            }),
         });
       }
 

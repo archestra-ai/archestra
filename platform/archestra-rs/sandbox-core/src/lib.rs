@@ -54,6 +54,14 @@ pub enum SandboxError {
     HistoryLimitReached {
         message: String,
     },
+    /// the engine answered but could not pull the sandbox base image: a network
+    /// egress policy blocking the registry, or a missing or private image. the
+    /// engine itself is healthy, so unlike `EngineUnreachable` this must not drop
+    /// the session or flip the runtime into an engine outage.
+    ImagePullFailed {
+        image: String,
+        registry: String,
+    },
     InvalidInput(String),
     Internal(String),
 }
@@ -80,6 +88,7 @@ impl SandboxError {
             Self::ArtifactTooLarge { .. } => "ARCHESTRA_ARTIFACT_TOO_LARGE",
             Self::ArtifactNotFound { .. } => "ARCHESTRA_ARTIFACT_NOT_FOUND",
             Self::HistoryLimitReached { .. } => "ARCHESTRA_SANDBOX_HISTORY_LIMIT",
+            Self::ImagePullFailed { .. } => "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED",
             Self::InvalidInput(_) => "ARCHESTRA_INVALID_INPUT",
             Self::Internal(_) => "ARCHESTRA_INTERNAL",
         }
@@ -100,6 +109,11 @@ impl fmt::Display for SandboxError {
             | Self::InvalidInput(message)
             | Self::Internal(message)
             | Self::HistoryLimitReached { message } => write!(f, "{message}"),
+            Self::ImagePullFailed { image, registry } => write!(
+                f,
+                "could not pull the sandbox base image \"{image}\" from {registry}. \
+                 Check that the network egress policy allows {registry} and that the image exists."
+            ),
         }
     }
 }

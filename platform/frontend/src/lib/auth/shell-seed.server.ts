@@ -35,6 +35,7 @@ import {
   connectionApprovalSeedQueries,
 } from "@/lib/connection-approval-seed";
 import { environmentKeys } from "@/lib/environment.query";
+import { guardrailsDeploymentQueryKey } from "@/lib/guardrails-deployment.query";
 import { mcpRegistryIssueIndexQueryKey } from "@/lib/mcp/mcp-registry.query";
 import {
   projectListQueryKey,
@@ -198,15 +199,18 @@ async function readShellQueries(params: {
         bootstrap: params.bootstrap,
       })
     : Promise.resolve([]);
-  const [shell, composerQueries, runs, approvalQueries] = await Promise.all([
-    Promise.all(reads),
-    composer,
-    readSidebarRuns({ ...options, bootstrap: params.bootstrap }),
-    approval,
-  ]);
+  const [shell, composerQueries, runs, guardrails, approvalQueries] =
+    await Promise.all([
+      Promise.all(reads),
+      composer,
+      readSidebarRuns({ ...options, bootstrap: params.bootstrap }),
+      readGuardrailsDeployment({ ...options, bootstrap: params.bootstrap }),
+      approval,
+    ]);
   return [
     ...shell.filter((entry) => entry !== null),
     ...runs,
+    ...guardrails,
     ...composerQueries,
     ...approvalQueries,
   ];
@@ -361,6 +365,30 @@ async function readSidebarRuns(options: {
     ),
   );
   return lists.filter((entry) => entry !== null);
+}
+
+/**
+ * The guardrails status the sidebar's warning row reads ("Guardrails
+ * disabled"), so the row is in the HTML instead of appearing after the page
+ * has drawn. Read only while OpenAPPA is on: otherwise nothing shows it.
+ */
+async function readGuardrailsDeployment(options: {
+  headers: Record<string, string>;
+  signal: AbortSignal;
+  bootstrap: Promise<{ data?: ShellSeed["bootstrap"] }>;
+}): Promise<ShellSeed["queries"]> {
+  const { data: bootstrap } = await options.bootstrap.catch(() => ({
+    data: undefined,
+  }));
+  if (!bootstrap?.config?.features?.openappaEnabled) return [];
+  const entry = await seedRead(
+    guardrailsDeploymentQueryKey,
+    archestraApiSdk.getGuardrailsDeployment({
+      headers: options.headers,
+      signal: options.signal,
+    }),
+  );
+  return entry ? [entry] : [];
 }
 
 /**

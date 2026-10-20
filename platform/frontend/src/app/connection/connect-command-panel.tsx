@@ -162,6 +162,8 @@ interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
   mcpGateways: (AgentSelectorAgent & { slug?: string | null })[] | null;
+  /** True while the gateway list is still loading (an empty list is not final). */
+  mcpGatewaysLoading?: boolean;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
@@ -197,6 +199,7 @@ interface ConnectCommandPanelProps {
 export function ConnectCommandPanel({
   client,
   mcpGateways,
+  mcpGatewaysLoading = false,
   mcpGatewayId,
   onMcpGatewaySelect,
   llmProxyId,
@@ -394,7 +397,8 @@ export function ConnectCommandPanel({
 
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
-  const { data: availableKeys } = useAvailableLlmProviderApiKeys();
+  const { data: availableKeys, isPending: availableKeysPending } =
+    useAvailableLlmProviderApiKeys();
   const usableOpenCodeKeys = useMemo(
     () =>
       (availableKeys ?? []).filter(
@@ -1188,7 +1192,15 @@ export function ConnectCommandPanel({
     );
   }
 
-  if (!hasAnything) {
+  // Until the lists that decide it have loaded, "nothing to connect" is not
+  // known yet: the normal layout shows, preparing, instead of a panel that a
+  // moment later turns into it.
+  const choicesLoading =
+    mcpGatewaysLoading ||
+    skillsLoading ||
+    pluginsLoading ||
+    availableKeysPending;
+  if (!hasAnything && !choicesLoading) {
     // Nothing to put in a setup command — but skills install from their own
     // marketplace URL, so a caller who can read them still has something to do.
     return (

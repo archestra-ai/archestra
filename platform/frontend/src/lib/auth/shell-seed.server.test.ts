@@ -28,6 +28,7 @@ const { requestHeaders, getBootstrapMock, getIssueIndexMock, fetchMock, sdk } =
       getPlugins: vi.fn(),
       getAvailableLlmProviderApiKeys: vi.fn(),
       getLlmModels: vi.fn(),
+      getGuardrailsDeployment: vi.fn(),
     },
   }));
 
@@ -69,6 +70,7 @@ import {
   connectionApprovalSeedQueries,
 } from "@/lib/connection-approval-seed";
 import { environmentKeys } from "@/lib/environment.query";
+import { guardrailsDeploymentQueryKey } from "@/lib/guardrails-deployment.query";
 import { mcpRegistryIssueIndexQueryKey } from "@/lib/mcp/mcp-registry.query";
 import {
   projectListQueryKey,
@@ -210,6 +212,9 @@ describe("prefetchShellSeed", () => {
       .mockReset()
       .mockResolvedValue({ data: approval.availableApiKeys });
     sdk.getLlmModels.mockReset().mockResolvedValue({ data: approval.models });
+    sdk.getGuardrailsDeployment
+      .mockReset()
+      .mockResolvedValue({ data: { enabled: false } });
   });
 
   it("resolves nothing for documents the proxy did not mark", async () => {
@@ -401,6 +406,23 @@ describe("prefetchShellSeed", () => {
         models: approval.models as never,
       }),
     ]);
+  });
+
+  it("seeds the guardrails status for the sidebar warning while OpenAPPA is on", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/chat");
+    getBootstrapMock.mockResolvedValue({
+      data: { ...bootstrap, config: { features: { openappaEnabled: true } } },
+    });
+
+    expect((await prefetchShellSeed())?.queries).toContainEqual({
+      queryKey: guardrailsDeploymentQueryKey,
+      data: { enabled: false },
+    });
+
+    getBootstrapMock.mockResolvedValue({ data: bootstrap });
+    sdk.getGuardrailsDeployment.mockClear();
+    await prefetchShellSeed();
+    expect(sdk.getGuardrailsDeployment).not.toHaveBeenCalled();
   });
 
   it("reads only the approval page parts the organization turns on", async () => {

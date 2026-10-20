@@ -307,6 +307,23 @@ describe("ConnectCommandPanel", () => {
     expect(createSetupMock).toHaveBeenCalledTimes(2);
   });
 
+  it("does not report nothing to connect while the gateway list is still loading", async () => {
+    // Nothing else to include: only a gateway could make the setup.
+    skillNamesMock.mockReturnValue(skillNames([]));
+    pluginsMock.mockReturnValue({ data: [], isPending: false });
+    const props = { mcpGateways: [], mcpGatewayId: null, llmProxyId: null };
+    const view = renderPanel({ ...props, mcpGatewaysLoading: true });
+
+    expect(screen.queryByText(/Nothing to connect yet/)).toBeNull();
+
+    view.rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({ ...props, mcpGatewaysLoading: false })}
+      />,
+    );
+    expect(await screen.findByText(/Nothing to connect yet/)).toBeVisible();
+  });
+
   it("keeps a prepared approval when the page re-renders with the same setup", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("connectRequest=demo&platform=macos") as ReturnType<
@@ -324,7 +341,7 @@ describe("ConnectCommandPanel", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({
-          data: "llmVirtualKey" in permissions ? false : true,
+          data: !("llmVirtualKey" in permissions),
         }) as ReturnType<typeof useHasPermissions>,
     );
     view.rerender(<ConnectCommandPanel {...renderPanelProps()} />);

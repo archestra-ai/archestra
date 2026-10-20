@@ -224,6 +224,10 @@ export function ConnectionFlow({
           <ConnectCommandPanel
             client={client}
             mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+            mcpGatewaysLoading={
+              canReadMcpGateway === undefined ||
+              (canReadMcpGateway === true && gatewayPage.isPending)
+            }
             mcpGatewayId={effectiveMcpId}
             onMcpGatewaySelect={handleMcpSelect}
             llmProxyId={

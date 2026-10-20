@@ -53,6 +53,7 @@ import { documentOriginQueryKey } from "@/lib/connection-approval-query-keys";
 import {
   CONNECTION_GATEWAY_PAGE_QUERY,
   CONNECTION_GATEWAY_REFERENCE_FILTERS,
+  type ConnectionSetupSeed,
   connectionApprovalSeedQueries,
 } from "@/lib/connection-approval-seed";
 import { environmentKeys } from "@/lib/environment.query";
@@ -62,7 +63,7 @@ import {
   projectListQueryKey,
   SIDEBAR_PINNED_PROJECTS_QUERY,
 } from "@/lib/projects/projects.query";
-import { originFromHeaders } from "@/lib/request-origin";
+import { originFromHeaders, originSchemeKnown } from "@/lib/request-origin";
 import { siteNotificationKeys } from "@/lib/site-notification.query";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import { withServerSeedDeadline } from "@/lib/utils/server-seed-timeout";
@@ -117,7 +118,11 @@ export async function prefetchShellSeed(): Promise<ShellSeed | null> {
           readShellQueries({
             route,
             search,
-            origin: originFromHeaders(requestHeaders),
+            // The origin the browser shows, when the headers say its scheme;
+            // without it the document prepares no setup.
+            origin: originSchemeKnown(requestHeaders)
+              ? originFromHeaders(requestHeaders)
+              : null,
             // A speculative load (prefetch or prerender) nobody may see:
             // it reads, but prepares no setup.
             speculative: !!(
@@ -419,7 +424,7 @@ async function prepareFirstSetup(params: {
   availableApiKeys:
     | archestraApiTypes.GetAvailableLlmProviderApiKeysResponses["200"]
     | undefined;
-}): Promise<{ keyDigest: string; id: string } | undefined> {
+}): Promise<ConnectionSetupSeed | undefined> {
   const organization = params.bootstrap?.organization;
   if (!params.origin || !organization || !params.request) return undefined;
   const query = new URLSearchParams(params.search ?? "");
@@ -479,14 +484,19 @@ async function prepareFirstSetup(params: {
   if (!body) return undefined;
   const created = await readValue(
     archestraApiSdk.createConnectionSetup({
-      headers: params.headers,
+      // The backend accepts a base URL on the origin that asks, as it does
+      // for the browser's own request, which carries its Origin too.
+      headers: { ...params.headers, Origin: params.origin },
       signal: params.signal,
       body,
     }),
   );
-  return created
-    ? { keyDigest: connectionSetupKeyDigest(inputsKey), id: created.id }
-    : undefined;
+  if (!created) return undefined;
+  return {
+    keyDigest: connectionSetupKeyDigest(inputsKey),
+    id: created.id,
+    ...(created.creditWarning ? { creditWarning: created.creditWarning } : {}),
+  };
 }
 
 /**

@@ -470,6 +470,11 @@ describe("prefetchShellSeed", () => {
     const seed = await prefetchShellSeed();
 
     expect(sdk.createConnectionSetup).toHaveBeenCalledTimes(1);
+    // The backend accepts a base URL on the origin that asks, as for the
+    // browser's own request, which carries its Origin.
+    expect(sdk.createConnectionSetup.mock.calls[0][0].headers).toMatchObject({
+      Origin: "https://connect.example",
+    });
     expect(sdk.createConnectionSetup.mock.calls[0][0].body).toMatchObject({
       clientId: "opencode",
       platform: "linux",
@@ -486,6 +491,114 @@ describe("prefetchShellSeed", () => {
       id: "setup-1",
     });
     // The setup's command carries a one-time token; it never lands in the HTML.
+    expect(JSON.stringify(seed)).not.toContain("secret-token");
+  });
+
+  it("prepares no setup when the headers do not say the document's scheme, unless the operator configured it", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    requestHeaders.set("host", "connect.example");
+    getBootstrapMock.mockResolvedValue({
+      data: {
+        ...bootstrap,
+        permissions: {
+          mcpGateway: ["read"],
+          llmProxy: ["read"],
+          skill: ["read"],
+          llmVirtualKey: ["create"],
+        },
+        scopedCapabilities: [],
+        organization: {
+          ...connectionOrganization,
+          connectionDefaultClientId: null,
+          connectionShownClientIds: null,
+          connectionClientProviderKeys: null,
+          connectionBaseUrls: null,
+        },
+      },
+    });
+    sdk.getAvailableLlmProviderApiKeys.mockResolvedValue({
+      data: [
+        {
+          id: "key-1",
+          provider: "openai",
+          isPrimary: true,
+          baseUrl: "https://llm.example/v1",
+        },
+      ],
+    });
+
+    // Behind a proxy that sends no X-Forwarded-Proto the scheme is a guess,
+    // and a setup for a guessed origin is one the page cannot use.
+    expect(await prefetchShellSeed()).not.toBeNull();
+    expect(sdk.createConnectionSetup).not.toHaveBeenCalled();
+
+    // A public URL the operator configured names the host's scheme.
+    vi.stubEnv("ARCHESTRA_FRONTEND_URL", "https://connect.example");
+    try {
+      expect(await prefetchShellSeed()).not.toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(sdk.createConnectionSetup).toHaveBeenCalledTimes(1);
+    expect(sdk.createConnectionSetup.mock.calls[0][0].body).toMatchObject({
+      baseUrl: "https://connect.example/v1",
+    });
+  });
+
+  it("seeds the prepared setup's credit warning with its id", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    requestHeaders.set("host", "connect.example");
+    requestHeaders.set("x-forwarded-proto", "https");
+    getBootstrapMock.mockResolvedValue({
+      data: {
+        ...bootstrap,
+        permissions: {
+          mcpGateway: ["read"],
+          llmProxy: ["read"],
+          skill: ["read"],
+          llmVirtualKey: ["create"],
+        },
+        scopedCapabilities: [],
+        organization: {
+          ...connectionOrganization,
+          connectionDefaultClientId: null,
+          connectionShownClientIds: null,
+          connectionClientProviderKeys: null,
+          connectionBaseUrls: null,
+        },
+      },
+    });
+    sdk.getAvailableLlmProviderApiKeys.mockResolvedValue({
+      data: [
+        {
+          id: "key-1",
+          provider: "openai",
+          isPrimary: true,
+          baseUrl: "https://llm.example/v1",
+        },
+      ],
+    });
+
+    sdk.createConnectionSetup.mockResolvedValue({
+      data: {
+        id: "setup-1",
+        command: "curl secret-token",
+        creditWarning: { kind: "insufficient_balance", keyName: "Anthropic" },
+      },
+    });
+
+    const seed = await prefetchShellSeed();
+
+    const setup = seed?.queries.find(
+      ({ queryKey }) => queryKey[0] === "connection-setup-seed",
+    );
+    expect(setup?.data).toEqual({
+      keyDigest: expect.stringMatching(/^[0-9a-f]{16}$/),
+      id: "setup-1",
+      creditWarning: { kind: "insufficient_balance", keyName: "Anthropic" },
+    });
     expect(JSON.stringify(seed)).not.toContain("secret-token");
   });
 

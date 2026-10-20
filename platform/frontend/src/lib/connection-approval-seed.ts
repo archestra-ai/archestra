@@ -40,7 +40,12 @@ export const CONNECTION_GATEWAY_REFERENCE_FILTERS = {
  * itself lists every selected skill id). Only the id: the setup's command
  * carries a one-time token, which never goes into the HTML.
  */
-export type ConnectionSetupSeed = { keyDigest: string; id: string };
+export type ConnectionSetupSeed = {
+  keyDigest: string;
+  id: string;
+  /** The backend's warning about the setup's model credits, when it gave one. */
+  creditWarning?: archestraApiTypes.CreateConnectionSetupResponses["200"]["creditWarning"];
+};
 
 /**
  * The parts of a connection approval document the server reads, each the

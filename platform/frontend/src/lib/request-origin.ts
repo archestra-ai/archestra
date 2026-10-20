@@ -41,6 +41,32 @@ export function originFromHeaders(
 }
 
 /**
+ * Whether the request's headers say which scheme the browser used, so the
+ * origin they name is the one the page shows as `window.location.origin`: a
+ * forwarded protocol, a loopback host, or a host the operator named in a
+ * public URL (its scheme is configured). Behind a TLS-terminating proxy that
+ * sends no X-Forwarded-Proto the scheme is a guess, and a setup prepared for
+ * a guessed origin is one the page cannot use.
+ */
+export function originSchemeKnown(headers: {
+  get(name: string): string | null;
+}): boolean {
+  const host = (
+    headers.get("x-forwarded-host") ?? headers.get("host")
+  )?.toLowerCase();
+  if (!host) return false;
+  const protocol = headers.get("x-forwarded-proto");
+  if (protocol === "http" || protocol === "https") return true;
+  const hostname = host.replace(/:\d+$/, "").replace(/^\[(.*)\]$/, "$1");
+  if (["localhost", "127.0.0.1", "::1"].includes(hostname)) return true;
+  return parsePublicHostSchemes([
+    process.env.ARCHESTRA_FRONTEND_URL,
+    process.env.ARCHESTRA_API_BASE_URL,
+    process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL,
+  ]).has(host);
+}
+
+/**
  * Restore the scheme the operator configured for this host.
  *
  * Next.js always binds plain http, so a TLS-terminating proxy that does not

@@ -576,12 +576,6 @@ export function ChatMessages({
     [messages, chatErrors, compactions],
   );
   const transcriptWindow = useTranscriptWindow(timelineItems);
-  // True for the first render, which hydrates the server's HTML.
-  const [transcriptFromHtml, setTranscriptFromHtml] = useState(true);
-  const takeOverTranscript = useCallback(
-    () => setTranscriptFromHtml(false),
-    [],
-  );
 
   if (
     messages.length === 0 &&
@@ -644,21 +638,12 @@ export function ChatMessages({
         className="h-full"
         resize={instantResize || initialLoad ? "instant" : "smooth"}
       >
-        <OpenAtEnd
-          fromHtml={transcriptFromHtml}
-          onTakenOver={takeOverTranscript}
-        />
         <ScrollToBottomOnSubmit status={status} />
         <ScrollToBottomOnContextCompaction
           isCompacting={contextCompaction?.isCompacting || isContextCompacting}
           feedback={contextCompactionFeedback}
         />
-        <ConversationContent
-          scrollClassName={cn(
-            "overflow-y-auto",
-            transcriptFromHtml && OPEN_AT_END_SCROLL_CLASS,
-          )}
-        >
+        <ConversationContent scrollClassName={OPEN_AT_END_SCROLL_CLASS}>
           <div className="@container/chat max-w-4xl mx-auto relative pb-8">
             <TranscriptWindowEdge
               hiddenCount={transcriptWindow.start}
@@ -1653,6 +1638,9 @@ export function ChatMessages({
             )}
           </div>
         </ConversationContent>
+        {/* After the scroller: React attaches a host element's ref after its
+            children's layout effects, and before a later sibling's. */}
+        <OpenAtEnd />
         <ChatScrollButton assistantMessageCount={assistantMessageCount} />
         <McpInstallDialogs orchestrator={orchestrator} />
       </Conversation>
@@ -1704,38 +1692,33 @@ function getMessagePartSignature(part: UIMessage["parts"][number]): string {
 
 /**
  * The transcript in the server's HTML opens at its end: until the page takes
- * over, its scroller lays out bottom-up, which browsers scroll to the end
- * (the auto bottom margin keeps a short transcript at the top and collapses
- * once it overflows). The HTML streams in
- * hidden segments, so a script could not scroll it; stick-to-bottom only
- * starts after hydration. The scroller is `overflow-y-auto` from the HTML on,
- * rather than from stick-to-bottom's mount effect, so the HTML scrolls it.
+ * over, its scroller lays out bottom-up, which browsers scroll to the end (the
+ * auto bottom margin keeps a short transcript at the top and collapses once
+ * it overflows). The HTML streams in hidden segments, so a script could not
+ * scroll it, and stick-to-bottom only starts after hydration. The scroller is
+ * `overflow-y-auto` from the HTML on, rather than from stick-to-bottom's mount
+ * effect, so the HTML scrolls it.
  */
 const OPEN_AT_END_SCROLL_CLASS =
-  "flex flex-col-reverse [&>*]:shrink-0 [&>*]:mb-auto";
+  "overflow-y-auto [&:not([data-taken-over])]:flex [&:not([data-taken-over])]:flex-col-reverse [&:not([data-taken-over])>*]:shrink-0 [&:not([data-taken-over])>*]:mb-auto";
 
 /**
- * Hands the scroller to stick-to-bottom before the first client paint: the
- * bottom-up layout is dropped and the end kept in view.
+ * Hands the scroller to stick-to-bottom as the transcript hydrates: the
+ * bottom-up layout is dropped and the end kept in view, before the first
+ * client paint. This marks the element instead of re-rendering: an update
+ * reaching the transcript's message boundaries before they finish hydrating
+ * would make React discard their server HTML and render them again.
  */
-function OpenAtEnd({
-  fromHtml,
-  onTakenOver,
-}: {
-  fromHtml: boolean;
-  onTakenOver: () => void;
-}) {
+function OpenAtEnd() {
   const { scrollRef } = useStickToBottomContext();
   useLayoutEffect(() => {
-    if (fromHtml) {
-      onTakenOver();
-      return;
-    }
     const scroller = scrollRef.current;
-    if (scroller && !window.location.hash.startsWith("#message-")) {
+    if (!scroller || "takenOver" in scroller.dataset) return;
+    scroller.dataset.takenOver = "";
+    if (!window.location.hash.startsWith("#message-")) {
       scroller.scrollTop = scroller.scrollHeight;
     }
-  }, [fromHtml, onTakenOver, scrollRef]);
+  }, [scrollRef]);
   return null;
 }
 

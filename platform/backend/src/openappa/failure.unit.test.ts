@@ -53,9 +53,12 @@ describe("openappaFailure", () => {
       ],
       [
         new Error("private native database error"),
-        "the policy runtime is unavailable.",
+        "the policy runtime is unavailable (code: unknown).",
       ],
-      ["not even an error", "the policy runtime is unavailable."],
+      [
+        "not even an error",
+        "the policy runtime is unavailable (code: unknown).",
+      ],
     ] as const) {
       const failure = openappaFailure(cause);
 
@@ -176,7 +179,7 @@ describe("openappaFailure", () => {
     expect(failure.shouldRetry).toBe(true);
     expect(failure.retryAfterSeconds).toBeGreaterThan(0);
     expect(failure.message).toBe(
-      "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
+      "OpenAPPA could not safely complete this operation: the policy runtime is unavailable (code: unknown).",
     );
     expect(failure.cause).toBe(cause);
   });

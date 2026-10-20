@@ -12,7 +12,8 @@ import { isPolicyMoved } from "./policy-moved";
  * configuration and names what to fix, while storage and runtime failures can
  * carry connection strings and stay generic. Every message ends with the trace
  * id so an operator can find the full cause in the logs. A generic runtime
- * failure also names its code, so the error card says which failure it was.
+ * failure also names its code, or `unknown` when it carries none, so the
+ * error card says which failure it was.
  *
  * A refused policy fails the same way on every request, so clients are told
  * not to retry it (`x-should-retry: false` on a 500). So do a missing
@@ -204,7 +205,7 @@ function classify(error: unknown): Failure {
     };
   // A runtime whose refusal carries no policy-moved class yet reports it in text.
   if (isPolicyMoved(error)) return POLICY_MOVED;
-  return UNAVAILABLE;
+  return unavailable("unknown");
 }
 
 function classifyCode(code: RuntimeFailureCode, message: string): Failure {
@@ -308,13 +309,11 @@ const POLICY_MOVED: Failure = {
     "the organization's guardrails policy changed while this request was checked. Retry the request.",
 };
 
-const UNAVAILABLE: Failure = {
-  statusCode: 503,
-  detail: "the policy runtime is unavailable.",
-};
-
-/** The generic runtime failure, naming its code: a fixed name, never the runtime's text. */
-function unavailable(code: RuntimeFailureCode): Failure {
+/**
+ * The generic runtime failure, naming its code: a fixed name, never the
+ * runtime's text. `unknown` marks a failure that carries no code.
+ */
+function unavailable(code: RuntimeFailureCode | "unknown"): Failure {
   return {
     statusCode: 503,
     detail: `the policy runtime is unavailable (code: ${code}).`,

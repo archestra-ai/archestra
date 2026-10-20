@@ -1398,7 +1398,7 @@ describe("APPA feature boundary", () => {
         toolCallId: "bad",
         sessionId: "conversation",
       }),
-      "Failed to cancel OpenAPPA admitted call",
+      "OpenAPPA could not cancel an admitted call",
     );
   });
 

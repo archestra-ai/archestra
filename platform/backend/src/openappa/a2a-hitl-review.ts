@@ -195,14 +195,14 @@ export async function decideCallerHitlReviews(params: {
     if (row.reviewerUserId !== null) {
       throw new A2AError(
         A2AErrorKind.UnsupportedOperation,
-        "this OpenAPPA review is answered in chat",
+        "OpenAPPA review is answered in chat",
       );
     }
     if (row.ruling) throw new A2AError(A2AErrorKind.ApprovalIdAlreadyResolved);
     if (!row.expiresAt || row.expiresAt <= params.now) {
       throw new A2AError(
         A2AErrorKind.UnsupportedOperation,
-        "the OpenAPPA review expired, so the action stays blocked",
+        "OpenAPPA review expired, so the action stays blocked",
       );
     }
     reviews.set(decision.approvalId, row);

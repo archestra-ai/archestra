@@ -1,5 +1,11 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { headers } from "next/headers";
+import {
+  myAgentRunsPageQuery,
+  myAgentRunsQueryKey,
+  SIDEBAR_PINNED_RUNS,
+  SIDEBAR_RECENT_RUNS,
+} from "@/lib/agent-runs-query-keys";
 import { appsQueryKey, SIDEBAR_PINNED_APPS_QUERY } from "@/lib/app.query";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import {
@@ -57,8 +63,12 @@ export async function prefetchShellSeed(): Promise<ShellSeed | null> {
   try {
     const apiHeaders = await getServerApiHeaders();
     const [session, bootstrap, queries] = await withServerSeedDeadline(
-      (signal) =>
-        Promise.all([
+      (signal) => {
+        const bootstrapRead = archestraApiSdk.getBootstrap({
+          headers: apiHeaders,
+          signal,
+        });
+        return Promise.all([
           fetch(`${getBackendBaseUrl()}/api/auth/get-session`, {
             headers: apiHeaders,
             cache: "no-store",
@@ -68,9 +78,16 @@ export async function prefetchShellSeed(): Promise<ShellSeed | null> {
               ? (response.json() as Promise<ShellSeed["session"] | null>)
               : null,
           ),
-          archestraApiSdk.getBootstrap({ headers: apiHeaders, signal }),
-          readShellQueries({ route, search, headers: apiHeaders, signal }),
-        ]),
+          bootstrapRead,
+          readShellQueries({
+            route,
+            search,
+            headers: apiHeaders,
+            signal,
+            bootstrap: bootstrapRead,
+          }),
+        ]);
+      },
     );
     if (!bootstrap.data) return null;
     if (!session?.user || !session.session) return null;
@@ -97,6 +114,7 @@ async function readShellQueries(params: {
   search: string | null;
   headers: Record<string, string>;
   signal: AbortSignal;
+  bootstrap: Promise<{ data?: ShellSeed["bootstrap"] }>;
 }): Promise<ShellSeed["queries"]> {
   const options = { headers: params.headers, signal: params.signal };
   const reads: Array<
@@ -149,11 +167,47 @@ async function readShellQueries(params: {
     : params.route === "/chat" && seedsNewChatComposer(params.search)
       ? readNewChatComposer(options)
       : Promise.resolve([]);
-  const [shell, composerQueries] = await Promise.all([
+  const [shell, composerQueries, runs] = await Promise.all([
     Promise.all(reads),
     composer,
+    readSidebarRuns({ ...options, bootstrap: params.bootstrap }),
   ]);
-  return [...shell.filter((entry) => entry !== null), ...composerQueries];
+  return [
+    ...shell.filter((entry) => entry !== null),
+    ...runs,
+    ...composerQueries,
+  ];
+}
+
+/**
+ * The sidebar's recent and pinned Agent Runtime runs, each as the first page
+ * of its list. Read only once the bootstrap says the deployment runs agents:
+ * otherwise the sidebar shows no runs and their endpoint is not served.
+ */
+async function readSidebarRuns(options: {
+  headers: Record<string, string>;
+  signal: AbortSignal;
+  bootstrap: Promise<{ data?: ShellSeed["bootstrap"] }>;
+}): Promise<ShellSeed["queries"]> {
+  const { data: bootstrap } = await options.bootstrap.catch(() => ({
+    data: undefined,
+  }));
+  if (!bootstrap?.config?.features?.agentRuntime) return [];
+  const lists = await Promise.all(
+    [SIDEBAR_RECENT_RUNS, SIDEBAR_PINNED_RUNS].map((list) =>
+      seedRead(
+        myAgentRunsQueryKey(list),
+        archestraApiSdk.getMyAgentRuns({
+          headers: options.headers,
+          signal: options.signal,
+          query: myAgentRunsPageQuery(list, 0),
+        }),
+        // An infinite query's cache entry: its pages and their offsets.
+        (page) => ({ pages: [page], pageParams: [0] }),
+      ),
+    ),
+  );
+  return lists.filter((entry) => entry !== null);
 }
 
 /**

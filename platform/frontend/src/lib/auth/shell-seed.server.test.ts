@@ -16,6 +16,7 @@ const { requestHeaders, getBootstrapMock, getIssueIndexMock, fetchMock, sdk } =
       getK8sCapabilities: vi.fn(),
       getNewChatBootstrap: vi.fn(),
       getConversationBootstrap: vi.fn(),
+      getMyAgentRuns: vi.fn(),
     },
   }));
 
@@ -40,6 +41,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
   };
 });
 
+import { myAgentRunsQueryKey } from "@/lib/agent-runs-query-keys";
 import { appsQueryKey, SIDEBAR_PINNED_APPS_QUERY } from "@/lib/app.query";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import {
@@ -135,6 +137,9 @@ describe("prefetchShellSeed", () => {
       .mockReset()
       .mockResolvedValue({ data: capabilities });
     sdk.getNewChatBootstrap.mockReset().mockResolvedValue({ data: newChat });
+    sdk.getMyAgentRuns.mockReset().mockImplementation(async ({ query }) => ({
+      data: { data: [{ taskId: `run-${query.sort}` }], pagination: {} },
+    }));
     sdk.getConversationBootstrap.mockReset().mockResolvedValue({
       data: { conversation, composer: newChat },
     });
@@ -228,6 +233,45 @@ describe("prefetchShellSeed", () => {
       error: { error: { message: "Conversation not found" } },
     });
     expect((await prefetchShellSeed())?.queries).toEqual(shellQueries);
+  });
+
+  it("seeds the sidebar's runs as their lists' first pages once the bootstrap says agents run here", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/chat");
+    getBootstrapMock.mockResolvedValue({
+      data: { ...bootstrap, config: { features: { agentRuntime: true } } },
+    });
+
+    const queries = (await prefetchShellSeed())?.queries ?? [];
+
+    expect(queries).toContainEqual({
+      queryKey: myAgentRunsQueryKey({ pinned: false }),
+      data: {
+        pages: [{ data: [{ taskId: "run-recent" }], pagination: {} }],
+        pageParams: [0],
+      },
+    });
+    expect(queries).toContainEqual({
+      queryKey: myAgentRunsQueryKey({ pinned: true }),
+      data: {
+        pages: [{ data: [{ taskId: "run-pinned" }], pagination: {} }],
+        pageParams: [0],
+      },
+    });
+    expect(sdk.getMyAgentRuns).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: { limit: 20, offset: 0, sort: "pinned", pinned: true },
+      }),
+    );
+  });
+
+  it("does not read runs where the deployment runs no agents", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/chat");
+    getBootstrapMock.mockResolvedValue({
+      data: { ...bootstrap, config: { features: { agentRuntime: false } } },
+    });
+
+    expect(await prefetchShellSeed()).not.toBeNull();
+    expect(sdk.getMyAgentRuns).not.toHaveBeenCalled();
   });
 
   it("leaves out a read the viewer may not make, so its query loads as before", async () => {

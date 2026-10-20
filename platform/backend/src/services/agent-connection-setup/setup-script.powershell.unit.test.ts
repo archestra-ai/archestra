@@ -21,7 +21,11 @@ import { CODEX_GUARD_CLIENT } from "./guard/clients";
 import { inSingleQuotedHereString } from "./guard/startup-guard.windows";
 import { renderSetupScript } from "./index";
 import { CODEX_HANDOFF_HELPER } from "./payloads/codex-handoff";
-import type { SetupScriptContext, SetupScriptProxySection } from "./types";
+import {
+  SETUP_STOPPED_EXIT_CODE,
+  type SetupScriptContext,
+  type SetupScriptProxySection,
+} from "./types";
 
 const execFileAsync = promisify(execFile);
 
@@ -1331,3 +1335,103 @@ foreach ($index in 0..${params.proxies.length - 1}) {
     await rm(root, { recursive: true, force: true });
   }
 }
+
+describe.skipIf(!powershellAvailable)("PowerShell Codex preflight", () => {
+  test.each([
+    {
+      // How the installer runs the downloaded script.
+      invocation: "-File",
+      args: (script: string) => ["-File", script],
+      status: SETUP_STOPPED_EXIT_CODE,
+    },
+    {
+      // A pasted one-liner runs in the user's session, which stays open.
+      invocation: "irm | iex",
+      args: (script: string) => [
+        "-Command",
+        `Get-Content -Raw '${script}' | Invoke-Expression; Write-Host 'session still open'`,
+      ],
+      status: 0,
+    },
+  ])("a stale model list stops setup with the cause once and no error record ($invocation)", async ({
+    args,
+    status,
+  }) => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "archestra-codex-preflight-powershell-"),
+    );
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const configPath = path.join(home, ".codex", "config.toml");
+    try {
+      await mkdir(path.dirname(configPath), { recursive: true });
+      await mkdir(bin);
+      await writeFile(configPath, CODEX_CONFIG_WITH_TRAILING_TABLE);
+      // Answers model discovery from the bundled catalog, writes no cache and
+      // has no app-server, like an offline or older Codex.
+      await writeFile(path.join(bin, "codex"), codexMcpStub("USERPROFILE"));
+      await chmod(path.join(bin, "codex"), 0o755);
+      await writeFile(
+        path.join(root, "setup.ps1"),
+        renderSetupScript({
+          clientId: "codex",
+          platform: "windows",
+          appName: "Test Platform",
+          mcp: {
+            serverName: "test_gateway",
+            toolPrefix: "test__",
+            url: "https://example.com/v1/mcp/test",
+          },
+          proxy: {
+            authMode: "provider-key",
+            provider: "openai",
+            providerLabel: "OpenAI",
+            baseUrl: "https://example.com/v1",
+            url: "https://example.com/v1/openai",
+            proxyName: "test_proxy",
+            virtualKey: null,
+            virtualKeyName: null,
+            passthroughVirtualKey: null,
+            model: null,
+          },
+          skills: null,
+        }),
+      );
+      const result = spawnSync(
+        "pwsh",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          ...args(path.join(root, "setup.ps1")),
+        ],
+        {
+          cwd: home,
+          encoding: "utf8",
+          env: {
+            HOME: home,
+            USERPROFILE: home,
+            PATH: `${bin}:${process.env.PATH}`,
+            NO_COLOR: "1",
+          },
+          timeout: 60_000,
+        },
+      );
+      const output = `${result.stdout}${result.stderr}`;
+      expect(result.status).toBe(status);
+      if (status === 0) expect(output).toContain("session still open");
+      expect(output).toContain(
+        "Codex setup preflight failed: Codex could not download its model list. Check that this computer can reach chatgpt.com (proxy, VPN or firewall), then start a new installer run.\nNo client configuration was changed.",
+      );
+      expect(output.match(/start a new installer run/g)).toHaveLength(1);
+      expect(output).not.toMatch(
+        /FullyQualifiedErrorId|CategoryInfo|Setup is incomplete/,
+      );
+      expect(await readFile(configPath, "utf8")).toBe(
+        CODEX_CONFIG_WITH_TRAILING_TABLE,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

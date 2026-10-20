@@ -14,6 +14,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { renderSetupScript, type SetupScriptContext } from "../index";
+import { SETUP_STOPPED_EXIT_CODE } from "../types";
 
 const exec = promisify(execFile);
 const ctx: SetupScriptContext = {
@@ -59,6 +60,7 @@ async function fixture() {
   await writeFile(
     cli,
     `#!${process.execPath}
+(() => {
 const fs = require('node:fs'); const path = require('node:path');
 const args = process.argv.slice(2); const home = process.env.CODEX_HOME;
 fs.appendFileSync(path.join(process.env.HOME, 'calls'), args.join(' ') + '\\n');
@@ -67,9 +69,29 @@ if (args[0] === 'debug' && process.env.BROKEN_CONFIG) {
   console.error('Error: ' + path.join(home, 'config.toml') + ':1:14: invalid transport\\n\\nCaused by:\\n    in \`mcp_servers.test_gateway\`');
   process.exit(1);
 }
+// Like Codex after a failed download: the bundled catalog, a successful exit
+// and no cache. STALE_UNTIL_SIGN_IN models a sign-in that app-server renews.
+const renewed = path.join(process.env.HOME, 'renewed');
 if (args[0] === 'debug') {
-  fs.writeFileSync(path.join(home, 'models_cache.json'), JSON.stringify({fetched_at: new Date().toISOString()}));
+  if (!process.env.STALE_CATALOG && !(process.env.STALE_UNTIL_SIGN_IN && !fs.existsSync(renewed))) {
+    fs.writeFileSync(path.join(home, 'models_cache.json'), JSON.stringify({fetched_at: new Date().toISOString()}));
+  }
   console.log(JSON.stringify({models:[{slug:process.env.TEST_MODEL || 'app-model'}]})); process.exit(0);
+}
+if (args.includes('app-server')) {
+  if (process.env.ACCOUNT === 'unsupported') { console.error("error: unrecognized subcommand 'app-server'"); process.exit(2); }
+  require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
+    const message = JSON.parse(line);
+    if (message.method === 'initialize') console.log(JSON.stringify({ id: message.id, result: {} }));
+    if (message.method !== 'account/read') return;
+    if (!message.params.refreshToken) process.exit(1);
+    const reply = { id: message.id, result: { account: null, requiresOpenaiAuth: true } };
+    if (process.env.ACCOUNT === 'chatgpt') { fs.writeFileSync(renewed, ''); reply.result.account = { type: 'chatgpt', email: 'user@example.com', planType: 'plus' }; }
+    if (process.env.ACCOUNT === 'unauthorized') { delete reply.result; reply.error = { code: -32603, message: 'workspace routing discovery unauthorized (401)' }; }
+    console.log(JSON.stringify(reply));
+  });
+  process.stdin.on('end', () => process.exit(0));
+  return;
 }
 if (args[0] === 'mcp' && args[1] === 'add') fs.appendFileSync(path.join(home, 'config.toml'), '\\n[mcp_servers.test_gateway]\\nurl = "https://example.com/v1/mcp/test"\\n');
 // Like the real CLI, report the clone URL as given, credential included.
@@ -88,6 +110,7 @@ if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'add') {
   fs.writeFileSync(marketplace, args[3]);
   console.log('Added marketplace \`test-skills\` from ' + args[3] + '.');
 }
+})();
 `,
   );
   await chmod(cli, 0o700);
@@ -109,7 +132,7 @@ test("model mismatch stops setup before client mutations", async () => {
     const result = await exec("bash", [f.script], {
       env: { ...f.env, TEST_MODEL: "cli-only-model" },
     }).catch((error) => error);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
     expect(result.stderr).toContain("No client configuration was changed");
     expect(result.stderr).toContain('"app-model"');
     expect(result.stderr).toContain("codex-cli test-version");
@@ -203,6 +226,8 @@ test("a rerun replaces the marketplace an earlier setup registered from another 
       await readFile(path.join(f.home, "marketplace-source"), "utf8"),
     ).toBe(ctx.skills?.cloneUrl);
     const calls = await readFile(path.join(f.home, "calls"), "utf8");
+    // A fresh catalog needs no account check.
+    expect(calls).not.toContain("app-server");
     expect(calls).toContain(
       `plugin marketplace remove test-skills\nplugin marketplace add ${ctx.skills?.cloneUrl}\n`,
     );
@@ -251,7 +276,7 @@ test("preflight shows the Codex error for a config Codex cannot load", async () 
     const result = await exec("bash", [f.script], {
       env: { ...f.env, BROKEN_CONFIG: "1" },
     }).catch((error) => error);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
     expect(result.stderr).toContain("Could not read the Codex model catalog");
     expect(result.stderr).toContain(
       `Error: ${f.config}:1:14: invalid transport`,
@@ -259,6 +284,92 @@ test("preflight shows the Codex error for a config Codex cannot load", async () 
     expect(result.stderr).toContain("in `mcp_servers.test_gateway`");
     expect(result.stderr).not.toContain(".archestra-codex-models-");
     expect(await readFile(f.config, "utf8")).toBe(original);
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  {
+    name: "a missing sign-in",
+    env: { STALE_CATALOG: "1" },
+    signedIn: false,
+    message:
+      "Codex is not signed in on this computer. Run `codex login`, then start a new installer run.",
+  },
+  {
+    name: "a sign-in that Codex cannot renew",
+    env: { STALE_CATALOG: "1" },
+    signedIn: true,
+    message:
+      "Codex could not renew its ChatGPT sign-in. The sign-in has expired or was ended elsewhere. Run `codex login`, then start a new installer run.",
+  },
+  {
+    name: "a sign-in that ChatGPT rejects",
+    env: { STALE_CATALOG: "1", ACCOUNT: "unauthorized" },
+    signedIn: true,
+    message: "Codex could not renew its ChatGPT sign-in.",
+  },
+  {
+    name: "a renewed sign-in that still gets no model list",
+    env: { STALE_CATALOG: "1", ACCOUNT: "chatgpt" },
+    signedIn: true,
+    message:
+      "Codex could not download its model list. Check that this computer can reach chatgpt.com (proxy, VPN or firewall), then start a new installer run.",
+  },
+  {
+    name: "a Codex without app-server",
+    env: { STALE_CATALOG: "1", ACCOUNT: "unsupported" },
+    signedIn: true,
+    message: "Codex could not download its model list.",
+  },
+])("preflight names the cause of a stale model list: $name", async ({
+  env,
+  signedIn,
+  message,
+}) => {
+  const f = await fixture();
+  try {
+    const auth = path.join(f.codexHome, "auth.json");
+    if (signedIn) await writeFile(auth, '{"auth_mode":"chatgpt"}');
+    const result = await exec("bash", [f.script], {
+      env: { ...f.env, ...env },
+    }).catch((error) => error);
+    expect(result.code).toBe(SETUP_STOPPED_EXIT_CODE);
+    expect(result.stderr).toContain(`Codex setup preflight failed: ${message}`);
+    expect(result.stderr.match(/start a new installer run/g)).toHaveLength(1);
+    expect(result.stderr).not.toContain("Setup is incomplete");
+    expect(await readFile(f.config, "utf8")).toBe(original);
+    expect((await readdir(f.codexHome)).sort()).toEqual(
+      signedIn ? ["auth.json", "config.toml"] : ["config.toml"],
+    );
+    const calls = await readFile(path.join(f.home, "calls"), "utf8");
+    expect(calls).toContain("app-server");
+    expect(calls).not.toMatch(/mcp|plugin/);
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test("a sign-in that Codex renews during preflight lets setup continue", async () => {
+  const f = await fixture();
+  try {
+    await writeFile(
+      path.join(f.codexHome, "auth.json"),
+      '{"auth_mode":"chatgpt"}',
+    );
+    const result = await exec("bash", [f.script], {
+      env: { ...f.env, STALE_UNTIL_SIGN_IN: "1", ACCOUNT: "chatgpt" },
+    }).catch((error) => error);
+    expect(`${result.stdout}${result.stderr}`).not.toContain(
+      "preflight failed",
+    );
+    expect(await readFile(f.config, "utf8")).toContain(
+      'model_provider = "test_proxy"',
+    );
+    const calls = await readFile(path.join(f.home, "calls"), "utf8");
+    expect(calls.match(/app-server/g)).toHaveLength(1);
+    expect(calls).toContain("mcp add");
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }

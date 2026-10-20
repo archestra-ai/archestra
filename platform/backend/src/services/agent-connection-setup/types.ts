@@ -5,6 +5,12 @@ import type {
   ConnectionSetupProxyAuth,
 } from "@/types";
 
+/**
+ * Exit status of a setup script that stopped before changing anything and has
+ * already printed the cause and the next step. The installer adds nothing more.
+ */
+export const SETUP_STOPPED_EXIT_CODE = 3;
+
 export interface SetupScriptMcpSection {
   /** Logical server name registered in the client (slug). */
   serverName: string;

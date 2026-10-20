@@ -24,7 +24,6 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
   const original = existsSync(path.join(home, 'config.toml')) ? readFileSync(path.join(home, 'config.toml'), 'utf8') : '';
   mkdirSync(home, { recursive: true });
   const shadow = mkdtempSync(path.join(home, '.archestra-codex-models-'));
-  const started = Date.now();
   const authFile = path.join(home, 'auth.json');
   let nativeAuth;
   let result;
@@ -62,16 +61,31 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
     }
     // Discovery uses the native provider, not the inference proxy or our own
     // model override. Enabling API-key discovery applies only to this process.
-    result = spawnSync(command, [...args, 'debug', 'models', '-c', 'model_provider="openai"', '-c', 'cli_auth_credentials_store="file"', '--enable', 'api_key_model_discovery'], { cwd: shadow, encoding: 'utf8', windowsHide: true, maxBuffer: 10 * 1024 * 1024, timeout: 30000, env: { ...process.env, CODEX_HOME: shadow } });
-    if (result.error || result.status !== 0) throw new Error('Could not read the Codex model catalog.' + codexErrorDetail(result, shadow, home));
-    // Codex can return the bundled catalog with a successful exit after a network/auth
-    // failure. A newly written cache is evidence of an actual remote refresh.
-    const cacheFile = path.join(shadow, 'models_cache.json');
-    const cache = existsSync(cacheFile) ? JSON.parse(readFileSync(cacheFile, 'utf8')) : null;
-    // The cache did not exist before this process. Allow a small wall-clock
-    // adjustment between Node and Codex without accepting an old cached result.
-    if (!cache || !Number.isFinite(Date.parse(cache.fetched_at)) || Date.parse(cache.fetched_at) < started - 1000) {
-      throw new Error('Codex did not fetch a fresh model catalog; check upstream credentials and connectivity.');
+    const overrides = ['-c', 'model_provider="openai"', '-c', 'cli_auth_credentials_store="file"'];
+    const options = { cwd: shadow, encoding: 'utf8', windowsHide: true, maxBuffer: 10 * 1024 * 1024, timeout: 30000, env: { ...process.env, CODEX_HOME: shadow } };
+    const readCatalog = () => {
+      const started = Date.now();
+      const output = spawnSync(command, [...args, 'debug', 'models', ...overrides, '--enable', 'api_key_model_discovery'], options);
+      if (output.error || output.status !== 0) throw new Error('Could not read the Codex model catalog.' + codexErrorDetail(output, shadow, home));
+      // Codex can return the bundled catalog with a successful exit after a network/auth
+      // failure. A newly written cache is evidence of an actual remote refresh.
+      const cacheFile = path.join(shadow, 'models_cache.json');
+      const cache = existsSync(cacheFile) ? JSON.parse(readFileSync(cacheFile, 'utf8')) : null;
+      // The cache did not exist before this process. Allow a small wall-clock
+      // adjustment between Node and Codex without accepting an old cached result.
+      return cache && Number.isFinite(Date.parse(cache.fetched_at)) && Date.parse(cache.fetched_at) >= started - 1000 ? output : null;
+    };
+    result = readCatalog();
+    if (!result) {
+      // Codex does not say why. Ask it, renewing the sign-in as a session would.
+      // Codex saves renewed tokens in place, so the shared login file stays linked.
+      const account = readCodexAccount(command, [...args, ...overrides, 'app-server'], options);
+      const type = account?.result?.account?.type;
+      if (account?.error && /unauthorized|\b401\b/i.test(String(account.error.message))) throw catalogError('expired');
+      if (account?.result && account.result.account === null) throw catalogError(nativeAuth ? 'expired' : 'signed-out');
+      if (type === 'apiKey') throw catalogError('api-key');
+      if (type === 'chatgpt') result = readCatalog();
+      if (!result) throw catalogError('connectivity');
     }
   } finally {
     try {
@@ -107,6 +121,27 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
     throw error;
   }
   return { home, filename };
+}
+// Each cause has one next step; callers add where to go from there.
+const CATALOG_FAILURES = {
+  'signed-out': ['Codex is not signed in on this computer.', 'Run \x60codex login\x60'],
+  expired: ['Codex could not renew its ChatGPT sign-in. The sign-in has expired or was ended elsewhere.', 'Run \x60codex login\x60'],
+  'api-key': ['Codex could not download its model list with its OpenAI API key.', 'Check the key and that this computer can reach api.openai.com (proxy, VPN or firewall)'],
+  connectivity: ['Codex could not download its model list.', 'Check that this computer can reach chatgpt.com (proxy, VPN or firewall)'],
+};
+function catalogError(reason) {
+  const [summary, action] = CATALOG_FAILURES[reason];
+  return Object.assign(new Error(summary + ' ' + action + '.'), { summary, action });
+}
+function withNextStep(error, step) {
+  return error.action ? error.summary + ' ' + error.action + ', then ' + step + '.' : error.message;
+}
+// One app-server exchange in a child Node process keeps this helper synchronous;
+// Codex exits at the end of its input before it answers.
+function readCodexAccount(command, args, options) {
+  const exchange = ${JSON.stringify(accountReadExchange())};
+  const output = spawnSync(process.execPath, ['-', command, JSON.stringify(args)], { ...options, input: exchange, timeout: 25000 });
+  try { return JSON.parse(output.stdout); } catch { return null; }
 }
 // A config that Codex cannot load fails discovery too. Show what Codex said,
 // with the path of the real config rather than the deleted copy.
@@ -377,7 +412,8 @@ if (process.argv[2] === '--setup-only') {
 } else if (process.argv[2] === '--preflight') {
   try { prepareDirectCatalog(process.argv[3], [], false); }
   catch (error) {
-    process.stderr.write('Codex setup preflight failed: ' + error.message + '\nNo client configuration was changed. Fix the compatibility or credential problem and start a new installer run.\n');
+    const next = error.action ? '' : ' Fix the problem above, then start a new installer run.';
+    process.stderr.write('Codex setup preflight failed: ' + withNextStep(error, 'start a new installer run') + '\nNo client configuration was changed.' + next + '\n');
     process.exitCode = 1;
   }
 } else if (process.argv[2] === '--direct' || process.argv[2] === '--install-direct') {
@@ -390,7 +426,7 @@ if (process.argv[2] === '--setup-only') {
     const config = 'model_catalog_json=' + JSON.stringify(filename);
     if (process.argv[2] === '--direct') process.stdout.write(process.argv[4] === '--output-base64' ? Buffer.from(config).toString('base64') : config);
   } catch (error) {
-    process.stderr.write('Codex direct tool mode could not be prepared: ' + error.message + '\n');
+    process.stderr.write('Codex direct tool mode could not be prepared: ' + withNextStep(error, 'start Codex again') + '\n');
     process.exitCode = 1;
   }
 } else if (process.argv[2] === '--launch') {
@@ -491,3 +527,38 @@ lines.on('line', line => {
 send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'archestra_connection', version: '1.0.0' } } });
 }
 `;
+
+/** Child script for readCodexAccount. Prints the account/read reply, or nothing. */
+function accountReadExchange() {
+  return String.raw`
+const { spawn } = require('node:child_process');
+const { createInterface } = require('node:readline');
+const child = spawn(process.argv[2], JSON.parse(process.argv[3]), { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+let finished = false;
+const timer = setTimeout(() => finish(), 15000);
+function finish(reply) {
+  if (finished) return;
+  finished = true;
+  clearTimeout(timer);
+  if (reply) process.stdout.write(JSON.stringify({ result: reply.result, error: reply.error }));
+  // Codex stops at the end of its input. Let it close its files before the
+  // caller removes its home; stop it only when it does not.
+  child.stdin.destroy();
+  setTimeout(() => { child.kill(); process.exit(0); }, 3000).unref();
+}
+function send(message) { child.stdin.write(JSON.stringify(message) + '\n'); }
+child.on('error', () => { finish(); process.exit(0); });
+child.on('exit', () => { finish(); process.exit(0); });
+child.stdin.on('error', () => finish());
+createInterface({ input: child.stdout }).on('line', line => {
+  let reply;
+  try { reply = JSON.parse(line); } catch { return; }
+  if (reply.id === 1) {
+    if (reply.error) return finish();
+    send({ method: 'initialized' });
+    send({ id: 2, method: 'account/read', params: { refreshToken: true } });
+  } else if (reply.id === 2) finish(reply);
+});
+send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'codex_setup', version: '1.0.0' } } });
+`;
+}

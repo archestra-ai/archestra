@@ -375,14 +375,16 @@ test("encrypted content and changed agent attribution do not change the admitted
   expect(costs.models.reduce((sum, item) => sum + item.requests, 0)).toBe(1);
 });
 
-test("deleting a user mid-request preserves the admitted charge and permits idempotent replay", async ({
+test("deleting multiple identities mid-request preserves the admitted charge and permits idempotent replay", async ({
   makeAgent,
   makeOrganization,
   makeUser,
+  makeServiceAccount,
 }) => {
   const org = await makeOrganization();
   const user = await makeUser();
   const agent = await makeAgent({ organizationId: org.id });
+  const account = await makeServiceAccount(org.id);
   const cap = await LimitModel.create({
     entityType: "organization",
     entityId: org.id,
@@ -391,10 +393,15 @@ test("deleting a user mid-request preserves the admitted charge and permits idem
     model: null,
   });
   const data = await record({ agent, userId: user.id });
+  data.serviceAccountId = account.id;
   await db.delete(schema.usersTable).where(eq(schema.usersTable.id, user.id));
+  await db
+    .delete(schema.serviceAccountsTable)
+    .where(eq(schema.serviceAccountsTable.id, account.id));
   const first = await InteractionModel.create(data);
   const replay = await InteractionModel.create(data);
   expect(first.userId).toBeNull();
+  expect(first.serviceAccountId).toBeNull();
   expect(replay.id).toBe(first.id);
   expect((await InteractionBillingModel.findMany([first.id]))[0].userId).toBe(
     user.id,

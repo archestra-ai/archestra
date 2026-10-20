@@ -3724,8 +3724,9 @@ async function retainDeletedBillingAttribution<T>(params: {
 }): Promise<T> {
   const columns = getTableColumns(schema.interactionsTable);
   const foreignKeys = getTableConfig(schema.interactionsTable).foreignKeys;
+  const clearedConstraints = new Set<string>();
   // Each retry clears a nullable log reference. Unknown constraints fail
-  // immediately, and the FK count bounds retries even if an error repeats.
+  // immediately; each constraint can be cleared only once.
   for (let attempt = 0; ; attempt++) {
     try {
       return await params.run();
@@ -3746,6 +3747,8 @@ async function retainDeletedBillingAttribution<T>(params: {
         !("code" in detail) ||
         detail.code !== "23503" ||
         !("constraint" in detail) ||
+        typeof detail.constraint !== "string" ||
+        clearedConstraints.has(detail.constraint) ||
         attempt >= foreignKeys.length
       )
         throw error;
@@ -3754,6 +3757,7 @@ async function retainDeletedBillingAttribution<T>(params: {
         ?.reference().columns;
       if (!missing?.length || missing.some((column) => column.notNull))
         throw error;
+      clearedConstraints.add(detail.constraint);
       for (const column of missing) {
         const key = Object.entries(columns).find(
           ([, value]) => value.name === column.name,
@@ -3761,6 +3765,10 @@ async function retainDeletedBillingAttribution<T>(params: {
         if (!key) throw error;
         Reflect.set(params.values, key, null);
       }
+      logger.info(
+        { constraint: detail.constraint },
+        "Cleared deleted log reference; retained admitted billing attribution",
+      );
     }
   }
 }

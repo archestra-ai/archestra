@@ -2819,6 +2819,13 @@ async function handleStreaming<
       await finalizeInteraction();
     } catch (settlementError) {
       // Serialize settlement failure here too, while the SSE stream is open.
+      logger.error(
+        {
+          upstreamStatus: extractDurationStatusCode(lifecycleError),
+          ...(suppressContent ? {} : { err: lifecycleError }),
+        },
+        "Stream failure preceded usage settlement failure",
+      );
       streamError = settlementError;
     }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;

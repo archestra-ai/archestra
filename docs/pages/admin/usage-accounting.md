@@ -2,7 +2,7 @@
 title: Roll Out Usage Accounting
 description: Activate component billing without resetting existing budgets.
 order: 8
-lastUpdated: 2026-10-20
+lastUpdated: 2026-10-21
 ---
 
 Usage accounting includes separately billed inference, such as an Anthropic advisor or compaction pass, in the request's cost and matching budgets.
@@ -12,10 +12,12 @@ Usage accounting includes separately billed inference, such as an Anthropic advi
 Deploy the compatible backend to every web and worker pod before enforcing component charges.
 
 1. Deploy with [`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE=off`](/docs/reference/configuration#ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE). The additive migration creates accounting storage without rewriting interaction logs or resetting budgets.
-2. Set the mode to `shadow` on web and worker pods. Compare candidate quotes with provider usage, including cache reads, cache write TTLs, advisors, and compaction. Confirm that every billed model has trusted pricing and that candidate records are complete.
+2. Set the mode to `shadow` on web and worker pods. Compare candidate quotes with provider usage, including cache reads, cache write TTLs, advisors, and compaction. Confirm complete candidate records and trusted pricing for every billed model.
 3. Wait for older pods and their in-flight requests to finish. Set the mode to `enforce` across the deployment, then check a test credential with a small budget: a completed charge over its limit must block the next request with HTTP `402`.
 
 Activation applies to requests that start in enforce mode. Existing consumption remains in the current budget window. Activation does not backfill missing historical components; settled charges retain their quoted prices, while legacy counters retain legacy pricing behavior.
+
+Monitor database query latency during rollout, especially budget checks and statistics over large date ranges.
 
 ## Understand User Impact
 

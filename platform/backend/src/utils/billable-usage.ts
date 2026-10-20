@@ -368,7 +368,7 @@ function tokens(usage: Record<string, unknown>, issues: string[]): UsageTokens {
 
 function decimal(value: string, scale: number): bigint {
   if (!/^\d+(?:\.\d+)?$/.test(value)) {
-    throw new Error("Invalid nonnegative billing amount");
+    throw new Error("Billing charges must be nonnegative decimal amounts");
   }
   const [whole, fraction = ""] = value.split(".");
   const digits = fraction.padEnd(scale + 1, "0");

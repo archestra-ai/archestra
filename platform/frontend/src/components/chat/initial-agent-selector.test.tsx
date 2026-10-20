@@ -95,6 +95,7 @@ const {
   mockUseInternalMcpCatalog: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseKnowledgeBases: vi.fn((_options?: unknown) => ({ data: [] })),
   mockUseMcpInstallOrchestrator: vi.fn((_options?: unknown) => ({
+    closeInstallForms: vi.fn(),
     closeLocalInstall: vi.fn(),
     closeNoAuthInstall: vi.fn(),
     closeOAuth: vi.fn(),

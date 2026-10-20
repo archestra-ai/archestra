@@ -510,6 +510,101 @@ exit 0
 );
 
 describe.skipIf(!powershellAvailable)(
+  "PowerShell managed instructions source file",
+  () => {
+    test("a reconnect locks the source file again without admin rights, and writes the token only after the lock", async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "archestra-acl-"));
+      const home = path.join(root, "home");
+      const bin = path.join(root, "bin");
+      const setupPath = path.join(root, "setup.ps1");
+      const driverPath = path.join(root, "driver.ps1");
+      const source = `${STARTUP_GUARD_INSTALL["claude-code"].psScriptRelpath}.instructions-source.json`;
+      try {
+        await Promise.all([home, bin].map((directory) => mkdir(directory)));
+        await writeFile(
+          path.join(bin, "claude"),
+          '#!/bin/sh\n[ "$1 $2" = "mcp remove" ] && exit 1\nexit 0\n',
+        );
+        await chmod(path.join(bin, "claude"), 0o755);
+        const script = renderSetupScript({
+          clientId: "claude-code",
+          platform: "windows",
+          appName: "Archestra",
+          mcp: {
+            serverName: "test_gateway",
+            toolPrefix: "archestra__",
+            url: "https://proxy.example.com/v1/mcp/test-gateway",
+          },
+          proxy: null,
+          skills: null,
+          managedInstructionsSource: {
+            url: "https://proxy.example.com/api/connection-instructions",
+            token: "instructions-token",
+          },
+        });
+        const identity =
+          "[System.Security.Principal.WindowsIdentity]::GetCurrent().Name";
+        expect(script).toContain(identity);
+        await writeFile(setupPath, script.replaceAll(identity, "'test-user'"));
+        // Linux has no Windows ACL APIs, so the driver fakes them. Owner-only
+        // file mode stands in for the owner-only ACL. The fake Set-Acl follows
+        // the Windows rule behind the bug: a non-admin user cannot set an ACL
+        // again on a file that already has it.
+        await writeFile(
+          driverPath,
+          `$ErrorActionPreference = 'Stop'
+$locked = [IO.UnixFileMode]'UserRead, UserWrite'
+function global:New-Object {
+  param([Parameter(Position = 0)][string]$TypeName, [Parameter(Position = 1)][object[]]$ArgumentList)
+  if ($TypeName -like 'System.Security.AccessControl.*') {
+    $acl = [pscustomobject]@{}
+    $acl | Add-Member -MemberType ScriptMethod -Name SetAccessRuleProtection -Value { }
+    $acl | Add-Member -MemberType ScriptMethod -Name AddAccessRule -Value { }
+    return $acl
+  }
+  if ($PSBoundParameters.ContainsKey('ArgumentList')) { return Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName -ArgumentList $ArgumentList }
+  Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName
+}
+function global:Set-Acl {
+  param([string]$LiteralPath, $AclObject)
+  if ([IO.File]::GetUnixFileMode($LiteralPath) -eq $locked) { throw "The process does not possess the 'SeSecurityPrivilege' privilege" }
+  if ((Get-Item -LiteralPath $LiteralPath).Length -ne 0) { throw 'The file had content before it was locked' }
+  [IO.File]::SetUnixFileMode($LiteralPath, $locked)
+}
+$setup = Get-Content -Raw $env:ARCHESTRA_TEST_SETUP_PATH
+$source = Join-Path $env:USERPROFILE '${source}'
+foreach ($attempt in 1..2) {
+  Invoke-Expression $setup
+  if ([IO.File]::GetUnixFileMode($source) -ne $locked) { throw "Connect $attempt left the source file unlocked" }
+  if ((Get-Content -Raw $source | ConvertFrom-Json).token -ne 'instructions-token') { throw "Connect $attempt did not write the token" }
+}
+exit 0
+`,
+        );
+        await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driverPath],
+          {
+            cwd: home,
+            env: {
+              HOME: home,
+              USERPROFILE: home,
+              CLAUDE_CONFIG_DIR: "",
+              PATH: `${bin}:${process.env.PATH}`,
+              NO_COLOR: "1",
+              ARCHESTRA_TEST_SETUP_PATH: setupPath,
+            },
+            timeout: 30_000,
+          },
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  },
+);
+
+describe.skipIf(!powershellAvailable)(
   "PowerShell Codex gateway registration",
   () => {
     test("approves the guardrail helpers once, under the gateway's own entry", async () => {

@@ -61,8 +61,11 @@ if (params.managedKeyFile) {
 const bootstrap = ${JSON.stringify(MANAGED_RUNTIME_BOOTSTRAP)};
 fs.mkdirSync(root, { recursive: true, mode: 0o700 });
 if (process.platform === "win32") {
+  // Not Set-Acl: once an earlier install has locked the directory, Set-Acl needs
+  // SeSecurityPrivilege, which a non-admin user does not have. SetAccessControl
+  // on the item works because powershell.exe is Windows PowerShell 5.1.
   require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-    '$ErrorActionPreference="Stop"; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){exit 1}; $acl.SetAccessRuleProtection($true,$false); foreach($rule in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($rule)}; $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,"FullControl","ContainerInherit,ObjectInherit","None","Allow"); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH -AclObject $acl'
+    '$ErrorActionPreference="Stop"; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){exit 1}; $acl.SetAccessRuleProtection($true,$false); foreach($rule in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($rule)}; $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,"FullControl","ContainerInherit,ObjectInherit","None","Allow"); $acl.AddAccessRule($rule); (Get-Item -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH).SetAccessControl($acl)'
   ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PATH: root }, timeout: 3000, stdio: "ignore" });
 }
 const check = file => {

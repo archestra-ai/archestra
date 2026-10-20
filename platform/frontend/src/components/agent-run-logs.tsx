@@ -9,7 +9,9 @@ import { FileX2, TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
+import { Button } from "@/components/ui/button";
 import type { AgentRun } from "@/lib/agent-runtime.query";
+import { formatBytes } from "@/lib/utils/format-bytes";
 import websocketService from "@/lib/websocket/websocket";
 
 export function AgentRunLogs({
@@ -26,27 +28,64 @@ export function AgentRunLogs({
   const [terminalContent, setTerminalContent] = useState("");
   const [error, setError] = useState<string>();
   const [isStreaming, setIsStreaming] = useState(!run.endedAt);
+  // An ended run's history is on its way until the server says it has ended:
+  // until then the panel is loading, not empty.
+  const [historyLoaded, setHistoryLoaded] = useState(!run.endedAt);
   const [retainedStatus, setRetainedStatus] = useState<{
     source: "full" | "tail";
     truncated: boolean;
   }>();
+  // An ended run opens on the end of its recording: replaying a long one in
+  // full costs seconds of main thread and, for the longest, the tab. The rest
+  // loads on request.
+  const [fullRecording, setFullRecording] = useState(false);
+  const [omittedBytes, setOmittedBytes] = useState(0);
+  const requestTail = Boolean(run.endedAt) && !fullRecording;
 
   useEffect(() => {
     let receivedOutput = false;
     let emptyRetryCount = 0;
     let emptyRetryTimer: ReturnType<typeof setTimeout> | undefined;
+    // Frames are collected and rendered together: every render replays and
+    // snapshots the whole recording, so one per frame (a long history is
+    // dozens of frames) multiplied that work and the copies of the string.
+    // An ended run's history renders once it has all arrived; a live run's
+    // output at most every LIVE_FLUSH_MS.
+    let received = "";
+    let pending: string[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = undefined;
+      if (pending.length === 0) return;
+      received += pending.join("");
+      pending = [];
+      setTerminalContent(received);
+    };
+    const scheduleFlush = () => {
+      if (run.endedAt) {
+        // The end message flushes; this only covers one that never comes.
+        if (flushTimer) clearTimeout(flushTimer);
+        flushTimer = setTimeout(flush, HISTORY_IDLE_FLUSH_MS);
+      } else if (!flushTimer) {
+        flushTimer = setTimeout(flush, LIVE_FLUSH_MS);
+      }
+    };
     const subscribeToLogs = () => {
       websocketService.send({
         type: "subscribe_agent_run_logs",
         payload: {
           runId: logId,
           ...(includeSessionHistory ? { includeSessionHistory: true } : {}),
+          ...(requestTail ? { tailBytes: RECORDING_TAIL_BYTES } : {}),
         },
       });
     };
     setTerminalContent("");
     setError(undefined);
     setIsStreaming(!run.endedAt);
+    setHistoryLoaded(!run.endedAt);
+    setOmittedBytes(0);
     setRetainedStatus(undefined);
     websocketService.connect();
     const subscriptions = [
@@ -58,7 +97,8 @@ export function AgentRunLogs({
             message.payload.channel !== "readable"
           ) {
             receivedOutput = true;
-            setTerminalContent((value) => value + message.payload.logs);
+            pending.push(message.payload.logs);
+            scheduleFlush();
           }
         },
       ),
@@ -66,8 +106,10 @@ export function AgentRunLogs({
         "agent_run_logs_error",
         (message: AgentRunLogsErrorMessage) => {
           if (message.payload.runId === logId) {
+            flush();
             setError(message.payload.error);
             setIsStreaming(false);
+            setHistoryLoaded(true);
           }
         },
       ),
@@ -75,7 +117,13 @@ export function AgentRunLogs({
         "agent_run_logs_ended",
         (message: AgentRunLogsEndedMessage) => {
           if (message.payload.runId === logId) {
-            if (!receivedOutput && emptyRetryCount < EMPTY_LOG_RETRY_LIMIT) {
+            // Retained output can land after the run's metadata, so an empty
+            // end is retried; not when the server says what it left out.
+            if (
+              !receivedOutput &&
+              !message.payload.omittedBytes &&
+              emptyRetryCount < EMPTY_LOG_RETRY_LIMIT
+            ) {
               emptyRetryCount += 1;
               setIsStreaming(true);
               emptyRetryTimer = setTimeout(
@@ -84,7 +132,10 @@ export function AgentRunLogs({
               );
               return;
             }
+            flush();
             setIsStreaming(false);
+            setHistoryLoaded(true);
+            setOmittedBytes(message.payload.omittedBytes ?? 0);
             if (message.payload.source) {
               setRetainedStatus({
                 source: message.payload.source,
@@ -98,28 +149,40 @@ export function AgentRunLogs({
     subscribeToLogs();
     return () => {
       if (emptyRetryTimer) clearTimeout(emptyRetryTimer);
+      if (flushTimer) clearTimeout(flushTimer);
       for (const unsubscribe of subscriptions) unsubscribe();
       websocketService.send({
         type: "unsubscribe_agent_run_logs",
         payload: { runId: logId },
       });
     };
-  }, [run.endedAt, logId, includeSessionHistory]);
+  }, [run.endedAt, logId, includeSessionHistory, requestTail]);
 
   return (
     <DeploymentLogPanel
       title={title}
       content={terminalContent}
       contentRenderer={(output) => (
-        <TerminalRecording key={run.taskId} content={output} />
+        <TerminalRecording
+          key={`${run.taskId}:${fullRecording}`}
+          content={output}
+        />
       )}
       error={error}
-      emptyIcon={run.endedAt ? FileX2 : TerminalSquare}
-      emptyMessage={run.endedAt ? "No output recorded" : "Waiting for output"}
+      emptyIcon={run.endedAt && historyLoaded ? FileX2 : TerminalSquare}
+      emptyMessage={
+        !historyLoaded
+          ? "Loading recording"
+          : run.endedAt
+            ? "No output recorded"
+            : "Waiting for output"
+      }
       emptyHint={
-        run.endedAt
-          ? "This run ended without writing anything to its log."
-          : "Output appears here as the Agent writes it."
+        !historyLoaded
+          ? undefined
+          : run.endedAt
+            ? "This run ended without writing anything to its log."
+            : "Output appears here as the Agent writes it."
       }
       status={
         isStreaming ? (
@@ -133,8 +196,25 @@ export function AgentRunLogs({
             </span>
             <span>Streaming</span>
           </div>
-        ) : terminalContent ? (
-          <RetainedTranscriptStatus status={retainedStatus} />
+        ) : terminalContent || omittedBytes > 0 ? (
+          <div className="flex items-center gap-3">
+            {omittedBytes > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 font-mono text-xs text-slate-300"
+                onClick={() => setFullRecording(true)}
+              >
+                Load full recording ({formatBytes(omittedBytes)} more)
+              </Button>
+            )}
+            {terminalContent && (
+              <RetainedTranscriptStatus
+                status={retainedStatus}
+                partial={omittedBytes > 0}
+              />
+            )}
+          </div>
         ) : null
       }
     />
@@ -143,11 +223,18 @@ export function AgentRunLogs({
 
 const EMPTY_LOG_RETRY_LIMIT = 3;
 const EMPTY_LOG_RETRY_DELAY_MS = 250;
+const LIVE_FLUSH_MS = 100;
+/** How much of an ended run's recording opens first. */
+const RECORDING_TAIL_BYTES = 2 * 1024 * 1024;
+const HISTORY_IDLE_FLUSH_MS = 500;
 
 function RetainedTranscriptStatus({
   status,
+  partial = false,
 }: {
   status?: { source: "full" | "tail"; truncated: boolean };
+  /** Only the end of the recording is shown; the rest loads on request. */
+  partial?: boolean;
 }) {
   const isTailOnly = status?.source === "tail" && status.truncated;
   return (
@@ -172,7 +259,9 @@ function RetainedTranscriptStatus({
       />
       <span>
         {status?.source === "full"
-          ? "Complete terminal recording"
+          ? partial
+            ? "End of the recording"
+            : "Complete terminal recording"
           : isTailOnly
             ? "Retained tail only"
             : "Retained"}

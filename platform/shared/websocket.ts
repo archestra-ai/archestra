@@ -115,6 +115,16 @@ const SubscribeAgentRunLogsPayloadSchema = z.object({
   includeSessionHistory: z.boolean().optional(),
   runId: z.string().uuid(),
   lines: z.number().int().min(1).max(10_000).optional(),
+  /**
+   * For an ended run with a complete recording: send only about this many of
+   * its last bytes, leaving out earlier turns (see `omittedBytes`).
+   */
+  tailBytes: z
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .optional(),
 });
 
 // MCP Deployment Status payloads
@@ -519,6 +529,8 @@ export type AgentRunLogsEndedMessage = {
     source?: "full" | "tail";
     truncated?: boolean;
     totalBytes?: number;
+    /** Stored bytes a `tailBytes` subscription left out. */
+    omittedBytes?: number;
     readable?: {
       provider: string;
       version: number;

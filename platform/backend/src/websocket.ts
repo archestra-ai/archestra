@@ -965,31 +965,58 @@ export class WebSocketService {
   }): Promise<boolean> {
     const { ws, runId, session, signal } = params;
     const decoder = new StringDecoder("utf8");
+    let sentOutput = false;
     const send = (logs: string) => {
-      if (logs && !signal.aborted)
-        this.sendToClient(ws, {
-          type: "agent_run_logs",
-          payload: { runId, logs },
-        });
+      if (!logs || signal.aborted) return;
+      sentOutput = true;
+      this.sendToClient(ws, {
+        type: "agent_run_logs",
+        payload: { runId, logs },
+      });
     };
-    const tail = await agentRunTranscriptStore
-      .streamTail({
+    const fail = (error: unknown, message: string) => {
+      logger.warn(
+        { error, sessionId: session.id, taskId: session.taskId },
+        message,
+      );
+      if (signal.aborted) return;
+      this.sendToClient(ws, {
+        type: "agent_run_logs_error",
+        payload: { runId, error: message },
+      });
+      this.unsubscribeAgentRunLogs(ws);
+    };
+    let tail: Awaited<ReturnType<typeof agentRunTranscriptStore.streamTail>>;
+    try {
+      tail = await agentRunTranscriptStore.streamTail({
         runId: session.id,
         maxBytes: params.tailBytes,
         onChunk: (chunk) => send(decoder.write(chunk)),
-      })
-      .catch((error) => {
+      });
+    } catch (error) {
+      // Once part of the tail is out, the full recording cannot follow it:
+      // the viewer would see the end of the run spliced in front of the run.
+      if (!sentOutput) {
         logger.warn(
           { error, sessionId: session.id, taskId: session.taskId },
           "Could not read the end of the Agent run transcript",
         );
-        return null;
-      });
+        return false;
+      }
+      fail(error, "Could not read the end of the recording");
+      return true;
+    }
     if (!tail || signal.aborted) return Boolean(tail);
     send(decoder.end());
-    const historyBytes = params.includeSessionHistory
-      ? await this.sessionHistoryBytes(session)
-      : 0;
+    let historyBytes = 0;
+    if (params.includeSessionHistory) {
+      try {
+        historyBytes = await this.sessionHistoryBytes(session);
+      } catch (error) {
+        fail(error, "Could not read session history");
+        return true;
+      }
+    }
     if (signal.aborted) return true;
     this.sendToClient(ws, {
       type: "agent_run_logs_ended",
@@ -1005,25 +1032,38 @@ export class WebSocketService {
     return true;
   }
 
-  /** The stored size of a session's earlier turns. */
-  private async sessionHistoryBytes(session: AgentRunRecord): Promise<number> {
+  /** A session's earlier turns, a page at a time, oldest first. */
+  private async *previousTurnPages(
+    session: AgentRunRecord,
+    signal?: AbortSignal,
+  ): AsyncGenerator<AgentRunRecord[]> {
     let afterId: string | undefined;
-    let bytes = 0;
-    for (;;) {
+    while (!signal?.aborted) {
       const turns = await AgentRunModel.listPreviousTurns({
         run: session,
         afterId,
       });
-      if (!turns.length) return bytes;
+      if (!turns.length) return;
+      yield turns;
+      afterId = turns.at(-1)?.id;
+    }
+  }
+
+  /**
+   * The stored size of a session's earlier turns: what
+   * `streamAgentSessionHistory` counts, without sending them.
+   */
+  private async sessionHistoryBytes(session: AgentRunRecord): Promise<number> {
+    let bytes = 0;
+    for await (const turns of this.previousTurnPages(session)) {
       const sizes = await AgentRunTranscriptModel.findSizesByRunIds(
         turns.map((turn) => turn.id),
       );
       for (const turn of turns) {
-        bytes +=
-          sizes.get(turn.id) ?? Buffer.byteLength(turn.logs ?? "", "utf8");
+        bytes += turnOutputBytes(turn, sizes.get(turn.id));
       }
-      afterId = turns.at(-1)?.id;
     }
+    return bytes;
   }
 
   private async streamAgentSessionHistory(params: {
@@ -1032,15 +1072,12 @@ export class WebSocketService {
     session: AgentRunRecord;
     signal: AbortSignal;
   }): Promise<{ complete: boolean; bytes: number }> {
-    let afterId: string | undefined;
     let complete = true;
     let bytes = 0;
-    while (!params.signal.aborted) {
-      const turns = await AgentRunModel.listPreviousTurns({
-        run: params.session,
-        afterId,
-      });
-      if (!turns.length) break;
+    for await (const turns of this.previousTurnPages(
+      params.session,
+      params.signal,
+    )) {
       for (const turn of turns) {
         if (params.signal.aborted) return { complete, bytes };
         const decoder = new StringDecoder("utf8");
@@ -1060,12 +1097,9 @@ export class WebSocketService {
           complete = false;
           send(turn.logs ?? "");
         }
-        bytes +=
-          transcript?.uncompressedBytes ??
-          Buffer.byteLength(turn.logs ?? "", "utf8");
+        bytes += turnOutputBytes(turn, transcript?.uncompressedBytes);
         send("\r\n\u001b[0m");
       }
-      afterId = turns.at(-1)?.id;
     }
     return { complete, bytes };
   }
@@ -2285,4 +2319,15 @@ function createCrossReplicaNotifyHub(): PgNotifyHub {
     : createPostgresNotifyHub(
         config.chat.activeRun.notifyDatabaseUrl || config.database.url,
       );
+}
+
+/**
+ * What a turn's output counts for: its stored recording's size, or its
+ * retained log's when nothing is stored.
+ */
+function turnOutputBytes(
+  turn: Pick<AgentRunRecord, "logs">,
+  storedBytes: number | undefined,
+): number {
+  return storedBytes ?? Buffer.byteLength(turn.logs ?? "", "utf8");
 }

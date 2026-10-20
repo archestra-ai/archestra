@@ -858,6 +858,130 @@ describe("websocket Agent run authorization and cleanup", () => {
     );
   });
 
+  test("a tail read that fails after output was sent ends in an error, not the full recording", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const { ws, task, recording } = await makeEndedRunWithRecording({
+      makeOrganization,
+      makeUser,
+      makeAgent,
+    });
+    const streamTail = vi
+      .spyOn(agentRunTranscriptStore, "streamTail")
+      .mockImplementation(async (params) => {
+        params.onChunk(Buffer.from("partial tail\n"));
+        throw new Error("chunk 3 is corrupt");
+      });
+    try {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_logs",
+          payload: { runId: task.id, tailBytes: 64 * 1024 },
+        },
+        ws,
+      );
+    } finally {
+      streamTail.mockRestore();
+    }
+    const sent = vi
+      .mocked(ws.send)
+      .mock.calls.map(([message]) => JSON.parse(String(message)));
+    expect(
+      sent
+        .filter((message) => message.type === "agent_run_logs")
+        .map((message) => message.payload.logs),
+    ).toEqual(["partial tail\n"]);
+    expect(sent.at(-1)).toEqual({
+      type: "agent_run_logs_error",
+      payload: {
+        runId: task.id,
+        error: "Could not read the end of the recording",
+      },
+    });
+    expect(
+      sent.some((message) => message.type === "agent_run_logs_ended"),
+    ).toBe(false);
+    expect(JSON.stringify(sent)).not.toContain(recording.slice(0, 40));
+  });
+
+  test("a tail read that fails before any output falls back to the full recording", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const { ws, task, recording } = await makeEndedRunWithRecording({
+      makeOrganization,
+      makeUser,
+      makeAgent,
+    });
+    const streamTail = vi
+      .spyOn(agentRunTranscriptStore, "streamTail")
+      .mockRejectedValue(new Error("sizes query failed"));
+    try {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_logs",
+          payload: { runId: task.id, tailBytes: 64 * 1024 },
+        },
+        ws,
+      );
+    } finally {
+      streamTail.mockRestore();
+    }
+    const sent = vi
+      .mocked(ws.send)
+      .mock.calls.map(([message]) => JSON.parse(String(message)));
+    expect(
+      sent
+        .filter((message) => message.type === "agent_run_logs")
+        .map((message) => message.payload.logs)
+        .join(""),
+    ).toBe(recording);
+    expect(sent.at(-1).type).toBe("agent_run_logs_ended");
+  });
+
+  test("a session history that cannot be counted ends the tail in an error", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const { ws, task } = await makeEndedRunWithRecording({
+      makeOrganization,
+      makeUser,
+      makeAgent,
+    });
+    const listPreviousTurns = vi
+      .spyOn(AgentRunModel, "listPreviousTurns")
+      .mockRejectedValue(new Error("connection reset"));
+    try {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_logs",
+          payload: {
+            runId: task.id,
+            includeSessionHistory: true,
+            tailBytes: 64 * 1024,
+          },
+        },
+        ws,
+      );
+    } finally {
+      listPreviousTurns.mockRestore();
+    }
+    const sent = vi
+      .mocked(ws.send)
+      .mock.calls.map(([message]) => JSON.parse(String(message)));
+    expect(sent.at(-1)).toEqual({
+      type: "agent_run_logs_error",
+      payload: { runId: task.id, error: "Could not read session history" },
+    });
+    expect(
+      sent.some((message) => message.type === "agent_run_logs_ended"),
+    ).toBe(false);
+  });
+
   test("owner session history includes earlier turns while shared access remains per turn", async ({
     makeOrganization,
     makeUser,
@@ -4266,4 +4390,54 @@ async function flushDeferredRefresh() {
   for (let i = 0; i < 3; i++) {
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
+}
+
+/** An ended run with a small complete recording, and a client subscribed as its owner. */
+async function makeEndedRunWithRecording(fixtures: {
+  makeOrganization: () => Promise<{ id: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  makeAgent: (params: { organizationId: string }) => Promise<{ id: string }>;
+}) {
+  const organization = await fixtures.makeOrganization();
+  const owner = await fixtures.makeUser();
+  const agent = await fixtures.makeAgent({ organizationId: organization.id });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: owner.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_COMPLETED",
+  });
+  const run = await AgentRunModel.create({
+    organizationId: organization.id,
+    taskId: task.id,
+    agentId: agent.id,
+    actorKind: "user",
+    actorId: owner.id,
+    actorUserId: owner.id,
+    workloadName: `agent-run-${task.id}`,
+    backend: "kubernetes",
+    runtimeScope: "archestra-dev",
+    virtualApiKeyId: null,
+  });
+  await AgentRunModel.close({ id: run.id, logs: "final tail\n" });
+  const recording = `${"recorded line\n".repeat(200)}done ✓\n`;
+  await agentRunTranscriptStore.persist({
+    runId: run.id,
+    transcript: recording,
+    observedBytes: Buffer.byteLength(recording),
+  });
+  const ws = {
+    readyState: WS.OPEN,
+    send: vi.fn(),
+    close: vi.fn(),
+  } as unknown as WS;
+  service.clientContexts.set(ws, {
+    userId: owner.id,
+    organizationId: organization.id,
+    userIsMcpServerAdmin: false,
+  });
+  return { ws, task, run, owner, organization, recording };
 }

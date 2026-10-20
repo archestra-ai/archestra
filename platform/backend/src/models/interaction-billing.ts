@@ -34,6 +34,8 @@ export default class InteractionBillingModel {
     } = params;
     // Prices may change between an ambiguous commit and its retry. Identity is
     // based on provider counts and admission attribution, never a new quote.
+    // logIdentity uses admitted IDs, not the nullable log columns repaired on
+    // an FK retry; deleting a log reference must not change receipt identity.
     const fingerprint = createHash("sha256")
       .update(
         JSON.stringify({

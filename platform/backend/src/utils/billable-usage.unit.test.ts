@@ -156,6 +156,8 @@ describe("cumulative provider accounting", () => {
     expect(() => parseUsageAccountingMode("client-choice")).toThrow();
     expect(() => moneyUnits("-0.01")).toThrow();
     expect(() => sumMoney(["1.00", "-0.01"])).toThrow();
+    expect(moneyUnits("0001.00")).toBe(10_000_000_000n);
+    expect(() => moneyUnits("1".repeat(1000))).toThrow();
     expect(() =>
       priceTokens(
         {

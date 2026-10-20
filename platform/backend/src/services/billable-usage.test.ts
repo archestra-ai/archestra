@@ -39,7 +39,21 @@ test("uses provider-specific rates for model-name collisions and preserves known
   expect(authoritative.components[0].prices.source).toBe("provider");
 });
 
-test("a reported total is preserved when a multi-model allocation cannot be authoritative", async () => {
+test.each([
+  false,
+  true,
+])("a reported total is preserved when a multi-model allocation cannot be authoritative (zero weights=%s)", async (zeroWeights) => {
+  if (zeroWeights)
+    for (const model of ["executor", "advisor"])
+      await ModelModel.create({
+        provider: "anthropic",
+        modelId: model,
+        externalId: `anthropic/${model}`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        customPricePerMillionInput: "0",
+        customPricePerMillionOutput: "0",
+      });
   const usage = normalizeAnthropicUsage(
     {
       input_tokens: 100,
@@ -69,6 +83,10 @@ test("a reported total is preserved when a multi-model allocation cannot be auth
   );
   expect(priced.status).toBe("incomplete");
   expect(priced.issues).toContain("unallocated_provider_cost");
+  if (zeroWeights) {
+    expect(priced.components[0].cost).toBe("0.0000000000");
+    expect(priced.components[1].cost).toBe(priced.cost);
+  }
 });
 
 test("reuses the request quote across metrics and settlement when model prices change", async () => {

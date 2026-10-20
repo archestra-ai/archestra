@@ -108,6 +108,8 @@ export async function priceBillingUsage(params: {
         const denominator = weights.reduce((sum, item) => sum + item, 0n);
         let remainder = total;
         for (let index = 0; index < components.length; index++) {
+          // With no price weights, retain the total on the final component.
+          // Allocation remains incomplete, so budgets cannot trust that split.
           const allocated =
             index === components.length - 1
               ? remainder
@@ -131,6 +133,7 @@ export async function priceBillingUsage(params: {
     components,
     cost: sumMoney(components.map((item) => item.cost)),
   };
+  // Request-scoped memoization keeps later metrics and settlement on this quote.
   usage.billingQuote = { model, provider, priced };
   return priced;
 }

@@ -242,7 +242,10 @@ export function priceTokens(usage: UsageTokens, prices: TokenPrices): string {
   return formatMoney((numerator + divisor / 2n) / divisor);
 }
 
-/** Cache charges and avoided uncached-input charges, from the same quote. */
+/**
+ * Cache charges and avoided uncached-input charges, from the same quote.
+ * Savings can be negative when cache writes cost more than uncached input.
+ */
 export function componentCacheCosts(component: PricedComponent) {
   const prices = {
     ...component.prices,
@@ -367,7 +370,8 @@ function tokens(usage: Record<string, unknown>, issues: string[]): UsageTokens {
 }
 
 function decimal(value: string, scale: number): bigint {
-  if (!/^\d+(?:\.\d+)?$/.test(value)) {
+  // Leading zeroes are valid decimal notation. Bound input before BigInt work.
+  if (value.length > 128 || !/^\d+(?:\.\d+)?$/.test(value)) {
     throw new Error("Billing charges must be nonnegative decimal amounts");
   }
   const [whole, fraction = ""] = value.split(".");

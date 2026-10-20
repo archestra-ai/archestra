@@ -760,7 +760,7 @@ class LimitModel {
           incomplete: usage.status === "incomplete" ? 1 : 0,
         });
       }
-      // A missing model must also protect caps scoped to that unknown model.
+      // An unmatched unknown model must still block the budget until reset.
       if (usage.status === "incomplete" && !matched.length) {
         const model =
           "urn:archestra:billing:incomplete:5707b463-67d0-4e54-a8f4-2c3897e186ba";

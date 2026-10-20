@@ -669,15 +669,10 @@ class InteractionDeltaManager {
     return map;
   }
 
-  /**
-   * Fold a row's parent chain, reusing cached ancestors and caching the
-   * target. `cache` false leaves the cache untouched for a caller that folds
-   * a whole thread and reads each result once.
-   */
+  /** Fold a row's parent chain, reusing cached ancestors and caching the target. */
   private static foldFor(
     id: string,
     map: Map<string, ChainRow>,
-    cache = true,
   ): FullRequest | null {
     const target = map.get(id);
     if (!target) return null;
@@ -687,7 +682,7 @@ class InteractionDeltaManager {
         request: target.request,
         processedRequest: target.processedRequest,
       };
-      if (cache) InteractionDeltaManager.reconstructCache.set(id, full);
+      InteractionDeltaManager.reconstructCache.set(id, full);
       return full;
     }
 
@@ -718,7 +713,7 @@ class InteractionDeltaManager {
     // Intermediate conversations grow with every turn. Sizing and retaining
     // each prefix repeats work over the same messages and churns the byte
     // budget; only the requested target needs a new cache entry.
-    if (foldedTarget && cache) {
+    if (foldedTarget) {
       InteractionDeltaManager.reconstructCache.set(id, foldedTarget);
     }
 

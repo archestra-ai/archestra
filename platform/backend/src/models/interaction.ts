@@ -1950,10 +1950,13 @@ class InteractionModel {
         })),
       ),
     );
+    // Counted from the rows as loaded, not from the sizing query: a
+    // concurrent run can fill rows between the two.
+    const targets = rows.filter((row) => row.missing).length;
     const filled = await InteractionModel.storeSessionPreviews(values);
     return {
       filled,
-      failed: missing - values.length,
+      failed: targets - values.length,
       skipped: false,
       storedBytes,
     };

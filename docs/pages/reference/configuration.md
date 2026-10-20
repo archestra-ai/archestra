@@ -871,7 +871,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
   - Setting it enables the code sandbox. Agents bound to an [environment](/docs/admin/environments) still run on that environment's managed engine.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for sandbox containers.
-  - Default: `ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim`
+  - Default: `ghcr.io/astral-sh/uv:0.13.4-python3.14-trixie-slim`
   - Values: a Debian-based image
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Skips the per-sandbox package install because [`ARCHESTRA_DAGGER_RUNTIME_IMAGE`](/docs/reference/configuration#ARCHESTRA_DAGGER_RUNTIME_IMAGE) is a pre-built sandbox base image.

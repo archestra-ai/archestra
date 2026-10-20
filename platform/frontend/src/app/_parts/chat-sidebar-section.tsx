@@ -469,8 +469,8 @@ export function ChatSidebarSection({
             "relative flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
             isCurrentConversation && "bg-sidebar-accent",
             // Reserve the menu gutter only while the menu trigger is visible.
-            // With a status indicator the gutter opens left of it instead,
-            // so the indicator keeps its column.
+            // With a status indicator the trigger takes over its slot instead,
+            // so nothing shifts.
             showChatMenu && !hasIndicator && "hover:pr-7 focus-within:pr-7",
             showChatMenu && !hasIndicator && isMenuOpen && "pr-7",
           )}
@@ -591,10 +591,11 @@ export function ChatSidebarSection({
               {hasIndicator && (
                 <span
                   className={cn(
-                    "ml-1 flex size-4 shrink-0 items-center justify-center",
+                    "ml-1 flex size-4 shrink-0 items-center justify-center transition-opacity",
+                    // The menu trigger is drawn over this slot while visible.
                     showChatMenu &&
-                      "group-hover/menu-sub-item:ml-7 group-focus-within/menu-sub-item:ml-7",
-                    showChatMenu && isMenuOpen && "ml-7",
+                      "group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0",
+                    showChatMenu && isMenuOpen && "opacity-0",
                   )}
                 >
                   {isGenerating ? (
@@ -639,7 +640,8 @@ export function ChatSidebarSection({
               onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
               onRename={() => handleStartEdit(conv.id, displayTitle)}
               triggerClassName={cn(
-                hasIndicator ? "right-9" : "right-1",
+                // right-4 = row pr-2 + button p-2: the indicator's slot.
+                hasIndicator ? "right-4" : "right-1",
                 isMenuOpen
                   ? "opacity-100"
                   : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",

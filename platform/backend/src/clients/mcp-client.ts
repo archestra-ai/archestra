@@ -4275,6 +4275,7 @@ class McpClient {
           inputSchema: tool.inputSchema as Record<string, unknown>,
           _meta: tool._meta,
           annotations: tool.annotations,
+          outputSchema: tool.outputSchema,
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");

@@ -643,6 +643,7 @@ export async function buildAgentMcpToolList(params: {
                 description ??
                 undefined),
       inputSchema: parameters,
+      ...advertisedOutputSchema(meta?.outputSchema),
       annotations: meta?.annotations || {},
       _meta: ALWAYS_LOADED_SHORT_NAMES.has(
         archestraMcpBranding.getToolShortName(name) ?? "",
@@ -1464,7 +1465,11 @@ export async function createAgentServer(params: {
       // Clients using protocol 2026-07-28 reject results without this property.
       // `InputRequiredResult` includes its own `resultType`.
       execute: async (signal) => {
-        const result = await executeCallToolRequest(signal);
+        const result = await withoutPlatformErrorEnvelopeForSchemaTool({
+          result: await executeCallToolRequest(signal),
+          agentId,
+          toolName: name,
+        });
         return "resultType" in result ? result : complete(result);
       },
     });
@@ -2577,6 +2582,8 @@ type McpListToolCandidate = {
   meta?: {
     annotations?: McpListTool["annotations"];
     _meta?: McpListTool["_meta"];
+    /** The upstream tool's declared `outputSchema`, kept at sync time. */
+    outputSchema?: unknown;
   };
   /** A platform built-in by catalog provenance, never by name. */
   builtIn: boolean;
@@ -2591,6 +2598,7 @@ function toMcpListTool(tool: {
   meta?: {
     annotations?: Record<string, unknown>;
     _meta?: Record<string, unknown>;
+    outputSchema?: unknown;
   } | null;
   builtIn?: boolean;
   annotations?: Record<string, unknown>;
@@ -3036,6 +3044,51 @@ export function normalizeToolInputSchema(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Clients validate any `structuredContent` against the tool's advertised
+ * `outputSchema`, error results included (the TypeScript SDK throws on a
+ * mismatch). The platform's error envelope (`structuredContent.archestraError`,
+ * mirrored in `_meta`) never matches an upstream tool's schema, so for a tool
+ * that advertises one the envelope travels in `_meta` and `content` only.
+ * Otherwise the client would surface a schema-validation failure in place of
+ * the actual refusal or upstream error.
+ */
+async function withoutPlatformErrorEnvelopeForSchemaTool(params: {
+  result: Record<string, unknown>;
+  agentId: string;
+  toolName: string;
+}): Promise<Record<string, unknown>> {
+  const { result } = params;
+  if (
+    !result.isError ||
+    !isRecord(result.structuredContent) ||
+    !("archestraError" in result.structuredContent) ||
+    !(await ToolModel.assignedToolDeclaresOutputSchema({
+      agentId: params.agentId,
+      name: params.toolName,
+    }))
+  ) {
+    return result;
+  }
+  const { structuredContent: _platformEnvelope, ...rest } = result;
+  return rest;
+}
+
+/**
+ * The `outputSchema` field for a tools/list entry, or nothing. An upstream
+ * tool's schema is advertised as-is so clients can validate the
+ * `structuredContent` tools/call relays unchanged. Only an object schema is
+ * valid MCP: anything else would make a client reject the whole list, so it
+ * is dropped rather than passed through.
+ */
+function advertisedOutputSchema(
+  schema: unknown,
+): Pick<McpListTool, "outputSchema"> {
+  return isRecord(schema) && schema.type === "object"
+    ? { outputSchema: schema as McpListTool["outputSchema"] }
+    : {};
 }
 
 function isArchestraMetaTool(toolName: string) {

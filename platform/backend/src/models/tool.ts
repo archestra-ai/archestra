@@ -2353,6 +2353,35 @@ class ToolModel {
   }
 
   /**
+   * Whether a tool assigned to the agent under `name` declares an upstream
+   * object `outputSchema`, i.e. whether the MCP gateway advertises one for it.
+   */
+  static async assignedToolDeclaresOutputSchema(params: {
+    agentId: string;
+    name: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        and(
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+          eq(schema.agentToolsTable.agentId, params.agentId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.name, params.name),
+          sql`${schema.toolsTable.meta}->'outputSchema'->>'type' = 'object'`,
+          notDeleted(schema.toolsTable),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
    * Rows a catalog's tool picker lists: discovered (not a pending clone),
    * active, and without the meta/knowledge dispatch tools the pickers never
    * show. Shared by {@link findByCatalogId}, {@link findListableByCatalogIds}

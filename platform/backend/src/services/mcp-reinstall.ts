@@ -383,6 +383,7 @@ export async function autoReinstallServer(
         inputSchema: Record<string, unknown>;
         _meta?: Record<string, unknown>;
         annotations?: Record<string, unknown>;
+        outputSchema?: Record<string, unknown>;
       }>
     >;
   },
@@ -499,6 +500,7 @@ async function syncToolsForServer(
         inputSchema: Record<string, unknown>;
         _meta?: Record<string, unknown>;
         annotations?: Record<string, unknown>;
+        outputSchema?: Record<string, unknown>;
       }>
     >;
   },
@@ -512,7 +514,11 @@ async function syncToolsForServer(
     name: ToolModel.slugifyName(toolNamePrefix, tool.name),
     description: tool.description,
     parameters: tool.inputSchema,
-    meta: { _meta: tool._meta, annotations: tool.annotations },
+    meta: {
+      _meta: tool._meta,
+      annotations: tool.annotations,
+      outputSchema: tool.outputSchema,
+    },
     catalogId: catalogItem.id,
     rawToolName: tool.name,
   }));

@@ -41,7 +41,7 @@ use crate::{
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
 /// override with `ARCHESTRA_DAGGER_RUNTIME_IMAGE` for a custom debian-based base.
-pub const DEFAULT_BASE_IMAGE: &str = "ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim";
+pub const DEFAULT_BASE_IMAGE: &str = "ghcr.io/astral-sh/uv:0.13.4-python3.15-trixie-slim";
 
 /// layered on top of the base on first warm; the toolbelt every sandbox can rely on.
 pub const DEFAULT_APT_PACKAGES: &[&str] = &[
@@ -92,20 +92,27 @@ const ARTIFACT_TOO_LARGE_EXIT_CODE: isize = 65;
 const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
 
 /// shell snippet baked into the warm base: writes a `pip` shim that redirects
-/// to uv and aliases `pip3`/`pip3.12` to the same shim. we `rm -f` first
+/// to uv and aliases `pip3`/`pip3.15` to the same shim. we `rm -f` first
 /// because the upstream uv-python image ships `pip` as a symlink to `pip3`,
 /// so a naive `> /usr/local/bin/pip` would follow the symlink and write to
 /// `pip3` instead — and the follow-up `cp pip pip3` would refuse with
 /// "are the same file". kept as a const so it shows up verbatim in build
 /// logs and survives `cargo fmt`.
-const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 && printf '%s\\n' '#!/bin/sh' 'echo \"error: pip is disabled in this sandbox. Use \\\"uv add --project /home/sandbox <pkg>\\\" instead.\" >&2' 'exit 1' > /usr/local/bin/pip && chmod +x /usr/local/bin/pip && ln -s pip /usr/local/bin/pip3 && ln -s pip /usr/local/bin/pip3.12";
+const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.15 && printf '%s\\n' '#!/bin/sh' 'echo \"error: pip is disabled in this sandbox. Use \\\"uv add --project /home/sandbox <pkg>\\\" instead.\" >&2' 'exit 1' > /usr/local/bin/pip && chmod +x /usr/local/bin/pip && ln -s pip /usr/local/bin/pip3 && ln -s pip /usr/local/bin/pip3.15";
 
 /// minimal uv project written into the sandbox home so `uv add <pkg>` works:
 /// uv refuses to add to a non-project ("No `pyproject.toml` found"), and the
 /// project's default `.venv` is exactly `DEFAULT_VENV_DIR`. model installs via
 /// `uv add` and skill `requirements.txt` installs (also `uv add --project … -r`)
 /// therefore land in the same interpreter that `python3` resolves to.
-const PYPROJECT_SETUP: &str = "printf '[project]\\nname = \"sandbox\"\\nversion = \"0.0.0\"\\nrequires-python = \">=3.12\"\\n' > pyproject.toml";
+const PYPROJECT_SETUP: &str = "printf '[project]\\nname = \"sandbox\"\\nversion = \"0.0.0\"\\nrequires-python = \">=3.15\"\\n' > pyproject.toml";
+
+/// the upstream python image ships its stdlib without bytecode, and the
+/// sandbox user cannot write it, so every short-lived container recompiles
+/// each stdlib module it imports. compiled once into the warm base instead.
+/// `compile_dir`'s result is ignored: the stdlib carries deliberately invalid
+/// test fixtures.
+const STDLIB_BYTECODE_SETUP: &str = "python3 -c \"import compileall, sysconfig; compileall.compile_dir(sysconfig.get_path('stdlib'), quiet=2, workers=0)\"";
 
 /// the Dagger engine connection plus its lazily-warmed base image. one per
 /// session; cloned `DaggerConn` handles are cheap (an Arc internally).
@@ -608,7 +615,17 @@ pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
 /// stays under test without a live engine.
 fn warm_base_user_setup(py_requirements: &str) -> String {
     format!(
-        "cd {SKILL_SANDBOX_HOME} && {PYPROJECT_SETUP} && uv venv --python python3 {DEFAULT_VENV_DIR} && uv add {py_requirements}"
+        "cd {SKILL_SANDBOX_HOME} && {PYPROJECT_SETUP} && uv venv --python python3 {DEFAULT_VENV_DIR} && UV_COMPILE_BYTECODE=1 uv add {py_requirements}"
+    )
+}
+
+/// root-level exec closing a skill mount. bytecode is hash-checked because
+/// file timestamps in Dagger layers say nothing about content; a skill with
+/// invalid python, or a base without python3, still mounts.
+fn skill_mount_setup(root: &str) -> String {
+    let root = shell_quote(root);
+    format!(
+        "python3 -c \"import compileall, py_compile, sys; compileall.compile_dir(sys.argv[1], quiet=2, invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH)\" {root} >/dev/null 2>&1; chown -R {SKILL_SANDBOX_USER} {root}"
     )
 }
 
@@ -631,7 +648,7 @@ fn warm_base_root_setup(prebuilt: bool) -> String {
         false => {
             let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
             format!(
-                "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
+                "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP} && {STDLIB_BYTECODE_SETUP}"
             )
         }
     }
@@ -692,6 +709,8 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         .with_env_variable("HOME", SKILL_SANDBOX_HOME)
         .with_env_variable("SKILL_SANDBOX_ROOT", SKILL_SANDBOX_ROOT)
         .with_env_variable("VIRTUAL_ENV", DEFAULT_VENV_DIR)
+        // sandbox runs are short-lived scripts: only pay for imports they touch.
+        .with_env_variable("PYTHON_LAZY_IMPORTS", "all")
         .with_env_variable("PATH", format!("{DEFAULT_VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"));
 
     // user setup runs as the sandbox user; a prebuilt base already has the venv.
@@ -887,13 +906,15 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
                         container = checkpoint(client, container).await?;
                     }
                 }
-                // chown this skill's tree; with_new_file writes as root.
+                // precompile the skill's python into this cached layer (each run's
+                // container is discarded, so bytecode written at run time never
+                // persists), then chown the tree; with_new_file writes as root.
                 container = container
                     .with_user("root")
                     .with_exec(vec![
                         "sh".to_string(),
                         "-c".to_string(),
-                        format!("chown -R {SKILL_SANDBOX_USER} {}", shell_quote(&root)),
+                        skill_mount_setup(&root),
                     ])
                     .with_user(SKILL_SANDBOX_USER);
                 let mut links = SKILL_MOUNT_CHOWN_CHAIN_LINKS;

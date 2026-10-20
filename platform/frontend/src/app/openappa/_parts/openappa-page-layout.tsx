@@ -136,6 +136,11 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         )
       }
       documentTitle={fileDetail ? "Validation" : page.title}
+      // The title carries the Beta badge, so on a phone it needs the full
+      // row: beside the actions it broke mid-word and pushed the badge down.
+      stackHeaderOnMobile
+      // Two tabs plus the overflow menu fit a 320px phone without scrolling.
+      mobileVisibleCount={2}
       backLink={
         fileDetail || requestedMode?.back ? (
           <PageBackLink href="/openappa/validation">

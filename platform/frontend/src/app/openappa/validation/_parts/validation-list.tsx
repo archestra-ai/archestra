@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 import {
   openRowOnPlainClick,
   RowClickShield,
@@ -126,6 +126,9 @@ export function ValidationList({
     for (const row of rows) c[row.status] += 1;
     return c;
   }, [rows]);
+  const stripItems = STRIP.filter(
+    (item) => item.status === "passed" || counts[item.status] > 0,
+  );
 
   const needle = query.trim().toLowerCase();
   const visible = rows
@@ -160,56 +163,74 @@ export function ValidationList({
         <EmptySuite />
       ) : (
         <>
-          {/* Summary strip: the counts are the status filter. */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <div className="-ml-2 flex flex-wrap items-center gap-0.5">
+          {/* Summary strip: the counts are the status filter. On a phone
+              they are equal tiles on one row, so they never wrap into a
+              ragged line; from `sm` up they read inline, dot-separated. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
+            <div className="flex flex-col gap-2 sm:-ml-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-0.5">
               {loading ? (
-                <Skeleton className="ml-2 h-5 w-64" />
+                <Skeleton className="h-14 w-full sm:ml-2 sm:h-5 sm:w-64" />
               ) : (
-                STRIP.filter(
-                  (item) => item.status === "passed" || counts[item.status] > 0,
-                ).map((item, index) => {
-                  const active = filter === item.status;
-                  return (
-                    <span key={item.status} className="flex items-center">
-                      {index > 0 && (
-                        <span
-                          aria-hidden
-                          className="px-0.5 text-muted-foreground/50"
-                        >
-                          ·
-                        </span>
-                      )}
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        aria-pressed={active}
-                        onClick={() => setFilter(active ? "all" : item.status)}
-                        className={cn(
-                          "text-sm font-normal text-muted-foreground",
-                          active &&
-                            "bg-muted text-foreground hover:bg-muted dark:hover:bg-muted",
-                        )}
+                <div
+                  style={
+                    { "--strip-count": stripItems.length } as CSSProperties
+                  }
+                  className="grid grid-cols-[repeat(var(--strip-count),minmax(0,1fr))] gap-2 sm:flex sm:items-center sm:gap-0.5"
+                >
+                  {stripItems.map((item, index) => {
+                    const active = filter === item.status;
+                    return (
+                      <span
+                        key={item.status}
+                        className="contents sm:flex sm:items-center"
                       >
-                        <StatusGlyph
-                          status={item.status}
-                          className="size-3.5"
-                        />
-                        <span>
-                          <span className="font-medium tabular-nums text-foreground">
+                        {index > 0 && (
+                          <span
+                            aria-hidden
+                            className="hidden px-0.5 text-muted-foreground/50 sm:inline"
+                          >
+                            ·
+                          </span>
+                        )}
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          aria-pressed={active}
+                          onClick={() =>
+                            setFilter(active ? "all" : item.status)
+                          }
+                          className={cn(
+                            "relative grid h-auto min-w-0 grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-x-1.5 gap-y-0.5 rounded-lg border px-3 py-2 text-left font-normal text-muted-foreground has-[>svg]:px-3",
+                            "sm:inline-flex sm:h-7 sm:rounded-md sm:border-0 sm:px-2 sm:py-0 sm:text-sm sm:has-[>svg]:px-1.5",
+                            active &&
+                              "border-foreground/30 bg-muted text-foreground hover:bg-muted dark:hover:bg-muted",
+                          )}
+                        >
+                          <StatusGlyph
+                            status={item.status}
+                            className="size-3.5"
+                          />
+                          <span className="text-base font-medium tabular-nums text-foreground sm:text-sm">
                             {counts[item.status]}
                           </span>{" "}
-                          {item.label}
-                        </span>
-                        {active && <X className="size-3 opacity-60" />}
-                      </Button>
-                    </span>
-                  );
-                })
+                          <span className="col-span-2 truncate text-xs sm:text-sm">
+                            {item.label}
+                          </span>
+                          {active && (
+                            <X className="absolute top-2 right-2 size-3 opacity-60 sm:static" />
+                          )}
+                        </Button>
+                      </span>
+                    );
+                  })}
+                </div>
               )}
               {lastRun && (
-                <span className="flex items-center pl-1 text-sm text-muted-foreground">
-                  <span aria-hidden className="pr-2 text-muted-foreground/50">
+                <span className="block text-xs text-muted-foreground first-letter:uppercase sm:flex sm:items-center sm:pl-1 sm:text-sm">
+                  <span
+                    aria-hidden
+                    className="hidden pr-2 text-muted-foreground/50 sm:inline"
+                  >
                     ·
                   </span>
                   <span>last run&nbsp;</span>

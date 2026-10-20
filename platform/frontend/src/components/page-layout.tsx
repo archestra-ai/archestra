@@ -3,7 +3,7 @@
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeaderBannerSlotContext } from "@/components/page-header-banner";
 import { Button } from "@/components/ui/button";
 import {
@@ -183,6 +183,7 @@ export function PageLayout({
     null,
   );
   const [headerHeight, setHeaderHeight] = useState(0);
+  const mobileTabsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!headerElement) return;
@@ -209,6 +210,22 @@ export function PageLayout({
     selectedTab && mobileOverflowTabs.includes(selectedTab)
       ? selectedTab
       : undefined;
+
+  // On a narrow phone the tab row scrolls sideways; bring the selected tab
+  // (or the overflow trigger naming it) into view so the reader can see
+  // where they are without swiping for it.
+  const selectedTabHref = selectedTab?.href;
+  useEffect(() => {
+    const row = mobileTabsRef.current;
+    if (!row || !selectedTabHref) return;
+    const selected = row.querySelector<HTMLElement>("[data-tab-selected]");
+    if (!selected) return;
+    const overflowEnd =
+      selected.offsetLeft + selected.offsetWidth - row.clientWidth;
+    if (overflowEnd > row.scrollLeft) row.scrollLeft = overflowEnd;
+    else if (selected.offsetLeft < row.scrollLeft)
+      row.scrollLeft = selected.offsetLeft;
+  }, [selectedTabHref]);
 
   return (
     <PageHeaderBannerSlotContext.Provider value={bannerSlot}>
@@ -375,7 +392,7 @@ export function PageLayout({
             {tabs.length > 0 && (
               <>
                 {/* Desktop: Show all tabs */}
-                <div className="hidden md:flex gap-4 mb-0 overflow-x-auto whitespace-nowrap">
+                <div className="hidden md:flex gap-4 mb-0 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {tabs.map((tab) => {
                     const isSelected = tab === selectedTab;
                     return (
@@ -405,7 +422,12 @@ export function PageLayout({
                 {/* Mobile: Show first N tabs + overflow dropdown */}
                 {/* Same rhythm as the desktop row; the overflow menu sits at the far
                     end so the visible tabs keep their spacing. */}
-                <div className="flex md:hidden gap-4 mb-0 items-end whitespace-nowrap overflow-x-auto">
+                {/* The row still scrolls on a very narrow phone; a scrollbar
+                    under a tab strip only reads as a stray line. */}
+                <div
+                  ref={mobileTabsRef}
+                  className="relative flex md:hidden gap-4 mb-0 items-end whitespace-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
                   {mobileVisibleTabs.map((tab) => {
                     const isSelected = tab === selectedTab;
                     return (
@@ -414,6 +436,7 @@ export function PageLayout({
                         href={tab.href}
                         onClick={tab.onClick}
                         aria-current={isSelected ? "page" : undefined}
+                        data-tab-selected={isSelected || undefined}
                         className={cn(
                           "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
                           isSelected
@@ -434,6 +457,9 @@ export function PageLayout({
                       <PopoverTrigger asChild>
                         <Button
                           variant="ghost"
+                          data-tab-selected={
+                            selectedOverflowTab ? true : undefined
+                          }
                           className={cn(
                             "relative ml-auto h-auto cursor-pointer rounded-none px-0 pt-0 pb-3 text-sm font-medium transition-colors hover:bg-transparent dark:hover:bg-transparent hover:text-foreground flex items-center gap-1",
                             selectedOverflowTab

@@ -18,10 +18,10 @@ crate-type = ["cdylib"]
 # parallel subagent spawns waiting for the earlier bind (#694), and plain
 # errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
 # and the generic coding battery (#697).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cf81bfa8821f578de556490bfebaa9975b4049cd", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cf81bfa8821f578de556490bfebaa9975b4049cd" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cf81bfa8821f578de556490bfebaa9975b4049cd", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "cf81bfa8821f578de556490bfebaa9975b4049cd" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

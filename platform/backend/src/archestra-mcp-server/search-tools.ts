@@ -37,6 +37,12 @@ import {
 import { filterToolNamesByPermission } from "./rbac";
 import { getSkillDelegationTools } from "./skill-delegation";
 
+// The most tools one search returns. A model that wants the whole catalog
+// often asks for more (limit: 100), so a larger limit is capped instead of
+// failing the call. The schema has no `maximum` for the same reason: a client
+// that checks input against it would refuse the call before it arrives.
+const MAX_SEARCH_LIMIT = 20;
+
 const SearchToolsArgsSchema = z
   .object({
     query: z
@@ -51,10 +57,12 @@ const SearchToolsArgsSchema = z
       .number()
       .int()
       .positive()
-      .max(20)
+      .overwrite((limit) => Math.min(limit, MAX_SEARCH_LIMIT))
       .optional()
       .default(8)
-      .describe("Maximum number of matching tools to return."),
+      .describe(
+        `Maximum number of matching tools to return, at most ${MAX_SEARCH_LIMIT}. A larger value returns ${MAX_SEARCH_LIMIT}.`,
+      ),
     mode: z
       .enum(["keyword", "regex"])
       .optional()
@@ -935,8 +943,12 @@ function buildSearchHint(params: {
       `No tools matched. Try broader or different keywords, or switch mode.${serverHint}${sandboxHint}`,
     );
   } else if (truncated) {
+    // At the cap, "raise limit" would send the model back for a larger limit
+    // that returns the same page.
     parts.push(
-      `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max 20).`,
+      limit < MAX_SEARCH_LIMIT
+        ? `Showing the top ${limit} of ${matchCount} matches. Narrow the query or raise limit (max ${MAX_SEARCH_LIMIT}).`
+        : `Showing the top ${limit} of ${matchCount} matches. One search returns at most ${MAX_SEARCH_LIMIT}, so narrow the query to see the others.`,
     );
   }
 

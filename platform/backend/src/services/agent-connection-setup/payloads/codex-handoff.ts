@@ -1,3 +1,5 @@
+import { SETUP_STOPPED_EXIT_CODE } from "../types";
+
 /** Local helper installed beside the guard. Prepares direct mode and reads native config. */
 export const CODEX_HANDOFF_HELPER = String.raw`
 const { spawn, spawnSync } = require('node:child_process');
@@ -27,6 +29,7 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
   const authFile = path.join(home, 'auth.json');
   let nativeAuth;
   let result;
+  let failed = true;
   try {
     chmodSync(shadow, 0o700);
     const content = restoreManagedConfig(original);
@@ -83,13 +86,20 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
       // it and keeps this folder in use on Windows. Unlike --disable, a -c
       // feature that a Codex version does not know is ignored.
       const account = readCodexAccount(command, [...args, ...overrides, '-c', 'features.plugins=false', 'app-server'], options);
+      // If a Codex version saved a renewal as a new file, the new sign-in would
+      // be deleted with this folder and the login it replaced would be spent.
+      const shadowAuth = path.join(shadow, 'auth.json');
+      const renewedAuth = nativeAuth && existsSync(shadowAuth) ? statSync(shadowAuth, { bigint: true }) : null;
+      if (nativeAuth && (!renewedAuth || renewedAuth.dev !== nativeAuth.dev || renewedAuth.ino !== nativeAuth.ino)) throw catalogError('renewal-lost');
       const type = account?.result?.account?.type;
       if (account?.error && /unauthorized|\b401\b/i.test(String(account.error.message))) throw catalogError('expired');
       if (account?.result && account.result.account === null) throw catalogError(nativeAuth ? 'expired' : 'signed-out');
       if (type === 'apiKey') throw catalogError('api-key');
-      if (type === 'chatgpt') result = readCatalog();
+      // Another download can only help when the renewal saved new credentials.
+      if (type === 'chatgpt' && renewedAuth && (renewedAuth.mtimeNs !== nativeAuth.mtimeNs || renewedAuth.size !== nativeAuth.size)) result = readCatalog();
       if (!result) throw catalogError('connectivity');
     }
+    failed = false;
   } finally {
     try {
       if (nativeAuth) {
@@ -101,8 +111,12 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
     } finally {
       // Remove the login link first, so a folder that Windows still reports as
       // in use never keeps a copy of the sign-in.
-      try { rmSync(path.join(shadow, 'auth.json'), { force: true }); }
-      finally { rmSync(shadow, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+      const retry = { recursive: true, force: true, maxRetries: 10, retryDelay: 100 };
+      try { rmSync(path.join(shadow, 'auth.json'), retry); }
+      finally {
+        // A leftover folder without the sign-in must not hide why setup stopped.
+        try { rmSync(shadow, retry); } catch (error) { if (!failed) throw error; }
+      }
     }
   }
   const catalog = JSON.parse(result.stdout);
@@ -134,6 +148,7 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
 const CATALOG_FAILURES = {
   'signed-out': ['Codex is not signed in on this computer.', 'Run \x60codex login\x60'],
   expired: ['Codex could not renew its ChatGPT sign-in. The sign-in has expired or was ended elsewhere.', 'Run \x60codex login\x60'],
+  'renewal-lost': ['Codex renewed its ChatGPT sign-in, but setup could not keep the renewed sign-in.', 'Run \x60codex login\x60'],
   'api-key': ['Codex could not download its model list with its OpenAI API key.', 'Check the key and that this computer can reach api.openai.com (proxy, VPN or firewall)'],
   connectivity: ['Codex could not download its model list.', 'Check that this computer can reach chatgpt.com (proxy, VPN or firewall)'],
 };
@@ -422,7 +437,8 @@ if (process.argv[2] === '--setup-only') {
   catch (error) {
     const next = error.action ? '' : ' Fix the problem above, then start a new installer run.';
     process.stderr.write('Codex setup preflight failed: ' + withNextStep(error, 'start a new installer run') + '\nNo client configuration was changed.' + next + '\n');
-    process.exitCode = 1;
+    // The cause and the next step are printed; the setup script stops quietly.
+    process.exitCode = ${SETUP_STOPPED_EXIT_CODE};
   }
 } else if (process.argv[2] === '--direct' || process.argv[2] === '--install-direct') {
   try {
@@ -555,8 +571,10 @@ function finish(reply) {
   setTimeout(() => { child.kill(); process.exit(0); }, 3000).unref();
 }
 function send(message) { child.stdin.write(JSON.stringify(message) + '\n'); }
-child.on('error', () => { finish(); process.exit(0); });
-child.on('exit', () => { finish(); process.exit(0); });
+// 'close' comes after Codex's last output line, and this process then ends
+// on its own once the reply is written.
+child.on('error', () => finish());
+child.on('close', () => finish());
 child.stdin.on('error', () => finish());
 createInterface({ input: child.stdout }).on('line', line => {
   let reply;

@@ -86,7 +86,11 @@ if (args.includes('app-server')) {
     if (message.method !== 'account/read') return;
     if (!message.params.refreshToken) process.exit(1);
     const reply = { id: message.id, result: { account: null, requiresOpenaiAuth: true } };
-    if (process.env.ACCOUNT === 'chatgpt') { fs.writeFileSync(renewed, ''); reply.result.account = { type: 'chatgpt', email: 'user@example.com', planType: 'plus' }; }
+    // Codex saves a renewal in place; chatgpt-replaced writes a new file instead
+    // and chatgpt-unchanged is a sign-in that needed no renewal.
+    if (process.env.ACCOUNT?.startsWith('chatgpt')) reply.result.account = { type: 'chatgpt', email: 'user@example.com', planType: 'plus' };
+    if (process.env.ACCOUNT === 'chatgpt') { fs.writeFileSync(renewed, ''); fs.writeFileSync(path.join(home, 'auth.json'), '{"auth_mode":"chatgpt","tokens":"renewed"}'); }
+    if (process.env.ACCOUNT === 'chatgpt-replaced') { fs.writeFileSync(path.join(home, 'auth.json.tmp'), '{"auth_mode":"chatgpt","tokens":"renewed"}'); fs.renameSync(path.join(home, 'auth.json.tmp'), path.join(home, 'auth.json')); }
     if (process.env.ACCOUNT === 'unauthorized') { delete reply.result; reply.error = { code: -32603, message: 'workspace routing discovery unauthorized (401)' }; }
     console.log(JSON.stringify(reply));
   });
@@ -289,7 +293,13 @@ test("preflight shows the Codex error for a config Codex cannot load", async () 
   }
 });
 
-test.each([
+test.each<{
+  name: string;
+  env: Record<string, string>;
+  signedIn: boolean;
+  downloads?: number;
+  message: string;
+}>([
   {
     name: "a missing sign-in",
     env: { STALE_CATALOG: "1" },
@@ -314,8 +324,24 @@ test.each([
     name: "a renewed sign-in that still gets no model list",
     env: { STALE_CATALOG: "1", ACCOUNT: "chatgpt" },
     signedIn: true,
+    downloads: 2,
     message:
       "Codex could not download its model list. Check that this computer can reach chatgpt.com (proxy, VPN or firewall), then start a new installer run.",
+  },
+  {
+    // Nothing changed, so a second download could only fail the same way.
+    name: "a valid sign-in that still gets no model list",
+    env: { STALE_CATALOG: "1", ACCOUNT: "chatgpt-unchanged" },
+    signedIn: true,
+    downloads: 1,
+    message: "Codex could not download its model list.",
+  },
+  {
+    name: "a renewal that Codex saves as a new file",
+    env: { STALE_CATALOG: "1", ACCOUNT: "chatgpt-replaced" },
+    signedIn: true,
+    message:
+      "Codex renewed its ChatGPT sign-in, but setup could not keep the renewed sign-in. Run `codex login`, then start a new installer run.",
   },
   {
     name: "a Codex without app-server",
@@ -326,6 +352,7 @@ test.each([
 ])("preflight names the cause of a stale model list: $name", async ({
   env,
   signedIn,
+  downloads,
   message,
 }) => {
   const f = await fixture();
@@ -348,6 +375,9 @@ test.each([
     // temporary Codex home in use on Windows, so its removal fails.
     expect(calls).toContain("-c features.plugins=false app-server");
     expect(calls).not.toMatch(/mcp |plugin /);
+    if (downloads) {
+      expect(calls.match(/^debug models/gm)).toHaveLength(downloads);
+    }
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }
@@ -372,6 +402,27 @@ test("a sign-in that Codex renews during preflight lets setup continue", async (
     const calls = await readFile(path.join(f.home, "calls"), "utf8");
     expect(calls.match(/app-server/g)).toHaveLength(1);
     expect(calls).toContain("mcp add");
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test("a preflight that fails without naming a cause keeps the installer's generic ending", async () => {
+  const f = await fixture();
+  try {
+    // Fails only the preflight's node process, like a crash in its backup step.
+    await writeFile(
+      path.join(f.home, "node"),
+      `#!/bin/bash\ncase "$*" in *setupProxy*) echo 'Error: backup failed' >&2; exit 1;; esac\nexec '${process.execPath}' "$@"\n`,
+    );
+    await chmod(path.join(f.home, "node"), 0o700);
+    const result = await exec("bash", [f.script], { env: f.env }).catch(
+      (error) => error,
+    );
+    expect(result.stderr).toContain("Error: backup failed");
+    // Not the stop status, so the installer adds its own next step.
+    expect(result.code).toBe(1);
+    expect(await readFile(f.config, "utf8")).toBe(original);
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }

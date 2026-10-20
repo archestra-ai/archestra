@@ -1337,26 +1337,13 @@ foreach ($index in 0..${params.proxies.length - 1}) {
 }
 
 describe.skipIf(!powershellAvailable)("PowerShell Codex preflight", () => {
-  test.each([
-    {
-      // How the installer runs the downloaded script.
-      invocation: "-File",
-      args: (script: string) => ["-File", script],
-      status: SETUP_STOPPED_EXIT_CODE,
-    },
-    {
-      // A pasted one-liner runs in the user's session, which stays open.
-      invocation: "irm | iex",
-      args: (script: string) => [
-        "-Command",
-        `Get-Content -Raw '${script}' | Invoke-Expression; Write-Host 'session still open'`,
-      ],
-      status: 0,
-    },
-  ])("a stale model list stops setup with the cause once and no error record ($invocation)", async ({
-    args,
-    status,
-  }) => {
+  // Runs a rendered Codex setup script against a Codex that answers model
+  // discovery from the bundled catalog, writes no cache and has no app-server,
+  // like an offline or older Codex.
+  async function runSetup(
+    args: (script: string) => string[],
+    { failPreflightNode = false } = {},
+  ) {
     const root = await mkdtemp(
       path.join(tmpdir(), "archestra-codex-preflight-powershell-"),
     );
@@ -1367,10 +1354,16 @@ describe.skipIf(!powershellAvailable)("PowerShell Codex preflight", () => {
       await mkdir(path.dirname(configPath), { recursive: true });
       await mkdir(bin);
       await writeFile(configPath, CODEX_CONFIG_WITH_TRAILING_TABLE);
-      // Answers model discovery from the bundled catalog, writes no cache and
-      // has no app-server, like an offline or older Codex.
       await writeFile(path.join(bin, "codex"), codexMcpStub("USERPROFILE"));
       await chmod(path.join(bin, "codex"), 0o755);
+      if (failPreflightNode) {
+        // Fails only the preflight's node process, like a crash in its backup step.
+        await writeFile(
+          path.join(bin, "node"),
+          `#!/bin/bash\nif [ "$1" = - ] && [ "$3" = proxy ]; then cat > /dev/null; echo 'Error: backup failed' >&2; exit 1; fi\nexec '${process.execPath}' "$@"\n`,
+        );
+        await chmod(path.join(bin, "node"), 0o755);
+      }
       await writeFile(
         path.join(root, "setup.ps1"),
         renderSetupScript({
@@ -1417,21 +1410,58 @@ describe.skipIf(!powershellAvailable)("PowerShell Codex preflight", () => {
           timeout: 60_000,
         },
       );
-      const output = `${result.stdout}${result.stderr}`;
-      expect(result.status).toBe(status);
-      if (status === 0) expect(output).toContain("session still open");
-      expect(output).toContain(
-        "Codex setup preflight failed: Codex could not download its model list. Check that this computer can reach chatgpt.com (proxy, VPN or firewall), then start a new installer run.\nNo client configuration was changed.",
-      );
-      expect(output.match(/start a new installer run/g)).toHaveLength(1);
-      expect(output).not.toMatch(
-        /FullyQualifiedErrorId|CategoryInfo|Setup is incomplete/,
-      );
-      expect(await readFile(configPath, "utf8")).toBe(
-        CODEX_CONFIG_WITH_TRAILING_TABLE,
-      );
+      return {
+        status: result.status,
+        output: `${result.stdout}${result.stderr}`,
+        config: await readFile(configPath, "utf8"),
+      };
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  }
+
+  test.each([
+    {
+      // How the installer runs the downloaded script.
+      invocation: "-File",
+      args: (script: string) => ["-File", script],
+      expectedStatus: SETUP_STOPPED_EXIT_CODE,
+    },
+    {
+      // A pasted one-liner runs in the user's session, which stays open.
+      invocation: "irm | iex",
+      args: (script: string) => [
+        "-Command",
+        `Get-Content -Raw '${script}' | Invoke-Expression; Write-Host 'session still open'`,
+      ],
+      expectedStatus: 0,
+    },
+  ])("a stale model list stops setup with the cause once and no error record ($invocation)", async ({
+    args,
+    expectedStatus,
+  }) => {
+    const { status, output, config } = await runSetup(args);
+    expect(status).toBe(expectedStatus);
+    if (expectedStatus === 0) expect(output).toContain("session still open");
+    expect(output).toContain(
+      "Codex setup preflight failed: Codex could not download its model list. Check that this computer can reach chatgpt.com (proxy, VPN or firewall), then start a new installer run.\nNo client configuration was changed.",
+    );
+    expect(output.match(/start a new installer run/g)).toHaveLength(1);
+    expect(output).not.toMatch(
+      /FullyQualifiedErrorId|CategoryInfo|Setup is incomplete/,
+    );
+    expect(config).toBe(CODEX_CONFIG_WITH_TRAILING_TABLE);
+  });
+
+  test("a preflight failure without a named cause still ends with the generic next step", async () => {
+    const { status, output, config } = await runSetup(
+      (script) => ["-File", script],
+      { failPreflightNode: true },
+    );
+    expect(output).toContain("Error: backup failed");
+    // PowerShell's error view wraps the rest of the message at the console width.
+    expect(output).toContain("Codex preflight failed.");
+    expect(status).toBe(1);
+    expect(config).toBe(CODEX_CONFIG_WITH_TRAILING_TABLE);
   });
 });

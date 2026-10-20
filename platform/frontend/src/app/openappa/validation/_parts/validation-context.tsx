@@ -188,15 +188,29 @@ function useSuite({
     return true;
   }
   /** Runs one saved file and records the result in run history. */
-  function runFile(path: string) {
+  function runFile(
+    path: string,
+    options?: {
+      progressToken?: string;
+      onSettled?: (run: PolicyTestRun | null, error: Error | null) => void;
+    },
+  ) {
     const file = files.find((item) => item.path === path);
-    if (!runnable || !file) return;
-    runMutation.mutate({
-      files: [file],
-      sourceVersion: collection.version,
-      directory: collection.directory,
-      partial: true,
-    });
+    if (!runnable || !file) return false;
+    runMutation.mutate(
+      {
+        files: [file],
+        sourceVersion: collection.version,
+        directory: collection.directory,
+        partial: true,
+        progressToken: options?.progressToken,
+      },
+      {
+        onSuccess: (run) => options?.onSettled?.(run ?? null, null),
+        onError: (error) => options?.onSettled?.(null, error),
+      },
+    );
+    return true;
   }
   const runningPath =
     runMutation.isPending && runMutation.variables?.partial

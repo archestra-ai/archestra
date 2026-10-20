@@ -2,15 +2,11 @@
 
 import {
   AlertTriangle,
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
   CircleX,
   FileCode2,
   History,
   Info,
-  Maximize2,
-  Minimize2,
   RotateCcw,
   X,
 } from "lucide-react";
@@ -132,7 +128,6 @@ export function ValidationRunnerPanel({
   );
   const reduceMotion = usePrefersReducedMotion();
   const [tab, setTab] = useState<Tab>("output");
-  const [size, setSize] = useState<PanelSize>("normal");
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [dragging, setDragging] = useState(false);
   const [seenProblemsAt, setSeenProblemsAt] = useState(-1);
@@ -175,12 +170,7 @@ export function ValidationRunnerPanel({
   }, [done]);
 
   const maxHeight = rect?.height ?? 800;
-  const panelHeight =
-    size === "min"
-      ? TAB_BAR_HEIGHT
-      : size === "max"
-        ? maxHeight
-        : Math.min(height, maxHeight - 64);
+  const panelHeight = Math.min(height, maxHeight);
 
   // Pad the page by the panel's height so content scrolls clear of it.
   useEffect(() => {
@@ -190,11 +180,11 @@ export function ValidationRunnerPanel({
       document.querySelector<HTMLElement>("main");
     if (!el) return;
     const previous = el.style.paddingBottom;
-    el.style.paddingBottom = `${size === "max" ? 0 : panelHeight}px`;
+    el.style.paddingBottom = `${panelHeight}px`;
     return () => {
       el.style.paddingBottom = previous;
     };
-  }, [open, panelHeight, size]);
+  }, [open, panelHeight]);
 
   useEffect(() => {
     if (!open) return;
@@ -205,12 +195,11 @@ export function ValidationRunnerPanel({
         target?.closest("input, textarea, select, [contenteditable=true]") &&
         !panelRef.current?.contains(target);
       if (typing) return;
-      if (size === "max") setSize("normal");
-      else onClose();
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, size]);
+  }, [open, onClose]);
 
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -218,9 +207,7 @@ export function ValidationRunnerPanel({
     const startHeight = panelHeight;
     setDragging(true);
     const onMove = (e: PointerEvent) => {
-      const next = clamp(startHeight + (startY - e.clientY), 140, maxHeight);
-      setHeight(next);
-      setSize(next >= maxHeight - 8 ? "max" : "normal");
+      setHeight(clamp(startHeight + (startY - e.clientY), 140, maxHeight));
     };
     const onUp = () => {
       setDragging(false);
@@ -229,11 +216,6 @@ export function ValidationRunnerPanel({
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
-  };
-
-  const selectTab = (next: Tab) => {
-    setTab(next);
-    if (size === "min") setSize("normal");
   };
 
   const style: CSSProperties = {
@@ -279,7 +261,6 @@ export function ValidationRunnerPanel({
         aria-valuemax={Math.round(maxHeight)}
         tabIndex={-1}
         onPointerDown={startResize}
-        onDoubleClick={() => setSize((s) => (s === "max" ? "normal" : "max"))}
         className="group absolute inset-x-0 -top-[3px] z-10 h-[7px] cursor-row-resize"
       >
         <div
@@ -292,7 +273,7 @@ export function ValidationRunnerPanel({
 
       <TabBar
         tab={tab}
-        onSelect={selectTab}
+        onSelect={setTab}
         problemCount={problemCount}
         problemsLive={!done && problemCount > 0}
         attention={attention}
@@ -327,22 +308,6 @@ export function ValidationRunnerPanel({
             >
               <History />
             </IconAction>
-            <span
-              aria-hidden
-              className="mx-1 hidden h-4 w-px bg-terminal-edge sm:block"
-            />
-            <IconAction
-              label={size === "max" ? "Restore panel size" : "Maximize panel"}
-              onClick={() => setSize((s) => (s === "max" ? "normal" : "max"))}
-            >
-              {size === "max" ? <Minimize2 /> : <Maximize2 />}
-            </IconAction>
-            <IconAction
-              label={size === "min" ? "Expand panel" : "Minimize panel"}
-              onClick={() => setSize((s) => (s === "min" ? "normal" : "min"))}
-            >
-              {size === "min" ? <ChevronUp /> : <ChevronDown />}
-            </IconAction>
             <IconAction label="Close panel" onClick={onClose}>
               <X />
             </IconAction>
@@ -350,12 +315,7 @@ export function ValidationRunnerPanel({
         }
       />
 
-      <div
-        className={cn(
-          "min-h-0 flex-1 transition-opacity duration-200",
-          size === "min" && "pointer-events-none opacity-0",
-        )}
-      >
+      <div className="min-h-0 flex-1">
         {tab === "output" && (
           <OutputTab
             mode={mode}
@@ -367,7 +327,7 @@ export function ValidationRunnerPanel({
             elapsedMs={elapsedMs}
             problemCount={problemCount}
             onOpenFile={onOpenFile}
-            onShowProblems={() => selectTab("problems")}
+            onShowProblems={() => setTab("problems")}
           />
         )}
         {tab === "problems" && (
@@ -1243,7 +1203,6 @@ function FilePath({
 // ===========================================================================
 
 type Tab = "output" | "problems";
-type PanelSize = "normal" | "max" | "min";
 type Tone = "pass" | "fail" | "warn" | "muted";
 type Outcome = "run" | "pass" | "fail" | "error";
 type Problem = {

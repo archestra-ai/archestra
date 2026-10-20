@@ -21,11 +21,12 @@ import { eq } from "drizzle-orm";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { AgentModel, McpServerModel } from "@/models";
+import { AgentModel, McpServerModel, ToolModel } from "@/models";
 import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 import { reloadToolsForServer } from "./mcp-reinstall";
+import { backfillMcpToolDescriptions } from "./mcp-tool-description-backfill";
 
 // The upstream server describes its tool for the account each installation
 // authenticated as, the way some hosted servers name the signed-in user.
@@ -230,6 +231,79 @@ describe("per-installation tool descriptions", () => {
   });
 });
 
+describe("backfill of installations that predate per-installation descriptions", () => {
+  test("records each existing installation's own description without touching the shared rows", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const { org, alice, bob, catalog } = await seedTwoPersonalInstalls({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+    // As before the upgrade: the shared rows hold Bob's text and an extra
+    // tool only Bob's installation reports; nothing is recorded per
+    // installation.
+    const [shared, bobOnly] = await ToolModel.bulkCreateToolsIfNotExists([
+      {
+        name: ToolModel.slugifyName(catalog.name, "search_messages"),
+        rawToolName: "search_messages",
+        description: describeFor(bob.id),
+        parameters: { type: "object", properties: {} },
+        catalogId: catalog.id,
+      },
+      {
+        name: ToolModel.slugifyName(catalog.name, "bob_only"),
+        rawToolName: "bob_only",
+        description: "Only Bob's installation reports this.",
+        parameters: { type: "object", properties: {} },
+        catalogId: catalog.id,
+      },
+    ]);
+
+    await backfillMcpToolDescriptions();
+
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "full",
+    });
+    await makeAgentTool(agent.id, shared.id, {
+      credentialResolutionMode: "dynamic",
+    });
+    const gateway = await AgentModel.findGatewayAgentById(agent.id);
+    if (!gateway) throw new Error("gateway agent not found");
+    const listFor = async (userId: string) => {
+      const { tools } = await buildAgentMcpToolList({
+        agent: gateway,
+        tokenAuth: { userId, organizationId: org.id },
+      });
+      return tools.find((listed) => listed.name.endsWith("search_messages"))
+        ?.description;
+    };
+
+    expect(await listFor(alice.id)).toContain(describeFor(alice.id));
+    expect(await listFor(bob.id)).toContain(describeFor(bob.id));
+    // The shared rows are left exactly as they were.
+    const rows = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalog.id));
+    expect(rows.map((row) => row.id).sort()).toEqual(
+      [shared.id, bobOnly.id].sort(),
+    );
+    expect(rows.find((row) => row.id === shared.id)?.description).toBe(
+      describeFor(bob.id),
+    );
+  });
+});
+
 // =============================================================================
 // Internal helpers
 // =============================================================================
@@ -282,5 +356,5 @@ async function seedTwoPersonalInstalls(fixtures: {
     if (!row) throw new Error("tool not synced");
     return row;
   };
-  return { org, alice, bob, aliceInstall, bobInstall, tool };
+  return { org, alice, bob, catalog, aliceInstall, bobInstall, tool };
 }

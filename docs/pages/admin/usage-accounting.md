@@ -1,7 +1,7 @@
 ---
 title: Roll Out Usage Accounting
 description: Activate component billing without resetting existing budgets.
-order: 6
+order: 8
 lastUpdated: 2026-10-20
 ---
 

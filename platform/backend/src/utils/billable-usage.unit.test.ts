@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   mergeAnthropicUsage,
+  moneyUnits,
   normalizeAnthropicUsage,
   parseUsageAccountingMode,
   priceTokens,
@@ -153,6 +154,8 @@ describe("cumulative provider accounting", () => {
   test("rejects invalid modes and token arithmetic", () => {
     expect(parseUsageAccountingMode(undefined)).toBe("off");
     expect(() => parseUsageAccountingMode("client-choice")).toThrow();
+    expect(() => moneyUnits("-0.01")).toThrow();
+    expect(() => sumMoney(["1.00", "-0.01"])).toThrow();
     expect(() =>
       priceTokens(
         {

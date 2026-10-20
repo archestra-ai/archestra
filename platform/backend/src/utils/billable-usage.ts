@@ -194,7 +194,7 @@ export function primaryBillingUsage(
   };
 }
 
-/** USD amounts use ten decimal places, matching persisted interaction costs. */
+/** Nonnegative charges only; refunds require a separate ledger operation. */
 export function moneyUnits(value: string): bigint {
   return decimal(value, 10);
 }

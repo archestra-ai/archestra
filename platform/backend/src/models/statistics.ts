@@ -678,6 +678,7 @@ class StatisticsModel {
         cost: modelBilledCost,
       })
       .from(schema.interactionsTable)
+      .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
       .leftJoin(billingModelFacts, sql`true`)
       .where(
         and(
@@ -1627,6 +1628,7 @@ class StatisticsModel {
           subscriptionCost: modelSubscriptionCost,
         })
         .from(i)
+        .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
         .leftJoin(billingModelFacts, sql`true`)
         .where(scope)
         .groupBy(billedModel, bucket)
@@ -2362,6 +2364,7 @@ class StatisticsModel {
         subscriptionCost: modelSubscriptionCost,
       })
       .from(schema.interactionsTable)
+      .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
       .leftJoin(billingModelFacts, sql`true`)
       .where(
         and(
@@ -2406,6 +2409,7 @@ class StatisticsModel {
         subscriptionCost: modelSubscriptionCost,
       })
       .from(schema.interactionsTable)
+      .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
       .leftJoin(billingModelFacts, sql`true`)
       .where(
         and(
@@ -2699,6 +2703,12 @@ type CostSavingsRow = {
   subscriptionCost: number;
 };
 
+// Join receipts before expanding JSON so PostgreSQL can plan one set-based
+// receipt join rather than a correlated receipt lookup for every interaction.
+const billingReceiptJoin = and(
+  eq(schema.interactionBillingTable.interactionId, schema.interactionsTable.id),
+  sql`${schema.interactionBillingTable.usage}->>'mode' = 'enforce'`,
+);
 const billingModelFacts = sql`LATERAL (
   SELECT component->>'model' AS model,
     bool_or(component->>'model' = COALESCE(
@@ -2715,9 +2725,7 @@ const billingModelFacts = sql`LATERAL (
       - ((component->>'cacheWriteTokens')::numeric - (component->>'cacheWrite1hTokens')::numeric) * COALESCE((component->'prices'->>'cacheWrite')::numeric, 0)
       - (component->>'cacheWrite1hTokens')::numeric * COALESCE((component->'prices'->>'cacheWrite1h')::numeric, 0)
     ) / 1000000, 10)) AS cache_savings
-  FROM ${schema.interactionBillingTable}, jsonb_array_elements(${schema.interactionBillingTable.usage}->'components') AS component
-  WHERE ${schema.interactionBillingTable.interactionId} = ${schema.interactionsTable.id}
-    AND ${schema.interactionBillingTable.usage}->>'mode' = 'enforce'
+  FROM jsonb_array_elements(${schema.interactionBillingTable.usage}->'components') AS component
   GROUP BY component->>'model'
 ) AS billing_model`;
 const billedModel = sql<string>`COALESCE(billing_model.model, ${schema.interactionsTable.model})`;

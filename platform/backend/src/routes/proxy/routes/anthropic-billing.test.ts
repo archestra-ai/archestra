@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -7,6 +8,7 @@ import {
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
+import db from "@/database";
 import LimitModel from "@/models/limit";
 import ModelModel from "@/models/model";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
@@ -51,14 +53,16 @@ const providerResponse = {
   usage: finalUsage,
 };
 
-for (const [stream, large, truncated] of [
-  [false, false, false],
-  [true, false, false],
-  [false, true, false],
-  [true, false, true],
-  [false, true, true],
+for (const [stream, large, truncated, settlementFails] of [
+  [false, false, false, false],
+  [true, false, false, false],
+  [false, true, false, false],
+  [true, false, true, false],
+  [false, true, true, false],
+  [true, false, false, true],
+  [true, false, true, true],
 ]) {
-  test(`settles advisor usage before completing and blocks next request (stream=${stream}, large=${large}, truncated=${truncated})`, async ({
+  test(`settles advisor usage before completing and blocks next request (stream=${stream}, large=${large}, truncated=${truncated}, settlementFails=${settlementFails})`, async ({
     makeOrganization,
     makeAgent,
     makeSecret,
@@ -153,6 +157,10 @@ for (const [stream, large, truncated] of [
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
     await app.register(anthropicProxyRoutes);
+    if (settlementFails)
+      await db.execute(
+        sql`ALTER TABLE interaction_billing ADD CONSTRAINT reject_test_settlement CHECK (false)`,
+      );
     try {
       const send = () =>
         app.inject({
@@ -174,6 +182,16 @@ for (const [stream, large, truncated] of [
           },
         });
       const first = await send();
+      if (settlementFails) {
+        expect(first.statusCode).toBe(200);
+        expect(first.body).toContain("event: error");
+        expect(first.body).toContain("Unable to settle LLM usage");
+        expect(first.body).not.toContain("event: message_stop");
+        expect(
+          (await LimitModel.getModelUsageBreakdowns([limit.id])).get(limit.id),
+        ).toEqual([]);
+        return;
+      }
       expect(first.statusCode, first.body).toBe(truncated && large ? 502 : 200);
       if (truncated && stream) {
         expect(first.body).toContain("event: error");
@@ -190,6 +208,10 @@ for (const [stream, large, truncated] of [
       expect(upstreamCalls).toBe(1);
       await drainBackgroundWork();
     } finally {
+      if (settlementFails)
+        await db.execute(
+          sql`ALTER TABLE interaction_billing DROP CONSTRAINT reject_test_settlement`,
+        );
       await app.close();
     }
   });

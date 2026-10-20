@@ -1645,19 +1645,18 @@ export async function handleLLMProxy<
       ["environment", resolvedAgent.environmentId],
     ] as const)
       if (entityId) billingEntities.push({ entityType, entityId });
+    const uniqueBillingEntities = new Map(
+      billingEntities.map((entity) => [
+        `${entity.entityType}:${entity.entityId}`,
+        entity,
+      ]),
+    );
     const ctx: LLMProxyContext<TRequest> = {
       usageAccountingMode: config.llmProxy.usageAccountingMode,
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
-        entities: billingEntities.filter(
-          (entity, index) =>
-            billingEntities.findIndex(
-              (other) =>
-                other.entityType === entity.entityType &&
-                other.entityId === entity.entityId,
-            ) === index,
-        ),
+        entities: [...uniqueBillingEntities.values()],
       },
       connectionVerification,
       ...(appaReceipts ? { appaReceipts } : {}),
@@ -2414,6 +2413,7 @@ async function handleStreaming<
       },
     });
 
+    // Anthropic requires message_stop; its beta usage arrives before that frame.
     upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
     if (!upstreamFinished && ctx.usageAccountingMode === "enforce")
       throw new ApiError(
@@ -2814,10 +2814,16 @@ async function handleStreaming<
       );
     }
 
-    await finalizeInteraction();
+    let streamError = lifecycleError;
+    try {
+      await finalizeInteraction();
+    } catch (settlementError) {
+      // Serialize settlement failure here too, while the SSE stream is open.
+      streamError = settlementError;
+    }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
     return handleError(
-      lifecycleError,
+      streamError,
       reply,
       provider.extractErrorMessage,
       true,
@@ -2990,7 +2996,6 @@ async function handleNonStreaming<
             encryptedChat,
             streamTiming,
           });
-          error.billingRecorded = true;
           if (costs.billingUsage?.mode === "enforce")
             withSessionContext(sessionId, () =>
               reportBillableUsageMetrics({
@@ -3002,7 +3007,12 @@ async function handleNonStreaming<
                 tokens: providerName === "anthropic",
               }),
             );
-          throw error;
+          throw new ObservedProviderUsageError({
+            original: error.original,
+            usage: error.usage,
+            response: error.response,
+            billingRecorded: true,
+          });
         }
         if (error instanceof CodexResponsesGenerationError) {
           // Reuse accounting/persistence below without running success hooks.

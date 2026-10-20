@@ -3724,6 +3724,8 @@ async function retainDeletedBillingAttribution<T>(params: {
 }): Promise<T> {
   const columns = getTableColumns(schema.interactionsTable);
   const foreignKeys = getTableConfig(schema.interactionsTable).foreignKeys;
+  // Each retry clears a nullable log reference. Unknown constraints fail
+  // immediately, and the FK count bounds retries even if an error repeats.
   for (let attempt = 0; ; attempt++) {
     try {
       return await params.run();

@@ -762,10 +762,12 @@ class LimitModel {
       }
       // A missing model must also protect caps scoped to that unknown model.
       if (usage.status === "incomplete" && !matched.length) {
-        legacyRows.push({ limitId: limit.id, model: "__incomplete__" });
+        const model =
+          "urn:archestra:billing:incomplete:5707b463-67d0-4e54-a8f4-2c3897e186ba";
+        legacyRows.push({ limitId: limit.id, model });
         settledRows.push({
           limitId: limit.id,
-          model: "__incomplete__",
+          model,
           incomplete: 1,
         });
       }

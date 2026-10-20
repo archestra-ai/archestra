@@ -18,3 +18,8 @@ export function conversationsQueryKey({
 } = {}) {
   return ["conversations", search, limit] as const;
 }
+
+/** The cache key of one conversation with its messages. */
+export function conversationQueryKey(conversationId: string | undefined) {
+  return ["conversation", conversationId] as const;
+}

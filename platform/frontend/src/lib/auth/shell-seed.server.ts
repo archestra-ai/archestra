@@ -6,9 +6,11 @@ import {
   isShellSeedRoute,
   SHELL_SEED_HEADER,
   SHELL_SEED_SEARCH_HEADER,
+  seededConversationId,
   seedsNewChatComposer,
 } from "@/lib/auth/shell-seed";
 import {
+  conversationQueryKey,
   conversationsQueryKey,
   SIDEBAR_CONVERSATION_LIMIT,
 } from "@/lib/chat/conversations-query-key";
@@ -140,9 +142,11 @@ async function readShellQueries(params: {
       ),
     );
   }
-  // The new-chat composer: one read for everything it needs to send.
-  const composer =
-    params.route === "/chat" && seedsNewChatComposer(params.search)
+  // The composer (and an existing conversation's end): one read.
+  const conversationId = seededConversationId(params.route);
+  const composer = conversationId
+    ? readConversation({ ...options, conversationId })
+    : params.route === "/chat" && seedsNewChatComposer(params.search)
       ? readNewChatComposer(options)
       : Promise.resolve([]);
   const [shell, composerQueries] = await Promise.all([
@@ -150,6 +154,36 @@ async function readShellQueries(params: {
     composer,
   ]);
   return [...shell.filter((entry) => entry !== null), ...composerQueries];
+}
+
+/**
+ * An existing conversation's first screen: its end (the last messages, with
+ * the count of the earlier ones) and the composer's parts for its agent, from
+ * one read. The rest of the history loads in the browser after paint. An
+ * encrypted chat is left to the browser: only it holds the key.
+ */
+async function readConversation(options: {
+  headers: Record<string, string>;
+  signal: AbortSignal;
+  conversationId: string;
+}): Promise<ShellSeed["queries"]> {
+  try {
+    const { data, error } = await archestraApiSdk.getConversationBootstrap({
+      headers: options.headers,
+      signal: options.signal,
+      path: { id: options.conversationId },
+    });
+    if (error || !data || data.conversation.encryptedChat) return [];
+    return [
+      {
+        queryKey: conversationQueryKey(options.conversationId),
+        data: data.conversation,
+      },
+      ...newChatSeedQueries(data.composer),
+    ];
+  } catch {
+    return [];
+  }
 }
 
 async function readNewChatComposer(options: {

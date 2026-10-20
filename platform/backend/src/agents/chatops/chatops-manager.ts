@@ -1070,6 +1070,30 @@ export class ChatOpsManager {
     });
   }
 
+  private async addPlatformMessageFiles(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+  }): Promise<void> {
+    const { provider, message } = params;
+    if (!provider.downloadMessageFiles) return;
+    const outcomes = await provider.downloadMessageFiles(message);
+    const delivered = outcomes.flatMap((o) =>
+      o.status === "delivered" ? [o.attachment] : [],
+    );
+    const skipped = outcomes.flatMap((o) =>
+      o.status === "skipped" ? [o.skipped] : [],
+    );
+    if (delivered.length > 0) {
+      message.attachments = [...(message.attachments ?? []), ...delivered];
+    }
+    if (skipped.length > 0) {
+      message.skippedAttachments = [
+        ...(message.skippedAttachments ?? []),
+        ...skipped,
+      ];
+    }
+  }
+
   private async processMessageWithAdmission(
     params: Parameters<ChatOpsManager["processMessage"]>[0],
     onPendingUserAdmission: (id: string) => void,
@@ -1099,6 +1123,19 @@ export class ChatOpsManager {
 
     if (!binding) {
       return { success: true, error: "NO_BINDING" };
+    }
+
+    // Files the platform keeps off the message (Teams channel and group-chat
+    // files live in SharePoint) are read only now, once per answered message.
+    await this.addPlatformMessageFiles({ provider, message });
+    // A Teams channel message can look empty until its files are read; one
+    // that is still empty has nothing to answer.
+    if (
+      !message.text.trim() &&
+      !message.attachments?.length &&
+      !message.skippedAttachments?.length
+    ) {
+      return { success: true };
     }
 
     // "@router list": the agents this person can reach with "Agent > message".

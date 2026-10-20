@@ -1268,13 +1268,13 @@ See [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams) for setup.
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`** - Microsoft Entra tenant ID of a single-tenant bot.
   - Default: unset (multi-tenant bot)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Tenant ID for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_TENANT_ID`** - Tenant ID for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_TENANT_ID)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Client ID for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_ID`** - Client ID for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_APP_ID)
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Client secret for reading thread history through Microsoft Graph.
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Client secret for reading thread history and files through Microsoft Graph.
   - Default: [`ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET)
 
 ### Slack

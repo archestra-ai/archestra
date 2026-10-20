@@ -58,11 +58,11 @@ class EnterpriseTierService {
     return config.enterpriseFeatures.core || this.isSmallTeam();
   }
 
-  /** The OpenAPPA integration needs the beta flag and the AI Security tier. */
+  /** The OpenAPPA integration needs the beta flag and the enterprise license. */
   isOpenappaActive(): boolean {
     return (
       config.openappa.enabled &&
-      (config.enterpriseFeatures.aiSecurity || this.isSmallTeam())
+      (config.enterpriseFeatures.core || this.isSmallTeam())
     );
   }
 

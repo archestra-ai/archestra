@@ -164,10 +164,10 @@ export const EffectivePolicySchema = createSelectSchema(
   // next release drops it.
   .omit({ retainedAnnotators: true })
   .extend({
-  compiledAt: z.coerce.date(),
-  lastErrorAt: z.coerce.date().nullable(),
-  served: ServedCompositionSchema.nullable(),
-});
+    compiledAt: z.coerce.date(),
+    lastErrorAt: z.coerce.date().nullable(),
+    served: ServedCompositionSchema.nullable(),
+  });
 
 export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
 

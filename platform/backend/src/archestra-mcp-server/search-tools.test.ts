@@ -1790,6 +1790,56 @@ describe("search_tools", () => {
       expect(structured.hint).toContain("top 1 of 3");
     });
 
+    test("caps a limit above the maximum instead of rejecting the call", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ name: "Cap", organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "Widgets MCP",
+      });
+      for (let index = 0; index < 21; index++) {
+        const tool = await makeTool({
+          name: `widgets__action_${index}`,
+          description: "widget action",
+          catalogId: catalog.id,
+          parameters: {},
+        });
+        await makeAgentTool(agent.id, tool.id);
+      }
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      // The call a model makes to list a whole catalog.
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "^widgets__", mode: "regex", limit: 100 },
+        context,
+      );
+      expect(result.isError).toBeFalsy();
+      const structured =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(structured.total).toBe(20);
+      expect(structured.matchCount).toBe(21);
+      expect(structured.truncated).toBe(true);
+      // Already at the cap: point at narrowing, not at a larger limit.
+      expect(structured.hint).toContain("top 20 of 21");
+      expect(structured.hint).not.toContain("raise limit");
+    });
+
     test("zero results return an actionable hint naming available servers", async ({
       makeAgent,
       makeAgentTool,

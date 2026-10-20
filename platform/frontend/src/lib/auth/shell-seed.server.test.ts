@@ -18,6 +18,18 @@ const { requestHeaders, getBootstrapMock, getIssueIndexMock, fetchMock, sdk } =
       getConversationBootstrap: vi.fn(),
       getMyAgentRuns: vi.fn(),
       getMyAgentRun: vi.fn(),
+      // The connection approval page's reads.
+      getClientConnection: vi.fn(),
+      getDefaultMcpGateway: vi.fn(),
+      getAgentOptions: vi.fn(),
+      getAgentOptionsPage: vi.fn(),
+      getLlmProxy: vi.fn(),
+      getSkillNames: vi.fn(),
+      getPlugins: vi.fn(),
+      getAvailableLlmProviderApiKeys: vi.fn(),
+      getLlmModels: vi.fn(),
+      getGuardrailsDeployment: vi.fn(),
+      createConnectionSetup: vi.fn(),
     },
   }));
 
@@ -53,7 +65,13 @@ import {
   conversationsQueryKey,
 } from "@/lib/chat/conversations-query-key";
 import { newChatSeedQueries } from "@/lib/chat/new-chat-seed";
+import {
+  CONNECTION_GATEWAY_PAGE_QUERY,
+  CONNECTION_GATEWAY_REFERENCE_FILTERS,
+  connectionApprovalSeedQueries,
+} from "@/lib/connection-approval-seed";
 import { environmentKeys } from "@/lib/environment.query";
+import { guardrailsDeploymentQueryKey } from "@/lib/guardrails-deployment.query";
 import { mcpRegistryIssueIndexQueryKey } from "@/lib/mcp/mcp-registry.query";
 import {
   projectListQueryKey,
@@ -88,6 +106,29 @@ const newChat = {
   availableApiKeys: [],
   models: [],
   agent: null,
+};
+
+const REQUEST_ID = "0a1b2c".repeat(8);
+const APPROVAL_SEARCH = `?clientId=opencode&platform=linux&connectRequest=${REQUEST_ID}`;
+const ADMIN_GATEWAY = "11111111-1111-4111-8111-111111111111";
+const DEFAULT_GATEWAY = "22222222-2222-4222-8222-222222222222";
+const URL_GATEWAY = "33333333-3333-4333-8333-333333333333";
+const connectionOrganization = {
+  connectionDefaultMcpGatewayId: ADMIN_GATEWAY,
+  connectionLlmProxyEnabled: true,
+  connectionSkillsEnabled: true,
+  connectionPluginsEnabled: true,
+};
+const approval = {
+  request: { clientId: "opencode", platform: "linux", userCode: "0A1B-2C0A" },
+  defaultGateway: { id: DEFAULT_GATEWAY, name: "My Gateway" },
+  gatewayPage: { data: [{ id: ADMIN_GATEWAY }], pagination: {} },
+  references: { data: [{ id: ADMIN_GATEWAY }, { id: DEFAULT_GATEWAY }] },
+  llmProxy: { id: "proxy-1" },
+  skillNames: { data: [{ id: "s1", name: "skill" }], total: 1 },
+  plugins: [{ id: "plugin-1" }],
+  availableApiKeys: [{ id: "key-1" }],
+  models: [{ id: "model-1" }],
 };
 
 // What every seeded route's shell carries, under its query's key.
@@ -151,6 +192,36 @@ describe("prefetchShellSeed", () => {
     sdk.getConversationBootstrap.mockReset().mockResolvedValue({
       data: { conversation, composer: newChat },
     });
+    sdk.getClientConnection
+      .mockReset()
+      .mockResolvedValue({ data: approval.request });
+    sdk.getDefaultMcpGateway
+      .mockReset()
+      .mockResolvedValue({ data: approval.defaultGateway });
+    sdk.getAgentOptions
+      .mockReset()
+      .mockResolvedValue({ data: approval.references });
+    sdk.getAgentOptionsPage
+      .mockReset()
+      .mockResolvedValue({ data: approval.gatewayPage });
+    sdk.getLlmProxy.mockReset().mockResolvedValue({ data: approval.llmProxy });
+    sdk.getSkillNames
+      .mockReset()
+      .mockResolvedValue({ data: approval.skillNames });
+    sdk.getPlugins.mockReset().mockResolvedValue({ data: approval.plugins });
+    sdk.getAvailableLlmProviderApiKeys
+      .mockReset()
+      .mockResolvedValue({ data: approval.availableApiKeys });
+    sdk.getLlmModels.mockReset().mockResolvedValue({ data: approval.models });
+    sdk.createConnectionSetup.mockReset().mockResolvedValue({
+      data: {
+        id: "setup-1",
+        command: "curl https://x/api/connection-setups/secret-token | bash",
+      },
+    });
+    sdk.getGuardrailsDeployment
+      .mockReset()
+      .mockResolvedValue({ data: { enabled: false } });
   });
 
   it("resolves nothing for documents the proxy did not mark", async () => {
@@ -298,6 +369,301 @@ describe("prefetchShellSeed", () => {
     expect(sdk.getMyAgentRuns).not.toHaveBeenCalled();
   });
 
+  it("seeds a connection approval document's shell and every part the page reads, each from its own endpoint", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(
+      SHELL_SEED_SEARCH_HEADER,
+      `${APPROVAL_SEARCH}&gatewayId=${URL_GATEWAY}`,
+    );
+    getBootstrapMock.mockResolvedValue({
+      data: { ...bootstrap, organization: connectionOrganization },
+    });
+
+    const seed = await prefetchShellSeed();
+
+    // The gateways the page names by id: the URL's, the admin default and
+    // the member's default, read once the default is known.
+    const ids = [ADMIN_GATEWAY, DEFAULT_GATEWAY, URL_GATEWAY];
+    expect(sdk.getAgentOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          ...CONNECTION_GATEWAY_REFERENCE_FILTERS,
+          ids,
+        }),
+      }),
+    );
+    expect(sdk.getAgentOptionsPage).toHaveBeenCalledWith(
+      expect.objectContaining({ query: CONNECTION_GATEWAY_PAGE_QUERY }),
+    );
+    expect(sdk.getClientConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ path: { id: REQUEST_ID } }),
+    );
+    expect(seed?.queries).toEqual([
+      ...shellQueries,
+      ...connectionApprovalSeedQueries({
+        connectRequest: REQUEST_ID,
+        request: approval.request as never,
+        defaultGateway: approval.defaultGateway as never,
+        gatewayPage: approval.gatewayPage as never,
+        gatewayReferences: { ids, options: approval.references.data as never },
+        llmProxy: approval.llmProxy as never,
+        skillNames: approval.skillNames as never,
+        plugins: approval.plugins as never,
+        availableApiKeys: approval.availableApiKeys as never,
+        models: approval.models as never,
+      }),
+    ]);
+  });
+
+  it("seeds the guardrails status for the sidebar warning while OpenAPPA is on", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/chat");
+    getBootstrapMock.mockResolvedValue({
+      data: { ...bootstrap, config: { features: { openappaEnabled: true } } },
+    });
+
+    expect((await prefetchShellSeed())?.queries).toContainEqual({
+      queryKey: guardrailsDeploymentQueryKey,
+      data: { enabled: false },
+    });
+
+    getBootstrapMock.mockResolvedValue({ data: bootstrap });
+    sdk.getGuardrailsDeployment.mockClear();
+    await prefetchShellSeed();
+    expect(sdk.getGuardrailsDeployment).not.toHaveBeenCalled();
+  });
+
+  it("prepares the approval page's first setup with the document, and seeds only its id", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    requestHeaders.set("host", "connect.example");
+    requestHeaders.set("x-forwarded-proto", "https");
+    getBootstrapMock.mockResolvedValue({
+      data: {
+        ...bootstrap,
+        permissions: {
+          mcpGateway: ["read"],
+          llmProxy: ["read"],
+          skill: ["read"],
+          llmVirtualKey: ["create"],
+        },
+        scopedCapabilities: [],
+        organization: {
+          ...connectionOrganization,
+          connectionDefaultClientId: null,
+          connectionShownClientIds: null,
+          connectionClientProviderKeys: null,
+          connectionBaseUrls: null,
+        },
+      },
+    });
+    sdk.getAvailableLlmProviderApiKeys.mockResolvedValue({
+      data: [
+        {
+          id: "key-1",
+          provider: "openai",
+          isPrimary: true,
+          baseUrl: "https://llm.example/v1",
+        },
+      ],
+    });
+
+    const seed = await prefetchShellSeed();
+
+    expect(sdk.createConnectionSetup).toHaveBeenCalledTimes(1);
+    // The backend accepts a base URL on the origin that asks, as for the
+    // browser's own request, which carries its Origin.
+    expect(sdk.createConnectionSetup.mock.calls[0][0].headers).toMatchObject({
+      Origin: "https://connect.example",
+    });
+    expect(sdk.createConnectionSetup.mock.calls[0][0].body).toMatchObject({
+      clientId: "opencode",
+      platform: "linux",
+      // The browser's window.location.origin for this document.
+      baseUrl: "https://connect.example/v1",
+      mcpGatewayId: ADMIN_GATEWAY,
+      skills: { skillIds: ["s1"], ttlDays: null },
+    });
+    const setup = seed?.queries.find(
+      ({ queryKey }) => queryKey[0] === "connection-setup-seed",
+    );
+    expect(setup?.data).toEqual({
+      keyDigest: expect.stringMatching(/^[0-9a-f]{16}$/),
+      id: "setup-1",
+    });
+    // The setup's command carries a one-time token; it never lands in the HTML.
+    expect(JSON.stringify(seed)).not.toContain("secret-token");
+  });
+
+  it("prepares no setup when the headers do not say the document's scheme, unless the operator configured it", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    requestHeaders.set("host", "connect.example");
+    getBootstrapMock.mockResolvedValue({
+      data: {
+        ...bootstrap,
+        permissions: {
+          mcpGateway: ["read"],
+          llmProxy: ["read"],
+          skill: ["read"],
+          llmVirtualKey: ["create"],
+        },
+        scopedCapabilities: [],
+        organization: {
+          ...connectionOrganization,
+          connectionDefaultClientId: null,
+          connectionShownClientIds: null,
+          connectionClientProviderKeys: null,
+          connectionBaseUrls: null,
+        },
+      },
+    });
+    sdk.getAvailableLlmProviderApiKeys.mockResolvedValue({
+      data: [
+        {
+          id: "key-1",
+          provider: "openai",
+          isPrimary: true,
+          baseUrl: "https://llm.example/v1",
+        },
+      ],
+    });
+
+    // Behind a proxy that sends no X-Forwarded-Proto the scheme is a guess,
+    // and a setup for a guessed origin is one the page cannot use.
+    expect(await prefetchShellSeed()).not.toBeNull();
+    expect(sdk.createConnectionSetup).not.toHaveBeenCalled();
+
+    // A public URL the operator configured names the host's scheme.
+    vi.stubEnv("ARCHESTRA_FRONTEND_URL", "https://connect.example");
+    try {
+      expect(await prefetchShellSeed()).not.toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(sdk.createConnectionSetup).toHaveBeenCalledTimes(1);
+    expect(sdk.createConnectionSetup.mock.calls[0][0].body).toMatchObject({
+      baseUrl: "https://connect.example/v1",
+    });
+  });
+
+  it("seeds the prepared setup's credit warning with its id", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    requestHeaders.set("host", "connect.example");
+    requestHeaders.set("x-forwarded-proto", "https");
+    getBootstrapMock.mockResolvedValue({
+      data: {
+        ...bootstrap,
+        permissions: {
+          mcpGateway: ["read"],
+          llmProxy: ["read"],
+          skill: ["read"],
+          llmVirtualKey: ["create"],
+        },
+        scopedCapabilities: [],
+        organization: {
+          ...connectionOrganization,
+          connectionDefaultClientId: null,
+          connectionShownClientIds: null,
+          connectionClientProviderKeys: null,
+          connectionBaseUrls: null,
+        },
+      },
+    });
+    sdk.getAvailableLlmProviderApiKeys.mockResolvedValue({
+      data: [
+        {
+          id: "key-1",
+          provider: "openai",
+          isPrimary: true,
+          baseUrl: "https://llm.example/v1",
+        },
+      ],
+    });
+
+    sdk.createConnectionSetup.mockResolvedValue({
+      data: {
+        id: "setup-1",
+        command: "curl secret-token",
+        creditWarning: { kind: "insufficient_balance", keyName: "Anthropic" },
+      },
+    });
+
+    const seed = await prefetchShellSeed();
+
+    const setup = seed?.queries.find(
+      ({ queryKey }) => queryKey[0] === "connection-setup-seed",
+    );
+    expect(setup?.data).toEqual({
+      keyDigest: expect.stringMatching(/^[0-9a-f]{16}$/),
+      id: "setup-1",
+      creditWarning: { kind: "insufficient_balance", keyName: "Anthropic" },
+    });
+    expect(JSON.stringify(seed)).not.toContain("secret-token");
+  });
+
+  it("prepares no setup for a speculative load or without the document's origin", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    getBootstrapMock.mockResolvedValue({
+      data: { ...bootstrap, organization: connectionOrganization },
+    });
+
+    requestHeaders.set("host", "connect.example");
+    requestHeaders.set("sec-purpose", "prefetch;prerender");
+    expect(await prefetchShellSeed()).not.toBeNull();
+    requestHeaders.delete("sec-purpose");
+    requestHeaders.delete("host");
+    expect(await prefetchShellSeed()).not.toBeNull();
+
+    expect(sdk.createConnectionSetup).not.toHaveBeenCalled();
+  });
+
+  it("reads only the approval page parts the organization turns on", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    getBootstrapMock.mockResolvedValue({
+      data: {
+        ...bootstrap,
+        organization: {
+          connectionDefaultMcpGatewayId: null,
+          connectionLlmProxyEnabled: false,
+          connectionSkillsEnabled: false,
+          connectionPluginsEnabled: false,
+        },
+      },
+    });
+
+    const keys = (await prefetchShellSeed())?.queries.map(
+      ({ queryKey }) => queryKey[0],
+    );
+
+    expect(sdk.getLlmProxy).not.toHaveBeenCalled();
+    expect(sdk.getSkillNames).not.toHaveBeenCalled();
+    expect(sdk.getPlugins).not.toHaveBeenCalled();
+    expect(keys).toContain("client-connection");
+    expect(keys).not.toContain("llm-proxy");
+  });
+
+  it("leaves an expired or foreign connection request to the page's error state", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    getBootstrapMock.mockResolvedValue({
+      data: { ...bootstrap, organization: connectionOrganization },
+    });
+    sdk.getClientConnection.mockResolvedValue({
+      data: undefined,
+      error: { error: { message: "Not found" } },
+    });
+
+    const seed = await prefetchShellSeed();
+
+    expect(seed).not.toBeNull();
+    expect(seed?.queries.map(({ queryKey }) => queryKey[0])).not.toContain(
+      "client-connection",
+    );
+  });
+
   it("leaves out a read the viewer may not make, so its query loads as before", async () => {
     requestHeaders.set(SHELL_SEED_HEADER, "/chat");
     sdk.getK8sCapabilities.mockResolvedValue({
@@ -325,6 +691,15 @@ describe("prefetchShellSeed", () => {
     }
     requestHeaders.set(SHELL_SEED_HEADER, `/chat/${CONVERSATION_ID}`);
     expect(await prefetchShellSeed()).not.toBeNull();
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    expect(await prefetchShellSeed()).not.toBeNull();
+    // The plain Connect page, and a malformed request id, are not seeded.
+    for (const search of ["", "?connectRequest=abc", "?clientId=opencode"]) {
+      requestHeaders.set(SHELL_SEED_SEARCH_HEADER, search);
+      expect(await prefetchShellSeed()).toBeNull();
+    }
+    requestHeaders.delete(SHELL_SEED_SEARCH_HEADER);
     for (const path of ["/agents", "/mcp/gateways", "/chat/abc"]) {
       requestHeaders.set(SHELL_SEED_HEADER, path);
       expect(await prefetchShellSeed()).toBeNull();

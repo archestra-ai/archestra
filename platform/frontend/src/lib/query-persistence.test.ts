@@ -182,6 +182,24 @@ describe("query persistence", () => {
     expect(window.sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
+  it("never replaces a value the page already holds with the snapshot", async () => {
+    await seed(client, ["shell"], { name: "Stale" }, true);
+    syncPersistedQueryCacheScope(client, "user-1:org-1");
+    await flushWrites();
+
+    const restored = makeClient();
+    // The document's server seed, stamped by a clock that runs behind the
+    // one that wrote the snapshot.
+    restored.setQueryData(
+      ["shell"],
+      { name: "Seeded" },
+      { updatedAt: Date.now() - 60_000 },
+    );
+    restorePersistedQueryCache(restored);
+
+    expect(restored.getQueryData(["shell"])).toEqual({ name: "Seeded" });
+  });
+
   it("leaves a fetch in flight free to replace the restored value", async () => {
     await seed(client, ["shell"], { name: "Stale" }, true);
     syncPersistedQueryCacheScope(client, "user-1:org-1");

@@ -16,7 +16,6 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import type { A2AAttachment } from "@/agents/a2a-executor";
-import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth";
 import config, { getAppAssetBaseOrigin } from "@/config";
@@ -196,13 +195,11 @@ async function launchDelegatedTask(params: {
     // Work started from a chat thread reports back to that thread when it
     // settles. The callback coordinates are also persisted on the Agent run,
     // so the reconciler can recover delivery after a restart.
-    if (context.chatOpsBindingId && context.chatOpsThreadId) {
-      void watchChatOpsTask({
+    if (completionTarget) {
+      void watchTaskCompletion({
         taskId: taskRow.id,
-        bindingId: context.chatOpsBindingId,
-        threadId: context.chatOpsThreadId,
         agentName: agent.name,
-        pinnedAgentId: context.chatOpsPinnedAgentId,
+        target: completionTarget,
       }).catch((error) => {
         logger.warn(
           { error, taskId: taskRow.id },

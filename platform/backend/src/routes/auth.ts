@@ -872,11 +872,17 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (!response.ok) {
+        const errorBody = response.body ? await response.text() : "";
+        // better-auth signs the consent page query with a short expiry and
+        // rejects it as `invalid_signature` once that passes (or if the query
+        // was altered). Resubmitting the same query can never succeed, so say
+        // so instead of relaying the raw error code.
+        if (isInvalidOAuthQuerySignatureError(errorBody)) {
+          throw new ApiError(400, OAUTH_CONSENT_REQUEST_EXPIRED_MESSAGE);
+        }
         throw new ApiError(
           response.status,
-          response.body
-            ? await response.text()
-            : "OAuth consent request failed",
+          errorBody || "OAuth consent request failed",
         );
       }
 
@@ -1330,6 +1336,17 @@ function oauthTokenErrorForBodylessResponse(betterAuthStatus: number): {
           },
     ),
   };
+}
+
+const OAUTH_CONSENT_REQUEST_EXPIRED_MESSAGE =
+  "This authorization request has expired. Go back to the application and connect again to start a new request.";
+
+function isInvalidOAuthQuerySignatureError(body: string): boolean {
+  try {
+    return JSON.parse(body)?.error === "invalid_signature";
+  } catch {
+    return false;
+  }
 }
 
 function shouldSkipForwardedAuthHeader(headerName: string): boolean {

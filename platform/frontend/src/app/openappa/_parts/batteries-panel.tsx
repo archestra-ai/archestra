@@ -498,6 +498,9 @@ function BatteryDialog({
         </span>
       }
       description={summary?.description}
+      // The title row is left-aligned (icon, name, badge), so the copy under
+      // it is too, at every width.
+      headerClassName="text-left"
       bodyClassName="space-y-6"
       footer={<DialogCancelButton>Close</DialogCancelButton>}
     >
@@ -546,7 +549,11 @@ function BatteryDialog({
       ) : (
         <DialogSection
           title="Servers"
-          description="Its rules check tool calls on these servers."
+          description={
+            writable && servers.length === 1
+              ? "Its rules check tool calls on these servers. Detaching the last one also removes the battery from the policy."
+              : "Its rules check tool calls on these servers."
+          }
         >
           {servers.length === 0 ? (
             <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
@@ -591,12 +598,6 @@ function BatteryDialog({
                 );
               })}
             </ul>
-          )}
-          {writable && servers.length === 1 && (
-            <p className="text-xs text-muted-foreground">
-              Detaching the last server also removes the battery from the
-              policy.
-            </p>
           )}
           {writable && summary && (
             <AttachServerPicker
@@ -652,16 +653,20 @@ function ServerRow({
           size={16}
         />
       ) : null}
-      <span className="font-medium">{name}</span>
-      <span
-        className={cn(
-          "truncate text-xs text-muted-foreground",
-          detail.endsWith("__*") && "font-mono",
-        )}
-      >
-        {detail}
+      {/* Name over the tool pattern, so neither squeezes the other or the
+          action on a narrow dialog. */}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{name}</span>
+        <span
+          className={cn(
+            "block truncate text-xs text-muted-foreground",
+            detail.endsWith("__*") && "font-mono",
+          )}
+        >
+          {detail}
+        </span>
       </span>
-      {action && <div className="ml-auto shrink-0">{action}</div>}
+      {action && <div className="shrink-0">{action}</div>}
     </li>
   );
 }

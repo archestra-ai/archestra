@@ -215,7 +215,7 @@ class ValidationProgressSender {
     } catch (error) {
       logger.warn(
         { err: error, organizationId },
-        "Could not send policy validation progress",
+        "OpenAPPA could not send policy validation progress",
       );
     }
   }

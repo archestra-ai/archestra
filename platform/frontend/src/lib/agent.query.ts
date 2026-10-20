@@ -29,6 +29,7 @@ import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
+import { defaultMcpGatewayQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useOrganization } from "@/lib/organization.query";
 import { inFlightQueryData } from "@/lib/query-in-flight";
@@ -388,7 +389,7 @@ export function useDefaultMcpGateway(params?: {
   initialData?: archestraApiTypes.GetDefaultMcpGatewayResponses["200"];
 }) {
   return useQuery({
-    queryKey: ["mcp-gateways", "default"],
+    queryKey: defaultMcpGatewayQueryKey,
     queryFn: async () => {
       // Callers read the gateway's identity and tool count, never its tools.
       const { data, error } = await getDefaultMcpGateway({

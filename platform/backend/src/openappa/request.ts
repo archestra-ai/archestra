@@ -196,7 +196,7 @@ export function prepareAppaRequest(params: {
   if ([...hostedNames].some((name) => clientNames.has(name))) {
     throw new ApiError(
       400,
-      "A provider-hosted tool conflicts with a client tool; rename or remove that declaration.",
+      "OpenAPPA found a provider-hosted tool that conflicts with a client tool; rename or remove that declaration.",
     );
   }
   if (
@@ -402,7 +402,7 @@ export function prepareAppaRequest(params: {
       ) {
         throw new ApiError(
           400,
-          "A provider-hosted tool conflicts with the OpenAPPA remedy tools; rename or remove that declaration.",
+          "OpenAPPA found a provider-hosted tool that conflicts with its remedy tools; rename or remove that declaration.",
         );
       }
       if (!notice) {

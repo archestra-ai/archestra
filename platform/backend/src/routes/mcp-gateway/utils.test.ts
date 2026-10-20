@@ -4126,7 +4126,7 @@ describe("createAgentServer tools/list", () => {
     }) => {
       config.openappa.enabled = true;
       config.openappa.yellEnabled = true;
-      config.enterpriseFeatures.aiSecurity = true;
+      config.enterpriseFeatures.core = true;
       await GuardrailsDeploymentModel.setEnabled(true);
       const org = await makeOrganization();
       const user = await makeUser();

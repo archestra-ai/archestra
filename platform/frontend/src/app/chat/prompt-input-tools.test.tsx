@@ -288,7 +288,7 @@ describe("chat composer typing performance", () => {
     expect(screen.queryByTestId("chat-setup-menu")).toBeNull();
   });
 
-  it("shows trust and audience as a static session readout", () => {
+  it("names trust and audience on the session status and APPA", () => {
     statusState.data = { trust: "suspicious", audience: "internal" };
     render(
       <ArchestraPromptInput
@@ -301,11 +301,16 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    const status = screen.getByRole("status", {
-      name: "Trust: suspicious; audience: internal",
-    });
-    expect(status).toHaveTextContent("suspicious");
-    expect(status).toHaveTextContent("internal");
+    expect(
+      screen.getByRole("status", {
+        name: "Trust: suspicious; audience: internal",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust suspicious, audience internal",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("preserves policy-defined labels in the status text", () => {
@@ -324,11 +329,16 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    const status = screen.getByRole("status", {
-      name: "Trust: reviewed; audience: alice ∩ internal,@finance",
-    });
-    expect(status).toHaveTextContent("reviewed");
-    expect(status).toHaveTextContent("alice ∩ internal,@finance");
+    expect(
+      screen.getByRole("status", {
+        name: "Trust: reviewed; audience: alice ∩ internal,@finance",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust reviewed, audience alice ∩ internal,@finance",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("hides retained labels when the selected session status read failed", () => {
@@ -413,7 +423,7 @@ describe("chat composer typing performance", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("keeps trust and audience visible above a narrow composer", () => {
+  it("keeps APPA above a narrow composer", () => {
     layoutState.isNarrow = true;
     statusState.data = { trust: "trusted", audience: "public" };
     render(
@@ -427,11 +437,14 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    const status = screen.getByRole("status", {
-      name: "Trust: trusted; audience: public",
-    });
-    expect(status).toHaveTextContent("trust:trusted");
-    expect(status).toHaveTextContent("audience:public");
+    expect(
+      screen.getByRole("status", { name: "Trust: trusted; audience: public" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust trusted, audience public",
+      }),
+    ).toBeInTheDocument();
   });
   it("removes the session readout when navigating to a new chat", () => {
     statusState.data = { trust: "trusted", audience: "public" };

@@ -89,7 +89,7 @@ export function proxy(req: NextRequest) {
 function rendersFirstPageOnServer(req: NextRequest) {
   return (
     req.method === "GET" &&
-    isShellSeedRoute(req.nextUrl.pathname) &&
+    isShellSeedRoute(req.nextUrl.pathname, req.nextUrl.search) &&
     req.headers.get("sec-fetch-dest") === "document"
   );
 }

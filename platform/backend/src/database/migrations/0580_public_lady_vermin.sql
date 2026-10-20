@@ -1,5 +1,0 @@
--- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=Hard cut chosen for removing policy snapshots: this release refuses conversations opened under the earlier policy model, and nothing in it reads the policy-for-new-sessions setting, the retained annotators, or the root openings. The previous release reads all three, so a rollback to it must first re-create them: ALTER TABLE "guardrails_deployment" ADD COLUMN "new_session_policy" varchar(16) DEFAULT 'live' NOT NULL; ALTER TABLE "openappa_effective_policies" ADD COLUMN "retained_annotators" jsonb; and openappa_root_openings as migration 0550 creates it (table, foreign key, index), which refills itself. No other table references openappa_root_openings, so a plain DROP TABLE removes it.
-DROP TABLE "openappa_root_openings";--> statement-breakpoint
-ALTER TABLE "guardrails_deployment" DROP COLUMN "new_session_policy";--> statement-breakpoint
-ALTER TABLE "openappa_effective_policies" DROP COLUMN "retained_annotators";

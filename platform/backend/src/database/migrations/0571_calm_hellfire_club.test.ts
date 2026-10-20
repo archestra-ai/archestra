@@ -5,7 +5,7 @@ import db from "@/database";
 // The native runtime's PostgreSQL store writes these tables with its own SQL.
 // These statements are the ones it runs to publish and to read a head, so the
 // schema here must accept them and refuse what the store relies on refusing.
-describe("0571 OpenAPPA policy revisions", () => {
+describe("0571 OpenAPPA policy revisions and the policy for new sessions", () => {
   test("a publish records the head and its revision, and the head reads back", async () => {
     await publish({ deployment: "org-a", revision: 1, hash: "a".repeat(64) });
     await db.execute(
@@ -68,6 +68,27 @@ describe("0571 OpenAPPA policy revisions", () => {
     expect(indexes.rows.map((row) => row.indexdef)).toEqual([
       expect.stringContaining("(deployment, hash, revision)"),
     ]);
+  });
+
+  test("the deployment row gives new sessions the live policy unless it is set", async () => {
+    await db.execute(
+      sql`INSERT INTO guardrails_deployment (id, enabled) VALUES ('global', true)`,
+    );
+    const read = () =>
+      db.execute<{ new_session_policy: string }>(
+        sql`SELECT new_session_policy FROM guardrails_deployment WHERE id = 'global'`,
+      );
+    expect((await read()).rows).toEqual([{ new_session_policy: "live" }]);
+
+    await db.execute(
+      sql`UPDATE guardrails_deployment SET new_session_policy = 'snapshot' WHERE id = 'global'`,
+    );
+    expect((await read()).rows).toEqual([{ new_session_policy: "snapshot" }]);
+    await expect(
+      db.execute(
+        sql`UPDATE guardrails_deployment SET new_session_policy = NULL WHERE id = 'global'`,
+      ),
+    ).rejects.toThrow();
   });
 });
 

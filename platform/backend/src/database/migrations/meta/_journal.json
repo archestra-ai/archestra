@@ -4061,13 +4061,6 @@
       "when": 1792452235075,
       "tag": "0579_remove_seeded_openappa_plugin",
       "breakpoints": true
-    },
-    {
-      "idx": 580,
-      "version": "7",
-      "when": 1792486137786,
-      "tag": "0580_public_lady_vermin",
-      "breakpoints": true
     }
   ]
 }

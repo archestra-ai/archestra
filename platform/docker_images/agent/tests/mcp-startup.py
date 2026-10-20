@@ -8,11 +8,13 @@ asserts that no tool-using inference arrives while discovery is incomplete.
 
 import base64
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
 import pty
 import select
+import shlex
 import signal
 import struct
 import subprocess
@@ -27,6 +29,48 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 CLIENT = sys.argv.pop(1)
 TOOLS = ["archestra__get_remedy_plans", "archestra__execute_remedy_plan", "archestra__yell"]
 BIN = Path(os.environ.get("ARCHESTRA_TEST_WRAPPERS", "/usr/local/bin"))
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGNQaHgARwzEcQBkUhgBQc3Y3wAAAABJRU5ErkJggg==")
+
+
+def native_file_call(path, image=False):
+    """Script the model response; the pinned client's own file tool executes."""
+    if CLIENT == "claude-code":
+        return "Read", {"file_path": str(path)}
+    if CLIENT == "codex":
+        return ("view_image", {"path": str(path)}) if image else ("exec_command", {"cmd": "cat -- " + shlex.quote(str(path))})
+    if CLIENT == "opencode":
+        return "read", {"filePath": str(path)}
+    if CLIENT == "hermes":
+        # This toolset has no optional vision provider. Verify binary access
+        # through the native terminal; read_file only supports text documents.
+        return ("terminal", {"command": "sha256sum -- " + shlex.quote(str(path))}) if image else ("read_file", {"path": str(path)})
+    if CLIENT == "openclaw":
+        # The maintained provider config defaults to text-only model input.
+        # Exercise file access without depending on optional image forwarding.
+        return ("exec", {"command": "sha256sum -- " + shlex.quote(str(path))}) if image else ("read", {"path": str(path)})
+    raise AssertionError(f"No native attachment test for {CLIENT}")
+
+
+def image_count(value):
+    if isinstance(value, dict):
+        return (value.get("type") in ("image", "input_image", "image_url")) + sum(image_count(item) for item in value.values())
+    if isinstance(value, list):
+        return sum(image_count(item) for item in value)
+    return 0
+
+
+def tool_results(request):
+    results = []
+    for item in request.get("input", []) + request.get("messages", []):
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "function_call_output":
+            results.append(item.get("output"))
+        elif item.get("role") == "tool":
+            results.append(item.get("content"))
+        elif isinstance(item.get("content"), list):
+            results.extend(block.get("content") for block in item["content"] if block.get("type") == "tool_result")
+    return json.dumps(results)
 
 
 class Gateway(ThreadingHTTPServer):
@@ -41,6 +85,8 @@ class Gateway(ThreadingHTTPServer):
         self.catalog_sent = False
         self.discovery_failed = threading.Event()
         self.binding_headers = []
+        self.attachment_calls = []
+        self.attachment_step = 0
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -121,27 +167,27 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.server.sequence += 1
         self.reply_id = str(self.server.sequence)
-        images = sum(
-            block.get("type") == "image"
-            for message in request.get("messages", [])
-            for block in (message.get("content") or [])
-            if isinstance(block, dict)
-        )
-        self.server.requests.append({"names": names, "catalog_sent": self.server.catalog_sent, "images": images})
+        self.server.requests.append({"names": names, "catalog_sent": self.server.catalog_sent, "images": image_count(request), "tool_results": tool_results(request)})
         if len(self.server.requests) == 1:
             print(f"{CLIENT}: first request gateway tools: {[n for n in names if 'remedy' in n or 'yell' in n]}", flush=True)
         tool = next((name for name in names if len(self.server.calls) < len(TOOLS) and name.endswith(TOOLS[len(self.server.calls)].removeprefix("archestra__"))), None)
+        arguments = {}
+        if self.server.attachment_step < len(self.server.attachment_calls):
+            tool, arguments = self.server.attachment_calls[self.server.attachment_step]
+            self.server.attachment_step += 1
+            assert tool in names, (tool, names)
         if self.path.split("?", 1)[0].endswith("/messages"):
-            self.anthropic(tool)
+            self.anthropic(tool, arguments)
         elif self.path.endswith("/chat/completions"):
-            self.chat(tool, request)
+            self.chat(tool, request, arguments)
         else:
-            self.send_responses(tool)
+            self.send_responses(tool, arguments)
 
-    def send_responses(self, tool):
+    def send_responses(self, tool, arguments):
+        arguments_json = json.dumps(arguments)
         if tool:
             namespace, _, name = tool.rpartition(".")
-            item = {"type": "function_call", "id": "fc_test_" + self.reply_id, "call_id": "call_test_" + self.reply_id, "name": name or tool, "arguments": "{}", "status": "completed"}
+            item = {"type": "function_call", "id": "fc_test_" + self.reply_id, "call_id": "call_test_" + self.reply_id, "name": name or tool, "arguments": arguments_json, "status": "completed"}
             if namespace:
                 item["namespace"] = namespace
         else:
@@ -153,15 +199,15 @@ class Handler(BaseHTTPRequestHandler):
             events.insert(3, {"type": "response.output_text.delta", "item_id": "msg_test_" + self.reply_id, "output_index": 0, "content_index": 0, "delta": "STARTUP_OK"})
             events.insert(4, {"type": "response.output_text.done", "item_id": "msg_test_" + self.reply_id, "output_index": 0, "content_index": 0, "text": "STARTUP_OK"})
         else:
-            events.insert(2, {"type": "response.function_call_arguments.delta", "item_id": "fc_test_" + self.reply_id, "output_index": 0, "delta": "{}"})
-            events.insert(3, {"type": "response.function_call_arguments.done", "item_id": "fc_test_" + self.reply_id, "output_index": 0, "arguments": "{}"})
+            events.insert(2, {"type": "response.function_call_arguments.delta", "item_id": "fc_test_" + self.reply_id, "output_index": 0, "delta": arguments_json})
+            events.insert(3, {"type": "response.function_call_arguments.done", "item_id": "fc_test_" + self.reply_id, "output_index": 0, "arguments": arguments_json})
         self.respond("".join("data: " + json.dumps(e) + "\n\n" for e in events).encode(), "text/event-stream")
 
-    def chat(self, tool, request):
+    def chat(self, tool, request, arguments):
         message = {"role": "assistant", "content": "STARTUP_OK"}
         finish = "stop"
         if tool:
-            message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_test_" + self.reply_id, "type": "function", "function": {"name": tool, "arguments": "{}"}}]}
+            message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_test_" + self.reply_id, "type": "function", "function": {"name": tool, "arguments": json.dumps(arguments)}}]}
             finish = "tool_calls"
         response = {"id": "chatcmpl-test", "object": "chat.completion", "created": 1, "model": "gpt-4.1", "choices": [{"index": 0, "message": message, "finish_reason": finish}], "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
         if request.get("stream"):
@@ -173,11 +219,11 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.respond(response)
 
-    def anthropic(self, tool):
+    def anthropic(self, tool, arguments):
         block = {"type": "tool_use", "id": "tool_test_" + self.reply_id, "name": tool, "input": {}} if tool else {"type": "text", "text": ""}
         message = {"id": "msg_test_" + self.reply_id, "type": "message", "role": "assistant", "model": "claude-sonnet-4-6", "content": [], "stop_reason": None, "stop_sequence": None, "usage": {"input_tokens": 10, "output_tokens": 0}}
         events = [("message_start", {"type": "message_start", "message": message}), ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": block})]
-        delta = {"type": "input_json_delta", "partial_json": "{}"} if tool else {"type": "text_delta", "text": "STARTUP_OK"}
+        delta = {"type": "input_json_delta", "partial_json": json.dumps(arguments)} if tool else {"type": "text_delta", "text": "STARTUP_OK"}
         events.extend([("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": delta}), ("content_block_stop", {"type": "content_block_stop", "index": 0}), ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "tool_use" if tool else "end_turn", "stop_sequence": None}, "usage": {"output_tokens": 5}}), ("message_stop", {"type": "message_stop"})])
         self.respond("".join("event: " + name + "\ndata: " + json.dumps(e) + "\n\n" for name, e in events).encode(), "text/event-stream")
 
@@ -206,6 +252,9 @@ class StartupTest(unittest.TestCase):
     def test_resumed_delegation(self):
         self.run_client("one_shot", resume=True)
 
+    def test_attachment_inputs(self):
+        self.run_client("one_shot", resume=True, attachments=True)
+
     def test_idle_interactive_resume(self):
         self.run_client("one_shot", resume=True, idle_resume=True)
 
@@ -221,9 +270,6 @@ class StartupTest(unittest.TestCase):
                 self.run_client("one_shot", failure=method)
 
     if CLIENT == "claude-code":
-        def test_resumed_delegation_with_image(self):
-            self.run_client("one_shot", resume=True, image_followup=True)
-
         def test_empty_gateway_catalog(self):
             self.run_client("one_shot", failure="empty")
 
@@ -231,7 +277,7 @@ class StartupTest(unittest.TestCase):
         def test_plain_cli(self):
             self.run_client("one_shot", plain=True)
 
-    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False, missing_binding=False, image_followup=False):
+    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False, missing_binding=False, attachments=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             runtime = root / "runtime"
@@ -251,18 +297,6 @@ class StartupTest(unittest.TestCase):
                     if turn:
                         env["ARCHESTRA_AGENT_RUNTIME_CONTINUE"] = "1"
                         env["ARCHESTRA_AGENT_RUNTIME_TASK"] = "Call each recovery tool again, then reply STARTUP_OK."
-                        if image_followup:
-                            # Delay the real PNG read beyond the submit buffer,
-                            # independent of machine speed. Claude must finish
-                            # its asynchronous paste before receiving Enter.
-                            image = home / "screenshot.png"
-                            os.mkfifo(image)
-                            def feed_image():
-                                with image.open("wb") as stream:
-                                    time.sleep(5)
-                                    stream.write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="))
-                            threading.Thread(target=feed_image, daemon=True).start()
-                            env["ARCHESTRA_AGENT_RUNTIME_TASK"] += "\n\nAttached files are available for this run:\n- " + str(image)
                         server.requests.clear()
                         server.calls.clear()
                         server.catalog_sent = False
@@ -270,6 +304,25 @@ class StartupTest(unittest.TestCase):
                         server.discovery_failed.clear()
                         server.binding_headers.clear()
                         server.release.clear()
+                    if attachments:
+                        files = runtime / "attachments" / str(turn)
+                        files.mkdir(parents=True)
+                        image = files / "screenshot.png"
+                        image.write_bytes(PNG)
+                        note = files / "notes.txt"
+                        marker = f"ATTACHMENT_CONTENT_TURN_{turn}"
+                        note.write_text(marker)
+                        manifests = runtime / "turns"
+                        manifests.mkdir(exist_ok=True)
+                        manifest = manifests / f"{turn}.attachments.json"
+                        manifest.write_text(json.dumps([
+                            {"name": path.name, "path": str(path), "mediaType": mime, "size": path.stat().st_size}
+                            for path, mime in [(image, "image/png"), (note, "text/plain")]
+                        ]))
+                        env["ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST"] = str(manifest)
+                        env["ARCHESTRA_AGENT_RUNTIME_TASK"] += f"\n\nAttached files for this turn are listed in {manifest}. Read the manifest, then use your file tools to inspect the relevant attachments."
+                        server.attachment_calls = [native_file_call(manifest), native_file_call(note), native_file_call(image, image=True)]
+                        server.attachment_step = 0
                     env["ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX"] = str(runtime / f"turn-{turn}")
                     turn_mode = "interactive" if turn and idle_resume else mode
                     if turn and idle_resume:
@@ -285,8 +338,15 @@ class StartupTest(unittest.TestCase):
                         self.assertFalse((runtime / "missing-binding.result").exists(), "A runtime without its binding was marked successful")
                     else:
                         self.run_turn(root, home, runtime, env, server, turn_mode, plain, failure, hold, idle=bool(turn and idle_resume))
-                        if turn and image_followup:
-                            self.assertGreater(server.requests[0]["images"], 0, "Follow-up submitted without its image")
+                        if attachments:
+                            outputs = "\n".join(request["tool_results"] for request in server.requests)
+                            self.assertIn(str(image), outputs, "The native client did not read this turn's manifest")
+                            self.assertIn(marker, outputs, "The native client did not read this turn's text attachment")
+                            if CLIENT in ("hermes", "openclaw"):
+                                self.assertIn(hashlib.sha256(PNG).hexdigest(), outputs, "The native client could not read the binary attachment")
+                            else:
+                                self.assertGreater(max(request["images"] for request in server.requests), server.requests[0]["images"], "The image did not reach the model through the native file tool: " + outputs[-3000:])
+                            print(f"{CLIENT}: turn {turn} submitted, manifest and attachments read", flush=True)
             finally:
                 server.release.set()
                 server.shutdown()

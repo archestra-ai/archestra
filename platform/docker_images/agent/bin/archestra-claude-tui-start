@@ -31,12 +31,6 @@ def gateway_state(menu: str) -> str:
     return "pending"
 
 
-def paste_in_progress(screen: str) -> bool:
-    # Only inspect the status below the last input border, not task/history text.
-    footer = re.split(r"(?m)^─{3,}[ \t]*$", screen)[-1]
-    return any(re.match(r"^\s*Pasting(?:…|\.\.\.)(?:\s|$)", line) for line in footer.splitlines())
-
-
 def main() -> int:
     pane = os.environ.get("TMUX_PANE")
     child = None
@@ -90,22 +84,6 @@ def main() -> int:
                 return child.wait()
             # Bracketed paste preserves multiline tasks as one submitted prompt.
             subprocess.run(["tmux", "send-keys", "-t", pane, "-l", "\x1b[200~" + task + "\x1b[201~"], check=True)
-            # Image paths are expanded asynchronously during paste. Enter sent
-            # immediately can be swallowed, leaving the task in the input box.
-            paste_deadline = time.monotonic() + 30
-            time.sleep(3)
-            while child.poll() is None:
-                screen = subprocess.check_output(["tmux", "capture-pane", "-p", "-t", pane], text=True)
-                if not paste_in_progress(screen):
-                    break
-                if time.monotonic() >= paste_deadline:
-                    message = "Claude Code could not finish pasting the prompt. Retry with smaller attachments."
-                    subprocess.run([str(Path(__file__).with_name("archestra-agent-failure")), "claude_prompt_submission", message], check=False)
-                    print("archestra: " + message, file=sys.stderr)
-                    return 78
-                time.sleep(0.1)
-            else:
-                return child.wait()
             subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], check=True)
             return child.wait()
     except (OSError, subprocess.SubprocessError, RuntimeError):

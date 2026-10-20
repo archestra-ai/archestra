@@ -5,7 +5,10 @@ import {
   nextAvailableName,
   sanitizeUploadFilename,
 } from "@/utils/upload-filename";
-import { AGENT_RUNTIME_ATTACHMENTS_DIR } from "./runtime-contract";
+import {
+  AGENT_RUNTIME_ATTACHMENTS_DIR,
+  agentRuntimeAttachmentsManifestPath,
+} from "./runtime-contract";
 
 /** Persist browser/messaging inputs before the detached task is allowed to run. */
 export async function persistAgentRunInputs(params: {
@@ -37,16 +40,18 @@ export async function persistAgentRunInputs(params: {
   );
 }
 
-/** Add stable paths to the instruction without rewriting the persisted prompt. */
+/** Refer to staged inputs without triggering native clients' image-paste handlers. */
 export function taskWithAgentRunInputs(params: {
+  taskId: string;
   task: string | null | undefined;
   inputs: AgentRunInput[];
 }): string | null | undefined {
   if (params.inputs.length === 0) return params.task;
-  const paths = params.inputs
-    .map((input) => `- ${input.runtimePath}`)
-    .join("\n");
-  return `${params.task ?? ""}\n\nAttached files are available for this run:\n${paths}`.trim();
+  // The manifest is staged before startup for every runtime. Keep attachment
+  // paths out of the prompt: some TUIs expand image paths asynchronously and
+  // can swallow the submit key while doing so. Read files through normal tools
+  // after submission instead, independently of the client's input handling.
+  return `${params.task ?? ""}\n\nAttached files for this turn are listed in ${agentRuntimeAttachmentsManifestPath(params.taskId)}. Read the manifest, then use your file tools to inspect the relevant attachments.`.trim();
 }
 
 // === Internal helpers ===

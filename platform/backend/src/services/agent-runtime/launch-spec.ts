@@ -347,6 +347,7 @@ export async function buildAgentRunLaunchSpec(params: {
   };
 
   const task = taskWithAgentRunInputs({
+    taskId: params.taskId,
     task: params.task,
     inputs: params.inputFiles ?? [],
   });

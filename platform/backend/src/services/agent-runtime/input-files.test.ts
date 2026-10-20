@@ -1,6 +1,7 @@
 import { A2AContextModel, A2ATaskModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { persistAgentRunInputs, taskWithAgentRunInputs } from "./input-files";
+import { agentRuntimeAttachmentsManifestPath } from "./runtime-contract";
 
 describe("Agent run input files", () => {
   test("stores binary inputs at collision-safe runtime paths", async ({
@@ -52,9 +53,16 @@ describe("Agent run input files", () => {
       "first",
       "second",
     ]);
-    expect(taskWithAgentRunInputs({ task: "Read both.", inputs })).toBe(
-      `Read both.\n\nAttached files are available for this run:\n- /var/run/archestra/attachments/${task.id}/notes.txt\n- /var/run/archestra/attachments/${task.id}/notes (1).txt`,
-    );
+    const prompt = taskWithAgentRunInputs({
+      taskId: task.id,
+      task: "Read both.",
+      inputs,
+    });
+    expect(prompt).toContain("Read both.");
+    expect(prompt).toContain(agentRuntimeAttachmentsManifestPath(task.id));
+    for (const input of inputs) {
+      expect(prompt).not.toContain(input.runtimePath);
+    }
     const followUp = await A2ATaskModel.createForRun({
       contextId: context.id,
       agentId: agent.id,
@@ -65,8 +73,8 @@ describe("Agent run input files", () => {
       uploadedByUserId: user.id,
       attachments: [
         {
-          name: "notes.txt",
-          contentType: "text/plain",
+          name: "screenshot.png",
+          contentType: "image/png",
           contentBase64: Buffer.from("follow-up").toString("base64"),
         },
       ],
@@ -75,6 +83,31 @@ describe("Agent run input files", () => {
       followUpInput.runtimePath,
     );
     expect(followUpInput.fileData.toString("utf8")).toBe("follow-up");
+    const followUpPrompt = taskWithAgentRunInputs({
+      taskId: followUp.id,
+      task: "Inspect the screenshot.",
+      inputs: [followUpInput],
+    });
+    expect(followUpPrompt).toContain("Inspect the screenshot.");
+    expect(followUpPrompt).toContain(
+      agentRuntimeAttachmentsManifestPath(followUp.id),
+    );
+    expect(followUpPrompt).not.toContain(
+      agentRuntimeAttachmentsManifestPath(task.id),
+    );
+    expect(followUpPrompt).not.toContain(followUpInput.runtimePath);
+    expect(followUpPrompt).not.toContain(followUpInput.originalName);
+  });
+
+  test.each([
+    undefined,
+    null,
+    "",
+    "Keep\nthese instructions.",
+  ])("preserves a task without attachments: %s", (task) => {
+    expect(
+      taskWithAgentRunInputs({ taskId: "empty-task", task, inputs: [] }),
+    ).toBe(task);
   });
 
   test("stores inputs from a system-originated task without a user owner", async ({

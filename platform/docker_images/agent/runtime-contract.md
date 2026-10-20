@@ -119,7 +119,9 @@ Write to a temporary file in the runtime directory and rename it into place so A
 
 ## Input Files
 
-Files attached to initial runs or API/A2A follow-ups are staged before the Agent command starts. Each turn uses its own subdirectory under `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR`. Earlier attachments remain intact. The task text lists the absolute path of every attached file, and `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` points to a JSON array containing each file's original name, absolute path, media type, and size. Filenames are reduced to safe path segments and collisions are renamed.
+Files attached to initial runs or API/A2A follow-ups are staged before the Agent command starts. Each turn uses its own subdirectory under `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR`. Earlier attachments remain intact. The task text points to a turn-specific JSON manifest containing each file's original name, absolute path, media type, and size. Read this manifest and inspect the relevant files through the client's normal tools. Individual attachment paths are not pasted into the prompt, so native image-paste handling cannot delay submission. Filenames are reduced to safe path segments and collisions are renamed.
+
+Turn manifests remain available when a workspace resumes, preserving references in earlier messages. `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` retains the current manifest's contents at its existing location for custom-image compatibility.
 
 The files are task inputs, not shell keystrokes and not model-provider attachments. The Agent reads them from disk with its normal file or shell tools. Kubernetes holds the Agent entrypoint until every file and the manifest have been written. If the control plane restarts during staging, reconciliation finishes the same durable inputs before releasing the command.
 

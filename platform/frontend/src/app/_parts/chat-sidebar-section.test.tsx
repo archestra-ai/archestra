@@ -178,6 +178,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
+  SIDEBAR_PINNED_PROJECTS_QUERY: { pinned: true, limit: 100, offset: 0 },
   // Answers like the endpoint: `pinned` splits the list, results are paged.
   useProjects: (filters?: { pinned?: boolean; enabled?: boolean }) => {
     mockUseProjects(filters);
@@ -196,6 +197,7 @@ vi.mock("@/lib/projects/projects.query", () => ({
 }));
 
 vi.mock("@/lib/app.query", () => ({
+  SIDEBAR_PINNED_APPS_QUERY: { limit: 100, offset: 0, pinned: true },
   useApps: () =>
     mockAppsLoading
       ? { data: undefined, isLoading: true }

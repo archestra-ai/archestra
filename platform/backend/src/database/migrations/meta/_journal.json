@@ -4061,6 +4061,20 @@
       "when": 1792452235075,
       "tag": "0579_remove_seeded_openappa_plugin",
       "breakpoints": true
+    },
+    {
+      "idx": 580,
+      "version": "7",
+      "when": 1792483829625,
+      "tag": "0580_connect_page_user_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 581,
+      "version": "7",
+      "when": 1792491071255,
+      "tag": "0581_chunk_size_markers",
+      "breakpoints": true
     }
   ]
 }

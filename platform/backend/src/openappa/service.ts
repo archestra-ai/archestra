@@ -28,10 +28,7 @@ import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import {
-  expandCommandExecutionPolicyRules,
-  normalizeCommandExecutionArguments,
-} from "@/openappa/command-normalization";
+import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
@@ -51,6 +48,7 @@ import {
   OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
+  runtimeFailureCode,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
@@ -663,12 +661,30 @@ async function dispatchFailure(params: {
   served: string;
   error: unknown;
 }): Promise<ApiError> {
-  const missing = await missingOpeningAnnotator(params.session, params.served);
-  if (missing !== null)
-    return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
-  return openappaFailure(
-    (await rootOnlyRefusal(params.organizationId)) ?? params.error,
-  );
+  // Only a refusal of the policy is explained by the policy; a storage, lease
+  // or uncoded failure is reported as itself.
+  switch (runtimeFailureCode(params.error)) {
+    // An annotator the opening policy routes to is no longer served, so the
+    // runtime has it unregistered.
+    case "annotation_refused":
+    case "policy_unavailable": {
+      const missing = await missingOpeningAnnotator(
+        params.session,
+        params.served,
+      );
+      return openappaFailure(
+        missing === null
+          ? params.error
+          : new OpenappaRetiredAnnotatorError(missing),
+      );
+    }
+    case "policy_refused":
+      return openappaFailure(
+        (await rootOnlyRefusal(params.organizationId)) ?? params.error,
+      );
+    default:
+      return openappaFailure(params.error);
+  }
 }
 
 /**
@@ -745,7 +761,7 @@ async function effectivePolicy(
     try {
       dispatch = await openappaDeclarations.dispatchPolicy({
         organizationId,
-        content: expandCommandExecutionPolicyRules(policy.content),
+        content: policy.content,
         onUnreadable: (found) => {
           unreadable = found;
         },
@@ -771,7 +787,7 @@ async function effectivePolicy(
     return {
       ...(await openappaDeclarations.dispatchPolicy({
         organizationId,
-        content: expandCommandExecutionPolicyRules(recompiled.content),
+        content: recompiled.content,
       })),
       compositionHash: recompiled.contentHash,
       snapshot: newSessionPolicy === "snapshot",

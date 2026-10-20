@@ -2215,3 +2215,52 @@ describe("AnthropicStreamAdapter carries cache usage to the end of the turn", ()
     });
   });
 });
+
+describe("AnthropicRequestAdapter replayed tool-call ids", () => {
+  test("fits a foreign call id after the result update looked it up", () => {
+    const geminiCallId = `gemsig-${"s".repeat(450)}.gemini-call-read-1`;
+    const request = createMockRequest([
+      { role: "user", content: "Read a.txt" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: geminiCallId, name: "read", input: {} },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: geminiCallId, content: "SECRET" },
+        ],
+      },
+    ] as Anthropic.Types.MessagesRequest["messages"]);
+
+    const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+    adapter.applyToolResultUpdates({ [geminiCallId]: "sanitized" });
+    const messages = adapter.toProviderRequest().messages;
+
+    const [toolUse] = messages[1].content as Array<{ id: string }>;
+    const [toolResult] = messages[2].content as Array<{
+      tool_use_id: string;
+    }>;
+    expect(toolUse.id).toMatch(/^call_[0-9a-f]{32}$/);
+    expect(toolResult.tool_use_id).toBe(toolUse.id);
+    expect(JSON.stringify(messages)).toContain("sanitized");
+    expect(JSON.stringify(messages)).not.toContain("SECRET");
+  });
+
+  test("keeps an id Anthropic minted", () => {
+    const request = createMockRequest([
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "toolu_01AbC", name: "read", input: {} },
+        ],
+      },
+    ] as Anthropic.Types.MessagesRequest["messages"]);
+
+    const adapter = anthropicAdapterFactory.createRequestAdapter(request);
+
+    expect(adapter.toProviderRequest().messages).toEqual(request.messages);
+  });
+});

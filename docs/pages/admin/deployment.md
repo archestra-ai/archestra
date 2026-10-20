@@ -144,6 +144,20 @@ The server caches the most-active list for at most 30 seconds, including load ti
 
 Use `archestra.resources` and `archestra.worker.resources` to size pods. Diagnostics storage shared by concurrent pods requires a compatible `ReadWriteMany` volume; check `archestra.diagnostics` in the selected chart's values.
 
+The web and worker pods share `archestra.nodeSelector`, `archestra.tolerations`, `archestra.affinity`, `archestra.topologySpreadConstraints` and `archestra.podAnnotations`.
+
+To survive a zone outage, spread replicas across zones with `archestra.topologySpreadConstraints`. Leave out `labelSelector` and each Deployment counts only its own pods, so web pods and worker pods each spread evenly and can share a zone:
+
+```yaml
+archestra:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+```
+
+For pod anti-affinity, add `matchLabelKeys: [app.kubernetes.io/component]` to the term so web and worker pods are counted separately (Kubernetes 1.31 and later).
+
 ### Accessing the Platform
 
 For a local verification before configuring ingress:

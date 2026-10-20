@@ -27,7 +27,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
-import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
+import { formatBytes } from "@/lib/utils/format-bytes";
 import { cn } from "@/lib/utils/tailwind";
 import type { ResourceFile } from "./skill-draft";
 

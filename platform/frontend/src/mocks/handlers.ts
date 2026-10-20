@@ -310,6 +310,16 @@ export const handlers: HttpHandler[] = [
   ...paths("/api/bootstrap").map((url) =>
     http.get(url, () => HttpResponse.json(null, { status: 401 })),
   ),
+  // The new-chat composer's bundle: unavailable by default for the same
+  // reason, so the composer loads from the individual reads.
+  ...paths("/api/bootstrap/new-chat").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
+  // A conversation's first screen: unavailable by default, so the page loads
+  // the conversation and composer from the individual reads.
+  ...paths("/api/bootstrap/conversation/:id").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
   // Recipients for an object not created yet: the admin may share with

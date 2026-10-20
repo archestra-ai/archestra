@@ -20,6 +20,22 @@ export function useShellReady(): boolean {
   );
 }
 
+/**
+ * Record that the server rendered this page with the shell's data in the
+ * HTML (see `prefetchShellSeed`). Call it once, as the query cache is
+ * created. The page's first data is then already there, so the shell's
+ * deferred requests start as soon as the cache is idle instead of waiting
+ * for a first wave that never comes.
+ */
+export function markShellSeeded(client: QueryClient): void {
+  seededClients.add(client);
+}
+
+/** Whether the server rendered this page with the shell's data. */
+export function useIsShellSeeded(): boolean {
+  return seededClients.has(useQueryClient());
+}
+
 // === Internal helpers
 
 class ShellDeferral {
@@ -28,7 +44,8 @@ class ShellDeferral {
   private stop: () => void = () => {};
 
   constructor(client: QueryClient) {
-    let sawFetch = false;
+    // A seeded page has had its first wave on the server.
+    let sawFetch = seededClients.has(client);
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const fallback = setTimeout(() => this.release(), FALLBACK_MS);
     // The query cache's events drive the release. Idle means no query is
@@ -54,6 +71,12 @@ class ShellDeferral {
       clearTimeout(settleTimer);
       unsubscribe();
     };
+    if (sawFetch) {
+      settleTimer = setTimeout(() => {
+        settleTimer = undefined;
+        if (client.isFetching() === 0) this.release();
+      }, SETTLE_MS);
+    }
   }
 
   subscribe = (listener: () => void) => {
@@ -89,3 +112,5 @@ const FALLBACK_MS = 1500;
 const SETTLE_MS = 50;
 
 const deferrals = new WeakMap<QueryClient, ShellDeferral>();
+
+const seededClients = new WeakSet<QueryClient>();

@@ -42,4 +42,26 @@ describe("preloadableLazy", () => {
     expect(container).toHaveTextContent("Hello Grace");
     expect(screen.queryByText("plain")).not.toBeInTheDocument();
   });
+
+  // A page that imports the module itself hands it over, so the server
+  // render and hydration both render it in the first pass; the chunk is
+  // never fetched on its own.
+  it("renders in the first pass with a module handed over, never loading it", () => {
+    let loads = 0;
+    const view = preloadableLazy(async () => {
+      loads += 1;
+      return { default: Greeting };
+    });
+    expect(view.isLoaded()).toBe(false);
+    view.provide({ default: Greeting });
+
+    const { container } = render(
+      <Suspense fallback={<p>plain</p>}>
+        <view.Component name="Linus" />
+      </Suspense>,
+    );
+    expect(container).toHaveTextContent("Hello Linus");
+    expect(view.isLoaded()).toBe(true);
+    return view.preload().then(() => expect(loads).toBe(0));
+  });
 });

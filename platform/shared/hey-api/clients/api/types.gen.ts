@@ -14377,7 +14377,7 @@ export type GetAgentCatalogData = {
          */
         pinned?: boolean;
         /**
-         * Attach each internal agent's assigned tools. Defaults to true. The Agents page passes false: it shows only `toolsCount` and `subagentsCount`, which are present either way, while the tool refs carry every assigned tool's name and description. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
+         * Attach each internal agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
          */
         includeTools?: boolean;
         limit?: number;
@@ -14754,7 +14754,7 @@ export type GetAgentsData = {
          */
         pinned?: boolean;
         /**
-         * Attach each agent's assigned tools. Defaults to true. Pass false when you need only the agents or their `toolsCount` and `subagentsCount`, which are always present: the tool refs carry every tool's name and description and make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned'.
+         * Attach each agent's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the agents, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned'.
          */
         includeTools?: boolean;
         /**
@@ -16436,7 +16436,7 @@ export type GetDefaultMcpGatewayData = {
     path?: never;
     query?: {
         /**
-         * Attach the gateway's assigned tools. Defaults to true. Pass false when you need only the gateway or its `toolsCount` and `subagentsCount`, which are always present: the tool refs make up most of the response. With false, `tools` is empty, meaning 'not requested' rather than 'none assigned', and `sandboxAvailable` is absent.
+         * Attach the gateway's assigned tools. Defaults to true. The tools carry every name and description, so they are most of the response. Pass false when you need only the gateway, `toolsCount`, or `subagentsCount`, which are always present. With false, `tools` is an empty array that means 'not requested', not 'none assigned', and `sandboxAvailable` is absent.
          */
         includeTools?: boolean;
     };
@@ -34576,6 +34576,1081 @@ export type GetBootstrapResponses = {
 
 export type GetBootstrapResponse = GetBootstrapResponses[keyof GetBootstrapResponses];
 
+export type GetNewChatBootstrapData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/bootstrap/new-chat';
+};
+
+export type GetNewChatBootstrapErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetNewChatBootstrapError = GetNewChatBootstrapErrors[keyof GetNewChatBootstrapErrors];
+
+export type GetNewChatBootstrapResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        roster: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            icon: string | null;
+            scope: 'personal' | 'team' | 'org';
+            authorId: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            builtIn: boolean | null;
+            builtInAgentConfig: {
+                name: 'openappa-configuration-agent';
+            } | {
+                name: 'context-compaction-subagent';
+            } | {
+                name: 'chat-title-generation-subagent';
+            } | {
+                name: 'app-runtime-llm-agent';
+            } | null;
+            runtime: {
+                image: string;
+                command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                backend: 'kubernetes';
+                steerMode: 'pipe' | 'tmux_keys';
+                privileged: boolean;
+                resources: {
+                    cpuRequest?: string;
+                    memoryRequest?: string;
+                    cpuLimit?: string;
+                    memoryLimit?: string;
+                } | null;
+                ports?: Array<number>;
+                environment: Array<{
+                    key: string;
+                    value: string;
+                }> | null;
+                credentials: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    credentialId?: string;
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }> | null;
+                allowAgentSuppliedCredentialValues?: boolean;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
+                ttlHours: number | null;
+                maxCostUsd?: number | null;
+                idleTimeoutMinutes: number | null;
+            } | null;
+            modelId: string | null;
+            llmApiKeyId: string | null;
+        }>;
+        apiKeys: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            secretId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            userId: string | null;
+            teamId: string | null;
+            baseUrl: string | null;
+            inferenceBaseUrl: string | null;
+            extraHeaders: {
+                [key: string]: string;
+            } | null;
+            isSystem: boolean;
+            isPrimary: boolean;
+            requiresReauthentication?: boolean;
+            createdByServiceAccountId: string | null;
+            createdAt: string;
+            updatedAt: string;
+            createdBy: {
+                id: string;
+                type?: 'user' | 'service_account';
+                name: string | null;
+                email: string | null;
+            } | null;
+            teamName?: string | null;
+            userName?: string | null;
+            vaultSecretPath?: string | null;
+            vaultSecretKey?: string | null;
+            secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+            bestModelId?: string | null;
+            isAgentKey?: boolean;
+            subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            labels?: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
+        }>;
+        availableApiKeys: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            secretId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            userId: string | null;
+            teamId: string | null;
+            baseUrl: string | null;
+            inferenceBaseUrl: string | null;
+            extraHeaders: {
+                [key: string]: string;
+            } | null;
+            isSystem: boolean;
+            isPrimary: boolean;
+            requiresReauthentication?: boolean;
+            createdByServiceAccountId: string | null;
+            createdAt: string;
+            updatedAt: string;
+            createdBy: {
+                id: string;
+                type?: 'user' | 'service_account';
+                name: string | null;
+                email: string | null;
+            } | null;
+            teamName?: string | null;
+            userName?: string | null;
+            vaultSecretPath?: string | null;
+            vaultSecretKey?: string | null;
+            secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+            bestModelId?: string | null;
+            isAgentKey?: boolean;
+            subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            labels?: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
+        }> | null;
+        models: Array<{
+            id: string;
+            dbId: string;
+            displayName: string;
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            createdAt?: string;
+            capabilities?: {
+                contextLength: number | null;
+                inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                supportsToolCalling: boolean | null;
+                supportsReasoningEffort: boolean | null;
+                supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                recommendedForAgents: boolean | null;
+                pricePerMillionInput: string | null;
+                pricePerMillionOutput: string | null;
+                isCustomPrice: boolean;
+                priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                pricePerMillionCacheRead: string | null;
+                pricePerMillionCacheWrite: string | null;
+                cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+            };
+            isBest?: boolean;
+            isFree: boolean;
+            embeddingDimensions?: EmbeddingDimensions | null;
+            requiresUserConnection?: boolean;
+            isConnected?: boolean;
+        }>;
+        agent: {
+            id: string;
+            detail: {
+                id: string;
+                organizationId: string;
+                authorId: string | null;
+                scope: 'personal' | 'team' | 'org';
+                name: string;
+                slug: string | null;
+                isDefault: boolean;
+                isPersonalGateway: boolean;
+                isPersonalProxy: boolean;
+                agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                systemPrompt: string | null;
+                description: string | null;
+                icon: string | null;
+                incomingEmailEnabled: boolean;
+                incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+                incomingEmailAllowedDomain: string | null;
+                llmApiKeyId: string | null;
+                llmModel: string | null;
+                modelId: string | null;
+                identityProviderId: string | null;
+                environmentId: string | null;
+                runtime: {
+                    image: string;
+                    command: Array<string> | null;
+                    inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                    backend: 'kubernetes';
+                    steerMode: 'pipe' | 'tmux_keys';
+                    privileged: boolean;
+                    resources: {
+                        cpuRequest?: string;
+                        memoryRequest?: string;
+                        cpuLimit?: string;
+                        memoryLimit?: string;
+                    } | null;
+                    ports?: Array<number>;
+                    environment: Array<{
+                        key: string;
+                        value: string;
+                    }> | null;
+                    credentials: Array<{
+                        key: string;
+                        scope: 'shared' | 'per_user';
+                        credentialId?: string;
+                        label: string;
+                        description?: string;
+                        required: boolean;
+                    }> | null;
+                    allowAgentSuppliedCredentialValues?: boolean;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                        model?: string;
+                    };
+                    ttlHours: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes: number | null;
+                } | null;
+                runtimeSecretId: string | null;
+                passthroughHeaders: Array<string> | null;
+                toolExposureMode: 'full' | 'search_and_run_only';
+                missingCredentialBehavior: 'allow' | 'warn' | 'block';
+                accessAllTools: boolean;
+                accessAllSkills: boolean;
+                activationSkillMode: 'all' | 'manual';
+                activationSkillPolicyRevision: number;
+                accessAllSubagents: boolean;
+                builtInAgentConfig: {
+                    name: 'openappa-configuration-agent';
+                } | {
+                    name: 'context-compaction-subagent';
+                } | {
+                    name: 'chat-title-generation-subagent';
+                } | {
+                    name: 'app-runtime-llm-agent';
+                } | null;
+                builtIn: boolean | null;
+                latestVersion: number;
+                lastUsedAt?: string | null;
+                createdByServiceAccountId: string | null;
+                createdAt: string;
+                updatedAt: string;
+                deletedAt: string | null;
+                tools: Array<{
+                    id: string;
+                    agentId: string | null;
+                    catalogId: string | null;
+                    delegateToAgentId: string | null;
+                    delegateToA2aConnectionId: string | null;
+                    name: string;
+                    rawName: string | null;
+                    description: string | null;
+                }>;
+                teams: Array<{
+                    id: string;
+                    name: string;
+                }>;
+                users?: Array<{
+                    id: string;
+                    name: string;
+                    email: string;
+                }>;
+                labels: Array<{
+                    key: string;
+                    value: string;
+                    keyId?: string;
+                    valueId?: string;
+                }>;
+                authorName?: string | null;
+                authorEmail?: string | null;
+                createdBy?: {
+                    id: string;
+                    type?: 'user' | 'service_account';
+                    name: string | null;
+                    email: string | null;
+                } | null;
+                knowledgeBaseIds: Array<string>;
+                connectorIds: Array<string>;
+                suggestedPrompts: Array<{
+                    summaryTitle: string;
+                    prompt: string;
+                }>;
+                resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                resolvedLlmProviderKeyName?: string | null;
+                resolvedLlmModelName?: string | null;
+                llmProviderRequiresPerUserCredential?: boolean;
+                sandboxAvailable?: boolean;
+                activationSkillsCount?: number;
+            };
+            delegations: Array<{
+                id: string;
+                name: string;
+                description: string | null;
+                systemPrompt: string | null;
+            }>;
+            credentialReadiness: Array<{
+                agentId: string;
+                missingCredentialBehavior: 'allow' | 'warn' | 'block';
+                missingConnections: Array<{
+                    catalogId: string;
+                    catalogName: string;
+                }>;
+            }>;
+            browserTools: Array<{
+                id: string;
+                agentId: string | null;
+                catalogId: string | null;
+                delegateToAgentId: string | null;
+                delegateToA2aConnectionId: string | null;
+                name: string;
+                rawName: string | null;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                description: string | null;
+                meta: string | number | boolean | null | {
+                    [key: string]: unknown;
+                } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
+                createdAt: string;
+                updatedAt: string;
+                deletedAt: string | null;
+                mcpServerId: string | null;
+                credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
+            }>;
+            defaultSuggestedPrompts: Array<{
+                summaryTitle: string;
+                prompt: string;
+            }> | null;
+            keyModels: Array<{
+                id: string;
+                dbId: string;
+                displayName: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                createdAt?: string;
+                capabilities?: {
+                    contextLength: number | null;
+                    inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                    outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                    supportsToolCalling: boolean | null;
+                    supportsReasoningEffort: boolean | null;
+                    supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    recommendedForAgents: boolean | null;
+                    pricePerMillionInput: string | null;
+                    pricePerMillionOutput: string | null;
+                    isCustomPrice: boolean;
+                    priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    pricePerMillionCacheRead: string | null;
+                    pricePerMillionCacheWrite: string | null;
+                    cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                };
+                isBest?: boolean;
+                isFree: boolean;
+                embeddingDimensions?: EmbeddingDimensions | null;
+                requiresUserConnection?: boolean;
+                isConnected?: boolean;
+            }> | null;
+        } | null;
+        memberDefaultKeyModels: {
+            apiKeyId: string;
+            models: Array<{
+                id: string;
+                dbId: string;
+                displayName: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                createdAt?: string;
+                capabilities?: {
+                    contextLength: number | null;
+                    inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                    outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                    supportsToolCalling: boolean | null;
+                    supportsReasoningEffort: boolean | null;
+                    supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    recommendedForAgents: boolean | null;
+                    pricePerMillionInput: string | null;
+                    pricePerMillionOutput: string | null;
+                    isCustomPrice: boolean;
+                    priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    pricePerMillionCacheRead: string | null;
+                    pricePerMillionCacheWrite: string | null;
+                    cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                };
+                isBest?: boolean;
+                isFree: boolean;
+                embeddingDimensions?: EmbeddingDimensions | null;
+                requiresUserConnection?: boolean;
+                isConnected?: boolean;
+            }>;
+        } | null;
+    };
+};
+
+export type GetNewChatBootstrapResponse = GetNewChatBootstrapResponses[keyof GetNewChatBootstrapResponses];
+
+export type GetConversationBootstrapData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/bootstrap/conversation/{id}';
+};
+
+export type GetConversationBootstrapErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConversationBootstrapError = GetConversationBootstrapErrors[keyof GetConversationBootstrapErrors];
+
+export type GetConversationBootstrapResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        conversation: {
+            id: string;
+            userId: string;
+            organizationId: string;
+            agentId: string | null;
+            chatApiKeyId: string | null;
+            title: string | null;
+            selectedModel: string;
+            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            modelId: string | null;
+            thinkingEffort: 'low' | 'medium' | 'high';
+            hasCustomToolSelection: boolean;
+            hooksDebugEnabled: boolean;
+            todoList: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            artifact: string | null;
+            projectId: string | null;
+            origin: 'user' | 'schedule_trigger' | 'app_open';
+            titleIsPlaceholder: boolean;
+            encryptedChat: boolean;
+            pinnedAt: string | null;
+            lastMessageAt: string;
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: string | null;
+            contentLocked?: boolean;
+            agent: {
+                id: string;
+                name: string;
+                systemPrompt?: string | null;
+                agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                toolExposureMode: 'full' | 'search_and_run_only';
+                llmApiKeyId: string | null;
+            } | null;
+            share: {
+                visibility: 'organization' | 'team' | 'user';
+            } | null;
+            projectName?: string | null;
+            projectIcon?: string | null;
+            unread?: boolean;
+            messages: Array<unknown>;
+            olderMessageCount?: number;
+            chatErrors: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'upstream_stalled' | 'incomplete_response' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            compactions: Array<{
+                id: string;
+                conversationId: string;
+                summary: string;
+                compactedThroughMessageId: string | null;
+                trigger: 'auto' | 'manual';
+                provider: string;
+                model: string;
+                originalTokenEstimate: number;
+                compactedTokenEstimate: number;
+                createdAt: string;
+            }>;
+            contextTokensUsed?: number | null;
+        };
+        composer: {
+            roster: Array<{
+                id: string;
+                organizationId: string;
+                name: string;
+                description: string | null;
+                icon: string | null;
+                scope: 'personal' | 'team' | 'org';
+                authorId: string | null;
+                agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                builtIn: boolean | null;
+                builtInAgentConfig: {
+                    name: 'openappa-configuration-agent';
+                } | {
+                    name: 'context-compaction-subagent';
+                } | {
+                    name: 'chat-title-generation-subagent';
+                } | {
+                    name: 'app-runtime-llm-agent';
+                } | null;
+                runtime: {
+                    image: string;
+                    command: Array<string> | null;
+                    inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                    backend: 'kubernetes';
+                    steerMode: 'pipe' | 'tmux_keys';
+                    privileged: boolean;
+                    resources: {
+                        cpuRequest?: string;
+                        memoryRequest?: string;
+                        cpuLimit?: string;
+                        memoryLimit?: string;
+                    } | null;
+                    ports?: Array<number>;
+                    environment: Array<{
+                        key: string;
+                        value: string;
+                    }> | null;
+                    credentials: Array<{
+                        key: string;
+                        scope: 'shared' | 'per_user';
+                        credentialId?: string;
+                        label: string;
+                        description?: string;
+                        required: boolean;
+                    }> | null;
+                    allowAgentSuppliedCredentialValues?: boolean;
+                    claudeCode?: {
+                        authentication: 'provider' | 'subscription';
+                        model?: string;
+                    };
+                    ttlHours: number | null;
+                    maxCostUsd?: number | null;
+                    idleTimeoutMinutes: number | null;
+                } | null;
+                modelId: string | null;
+                llmApiKeyId: string | null;
+            }>;
+            apiKeys: Array<{
+                id: string;
+                organizationId: string;
+                name: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                secretId: string | null;
+                scope: 'personal' | 'team' | 'org';
+                userId: string | null;
+                teamId: string | null;
+                baseUrl: string | null;
+                inferenceBaseUrl: string | null;
+                extraHeaders: {
+                    [key: string]: string;
+                } | null;
+                isSystem: boolean;
+                isPrimary: boolean;
+                requiresReauthentication?: boolean;
+                createdByServiceAccountId: string | null;
+                createdAt: string;
+                updatedAt: string;
+                createdBy: {
+                    id: string;
+                    type?: 'user' | 'service_account';
+                    name: string | null;
+                    email: string | null;
+                } | null;
+                teamName?: string | null;
+                userName?: string | null;
+                vaultSecretPath?: string | null;
+                vaultSecretKey?: string | null;
+                secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+                bestModelId?: string | null;
+                isAgentKey?: boolean;
+                subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+                labels?: Array<{
+                    key: string;
+                    value: string;
+                    keyId?: string;
+                    valueId?: string;
+                }>;
+            }>;
+            availableApiKeys: Array<{
+                id: string;
+                organizationId: string;
+                name: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                secretId: string | null;
+                scope: 'personal' | 'team' | 'org';
+                userId: string | null;
+                teamId: string | null;
+                baseUrl: string | null;
+                inferenceBaseUrl: string | null;
+                extraHeaders: {
+                    [key: string]: string;
+                } | null;
+                isSystem: boolean;
+                isPrimary: boolean;
+                requiresReauthentication?: boolean;
+                createdByServiceAccountId: string | null;
+                createdAt: string;
+                updatedAt: string;
+                createdBy: {
+                    id: string;
+                    type?: 'user' | 'service_account';
+                    name: string | null;
+                    email: string | null;
+                } | null;
+                teamName?: string | null;
+                userName?: string | null;
+                vaultSecretPath?: string | null;
+                vaultSecretKey?: string | null;
+                secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+                bestModelId?: string | null;
+                isAgentKey?: boolean;
+                subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+                labels?: Array<{
+                    key: string;
+                    value: string;
+                    keyId?: string;
+                    valueId?: string;
+                }>;
+            }> | null;
+            models: Array<{
+                id: string;
+                dbId: string;
+                displayName: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                createdAt?: string;
+                capabilities?: {
+                    contextLength: number | null;
+                    inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                    outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                    supportsToolCalling: boolean | null;
+                    supportsReasoningEffort: boolean | null;
+                    supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                    recommendedForAgents: boolean | null;
+                    pricePerMillionInput: string | null;
+                    pricePerMillionOutput: string | null;
+                    isCustomPrice: boolean;
+                    priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    pricePerMillionCacheRead: string | null;
+                    pricePerMillionCacheWrite: string | null;
+                    cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                };
+                isBest?: boolean;
+                isFree: boolean;
+                embeddingDimensions?: EmbeddingDimensions | null;
+                requiresUserConnection?: boolean;
+                isConnected?: boolean;
+            }>;
+            agent: {
+                id: string;
+                detail: {
+                    id: string;
+                    organizationId: string;
+                    authorId: string | null;
+                    scope: 'personal' | 'team' | 'org';
+                    name: string;
+                    slug: string | null;
+                    isDefault: boolean;
+                    isPersonalGateway: boolean;
+                    isPersonalProxy: boolean;
+                    agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                    systemPrompt: string | null;
+                    description: string | null;
+                    icon: string | null;
+                    incomingEmailEnabled: boolean;
+                    incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+                    incomingEmailAllowedDomain: string | null;
+                    llmApiKeyId: string | null;
+                    llmModel: string | null;
+                    modelId: string | null;
+                    identityProviderId: string | null;
+                    environmentId: string | null;
+                    runtime: {
+                        image: string;
+                        command: Array<string> | null;
+                        inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+                        backend: 'kubernetes';
+                        steerMode: 'pipe' | 'tmux_keys';
+                        privileged: boolean;
+                        resources: {
+                            cpuRequest?: string;
+                            memoryRequest?: string;
+                            cpuLimit?: string;
+                            memoryLimit?: string;
+                        } | null;
+                        ports?: Array<number>;
+                        environment: Array<{
+                            key: string;
+                            value: string;
+                        }> | null;
+                        credentials: Array<{
+                            key: string;
+                            scope: 'shared' | 'per_user';
+                            credentialId?: string;
+                            label: string;
+                            description?: string;
+                            required: boolean;
+                        }> | null;
+                        allowAgentSuppliedCredentialValues?: boolean;
+                        claudeCode?: {
+                            authentication: 'provider' | 'subscription';
+                            model?: string;
+                        };
+                        ttlHours: number | null;
+                        maxCostUsd?: number | null;
+                        idleTimeoutMinutes: number | null;
+                    } | null;
+                    runtimeSecretId: string | null;
+                    passthroughHeaders: Array<string> | null;
+                    toolExposureMode: 'full' | 'search_and_run_only';
+                    missingCredentialBehavior: 'allow' | 'warn' | 'block';
+                    accessAllTools: boolean;
+                    accessAllSkills: boolean;
+                    activationSkillMode: 'all' | 'manual';
+                    activationSkillPolicyRevision: number;
+                    accessAllSubagents: boolean;
+                    builtInAgentConfig: {
+                        name: 'openappa-configuration-agent';
+                    } | {
+                        name: 'context-compaction-subagent';
+                    } | {
+                        name: 'chat-title-generation-subagent';
+                    } | {
+                        name: 'app-runtime-llm-agent';
+                    } | null;
+                    builtIn: boolean | null;
+                    latestVersion: number;
+                    lastUsedAt?: string | null;
+                    createdByServiceAccountId: string | null;
+                    createdAt: string;
+                    updatedAt: string;
+                    deletedAt: string | null;
+                    tools: Array<{
+                        id: string;
+                        agentId: string | null;
+                        catalogId: string | null;
+                        delegateToAgentId: string | null;
+                        delegateToA2aConnectionId: string | null;
+                        name: string;
+                        rawName: string | null;
+                        description: string | null;
+                    }>;
+                    teams: Array<{
+                        id: string;
+                        name: string;
+                    }>;
+                    users?: Array<{
+                        id: string;
+                        name: string;
+                        email: string;
+                    }>;
+                    labels: Array<{
+                        key: string;
+                        value: string;
+                        keyId?: string;
+                        valueId?: string;
+                    }>;
+                    authorName?: string | null;
+                    authorEmail?: string | null;
+                    createdBy?: {
+                        id: string;
+                        type?: 'user' | 'service_account';
+                        name: string | null;
+                        email: string | null;
+                    } | null;
+                    knowledgeBaseIds: Array<string>;
+                    connectorIds: Array<string>;
+                    suggestedPrompts: Array<{
+                        summaryTitle: string;
+                        prompt: string;
+                    }>;
+                    resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    resolvedLlmProviderKeyName?: string | null;
+                    resolvedLlmModelName?: string | null;
+                    llmProviderRequiresPerUserCredential?: boolean;
+                    sandboxAvailable?: boolean;
+                    activationSkillsCount?: number;
+                };
+                delegations: Array<{
+                    id: string;
+                    name: string;
+                    description: string | null;
+                    systemPrompt: string | null;
+                }>;
+                credentialReadiness: Array<{
+                    agentId: string;
+                    missingCredentialBehavior: 'allow' | 'warn' | 'block';
+                    missingConnections: Array<{
+                        catalogId: string;
+                        catalogName: string;
+                    }>;
+                }>;
+                browserTools: Array<{
+                    id: string;
+                    agentId: string | null;
+                    catalogId: string | null;
+                    delegateToAgentId: string | null;
+                    delegateToA2aConnectionId: string | null;
+                    name: string;
+                    rawName: string | null;
+                    /**
+                     *
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                     *
+                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                     * documentation about the format.
+                     *
+                     * Omitting parameters defines a function with an empty parameter list.
+                     *
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    description: string | null;
+                    meta: string | number | boolean | null | {
+                        [key: string]: unknown;
+                    } | Array<unknown> | null;
+                    clonedPendingDiscovery: boolean;
+                    createdAt: string;
+                    updatedAt: string;
+                    deletedAt: string | null;
+                    mcpServerId: string | null;
+                    credentialResolutionMode: 'static' | 'dynamic' | 'enterprise_managed';
+                }>;
+                defaultSuggestedPrompts: Array<{
+                    summaryTitle: string;
+                    prompt: string;
+                }> | null;
+                keyModels: Array<{
+                    id: string;
+                    dbId: string;
+                    displayName: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    createdAt?: string;
+                    capabilities?: {
+                        contextLength: number | null;
+                        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                        supportsToolCalling: boolean | null;
+                        supportsReasoningEffort: boolean | null;
+                        supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                        recommendedForAgents: boolean | null;
+                        pricePerMillionInput: string | null;
+                        pricePerMillionOutput: string | null;
+                        isCustomPrice: boolean;
+                        priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                        pricePerMillionCacheRead: string | null;
+                        pricePerMillionCacheWrite: string | null;
+                        cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    };
+                    isBest?: boolean;
+                    isFree: boolean;
+                    embeddingDimensions?: EmbeddingDimensions | null;
+                    requiresUserConnection?: boolean;
+                    isConnected?: boolean;
+                }> | null;
+            } | null;
+            memberDefaultKeyModels: {
+                apiKeyId: string;
+                models: Array<{
+                    id: string;
+                    dbId: string;
+                    displayName: string;
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    createdAt?: string;
+                    capabilities?: {
+                        contextLength: number | null;
+                        inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
+                        outputModalities: Array<'text' | 'image' | 'audio'> | null;
+                        supportsToolCalling: boolean | null;
+                        supportsReasoningEffort: boolean | null;
+                        supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
+                        recommendedForAgents: boolean | null;
+                        pricePerMillionInput: string | null;
+                        pricePerMillionOutput: string | null;
+                        isCustomPrice: boolean;
+                        priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                        pricePerMillionCacheRead: string | null;
+                        pricePerMillionCacheWrite: string | null;
+                        cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
+                    };
+                    isBest?: boolean;
+                    isFree: boolean;
+                    embeddingDimensions?: EmbeddingDimensions | null;
+                    requiresUserConnection?: boolean;
+                    isConnected?: boolean;
+                }>;
+            } | null;
+        };
+    };
+};
+
+export type GetConversationBootstrapResponse = GetConversationBootstrapResponses[keyof GetConversationBootstrapResponses];
+
 export type GetBrowserStorageStatesData = {
     body?: never;
     path?: never;
@@ -35527,6 +36602,7 @@ export type GetChatConversationsResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -35707,6 +36783,7 @@ export type CreateChatConversationResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -35872,6 +36949,7 @@ export type GetDeletedChatConversationsResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -36009,7 +37087,12 @@ export type GetChatConversationData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Return only the last N messages
+         */
+        tail?: number;
+    };
     url: '/api/chat/conversations/{id}';
 };
 
@@ -36127,6 +37210,7 @@ export type GetChatConversationResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -36303,6 +37387,7 @@ export type UpdateChatConversationResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -37016,6 +38101,7 @@ export type ForkChatConversationResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -37276,6 +38362,7 @@ export type RestoreChatConversationResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -37546,6 +38633,7 @@ export type CompactChatConversationResponses = {
             projectIcon?: string | null;
             unread?: boolean;
             messages: Array<unknown>;
+            olderMessageCount?: number;
             chatErrors: Array<{
                 id: string;
                 conversationId: string;
@@ -37719,6 +38807,7 @@ export type GenerateChatConversationTitleResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -37891,6 +38980,7 @@ export type UpdateChatMessageResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;
@@ -94140,6 +95230,7 @@ export type RunOpenAppaPolicyTestsData = {
         sourceVersion: string;
         directory?: string;
         partial?: boolean;
+        progressToken?: string;
     };
     path?: never;
     query?: never;
@@ -94240,6 +95331,7 @@ export type RunOpenAppaPolicyTestsResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;
@@ -94361,6 +95453,7 @@ export type GetOpenAppaPolicyTestRunsResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;
@@ -94486,6 +95579,7 @@ export type PreviewOpenAppaPolicyTestResponses = {
             status: 'passed' | 'failed' | 'cannot_run';
             error?: string | null;
             contentHash: string;
+            durationMs?: number;
             steps: Array<{
                 line: number;
                 tool: string;
@@ -107575,6 +108669,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         projectIcon?: string | null;
         unread?: boolean;
         messages: Array<unknown>;
+        olderMessageCount?: number;
         chatErrors: Array<{
             id: string;
             conversationId: string;

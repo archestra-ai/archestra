@@ -24,9 +24,9 @@ const POLICY_LAUNCH_PROMPTS = {
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
     "Set up a starting OpenAPPA policy with what is already available.",
-  /** Tool coverage card: how to bring more tools under a rule. */
+  /** Tool coverage card: specific rules for tools with none or only the catch-all. */
   improveCoverage:
-    "Review my OpenAPPA tool coverage and suggest how to cover more tools.",
+    "Review my OpenAPPA tool coverage and suggest specific rules for tools that have no rule or only the catch-all rule.",
   /** Batteries card: included batteries not enforced, or ones that fit. */
   configureBatteries:
     "Review my OpenAPPA batteries: what is not enforced, and which ones fit my MCP servers.",

@@ -151,6 +151,11 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
       description={
         detail ? <span ref={setDescriptionSlot} /> : page.description
       }
+      // The Overview's enforcement pill and Settings button are wider than a
+      // phone can spare beside the title, which then breaks mid-word. Other
+      // pages keep their actions inline: the Validations slot is empty until
+      // its list loads, and a stacked empty slot would leave a blank row.
+      stackHeaderOnMobile={pathname === "/openappa"}
       tabs={
         firstStepOnly || detail
           ? []

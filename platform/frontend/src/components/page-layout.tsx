@@ -403,9 +403,11 @@ export function PageLayout({
                 </div>
 
                 {/* Mobile: Show first N tabs + overflow dropdown */}
-                {/* Same rhythm as the desktop row; the overflow menu sits at the far
-                    end so the visible tabs keep their spacing. */}
-                <div className="flex md:hidden gap-4 mb-0 items-end whitespace-nowrap overflow-x-auto">
+                {/* Same rhythm as the desktop row, a step tighter on phones so
+                    a selected overflow tab's label still fits; the overflow
+                    menu sits at the far end so the visible tabs keep their
+                    spacing. */}
+                <div className="flex md:hidden gap-3 sm:gap-4 mb-0 items-end whitespace-nowrap overflow-x-auto">
                   {mobileVisibleTabs.map((tab) => {
                     const isSelected = tab === selectedTab;
                     return (
@@ -435,7 +437,10 @@ export function PageLayout({
                         <Button
                           variant="ghost"
                           className={cn(
-                            "relative ml-auto h-auto cursor-pointer rounded-none px-0 pt-0 pb-3 text-sm font-medium transition-colors hover:bg-transparent dark:hover:bg-transparent hover:text-foreground flex items-center gap-1",
+                            // Shrinks and truncates the selected tab's label
+                            // rather than overflowing the row, which would
+                            // paint a scrollbar under the tabs.
+                            "relative ml-auto h-auto min-w-0 shrink cursor-pointer rounded-none px-0 pt-0 pb-3 text-sm font-medium transition-colors hover:bg-transparent dark:hover:bg-transparent hover:text-foreground flex items-center gap-1",
                             selectedOverflowTab
                               ? "text-foreground"
                               : "text-muted-foreground",
@@ -448,7 +453,7 @@ export function PageLayout({
                             <font> wrappers and React crashes removing a
                             re-parented text node (facebook/react#11538). */}
                           {selectedOverflowTab ? (
-                            <span key="selected-tab">
+                            <span key="selected-tab" className="truncate">
                               {selectedOverflowTab.label}
                             </span>
                           ) : (

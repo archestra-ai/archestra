@@ -5,6 +5,7 @@ import {
   type MessagingChannelId,
   providerDisplayNames,
   type ResourceVisibilityScope,
+  TOOL_POST_RUN_MESSAGE_SHORT_NAME,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import type { UIMessageChunk } from "ai";
@@ -288,25 +289,35 @@ export class ChatOpsManager {
     conversationReference?: Record<string, unknown>;
     placeholderActivityId?: string;
     muteMarkerAtStart?: string | null;
-  }): Promise<void> {
+    progress?: boolean;
+  }): Promise<boolean> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
+      if (params.progress)
+        throw new Error("The run's Slack binding no longer exists.");
       logger.warn(
         { bindingId: params.bindingId },
         "[ChatOps] notifyBindingThread: binding no longer exists",
       );
-      return;
+      return false;
+    }
+    if (params.progress && binding.provider !== "slack") {
+      throw new Error(
+        "Progress updates are only supported for Slack runtime runs.",
+      );
     }
     const provider = this.providerForBinding(
       binding.provider,
       params.pinnedAgentId,
     );
     if (!provider?.isConfigured()) {
+      if (params.progress)
+        throw new Error("The run's Slack provider is not configured.");
       logger.warn(
         { bindingId: params.bindingId, provider: binding.provider },
         "[ChatOps] notifyBindingThread: provider not configured",
       );
-      return;
+      return false;
     }
     const run = params.taskId
       ? await AgentRunModel.findByTaskId(params.taskId)
@@ -314,7 +325,8 @@ export class ChatOpsManager {
     const workspace = run
       ? await AgentWorkspaceModel.findByWorkloadName(run.workloadName)
       : null;
-    if (params.taskId) await assertRuntimeAcknowledgementSettled(params.taskId);
+    if (params.taskId && !params.progress)
+      await assertRuntimeAcknowledgementSettled(params.taskId);
     const metadata = {
       conversationReference: params.conversationReference,
       placeholderActivityId: params.placeholderActivityId,
@@ -324,7 +336,7 @@ export class ChatOpsManager {
         !params.text.trim() ||
         params.text.includes(CHATOPS_NO_REPLY_SENTINEL)
       )
-        return;
+        return false;
       if (
         params.muteMarkerAtStart !== undefined &&
         (await this.threadMutedSinceStart(
@@ -337,15 +349,15 @@ export class ChatOpsManager {
           params.muteMarkerAtStart,
         ))
       )
-        return;
+        return false;
       const nativeRuntimeReply =
         !!run &&
         (binding.provider === "slack" || binding.provider === "ms-teams");
       const conversationUrl = params.taskId
         ? agentRunUrl(workspace?.id ?? params.taskId)
         : undefined;
-      const send = (includeAnchor: boolean) =>
-        provider.sendReply({
+      const send = async (includeAnchor: boolean) => {
+        const messageId = await provider.sendReply({
           // Saved metadata preserves detached Teams routing and placeholder replacement.
           originalMessage: {
             messageId: `notify-${params.bindingId}-${Date.now()}`,
@@ -373,21 +385,29 @@ export class ChatOpsManager {
               : undefined,
           conversationReference: params.conversationReference,
         });
+        if (params.progress && !messageId) {
+          throw new Error("Slack did not confirm the progress update.");
+        }
+        return messageId;
+      };
       if (nativeRuntimeReply && conversationUrl) {
         await sendRuntimeReplyWithAnchor({
           organizationId: binding.organizationId,
           bindingId: binding.id,
           threadId: params.threadId,
           providerScope: provider.stateScope,
+          ...(params.progress && { anchorOptional: true }),
           send,
         });
       } else {
         await send(true);
       }
+      return true;
     } finally {
       try {
         if (
           params.taskId &&
+          !params.progress &&
           (binding.provider !== "slack" ||
             (
               await AgentRunModel.listCancelableInChatOpsThread({
@@ -1759,6 +1779,11 @@ export class ChatOpsManager {
     ].join("\n\n");
     const fullMessage = [
       `Current message: ${message.messageId}; sender: ${message.senderId}.`,
+      ...(provider.providerId === "slack"
+        ? [
+            `You can send concise updates to this Slack thread before your turn ends: for meaningful progress, a change of plan, a long wait, or to notify the user that input or approval is needed. Use ${archestraMcpBranding.getToolName(TOOL_POST_RUN_MESSAGE_SHORT_NAME)} with message and the current task_id from the ARCHESTRA_AGENT_RUNTIME_TASK_ID environment variable. If needed, discover it through the gateway's tool search. Sending a message does not end the turn or wait for a reply; collect input and approvals through the available question or approval interface. Avoid narrating every action. Your final answer is posted automatically; do not send it with this tool.`,
+          ]
+        : []),
       ...(isGroup
         ? [
             `Directly @mentioned: ${message.metadata?.botMentioned === true ? "yes" : "no"}.`,

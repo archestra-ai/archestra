@@ -1,7 +1,9 @@
+import { TOOL_POST_RUN_MESSAGE_FULL_NAME } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { onTestFinished, vi } from "vitest";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
+import { executeArchestraTool } from "@/archestra-mcp-server";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -209,9 +211,31 @@ test.each([
       taskId: run?.taskId,
       viewerRole: "owner",
     });
+    const update = await executeArchestraTool(
+      TOOL_POST_RUN_MESSAGE_FULL_NAME,
+      {
+        task_id: run?.taskId,
+        message: "I found the cause and am checking the fix.",
+      },
+      {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        userId,
+        organizationId: agent.organizationId,
+      },
+    );
+    expect(update.isError).toBeFalsy();
+    expect(update.structuredContent).toMatchObject({ sent: true });
+    expect(replies[1]).toMatchObject({
+      text: "I found the cause and am checking the fix.",
+      originalMessage: { channelId: "C-runtime", threadId: THREAD_ID },
+    });
+    expect((await A2ATaskModel.findById(run?.taskId ?? ""))?.state).toBe(
+      "TASK_STATE_WORKING",
+    );
     expect(provider.clearTypingStatus).not.toHaveBeenCalled();
     await chatOpsManager.processMessage({ message: incoming, provider });
-    expect(replies).toHaveLength(1);
+    expect(replies).toHaveLength(2);
     expect(launch).toHaveBeenCalledOnce();
   } finally {
     launchGate.resolve();
@@ -221,6 +245,62 @@ test.each([
       )
       .toBe(true);
     await app.close();
+  }
+});
+
+test("runtime updates report transport failures and respect a thread stopped mid-run", async () => {
+  const launchGate = deferred();
+  const launch = vi.spyOn(backend, "launch").mockImplementation(async () => {
+    await launchGate.promise;
+    throw new Error("Startup stopped by test");
+  });
+  await chatOpsManager.processMessage({
+    message: message("Investigate this issue"),
+    provider,
+  });
+  await expect.poll(() => launch.mock.calls.length).toBe(1);
+  const run = await latestRun();
+  if (!run) throw new Error("Expected a runtime run");
+  const post = () =>
+    executeArchestraTool(
+      TOOL_POST_RUN_MESSAGE_FULL_NAME,
+      { task_id: run.taskId, message: "Still investigating." },
+      {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        userId,
+        organizationId: agent.organizationId,
+      },
+    );
+  try {
+    const send = vi
+      .spyOn(provider, "sendReply")
+      .mockRejectedValueOnce(new Error("Slack unavailable"));
+    expect((await post()).isError).toBe(true);
+    expect((await A2ATaskModel.findById(run.taskId))?.state).toBe(
+      "TASK_STATE_WORKING",
+    );
+    expect(provider.clearTypingStatus).not.toHaveBeenCalled();
+    await stopChannelThreadReply({
+      provider: "slack",
+      channelId: "C-runtime",
+      threadId: THREAD_ID,
+    });
+    expect((await post()).isError).toBe(true);
+    expect(
+      await chatOpsManager.notifyBindingThread({
+        taskId: run.taskId,
+        bindingId: binding.id,
+        threadId: THREAD_ID,
+        text: "Update already in flight when stopped.",
+        progress: true,
+        muteMarkerAtStart: null,
+      }),
+    ).toBe(false);
+    expect(send).toHaveBeenCalledOnce();
+  } finally {
+    launchGate.resolve();
+    await expect.poll(async () => (await latestRun())?.endedAt).not.toBeNull();
   }
 });
 
@@ -405,7 +485,9 @@ test.each([
   const prompt = JSON.stringify(spec);
   expect(prompt).toContain(incoming.text);
   expect(prompt).not.toContain("You are replying via");
-  expect(prompt).not.toContain("Your final answer is posted");
+  expect(prompt.includes(TOOL_POST_RUN_MESSAGE_FULL_NAME)).toBe(
+    providerId === "slack",
+  );
   expect(prompt).not.toContain("Reply by default");
   expect(prompt).toContain("Directly @mentioned: no");
   expect(prompt).toContain("Thread reference:");

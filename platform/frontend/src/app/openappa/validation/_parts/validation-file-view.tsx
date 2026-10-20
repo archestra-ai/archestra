@@ -207,14 +207,20 @@ function Header({
               variant="outline"
               disabled={save.disabled}
               onClick={save.onClick}
+              className={ICON_ON_PHONES}
             >
               <Save />
-              <span>Save</span>
+              <span className="sr-only sm:not-sr-only">Save</span>
             </Button>
           )}
-          <Button size="sm" disabled={run.disabled} onClick={run.onClick}>
+          <Button
+            size="sm"
+            disabled={run.disabled}
+            onClick={run.onClick}
+            className={ICON_ON_PHONES}
+          >
             {run.running ? <Loader2 className="animate-spin" /> : <Play />}
-            <span>{run.label}</span>
+            <span className="sr-only sm:not-sr-only">{run.label}</span>
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1116,6 +1122,9 @@ function CountDot({ tone, value }: { tone: "pass" | "fail"; value: number }) {
     </span>
   );
 }
+
+/** Header actions shrink to their icon on phones so the title keeps the row. */
+const ICON_ON_PHONES = "w-8 has-[>svg]:px-0 sm:w-auto sm:has-[>svg]:px-2.5";
 
 // ===========================================================================
 // Rename

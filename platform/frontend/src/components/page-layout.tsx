@@ -315,6 +315,7 @@ export function PageLayout({
                   heading name would make the heading change every time the
                   probe does. */}
                 <div
+                  data-page-title-row
                   className={cn(
                     "row-start-1 flex min-w-0 items-center gap-2",
                     headerSpacing.titleRow,
@@ -332,20 +333,34 @@ export function PageLayout({
                   )}
                 >
                   {/* Without an icon the back link leads the title itself;
-                    with one it leads the tile instead (above). */}
-                  {!icon && backLink}
-                  <h1
-                    className={cn(
-                      "min-w-0 break-words text-2xl font-semibold tracking-tight",
-                      maxWidthKey === "wizard" &&
-                        (stackHeaderOnMobile
-                          ? "sm:max-h-10 sm:overflow-hidden"
-                          : "max-h-10 overflow-hidden"),
+                    with one it leads the tile instead (above). The arrow
+                    stays on the title's first line rather than wrapping onto
+                    a row of its own, and the status pill shares the title's
+                    column: beside it when it fits, under its text when not. */}
+                  <div className="flex min-w-0 max-w-full items-start gap-2">
+                    {!icon && backLink && (
+                      <span className="flex h-7 shrink-0 items-center sm:h-8">
+                        {backLink}
+                      </span>
                     )}
-                  >
-                    <span key={pathname}>{title}</span>
-                  </h1>
-                  {status && <div className="shrink-0">{status}</div>}
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <h1
+                        className={cn(
+                          "min-w-0 break-words text-2xl font-semibold tracking-tight",
+                          // Detail titles name a record and run long; a step
+                          // smaller on phones keeps them to a line or two.
+                          backLink && "text-xl sm:text-2xl",
+                          maxWidthKey === "wizard" &&
+                            (stackHeaderOnMobile
+                              ? "sm:max-h-10 sm:overflow-hidden"
+                              : "max-h-10 overflow-hidden"),
+                        )}
+                      >
+                        <span key={pathname}>{title}</span>
+                      </h1>
+                      {status && <div className="shrink-0">{status}</div>}
+                    </div>
+                  </div>
                 </div>
                 {description && (
                   <div

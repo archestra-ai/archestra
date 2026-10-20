@@ -16,6 +16,10 @@ describe("getCachedDeploymentAppearance", () => {
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.resetModules();
+    // The cache lives on globalThis (one per process); start each test cold.
+    delete (globalThis as Record<symbol, unknown>)[
+      Symbol.for("archestra.deploymentAppearanceCache")
+    ];
     favicons = await import("./favicon.server");
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
@@ -74,6 +78,25 @@ describe("getCachedDeploymentAppearance", () => {
 
     fetchMock.mockResolvedValue(Response.json({ favicon: PNG_B }));
     expect((await favicons.getDeploymentFavicon()).href).not.toBe(good.href);
+  });
+
+  it("lets the first document use the startup warm-up read from another copy of the module", async () => {
+    // Next loads instrumentation.ts (which warms the cache) and the root
+    // layout (which reads it) from separate bundles, each with its own copy.
+    fetchMock.mockResolvedValue(
+      Response.json({ favicon: null, theme: "cosmic-night" }),
+    );
+    favicons.warmDeploymentFavicon();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(0);
+
+    vi.resetModules();
+    const layoutCopy = await import("./favicon.server");
+    expect(layoutCopy).not.toBe(favicons);
+    const appearance = await layoutCopy.getCachedDeploymentAppearance();
+
+    expect(appearance.theme).toBe("cosmic-night");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("carries the organization's theme from the same cached read", async () => {

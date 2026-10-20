@@ -113,6 +113,11 @@ import { cn } from "@/lib/utils/tailwind";
 
 const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
+// Fades an overflowing title out at the right edge instead of an ellipsis.
+// flex-1 stretches the box across the row, so short titles never reach the
+// faded strip. text-clip! beats SidebarMenuButton's last-span `truncate`.
+const TITLE_FADE_CLASS =
+  "min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip! [mask-image:linear-gradient(to_right,#000_calc(100%_-_1.5rem),transparent)]";
 
 function ChatListFadeIn({
   fadeIn,
@@ -441,7 +446,7 @@ export function ChatSidebarSection({
                   className="h-3.5 w-3.5 shrink-0"
                   aria-label="Scheduled task"
                 />
-                <span className="truncate">
+                <span className={TITLE_FADE_CLASS}>
                   {conv.scheduledRun.scheduleName}
                 </span>
               </IntentPrefetchLink>
@@ -593,7 +598,7 @@ export function ChatSidebarSection({
                       Generating...
                     </span>
                   ) : hasRecentlyGeneratedTitle ? (
-                    <span key="typing" className="truncate">
+                    <span key="typing" className={TITLE_FADE_CLASS}>
                       <TypingText
                         text={
                           displayTitle.length > MAX_TITLE_LENGTH
@@ -609,7 +614,7 @@ export function ChatSidebarSection({
                     <TruncatedText
                       message={displayTitle}
                       maxLength={MAX_TITLE_LENGTH}
-                      className="truncate"
+                      className={TITLE_FADE_CLASS}
                       showTooltip={false}
                     />
                   )}
@@ -737,7 +742,7 @@ export function ChatSidebarSection({
                 <TruncatedText
                   message={run.title}
                   maxLength={MAX_TITLE_LENGTH}
-                  className="truncate"
+                  className={TITLE_FADE_CLASS}
                   showTooltip={false}
                 />
               </span>
@@ -881,7 +886,7 @@ export function ChatSidebarSection({
               <TruncatedText
                 message={project.name}
                 maxLength={MAX_TITLE_LENGTH}
-                className="truncate"
+                className={TITLE_FADE_CLASS}
                 showTooltip={false}
               />
             </span>
@@ -960,7 +965,7 @@ export function ChatSidebarSection({
               <TruncatedText
                 message={appItem.name}
                 maxLength={MAX_TITLE_LENGTH}
-                className="truncate"
+                className={TITLE_FADE_CLASS}
                 showTooltip={false}
               />
             </span>

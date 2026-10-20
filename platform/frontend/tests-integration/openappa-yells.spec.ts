@@ -157,8 +157,15 @@ for (const width of [1280, 390]) {
             .click();
           await resolvedList;
           await expect(page).toHaveURL(/\/openappa\/yells\?status=resolved$/);
+          await expect(status).toHaveText("Resolved");
+          // Status is a view, not a filter: switching it offers no Clear.
+          await expect(
+            page.getByRole("button", { name: "Clear", exact: true }),
+          ).toHaveCount(0);
+          await expect(page.getByText("No resolved yells")).toBeVisible();
+          await status.click();
           await page
-            .getByRole("button", { name: "Clear", exact: true })
+            .getByRole("option", { name: "Unresolved", exact: true })
             .click();
           await expect(status).toHaveText("Unresolved");
           await expect(page).toHaveURL(/\/openappa\/yells$/);

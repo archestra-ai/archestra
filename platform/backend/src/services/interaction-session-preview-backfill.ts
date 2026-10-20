@@ -1,5 +1,6 @@
 import logger from "@/logging";
 import InteractionModel from "@/models/interaction";
+import { sizedChunks } from "@/utils/sized-chunks";
 
 /**
  * Fills `session_preview` on interactions written before migration 0562 added
@@ -72,12 +73,16 @@ class InteractionSessionPreviewBackfill {
       const whole = page.filter(
         (row) => row.threadId === null || row.sessionId === null,
       );
-      for (const ids of budgetedChunks(whole, chunkRows)) {
+      for (const chunk of sizedChunks(
+        whole,
+        { maxRows: chunkRows, maxBytes: MAX_CHUNK_BYTES },
+        (row) => row.requestBytes,
+      )) {
         if (Date.now() >= deadline) {
           exhausted = true;
           break;
         }
-        const result = await fillChunk(ids);
+        const result = await fillChunk(chunk.map((row) => row.id));
         filled += result.filled;
         failed += result.failed;
       }
@@ -99,9 +104,13 @@ class InteractionSessionPreviewBackfill {
           exhausted = true;
           break;
         }
-        const result = await fillThread(thread, chunkRows);
+        const result = await fillThread(thread, chunkRows, deadline);
         filled += result.filled;
         failed += result.failed;
+        if (!result.complete) {
+          exhausted = true;
+          break;
+        }
       }
       if (exhausted) break;
 
@@ -190,47 +199,21 @@ async function fillChunk(
 async function fillThread(
   thread: ThreadOnPage,
   chunkRows: number,
-): Promise<{ filled: number; failed: number }> {
+  deadline: number,
+): Promise<{ filled: number; failed: number; complete: boolean }> {
   try {
     return await InteractionModel.fillThreadSessionPreviews({
       sessionId: thread.sessionId,
       threadId: thread.threadId,
-      batchRows: chunkRows,
-      batchBytes: MAX_CHUNK_BYTES,
+      chunkRows,
+      chunkBytes: MAX_CHUNK_BYTES,
+      deadline,
     });
   } catch (error) {
     logger.warn(
       { err: error, sessionId: thread.sessionId, threadId: thread.threadId },
       "Could not fill a thread's session previews; the session list keeps deriving them on read",
     );
-    return { filled: 0, failed: thread.pageRows };
+    return { filled: 0, failed: thread.pageRows, complete: true };
   }
-}
-
-/**
- * Cut a sized page into id chunks that fit {@link MAX_CHUNK_BYTES} and
- * {@link MAX_CHUNK_ROWS}. A row larger than the byte budget is yielded alone
- * rather than skipped.
- */
-function* budgetedChunks(
-  rows: Array<{ id: string; requestBytes: number }>,
-  maxRows: number,
-): Generator<string[]> {
-  let chunk: string[] = [];
-  let bytes = 0;
-
-  for (const row of rows) {
-    if (
-      chunk.length > 0 &&
-      (bytes + row.requestBytes > MAX_CHUNK_BYTES || chunk.length >= maxRows)
-    ) {
-      yield chunk;
-      chunk = [];
-      bytes = 0;
-    }
-    chunk.push(row.id);
-    bytes += row.requestBytes;
-  }
-
-  if (chunk.length > 0) yield chunk;
 }

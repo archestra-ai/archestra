@@ -93,9 +93,9 @@ interface ReconstructableRow {
 }
 
 /**
- * A stored, already-decrypted row as {@link
- * InteractionDeltaManager.foldLoadedRows} takes it: a {@link ChainRow} whose
- * processed side may be left out when the caller only needs the request.
+ * A stored, already-decrypted row as a {@link ThreadFolder} takes it: a
+ * {@link ChainRow} whose processed side may be left out when the caller only
+ * needs the request.
  */
 type LoadedChainRow = Omit<
   ChainRow,
@@ -121,6 +121,11 @@ interface ThreadFolder {
    * when the parent belongs to the thread but has not been fed yet.
    */
   fold(row: LoadedChainRow): unknown | null;
+  /**
+   * Pass a row the caller will not fold (it could not be read, or its parent
+   * could not be folded), so its parent's fold is not held for it.
+   */
+  skip(row: { id: string; parentId: string | null }): void;
 }
 
 const CACHE_MAX_SIZE = 5000;
@@ -434,12 +439,18 @@ class InteractionDeltaManager {
       }
     }
     const states = new Map<string, FoldState>();
+    const threadParent = (row: { parentId: string | null }) =>
+      row.parentId !== null && members.has(row.parentId) ? row.parentId : null;
+    // One child fewer to come for `parentId`; its fold goes with the last.
+    const release = (parentId: string | null) => {
+      if (parentId === null) return;
+      const left = (unfoldedChildren.get(parentId) ?? 1) - 1;
+      unfoldedChildren.set(parentId, left);
+      if (left <= 0) states.delete(parentId);
+    };
     return {
       fold(row) {
-        const parentId =
-          row.parentId !== null && members.has(row.parentId)
-            ? row.parentId
-            : null;
+        const parentId = threadParent(row);
         let parent: FoldState | null = null;
         if (parentId !== null) {
           const known = states.get(parentId);
@@ -461,12 +472,11 @@ class InteractionDeltaManager {
           parent,
         );
         if ((unfoldedChildren.get(row.id) ?? 0) > 0) states.set(row.id, state);
-        if (parentId !== null) {
-          const left = (unfoldedChildren.get(parentId) ?? 1) - 1;
-          unfoldedChildren.set(parentId, left);
-          if (left <= 0) states.delete(parentId);
-        }
+        release(parentId);
         return state.full.request;
+      },
+      skip(row) {
+        release(threadParent(row));
       },
     };
   }

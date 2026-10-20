@@ -47,7 +47,7 @@ beforeEach(() => {
   );
 });
 
-it("hides retained labels after a failed refresh and recovers on reconnect", async () => {
+it("hides status labels after a failed refresh and recovers on reconnect", async () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });

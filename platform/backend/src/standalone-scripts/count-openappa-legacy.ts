@@ -46,7 +46,18 @@ async function main() {
   const counts = new Map<string, Counts>();
   for (let start = 0; start < rows.length; start += CHUNK) {
     const chunk = rows.slice(start, start + CHUNK);
-    const kinds = await native.openappaRootKinds(chunk.map(({ root }) => root));
+    let kinds: Array<string | null | undefined>;
+    try {
+      kinds = await native.openappaRootKinds(chunk.map(({ root }) => root));
+    } catch (error) {
+      throw new Error(
+        `the policy runtime could not read the openings of ${chunk.length} roots (store URL, connection or encryption): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    // A root with no log reads as null and one whose opening this read cannot
+    // decrypt as "encrypted"; neither counts as legacy.
     const legacy = chunk.filter((_, index) => kinds[index] === "legacy");
     const active = new Set(
       legacy.length === 0

@@ -344,8 +344,10 @@ test.each([
       signedIn ? ["auth.json", "config.toml"] : ["config.toml"],
     );
     const calls = await readFile(path.join(f.home, "calls"), "utf8");
-    expect(calls).toContain("app-server");
-    expect(calls).not.toMatch(/mcp|plugin/);
+    // With plugins on, app-server leaves a git sync running that keeps the
+    // temporary Codex home in use on Windows, so its removal fails.
+    expect(calls).toContain("-c features.plugins=false app-server");
+    expect(calls).not.toMatch(/mcp |plugin /);
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }

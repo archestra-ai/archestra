@@ -79,7 +79,10 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
     if (!result) {
       // Codex does not say why. Ask it, renewing the sign-in as a session would.
       // Codex saves renewed tokens in place, so the shared login file stays linked.
-      const account = readCodexAccount(command, [...args, ...overrides, 'app-server'], options);
+      // Without plugins, app-server starts no background git sync that outlives
+      // it and keeps this folder in use on Windows. Unlike --disable, a -c
+      // feature that a Codex version does not know is ignored.
+      const account = readCodexAccount(command, [...args, ...overrides, '-c', 'features.plugins=false', 'app-server'], options);
       const type = account?.result?.account?.type;
       if (account?.error && /unauthorized|\b401\b/i.test(String(account.error.message))) throw catalogError('expired');
       if (account?.result && account.result.account === null) throw catalogError(nativeAuth ? 'expired' : 'signed-out');
@@ -95,7 +98,12 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
           throw new Error('Codex credentials changed during catalog refresh. Retry the launch.');
         }
       }
-    } finally { rmSync(shadow, { recursive: true, force: true }); }
+    } finally {
+      // Remove the login link first, so a folder that Windows still reports as
+      // in use never keeps a copy of the sign-in.
+      try { rmSync(path.join(shadow, 'auth.json'), { force: true }); }
+      finally { rmSync(shadow, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+    }
   }
   const catalog = JSON.parse(result.stdout);
   if (!Array.isArray(catalog.models) || !catalog.models.length) throw new Error('Codex returned an empty model catalog.');

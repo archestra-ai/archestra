@@ -1018,6 +1018,9 @@ export class WebSocketService {
       }
     }
     if (signal.aborted) return true;
+    // A session's earlier turns are left out of a tail entirely, so they
+    // count as omitted: a full subscription with the session's history
+    // streams them along with the rest of this turn's recording.
     this.sendToClient(ws, {
       type: "agent_run_logs_ended",
       payload: {

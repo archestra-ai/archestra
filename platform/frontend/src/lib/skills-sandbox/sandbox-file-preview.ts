@@ -15,5 +15,3 @@ export function sandboxFilePreviewKind(
 export function sandboxArtifactUrl(id: string): string {
   return `/api/skill-sandbox/artifacts/${id}`;
 }
-
-/** Human-readable file size for the X-Files list (B / KB / MB). */

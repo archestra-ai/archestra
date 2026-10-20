@@ -82,8 +82,8 @@ export function OpenAppaPolicyChange({
       {change.errors?.map((error) => (
         <InlineNotice key={error} variant="error">
           <TriangleAlert />
-          <span className="font-medium">Validation error</span>
-          <InlineNoticeText>{error}</InlineNoticeText>
+          <span className="font-medium">Policy error</span>
+          <InlineNoticeText>{policyErrorText(error)}</InlineNoticeText>
         </InlineNotice>
       ))}
     </div>
@@ -434,6 +434,15 @@ function parsePolicyChange(
   )
     return null;
   return value as PolicyChange;
+}
+
+/**
+ * The runtime prefixes a refused policy's error with "unsupported policy: ",
+ * which the "Policy error" label already says. The backend matches on the
+ * prefix, so it is dropped here, for display only.
+ */
+function policyErrorText(error: string): string {
+  return error.replace(/^unsupported policy: /, "");
 }
 
 function policyDiff(before: string, after: string, path: string): string {

@@ -105,7 +105,59 @@ describe("validationFileStates", () => {
       runAt: null,
       runLabel: null,
       error: null,
+      failedStep: null,
     });
+  });
+
+  test("a mismatched decision keeps its step and sums it up without the agent's remedies", () => {
+    const step = {
+      line: 23,
+      tool: "archestra_pm__create_task",
+      expected: "allow",
+      actual: "deny",
+      status: "failed" as const,
+      error:
+        "[appa] Blocked: archestra_pm__create_task cannot run yet.\n\nWhy:\n  - trust is suspicious, below the required floor trusted\n\nContinue:\n  - Submit for approval:",
+      reasons: ["trust is suspicious, below the required floor trusted"],
+    };
+    const recorded = run("1", [["a.appa", "h", "failed"]]);
+    recorded.files[0] = { ...recorded.files[0], steps: [step] } as never;
+    expect(
+      validationFileStates([{ path: "a.appa" }], [recorded]).get("a.appa"),
+    ).toMatchObject({
+      failedStep: step,
+      error:
+        "Line 23 · archestra_pm__create_task: expected allow, got deny\ntrust is suspicious, below the required floor trusted",
+    });
+  });
+
+  test("a step replay could not decide, or a failed run, has no mismatched step", () => {
+    const step = {
+      line: 4,
+      tool: "slack_send",
+      expected: "allow",
+      actual: null,
+      status: "cannot_run" as const,
+      error: "audience source gave no answer",
+    };
+    const undecided = run("2", [["a.appa", "h", "cannot_run"]]);
+    undecided.files[0] = { ...undecided.files[0], steps: [step] } as never;
+    expect(
+      validationFileStates([{ path: "a.appa" }], [undecided]).get("a.appa"),
+    ).toMatchObject({
+      failedStep: null,
+      error: "Line 4 · slack_send: audience source gave no answer",
+    });
+    const refused = run("1", [["a.appa", "h", "failed"]], {
+      executionError: "boom",
+    });
+    refused.files[0] = {
+      ...refused.files[0],
+      steps: [{ ...step, status: "failed", actual: "deny" }],
+    } as never;
+    expect(
+      validationFileStates([{ path: "a.appa" }], [refused]).get("a.appa"),
+    ).toMatchObject({ failedStep: null, error: "boom" });
   });
 
   test("names the run that recorded the result and keeps a refused policy's reasons", () => {

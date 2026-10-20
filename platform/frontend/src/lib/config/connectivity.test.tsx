@@ -60,6 +60,16 @@ async function flush() {
   });
 }
 
+// The first probe waits for the shell's first wave (see useShellReady); with
+// no other request in flight that is its fallback delay. The extra tick puts
+// the next poll on a later timestamp than this one, as real polls are.
+async function firstProbe() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1_500);
+  });
+  await flush();
+}
+
 describe("ConnectivityProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,6 +79,29 @@ describe("ConnectivityProvider", () => {
     vi.useRealTimers();
   });
 
+  it("waits for the page's first requests before its first probe", async () => {
+    mockGetReady.mockResolvedValue(READY_OK);
+    const { queryClient, wrapper } = makeWrapper();
+    let answerPage: (value: string) => void = () => undefined;
+    void queryClient.fetchQuery({
+      queryKey: ["page-data"],
+      queryFn: () =>
+        new Promise<string>((resolve) => {
+          answerPage = resolve;
+        }),
+    });
+    renderHook(() => useConnectivity(), { wrapper });
+
+    await flush();
+    expect(mockGetReady).not.toHaveBeenCalled();
+
+    await act(async () => answerPage("rows"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(mockGetReady).toHaveBeenCalledTimes(1);
+  });
+
   it("needs two consecutive readiness failures before reporting backend-unreachable", async () => {
     mockGetReady.mockResolvedValue(READY_FAIL);
     const { result } = renderHook(() => useConnectivity(), {
@@ -76,7 +109,7 @@ describe("ConnectivityProvider", () => {
     });
 
     // Mount poll = failure #1 — still online under the hysteresis threshold.
-    await flush();
+    await firstProbe();
     expect(result.current.state.kind).toBe("online");
     expect(mockGetReady).toHaveBeenCalledTimes(1);
 
@@ -93,7 +126,7 @@ describe("ConnectivityProvider", () => {
       wrapper: makeWrapper().wrapper,
     });
 
-    await flush();
+    await firstProbe();
     expect(result.current.state.kind).toBe("online");
     act(() => result.current.retry());
     await flush();
@@ -111,7 +144,7 @@ describe("ConnectivityProvider", () => {
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useConnectivity(), { wrapper });
 
-    await flush();
+    await firstProbe();
     act(() => result.current.retry());
     await flush();
     expect(result.current.state.kind).toBe("backend-unreachable");
@@ -133,7 +166,7 @@ describe("ConnectivityProvider", () => {
       wrapper: makeWrapper().wrapper,
     });
 
-    await flush();
+    await firstProbe();
     expect(result.current.state.kind).toBe("online");
 
     const onLineSpy = vi
@@ -157,7 +190,7 @@ describe("ConnectivityProvider", () => {
     const { queryClient, wrapper } = makeWrapper();
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useConnectivity(), { wrapper });
-    await flush();
+    await firstProbe();
 
     const onLineSpy = vi.spyOn(navigator, "onLine", "get");
     const countActiveWaves = () =>

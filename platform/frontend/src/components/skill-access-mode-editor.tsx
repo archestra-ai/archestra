@@ -1,14 +1,20 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AccessModeCards,
+  type AccessModeOption,
+} from "@/components/access-mode-cards";
 
 export type SkillAccessMode = "all" | "manual";
 
 interface SkillAccessModeEditorProps {
   mode: SkillAccessMode;
   onModeChange: (mode: SkillAccessMode) => void;
-  summary: ReactNode;
+  /** What "All skills" covers here, such as every skill the person can use. */
+  allRule: string;
+  allStat?: string;
+  manualStat?: string;
   availableSkillsView?: ReactNode;
   allEditor: ReactNode;
   manualEditor: ReactNode;
@@ -18,30 +24,33 @@ interface SkillAccessModeEditorProps {
 export function SkillAccessModeEditor({
   mode,
   onModeChange,
-  summary,
+  allRule,
+  allStat,
+  manualStat,
   availableSkillsView,
   allEditor,
   manualEditor,
 }: SkillAccessModeEditorProps) {
+  const all: AccessModeOption = {
+    title: "All skills",
+    rule: allRule,
+    stat: allStat,
+  };
+  const manual: AccessModeOption = {
+    title: "Manual",
+    rule: "Only the skills you pick. New skills stay off.",
+    stat: manualStat,
+  };
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col items-start gap-0.5 text-sm text-muted-foreground">
-          <p>{summary}</p>
-          {mode === "all" && availableSkillsView}
-        </div>
-        <Tabs
-          value={mode}
-          onValueChange={(value) =>
-            onModeChange(value === "all" ? "all" : "manual")
-          }
-        >
-          <TabsList size="sm">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="manual">Manual</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      <AccessModeCards
+        label="Skill access"
+        mode={mode}
+        onModeChange={onModeChange}
+        all={all}
+        manual={manual}
+        footnote={mode === "all" ? availableSkillsView : null}
+      />
       {mode === "all" ? allEditor : manualEditor}
     </div>
   );

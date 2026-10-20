@@ -12,6 +12,7 @@ const mockListComments = vi.fn();
 const mockGetRef = vi.fn();
 const mockGetTree = vi.fn();
 const mockGetContent = vi.fn();
+const mockGetBlob = vi.fn();
 const mockReposGet = vi.fn();
 const mockListCollaborators = vi.fn();
 const mockReposListTeams = vi.fn();
@@ -52,7 +53,7 @@ vi.mock("@octokit/rest", () => ({
         list: mockTeamsList,
         listMembersInOrg: mockListMembersInOrg,
       },
-      git: { getRef: mockGetRef, getTree: mockGetTree },
+      git: { getRef: mockGetRef, getTree: mockGetTree, getBlob: mockGetBlob },
     };
   },
 }));
@@ -1403,6 +1404,82 @@ describe("GithubConnector", () => {
       ).resolves.toBe(
         "https://ghe.example.com/test-org/my-repo/blob/main/README.md",
       );
+    });
+  });
+
+  describe("large repository files", () => {
+    async function syncFiles(
+      tree: Array<{ path: string; sha: string; size: number }>,
+    ): Promise<ConnectorSyncBatch[]> {
+      mockListForRepo.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+      mockGetTree.mockResolvedValueOnce({
+        data: { tree: tree.map((file) => ({ type: "blob", ...file })) },
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...validConfig, includeRepositoryFiles: true },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+      return batches;
+    }
+
+    test("indexes a file larger than the Contents API's 1 MiB inline limit", async () => {
+      const largeContent = `# Big\n${"x".repeat(2 * 1024 * 1024)}`;
+      // What GitHub returns for a 1-100 MB file: metadata, but no content.
+      mockGetContent.mockResolvedValue({
+        data: { type: "file", encoding: "none", content: "" },
+      });
+      mockGetBlob.mockResolvedValue({
+        data: {
+          encoding: "base64",
+          content: Buffer.from(largeContent).toString("base64"),
+        },
+      });
+
+      const batches = await syncFiles([
+        { path: "docs/big.md", sha: "big-sha", size: largeContent.length },
+      ]);
+
+      const fileDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file");
+      expect(fileDocs).toHaveLength(1);
+      expect(fileDocs[0].content).toBe(largeContent);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([]);
+    });
+
+    test("skips a file over the size limit without failing the run", async () => {
+      mockGetContent.mockResolvedValue({
+        data: { content: Buffer.from("# Small").toString("base64") },
+      });
+
+      const batches = await syncFiles([
+        { path: "data/dump.md", sha: "dump-sha", size: 50 * 1024 * 1024 },
+        { path: "README.md", sha: "readme-sha", size: 7 },
+      ]);
+
+      const fileDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file");
+      expect(fileDocs.map((d) => d.metadata.filePath)).toEqual(["README.md"]);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([]);
+      expect(batches.flatMap((b) => b.skipped ?? [])).toEqual([
+        expect.objectContaining({
+          itemId: "data/dump.md",
+          sourceId: "my-repo#file:data/dump.md",
+        }),
+      ]);
+      expect(mockGetContent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ path: "data/dump.md" }),
+      );
+      expect(mockGetBlob).not.toHaveBeenCalled();
     });
   });
 

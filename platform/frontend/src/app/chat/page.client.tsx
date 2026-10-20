@@ -509,6 +509,7 @@ export function ChatPageContent({
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
+    isAgentResolving: isInitialAgentResolving,
     selectedAgent: initialAgentReference,
     modelId: initialModel,
     apiKeyId: initialApiKeyId,
@@ -1922,7 +1923,12 @@ export function ChatPageContent({
 
   const conversationAgentId =
     conversation?.agentId ?? conversation?.agent?.id ?? null;
-  const activeAgentId = conversationAgentId ?? initialAgentId;
+  // While a conversation loads, its agent is unknown. Standing in the new-chat
+  // default there painted an unrelated agent on reload, then swapped it.
+  const fallbackAgentId = isLoadingConversation ? null : initialAgentId;
+  const activeAgentId = conversationAgentId ?? fallbackAgentId;
+  const isActiveAgentResolving =
+    !activeAgentId && (isLoadingConversation || isInitialAgentResolving);
   const promptAgentId = conversation?.agent?.id ?? activeAgentId;
   const newChatAgentId =
     activeAgentId ??
@@ -3364,7 +3370,7 @@ export function ChatPageContent({
                           conversationId={conversationId}
                           readOnly={isReadOnlyConversation}
                           agentId={
-                            currentProfileId || initialAgentId || undefined
+                            currentProfileId || fallbackAgentId || undefined
                           }
                           messages={messages}
                           status={status}
@@ -3386,7 +3392,7 @@ export function ChatPageContent({
                                   (a) => a.id === currentProfileId,
                                 )
                               : internalAgents.find(
-                                  (a) => a.id === initialAgentId,
+                                  (a) => a.id === fallbackAgentId,
                                 )
                             )?.name ?? conversation?.agent?.name
                           }
@@ -3618,6 +3624,7 @@ export function ChatPageContent({
                                   : undefined
                               }
                               selectorAgentId={activeAgentId}
+                              isSelectorAgentResolving={isActiveAgentResolving}
                               onAgentChange={handleConversationAgentChange}
                               modelSource={conversationModelSource}
                               onResetModelOverride={
@@ -3872,6 +3879,7 @@ export function ChatPageContent({
                                 initialPerUserConnect.provider
                               }
                               selectorAgentId={initialAgentId}
+                              isSelectorAgentResolving={isInitialAgentResolving}
                               onAgentChange={handleInitialAgentChange}
                               encryptedChat={
                                 isInitialRuntimeMode

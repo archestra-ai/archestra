@@ -83,6 +83,7 @@ import AgentTeamModel from "./agent-team";
 import AgentUsageModel from "./agent-usage";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
+import InteractionSessionHeadModel from "./interaction-session-head";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
 import { interactionBelongsToOrganization } from "./log-organization";
@@ -446,25 +447,6 @@ function stripUnstorableChars<T>(value: T): T {
     return result as T;
   }
   return value;
-}
-
-/**
- * Join predicate linking an interaction's `session_id` (VARCHAR) to a
- * conversation's `id` (UUID) — used for Archestra Chat sessions whose
- * session_id IS the conversation id.
- *
- * The only reason a cast is needed at all is type compatibility: Postgres has no
- * `varchar = uuid` operator. We cast the TRUSTED side (`conversations.id::text`,
- * which can never fail) rather than the untrusted `session_id::uuid` — a non-uuid
- * session_id (e.g. some a2a / external-agent ids) would otherwise throw
- * "invalid input syntax for type uuid" and 500 the whole query (see utils/uuid.ts).
- * Comparing as text, a non-conversation session_id simply matches no row, and the
- * equality on the bare `session_id` column can use interactions_session_*_idx.
- * Conversation ids are generated as canonical lowercase uuids, so they match the
- * canonical lowercase form `id::text` produces.
- */
-function sessionIdMatchesConversation(): SQL {
-  return sql`${schema.interactionsTable.sessionId} = ${schema.conversationsTable.id}::text`;
 }
 
 /**
@@ -1665,9 +1647,6 @@ class InteractionModel {
     if (access === SESSION_ACCESS_DENIED) {
       return emptyPage();
     }
-    const whereClause = filters?.organizationId
-      ? and(access, interactionBelongsToOrganization(filters.organizationId))
-      : access;
     const headWhereClause = filters?.organizationId
       ? and(
           access,
@@ -1678,23 +1657,36 @@ class InteractionModel {
       : access;
 
     // One row past the page is fetched so its presence can answer "is there
-    // another page" — the job the total count used to do.
-    const heads = await InteractionModel.findSessionHeadsForCursor(
-      headWhereClause,
-      cursorQuery,
-    );
+    // another page" — the job the total count used to do. The stored heads
+    // serve the page once they cover all history; until the startup backfill
+    // finishes, the interactions scan gives the same answer more slowly.
+    const heads = (await InteractionSessionHeadModel.isComplete())
+      ? await InteractionModel.findStoredSessionHeadsForCursor(
+          headWhereClause,
+          cursorQuery,
+          filters,
+        )
+      : await InteractionModel.findSessionHeadsForCursor(
+          headWhereClause,
+          cursorQuery,
+        );
     const hasNext = heads.length > cursorQuery.limit;
     const pageRows = hasNext ? heads.slice(0, cursorQuery.limit) : heads;
     if (pageRows.length === 0) {
       return emptyPage();
     }
 
+    // The page's session keys bound phase 2 to a few hundred rows, but a
+    // session can hold rows of another organization, so the organization
+    // check still applies there. It uses the primary-key probes rather than
+    // the shared predicate, whose owner sets read every agent of the
+    // organization on every request.
     const summaries = await InteractionModel.summarizeSessionPage(
       pageRows.map(({ sessionId, interactionId }) => ({
         sessionId,
         interactionId,
       })),
-      whereClause,
+      headWhereClause,
     );
 
     // The summary query groups, so its row order is not the head order. Emit
@@ -1729,6 +1721,161 @@ class InteractionModel {
             : null,
       },
     };
+  }
+
+  /**
+   * Rows with no `session_preview`, newest first, one keyset page at a time.
+   * Rows written before migration 0562 have none, and the session list has to
+   * load, decrypt and often rebuild each one's full request in its place.
+   *
+   * Encrypted-chat rows are left out. Their content is keyed to a browser the
+   * server does not hold, so nothing can be derived from it.
+   *
+   * `requestBytes` is the stored request's size, so the caller can cut the page
+   * to a memory budget before loading anything. `cursor` is the row's
+   * `(created_at, id)` with created_at as text: a JS Date drops microseconds,
+   * and resuming from a truncated time would read the same rows again.
+   */
+  static async findRowsMissingSessionPreview(params: {
+    before: { createdAt: string; id: string } | null;
+    limit: number;
+  }): Promise<Array<{ id: string; createdAt: string; requestBytes: number }>> {
+    const before = params.before
+      ? sql`AND (created_at, id) < (${params.before.createdAt}::timestamp, ${params.before.id}::uuid)`
+      : sql``;
+    // Matches the predicate and key order of the partial index built in
+    // database/index-maintenance.ts, so this walks only the rows still to do.
+    const { rows } = await db.execute<{
+      id: string;
+      created_at: string;
+      request_bytes: number | null;
+    }>(sql`
+      SELECT id, created_at::text AS created_at,
+             pg_column_size(request) AS request_bytes
+      FROM interactions
+      WHERE session_preview IS NULL
+        AND encrypted_chat_conversation_id IS NULL
+        ${before}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${params.limit}
+    `);
+    return rows.map((row) => ({
+      id: row.id,
+      createdAt: row.created_at,
+      requestBytes: Number(row.request_bytes ?? 0),
+    }));
+  }
+
+  /**
+   * Store the session preview each of these rows would have been written with,
+   * so the session list stops rebuilding it on every read.
+   *
+   * It is derived exactly as {@link create} derives it: flags from the stored
+   * (possibly delta-encoded) request, the last-user-message text from the full
+   * reconstructed request. That is also exactly what the list computes for a row
+   * without one, so filling it changes no output, only the cost. A row that
+   * already has a preview is never overwritten, which keeps concurrent runs
+   * harmless.
+   *
+   * Returns how many rows were filled.
+   */
+  static async fillSessionPreviews(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const t = schema.interactionsTable;
+
+    const rows = await db
+      .select({
+        id: t.id,
+        threadId: t.threadId,
+        request: t.request,
+        source: t.source,
+        sessionSource: t.sessionSource,
+        type: t.type,
+        encryptedChatConversationId: t.encryptedChatConversationId,
+      })
+      .from(t)
+      .where(
+        and(
+          inArray(t.id, ids),
+          isNull(t.sessionPreview),
+          isNull(t.encryptedChatConversationId),
+        ),
+      );
+    if (rows.length === 0) return 0;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    for (const row of rows) {
+      readInteractionRow(row);
+    }
+    // SPDX-SnippetEnd
+
+    const reconstructed = await InteractionDeltaManager.reconstructMany(
+      rows.map((row) => ({
+        id: row.id,
+        threadId: row.threadId,
+        request: row.request,
+        processedRequest: null,
+      })),
+    );
+
+    // Only a title-generation turn reads its response, for the title text.
+    // Responses can dwarf requests, so the rest are never loaded.
+    const titleIds = rows
+      .filter(
+        (row) =>
+          !isGuardrailSource(row.source) &&
+          JSON.stringify(row.request ?? null).includes(
+            "Please write a 5-10 word title",
+          ),
+      )
+      .map((row) => row.id);
+    const responses = new Map<string, unknown>();
+    if (titleIds.length > 0) {
+      const titles = await db
+        .select({
+          id: t.id,
+          response: t.response,
+          encryptedChatConversationId: t.encryptedChatConversationId,
+        })
+        .from(t)
+        .where(inArray(t.id, titleIds));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      for (const title of titles) {
+        readInteractionRow(title);
+        responses.set(title.id, title.response);
+      }
+      // SPDX-SnippetEnd
+    }
+
+    const values = rows.map((row) => {
+      const preview = buildSessionPreview(
+        {
+          source: row.source,
+          sessionSource: row.sessionSource,
+          type: row.type,
+          request: reconstructed.get(row.id)?.request ?? row.request,
+          response: responses.get(row.id) ?? null,
+        } as InsertInteraction,
+        row.request,
+      );
+      const { sessionPreview } = encryptInteractionContent(
+        { sessionPreview: preview },
+        null,
+      );
+      return sql`(${row.id}::uuid, ${JSON.stringify(sessionPreview)}::jsonb)`;
+    });
+
+    const { rows: filled } = await db.execute<{ id: string }>(sql`
+      UPDATE interactions AS i
+      SET session_preview = v.preview
+      FROM (VALUES ${sql.join(values, sql`, `)}) AS v(id, preview)
+      WHERE i.id = v.id AND i.session_preview IS NULL
+      RETURNING i.id
+    `);
+    return filled.length;
   }
 
   /**
@@ -1853,6 +2000,47 @@ class InteractionModel {
       or(sql`${t.connectorId} IS NULL`, connectorBelongs),
       or(sql`${t.appId} IS NULL`, appBelongs),
     ) as SQL;
+  }
+
+  /**
+   * {@link findSessionHeadsForCursor}, answered from the stored session heads:
+   * one ordered scan of `interaction_session_heads` with a primary-key join to
+   * each head interaction for the filters, instead of a walk over every
+   * interaction above the cursor with a newer-sibling probe per row.
+   *
+   * Cursors are the same `(created_at, id)` of the head interaction, so a
+   * cursor issued by either reader continues correctly on the other.
+   */
+  private static async findStoredSessionHeadsForCursor(
+    whereClause: SQL | undefined,
+    cursorQuery: CursorQuery,
+    filters: { userId?: string; sessionId?: string } | undefined,
+  ): Promise<
+    Array<{
+      sessionId: string | null;
+      interactionId: string | null;
+      headCreatedAt: Date;
+      headId: string;
+    }>
+  > {
+    const position = decodeCursor(cursorQuery.cursor);
+    const before =
+      position && !Number.isNaN(new Date(position.value).getTime())
+        ? { createdAt: position.value, id: position.id }
+        : null;
+    const rows = await InteractionSessionHeadModel.findPage({
+      interactionFilter: whereClause,
+      userId: filters?.userId,
+      sessionKey: filters?.sessionId,
+      before,
+      limit: cursorQuery.limit,
+    });
+    return rows.map((row) => ({
+      sessionId: row.sessionId,
+      interactionId: row.sessionId ? null : row.headId,
+      headCreatedAt: row.headCreatedAt,
+      headId: row.headId,
+    }));
   }
 
   /**
@@ -2052,8 +2240,15 @@ class InteractionModel {
         passthroughVirtualKeyIds: sql<
           string[]
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.passthroughVirtualKeyId}::text), NULL)`,
-        // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
-        conversationTitle: max(schema.conversationsTable.title),
+        // Title of the Archestra Chat conversation whose id is the session id.
+        // Looked up by primary key once per session: joining on
+        // `conversations.id::text` cannot use that key, so every page read
+        // the whole conversations table. The CASE keeps a non-uuid session id
+        // from reaching the cast (an invalid uuid would fail the query), and
+        // matches only the canonical lowercase form, as the text join did.
+        conversationTitle: sql<
+          string | null
+        >`(SELECT ${schema.conversationsTable.title} FROM ${schema.conversationsTable} WHERE ${schema.conversationsTable.id} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
       })
       .from(schema.interactionsTable)
       .leftJoin(
@@ -2067,7 +2262,6 @@ class InteractionModel {
         schema.usersTable,
         eq(schema.interactionsTable.userId, schema.usersTable.id),
       )
-      .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
       .where(pageWhereClause)
       // A session is identified by its session id alone (COALESCE(session_id,
       // id) for sessionless rows). profile_id / agent name must NOT be part of

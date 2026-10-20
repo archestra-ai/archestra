@@ -340,6 +340,19 @@ tests:
           path: spec.template.spec.initContainers[0].image
           value: registry.internal.example.com/platform/busybox:1.36
 
+  - it: worker gives wait-for-postgres the envFrom sources that supply the database URL
+    set:
+      postgresql.external_database_url: null
+      archestra.envFrom:
+        - secretRef:
+            name: external-db-env
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name == "wait-for-postgres")].envFrom
+          value:
+            - secretRef:
+                name: external-db-env
+
   - it: worker waits for migrations after postgres is reachable by default
     asserts:
       - equal:

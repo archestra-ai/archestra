@@ -62,7 +62,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import { slackAppFactory } from "./slack-app-factory";
-import { slackMessageText } from "./slack-message-text";
+import { slackMessageText, slackThreadMessageText } from "./slack-message-text";
 import { SlackReplyStream, updatePausedTasks } from "./slack-reply-stream";
 import {
   EventDedupMap,
@@ -1032,7 +1032,7 @@ class SlackProvider implements ChatOpsProvider {
       // Trim to the requested limit
       const trimmedMessages = allMessages.slice(0, limit).map((message) => ({
         ...message,
-        text: slackMessageText(message),
+        text: slackThreadMessageText(message),
       }));
 
       // Keep text-less USER messages that carry downloadable files: a

@@ -106,6 +106,7 @@ import {
   type McpCatalogDirectoryItem,
   useMcpCatalogDirectory,
 } from "@/lib/mcp/mcp-registry.query";
+import { useShellReady } from "@/lib/shell-deferral";
 import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -139,11 +140,18 @@ type DialogView =
 interface InitialAgentSelectorProps {
   currentAgentId: string | null;
   onAgentChange: (agentId: string) => void;
+  /**
+   * The caller is still deciding the agent (its conversation or its default
+   * is loading). The chip holds a placeholder instead of standing in a
+   * guessed agent that would flicker to the real one.
+   */
+  isAgentResolving?: boolean;
 }
 
 export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
   onAgentChange,
+  isAgentResolving: isCallerResolvingAgent = false,
 }: InitialAgentSelectorProps) {
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -183,14 +191,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const createProfile = useCreateProfile();
   const cloningStartedForRef = useRef<string | null>(null);
 
-  // Loaded after first paint, not on open, so the Pinned group is there the
-  // moment the picker opens instead of popping in once the request lands.
+  // Loaded once the page's first requests settle, not on open, so the Pinned
+  // group is there the moment the picker opens instead of popping in once the
+  // request lands, without queueing in front of what the composer needs.
+  const shellReady = useShellReady();
   const { data: pinnedIds } = usePinnedAgentIds({
-    enabled: open || afterFirstPaint,
+    enabled: open || shellReady,
   });
   const { data: pinnedAgents = [] } = useChatAgentReferences(
     pinnedIds ?? [],
-    open || afterFirstPaint,
+    open || shellReady,
   );
   const allAgents = useMemo(
     () => [
@@ -254,12 +264,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const currentAgentSummary = useMemo(
     () =>
       allAgents.find((a) => a.id === currentAgentId) ??
-      (currentAgentId
+      (currentAgentId || isCallerResolvingAgent
         ? null
         : (allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
           allAgents.find((a) => !a.builtIn) ??
           null)),
-    [allAgents, currentAgentId],
+    [allAgents, currentAgentId, isCallerResolvingAgent],
   );
   // The roster omits large embedded icons and editing-only fields. Hydrate one
   // record after the composer's first paint, so the response never competes
@@ -273,10 +283,13 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const displayAgentName = displayAgent?.name ?? "Select agent";
   // The composer renders before the chat knows its agent; until the roster
   // answers, the chip holds a placeholder rather than asking for a choice.
-  const isAgentResolving = !displayAgent && isRosterPending;
+  const isAgentResolving =
+    !displayAgent && (isRosterPending || isCallerResolvingAgent);
   const effectiveAgentId = displayAgent?.id ?? currentAgentId;
+  // The trigger's server and knowledge icons: wanted on screen, not for
+  // typing, so they wait for the page's first requests too.
   const shouldLoadAgentManagementDetails =
-    open || !!editingAgentId || afterFirstPaint;
+    open || !!editingAgentId || shellReady;
   const installer = useMcpInstallOrchestrator({
     enabled: open || !!editingAgentId,
   });
@@ -493,6 +506,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   );
 
   const closeQuickEdit = () => {
+    // The connect view's form is the installer's; once that view is gone the
+    // install dialogs below would show it as a modal.
+    if (dialogView === "connect") installer.closeInstallForms();
     setCloseGuardOpen(false);
     setEditingAgentId(null);
     setDialogView("settings");

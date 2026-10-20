@@ -35,11 +35,12 @@ export const CONNECTION_GATEWAY_REFERENCE_FILTERS = {
 };
 
 /**
- * A setup the server prepared with the document: its id, and the payload key
- * it was prepared for. Only the id: the setup's command carries a one-time
- * token, which never goes into the HTML.
+ * A setup the server prepared with the document: its id, and the digest of
+ * the payload key it was prepared for (`connectionSetupKeyDigest`; the key
+ * itself lists every selected skill id). Only the id: the setup's command
+ * carries a one-time token, which never goes into the HTML.
  */
-export type ConnectionSetupSeed = { inputsKey: string; id: string };
+export type ConnectionSetupSeed = { keyDigest: string; id: string };
 
 /**
  * The parts of a connection approval document the server reads, each the

@@ -17,6 +17,7 @@ import {
 import {
   connectionSetupBody,
   connectionSetupInputsKey,
+  connectionSetupKeyDigest,
   firstConnectionSetupInputs,
 } from "@/app/connection/connection-setup-payload";
 import {
@@ -418,7 +419,7 @@ async function prepareFirstSetup(params: {
   availableApiKeys:
     | archestraApiTypes.GetAvailableLlmProviderApiKeysResponses["200"]
     | undefined;
-}): Promise<{ inputsKey: string; id: string } | undefined> {
+}): Promise<{ keyDigest: string; id: string } | undefined> {
   const organization = params.bootstrap?.organization;
   if (!params.origin || !organization || !params.request) return undefined;
   const query = new URLSearchParams(params.search ?? "");
@@ -483,7 +484,9 @@ async function prepareFirstSetup(params: {
       body,
     }),
   );
-  return created ? { inputsKey, id: created.id } : undefined;
+  return created
+    ? { keyDigest: connectionSetupKeyDigest(inputsKey), id: created.id }
+    : undefined;
 }
 
 /**

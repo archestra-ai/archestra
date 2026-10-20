@@ -100,6 +100,7 @@ import {
 import {
   connectionSetupBody,
   connectionSetupInputsKey,
+  connectionSetupKeyDigest,
 } from "./connection-setup-payload";
 import { GatewayLink } from "./gateway-link";
 import { GatewayServersSummary } from "./gateway-servers-summary";
@@ -732,7 +733,9 @@ export function ConnectCommandPanel({
       : null,
   );
   const seededSetupId =
-    seededSetup?.inputsKey === inputsKey ? seededSetup.id : null;
+    seededSetup && seededSetup.keyDigest === connectionSetupKeyDigest(inputsKey)
+      ? seededSetup.id
+      : null;
   const latestKeyRef = useRef(inputsKey);
   latestKeyRef.current = inputsKey;
   // The payload of the setup in `result`, so an effect run with the same

@@ -482,7 +482,7 @@ describe("prefetchShellSeed", () => {
       ({ queryKey }) => queryKey[0] === "connection-setup-seed",
     );
     expect(setup?.data).toEqual({
-      inputsKey: expect.any(String),
+      keyDigest: expect.stringMatching(/^[0-9a-f]{16}$/),
       id: "setup-1",
     });
     // The setup's command carries a one-time token; it never lands in the HTML.

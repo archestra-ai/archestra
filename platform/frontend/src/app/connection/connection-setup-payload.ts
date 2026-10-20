@@ -62,6 +62,25 @@ export function connectionSetupInputsKey(inputs: ConnectionSetupInputs) {
 }
 
 /**
+ * A short, stable digest of a payload key: two 32-bit FNV-1a-style hashes
+ * with different offsets and multipliers, as 16 hex digits. The server seed hands the page this
+ * instead of the key, which lists every selected skill id; both sides compute
+ * it from the same key. Synchronous on purpose: the page compares it on its
+ * first render.
+ */
+export function connectionSetupKeyDigest(key: string): string {
+  let a = 0x811c9dc5;
+  let b = 0x050c5d1f;
+  for (let i = 0; i < key.length; i++) {
+    const code = key.charCodeAt(i);
+    a = Math.imul(a ^ code, 0x01000193);
+    b = Math.imul(b ^ code, 0x5bd1e995);
+  }
+  const hex = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
+  return hex(a) + hex(b);
+}
+
+/**
  * The `POST /api/connection-setups` body for a payload key, or null when the
  * payload has nothing to set up.
  */

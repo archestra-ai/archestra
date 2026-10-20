@@ -35,6 +35,7 @@ import {
   type ConnectionSetupInputs,
   connectionSetupBody,
   connectionSetupInputsKey,
+  connectionSetupKeyDigest,
   firstConnectionSetupInputs,
 } from "./connection-setup-payload";
 
@@ -2446,10 +2447,20 @@ describe("first approval setup, as the server seed prepares it", () => {
     });
 
     await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    const serverKey = connectionSetupInputsKey(
+      serverInputs as ConnectionSetupInputs,
+    );
     expect(createSetupMock.mock.calls[0][0]).toEqual(
-      connectionSetupBody(
-        connectionSetupInputsKey(serverInputs as ConnectionSetupInputs),
-      ),
+      connectionSetupBody(serverKey),
+    );
+    // The page matches the seeded setup by the key's digest: the digest of
+    // the payload it sent equals the server's.
+    const browserKey = connectionSetupInputsKey({
+      ...(serverInputs as ConnectionSetupInputs),
+      ...keyFields(createSetupMock.mock.calls[0][0]),
+    });
+    expect(connectionSetupKeyDigest(browserKey)).toBe(
+      connectionSetupKeyDigest(serverKey),
     );
   });
 
@@ -2483,7 +2494,7 @@ describe("first approval setup, as the server seed prepares it", () => {
       defaultOptions: { queries: { retry: false } },
     });
     queryClient.setQueryData(connectionSetupSeedQueryKey(REQUEST_ID), {
-      inputsKey,
+      keyDigest: connectionSetupKeyDigest(inputsKey),
       id: "server-setup",
     });
     render(<ConnectCommandPanel {...renderPanelProps()} />, {
@@ -2496,5 +2507,45 @@ describe("first approval setup, as the server seed prepares it", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(createSetupMock).not.toHaveBeenCalled();
+  });
+});
+
+/** The payload fields a setup body carries, as the page's key names them. */
+function keyFields(body: {
+  clientId: string;
+  platform?: string;
+  baseUrl: string;
+  mcpGatewayId?: string;
+  llmProxyId?: string;
+  provider?: string;
+  proxyAuth?: string;
+  model?: string;
+  skills?: { skillIds?: string[] };
+  pluginIds?: string[];
+}): Partial<ConnectionSetupInputs> {
+  return {
+    clientId: body.clientId as ConnectionSetupInputs["clientId"],
+    platform: body.platform as ConnectionSetupInputs["platform"],
+    baseUrl: body.baseUrl,
+    gatewayId: body.mcpGatewayId ?? null,
+    proxyId: body.llmProxyId ?? null,
+    proxyAuth: (body.proxyAuth ?? null) as ConnectionSetupInputs["proxyAuth"],
+    model: body.model ?? null,
+    skillIds: body.skills?.skillIds ?? null,
+    pluginIds: body.pluginIds ?? null,
+  };
+}
+
+describe("connectionSetupKeyDigest", () => {
+  it("is stable for a key and differs when one selected skill differs", () => {
+    const ids = Array.from({ length: 1100 }, (_, i) => `skill-${i}`);
+    const key = JSON.stringify({ skillIds: ids });
+    expect(connectionSetupKeyDigest(key)).toBe(connectionSetupKeyDigest(key));
+    expect(connectionSetupKeyDigest(key)).toMatch(/^[0-9a-f]{16}$/);
+    expect(
+      connectionSetupKeyDigest(
+        JSON.stringify({ skillIds: [...ids.slice(0, -1), "skill-x"] }),
+      ),
+    ).not.toBe(connectionSetupKeyDigest(key));
   });
 });

@@ -31,3 +31,8 @@ export function agentOptionsPageQueryKey(query: Record<string, unknown>) {
 export function agentOptionsByIdsQueryKey(ids: string[], filters: unknown) {
   return ["agents", "options", "ids", ids, filters] as const;
 }
+
+/** A setup the server prepared for an approval document's first payload. */
+export function connectionSetupSeedQueryKey(connectRequest: string) {
+  return ["connection-setup-seed", connectRequest] as const;
+}

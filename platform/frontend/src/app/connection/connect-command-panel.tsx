@@ -17,6 +17,7 @@ import {
   isOpenCodeFamilyClient,
   PLUGIN_DELIVERY_MAX_COUNT,
 } from "@archestra/shared/connection-setup";
+import { useQueryClient } from "@tanstack/react-query";
 import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -62,6 +63,8 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useClientConnection } from "@/lib/client-connection.query";
+import { connectionSetupSeedQueryKey } from "@/lib/connection-approval-query-keys";
+import type { ConnectionSetupSeed } from "@/lib/connection-approval-seed";
 import {
   type CreateConnectionSetupBody,
   type CreateConnectionSetupResult,
@@ -94,6 +97,10 @@ import {
   ConnectionConsentOptions,
   type ConsentProxyMode,
 } from "./connection-consent-options";
+import {
+  connectionSetupBody,
+  connectionSetupInputsKey,
+} from "./connection-setup-payload";
 import { GatewayLink } from "./gateway-link";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
@@ -692,8 +699,8 @@ export function ConnectCommandPanel({
   // One key per distinct setup payload. The effect below regenerates when it
   // changes; the ref guards against an older in-flight response overwriting a
   // newer one.
-  const inputsKey = JSON.stringify({
-    clientId: client.id,
+  const inputsKey = connectionSetupInputsKey({
+    clientId: client.id as InstallerClientId,
     platform: setupPlatform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
@@ -713,6 +720,19 @@ export function ConnectCommandPanel({
       ? selectedPlugins.map((plugin) => plugin.id).sort()
       : null,
   });
+  // A setup the server prepared for this document's first payload (see
+  // `firstConnectionSetupInputs`): Approve is ready at first paint, and the
+  // browser prepares nothing while the payload stays the same.
+  const queryClient = useQueryClient();
+  const [seededSetup] = useState(() =>
+    connectRequest
+      ? (queryClient.getQueryData<ConnectionSetupSeed>(
+          connectionSetupSeedQueryKey(connectRequest),
+        ) ?? null)
+      : null,
+  );
+  const seededSetupId =
+    seededSetup?.inputsKey === inputsKey ? seededSetup.id : null;
   const latestKeyRef = useRef(inputsKey);
   latestKeyRef.current = inputsKey;
   // The payload of the setup in `result`, so an effect run with the same
@@ -724,52 +744,10 @@ export function ConnectCommandPanel({
 
   const runGeneration = useCallback(
     async (key: string) => {
-      const inputs = JSON.parse(key) as {
-        clientId: InstallerClientId;
-        platform: NonNullable<CreateConnectionSetupBody["platform"]>;
-        baseUrl: string;
-        gatewayId: string | null;
-        proxyId: string | null;
-        provider: SupportedProvider | null;
-        proxyAuth: ConnectProxyAuth | null;
-        model: string | null;
-        skillIds: string[] | null;
-        pluginIds: string[] | null;
-      };
-
-      let skills: CreateConnectionSetupBody["skills"];
-      if (inputs.skillIds && inputs.skillIds.length > 0) {
-        // ttlDays is null because the marketplace the client clones from must
-        // outlive the one-time setup token. It only applies on the snapshot
-        // path (a setup that also delivers plugins); the shared marketplace URL
-        // this normally renders has no expiry to set.
-        skills = { skillIds: inputs.skillIds, ttlDays: null };
-      }
-      if (
-        !inputs.gatewayId &&
-        !inputs.proxyId &&
-        !skills &&
-        (!inputs.pluginIds || inputs.pluginIds.length === 0)
-      ) {
-        return;
-      }
-
+      const body = connectionSetupBody(key);
+      if (!body) return;
       refusalRef.current = null;
-      const created = await createSetup({
-        clientId: inputs.clientId,
-        platform: inputs.platform,
-        baseUrl: inputs.baseUrl,
-        mcpGatewayId: inputs.gatewayId ?? undefined,
-        llmProxyId: inputs.proxyId ?? undefined,
-        provider:
-          inputs.proxyAuth === "primary-providers"
-            ? undefined
-            : (inputs.provider ?? undefined),
-        proxyAuth: inputs.proxyAuth ?? undefined,
-        model: inputs.model ?? undefined,
-        skills,
-        ...(inputs.pluginIds ? { pluginIds: inputs.pluginIds } : {}),
-      });
+      const created = await createSetup(body);
       if (latestKeyRef.current !== key) return; // stale response
       preparedKeyRef.current = created ? key : null;
       setResult(created);
@@ -802,6 +780,12 @@ export function ConnectCommandPanel({
     }
     // The same payload as the prepared setup: keep it, and Approve stays on.
     if (preparedKeyRef.current === inputsKey) return;
+    // The server prepared the first payload with the document.
+    if (!preparationStartedRef.current && seededSetupId) {
+      preparationStartedRef.current = true;
+      preparedKeyRef.current = inputsKey;
+      return;
+    }
     preparedKeyRef.current = null;
     setResult(null);
     setFailure(null);
@@ -824,6 +808,7 @@ export function ConnectCommandPanel({
     primaryRoutingBlocked,
     canAttribute,
     runGeneration,
+    seededSetupId,
   ]);
 
   // Each summary line owns its inline editor. A line is editable only when it
@@ -1648,7 +1633,14 @@ export function ConnectCommandPanel({
               <ClientConnectionApproval
                 key={connectRequest}
                 requestId={connectRequest}
-                setupId={result?.id}
+                setupId={
+                  result?.id ??
+                  (seededSetupId &&
+                  (!preparationStartedRef.current ||
+                    preparedKeyRef.current === inputsKey)
+                    ? seededSetupId
+                    : undefined)
+                }
                 setupProblem={
                   selectionProblem ??
                   (failureMessage

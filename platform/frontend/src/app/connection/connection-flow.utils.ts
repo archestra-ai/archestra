@@ -156,16 +156,31 @@ export function resolveEffectiveId(params: {
 export function useConnectionBaseUrl(
   metadata: readonly ConnectionBaseUrl[] | null | undefined,
 ): string {
-  const baseUrls = useMemo(
+  return useMemo(
     () =>
-      resolveCandidateBaseUrls({
+      resolveConnectionBaseUrl({
         externalProxyUrls: config.api.externalProxyUrls,
         internalProxyUrl: config.api.internalProxyUrl,
-        metadata: metadata ?? null,
+        metadata,
       }),
     [metadata],
   );
-  const adminDefault = resolveAdminDefaultBaseUrl(metadata ?? null);
+}
+
+/**
+ * {@link useConnectionBaseUrl} for given URLs: the server seed passes the
+ * document's own origin where the browser passes `window.location.origin`.
+ */
+export function resolveConnectionBaseUrl(params: {
+  externalProxyUrls: readonly string[];
+  internalProxyUrl: string;
+  metadata: readonly ConnectionBaseUrl[] | null | undefined;
+}): string {
+  const baseUrls = resolveCandidateBaseUrls({
+    ...params,
+    metadata: params.metadata ?? null,
+  });
+  const adminDefault = resolveAdminDefaultBaseUrl(params.metadata ?? null);
   return adminDefault && baseUrls.includes(adminDefault)
     ? adminDefault
     : baseUrls[0];

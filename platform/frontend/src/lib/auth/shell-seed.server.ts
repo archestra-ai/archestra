@@ -5,6 +5,21 @@ import {
 } from "@archestra/shared";
 import { headers } from "next/headers";
 import {
+  CONNECT_CLIENTS,
+  isInstallerClientId,
+  visibleClients,
+} from "@/app/connection/clients";
+import {
+  getConnectableProviders,
+  resolveConnectionBaseUrl,
+  resolveInitialClientId,
+} from "@/app/connection/connection-flow.utils";
+import {
+  connectionSetupBody,
+  connectionSetupInputsKey,
+  firstConnectionSetupInputs,
+} from "@/app/connection/connection-setup-payload";
+import {
   agentRunQueryKey,
   myAgentRunsPageQuery,
   myAgentRunsQueryKey,
@@ -28,7 +43,11 @@ import {
   SIDEBAR_CONVERSATION_LIMIT,
 } from "@/lib/chat/conversations-query-key";
 import { newChatSeedQueries } from "@/lib/chat/new-chat-seed";
-import { getBackendBaseUrl } from "@/lib/config/config";
+import {
+  getBackendBaseUrl,
+  getConfiguredExternalProxyUrls,
+  getInternalProxyUrl,
+} from "@/lib/config/config";
 import {
   CONNECTION_GATEWAY_PAGE_QUERY,
   CONNECTION_GATEWAY_REFERENCE_FILTERS,
@@ -41,6 +60,7 @@ import {
   projectListQueryKey,
   SIDEBAR_PINNED_PROJECTS_QUERY,
 } from "@/lib/projects/projects.query";
+import { originFromHeaders } from "@/lib/request-origin";
 import { siteNotificationKeys } from "@/lib/site-notification.query";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import { withServerSeedDeadline } from "@/lib/utils/server-seed-timeout";
@@ -95,6 +115,12 @@ export async function prefetchShellSeed(): Promise<ShellSeed | null> {
           readShellQueries({
             route,
             search,
+            origin: originFromHeaders(requestHeaders),
+            // A speculative load (prefetch or prerender) nobody may see:
+            // it reads, but prepares no setup.
+            speculative: !!(
+              requestHeaders.get("sec-purpose") ?? requestHeaders.get("purpose")
+            ),
             headers: apiHeaders,
             signal,
             bootstrap: bootstrapRead,
@@ -125,6 +151,8 @@ export async function prefetchShellSeed(): Promise<ShellSeed | null> {
 async function readShellQueries(params: {
   route: string | null;
   search: string | null;
+  origin: string | null;
+  speculative: boolean;
   headers: Record<string, string>;
   signal: AbortSignal;
   bootstrap: Promise<{ data?: ShellSeed["bootstrap"] }>;
@@ -197,6 +225,7 @@ async function readShellQueries(params: {
         connectRequest,
         search: params.search,
         bootstrap: params.bootstrap,
+        origin: params.speculative ? null : params.origin,
       })
     : Promise.resolve([]);
   const [shell, composerQueries, runs, guardrails, approvalQueries] =
@@ -232,6 +261,8 @@ async function readConnectionApproval(options: {
   connectRequest: string;
   search: string | null;
   bootstrap: Promise<{ data?: ShellSeed["bootstrap"] }>;
+  /** The document's public origin; null prepares no setup. */
+  origin: string | null;
 }): Promise<ShellSeed["queries"]> {
   const sdk = { headers: options.headers, signal: options.signal };
   // The organization's settings choose the optional parts and name the admin
@@ -322,6 +353,20 @@ async function readConnectionApproval(options: {
   ]);
   // Without the organization the page cannot render past its settings check.
   if (!organization) return [];
+  const setup = await prepareFirstSetup({
+    ...sdk,
+    search: options.search,
+    origin: options.origin,
+    bootstrap: await options.bootstrap.then(({ data }) => data),
+    request,
+    defaultGateway,
+    gatewayPage,
+    gatewayReferences,
+    llmProxy,
+    skillNames,
+    plugins,
+    availableApiKeys,
+  });
   return connectionApprovalSeedQueries({
     connectRequest: options.connectRequest,
     request,
@@ -333,7 +378,108 @@ async function readConnectionApproval(options: {
     plugins,
     availableApiKeys,
     models,
+    setup,
   });
+}
+
+/**
+ * Prepare the approval page's first setup with the document. The page
+ * creates one setup per load without any user action; preparing it here
+ * moves that request into the document, so Approve is ready at first paint.
+ * The payload is the one the page would send first (the same key, see
+ * `firstConnectionSetupInputs`); the page keeps the seeded setup only while
+ * its own payload has that key, so a load still prepares exactly one setup.
+ * Only its id is seeded: the setup's command carries a one-time token.
+ */
+async function prepareFirstSetup(params: {
+  headers: Record<string, string>;
+  signal: AbortSignal;
+  search: string | null;
+  origin: string | null;
+  bootstrap: ShellSeed["bootstrap"] | undefined;
+  request: archestraApiTypes.GetClientConnectionResponses["200"] | undefined;
+  defaultGateway:
+    | archestraApiTypes.GetDefaultMcpGatewayResponses["200"]
+    | null
+    | undefined;
+  gatewayPage:
+    | archestraApiTypes.GetAgentOptionsPageResponses["200"]
+    | undefined;
+  gatewayReferences:
+    | { options: archestraApiTypes.GetAgentOptionsResponses["200"]["data"] }
+    | undefined;
+  llmProxy: archestraApiTypes.GetLlmProxyResponses["200"] | null | undefined;
+  skillNames: archestraApiTypes.GetSkillNamesResponses["200"] | undefined;
+  plugins: archestraApiTypes.GetPluginsResponses["200"] | undefined;
+  availableApiKeys:
+    | archestraApiTypes.GetAvailableLlmProviderApiKeysResponses["200"]
+    | undefined;
+}): Promise<{ inputsKey: string; id: string } | undefined> {
+  const organization = params.bootstrap?.organization;
+  if (!params.origin || !organization || !params.request) return undefined;
+  const query = new URLSearchParams(params.search ?? "");
+  const clientId = resolveInitialClientId({
+    urlClientId: query.get("clientId"),
+    adminDefaultClientId: organization.connectionDefaultClientId,
+    visibleClientIds: visibleClients(organization.connectionShownClientIds).map(
+      (client) => client.id,
+    ),
+  });
+  const client = CONNECT_CLIENTS.find((c) => c.id === clientId);
+  // The page approves only a request for the client it shows.
+  if (
+    !client ||
+    !isInstallerClientId(client.id) ||
+    params.request.clientId !== client.id
+  ) {
+    return undefined;
+  }
+  // The gateway list as the page merges it: the first page, then the
+  // gateways it names by id.
+  const gateways = [
+    ...new Map(
+      [
+        ...(params.gatewayPage?.data ?? []),
+        ...(params.gatewayReferences?.options ?? []),
+      ].map((gateway) => [gateway.id, gateway]),
+    ).values(),
+  ];
+  const external = getConfiguredExternalProxyUrls();
+  const inputs = firstConnectionSetupInputs({
+    client,
+    requestedPlatform: query.get("platform"),
+    baseUrl: resolveConnectionBaseUrl({
+      externalProxyUrls:
+        external.length > 0 ? external : [`${params.origin}/v1`],
+      internalProxyUrl: getInternalProxyUrl(),
+      metadata: organization.connectionBaseUrls,
+    }),
+    urlGatewayId: query.get("gatewayId"),
+    urlProviderId: query.get("providerId"),
+    organization,
+    shownProviders: getConnectableProviders(organization),
+    permissions: params.bootstrap?.permissions ?? {},
+    scopedCapabilities: params.bootstrap?.scopedCapabilities ?? [],
+    request: params.request,
+    defaultGatewayId: params.defaultGateway?.id ?? null,
+    gateways,
+    llmProxyId: params.llmProxy?.id ?? null,
+    skillNames: params.skillNames ?? null,
+    plugins: params.plugins ?? null,
+    availableKeys: params.availableApiKeys ?? null,
+  });
+  if (!inputs) return undefined;
+  const inputsKey = connectionSetupInputsKey(inputs);
+  const body = connectionSetupBody(inputsKey);
+  if (!body) return undefined;
+  const created = await readValue(
+    archestraApiSdk.createConnectionSetup({
+      headers: params.headers,
+      signal: params.signal,
+      body,
+    }),
+  );
+  return created ? { inputsKey, id: created.id } : undefined;
 }
 
 /**

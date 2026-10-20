@@ -1,6 +1,7 @@
 import { archestraApiClient, type SupportedProvider } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -20,10 +21,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
 import { useConfig, useFeature } from "@/lib/config/config.query";
+import { connectionSetupSeedQueryKey } from "@/lib/connection-approval-query-keys";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
+import { originFromHeaders } from "@/lib/request-origin";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
+import {
+  getConnectableProviders,
+  resolveConnectionBaseUrl,
+} from "./connection-flow.utils";
+import {
+  type ConnectionSetupInputs,
+  connectionSetupBody,
+  connectionSetupInputsKey,
+  firstConnectionSetupInputs,
+} from "./connection-setup-payload";
 
 const {
   createSetupMock,
@@ -2241,4 +2254,247 @@ describe("a setup over a delivery limit on the approval page", () => {
       supportedPlatforms: ["posix"],
     }));
   }
+});
+
+// The server seed prepares the approval page's first setup with the document
+// (see `prepareFirstSetup`). It must send what the page itself would send
+// first, or the page prepares a second one: one setup per load either way.
+describe("first approval setup, as the server seed prepares it", () => {
+  const REQUEST_ID = "c".repeat(48);
+  const ADMIN_GATEWAY = "11111111-1111-4111-8111-111111111111";
+  const DEFAULT_GATEWAY = "22222222-2222-4222-8222-222222222222";
+  const roles = {
+    admin: {
+      permissions: {
+        mcpGateway: ["read"],
+        llmProxy: ["read"],
+        skill: ["read"],
+        llmVirtualKey: ["create"],
+      },
+      scoped: [
+        { resource: "plugin", action: "read", scope: "*" },
+        { resource: "plugin", action: "update", scope: "*" },
+      ],
+    },
+    member: {
+      permissions: {
+        mcpGateway: ["read"],
+        llmProxy: ["read"],
+        skill: ["read"],
+        llmVirtualKey: ["create"],
+      },
+      scoped: [],
+    },
+  } as const;
+  const organization = {
+    connectionDefaultMcpGatewayId: ADMIN_GATEWAY,
+    connectionSkillsEnabled: true,
+    connectionLlmProxyEnabled: true,
+    connectionPluginsEnabled: true,
+    connectionClientProviderKeys: null,
+    connectionDefaultClientId: "opencode",
+    connectionShownClientIds: null,
+    modelProviderOverrides: null,
+  };
+  const keys = [
+    {
+      id: "key-2",
+      provider: "openai",
+      isPrimary: true,
+      baseUrl: "http://stub.example/v1",
+      requiresReauthentication: false,
+    },
+    { id: "key-1", provider: "anthropic", isPrimary: false, baseUrl: null },
+  ];
+  const skills = [
+    { id: "s2", name: "second" },
+    { id: "s1", name: "first" },
+  ];
+  const plugins = [
+    {
+      id: "pl-2",
+      displayName: "Two",
+      pluginSlug: "two",
+      clientType: "claude-code",
+      enabled: true,
+      contentHash: "h",
+      approvedContentHash: "h",
+      supportedPlatforms: ["posix", "windows"],
+    },
+    {
+      id: "pl-1",
+      displayName: "One",
+      pluginSlug: "one",
+      clientType: "claude-code",
+      enabled: true,
+      contentHash: "h",
+      approvedContentHash: "h",
+      supportedPlatforms: ["posix"],
+    },
+  ];
+  const gateways = [
+    { id: DEFAULT_GATEWAY, name: "My Gateway", agentType: "mcp_gateway" },
+    { id: ADMIN_GATEWAY, name: "Shared Gateway", agentType: "mcp_gateway" },
+  ] as const;
+
+  it.each(
+    (["opencode", "claude-code"] as const).flatMap((clientId) =>
+      (["admin", "member"] as const).flatMap((role) =>
+        [false, true].map((configuredBaseUrls) => ({
+          clientId,
+          role,
+          configuredBaseUrls,
+        })),
+      ),
+    ),
+  )("sends the same payload: $clientId, $role, configured base URLs $configuredBaseUrls", async ({
+    clientId,
+    role,
+    configuredBaseUrls,
+  }) => {
+    const grants = roles[role];
+    vi.mocked(useHasPermissions).mockImplementation(
+      (wanted, scope) =>
+        ({
+          data: Object.entries(wanted).every(([resource, actions]) =>
+            (actions ?? []).every((action) =>
+              scope !== undefined && resource === "plugin"
+                ? grants.scoped.some(
+                    (g) => g.resource === resource && g.action === action,
+                  )
+                : (
+                    (grants.permissions as Record<string, readonly string[]>)[
+                      resource
+                    ] ?? []
+                  ).includes(action),
+            ),
+          ),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: organization,
+    } as unknown as ReturnType<typeof useOrganization>);
+    availableKeysMock.mockReturnValue({ data: keys, isPending: false });
+    skillNamesMock.mockReturnValue(skillNames(skills));
+    pluginsMock.mockImplementation((enabled?: boolean) => ({
+      data: enabled ? plugins : undefined,
+      isPending: false,
+    }));
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        `clientId=${clientId}&platform=linux&connectRequest=${REQUEST_ID}`,
+      ) as ReturnType<typeof useSearchParams>,
+    );
+    // An admin-curated entry for the page's own URL, marked as the default.
+    const metadata = configuredBaseUrls
+      ? [
+          {
+            url: `${window.location.origin}/v1`,
+            description: "This deployment",
+            isDefault: true,
+            visible: true,
+          },
+        ]
+      : null;
+    // The browser's base URL (useConnectionBaseUrl), and the server's from
+    // the document's Host header, where the browser has window.location.
+    const browserBaseUrl = resolveConnectionBaseUrl({
+      externalProxyUrls: appConfig.api.externalProxyUrls,
+      internalProxyUrl: appConfig.api.internalProxyUrl,
+      metadata,
+    });
+    const origin = originFromHeaders({
+      get: (name) => (name === "host" ? window.location.host : null),
+    });
+    const serverBaseUrl = resolveConnectionBaseUrl({
+      externalProxyUrls: [`${origin}/v1`],
+      internalProxyUrl: appConfig.api.internalProxyUrl,
+      metadata,
+    });
+    expect(serverBaseUrl).toBe(browserBaseUrl);
+
+    const client = findClient(clientId);
+    const serverInputs = firstConnectionSetupInputs({
+      client,
+      requestedPlatform: "linux",
+      baseUrl: serverBaseUrl,
+      urlGatewayId: null,
+      urlProviderId: null,
+      organization,
+      shownProviders: getConnectableProviders(organization),
+      permissions: grants.permissions as never,
+      scopedCapabilities: [...grants.scoped],
+      request: { exclude: null, gateway: null, plugins: null },
+      defaultGatewayId: DEFAULT_GATEWAY,
+      gateways: [...gateways],
+      llmProxyId: "p1",
+      skillNames: { data: skills, total: skills.length },
+      plugins: plugins as never,
+      availableKeys: keys,
+    });
+    expect(serverInputs).not.toBeNull();
+
+    renderPanel({
+      client,
+      mcpGateways: [...gateways],
+      // ConnectionFlow's choice: the admin default before the member's own.
+      mcpGatewayId: ADMIN_GATEWAY,
+      llmProxyId: "p1",
+      shownProviders: getConnectableProviders(organization),
+      baseUrl: browserBaseUrl,
+    });
+
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    expect(createSetupMock.mock.calls[0][0]).toEqual(
+      connectionSetupBody(
+        connectionSetupInputsKey(serverInputs as ConnectionSetupInputs),
+      ),
+    );
+  });
+
+  it("takes a setup the server prepared for its first payload, and prepares none", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        `clientId=claude-code&platform=macos&connectRequest=${REQUEST_ID}`,
+      ) as ReturnType<typeof useSearchParams>,
+    );
+    // Learn the page's first payload key from one load.
+    renderPanel();
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalledTimes(1));
+    const body = createSetupMock.mock.calls[0][0];
+    const inputsKey = connectionSetupInputsKey({
+      clientId: body.clientId,
+      platform: body.platform,
+      baseUrl: body.baseUrl,
+      gatewayId: body.mcpGatewayId ?? null,
+      proxyId: body.llmProxyId ?? null,
+      provider: body.provider ?? null,
+      proxyAuth: body.proxyAuth ?? null,
+      primaryKeyIds: null,
+      model: body.model ?? null,
+      skillIds: body.skills?.skillIds ?? null,
+      pluginIds: body.pluginIds ?? null,
+    });
+    cleanup();
+    createSetupMock.mockClear();
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(connectionSetupSeedQueryKey(REQUEST_ID), {
+      inputsKey,
+      id: "server-setup",
+    });
+    render(<ConnectCommandPanel {...renderPanelProps()} />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(createSetupMock).not.toHaveBeenCalled();
+  });
 });

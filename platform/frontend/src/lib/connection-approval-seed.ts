@@ -3,6 +3,7 @@ import {
   agentOptionsByIdsQueryKey,
   agentOptionsPageQueryKey,
   clientConnectionQueryKey,
+  connectionSetupSeedQueryKey,
   defaultMcpGatewayQueryKey,
   llmProxyQueryKey,
   pluginsQueryKey,
@@ -34,6 +35,13 @@ export const CONNECTION_GATEWAY_REFERENCE_FILTERS = {
 };
 
 /**
+ * A setup the server prepared with the document: its id, and the payload key
+ * it was prepared for. Only the id: the setup's command carries a one-time
+ * token, which never goes into the HTML.
+ */
+export type ConnectionSetupSeed = { inputsKey: string; id: string };
+
+/**
  * The parts of a connection approval document the server reads, each the
  * response of its own endpoint. A part the viewer may not read, or that the
  * page does not show, is left out and its query loads in the browser.
@@ -63,6 +71,8 @@ export type ConnectionApprovalSeed = {
   availableApiKeys?: archestraApiTypes.GetAvailableLlmProviderApiKeysResponses["200"];
   /** `GET /api/llm-models/available` */
   models?: archestraApiTypes.GetLlmModelsResponses["200"];
+  /** `POST /api/connection-setups` for the page's first payload, id only */
+  setup?: ConnectionSetupSeed;
 };
 
 /**
@@ -104,5 +114,6 @@ export function connectionApprovalSeedQueries(
     seed.availableApiKeys,
   );
   add(llmModelsQueryKey(null), seed.models);
+  add(connectionSetupSeedQueryKey(seed.connectRequest), seed.setup);
   return queries;
 }

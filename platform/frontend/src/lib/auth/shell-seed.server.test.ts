@@ -29,6 +29,7 @@ const { requestHeaders, getBootstrapMock, getIssueIndexMock, fetchMock, sdk } =
       getAvailableLlmProviderApiKeys: vi.fn(),
       getLlmModels: vi.fn(),
       getGuardrailsDeployment: vi.fn(),
+      createConnectionSetup: vi.fn(),
     },
   }));
 
@@ -212,6 +213,12 @@ describe("prefetchShellSeed", () => {
       .mockReset()
       .mockResolvedValue({ data: approval.availableApiKeys });
     sdk.getLlmModels.mockReset().mockResolvedValue({ data: approval.models });
+    sdk.createConnectionSetup.mockReset().mockResolvedValue({
+      data: {
+        id: "setup-1",
+        command: "curl https://x/api/connection-setups/secret-token | bash",
+      },
+    });
     sdk.getGuardrailsDeployment
       .mockReset()
       .mockResolvedValue({ data: { enabled: false } });
@@ -423,6 +430,80 @@ describe("prefetchShellSeed", () => {
     sdk.getGuardrailsDeployment.mockClear();
     await prefetchShellSeed();
     expect(sdk.getGuardrailsDeployment).not.toHaveBeenCalled();
+  });
+
+  it("prepares the approval page's first setup with the document, and seeds only its id", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    requestHeaders.set("host", "connect.example");
+    requestHeaders.set("x-forwarded-proto", "https");
+    getBootstrapMock.mockResolvedValue({
+      data: {
+        ...bootstrap,
+        permissions: {
+          mcpGateway: ["read"],
+          llmProxy: ["read"],
+          skill: ["read"],
+          llmVirtualKey: ["create"],
+        },
+        scopedCapabilities: [],
+        organization: {
+          ...connectionOrganization,
+          connectionDefaultClientId: null,
+          connectionShownClientIds: null,
+          connectionClientProviderKeys: null,
+          connectionBaseUrls: null,
+        },
+      },
+    });
+    sdk.getAvailableLlmProviderApiKeys.mockResolvedValue({
+      data: [
+        {
+          id: "key-1",
+          provider: "openai",
+          isPrimary: true,
+          baseUrl: "https://llm.example/v1",
+        },
+      ],
+    });
+
+    const seed = await prefetchShellSeed();
+
+    expect(sdk.createConnectionSetup).toHaveBeenCalledTimes(1);
+    expect(sdk.createConnectionSetup.mock.calls[0][0].body).toMatchObject({
+      clientId: "opencode",
+      platform: "linux",
+      // The browser's window.location.origin for this document.
+      baseUrl: "https://connect.example/v1",
+      mcpGatewayId: ADMIN_GATEWAY,
+      skills: { skillIds: ["s1"], ttlDays: null },
+    });
+    const setup = seed?.queries.find(
+      ({ queryKey }) => queryKey[0] === "connection-setup-seed",
+    );
+    expect(setup?.data).toEqual({
+      inputsKey: expect.any(String),
+      id: "setup-1",
+    });
+    // The setup's command carries a one-time token; it never lands in the HTML.
+    expect(JSON.stringify(seed)).not.toContain("secret-token");
+  });
+
+  it("prepares no setup for a speculative load or without the document's origin", async () => {
+    requestHeaders.set(SHELL_SEED_HEADER, "/connection");
+    requestHeaders.set(SHELL_SEED_SEARCH_HEADER, APPROVAL_SEARCH);
+    getBootstrapMock.mockResolvedValue({
+      data: { ...bootstrap, organization: connectionOrganization },
+    });
+
+    requestHeaders.set("host", "connect.example");
+    requestHeaders.set("sec-purpose", "prefetch;prerender");
+    expect(await prefetchShellSeed()).not.toBeNull();
+    requestHeaders.delete("sec-purpose");
+    requestHeaders.delete("host");
+    expect(await prefetchShellSeed()).not.toBeNull();
+
+    expect(sdk.createConnectionSetup).not.toHaveBeenCalled();
   });
 
   it("reads only the approval page parts the organization turns on", async () => {

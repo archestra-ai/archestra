@@ -127,9 +127,10 @@ pub(crate) enum PackageOrigin {
 }
 
 /// Bundled batteries written for another host's own tools that this host serves
-/// anyway: a root's `[aliases] host` table rebinds their rules onto the client
-/// built-ins Archestra derives as `host/archestra/<name>`.
-const HOST_ALIASED_BATTERIES: &[&str] = &["claude-code"];
+/// anyway: `coding` names canonical tools that `claude-code`'s tool map binds to
+/// Claude Code's built-ins, and a root's `[aliases] host` table rebinds those onto
+/// the client built-ins Archestra derives as `host/archestra/<name>`.
+const HOST_ALIASED_BATTERIES: &[&str] = &["coding", "claude-code"];
 
 /// Validate a battery package from its files and read what the host needs from it.
 /// Runs the marketplace's own package validation on a scratch copy, so an uploaded
@@ -398,15 +399,18 @@ mod tests {
     }
 
     #[test]
-    fn the_bundled_claude_code_battery_is_served_for_host_aliasing_and_no_other_host_battery_is() {
+    fn the_bundled_coding_and_claude_code_batteries_are_served_and_no_other_host_battery_is() {
         let served = bundled().expect("bundled batteries validate");
-        let claude_code = served
-            .iter()
-            .find(|battery| battery.name == "claude-code")
-            .expect("the claude-code battery is rebound onto this host's client built-ins");
-        // Its rules name another host's tools, so no server alias points it anywhere.
-        assert!(claude_code.namespaces.is_empty());
-        assert!(!claude_code.routed_annotators.is_empty());
+        for name in ["coding", "claude-code"] {
+            let battery = served
+                .iter()
+                .find(|battery| battery.name == name)
+                .unwrap_or_else(|| panic!("{name} is rebound onto this host's client built-ins"));
+            // Its rules name canonical or another host's tools, so no server alias
+            // points it anywhere.
+            assert!(battery.namespaces.is_empty(), "{name}");
+            assert!(!battery.routed_annotators.is_empty(), "{name}");
+        }
         let foreign: Vec<&str> = bundled_batteries()
             .iter()
             .filter(|battery| !HOST_ALIASED_BATTERIES.contains(&battery.name))

@@ -7,7 +7,6 @@ import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
-import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
 import {
@@ -373,8 +372,7 @@ async function evaluateWithDraftHelpers(
   const progress = params.onProgress
     ? new ReplayProgress(params.onProgress)
     : null;
-  // A dispatch evaluates the composition with every command tool's spelling.
-  const content = expandCommandExecutionPolicyRules(effective.content);
+  const content = effective.content;
   const cannotRun = (error: string) =>
     params.files.map((file) => ({
       path: file.path,

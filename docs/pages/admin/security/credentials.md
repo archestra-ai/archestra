@@ -55,7 +55,7 @@ Decide, credential by credential, who sees it, connects to it, and changes its s
 Each recipient gets a level:
 
 - **Can read:** sees the credential and where it is used.
-- **Can use:** also connects a personal value, and binds it to a [guardrails battery](/docs/agents/guardrails/batteries).
+- **Can use:** also connects a personal value, and binds it to a [guardrails battery](/docs/agents/guardrails/policies#batteries).
 - **Can update:** also changes its details and its organization value.
 - **Full access:** also deletes it and manages who else can reach it.
 

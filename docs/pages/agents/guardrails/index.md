@@ -10,8 +10,6 @@ lastUpdated: 2026-10-20
 
 Guardrails check every tool call an agent makes against your organization's policy, before the call runs. So an agent that has read an untrusted web page cannot then email your customer list. The [OpenAPPA](https://www.openappa.com/) policy engine decides by rules, not by asking another model. It runs outside the agent's loop, so a prompt injection cannot change its decisions.
 
-> **Platform + AI Security** — see [Pricing Model](/docs/get-started/pricing-model#platform--ai-security). OpenAPPA itself is MIT-licensed; its integration here is the licensed part. Once the instance has 30 or more users, the integration turns off until [`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED) is set.
-
 ![The Guardrails Overview tab with the policy cards above the GitHub sync, Validations, and Yells cards](/docs/automated_screenshots/platform-ai-tool-guardrails_overview.webp)
 
 <a id="the-lethal-trifecta"></a>
@@ -42,24 +40,37 @@ name = "blog__publish_post"
 requires = { trust = "trusted", audience = { contains = ["public"] } }
 ```
 
-When a tool's *requirements* don't match the session's *label*, the call is blocked. An *authority*, such as the person running the session, can approve it, or a *sanitizer* can clean the data first. Otherwise it stays blocked, and the agent explains why. See [the core concepts](https://www.openappa.com/how-it-works#the-core-concepts) for details.
+When a tool's requirements don't match the session's label, the call is blocked. Guardrails provide several ways to unblock the agent. The policy offers them as remedy plans, and the agent picks one:
+
+- **Authority:** approves one exact call. The starting policy's authority, `human-approval`, asks the person running the session.
+- **Sanitizer:** cleans the data first, for example by removing secrets, so the call can go ahead.
+- **`attest-schema`:** a built-in sanitizer for risky reads. The agent hands the read to a subagent, which must reply in a strict JSON shape the agent asked for. Injected instructions cannot slip back, so a reply that fits keeps the agent's trust.
+- **Accept restrictions:** the agent accepts the lower trust or smaller audience a tool result brings, and goes on under them.
+
+If no remedy plan works, the call stays blocked, and the agent explains why. See [the core concepts](https://www.openappa.com/how-it-works#the-core-concepts) for details.
 
 <a id="configure-with-the-agent"></a>
 
 ## Turn On Guardrails
 
-The configuration agent writes your first policy from the tools you already have. You need [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar for anyone with [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) or [`log:read`](/docs/reference/permissions#log:read).
+The APPA Keeper agent helps you manage your policy. It writes your first policy from the tools you already have.
 
-1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
+1. Go to **Guardrails** and click **Create my policy**. A chat with the APPA Keeper opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.
 3. Approve the policy. Saving the first policy turns enforcement on.
 
-The Guardrails page header now shows **Enforcement on**.
+The starting policy contains:
 
-What to know:
+- **Archestra's own tools:** rules from the bundled Archestra battery.
+- **Coding agent tools:** rules for the built-in tools of Claude Code, Codex, and OpenCode, such as shell commands, file edits, and web fetches.
+- **Your organization as the `internal` audience:** data your members can see may go to them, and no further.
+- **The annotator model for the rest:** it labels sandbox commands ([`run_command`](/docs/reference/archestra-mcp-server#run_command)), coding agent shell commands, and every tool no rule covers. It uses the model under **Annotator model** in **Settings → Guardrails**, or your organization's default model.
+- **Human approval:** the `human-approval` authority, the person running the session, can approve a blocked call.
 
-- The starting policy has rules for Archestra's own tools and for the built-in tools of Claude Code, Codex, and OpenCode. Every other tool call goes to the annotator model: the one under **Annotator model** in **Settings → Guardrails**, or your organization's default model. If no model can answer, the call is refused.
-- Enforcement applies to sessions that start while it is on. Start a new session after you turn it on. The same holds for an [Agent Runtime](/docs/agents/runtime/handoff#hand-off-with-guardrails-on) run.
-- To turn enforcement off again, switch **Enforce the policy** in **Settings → Guardrails**. Every other setting there is explained on the page where you use it.
+Required permissions:
 
-**Next:** [Change the policy](/docs/agents/guardrails/policies) to cover your other tools.
+- [`guardrailsPolicy:read`](/docs/reference/permissions#guardrailsPolicy:read) to see **Guardrails** under **Agents** in the sidebar.
+- [`guardrailsPolicy:update`](/docs/reference/permissions#guardrailsPolicy:update) to write the policy.
+- [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off.
+
+**Next:** Check how to [manage your policy](/docs/agents/guardrails/policies) to cover more tools, [test your policy](/docs/agents/guardrails/policies#validating-the-policy), and [deal with agents stuck because of the policy](/docs/agents/guardrails/policies#yells).

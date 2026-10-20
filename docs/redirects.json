@@ -1,6 +1,7 @@
 {
   "$comment": "Redirects for moved/renamed/deleted docs pages, merged into the archestra-website redirect table at build. URL = /docs/<path below docs/pages, without .md; a folder's index.md is the folder URL>. On move/rename/delete, append { source, destination, permanent: true } pointing at the final URL (no chains); if there is no equivalent, let it 404.",
   "redirects": [
+    {"source": "/docs/agents/guardrails/batteries", "destination": "/docs/agents/guardrails/policies#batteries", "permanent": true},
     {"source": "/docs/agents/prompt-templates", "destination": "/docs/agents#prompt-templates", "permanent": true},
     {"source": "/docs/administration", "destination": "/docs/admin", "permanent": true},
     {"source": "/docs/administration/access-control", "destination": "/docs/admin/access-control", "permanent": true},

@@ -2,59 +2,37 @@
 title: Guardrail Clients
 sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
-order: 4
+order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
 lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Guardrails check the tool calls of any client that sends its traffic through Archestra. Built-in clients work out of the box. Any other client adds one header.
+Guardrails check the tool calls of any client that sends its traffic through the Archestra [LLM Proxy](/docs/llm-proxy). Built-in clients work out of the box. Any other client needs to add the `X-Appa-Session-ID` and `X-Appa-Parent-ID` headers.
 
-## Supported Clients
+<a id="supported-clients"></a><a id="connect-a-client"></a>
 
-These clients identify themselves to the proxy and work without extra configuration:
+## Connect a Supported Client
 
-- **Archestra Chat**: built-in chat in the platform. Tracks conversations automatically.
-- **Claude Code**: terminal coding agent. Passes session identifiers through request headers.
-- **Codex CLI**: terminal coding agent. Sends conversation identifiers in request metadata.
-- **OpenCode**: terminal coding agent. Sends its session headers automatically.
-- **Kilo Code**: terminal coding agent built on OpenCode. Sends the same session headers automatically.
+These clients work without extra configuration:
 
-All other clients, including workflow automations like [n8n](/docs/integrations/web-ui-and-automation#n8n) and custom API integrations, require [session headers](#session-headers).
+- **Archestra Chat**
+- **Claude Code**
+- **Codex CLI**
+- **OpenCode**
+- **Kilo Code**
 
-## Connect a Client
+Connect the client to the LLM Proxy and the MCP Gateway on the [connection page](/docs/get-started/connect). The client needs both: the LLM Proxy checks each tool call, and the MCP Gateway gives the agent the tools to handle a block, such as [`get_remedy_plans`](/docs/reference/archestra-mcp-server#get_remedy_plans) and [`yell`](/docs/reference/archestra-mcp-server#yell).
 
-Route model requests through the proxy so Guardrails can check the tool calls the model asks for.
+<a id="session-headers"></a>
 
-1. [Connect the client](/docs/get-started/connect) to the [LLM Proxy](/docs/llm-proxy) and the [MCP Gateway](/docs/mcp/gateway). The proxy checks each tool call. The gateway gives the agent the tools to handle a block.
-2. For a client without built-in support, add the [session headers](#session-headers).
+## Configure Other Clients
 
-**Other clients** under **Settings → Guardrails** sets what happens to [unrecognized ones](#unrecognized-clients).
+Any other client, such as [n8n](/docs/integrations/web-ui-and-automation#configure-guardrails) or your own app built with an [SDK](/docs/integrations/sdks-and-frameworks#session-ids-for-guardrails), sends the session headers with every model call. Guardrails use them to remember restrictions across turns, tool calls, and retries.
 
-- A block that says no remedy plan can be used in this session means the client sent no gateway tools: it is not signed in to the gateway, or the gateway is not connected. The message names the fix for your client. The steps are under [Finish Setup in Your Client](/docs/get-started/connect#finish-setup-in-your-client).
-
-## Approval Cards
-
-Read the complete call before you approve it. An approval allows this one call only, and only when the policy allows it.
-
-Claude Code asks "Run *tool*?" and offers **Allow**, **Deny**, and **Inspect**. The card shows the call's arguments, and under **Allow** what an approval accepts. **Inspect** prints the complete review in the chat, then shows the card again. It never grants permission.
-
-What to know:
-
-- Long text arguments can get a **Generated summary**. It needs an [explicitly configured summary model](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER), uses tokens, and never replaces the exact arguments.
-- If the card cannot show everything an approval accepts, it does not offer **Allow**.
-
-## Session Headers
-
-Send the same session ID with every model call in a conversation or workflow run. Guardrails use it to remember policy decisions and restrictions across turns, tool calls, and retries.
-
-- **`X-Appa-Session-ID`**: your app's conversation ID or workflow execution ID. If you do not have one, generate a UUID when the conversation starts and save it.
-- **`X-Appa-Parent-ID`**: optional parent session ID when running a subagent or child workflow. Keep both IDs stable for every call the child makes.
-
-For client examples, see [n8n](/docs/integrations/web-ui-and-automation#configure-guardrails) and the [SDK examples](/docs/integrations/sdks-and-frameworks#session-ids-for-guardrails).
-
-With `curl`, generate an ID once and reuse it across requests:
+- **`X-Appa-Session-ID`**: your app's conversation ID or workflow run ID. If you do not have one, generate a UUID when the conversation starts and reuse it.
+- **`X-Appa-Parent-ID`**: the parent's session ID, when a subagent or child workflow makes the call. Leave it out otherwise.
 
 ```bash
 export SESSION_ID="$(uuidgen)"
@@ -66,36 +44,14 @@ curl "https://archestra.example.com/v1/openai/chat/completions" \
   -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-Reuse `$SESSION_ID` when sending tool results back to the model.
+Reuse the same ID for the whole conversation, including when you send tool results back. Start a new ID only for a new conversation.
 
-### What to Know
-
-- Reuse the same ID when resuming a chat. Start a new ID only when a separate conversation starts.
-- Any string up to 512 bytes works (no control characters). It does not need to be a UUID.
-- [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) labels requests in logs, but Guardrails ignore it. When you send both `X-Archestra-Session-Id` and `X-Appa-Session-ID`, use the same value for both.
-
-## Unrecognized Clients
-
-By default, Guardrails let an unrecognized client through, unchecked. To change that, go to **Settings → Guardrails** and set **Other clients**:
-
-- **Allowed** (default): its requests reach the model without checks.
-- **Blocked:** the proxy rejects its requests with HTTP 400 and tells the user to add an `X-Appa-Session-ID` header.
-
-The setting also decides whether a client that Guardrails do not check can [hand work off](/docs/agents/runtime/handoff#hand-off-with-guardrails-on) to Agent Runtime.
-
-## Subagents and Teammates
-
-Work handed to another agent stays under the same policy.
-
-- **Subagents:** a subagent runs in its own session. The parent decides before it starts what it may return. Its answer passes a [checked return path](https://www.openappa.com/contracts#remedy-plans-and-child-returns).
-- **Claude Code teammates:** a message that adds no restrictions arrives directly. Any other message waits. The receiver can read it with [`read_peer_message`](/docs/reference/archestra-mcp-server#read_peer_message), and then takes on its restrictions.
+<a id="unrecognized-clients"></a>
 
 ## Protection Limits
 
-Guardrails check tool calls. They do not contain the machine the agent runs on. Pair them with isolation:
+Guardrails check tool calls that go through the LLM Proxy. They do not cover:
 
-- **Shell, files, and network:** Guardrails do not sandbox them. Run the agent in [Agent Runtime](/docs/agents/runtime) instead. It gets its own container, and an [egress policy](/docs/admin/environments#network-egress-policies) limits where it can send data.
-- **Traffic around the proxy:** Guardrails check only requests through the LLM Proxy. Connect every client to it, and set **Other clients** to **Blocked**.
-- **Provider-hosted tools:** most, such as a provider's own web search, run before the proxy sees the call. Where you need the check, use a tool that runs in the client or through the MCP Gateway.
-- **Sessions that cannot be checked:** the proxy rejects them with HTTP 400. These are Codex in code mode, client-run `local_shell` or `computer_use` tools, and Responses requests that continue a stored response with `previous_response_id`.
-- **Images, documents, and audio in tool results:** the policy sees the type, size, and hash of each one, not its content. Their restrictions come from the rule for the tool that returned them.
+- **Other traffic:** a client that skips the proxy, or sends no session header, is not checked. To refuse such clients, set **Other clients** to **Blocked** in **Settings → Guardrails**.
+- **The machine itself:** shell, files, and network are not sandboxed. Run the agent in [Agent Runtime](/docs/agents/runtime) to isolate it.
+- **Provider-hosted tools:** a provider's own tools, such as its web search, run before the proxy sees them.

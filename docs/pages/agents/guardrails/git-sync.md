@@ -12,9 +12,7 @@ With Git sync, every policy change goes through a pull request in your own GitHu
 
 ## Set Up Git Sync
 
-You need [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), and [`credential:read`](/docs/reference/permissions#credential:read) to pick a saved GitHub App or token. Creating a GitHub App or saving a GitLab token also needs [`credential:create`](/docs/reference/permissions#credential:create).
-
-1. Go to **Settings → Guardrails** and click **Set up Git sync**. After the configuration agent saves a policy, the banner in chat links here too.
+1. Go to **Settings → Guardrails** and click **Set up Git sync**. After the APPA Keeper saves a policy, the banner in chat links here too.
 2. Pick **GitHub** or **GitLab**, then follow its steps below.
 
 When setup is done, the card on **Settings → Guardrails** shows **Connected**.
@@ -51,9 +49,15 @@ Before you connect, the dialog checks what the repository holds:
 
 ## Validations in Git
 
-With Git sync on, [validation files](/docs/agents/guardrails/validations) live in the repository's validations folder, and Archestra loads them from the same commit as the policy. Change the folder with **Edit source** on **Settings → Guardrails**. An edit in Archestra stays a draft until you commit it to the repository.
+With Git sync on, [validation files](/docs/agents/guardrails/policies#validating-the-policy) live in the repository's validations folder, and Archestra loads them from the same commit as the policy. Change the folder with **Edit source** on **Settings → Guardrails**. An edit in Archestra stays a draft until you commit it to the repository.
 
 What to know:
 
-- Credentials never live in the repository. A policy with a `[credentials]` line fails to sync. Bind keys on the [**Batteries**](/docs/agents/guardrails/batteries#fix-a-battery) tab instead.
+- Credentials never live in the repository. A policy with a `[credentials]` line fails to sync. Bind keys on the [**Batteries**](/docs/agents/guardrails/policies#batteries) tab instead.
 - Validation failures do not block a merge on their own. Set up repository CI if they should.
+
+Required permissions:
+
+- [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to set up Git sync.
+- [`credential:read`](/docs/reference/permissions#credential:read) to pick a saved GitHub App or GitLab token.
+- [`credential:create`](/docs/reference/permissions#credential:create) to create a GitHub App or save a GitLab token.

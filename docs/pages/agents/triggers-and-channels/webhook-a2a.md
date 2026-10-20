@@ -134,7 +134,7 @@ What to know:
 
 ## Approving Tool Calls
 
-When your [policy](/docs/agents/guardrails/policies#human-review) asks a person to approve an action, the result is a task in `TASK_STATE_INPUT_REQUIRED`. The pending requests are in `metadata.approvalRequests`. `openappaReview.text` is what the reviewer should read:
+When your [policy](/docs/agents/guardrails/policies) asks a person to approve an action, the result is a task in `TASK_STATE_INPUT_REQUIRED`. The pending requests are in `metadata.approvalRequests`. `openappaReview.text` is what the reviewer should read:
 
 ```json
 "metadata": {

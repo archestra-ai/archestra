@@ -60,7 +60,10 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
                 and services. See which are active and what they need to work.
               </span>{" "}
               <ExternalDocsLink
-                href={getDocsUrl(DocsPage.PlatformAiToolGuardrailsBatteries)}
+                href={getDocsUrl(
+                  DocsPage.PlatformAiToolGuardrailsPolicies,
+                  "batteries",
+                )}
               >
                 Learn more
               </ExternalDocsLink>

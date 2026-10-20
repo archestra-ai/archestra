@@ -454,8 +454,7 @@ export function GithubSyncSetupDialog({
     );
 
   const policyDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformAiToolGuardrailsPolicies,
-    "github-sync",
+    DocsPage.PlatformAiToolGuardrailsGitSync,
   );
   const header = headerFor({
     editing: !!editing,

@@ -9,6 +9,7 @@ import {
   KNOWLEDGE_DIRECTORIES,
   KNOWLEDGE_FILES,
   USAGE,
+  YELLS,
 } from "./dataset";
 import { FIXTURE_TIME } from "./determinism";
 import type { SeedState } from "./seed";
@@ -52,6 +53,7 @@ ON CONFLICT DO NOTHING;`);
   seedUsage(state);
   seedLimitUsage();
   seedKnowledge(state);
+  seedYells(state);
 }
 
 /**
@@ -83,6 +85,18 @@ function seedColleagues(state: SeedState): void {
       return `INSERT INTO "user" (id, name, email, email_verified) VALUES (${sql(userId)}, ${sql(colleague.name)}, ${sql(colleague.email)}, true) ON CONFLICT DO NOTHING;
 INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES (${sql(`docs-member-${colleague.key}`)}, ${sql(organizationId)}, ${sql(userId)}, 'member', now()) ON CONFLICT DO NOTHING;`;
     }).join("\n"),
+  );
+}
+
+/** Agent reports on Guardrails → Yells, filed by the colleagues. Agents file them through a tool call; no API creates one. */
+function seedYells(state: SeedState): void {
+  const organizationId = state.organization.id;
+  runSql(
+    YELLS.map(
+      (yell) => `INSERT INTO openappa_yells (id, organization_id, caller_id, session_id, tool_call_id, message, with_trajectory, superyell, created_at)
+VALUES (${sql(yell.id)}, ${sql(organizationId)}, ${sql(`user:${state.users[yell.user]}`)}, ${sql(`docs-yell-session-${yell.id}`)}, ${sql(`docs-yell-call-${yell.id}`)}, ${sql(yell.message)}, false, ${yell.superyell}, ${FIXTURE_TIME_SQL} - make_interval(mins => ${yell.minutesAgo}))
+ON CONFLICT (id) DO UPDATE SET caller_id = EXCLUDED.caller_id, message = EXCLUDED.message;`,
+    ).join("\n"),
   );
 }
 

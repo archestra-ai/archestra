@@ -605,7 +605,27 @@ export const SHOTS: Shot[] = [
     asset: "automated_screenshots/platform-openappa_policy",
     route: () => "/openappa/policy",
     prepare: async (page) => {
-      await page.locator(".monaco-editor").first().waitFor();
+      // The docs' rules are at the end of the file: jump there, then drop focus
+      // so no cursor shows.
+      await page.locator(".monaco-editor .view-line").first().click();
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      // Monaco renders spaces as non-breaking spaces, so match a token without one.
+      await page.locator(".view-line").filter({ hasText: "acme/sdk" }).first().waitFor();
+    },
+  },
+  {
+    asset: "automated_screenshots/platform-openappa_validations",
+    route: () => "/openappa/validation",
+    prepare: async (page) => {
+      await page.getByText("Slack data can't go into a public GitHub issue").first().waitFor();
+    },
+  },
+  {
+    asset: "automated_screenshots/platform-openappa_yells",
+    route: () => "/openappa/yells",
+    prepare: async (page) => {
+      await page.getByText("Blocked from opening an issue in acme/sdk").waitFor();
     },
   },
 ];

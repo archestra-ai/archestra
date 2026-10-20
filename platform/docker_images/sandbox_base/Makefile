@@ -1,4 +1,4 @@
-PYTHON_VERSION := 3.15
+PYTHON_VERSION := 3.14
 
 # Regenerate the hashed lockfile after editing pyproject.toml. Universal so the
 # image can build for both linux/amd64 and linux/arm64 from one lock.

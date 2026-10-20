@@ -91,7 +91,7 @@ export function GuardrailsPolicyEditor({
               }))}
             />
           )}
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:gap-x-3">
             {tab === "effective" ? (
               effective.data &&
               (effective.data.lastError !== null ? (
@@ -114,7 +114,21 @@ export function GuardrailsPolicyEditor({
               </>
             ) : (
               <>
-                <Button asChild variant="ghost" size="sm">
+                {policy.data && (
+                  <output className="text-xs text-muted-foreground">
+                    {policy.data.revision === 0
+                      ? "Not yet saved"
+                      : `Revision ${policy.data.revision}`}
+                  </output>
+                )}
+                {/* Last, so on a phone the bare icon sits on the card's edge
+                    above the picker's end rather than floating mid-row. */}
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="-mr-2 size-8 has-[>svg]:px-0 sm:mr-0 sm:size-auto sm:has-[>svg]:px-2.5"
+                >
                   <a
                     href={getDocsUrl(
                       DocsPage.PlatformAiToolGuardrails,
@@ -127,13 +141,6 @@ export function GuardrailsPolicyEditor({
                     <ExternalLink className="size-3.5" />
                   </a>
                 </Button>
-                {policy.data && (
-                  <output className="text-xs text-muted-foreground">
-                    {policy.data.revision === 0
-                      ? "Not yet saved"
-                      : `Revision ${policy.data.revision}`}
-                  </output>
-                )}
               </>
             )}
           </div>

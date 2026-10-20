@@ -6,6 +6,10 @@ export const POLICY_EDITOR_OPTIONS = {
   minimap: { enabled: false },
   fontSize: 14,
   lineNumbers: "on",
+  // Monaco reserves five digits and a wide decorations lane by default, which
+  // ate a quarter of a phone's width; the gutter still grows past 999 lines.
+  lineNumbersMinChars: 3,
+  lineDecorationsWidth: 6,
   scrollBeyondLastLine: false,
   wordWrap: "on",
   padding: { top: 16, bottom: 16 },

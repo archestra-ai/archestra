@@ -87,7 +87,8 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
   );
 
   const clientForModel = createVertexClientResolver();
-  const discoveredModels = await listVertexGeminiModels();
+  const { models: discoveredModels, listingError } =
+    await listVertexGeminiModels();
 
   logger.debug(
     { modelCount: discoveredModels.length },
@@ -117,6 +118,13 @@ export async function fetchGeminiModelsViaVertexAi(): Promise<ModelInfo[]> {
     ...fallbackModels,
     ...multimodalEmbeddingModels,
   ]);
+  // No location could be listed and no probe found a model: Vertex AI refused
+  // every call (a billing or permission denial answers each one with 403).
+  // That says nothing about the catalog, so fail the sync and keep the models
+  // already linked to the key instead of unlinking every one of them.
+  if (listingError !== undefined && candidateModels.length === 0) {
+    throw listingError;
+  }
   const reachableModels = filterToConfiguredVertexLocations(candidateModels);
   const accessibleModels = await filterToAccessibleVertexModels({
     clientForModel,
@@ -150,6 +158,13 @@ const VERTEX_GEMINI_FALLBACK_MODEL_IDS = [
 
 type VertexClientResolver = (modelId: string) => GoogleGenAI;
 
+/** One location's catalog; `error` is set when its listing failed. */
+type LocationListing = {
+  models: ModelInfo[];
+  failed: boolean;
+  error?: unknown;
+};
+
 /**
  * One client per Vertex location, built on first use and reused for every model
  * that resolves to it. Two at most — the configured location and `global` — so
@@ -180,8 +195,14 @@ function createVertexClientResolver(): VertexClientResolver {
  * global catalogs are not nested — Gemma MaaS and `gemini-embedding-001` appear
  * only regionally, and a global-only generation may be listed only globally —
  * so both are read and merged when the global endpoint is in play.
+ *
+ * `listingError` is the first location's error, set only when every location
+ * failed to list.
  */
-async function listVertexGeminiModels(): Promise<ModelInfo[]> {
+async function listVertexGeminiModels(): Promise<{
+  models: ModelInfo[];
+  listingError?: unknown;
+}> {
   const { location, allowGlobalEndpoint } = config.llm.gemini.vertexAi;
   const locations = new Set([location]);
   if (allowGlobalEndpoint) {
@@ -189,7 +210,7 @@ async function listVertexGeminiModels(): Promise<ModelInfo[]> {
   }
 
   const perLocation = await Promise.all(
-    [...locations].map(async (vertexLocation) => {
+    [...locations].map(async (vertexLocation): Promise<LocationListing> => {
       const client = createVertexClientForLocation(
         vertexLocation,
         "[ChatModels]",
@@ -203,6 +224,7 @@ async function listVertexGeminiModels(): Promise<ModelInfo[]> {
             models.push(modelInfo);
           }
         }
+        return { models, failed: false };
       } catch (error) {
         // One unreachable location must not empty the catalog: the other still
         // has models, and the accessibility probe vets whatever comes back.
@@ -214,12 +236,17 @@ async function listVertexGeminiModels(): Promise<ModelInfo[]> {
           },
           "Failed to list Vertex AI Gemini models for location",
         );
+        return { models, failed: true, error };
       }
-      return models;
     }),
   );
 
-  return dedupeModelsById(perLocation.flat());
+  return {
+    models: dedupeModelsById(perLocation.flatMap((result) => result.models)),
+    listingError: perLocation.every((result) => result.failed)
+      ? perLocation[0].error
+      : undefined,
+  };
 }
 
 /**

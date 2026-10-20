@@ -12,6 +12,7 @@ import {
   returnRuntimeValue,
   startRuntimeChild,
 } from "@/openappa/service";
+import { isUnenforcedSession } from "@/openappa/unenforced";
 import {
   getGuardrailsDeployment,
   isGuardrailsV2Active,
@@ -102,9 +103,15 @@ export async function guardRuntimeCrossing(
 /**
  * A runtime bound to a parent answers only to that parent's proof. Returns the
  * refusal for a caller without one, or undefined when the runtime has no
- * parent. A runtime whose session cannot be resolved is refused, not assumed
- * to be unbound. Without a proof the gateway cannot tell the parent from a
- * stranger, so the refusal names the missing proof, not a different session.
+ * parent or OpenAPPA no longer governs its session. A runtime whose session
+ * cannot be resolved is refused, not assumed to be unbound. Without a proof
+ * the gateway cannot tell the parent from a stranger, so the refusal names the
+ * missing proof, not a different session.
+ *
+ * A session that was superyelled, whose parent was, or that started while
+ * enforcement was off gets no proof from the proxy, so its own calls and its
+ * parent's carry none. The gateway asks the same question the proxy does, but
+ * only reads: the proxy records the session on its own next request.
  */
 export async function refuseUnrecognizedCaller(params: {
   organizationId: string;
@@ -124,6 +131,7 @@ export async function refuseUnrecognizedCaller(params: {
     });
   }
   if (!resolved.session.parent_id) return undefined;
+  if (await isUnenforcedSession(resolved.session)) return undefined;
   return reportCrossingRefusal({
     reason: "proof_missing",
     message: UNPROVEN_CALLER_ON_BOUND_RUNTIME,
@@ -421,4 +429,4 @@ const BOUND_TO_ANOTHER_SESSION =
   "This runtime is bound to a different session. The request was refused.";
 
 const UNPROVEN_CALLER_ON_BOUND_RUNTIME =
-  "This runtime is bound to a Guardrails session, and this call carried no proof of its source. The request was refused. Retry from the conversation that started the run, with its model requests going through the LLM Proxy.";
+  "This runtime is bound to a Guardrails session, and this call carried no proof of its source. The request was refused. Only a tool call that a model makes through the LLM Proxy carries that proof: the run's own model, or the model of the conversation that started the run. A script, or a client that does not send its model requests through the LLM Proxy, cannot make this call. Make it as a tool call from one of those conversations.";

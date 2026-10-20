@@ -661,18 +661,9 @@ async function dispatchFailure(params: {
   served: string;
   error: unknown;
 }): Promise<ApiError> {
+  // Only a refusal of the policy is explained by the policy; a storage, lease
+  // or uncoded failure is reported as itself.
   switch (runtimeFailureCode(params.error)) {
-    // An operational fault is reported as itself: the stored policy does not
-    // explain it.
-    case "storage":
-    case "pool_exhausted":
-    case "panicked":
-    case "lease_lost":
-    case "held_elsewhere":
-    case "policy_moved":
-    case "replay_busy":
-    case "replay_timed_out":
-      return openappaFailure(params.error);
     // An annotator the opening policy routes to is no longer served, so the
     // runtime has it unregistered.
     case "annotation_refused":
@@ -681,14 +672,19 @@ async function dispatchFailure(params: {
         params.session,
         params.served,
       );
-      if (missing !== null)
-        return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
-      break;
+      return openappaFailure(
+        missing === null
+          ? params.error
+          : new OpenappaRetiredAnnotatorError(missing),
+      );
     }
+    case "policy_refused":
+      return openappaFailure(
+        (await rootOnlyRefusal(params.organizationId)) ?? params.error,
+      );
+    default:
+      return openappaFailure(params.error);
   }
-  return openappaFailure(
-    (await rootOnlyRefusal(params.organizationId)) ?? params.error,
-  );
 }
 
 /**

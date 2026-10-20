@@ -3536,6 +3536,18 @@ describe("a dispatch failure on a policy that never composed", () => {
     expect(failure).toMatchObject({ statusCode: 503, shouldRetry: true });
     expect((failure as ApiError).cause).toBe(storage);
   });
+
+  test("an uncoded failure is reported as itself, not as the refused policy", async () => {
+    const uncoded = new Error("Database not initialized");
+    native.dispatchHook.mockRejectedValue(uncoded);
+
+    const failure = await evaluateToolCalls(session, [read], {
+      canonicalize: (n) => n,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ statusCode: 503, shouldRetry: true });
+    expect((failure as ApiError).cause).toBe(uncoded);
+  });
 });
 
 const POLICY_MOVED =

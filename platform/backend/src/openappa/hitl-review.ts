@@ -226,7 +226,7 @@ export async function stageHitlReview(params: {
       summary = await summarizeHitlReview(params);
     } catch {
       logger.warn(
-        "Approval summary unavailable; retaining the complete review",
+        "OpenAPPA approval summary unavailable; retaining the complete review",
       );
     }
   }

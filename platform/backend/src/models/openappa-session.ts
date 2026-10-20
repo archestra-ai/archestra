@@ -532,7 +532,7 @@ class OpenAppaSessionModel {
     if (!scoped && ownRows.length > 1) {
       throw new ApiError(
         409,
-        `Session lineage is ambiguous because multiple authenticated callers used session ID "${params.clientSessionId}"`,
+        `OpenAPPA session lineage is ambiguous because multiple authenticated callers used session ID "${params.clientSessionId}"`,
       );
     }
     const [own] = ownRows;

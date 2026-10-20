@@ -655,7 +655,7 @@ class OpenAppaDeclarations {
           contentHash: params.contentHash,
           error,
         },
-        "Stored OpenAPPA battery package no longer validates; ignoring it",
+        "OpenAPPA stored battery package no longer validates; ignoring it",
       );
       return null;
     }

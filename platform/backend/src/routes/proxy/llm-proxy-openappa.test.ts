@@ -2292,7 +2292,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "Guardrails do not recognize this client",
+      "OpenAPPA does not recognize this client",
     );
     expect(providerRequests).toHaveLength(0);
     expect(events).toHaveLength(0);
@@ -2489,7 +2489,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     expect(response.statusCode, response.body).toBe(403);
     expect(response.json().error.message).toBe(
-      "The subagent binding is invalid or expired",
+      "OpenAPPA subagent binding is invalid or expired",
     );
     expect(providerRequests).toEqual([]);
   });
@@ -12824,7 +12824,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).not.toContain("NATIVE REFUSAL");
       expect(response.body).not.toContain("defers its tools");
       expect(response.body).not.toContain(
-        "Guardrails do not recognize this client",
+        "OpenAPPA does not recognize this client",
       );
       expect(response.body).not.toContain("cps1_");
       expect(response.body).not.toContain(token);
@@ -12848,7 +12848,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     }) => {
       expect(response.statusCode, response.body).toBe(400);
       expect(response.body).toContain(
-        "Guardrails do not recognize this client",
+        "OpenAPPA does not recognize this client",
       );
       expect(providerRequests).toHaveLength(0);
       expect(events).toEqual([]);
@@ -13035,7 +13035,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           400,
         );
         expect(response.body, item.label).toContain(
-          "Guardrails do not recognize this client",
+          "OpenAPPA does not recognize this client",
         );
         expect(providerRequests, item.label).toHaveLength(0);
         expect(events, item.label).toEqual([]);

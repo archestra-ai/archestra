@@ -1,5 +1,6 @@
 "use client";
 
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   CircleAlert,
   CircleCheck,
@@ -13,18 +14,21 @@ import {
   MessageCircle,
   MoreHorizontal,
   Play,
-  Search,
   Trash2,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
+import { filterSearchClass } from "@/components/filter-bar";
+import { SearchInput } from "@/components/search-input";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,16 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
@@ -126,6 +121,9 @@ export function ValidationList({
     for (const row of rows) c[row.status] += 1;
     return c;
   }, [rows]);
+  const stripItems = STRIP.filter(
+    (item) => item.status === "passed" || counts[item.status] > 0,
+  );
 
   const needle = query.trim().toLowerCase();
   const visible = rows
@@ -137,6 +135,89 @@ export function ValidationList({
         row.path.toLowerCase().includes(needle),
     )
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+
+  const columns: ColumnDef<Row>[] = [
+    {
+      id: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <NameCell
+          row={row.original}
+          running={suite.runningPath === row.original.path}
+        />
+      ),
+    },
+    {
+      id: "lastRun",
+      header: "Last run",
+      size: 110,
+      cell: ({ row }) => {
+        const { runAt, runId, name } = row.original;
+        if (suite.runningPath === row.original.path)
+          return <span className="text-muted-foreground">Running…</span>;
+        if (!runAt || !runId)
+          return <span className="text-muted-foreground">Never</span>;
+        return (
+          <RowClickShield>
+            <UnstyledButton
+              onClick={() => openRun(runId)}
+              title={formatDate({ date: runAt })}
+              aria-label={`${name}: last run ${formatCompactRelativeTime(runAt)}. Open run`}
+              className="text-muted-foreground tabular-nums underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {formatCompactRelativeTime(runAt)}
+            </UnstyledButton>
+          </RowClickShield>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      size: 100,
+      enableHiding: false,
+      cell: ({ row }) => {
+        const { path, name } = row.original;
+        const running = suite.runningPath === path;
+        return (
+          <RowClickShield>
+            <TableRowActions
+              itemName={name}
+              actions={[
+                {
+                  icon: running ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  ),
+                  label: "Run",
+                  permissions: { guardrailsPolicy: ["update"] },
+                  disabled: !suite.runnable,
+                  disabledTooltip: suite.busy
+                    ? "Wait for the current run to finish"
+                    : "Refresh the page to run",
+                  onClick: () => runFile(path),
+                },
+                ...(requestDelete
+                  ? [
+                      {
+                        icon: <Trash2 className="h-4 w-4" />,
+                        label: "Delete",
+                        variant: "destructive" as const,
+                        permissions: { guardrailsPolicy: ["update"] },
+                        disabled: !canDelete,
+                        disabledTooltip: "Wait for the current run to finish",
+                        onClick: () => requestDelete([path]),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </RowClickShield>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="-mt-2 space-y-4">
@@ -160,56 +241,83 @@ export function ValidationList({
         <EmptySuite />
       ) : (
         <>
-          {/* Summary strip: the counts are the status filter. */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <div className="-ml-2 flex flex-wrap items-center gap-0.5">
+          {/* Search, then the summary strip: the counts are the status
+              filter. On a phone they are equal tiles on one row, so they
+              never wrap into a ragged line; from `sm` up they read inline,
+              dot-separated. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
+            <SearchInput
+              value={query}
+              onSearchChange={setQuery}
+              syncQueryParams={false}
+              objectNamePlural="validations"
+              searchFields={["name", "path"]}
+              className={filterSearchClass}
+            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-0.5">
               {loading ? (
-                <Skeleton className="ml-2 h-5 w-64" />
+                <Skeleton className="h-14 w-full sm:h-5 sm:w-64" />
               ) : (
-                STRIP.filter(
-                  (item) => item.status === "passed" || counts[item.status] > 0,
-                ).map((item, index) => {
-                  const active = filter === item.status;
-                  return (
-                    <span key={item.status} className="flex items-center">
-                      {index > 0 && (
-                        <span
-                          aria-hidden
-                          className="px-0.5 text-muted-foreground/50"
-                        >
-                          ·
-                        </span>
-                      )}
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        aria-pressed={active}
-                        onClick={() => setFilter(active ? "all" : item.status)}
-                        className={cn(
-                          "text-sm font-normal text-muted-foreground",
-                          active &&
-                            "bg-muted text-foreground hover:bg-muted dark:hover:bg-muted",
-                        )}
+                <div
+                  style={
+                    { "--strip-count": stripItems.length } as CSSProperties
+                  }
+                  className="grid grid-cols-[repeat(var(--strip-count),minmax(0,1fr))] gap-2 sm:flex sm:items-center sm:gap-0.5"
+                >
+                  {stripItems.map((item, index) => {
+                    const active = filter === item.status;
+                    return (
+                      <span
+                        key={item.status}
+                        className="contents sm:flex sm:items-center"
                       >
-                        <StatusGlyph
-                          status={item.status}
-                          className="size-3.5"
-                        />
-                        <span>
-                          <span className="font-medium tabular-nums text-foreground">
+                        {index > 0 && (
+                          <span
+                            aria-hidden
+                            className="hidden px-0.5 text-muted-foreground/50 sm:inline"
+                          >
+                            ·
+                          </span>
+                        )}
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          aria-pressed={active}
+                          onClick={() =>
+                            setFilter(active ? "all" : item.status)
+                          }
+                          className={cn(
+                            "relative grid h-auto min-w-0 grid-cols-[auto_minmax(0,1fr)] justify-items-start gap-x-1.5 gap-y-0.5 rounded-lg border px-3 py-2 text-left font-normal text-muted-foreground has-[>svg]:px-3",
+                            "sm:inline-flex sm:h-7 sm:rounded-md sm:border-0 sm:px-2 sm:py-0 sm:text-sm sm:has-[>svg]:px-1.5",
+                            active &&
+                              "border-foreground/30 bg-muted text-foreground hover:bg-muted dark:hover:bg-muted",
+                          )}
+                        >
+                          <StatusGlyph
+                            status={item.status}
+                            className="size-3.5"
+                          />
+                          <span className="text-base font-medium tabular-nums text-foreground sm:text-sm">
                             {counts[item.status]}
                           </span>{" "}
-                          {item.label}
-                        </span>
-                        {active && <X className="size-3 opacity-60" />}
-                      </Button>
-                    </span>
-                  );
-                })
+                          <span className="col-span-2 truncate text-xs sm:text-sm">
+                            {item.label}
+                          </span>
+                          {active && (
+                            <X className="absolute top-2 right-2 size-3 opacity-60 sm:static" />
+                          )}
+                        </Button>
+                      </span>
+                    );
+                  })}
+                </div>
               )}
               {lastRun && (
-                <span className="flex items-center pl-1 text-sm text-muted-foreground">
-                  <span aria-hidden className="pr-2 text-muted-foreground/50">
+                <span className="block text-xs text-muted-foreground first-letter:uppercase sm:flex sm:items-center sm:pl-1 sm:text-sm">
+                  <span
+                    aria-hidden
+                    className="hidden pr-2 text-muted-foreground/50 sm:inline"
+                  >
                     ·
                   </span>
                   <span>last run&nbsp;</span>
@@ -224,207 +332,35 @@ export function ValidationList({
                 </span>
               )}
             </div>
-
-            <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
-              <div className="relative min-w-0 flex-1 sm:w-52 sm:flex-none">
-                <Search
-                  aria-hidden
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search"
-                  aria-label="Search validations"
-                  className="h-8 pl-8"
-                />
-              </div>
-            </div>
           </div>
 
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="h-9 w-10 pr-0 pl-4 md:pr-0">
-                    <span className="sr-only">Status</span>
-                  </TableHead>
-                  <TableHead className="h-9 text-xs font-medium text-muted-foreground">
-                    Validation
-                  </TableHead>
-                  <TableHead className="h-9 w-[76px] text-xs font-medium text-muted-foreground sm:w-24">
-                    Last run
-                  </TableHead>
-                  <TableHead className="h-9 w-[72px]">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visible.map((row, index) => {
-                  const running = suite.runningPath === row.path;
-                  const href = validationFileHref(row.path);
-                  const tone = row.reason ? REASON_TONE[row.status] : null;
-                  return (
-                    <TableRow
-                      key={row.path}
-                      className="group animate-in cursor-pointer fade-in duration-300"
-                      style={{
-                        animationDelay: `${Math.min(index, 12) * 25}ms`,
-                        animationFillMode: "both",
-                      }}
-                      onClick={(event) =>
-                        openRowOnPlainClick(event, () => router.push(href))
-                      }
-                    >
-                      <TableCell className="py-3 pr-0 pl-4 align-top md:pr-0">
-                        <div className="flex h-5 items-center">
-                          <StatusGlyph
-                            status={running ? "running" : row.status}
-                            className="size-4"
-                          />
-                          <span className="sr-only">
-                            {running ? "Running" : statusLabel(row.status)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="min-w-0 py-3">
-                        <RowClickShield>
-                          <Link
-                            href={href}
-                            className="block truncate text-sm leading-5 font-medium hover:underline hover:underline-offset-4"
-                          >
-                            {row.name}
-                          </Link>
-                        </RowClickShield>
-                        {row.reason && tone ? (
-                          <p
-                            className={cn("mt-0.5 truncate text-xs", tone)}
-                            title={row.reasonFull || row.reason}
-                          >
-                            {row.line !== null && (
-                              <span className="font-mono opacity-80">
-                                L{row.line}
-                              </span>
-                            )}
-                            {row.line !== null && (
-                              <span aria-hidden className="px-1 opacity-50">
-                                ·
-                              </span>
-                            )}
-                            {row.reason}
-                          </p>
-                        ) : (
-                          <p
-                            className="mt-0.5 truncate font-mono text-xs text-muted-foreground/80"
-                            title={row.path}
-                          >
-                            {row.path}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-3 align-top">
-                        {!running && row.runAt && row.runId ? (
-                          <RowClickShield className="flex h-5 items-center">
-                            <UnstyledButton
-                              onClick={() => row.runId && openRun(row.runId)}
-                              title={formatDate({ date: row.runAt })}
-                              aria-label={`${row.name}: last run ${formatCompactRelativeTime(row.runAt)}. Open run`}
-                              className="truncate text-xs leading-5 text-muted-foreground tabular-nums underline-offset-4 hover:text-foreground hover:underline"
-                            >
-                              {formatCompactRelativeTime(row.runAt)}
-                            </UnstyledButton>
-                          </RowClickShield>
-                        ) : (
-                          <span className="block h-5 truncate text-xs leading-5 text-muted-foreground tabular-nums">
-                            {running ? "Running…" : "Never"}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-2.5 pr-3 align-top md:pr-3">
-                        <RowClickShield
-                          className={cn(
-                            "flex justify-end gap-0.5 transition-opacity",
-                            running
-                              ? "opacity-100"
-                              : "opacity-0 group-hover:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100 [@media(hover:none)]:opacity-100",
-                          )}
-                        >
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            aria-label={`Run ${row.name}`}
-                            title={
-                              suite.runnable
-                                ? "Run this validation"
-                                : suite.busy
-                                  ? "Wait for the current run to finish"
-                                  : "Running needs policy update permission"
-                            }
-                            disabled={!suite.runnable}
-                            onClick={() => runFile(row.path)}
-                          >
-                            {running ? (
-                              <Loader2 className="animate-spin" />
-                            ) : (
-                              <Play />
-                            )}
-                          </Button>
-                          {requestDelete && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="icon-xs"
-                                  variant="ghost"
-                                  aria-label={`More actions for ${row.name}`}
-                                >
-                                  <MoreHorizontal />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  disabled={!canDelete}
-                                  onSelect={() => requestDelete([row.path])}
-                                >
-                                  <Trash2 />
-                                  <span>Delete</span>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </RowClickShield>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {visible.length === 0 && (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={4} className="py-10 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        {needle
-                          ? `No validations match “${query.trim()}”.`
-                          : filter === "all"
-                            ? "No validations."
-                            : EMPTY_FILTER[filter]}
-                      </p>
-                      <Button
-                        size="xs"
-                        variant="link"
-                        className="mt-1"
-                        onClick={() => {
-                          setQueryState("");
-                          updateQuery({ status: null, search: "" });
-                        }}
-                      >
-                        Show all
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <DataTable
+            columns={columns}
+            data={visible}
+            getRowId={(row) => row.path}
+            onRowClick={(row, event) =>
+              openRowOnPlainClick(event, () =>
+                router.push(validationFileHref(row.path)),
+              )
+            }
+            hidePaginationWhenSinglePage
+            tableClassName="min-w-[560px]"
+            fixedWidthColumnIds={["lastRun", "actions"]}
+            flexibleColumnIds={["name"]}
+            hasActiveFilters={Boolean(needle) || filter !== "all"}
+            onClearFilters={() => {
+              setQueryState("");
+              updateQuery({ status: null, search: "" });
+            }}
+            filteredEmptyMessage={
+              needle
+                ? `No validations match “${query.trim()}”.`
+                : filter === "all"
+                  ? "No validations."
+                  : EMPTY_FILTER[filter]
+            }
+            emptyMessage="No validations yet."
+          />
         </>
       )}
     </div>
@@ -456,9 +392,15 @@ function HeaderActions({ runAll }: { runAll: () => void }) {
   });
   return (
     <div className="flex items-center gap-2">
-      <Button size="sm" disabled={!runnable || !files.length} onClick={runAll}>
+      {/* Icon-only on phones, so both actions fit beside the title. */}
+      <Button
+        size="sm"
+        disabled={!runnable || !files.length}
+        onClick={runAll}
+        className="w-8 has-[>svg]:px-0 sm:w-auto sm:has-[>svg]:px-2.5"
+      >
         {runningAll ? <Loader2 className="animate-spin" /> : <Play />}
-        <span>Run all</span>
+        <span className="sr-only sm:not-sr-only">Run all</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -570,6 +512,56 @@ function EmptySuite() {
           <Info />
           <span>Explain validations</span>
         </OpenAppaChatButton>
+      </div>
+    </div>
+  );
+}
+
+function NameCell({ row, running }: { row: Row; running: boolean }) {
+  const tone = row.reason ? REASON_TONE[row.status] : null;
+  return (
+    <div className="flex min-w-0 items-start gap-2.5">
+      <span className="flex h-5 shrink-0 items-center">
+        <StatusGlyph
+          status={running ? "running" : row.status}
+          className="size-4"
+        />
+        <span className="sr-only">
+          {running ? "Running" : statusLabel(row.status)}
+        </span>
+      </span>
+      <div className="min-w-0">
+        <RowClickShield>
+          <Link
+            href={validationFileHref(row.path)}
+            className="block truncate font-medium hover:underline hover:underline-offset-4"
+          >
+            {row.name}
+          </Link>
+        </RowClickShield>
+        {row.reason && tone ? (
+          <p
+            className={cn("mt-0.5 truncate text-xs", tone)}
+            title={row.reasonFull || row.reason}
+          >
+            {row.line !== null && (
+              <span className="font-mono opacity-80">L{row.line}</span>
+            )}
+            {row.line !== null && (
+              <span aria-hidden className="px-1 opacity-50">
+                ·
+              </span>
+            )}
+            {row.reason}
+          </p>
+        ) : (
+          <p
+            className="mt-0.5 truncate font-mono text-xs text-muted-foreground/80"
+            title={row.path}
+          >
+            {row.path}
+          </p>
+        )}
       </div>
     </div>
   );

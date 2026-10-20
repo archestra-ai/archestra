@@ -24,6 +24,7 @@ import {
 } from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
+import { HIDE_DISMISSED_SITE_NOTIFICATIONS_SCRIPT } from "@/lib/site-notification-dismissal";
 import { getThemeFontPreload } from "@/lib/theme-font.server";
 import { RESTORE_REMEMBERED_THEME_SCRIPT } from "@/lib/theme-storage";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
@@ -310,6 +311,9 @@ export default async function RootLayout({
         />
         {favicon.version && <script>{ACTIVATE_FAVICON_SCRIPT}</script>}
         {!theme && <script>{RESTORE_REMEMBERED_THEME_SCRIPT}</script>}
+        {/* A server-rendered page has the active site notification in its
+            HTML; hide it before the first paint if this browser dismissed it. */}
+        <script>{HIDE_DISMISSED_SITE_NOTIFICATIONS_SCRIPT}</script>
       </head>
       <body className="font-sans antialiased">
         <VisualViewportHeight />

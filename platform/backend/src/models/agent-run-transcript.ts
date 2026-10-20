@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AgentRunReadableTranscriptChunk,
@@ -67,7 +78,7 @@ export default class AgentRunTranscriptModel {
   /**
    * A complete recording's header and its last chunks, enough for about
    * `maxBytes` of output, without reading the earlier chunks' data. Null when
-   * nothing is stored.
+   * nothing complete is stored.
    */
   static async findTailByRunId(params: {
     runId: string;
@@ -82,7 +93,7 @@ export default class AgentRunTranscriptModel {
       .from(schema.agentRunTranscriptsTable)
       .where(eq(schema.agentRunTranscriptsTable.runId, params.runId))
       .limit(1);
-    if (!transcript) return null;
+    if (!transcript?.isComplete) return null;
     const sizes = await db
       .select({
         sequence: schema.agentRunTranscriptChunksTable.sequence,
@@ -113,6 +124,52 @@ export default class AgentRunTranscriptModel {
       transcript,
       chunks: chunks.map((chunk) => normalizeByteaField(chunk, "data")),
       firstSequence,
+    };
+  }
+
+  /**
+   * Where a recording's terminal size last changed at or before the end of
+   * chunk `throughSequence`, from the sizes indexed when the chunks were
+   * stored: the nearest indexed size, and the nearest chunk whose size was
+   * never indexed (stored before sizes were), which may hold a later one.
+   */
+  static async findLastSizeMarkerIndex(params: {
+    runId: string;
+    throughSequence: number;
+  }): Promise<{
+    indexed: { sequence: number; marker: string } | null;
+    unindexedSequence: number | null;
+  }> {
+    const table = schema.agentRunTranscriptChunksTable;
+    const upTo = and(
+      eq(table.runId, params.runId),
+      lte(table.sequence, params.throughSequence),
+    );
+    const [[indexed], [unindexed]] = await Promise.all([
+      db
+        .select({ sequence: table.sequence, marker: table.lastSizeMarker })
+        .from(table)
+        .where(
+          and(
+            upTo,
+            isNotNull(table.lastSizeMarker),
+            ne(table.lastSizeMarker, ""),
+          ),
+        )
+        .orderBy(desc(table.sequence))
+        .limit(1),
+      db
+        .select({ sequence: table.sequence })
+        .from(table)
+        .where(and(upTo, isNull(table.lastSizeMarker)))
+        .orderBy(desc(table.sequence))
+        .limit(1),
+    ]);
+    return {
+      indexed: indexed?.marker
+        ? { sequence: indexed.sequence, marker: indexed.marker }
+        : null,
+      unindexedSequence: unindexed?.sequence ?? null,
     };
   }
 

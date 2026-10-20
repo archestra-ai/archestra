@@ -1179,3 +1179,46 @@ describe("Bedrock sampling-param fallback", () => {
     expect(calls).toBe(1);
   });
 });
+
+describe("Bedrock replayed tool-call ids", () => {
+  test("fits a foreign call id after the result update looked it up", () => {
+    const foreignCallId = "call.0:read";
+    const request = createConverseRequest({
+      messages: [
+        { role: "user", content: [{ text: "Read a.txt" }] },
+        {
+          role: "assistant",
+          content: [
+            { toolUse: { toolUseId: foreignCallId, name: "read", input: {} } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: foreignCallId,
+                content: [{ text: "SECRET" }],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const adapter = bedrockAdapterFactory.createRequestAdapter(request);
+    adapter.applyToolResultUpdates({ [foreignCallId]: "sanitized" });
+    const messages = adapter.toProviderRequest().messages ?? [];
+
+    const toolUse = messages[1].content?.[0] as {
+      toolUse: { toolUseId: string };
+    };
+    const toolResult = messages[2].content?.[0] as {
+      toolResult: { toolUseId: string };
+    };
+    expect(toolUse.toolUse.toolUseId).toMatch(/^call_[0-9a-f]{32}$/);
+    expect(toolResult.toolResult.toolUseId).toBe(toolUse.toolUse.toolUseId);
+    expect(JSON.stringify(messages)).toContain("sanitized");
+    expect(JSON.stringify(messages)).not.toContain("SECRET");
+  });
+});

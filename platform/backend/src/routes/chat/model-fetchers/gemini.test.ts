@@ -572,6 +572,77 @@ describe("gemini model fetchers", () => {
       ]);
     });
 
+    describe("listing failures", () => {
+      // Vertex AI answers every call this way when the project's billing is
+      // suspended or the service account lost access.
+      const denied = new Error(
+        '{"error":{"code":403,"message":"Billing is disabled for this project","status":"PERMISSION_DENIED"}}',
+      );
+
+      test("fails instead of reporting an empty catalog when Vertex AI refuses every call", async () => {
+        const client = {
+          models: {
+            list: vi.fn().mockRejectedValue(denied),
+            get: vi.fn().mockRejectedValue(denied),
+            countTokens: vi.fn().mockRejectedValue(denied),
+          },
+        } as unknown as GoogleGenAI;
+        mockCreateVertexClientForLocation.mockReturnValue(client);
+
+        // An empty list would unlink every Gemini model from the system key;
+        // the error keeps the linked models until Vertex AI answers again.
+        await expect(fetchGeminiModelsViaVertexAi()).rejects.toBe(denied);
+      });
+
+      test("keeps the catalog of the location that still lists", async () => {
+        const regionalClient = {
+          models: {
+            list: vi.fn().mockRejectedValue(denied),
+            get: vi.fn().mockRejectedValue(new Error("Not found")),
+            countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
+          },
+        } as unknown as GoogleGenAI;
+        const globalClient = {
+          models: {
+            list: vi.fn().mockResolvedValue({
+              [Symbol.asyncIterator]: async function* () {
+                yield { name: "publishers/google/models/gemini-3.5-flash" };
+              },
+            }),
+            get: vi.fn().mockRejectedValue(new Error("Not found")),
+            countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
+          },
+        } as unknown as GoogleGenAI;
+        mockCreateVertexClientForLocation.mockImplementation((location) =>
+          location === "global" ? globalClient : regionalClient,
+        );
+
+        const models = await fetchGeminiModelsViaVertexAi();
+
+        expect(models.map((model) => model.id)).toEqual(["gemini-3.5-flash"]);
+      });
+
+      test("keeps probed models when no location can be listed", async () => {
+        const client = {
+          models: {
+            list: vi.fn().mockRejectedValue(denied),
+            get: vi.fn(async ({ model }: { model: string }) => {
+              if (model === "gemini-2.5-flash") {
+                return { name: `publishers/google/models/${model}` };
+              }
+              throw new Error("Not found");
+            }),
+            countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
+          },
+        } as unknown as GoogleGenAI;
+        mockCreateVertexClientForLocation.mockReturnValue(client);
+
+        const models = await fetchGeminiModelsViaVertexAi();
+
+        expect(models.map((model) => model.id)).toEqual(["gemini-2.5-flash"]);
+      });
+    });
+
     describe("global-only generations", () => {
       /** A Vertex client whose catalog is exactly `modelIds`. */
       function vertexClientListing(modelIds: string[]): GoogleGenAI {

@@ -30,6 +30,9 @@ const markdown = preloadableLazy(() => import("./response-markdown"));
  */
 export const preloadResponseMarkdown = markdown.preload;
 
+/** Hand over the renderer a page imported statically (see preloadableLazy). */
+export const provideResponseMarkdown = markdown.provide;
+
 if (typeof window !== "undefined" && window.location.pathname !== "/chat") {
   void appInteractive.whenIdle().then(preloadResponseMarkdown);
 }

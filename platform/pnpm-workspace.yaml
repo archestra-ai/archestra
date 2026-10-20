@@ -42,7 +42,11 @@ overrides:
   '@fastify/http-proxy': '>=11.4.4'
   protobufjs: '>=8.6.0'
   '@protobufjs/utf8': '>=1.1.1'
-  vite: 7.3.5
+  # CVE-2026-112942 (HIGH, command injection) affects >=7.0.0 <=7.3.6 and is
+  # fixed in 7.3.7. Transitive-only (vitest, @vitest/mocker and
+  # vite-tsconfig-paths resolve it), so the override is the only way to lift
+  # every resolution past the vulnerable range.
+  vite: 7.3.7
   # CVE / GHSA-395f-4hp3-45gv (HIGH, CVSS 8.7): quadratic-complexity DoS in
   # shell-quote's parse() on plain space-separated input. Vulnerable range is
   # <= 1.8.4, fixed in 1.9.0 — the floor must be >=1.9.0, since a >=1.8.4 floor

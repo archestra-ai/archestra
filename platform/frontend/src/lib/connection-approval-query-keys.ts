@@ -36,3 +36,9 @@ export function agentOptionsByIdsQueryKey(ids: string[], filters: unknown) {
 export function connectionSetupSeedQueryKey(connectRequest: string) {
   return ["connection-setup-seed", connectRequest] as const;
 }
+
+/**
+ * The document's public origin, which a server render reads from the request
+ * where the browser has `window.location.origin`.
+ */
+export const documentOriginQueryKey = ["document-origin"] as const;

@@ -48,6 +48,7 @@ import {
   getConfiguredExternalProxyUrls,
   getInternalProxyUrl,
 } from "@/lib/config/config";
+import { documentOriginQueryKey } from "@/lib/connection-approval-query-keys";
 import {
   CONNECTION_GATEWAY_PAGE_QUERY,
   CONNECTION_GATEWAY_REFERENCE_FILTERS,
@@ -367,7 +368,7 @@ async function readConnectionApproval(options: {
     plugins,
     availableApiKeys,
   });
-  return connectionApprovalSeedQueries({
+  const queries = connectionApprovalSeedQueries({
     connectRequest: options.connectRequest,
     request,
     defaultGateway,
@@ -380,6 +381,9 @@ async function readConnectionApproval(options: {
     models,
     setup,
   });
+  return options.origin
+    ? [...queries, { queryKey: documentOriginQueryKey, data: options.origin }]
+    : queries;
 }
 
 /**

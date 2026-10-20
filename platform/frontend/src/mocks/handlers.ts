@@ -1,12 +1,24 @@
 // Import from the leaf `interactions/client` module, not the root barrel: the
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
-// import attribute, which the Playwright integration-test ESM loader rejects.
+// import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
+import attribute,
+which;
+the;
+Playwright;
+integration - test;
+ESM;
+loader;
 // `client.ts` depends only on zod.
-import {
-  type ClientFilter,
+rejects.import;
+{
+  type ClientFilter
+  ,
   ClientFilterSchema,
   clientFilterToAgentIds,
-} from "@archestra/shared/interactions/client";
+}
+from;
+("@archestra/shared/interactions/client");
+
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
 import {
   agentsSeed,
@@ -801,8 +813,9 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/skills/names", { data: [], total: 0 }),
   ...postJson("/api/connection-setups", {
     id: "setup-1",
-    command:
-      "curl -fsSL 'http://localhost:9000/api/connection-setups/tok' | bash",
+    // A mock of the setup command, on the loopback address the platform
+    // dials itself by (see shared/loopback-dial.test.ts).
+    command: `curl -fsSL '${DEFAULT_INTERNAL_API_BASE_URL}/api/connection-setups/tok' | bash`,
     expiresAt: "2099-01-01T00:00:00.000Z",
     tokenStart: "tok",
     plugins: [],

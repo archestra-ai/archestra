@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0-rc.53](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.52...platform-v1.4.0-rc.53) (2026-10-20)
+
+
+### Bug Fixes
+
+* **chat:** fade overflowing sidebar titles instead of an ellipsis ([#9321](https://github.com/archestra-ai/archestra/issues/9321)) ([4ba3b8e](https://github.com/archestra-ai/archestra/commit/4ba3b8e8eae62e9659cce6c3a41ba21de77e5af4))
+* **logs:** fold a thread's session previews chunk by chunk ([#9308](https://github.com/archestra-ai/archestra/issues/9308)) ([985dfa9](https://github.com/archestra-ai/archestra/commit/985dfa925aac4d713e59ec20c2bf25c53f1b0b4f))
+* **oauth:** explain an expired consent request instead of asking to try again ([#9317](https://github.com/archestra-ai/archestra/issues/9317)) ([0592ce7](https://github.com/archestra-ai/archestra/commit/0592ce7ace054cc0a589d98877883a958847b066))
+* **openappa:** don't offer Clear for the Resolved yells view ([#9307](https://github.com/archestra-ai/archestra/issues/9307)) ([d3f2451](https://github.com/archestra-ai/archestra/commit/d3f2451164c878cf3bc46be25d40a9856abebe91))
+* **openappa:** log failure causes and prefix runtime errors with OpenAPPA ([#9325](https://github.com/archestra-ai/archestra/issues/9325)) ([155e2d5](https://github.com/archestra-ai/archestra/commit/155e2d58c41aeae6493e19d296270254fccdaf24))
+
+
+### Performance Improvements
+
+* **connection:** seed the approval page and its first setup on the server ([#9316](https://github.com/archestra-ai/archestra/issues/9316)) ([b23c283](https://github.com/archestra-ai/archestra/commit/b23c2832aa797f02436a6e503914ce351e129a35))
+
+
+### Documentation
+
+* **openappa:** restructure the Guardrails docs and fix stale claims ([#9310](https://github.com/archestra-ai/archestra/issues/9310)) ([e3c9f3b](https://github.com/archestra-ai/archestra/commit/e3c9f3b13dd53f910fc29598ddc6277fef348616))
+
 ## [1.4.0-rc.52](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.51...platform-v1.4.0-rc.52) (2026-10-20)
 
 

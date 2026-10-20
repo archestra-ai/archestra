@@ -71,8 +71,9 @@ class GatewayStateTest(unittest.TestCase):
 class PasteStateTest(unittest.TestCase):
     def test_waits_for_paste_status_below_input(self):
         for status in ("Pasting…", "Pasting..."):
-            with self.subTest(status=status):
-                self.assertTrue(paste_in_progress("───\n❯ task\n───\n  " + status + "\n"))
+            for hint in ("", "    tmux focus-events off · add 'set -g focus-events on'"):
+                with self.subTest(status=status, hint=hint):
+                    self.assertTrue(paste_in_progress("───\n❯ task\n───\n  " + status + hint + "\n"))
 
     def test_ignores_pasting_text_in_prompt_or_history(self):
         self.assertFalse(paste_in_progress("Pasting…\n───\n❯ Explain:\nPasting...\n───\n  ⏵⏵ bypass permissions on\n"))

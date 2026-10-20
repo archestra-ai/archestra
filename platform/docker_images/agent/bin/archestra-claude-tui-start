@@ -34,7 +34,7 @@ def gateway_state(menu: str) -> str:
 def paste_in_progress(screen: str) -> bool:
     # Only inspect the status below the last input border, not task/history text.
     footer = re.split(r"(?m)^─{3,}[ \t]*$", screen)[-1]
-    return any(line.strip() in ("Pasting…", "Pasting...") for line in footer.splitlines())
+    return any(re.match(r"^\s*Pasting(?:…|\.\.\.)(?:\s|$)", line) for line in footer.splitlines())
 
 
 def main() -> int:

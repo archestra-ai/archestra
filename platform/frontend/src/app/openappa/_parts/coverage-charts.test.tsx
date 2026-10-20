@@ -145,7 +145,9 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
   }
 
   expect(
-    coverage.getByText("21 tools always run, with any data."),
+    coverage.getByText(
+      "21 tools have no rule and always run. Create rules for limits on what each tool can do.",
+    ),
   ).toBeVisible();
 
   // A legend row explains its slice and puts its share in the middle.
@@ -159,11 +161,29 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
   );
 });
 
-test("warns only while some tool runs with no rule", async () => {
-  renderCharts({ summary: totals({ tools: 3, catchAll: 3 }) });
+test("asks for specific rules while the wildcard fallback covers half the tools", async () => {
+  renderCharts({ summary: totals({ tools: 4, battery: 2, catchAll: 2 }) });
 
   expect(await screen.findByRole("img")).toBeVisible();
-  expect(screen.queryByText("Low coverage.")).not.toBeInTheDocument();
+  expect(screen.queryByText("Unchecked tools.")).not.toBeInTheDocument();
+  expect(screen.getByText("Few specific rules.")).toBeVisible();
+  expect(
+    screen.getByText(
+      "2 tools use the wildcard fallback. Create specific rules for precise control over each tool.",
+    ),
+  ).toBeVisible();
+  expect(
+    chatPrompt(await screen.findByRole("link", { name: "Fix in chat" })),
+  ).toBe(resolveOpenAppaLaunchPrompt("improveCoverage"));
+});
+
+test("warns nothing while specific rules cover most tools", async () => {
+  renderCharts({
+    summary: totals({ tools: 3, root: 1, battery: 1, catchAll: 1 }),
+  });
+
+  expect(await screen.findByRole("img")).toBeVisible();
+  expect(screen.queryByText("Few specific rules.")).not.toBeInTheDocument();
   expect(
     screen.queryByRole("link", { name: "Fix in chat" }),
   ).not.toBeInTheDocument();

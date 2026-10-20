@@ -4075,6 +4075,13 @@
       "when": 1792491071255,
       "tag": "0581_chunk_size_markers",
       "breakpoints": true
+    },
+    {
+      "idx": 582,
+      "version": "7",
+      "when": 1792523784910,
+      "tag": "0582_loud_zeigeist",
+      "breakpoints": true
     }
   ]
 }

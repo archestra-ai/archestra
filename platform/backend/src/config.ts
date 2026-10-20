@@ -47,6 +47,7 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
+import { parseUsageAccountingMode } from "@/utils/billable-usage";
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
@@ -3432,6 +3433,9 @@ const config = {
   production: isProduction,
   environment,
   llmProxy: {
+    usageAccountingMode: parseUsageAccountingMode(
+      process.env.ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE,
+    ),
     plugins: llmProxyPlugins,
     maxVirtualKeysPerApiKey: parsePositiveInt(
       process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,

@@ -1,4 +1,10 @@
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
+import type {
+  BillingAttribution,
+  PricedBillingUsage,
+} from "@/utils/billable-usage";
+import { primaryBillingUsage } from "@/utils/billable-usage";
+import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 /**
  * Generic LLM Proxy Handler
  *
@@ -150,6 +156,7 @@ import {
   isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
+  reportBillableUsageMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
@@ -184,6 +191,8 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  usageAccountingMode?: PricedBillingUsage["mode"];
+  billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
   governedThread?: GovernedThread;
@@ -1621,7 +1630,35 @@ export async function handleLLMProxy<
         ),
     );
 
+    const billingEntities: BillingAttribution["entities"] = [
+      { entityType: "organization", entityId: resolvedAgent.organizationId },
+      { entityType: "agent", entityId: resolvedAgent.id },
+      ...(billingTeamId ? [billingTeamId] : teams.map((team) => team.id)).map(
+        (entityId) => ({ entityType: "team" as const, entityId }),
+      ),
+    ];
+    for (const [entityType, entityId] of [
+      ["user", billingTeamId ? undefined : userId],
+      ["virtual_key", virtualKeyId],
+      ["virtual_key", passthroughVirtualKeyId],
+      ["llm_oauth_client", authenticatedApp?.id],
+      ["environment", resolvedAgent.environmentId],
+    ] as const)
+      if (entityId) billingEntities.push({ entityType, entityId });
     const ctx: LLMProxyContext<TRequest> = {
+      usageAccountingMode: config.llmProxy.usageAccountingMode,
+      billingAttribution: {
+        organizationId: resolvedAgent.organizationId,
+        environmentId: resolvedAgent.environmentId,
+        entities: billingEntities.filter(
+          (entity, index) =>
+            billingEntities.findIndex(
+              (other) =>
+                other.entityType === entity.entityType &&
+                other.entityId === entity.entityId,
+            ) === index,
+        ),
+      },
       connectionVerification,
       ...(appaReceipts ? { appaReceipts } : {}),
       ...(governedThread ? { governedThread } : {}),
@@ -1701,6 +1738,19 @@ export async function handleLLMProxy<
         );
       }
     }
+    if (
+      lifecycleError instanceof ObservedProviderUsageError &&
+      lifecycleError.billingRecorded
+    )
+      return handleError(
+        lifecycleError,
+        reply,
+        provider.extractErrorMessage,
+        false,
+        provider.extractInternalCode.bind(provider),
+        provider.formatStreamErrorFrame,
+        provider.translatesWireFormat,
+      );
     // Persist failed interactions so they appear in LLM logs
     try {
       const errorMessage = upstreamErrorMessage(
@@ -2002,6 +2052,170 @@ async function handleStreaming<
   // refused is indistinguishable from a healthy one.
   let toolCallBlock: ToolCallBlock | undefined;
 
+  let accountingFinalized = false;
+  let upstreamFinished = false;
+  let providerTerminalSeen = false;
+  const finalizeInteraction = async () => {
+    if (accountingFinalized) return;
+    accountingFinalized = true;
+
+    // Always record interaction (whether stream completed or was aborted)
+    if (!upstreamFinished && !streamCompleted) {
+      logger.info(
+        { clientGone },
+        "Stream was aborted before completion, recording partial interaction",
+      );
+    }
+
+    // Client-visible first byte, preflight included. Observed here rather
+    // than at commit time because the commit can happen during preflight,
+    // before the handler has the labels in hand.
+    if (streamTiming.firstByteAt !== undefined) {
+      metrics.llm.reportTimeToFirstByte(
+        providerName,
+        agent,
+        actualModel,
+        (streamTiming.firstByteAt - streamTiming.requestReceivedAt) / 1000,
+        source,
+      );
+    }
+
+    let usage = streamAdapter.state.usage;
+    if (usage && !upstreamFinished && ctx.usageAccountingMode !== "off") {
+      const breakdown =
+        usage.billingUsage ?? primaryBillingUsage(usage, actualModel);
+      usage = {
+        ...usage,
+        billingQuote: undefined,
+        billingUsage: {
+          ...breakdown,
+          status: "incomplete",
+          issues: [...breakdown.issues, "partial_stream"],
+        },
+      };
+    }
+    if (usage) {
+      withSessionContext(sessionId, () => {
+        if (ctx.usageAccountingMode !== "enforce")
+          metrics.llm.reportLLMTokens(
+            providerName,
+            agent,
+            {
+              input: usage.inputTokens,
+              output: usage.outputTokens,
+              cacheRead: usage.cacheReadTokens,
+              cacheWrite: usage.cacheWriteTokens,
+            },
+            actualModel,
+            source,
+          );
+
+        if (usage.outputTokens && firstChunkTime) {
+          const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
+          metrics.llm.reportTokensPerSecond(
+            providerName,
+            agent,
+            actualModel,
+            usage.outputTokens,
+            totalDurationSeconds,
+            source,
+          );
+        }
+      });
+
+      const costs = await calculateInteractionCosts({
+        usageAccountingMode: ctx.usageAccountingMode,
+        actualModel,
+        usage,
+        providerName,
+      });
+
+      withSessionContext(sessionId, () => {
+        if (costs.billingUsage?.mode === "enforce") {
+          reportBillableUsageMetrics({
+            usage: costs.billingUsage,
+            agent,
+            source,
+            billingMode,
+            authMethod,
+            tokens: true,
+          });
+          return;
+        }
+        metrics.llm.reportLLMCost({
+          provider: providerName,
+          profile: agent,
+          model: actualModel,
+          cost: costs.actualCost,
+          source,
+          billingMode,
+          authMethod,
+        });
+        metrics.llm.reportLLMCacheCost(
+          providerName,
+          agent,
+          actualModel,
+          {
+            cacheCost: costs.cacheCost,
+            cacheReadSavings: costs.cacheReadSavings,
+          },
+          source,
+        );
+      });
+
+      try {
+        const record = buildInteractionRecord({
+          billingAttribution: ctx.billingAttribution,
+          agent,
+          externalAgentId,
+          authMethod,
+          billingMode,
+          authenticatedApp,
+          billingTeamId,
+          runId,
+          userId,
+          serviceAccountId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          appId,
+          sessionId,
+          sessionSource,
+          source,
+          providerType: provider.interactionType,
+          request: originalRequest,
+          processedRequest: request,
+          response: withProviderToolCallIds(
+            failedStreamResponse ?? streamAdapter.toProviderResponse(),
+            streamAdapter.state.toolCalls,
+          ),
+          actualModel,
+          usage,
+          costs,
+          toolCallBlock,
+        });
+        await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      } catch (interactionError) {
+        logger.error(
+          { err: interactionError, profileId: agent.id },
+          "Failed to create interaction record (agent may have been deleted)",
+        );
+        if (ctx.usageAccountingMode === "enforce")
+          throw new ApiError(503, "Unable to settle LLM usage");
+      }
+    } else {
+      // No usage ever arrived. On the error path the catch has already recorded
+      // the failure; otherwise the provider ended the stream early (a truncated
+      // response), and the partial content is all we have to log. Either way the
+      // call must not disappear from interaction history.
+      await recordUsagelessInteraction(
+        withProviderToolCallIds(
+          failedStreamResponse ?? streamAdapter.toProviderResponse(),
+          streamAdapter.state.toolCalls,
+        ),
+      );
+    }
+  };
+
   try {
     // Execute streaming request with tracing — the span covers the full streaming
     // operation (request → all chunks consumed) so we can set response attributes
@@ -2105,6 +2319,7 @@ async function handleStreaming<
           }
 
           if (result.isFinal) {
+            providerTerminalSeen = true;
             break;
           }
         }
@@ -2174,6 +2389,7 @@ async function handleStreaming<
             );
           }
           const cost = await calculateUsageCost({
+            usageAccountingMode: ctx.usageAccountingMode,
             model: actualModel,
             usage: state.usage,
             provider: providerName,
@@ -2198,6 +2414,12 @@ async function handleStreaming<
       },
     });
 
+    upstreamFinished = providerName !== "anthropic" || providerTerminalSeen;
+    if (!upstreamFinished && ctx.usageAccountingMode === "enforce")
+      throw new ApiError(
+        502,
+        "Provider stream ended before final usage was confirmed",
+      );
     logger.info("Stream loop completed, processing final events");
 
     if (
@@ -2220,6 +2442,7 @@ async function handleStreaming<
         ? withoutResponsesModelOutputSSE(failureEvents)
         : failureEvents)
         writeToClient(event);
+      await finalizeInteraction();
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
       streamCompleted = true;
@@ -2445,6 +2668,7 @@ async function handleStreaming<
     }
 
     // Stream end events
+    await finalizeInteraction();
     writeToClient(streamAdapter.formatEndSSE());
     reply.raw.end();
 
@@ -2550,6 +2774,7 @@ async function handleStreaming<
         usage: codexError.completion.usage,
       } as TChunk);
       if (terminal.sseData) writeToClient(terminal.sseData);
+      await finalizeInteraction();
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
       streamCompleted = true;
@@ -2589,6 +2814,7 @@ async function handleStreaming<
       );
     }
 
+    await finalizeInteraction();
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
     return handleError(
       lifecycleError,
@@ -2609,133 +2835,7 @@ async function handleStreaming<
     );
   } finally {
     keepAlive.stop();
-
-    // Always record interaction (whether stream completed or was aborted)
-    if (!streamCompleted) {
-      logger.info(
-        { clientGone },
-        "Stream was aborted before completion, recording partial interaction",
-      );
-    }
-
-    // Client-visible first byte, preflight included. Observed here rather
-    // than at commit time because the commit can happen during preflight,
-    // before the handler has the labels in hand.
-    if (streamTiming.firstByteAt !== undefined) {
-      metrics.llm.reportTimeToFirstByte(
-        providerName,
-        agent,
-        actualModel,
-        (streamTiming.firstByteAt - streamTiming.requestReceivedAt) / 1000,
-        source,
-      );
-    }
-
-    const usage = streamAdapter.state.usage;
-    if (usage) {
-      withSessionContext(sessionId, () => {
-        metrics.llm.reportLLMTokens(
-          providerName,
-          agent,
-          {
-            input: usage.inputTokens,
-            output: usage.outputTokens,
-            cacheRead: usage.cacheReadTokens,
-            cacheWrite: usage.cacheWriteTokens,
-          },
-          actualModel,
-          source,
-        );
-
-        if (usage.outputTokens && firstChunkTime) {
-          const totalDurationSeconds = (Date.now() - streamStartTime) / 1000;
-          metrics.llm.reportTokensPerSecond(
-            providerName,
-            agent,
-            actualModel,
-            usage.outputTokens,
-            totalDurationSeconds,
-            source,
-          );
-        }
-      });
-
-      const costs = await calculateInteractionCosts({
-        actualModel,
-        usage,
-        providerName,
-      });
-
-      withSessionContext(sessionId, () => {
-        metrics.llm.reportLLMCost({
-          provider: providerName,
-          profile: agent,
-          model: actualModel,
-          cost: costs.actualCost,
-          source,
-          billingMode,
-          authMethod,
-        });
-        metrics.llm.reportLLMCacheCost(
-          providerName,
-          agent,
-          actualModel,
-          {
-            cacheCost: costs.cacheCost,
-            cacheReadSavings: costs.cacheReadSavings,
-          },
-          source,
-        );
-      });
-
-      try {
-        const record = buildInteractionRecord({
-          agent,
-          externalAgentId,
-          authMethod,
-          billingMode,
-          authenticatedApp,
-          billingTeamId,
-          runId,
-          userId,
-          serviceAccountId,
-          virtualKeyId,
-          passthroughVirtualKeyId,
-          appId,
-          sessionId,
-          sessionSource,
-          source,
-          providerType: provider.interactionType,
-          request: originalRequest,
-          processedRequest: request,
-          response: withProviderToolCallIds(
-            failedStreamResponse ?? streamAdapter.toProviderResponse(),
-            streamAdapter.state.toolCalls,
-          ),
-          actualModel,
-          usage,
-          costs,
-          toolCallBlock,
-        });
-        await persistProxyInteraction({ record, encryptedChat, streamTiming });
-      } catch (interactionError) {
-        logger.error(
-          { err: interactionError, profileId: agent.id },
-          "Failed to create interaction record (agent may have been deleted)",
-        );
-      }
-    } else {
-      // No usage ever arrived. On the error path the catch has already recorded
-      // the failure; otherwise the provider ended the stream early (a truncated
-      // response), and the partial content is all we have to log. Either way the
-      // call must not disappear from interaction history.
-      await recordUsagelessInteraction(
-        withProviderToolCallIds(
-          failedStreamResponse ?? streamAdapter.toProviderResponse(),
-          streamAdapter.state.toolCalls,
-        ),
-      );
-    }
+    await finalizeInteraction();
   }
 }
 
@@ -2853,6 +2953,57 @@ async function handleNonStreaming<
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
       } catch (error) {
+        if (error instanceof ObservedProviderUsageError) {
+          const costs = await calculateInteractionCosts({
+            actualModel,
+            usage: error.usage,
+            providerName,
+            usageAccountingMode: ctx.usageAccountingMode,
+          });
+          const record = buildInteractionRecord({
+            agent,
+            billingAttribution: ctx.billingAttribution,
+            externalAgentId,
+            authMethod,
+            billingMode: getBillingMode(),
+            authenticatedApp,
+            billingTeamId,
+            runId,
+            userId,
+            serviceAccountId,
+            virtualKeyId,
+            passthroughVirtualKeyId,
+            appId,
+            sessionId,
+            sessionSource,
+            source,
+            providerType: provider.interactionType,
+            request: originalRequest,
+            processedRequest: request,
+            response: error.response,
+            actualModel,
+            usage: error.usage,
+            costs,
+          });
+          await persistProxyInteraction({
+            record,
+            encryptedChat,
+            streamTiming,
+          });
+          error.billingRecorded = true;
+          if (costs.billingUsage?.mode === "enforce")
+            withSessionContext(sessionId, () =>
+              reportBillableUsageMetrics({
+                usage: costs.billingUsage as PricedBillingUsage,
+                agent,
+                source,
+                billingMode: getBillingMode(),
+                authMethod,
+                tokens: providerName === "anthropic",
+              }),
+            );
+          throw error;
+        }
         if (error instanceof CodexResponsesGenerationError) {
           // Reuse accounting/persistence below without running success hooks.
           codexGenerationError = error;
@@ -2939,6 +3090,7 @@ async function handleNonStreaming<
         );
       }
       const cost = await calculateUsageCost({
+        usageAccountingMode: ctx.usageAccountingMode,
         model: actualModel,
         usage,
         provider: providerName,
@@ -3124,12 +3276,37 @@ async function handleNonStreaming<
 
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
+        usageAccountingMode: ctx.usageAccountingMode,
         actualModel,
         usage,
         providerName,
       });
 
       withSessionContext(sessionId, () => {
+        if (costs.billingUsage?.mode === "enforce") {
+          reportBillableUsageMetrics({
+            usage: costs.billingUsage,
+            agent,
+            source,
+            billingMode,
+            authMethod,
+            tokens: providerName === "anthropic",
+          });
+          return;
+        }
+        if (providerName === "anthropic")
+          metrics.llm.reportLLMTokens(
+            providerName,
+            agent,
+            {
+              input: usage.inputTokens,
+              output: usage.outputTokens,
+              cacheRead: usage.cacheReadTokens,
+              cacheWrite: usage.cacheWriteTokens,
+            },
+            actualModel,
+            source,
+          );
         metrics.llm.reportLLMCost({
           provider: providerName,
           profile: agent,
@@ -3152,6 +3329,7 @@ async function handleNonStreaming<
       });
 
       const refusalRecord = buildInteractionRecord({
+        billingAttribution: ctx.billingAttribution,
         agent,
         externalAgentId,
         authMethod,
@@ -3261,25 +3439,40 @@ async function handleNonStreaming<
     }
     clientResponse = pluginResponse as TResponse;
   }
-  // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
-  // for non-streaming requests. We only report cost here to avoid double counting.
-  // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
-  // mocked API clients can't use an observable fetch.
-  // metrics.llm.reportLLMTokens(
-  //   providerName,
-  //   agent,
-  //   { input: usage.inputTokens, output: usage.outputTokens },
-  //   actualModel,
-  //   source,
-  // );
-
+  // Anthropic tokens are emitted here for JSON and internally streamed calls;
+  // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
+    usageAccountingMode: ctx.usageAccountingMode,
     actualModel,
     usage,
     providerName,
   });
 
   withSessionContext(sessionId, () => {
+    if (costs.billingUsage?.mode === "enforce") {
+      reportBillableUsageMetrics({
+        usage: costs.billingUsage,
+        agent,
+        source,
+        billingMode,
+        authMethod,
+        tokens: providerName === "anthropic",
+      });
+      return;
+    }
+    if (providerName === "anthropic")
+      metrics.llm.reportLLMTokens(
+        providerName,
+        agent,
+        {
+          input: usage.inputTokens,
+          output: usage.outputTokens,
+          cacheRead: usage.cacheReadTokens,
+          cacheWrite: usage.cacheWriteTokens,
+        },
+        actualModel,
+        source,
+      );
     metrics.llm.reportLLMCost({
       provider: providerName,
       profile: agent,
@@ -3301,6 +3494,7 @@ async function handleNonStreaming<
   let responsePersisted = false;
   try {
     const record = buildInteractionRecord({
+      billingAttribution: ctx.billingAttribution,
       agent,
       externalAgentId,
       authMethod,
@@ -3344,6 +3538,8 @@ async function handleNonStreaming<
       { err: interactionError, profileId: agent.id },
       "Failed to create interaction record (agent may have been deleted)",
     );
+    if (ctx.usageAccountingMode === "enforce")
+      throw new ApiError(503, "Unable to settle LLM usage");
   }
 
   if (generationFailed) {

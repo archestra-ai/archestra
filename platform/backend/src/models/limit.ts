@@ -1,5 +1,16 @@
-import { and, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  getTableColumns,
+  inArray,
+  isNull,
+  lt,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
@@ -15,6 +26,11 @@ import type {
   Model,
   UpdateLimit,
 } from "@/types";
+import type {
+  BillingAttribution,
+  PricedBillingUsage,
+} from "@/utils/billable-usage";
+import { priceTokens, sumMoney } from "@/utils/billable-usage";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
@@ -47,7 +63,26 @@ type RollingLimitCleanupInterval = Extract<
   "1h" | "12h" | "24h" | "1w" | "1m"
 >;
 
-type LimitModelUsageRecord = typeof schema.limitModelUsageTable.$inferSelect;
+type LimitModelUsageRecord = typeof schema.limitModelUsageTable.$inferSelect & {
+  coveredTokensIn: number | null;
+  coveredTokensOut: number | null;
+  settledCost: string | null;
+  incomplete: number | null;
+};
+const usageSelection = {
+  ...getTableColumns(schema.limitModelUsageTable),
+  coveredTokensIn: schema.limitBillingUsageTable.coveredTokensIn,
+  coveredTokensOut: schema.limitBillingUsageTable.coveredTokensOut,
+  settledCost: schema.limitBillingUsageTable.cost,
+  incomplete: schema.limitBillingUsageTable.incomplete,
+};
+const billingJoin = and(
+  eq(
+    schema.limitModelUsageTable.limitId,
+    schema.limitBillingUsageTable.limitId,
+  ),
+  eq(schema.limitModelUsageTable.model, schema.limitBillingUsageTable.model),
+);
 type ModelUsageBreakdown = {
   model: string;
   tokensIn: number;
@@ -215,8 +250,9 @@ class LimitModel {
     if (limitIds.length === 0) return breakdowns;
 
     const modelUsages = await db
-      .select()
+      .select(usageSelection)
       .from(schema.limitModelUsageTable)
+      .leftJoin(schema.limitBillingUsageTable, billingJoin)
       .where(inArray(schema.limitModelUsageTable.limitId, limitIds));
     const pricing = await ModelModel.findByModelIdsOnly([
       ...new Set(modelUsages.map((usage) => usage.model)),
@@ -250,8 +286,9 @@ class LimitModel {
   > {
     logger.debug({ limitId }, "LimitModel.getRawModelUsage: fetching records");
     const records = await db
-      .select()
+      .select(usageSelection)
       .from(schema.limitModelUsageTable)
+      .leftJoin(schema.limitBillingUsageTable, billingJoin)
       .where(eq(schema.limitModelUsageTable.limitId, limitId));
 
     logger.debug(
@@ -419,8 +456,9 @@ class LimitModel {
     if (capRows.size === 0) return new Map();
 
     const usages = await db
-      .select()
+      .select(usageSelection)
       .from(schema.limitModelUsageTable)
+      .leftJoin(schema.limitBillingUsageTable, billingJoin)
       .where(
         inArray(
           schema.limitModelUsageTable.limitId,
@@ -607,8 +645,24 @@ class LimitModel {
     model: string;
     inputTokens: number;
     outputTokens: number;
+    tx?: Transaction;
+    attribution?: BillingAttribution;
   }): Promise<void> {
-    const { agentId, teamIds, entities, ...usage } = params;
+    const { agentId, teamIds, entities, tx, attribution, ...usage } = params;
+    if (attribution) {
+      if (!attribution.entities.length) return;
+      await LimitModel.addTokenUsage({
+        ...usage,
+        tx,
+        entityRefs: sql`VALUES ${sql.join(
+          attribution.entities.map(
+            ({ entityType, entityId }) => sql`(${entityType}, ${entityId})`,
+          ),
+          sql`, `,
+        )}`,
+      });
+      return;
+    }
     const team = schema.teamsTable;
     const agent = schema.agentsTable;
     const literalRefs = sql.join(
@@ -634,6 +688,114 @@ class LimitModel {
       entityRefs: sql`VALUES ${literalRefs} UNION ALL ${derivedRefs}`,
       ...usage,
     });
+  }
+
+  /** All amounts and price snapshots were resolved before entering the transaction. */
+  static async settleBillableUsage(params: {
+    tx: Transaction;
+    attribution: BillingAttribution;
+    usage: PricedBillingUsage;
+  }): Promise<void> {
+    const { tx, attribution, usage } = params;
+    if (!attribution.entities.length) return;
+    const conditions = attribution.entities.map(({ entityType, entityId }) =>
+      and(
+        eq(schema.limitsTable.entityType, entityType),
+        eq(schema.limitsTable.entityId, entityId),
+      ),
+    );
+    // A parent lock serializes settlement with resets, even for cache-only rows
+    // whose legacy input/output counters are zero. Always lock in id order.
+    const limits = await tx
+      .select()
+      .from(schema.limitsTable)
+      .where(
+        and(eq(schema.limitsTable.limitType, "token_cost"), or(...conditions)),
+      )
+      .orderBy(schema.limitsTable.id)
+      .for("no key update");
+    const models = [
+      ...new Set(usage.components.map((item) => item.model)),
+    ].sort();
+    const legacyRows: (typeof schema.limitModelUsageTable.$inferInsert)[] = [];
+    const settledRows: (typeof schema.limitBillingUsageTable.$inferInsert)[] =
+      [];
+    const grouped = new Map(
+      models.map((model) => {
+        const components = usage.components.filter(
+          (item) => item.model === model,
+        );
+        return [
+          model,
+          {
+            input: components.reduce((sum, item) => sum + item.inputTokens, 0),
+            output: components.reduce(
+              (sum, item) => sum + item.outputTokens,
+              0,
+            ),
+            cost: sumMoney(components.map((item) => item.cost)),
+          },
+        ];
+      }),
+    );
+    for (const limit of limits) {
+      const matched = models.filter(
+        (model) => !limit.model?.length || limit.model.includes(model),
+      );
+      for (const model of matched) {
+        const total = grouped.get(model);
+        if (!total) continue;
+        legacyRows.push({
+          limitId: limit.id,
+          model,
+          currentUsageTokensIn: total.input,
+          currentUsageTokensOut: total.output,
+        });
+        settledRows.push({
+          limitId: limit.id,
+          model,
+          coveredTokensIn: total.input,
+          coveredTokensOut: total.output,
+          cost: total.cost,
+          incomplete: usage.status === "incomplete" ? 1 : 0,
+        });
+      }
+      // A missing model must also protect caps scoped to that unknown model.
+      if (usage.status === "incomplete" && !matched.length) {
+        legacyRows.push({ limitId: limit.id, model: "__incomplete__" });
+        settledRows.push({
+          limitId: limit.id,
+          model: "__incomplete__",
+          incomplete: 1,
+        });
+      }
+    }
+    if (!legacyRows.length) return;
+    const legacy = schema.limitModelUsageTable;
+    await tx
+      .insert(legacy)
+      .values(legacyRows)
+      .onConflictDoUpdate({
+        target: [legacy.limitId, legacy.model],
+        set: {
+          currentUsageTokensIn: sql`${legacy.currentUsageTokensIn} + excluded.current_usage_tokens_in`,
+          currentUsageTokensOut: sql`${legacy.currentUsageTokensOut} + excluded.current_usage_tokens_out`,
+          updatedAt: new Date(),
+        },
+      });
+    const settled = schema.limitBillingUsageTable;
+    await tx
+      .insert(settled)
+      .values(settledRows)
+      .onConflictDoUpdate({
+        target: [settled.limitId, settled.model],
+        set: {
+          coveredTokensIn: sql`${settled.coveredTokensIn} + excluded.covered_tokens_in`,
+          coveredTokensOut: sql`${settled.coveredTokensOut} + excluded.covered_tokens_out`,
+          cost: sql`${settled.cost} + excluded.cost`,
+          incomplete: sql`${settled.incomplete} + excluded.incomplete`,
+        },
+      });
   }
 
   static async cleanupLimitsIfNeeded(
@@ -796,6 +958,11 @@ class LimitModel {
             schema.limitModelUsageTable.model,
           )
           .for("update");
+        await tx
+          .delete(schema.limitBillingUsageTable)
+          .where(
+            inArray(schema.limitBillingUsageTable.limitId, tokenCostLimitIds),
+          );
         // Reset model usage records for token_cost limits
         await tx
           .update(schema.limitModelUsageTable)
@@ -1038,8 +1205,9 @@ class LimitModel {
     model: string;
     inputTokens: number;
     outputTokens: number;
+    tx?: Transaction;
   }): Promise<void> {
-    const { entityRefs, model, inputTokens, outputTokens } = params;
+    const { entityRefs, model, inputTokens, outputTokens, tx } = params;
     const limits = schema.limitsTable;
     const usage = schema.limitModelUsageTable;
     const statement = sql`
@@ -1063,7 +1231,8 @@ class LimitModel {
         current_usage_tokens_out = ${usage}.current_usage_tokens_out + EXCLUDED.current_usage_tokens_out,
         updated_at = ${sql.param(new Date(), usage.updatedAt)}
     `;
-    await retryOnceOnDeadlock(() => db.execute(statement));
+    if (tx) await tx.execute(statement);
+    else await retryOnceOnDeadlock(() => db.execute(statement));
   }
 }
 
@@ -1398,7 +1567,7 @@ export class LimitValidationService {
       logger.error(
         `[LimitValidation] Error checking limits before request: ${error}`,
       );
-      // In case of error, allow the request to proceed
+      if (config.llmProxy.usageAccountingMode === "enforce") throw error;
       return null;
     }
   }
@@ -1427,8 +1596,9 @@ export class LimitValidationService {
     const usageByLimitId = new Map<string, LimitModelUsageRecord[]>();
     if (limits.length > 0) {
       const usageRows = await db
-        .select()
+        .select(usageSelection)
         .from(schema.limitModelUsageTable)
+        .leftJoin(schema.limitBillingUsageTable, billingJoin)
         .where(
           inArray(
             schema.limitModelUsageTable.limitId,
@@ -1499,7 +1669,9 @@ export class LimitValidationService {
 
           totalTokensIn = usageCosts.tokensIn;
           totalTokensOut = usageCosts.tokensOut;
-          comparisonValue = usageCosts.cost;
+          comparisonValue = usageCosts.incomplete
+            ? Number.POSITIVE_INFINITY
+            : usageCosts.cost;
           limitDescription = "cost_dollars";
 
           logger.debug(
@@ -1629,6 +1801,7 @@ export class LimitValidationService {
         { error, params },
         "[LimitValidation] Error checking default user limit",
       );
+      if (config.llmProxy.usageAccountingMode === "enforce") throw error;
       return null;
     }
   }
@@ -1745,17 +1918,21 @@ function buildCleanupDueCondition(): SQL {
 
 function buildUsagePeriodStartCondition(
   cleanupInterval: LimitCleanupInterval,
+  createdAt:
+    | typeof schema.interactionsTable.createdAt
+    | typeof schema.interactionBillingTable.createdAt = schema.interactionsTable
+    .createdAt,
 ): SQL {
   const rollingInterval =
     LimitModel.rollingCleanupIntervalSqlLiterals[
       cleanupInterval as RollingLimitCleanupInterval
     ];
   if (rollingInterval) {
-    return sql`${schema.interactionsTable.createdAt} >= now() - ${rollingInterval}::interval`;
+    return sql`${createdAt} >= now() - ${rollingInterval}::interval`;
   }
 
   if (isCalendarCleanupInterval(cleanupInterval)) {
-    return sql`${schema.interactionsTable.createdAt} >= ${getCalendarPeriodStartSql(cleanupInterval)}`;
+    return sql`${createdAt} >= ${getCalendarPeriodStartSql(cleanupInterval)}`;
   }
 
   throw new Error(`Unsupported cleanup interval: ${cleanupInterval}`);
@@ -1790,32 +1967,51 @@ function computeModelUsageCosts(
   modelUsages: LimitModelUsageRecord[],
   modelEntriesByModelId: Map<string, Model>,
 ) {
-  let cost = 0;
+  let cost = "0.0000000000";
   let tokensIn = 0;
   let tokensOut = 0;
+  let incomplete = false;
   const breakdown = modelUsages.map((usage) => {
     tokensIn += usage.currentUsageTokensIn;
     tokensOut += usage.currentUsageTokensOut;
-
-    const modelEntry = modelEntriesByModelId.get(usage.model) ?? null;
-    const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
-    const modelCost =
-      (usage.currentUsageTokensIn * parseFloat(pricing.pricePerMillionInput)) /
-        1_000_000 +
-      (usage.currentUsageTokensOut *
-        parseFloat(pricing.pricePerMillionOutput)) /
-        1_000_000;
-    cost += modelCost;
-
+    incomplete ||= (usage.incomplete ?? 0) > 0;
+    const pricing = ModelModel.getEffectivePricing(
+      modelEntriesByModelId.get(usage.model) ?? null,
+      usage.model,
+    );
+    const legacyCost = priceTokens(
+      {
+        inputTokens: Math.max(
+          0,
+          usage.currentUsageTokensIn - (usage.coveredTokensIn ?? 0),
+        ),
+        outputTokens: Math.max(
+          0,
+          usage.currentUsageTokensOut - (usage.coveredTokensOut ?? 0),
+        ),
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cacheWrite1hTokens: 0,
+      },
+      {
+        input: pricing.pricePerMillionInput,
+        output: pricing.pricePerMillionOutput,
+        cacheRead: null,
+        cacheWrite: null,
+        cacheWrite1h: null,
+        source: pricing.source,
+      },
+    );
+    const modelCost = sumMoney([legacyCost, usage.settledCost ?? "0"]);
+    cost = sumMoney([cost, modelCost]);
     return {
       model: usage.model,
       tokensIn: usage.currentUsageTokensIn,
       tokensOut: usage.currentUsageTokensOut,
-      cost: modelCost,
+      cost: Number(modelCost),
     };
   });
-
-  return { breakdown, cost, tokensIn, tokensOut };
+  return { breakdown, cost: Number(cost), tokensIn, tokensOut, incomplete };
 }
 
 async function getDefaultUserLimitUsage(params: {
@@ -1834,6 +2030,7 @@ async function getDefaultUserLimitUsage(params: {
     // Team-billed traffic is charged to the team, not to the caller.
     isNull(schema.interactionsTable.billingTeamId),
     buildUsagePeriodStartCondition(params.cleanupInterval),
+    sql`NOT EXISTS (SELECT 1 FROM ${schema.interactionBillingTable} WHERE ${schema.interactionBillingTable.interactionId} = ${schema.interactionsTable.id} AND ${schema.interactionBillingTable.usage}->>'mode' = 'enforce')`,
   ];
 
   if (params.models && params.models.length > 0) {
@@ -1892,7 +2089,39 @@ async function getDefaultUserLimitUsage(params: {
   const modelEntriesByModelId =
     await ModelModel.findByModelIdsOnly(modelsMissingCost);
 
-  let cost = 0;
+  const receipt = schema.interactionBillingTable;
+  const componentMatches = params.models?.length
+    ? inArray(sql`component->>'model'`, params.models)
+    : sql`true`;
+  const [settled] = await db
+    .select({
+      cost: sql<string>`COALESCE(sum((component->>'cost')::numeric) FILTER (WHERE ${componentMatches}), 0)::text`,
+      tokensIn: sql<number>`COALESCE(sum((component->>'inputTokens')::bigint) FILTER (WHERE ${componentMatches}), 0)::bigint`,
+      tokensOut: sql<number>`COALESCE(sum((component->>'outputTokens')::bigint) FILTER (WHERE ${componentMatches}), 0)::bigint`,
+      incomplete: sql<number>`count(*) FILTER (WHERE ${receipt.usage}->>'status' = 'incomplete')::integer`,
+    })
+    .from(receipt)
+    .leftJoin(
+      sql`LATERAL jsonb_array_elements(${receipt.usage}->'components') AS component`,
+      sql`true`,
+    )
+    .where(
+      and(
+        eq(receipt.organizationId, params.organizationId),
+        eq(receipt.userId, params.userId),
+        eq(receipt.billingMode, "metered"),
+        isNull(receipt.billingTeamId),
+        sql`${receipt.usage}->>'mode' = 'enforce'`,
+        buildUsagePeriodStartCondition(
+          params.cleanupInterval,
+          receipt.createdAt,
+        ),
+        params.environmentId
+          ? eq(receipt.environmentId, params.environmentId)
+          : undefined,
+      ),
+    );
+  let cost = "0.0000000000";
   let tokensIn = 0;
   let tokensOut = 0;
   for (const interaction of interactions) {
@@ -1902,7 +2131,7 @@ async function getDefaultUserLimitUsage(params: {
     tokensOut += outputTokens;
 
     if (interaction.cost !== null) {
-      cost += Number(interaction.cost);
+      cost = sumMoney([cost, interaction.cost]);
       continue;
     }
 
@@ -1915,12 +2144,35 @@ async function getDefaultUserLimitUsage(params: {
       modelEntry,
       interaction.model,
     );
-    cost +=
-      (inputTokens * parseFloat(pricing.pricePerMillionInput)) / 1000000 +
-      (outputTokens * parseFloat(pricing.pricePerMillionOutput)) / 1000000;
+    cost = sumMoney([
+      cost,
+      priceTokens(
+        {
+          inputTokens,
+          outputTokens,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cacheWrite1hTokens: 0,
+        },
+        {
+          input: pricing.pricePerMillionInput,
+          output: pricing.pricePerMillionOutput,
+          cacheRead: null,
+          cacheWrite: null,
+          cacheWrite1h: null,
+          source: pricing.source,
+        },
+      ),
+    ]);
   }
-
-  return { cost, tokensIn, tokensOut };
+  tokensIn += Number(settled?.tokensIn ?? 0);
+  tokensOut += Number(settled?.tokensOut ?? 0);
+  cost = sumMoney([cost, settled?.cost ?? "0"]);
+  return {
+    cost: settled?.incomplete ? Number.POSITIVE_INFINITY : Number(cost),
+    tokensIn,
+    tokensOut,
+  };
 }
 
 function buildLimitViolationResponse(params: {
@@ -1934,6 +2186,12 @@ function buildLimitViolationResponse(params: {
   cleanupInterval?: LimitCleanupInterval | null;
   models?: string[] | null;
 }): LimitViolationResponse {
+  if (!Number.isFinite(params.comparisonValue))
+    return [
+      "Usage accounting is incomplete.",
+      `The ${archestraMcpBranding.appName} budget has incomplete billing usage. Ask an administrator to review provider usage and model prices before resetting the budget.`,
+      { entityType: params.entityType, limitType: "token_cost" },
+    ];
   const totalTokens = params.totalTokensIn + params.totalTokensOut;
   const remaining = Math.max(0, params.limitValue - params.comparisonValue);
   // Human-readable description of the exact rule that fired, so both the LLM

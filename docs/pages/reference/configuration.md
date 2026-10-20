@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 1
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -557,6 +557,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Default: `https://api.z.ai/api/paas/v4`
 
 ## LLM Proxy
+
+- **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
+  - Default: `off`
+  - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
+  - Set it on both web and worker pods. Requests retain their starting mode. See [Roll Out Usage Accounting](/docs/admin/usage-accounting).
 
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`

@@ -1114,6 +1114,14 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "internal backfill progress marker",
   },
+  interactionBillingTable: {
+    audited: false,
+    reason: "content-free idempotent billing receipts",
+  },
+  limitBillingUsageTable: {
+    audited: false,
+    reason: "transactional settled usage projection",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

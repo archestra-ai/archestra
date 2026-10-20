@@ -321,6 +321,28 @@ describe("getObservableFetch", () => {
     });
   });
 
+  test("handler-owned token reporting retains HTTP duration without duplicating tokens", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ usage: { input_tokens: 200, output_tokens: 75 } }),
+            { headers: { "content-type": "application/json" } },
+          ),
+        ),
+    );
+    const observableFetch = getObservableFetch("anthropic", testAgent, "api", {
+      reportTokens: false,
+    });
+    await observableFetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+    });
+    expect(histogramObserve).toHaveBeenCalledTimes(1);
+    expect(counterInc).not.toHaveBeenCalled();
+  });
+
   test("records tokens for Anthropic response format", async () => {
     const mockResponse = {
       ok: true,

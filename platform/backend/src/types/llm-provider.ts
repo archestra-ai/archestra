@@ -34,6 +34,7 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
+import type { BillingUsage, PricedBillingUsage } from "@/utils/billable-usage";
 
 import type { GatewayAgent } from "./agent";
 
@@ -669,6 +670,14 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
  * Token usage from response
  */
 export interface UsageView {
+  /** Disjoint provider billing components; primary token fields remain unchanged. */
+  billingUsage?: BillingUsage;
+  /** Internal quote attached to this normalized request snapshot, never forwarded. */
+  billingQuote?: {
+    model: string;
+    provider: SupportedProvider;
+    priced: PricedBillingUsage;
+  };
   /** Uncached input tokens only (normalized across providers). */
   inputTokens: number;
   outputTokens: number;

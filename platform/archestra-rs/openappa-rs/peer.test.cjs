@@ -207,7 +207,7 @@ context_control = true
     value: 'delivered despite the stop',
   };
   try {
-    await assert.rejects(() => send(parent, interrupted), /database|db error|injected receipt failure/);
+    await assert.rejects(() => send(parent, interrupted), /PostgreSQL|database|db error/);
   } finally {
     await client.query('DROP TRIGGER IF EXISTS openappa_peer_fail_send ON openappa_operations');
     await client.query('DROP FUNCTION IF EXISTS openappa_peer_fail_send()');
@@ -237,7 +237,7 @@ context_control = true
     await client.query(`CREATE OR REPLACE FUNCTION openappa_peer_fail_list() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected list receipt failure'; END $$`);
     await client.query(`CREATE TRIGGER openappa_peer_fail_list BEFORE UPDATE ON ${failure.table} FOR EACH ROW WHEN (NEW.organization_id = '${organization_id}' AND NEW.${failure.column} = '${failure.id}' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_peer_fail_list()`);
     try {
-      await assert.rejects(listTracked, /database|db error|injected list receipt failure/);
+      await assert.rejects(listTracked, /PostgreSQL|database|db error/);
     } finally {
       await client.query(`DROP TRIGGER IF EXISTS openappa_peer_fail_list ON ${failure.table}`);
       await client.query('DROP FUNCTION IF EXISTS openappa_peer_fail_list()');

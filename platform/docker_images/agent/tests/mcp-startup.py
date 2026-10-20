@@ -6,6 +6,7 @@ The barrier test holds tools/list until AFTER the former startup grace, and
 asserts that no tool-using inference arrives while discovery is incomplete.
 """
 
+import base64
 import fcntl
 import json
 import os
@@ -120,7 +121,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.server.sequence += 1
         self.reply_id = str(self.server.sequence)
-        self.server.requests.append({"names": names, "catalog_sent": self.server.catalog_sent})
+        images = sum(
+            block.get("type") == "image"
+            for message in request.get("messages", [])
+            for block in (message.get("content") or [])
+            if isinstance(block, dict)
+        )
+        self.server.requests.append({"names": names, "catalog_sent": self.server.catalog_sent, "images": images})
         if len(self.server.requests) == 1:
             print(f"{CLIENT}: first request gateway tools: {[n for n in names if 'remedy' in n or 'yell' in n]}", flush=True)
         tool = next((name for name in names if len(self.server.calls) < len(TOOLS) and name.endswith(TOOLS[len(self.server.calls)].removeprefix("archestra__"))), None)
@@ -214,6 +221,9 @@ class StartupTest(unittest.TestCase):
                 self.run_client("one_shot", failure=method)
 
     if CLIENT == "claude-code":
+        def test_resumed_delegation_with_image(self):
+            self.run_client("one_shot", resume=True, image_followup=True)
+
         def test_empty_gateway_catalog(self):
             self.run_client("one_shot", failure="empty")
 
@@ -221,7 +231,7 @@ class StartupTest(unittest.TestCase):
         def test_plain_cli(self):
             self.run_client("one_shot", plain=True)
 
-    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False, missing_binding=False):
+    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False, missing_binding=False, image_followup=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             runtime = root / "runtime"
@@ -241,6 +251,12 @@ class StartupTest(unittest.TestCase):
                     if turn:
                         env["ARCHESTRA_AGENT_RUNTIME_CONTINUE"] = "1"
                         env["ARCHESTRA_AGENT_RUNTIME_TASK"] = "Call each recovery tool again, then reply STARTUP_OK."
+                        if image_followup:
+                            # A real PNG makes Claude resolve the pasted path
+                            # asynchronously before it can submit the draft.
+                            image = home / "screenshot.png"
+                            image.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="))
+                            env["ARCHESTRA_AGENT_RUNTIME_TASK"] += "\n\nAttached files are available for this run:\n- " + str(image)
                         server.requests.clear()
                         server.calls.clear()
                         server.catalog_sent = False
@@ -263,6 +279,8 @@ class StartupTest(unittest.TestCase):
                         self.assertFalse((runtime / "missing-binding.result").exists(), "A runtime without its binding was marked successful")
                     else:
                         self.run_turn(root, home, runtime, env, server, turn_mode, plain, failure, hold, idle=bool(turn and idle_resume))
+                        if turn and image_followup:
+                            self.assertGreater(server.requests[0]["images"], 0, "Follow-up submitted without its image")
             finally:
                 server.release.set()
                 server.shutdown()

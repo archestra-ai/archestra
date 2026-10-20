@@ -84,6 +84,9 @@ def main() -> int:
                 return child.wait()
             # Bracketed paste preserves multiline tasks as one submitted prompt.
             subprocess.run(["tmux", "send-keys", "-t", pane, "-l", "\x1b[200~" + task + "\x1b[201~"], check=True)
+            # Image paths are expanded asynchronously during paste. Enter sent
+            # immediately can be swallowed, leaving the task in the input box.
+            time.sleep(1)
             subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], check=True)
             return child.wait()
     except (OSError, subprocess.SubprocessError, RuntimeError):

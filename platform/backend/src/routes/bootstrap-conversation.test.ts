@@ -100,9 +100,8 @@ describe("conversation bootstrap route", () => {
           `/api/agents/credential-readiness?ids=${conversationAgent.id}`,
         ),
         browserTools: expect.any(Array),
-        defaultSuggestedPrompts: await get(
-          `/api/agents/${conversationAgent.id}/default-suggested-prompts`,
-        ),
+        // Only an empty chat shows the platform's prompts.
+        defaultSuggestedPrompts: null,
         keyModels: null,
       },
     });

@@ -277,10 +277,11 @@ export default bootstrapRoutes;
 // ===
 
 /**
- * The new-chat composer's parts (see `/api/bootstrap/new-chat`). With `agent`,
- * that agent's parts instead of the starting agent the member's and the
- * organization's defaults choose; an agent the caller cannot read leaves the
- * agent part empty.
+ * The new-chat composer's parts (see `/api/bootstrap/new-chat`). With `agent`
+ * (an existing conversation's), that agent's parts instead of the starting
+ * agent the member's and the organization's defaults choose, without the
+ * platform's default prompts, which only an empty chat shows; an agent the
+ * caller cannot read leaves the agent part empty.
  */
 async function getNewChatComposer(params: {
   userId: string;
@@ -339,6 +340,7 @@ async function getNewChatComposer(params: {
           llmApiKeyId: startingAgent.llmApiKeyId,
           userId,
           organizationId,
+          withPlatformPrompts: params.agent === undefined,
         }).catch((error) => {
           // A given agent the caller cannot read (a shared chat's agent)
           // leaves the part empty; its endpoints refuse the caller too.
@@ -408,6 +410,8 @@ async function getNewChatAgentParts(params: {
   llmApiKeyId: string | null;
   userId: string;
   organizationId: string;
+  /** False for an existing conversation: only an empty chat shows them. */
+  withPlatformPrompts: boolean;
 }) {
   const { agentId, llmApiKeyId, userId, organizationId } = params;
   const [
@@ -438,7 +442,9 @@ async function getNewChatAgentParts(params: {
           organizationId,
         })
       : null,
-    getAgentDefaultSuggestedPrompts({ id: agentId, userId, organizationId }),
+    params.withPlatformPrompts
+      ? getAgentDefaultSuggestedPrompts({ id: agentId, userId, organizationId })
+      : null,
   ]);
   // The composer asks for the platform's prompts only for an agent without
   // its own: they are read with the other parts and kept in that case alone.

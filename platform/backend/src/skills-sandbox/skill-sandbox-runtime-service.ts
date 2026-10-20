@@ -797,6 +797,11 @@ class SkillSandboxRuntimeService {
           // message verbatim so the model knows to start a fresh sandbox; this
           // is a per-session dead end, not an engine outage.
           return new SkillSandboxError(error.message);
+        case "ARCHESTRA_SANDBOX_IMAGE_PULL_FAILED":
+          // The engine is up but cannot fetch the base image, usually because
+          // the network egress policy blocks the registry. The native message
+          // names the image and registry so the cause is actionable.
+          return new SkillSandboxError(error.message);
         case "ARCHESTRA_ENGINE_UNREACHABLE":
         case "ARCHESTRA_INTERNAL":
           logger.error({ err: error }, "[SkillSandbox] runtime error");

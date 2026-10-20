@@ -43,6 +43,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { withOpenAiResponsesToolCallIds } from "../utils/tool-call-ids";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import {
   formatResponsesFunctionCallFrames,
@@ -327,21 +328,24 @@ class AzureResponsesRequestAdapter
     return {
       ...this.request,
       model: this.getModel(),
-      input: this.request.input.map((item) => {
-        if (!isFunctionCallOutputItem(item)) {
-          return item;
-        }
+      input: this.request.input
+        .map((item) => {
+          if (!isFunctionCallOutputItem(item)) {
+            return item;
+          }
 
-        const updatedOutput = this.toolResultUpdates[item.call_id];
-        if (!updatedOutput) {
-          return item;
-        }
+          const updatedOutput = this.toolResultUpdates[item.call_id];
+          if (!updatedOutput) {
+            return item;
+          }
 
-        return {
-          ...item,
-          output: updatedOutput,
-        };
-      }) as unknown as ResponseInput,
+          return {
+            ...item,
+            output: updatedOutput,
+          };
+        })
+        // After the result updates above, which look up the client's call ids.
+        .map(withOpenAiResponsesToolCallIds) as unknown as ResponseInput,
     };
   }
 }

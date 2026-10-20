@@ -98,6 +98,10 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   THREAD_MUTE_HINT,
 } from "./constants";
+import {
+  getFileDeliveryContext,
+  rememberFileDeliveryContext,
+} from "./file-delivery-context";
 import { ChatOpsFileUploadError } from "./file-upload-error";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
@@ -257,12 +261,20 @@ export class ChatOpsManager {
     }
     if (!provider.uploadFileToThread) {
       throw new ChatOpsFileUploadError(
-        `File uploads are not supported for ${provider.displayName}. Currently only Slack supports posting files.`,
+        `File uploads are not supported for ${provider.displayName}.`,
       );
     }
+    const deliveryContext =
+      binding.provider === "ms-teams"
+        ? await getFileDeliveryContext(binding.id, params.threadId)
+        : undefined;
     await provider.uploadFileToThread({
       channelId: binding.channelId,
       threadId: params.threadId,
+      ...(binding.provider === "ms-teams" && {
+        workspaceId: binding.workspaceId,
+        ...deliveryContext,
+      }),
       filename: params.filename,
       data: params.data,
       comment: params.comment,
@@ -2057,6 +2069,10 @@ export class ChatOpsManager {
       sendReply,
       userId,
     } = params;
+
+    if (provider.providerId === "ms-teams") {
+      await rememberFileDeliveryContext(binding.id, message);
+    }
 
     // An Agent with its own runtime runs there, never as a foreground LLM
     // call — the same rule every other invocation surface follows.

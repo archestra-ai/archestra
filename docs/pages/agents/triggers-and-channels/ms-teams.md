@@ -2,7 +2,7 @@
 title: MS Teams
 description: Connect Archestra agents to Microsoft Teams channels
 order: 4
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -92,6 +92,7 @@ They come first, before the agent's own instructions. They add to what the agent
 - **Welcome message:** the bot DMs a new person a sign-up link, or a sign-in link when you use [SSO](/docs/admin/identity/sso). To turn it off, set [`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED).
 - **Files:** the agent reads images, PDFs, and text files such as CSV, JSON, and Markdown. With a [code sandbox](/docs/agents#code-sandbox), it can open other files too, such as ZIP archives.
 - **File limits:** 20 files per message, 10 MB per file, 25 MB in total. Archestra skips larger files without a warning.
+- **Files from agents:** [`post_thread_file`](/docs/reference/archestra-mcp-server#post_thread_file) and [`post_run_file`](/docs/reference/archestra-mcp-server#post_run_file) save files in the channel's SharePoint folder and post an **Open file** card as the bot. The configured Graph application needs [access to the channel's file folder](https://learn.microsoft.com/en-us/graph/api/channel-get-filesfolder?view=graph-rest-1.0) and [permission to upload files](https://learn.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0). These tools do not upload files to personal or group chats.
 
 ## Troubleshooting
 

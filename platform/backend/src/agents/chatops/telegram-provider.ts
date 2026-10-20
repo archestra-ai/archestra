@@ -25,6 +25,7 @@ import {
   CHATOPS_ATTACHMENT_LIMITS,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "./constants";
+import { ChatOpsFileUploadError } from "./file-upload-error";
 import {
   errorMessage,
   formatApprovalReviewText,
@@ -245,6 +246,54 @@ class TelegramProvider implements ChatOpsProvider {
       if (!firstId) firstId = id;
     }
     return firstId;
+  }
+
+  async uploadFileToThread(options: {
+    channelId: string;
+    threadId: string;
+    filename: string;
+    data: Buffer;
+    comment?: string;
+  }): Promise<void> {
+    // For plain chats the manager uses the chat ID as the completion target;
+    // forum topics use Telegram's numeric message_thread_id instead.
+    const topicId =
+      options.threadId === options.channelId ? undefined : options.threadId;
+    if (topicId && !/^[1-9]\d*$/.test(topicId)) {
+      throw new ChatOpsFileUploadError(
+        "Invalid Telegram topic for file upload",
+      );
+    }
+    if (options.comment && [...options.comment].length > 1024) {
+      throw new ChatOpsFileUploadError(
+        "Telegram file captions are limited to 1024 characters. Shorten the comment and retry.",
+      );
+    }
+    // Telegram renders MP4 uploads as playable videos. Other formats remain
+    // documents, preserving the original bytes without photo recompression.
+    const isVideo = options.filename.toLowerCase().endsWith(".mp4");
+    const field = isVideo ? "video" : "document";
+    const form = new FormData();
+    form.set("chat_id", options.channelId);
+    if (topicId) form.set("message_thread_id", topicId);
+    if (options.comment) form.set("caption", options.comment);
+    if (isVideo) form.set("supports_streaming", "true");
+    form.set(
+      field,
+      new Blob([new Uint8Array(options.data)], {
+        type: isVideo ? "video/mp4" : "application/octet-stream",
+      }),
+      options.filename,
+    );
+    // Do not retry a failed send as another media type: a timeout can occur
+    // after delivery, and retrying would publish a duplicate.
+    const message = await this.callApi<TelegramMessage>(
+      isVideo ? "sendVideo" : "sendDocument",
+      form,
+    );
+    if (!message?.message_id) {
+      throw new Error("Telegram did not confirm file delivery");
+    }
   }
 
   async addApprovalRequestForm(
@@ -1039,15 +1088,19 @@ class TelegramProvider implements ChatOpsProvider {
    */
   private async callApi<T = unknown>(
     method: string,
-    params?: Record<string, unknown>,
+    params?: Record<string, unknown> | FormData,
     signal?: AbortSignal,
   ): Promise<T> {
     const response = await fetch(
       `${TELEGRAM_API_BASE}/bot${this.config.botToken}/${method}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        ...(params && { body: JSON.stringify(params) }),
+        ...(params instanceof FormData
+          ? { body: params }
+          : {
+              headers: { "Content-Type": "application/json" },
+              ...(params && { body: JSON.stringify(params) }),
+            }),
         ...(signal && { signal }),
       },
     );
@@ -1057,7 +1110,7 @@ class TelegramProvider implements ChatOpsProvider {
       error_code?: number;
       description?: string;
     };
-    if (!body.ok) {
+    if (!response.ok || !body.ok) {
       throw new Error(
         `Telegram ${method} failed: ${body.error_code ?? response.status} ${body.description ?? ""}`.trim(),
       );

@@ -10,6 +10,7 @@ import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { ChatOpsFileUploadError } from "@/agents/chatops/file-upload-error";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
@@ -963,6 +964,33 @@ describe("run tools", () => {
       "does not report to a messaging-channel thread",
     );
     expect(upload).not.toHaveBeenCalled();
+    upload.mockRestore();
+  });
+
+  test("post_run_file returns actionable provider failures without claiming delivery", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+    });
+    const upload = vi
+      .spyOn(chatOpsManager, "uploadFileToBindingThread")
+      .mockRejectedValue(
+        new ChatOpsFileUploadError(
+          "Telegram file captions are limited to 1024 characters.",
+        ),
+      );
+    const result = await executeArchestraTool(
+      TOOL_POST_RUN_FILE_FULL_NAME,
+      {
+        task_id: task.id,
+        filename: "report.pdf",
+        content_base64: Buffer.from("report").toString("base64"),
+      },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("1024 characters");
+    expect(result.structuredContent).not.toMatchObject({ success: true });
     upload.mockRestore();
   });
 

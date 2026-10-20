@@ -2,7 +2,7 @@
 title: Telegram
 description: Connect Archestra agents to Telegram chats and groups
 order: 5
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-20
 ---
 
 Message a Telegram bot, and an Archestra agent answers. It works in direct messages and in groups. It needs only a bot token: no public URL, webhook, or tunnel.
@@ -68,7 +68,7 @@ Then the agent joins the talk. It always answers mentions and replies to its own
 - **Memory:** Telegram bots cannot read chat history, so Archestra keeps it. A group shares one history. See [Conversation History](/docs/agents/triggers-and-channels#conversation-history).
 - **Gaps:** the history holds only messages the bot received. Group messages sent while privacy was on are not in it.
 - **New messages win:** a message sent while the bot types cancels that answer. The bot then answers your latest message.
-- **Files:** photos and documents reach the agent, up to 10 MB each.
+- **Files:** photos and documents reach the agent, up to 10 MB each. Agents can return files through [`post_thread_file`](/docs/reference/archestra-mcp-server#post_thread_file) or [`post_run_file`](/docs/reference/archestra-mcp-server#post_run_file), using the same bot in the originating chat or topic. MP4 files appear as videos; other files appear as documents. Captions are limited to 1,024 characters.
 - **One token, one consumer:** do not use the bot token in another system. With several backend replicas, one of them receives the messages.
 
 ## Troubleshooting

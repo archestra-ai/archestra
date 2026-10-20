@@ -16,11 +16,13 @@ import {
 } from "@/sandbox-runtime/sandbox-runtime-service";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 // Only the container and messaging-provider boundaries are stubbed. Tool
 // admission, sandbox ownership, file limits and extraction run as production code.
 describe("post_thread_file", () => {
+  setupTestCacheManager();
   let context: ArchestraContext & { organizationId: string; userId: string };
   const bytes = Buffer.from([0, 255, 128, 42]);
 
@@ -239,7 +241,7 @@ describe("post_thread_file", () => {
     expect(chatOpsManager.uploadFileToBindingThread).not.toHaveBeenCalled();
   });
 
-  test("explains that Teams file posting is unsupported", async () => {
+  test("explains missing Teams routing instead of claiming file delivery", async () => {
     const binding = await ChatOpsChannelBindingModel.create({
       organizationId: context.organizationId,
       agentId: context.agent.id,
@@ -264,9 +266,8 @@ describe("post_thread_file", () => {
     });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain(
-      "File uploads are not supported for Microsoft Teams",
+      "Teams file delivery needs a recent message",
     );
-    expect(JSON.stringify(result.content)).toContain("Currently only Slack");
     expect(result.structuredContent).not.toMatchObject({ success: true });
   });
 

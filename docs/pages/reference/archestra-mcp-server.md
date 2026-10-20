@@ -443,7 +443,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
-Additional access requirement: Requires an authenticated messaging-channel conversation and a file in its own sandbox. The channel, thread, and bot identity come from that conversation; they cannot be supplied as tool arguments. Currently supported by the Slack provider; Teams and Telegram file uploads are not implemented.
+Additional access requirement: Requires an authenticated messaging-channel conversation and a file in its own sandbox. The channel, thread, and bot identity come from that conversation; they cannot be supplied as tool arguments. Supports Slack, Telegram, and Teams channel threads. Teams requires Graph write access to the channel's SharePoint folder and posts a file card. Teams personal/group chats are unsupported.
 
 ##### Input
 
@@ -1554,7 +1554,7 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 | `list_agent_runs` | List recent runs across one or more accessible Agents for a read-only operations dashboard. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `steer_run` | Interject one message into a live run's container session — a course correction without stopping the work. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `cancel_run` | Stop an active run. | [`agent:read`](/docs/reference/permissions#agent:read) |
-| `post_run_file` | Upload a file into the messaging-channel thread a run reports to — a demo recording, for example — so it renders natively there (Slack plays video uploads inline). | [`agent:read`](/docs/reference/permissions#agent:read) |
+| `post_run_file` | Deliver a file to the messaging-channel thread a run reports to using the bot. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `transfer_credential` | Give an Agent Runtime Agent a credential, so a handed-over task can use the CLI authentication the local session was using. | [`credential:create`](/docs/reference/permissions#credential:create) |
 
 #### delete_workspace

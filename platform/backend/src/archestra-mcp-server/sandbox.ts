@@ -814,8 +814,11 @@ const registry = defineArchestraTools([
     description:
       "Upload a file from the foreground agent's sandbox to the current messaging " +
       "thread using that conversation's bot identity. Use this to deliver a subagent's " +
-      "video, image, or document. Currently supports Slack; Teams and Telegram uploads " +
-      "are not implemented. For an Agent Runtime subagent's file, have it save under " +
+      "video, image, or document. Supports Slack, Telegram, and Teams channel threads. " +
+      "Teams saves the file in the channel's SharePoint folder and posts a bot file card; " +
+      "Graph write access is required. Teams personal/group chats are unsupported. " +
+      "Telegram captions are limited to 1024 characters. " +
+      "For an Agent Runtime subagent's file, have it save under " +
       "/home/node/workspace, then call transfer_workspace_file with its task_id, " +
       "direction='download', a workspace-relative path, and " +
       "local_path='/home/sandbox/artifacts/<filename>'. If pending, retry later. " +

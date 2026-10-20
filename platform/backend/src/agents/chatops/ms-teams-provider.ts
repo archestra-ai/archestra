@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ClientSecretCredential } from "@azure/identity";
 import { AzureIdentityAuthenticationProvider } from "@microsoft/kiota-authentication-azure";
 import {
@@ -59,6 +60,7 @@ import {
   CHATOPS_TEAM_CACHE,
   CHATOPS_THREAD_HISTORY,
 } from "./constants";
+import { ChatOpsFileUploadError } from "./file-upload-error";
 import {
   errorMessage,
   formatApprovalReviewText,
@@ -79,6 +81,7 @@ class MSTeamsProvider implements ChatOpsProvider {
   private adapter: CloudAdapter | null = null;
   private authorize: ReturnType<typeof authorizeJWT> | null = null;
   private graphClient: GraphServiceClient | null = null;
+  private graphCredential: ClientSecretCredential | null = null;
   private eventHandler: ChatOpsEventHandler | null = null;
   private config: MsTeamsDbConfig;
 
@@ -155,6 +158,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         graph.clientId,
         graph.clientSecret,
       );
+      this.graphCredential = credential;
       const authProvider = new AzureIdentityAuthenticationProvider(credential, [
         "https://graph.microsoft.com/.default",
       ]);
@@ -172,6 +176,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     this.adapter = null;
     this.authorize = null;
     this.graphClient = null;
+    this.graphCredential = null;
     this.eventHandler = null;
     logger.info("[MSTeamsProvider] Cleaned up");
   }
@@ -295,7 +300,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     // stream: a quoted reply there still carries a replyToId, which must not
     // split the chat into separate sessions.
     const threadId = isTeamsChannel(activity)
-      ? extractThreadId(activity)
+      ? (extractThreadId(activity) ?? activity.id)
       : undefined;
     const conversationId = activity.conversation?.id;
     const isThreadReply =
@@ -505,6 +510,158 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     return messageId;
+  }
+
+  async uploadFileToThread(
+    options: Parameters<NonNullable<ChatOpsProvider["uploadFileToThread"]>>[0],
+  ): Promise<void> {
+    const ref = options.conversationReference as
+      | ConversationReference
+      | undefined;
+    if (!ref?.serviceUrl || !ref.conversation?.id) {
+      throw new ChatOpsFileUploadError(
+        "Teams file delivery needs a recent message in this conversation. Send a new message to the bot and retry.",
+      );
+    }
+    if (ref.conversation.conversationType !== "channel") {
+      throw new ChatOpsFileUploadError(
+        "Teams file uploads currently support channel threads only. Personal and group chats need a separate file-consent or storage flow.",
+      );
+    }
+    if (!this.adapter || !this.graphClient || !this.graphCredential) {
+      throw new ChatOpsFileUploadError(
+        "Teams channel file uploads require the bot and its Microsoft Graph credentials to be configured, with write access to the channel's files.",
+      );
+    }
+    // Reject unsupported names before any storage side effect. Prefixing a UUID
+    // below prevents one deliverable from replacing a previous channel file.
+    if (
+      !options.filename ||
+      /["*:<>?\\/|]/.test(options.filename) ||
+      /[. ]$/.test(options.filename) ||
+      [...options.filename].some((character) => character.charCodeAt(0) < 32)
+    ) {
+      throw new ChatOpsFileUploadError(
+        "This filename is not supported by SharePoint. Use a plain filename without reserved characters or a trailing dot or space.",
+      );
+    }
+    const teamId =
+      options.workspaceId && isUuid(options.workspaceId)
+        ? options.workspaceId
+        : await this.lookupTeamIdFromChannel(
+            options.channelId,
+            options.workspaceId ?? undefined,
+          );
+    if (!teamId) {
+      throw new ChatOpsFileUploadError(
+        "Could not resolve this Teams channel's team. Check the bot's Graph access to the team.",
+      );
+    }
+    let fileUrl: string;
+    try {
+      // Use this channel's filesFolder, including private/shared channels.
+      // Never fall back to the team's default drive or create a sharing link.
+      const folder = await this.graphClient.teams
+        .byTeamId(teamId)
+        .channels.byChannelId(options.channelId)
+        .filesFolder.get();
+      const driveId = folder?.parentReference?.driveId;
+      if (!folder?.id || !driveId) {
+        throw new ChatOpsFileUploadError(
+          "Teams did not return a file folder for this channel. Open its Files tab to provision it, then retry.",
+        );
+      }
+      const name = `${randomUUID()}-${options.filename}`;
+      const token = await this.graphCredential.getToken(
+        "https://graph.microsoft.com/.default",
+      );
+      const response = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(folder.id)}:/${encodeURIComponent(name)}:/content`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token.token}`,
+            "Content-Type": "application/octet-stream",
+          },
+          body: new Uint8Array(options.data),
+          redirect: "error",
+          signal: AbortSignal.timeout(120_000),
+        },
+      );
+      if (response.status === 401 || response.status === 403) {
+        throw new ChatOpsFileUploadError(
+          "Teams could not write to this channel's files. Grant the configured Graph application write access to the channel's SharePoint storage.",
+        );
+      }
+      if (!response.ok) {
+        throw new Error(`Teams file upload failed (HTTP ${response.status})`);
+      }
+      const item = (await response.json()) as { webUrl?: string };
+      if (!item.webUrl || new URL(item.webUrl).protocol !== "https:") {
+        throw new Error("Teams file upload returned no HTTPS file URL");
+      }
+      fileUrl = item.webUrl;
+    } catch (error) {
+      if (error instanceof ChatOpsFileUploadError) throw error;
+      // Kiota errors expose responseStatusCode; do not return Graph's raw body.
+      const status = (error as { responseStatusCode?: number })
+        ?.responseStatusCode;
+      if (status === 401 || status === 403) {
+        throw new ChatOpsFileUploadError(
+          "Teams could not access this channel's files. Check the configured Graph application's file permissions.",
+        );
+      }
+      throw error;
+    }
+
+    let delivered = false;
+    try {
+      // Reuse the authenticated bot transport, preserving the visible sender.
+      // Graph stores the file; it does not post a message as a human account.
+      await this.adapter.continueConversation(
+        this.config.appId,
+        ref,
+        async (context) => {
+          const response = await context.sendActivity(
+            Activity.fromObject({
+              type: ActivityTypes.Message,
+              text: options.comment ?? "",
+              attachments: [
+                {
+                  contentType: "application/vnd.microsoft.card.adaptive",
+                  content: {
+                    type: "AdaptiveCard",
+                    version: "1.2",
+                    body: [
+                      {
+                        type: "TextBlock",
+                        text: options.filename,
+                        wrap: true,
+                      },
+                    ],
+                    actions: [
+                      {
+                        type: "Action.OpenUrl",
+                        title: "Open file",
+                        url: fileUrl,
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          );
+          delivered = Boolean(response?.id);
+        },
+      );
+      // The adapter's onTurnError can consume a failed send. A resolved
+      // continueConversation alone is not confirmation of delivery.
+      if (!delivered) throw new Error("Teams did not confirm card delivery");
+    } catch {
+      throw new ChatOpsFileUploadError(
+        `The file was saved to SharePoint, but delivery of its Teams card could not be confirmed. Do not upload it again automatically. Existing file: ${fileUrl}`,
+      );
+    }
   }
 
   async getThreadHistory(

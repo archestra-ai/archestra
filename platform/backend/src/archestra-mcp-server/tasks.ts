@@ -17,6 +17,7 @@ import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
+import { ChatOpsFileUploadError } from "@/agents/chatops/file-upload-error";
 import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth";
 import config, { getAppAssetBaseOrigin } from "@/config";
@@ -1206,9 +1207,11 @@ const registry = defineArchestraTools([
     shortName: TOOL_POST_RUN_FILE_SHORT_NAME,
     title: "Post Run File",
     description:
-      "Upload a file into the messaging-channel thread a run reports to — a demo recording, " +
-      "for example — so it renders natively there (Slack plays video uploads inline). Only " +
-      "runs delegated from a bound messaging channel have such a thread. " +
+      "Deliver a file to the messaging-channel thread a run reports to using the bot. " +
+      "Supports Slack, Telegram, and Teams channel threads. Teams saves the file in the " +
+      "channel's SharePoint folder and posts a bot file card; Graph write access is required. " +
+      "Teams personal/group chats are unsupported. Telegram captions are limited to 1024 " +
+      "characters. Only runs delegated from a bound messaging channel have such a thread. " +
       "For a foreground agent relaying a subagent's deliverable, transfer it into " +
       "the foreground sandbox and use post_thread_file instead. Protected runtime " +
       "uploads through this tool must originate from the producing runtime session.",
@@ -1292,6 +1295,8 @@ const registry = defineArchestraTools([
           "File posted to the run's thread.",
         );
       } catch (error) {
+        if (error instanceof ChatOpsFileUploadError)
+          return errorResult(error.message);
         return catchError(error, "posting the run file");
       }
     },

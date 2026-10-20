@@ -75,7 +75,7 @@ const groupLabel = new Map<ArchestraToolGroupId, string>(
  */
 const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
   post_thread_file:
-    "Requires an authenticated messaging-channel conversation and a file in its own sandbox. The channel, thread, and bot identity come from that conversation; they cannot be supplied as tool arguments. Currently supported by the Slack provider; Teams and Telegram file uploads are not implemented.",
+    "Requires an authenticated messaging-channel conversation and a file in its own sandbox. The channel, thread, and bot identity come from that conversation; they cannot be supplied as tool arguments. Supports Slack, Telegram, and Teams channel threads. Teams requires Graph write access to the channel's SharePoint folder and posts a file card. Teams personal/group chats are unsupported.",
   // Membership mutations gate on `team:read`, then require the caller to be an
   // organization-level team manager (holds `team:create`) OR an admin
   // (team-member role) of the target team.

@@ -429,13 +429,16 @@ export interface ChatOpsProvider {
   sendReply(options: ChatReplyOptions): Promise<string>;
 
   /**
-   * Upload a file into a channel thread so it renders natively (a playable
-   * video, a viewable image). Optional: providers without a file API omit it
-   * and callers surface a clear "unsupported" error instead.
+   * Deliver a file using the channel's bot. Slack/Telegram upload directly;
+   * Teams stores it in the channel's SharePoint folder and posts a file card.
+   * Providers without an implementation surface an "unsupported" error.
    */
   uploadFileToThread?(options: {
     channelId: string;
     threadId: string;
+    workspaceId?: string | null;
+    /** Trusted Teams routing captured from an authenticated incoming activity. */
+    conversationReference?: unknown;
     filename: string;
     data: Buffer;
     comment?: string;

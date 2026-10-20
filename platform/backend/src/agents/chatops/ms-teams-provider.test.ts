@@ -453,10 +453,10 @@ describe("MSTeamsProvider file attachment downloads", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  test("file-only message whose download fails is dropped (no empty turn)", async () => {
+  test("a file whose download fails reaches the agent as skipped, so it can say so", async () => {
     const provider = createProvider();
 
-    // The download fails (e.g. expired/oversized), so no attachment survives.
+    // The download fails (e.g. expired), so no attachment survives.
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
 
     const result = await provider.parseWebhookNotification(
@@ -473,7 +473,10 @@ describe("MSTeamsProvider file attachment downloads", () => {
       {},
     );
 
-    expect(result).toBeNull();
+    expect(result?.attachments).toBeUndefined();
+    expect(result?.skippedAttachments).toEqual([
+      { name: "report.pdf", reason: "download_failed" },
+    ]);
   });
 
   test("card-only message with empty text returns null (cards are not files)", async () => {

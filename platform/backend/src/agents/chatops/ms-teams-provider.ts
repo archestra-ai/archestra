@@ -313,8 +313,9 @@ class MSTeamsProvider implements ChatOpsProvider {
     const workspaceId = teamData?.aadGroupId || teamData?.id || null;
 
     // Download file attachments (skip Adaptive Cards and other non-file
-    // attachments). Current-message drops are intentionally not surfaced for
-    // Teams (unlike Slack) — only the delivered attachments are used.
+    // attachments). Files that could not be delivered are passed on as
+    // skipped, so the agent explains the miss instead of saying it sees
+    // nothing.
     const fileOutcomes = await this.downloadTeamsFiles(
       filterTeamsFileAttachments(activity.attachments),
       activity.serviceUrl,
@@ -322,11 +323,17 @@ class MSTeamsProvider implements ChatOpsProvider {
     const attachments = fileOutcomes.flatMap((o) =>
       o.status === "delivered" ? [o.attachment] : [],
     );
+    const skippedAttachments = fileOutcomes.flatMap((o) =>
+      o.status === "skipped" ? [o.skipped] : [],
+    );
 
-    // A file-only message (empty text) is kept only when a file actually
-    // survived download — oversized, expired, or failed downloads must not
-    // leave the bot answering an empty turn.
-    if (!cleanedText && attachments.length === 0) {
+    // A file-only message (empty text) is answered when a file was delivered
+    // or skipped: a skipped screenshot still deserves "I couldn't open it".
+    if (
+      !cleanedText &&
+      attachments.length === 0 &&
+      skippedAttachments.length === 0
+    ) {
       return null;
     }
 
@@ -358,6 +365,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         mentionedOthers: extractMentionedOthers(activity),
       },
       ...(attachments.length > 0 && { attachments }),
+      ...(skippedAttachments.length > 0 && { skippedAttachments }),
     };
   }
 

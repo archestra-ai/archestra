@@ -32,6 +32,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
@@ -2482,77 +2483,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetChatConversation,
-        description: "Get conversation with messages",
+        description:
+          "Get conversation with messages. With `tail`, only the last `tail` messages and the count of the earlier ones (`olderMessageCount`).",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          tail: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(CONVERSATION_TAIL_MAX)
+            .optional()
+            .describe("Return only the last N messages"),
+        }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (request, reply) => {
       const {
         params: { id },
-        user,
-        organizationId,
+        query: { tail },
       } = request;
-      const conversation = await findReadableConversationById({
-        conversationId: id,
-        userId: user.id,
-        organizationId,
-      });
-
-      if (!conversation) {
-        throw new ApiError(404, "Conversation not found");
-      }
-
-      // EncryptedChat: the model returned no message content (it cannot — the key
-      // only exists on this request). Decrypt here with the presented key, or
-      // return the locked shape for the tombstone. A wrong key is a 409.
-      if (conversation.encryptedChat) {
-        const keyInfo = await ConversationModel.getEncryptedChatKeyInfo(id);
-        const access = resolveEncryptedChatAccess({
-          request,
-          conversation: keyInfo ?? {
-            id,
-            encryptedChat: true,
-            encryptedChatDekFingerprint: null,
-            hasEscrow: false,
-          },
-        });
-        if (access.state === "unlocked") {
-          // Chat errors are loaded locked-safe by the model (it has no key),
-          // so re-read them here now that one is in hand.
-          const [rows, chatErrors] = await Promise.all([
-            MessageModel.findByConversation(id, access.key),
-            ConversationChatErrorModel.findByConversation(id, access.key),
-          ]);
-          conversation.messages = toConversationApiMessages(
-            rows,
-          ) as typeof conversation.messages;
-          conversation.chatErrors = chatErrors;
-        } else {
-          conversation.messages = [];
-          conversation.contentLocked = true;
-          return reply.send(conversation);
-        }
-      }
-
-      // Hook-run debug parts are persisted on every turn but only surfaced to
-      // admins while this conversation has debug mode on. Strip them otherwise
-      // so hook stdout/stderr/payload never reach a non-admin client. (When
-      // debug is off we skip the permission lookup entirely.)
-      const hooksDebugVisible =
-        config.hooks.enabled &&
-        conversation.hooksDebugEnabled &&
-        (await hasAnyAgentTypeAdminPermission({
-          userId: user.id,
-          organizationId,
-        }));
-      conversation.messages = stripHookRunParts(
-        conversation.messages as ChatMessage[],
-        { visible: hooksDebugVisible },
+      return reply.send(
+        await readConversationForRequest({ request, id, tail }),
       );
-
-      return reply.send(conversation);
     },
   );
 
@@ -4187,6 +4141,85 @@ export function resolveTitleUserInput(
   );
 }
 
+/**
+ * A conversation as `GET /api/chat/conversations/:id` returns it to the
+ * caller: 404 unless they may read it, an encrypted chat decrypted with the
+ * request's key (the full history) or locked without one, and hook-run debug
+ * parts kept only for an admin while debug mode is on. With `tail`, only the
+ * last `tail` messages and the count of the earlier ones.
+ */
+export async function readConversationForRequest(params: {
+  request: FastifyRequest;
+  id: string;
+  tail?: number;
+}): Promise<z.infer<typeof SelectConversationSchema>> {
+  const { request, id, tail } = params;
+  const { user, organizationId } = request;
+  const conversation = await findReadableConversationById({
+    conversationId: id,
+    userId: user.id,
+    organizationId,
+    tail,
+  });
+
+  if (!conversation) {
+    throw new ApiError(404, "Conversation not found");
+  }
+
+  // EncryptedChat: the model returned no message content (it cannot — the key
+  // only exists on this request). Decrypt here with the presented key, or
+  // return the locked shape for the tombstone. A wrong key is a 409.
+  if (conversation.encryptedChat) {
+    const keyInfo = await ConversationModel.getEncryptedChatKeyInfo(id);
+    const access = resolveEncryptedChatAccess({
+      request,
+      conversation: keyInfo ?? {
+        id,
+        encryptedChat: true,
+        encryptedChatDekFingerprint: null,
+        hasEscrow: false,
+      },
+    });
+    if (access.state === "unlocked") {
+      // Chat errors are loaded locked-safe by the model (it has no key),
+      // so re-read them here now that one is in hand.
+      const [rows, chatErrors] = await Promise.all([
+        MessageModel.findByConversation(id, access.key),
+        ConversationChatErrorModel.findByConversation(id, access.key),
+      ]);
+      // The key-holding read is the full history: a tail read does not
+      // apply to an encrypted chat.
+      conversation.messages = toConversationApiMessages(
+        rows,
+      ) as typeof conversation.messages;
+      delete conversation.olderMessageCount;
+      conversation.chatErrors = chatErrors;
+    } else {
+      conversation.messages = [];
+      conversation.contentLocked = true;
+      return conversation;
+    }
+  }
+
+  // Hook-run debug parts are persisted on every turn but only surfaced to
+  // admins while this conversation has debug mode on. Strip them otherwise
+  // so hook stdout/stderr/payload never reach a non-admin client. (When
+  // debug is off we skip the permission lookup entirely.)
+  const hooksDebugVisible =
+    config.hooks.enabled &&
+    conversation.hooksDebugEnabled &&
+    (await hasAnyAgentTypeAdminPermission({
+      userId: user.id,
+      organizationId,
+    }));
+  conversation.messages = stripHookRunParts(
+    conversation.messages as ChatMessage[],
+    { visible: hooksDebugVisible },
+  );
+
+  return conversation;
+}
+
 export function buildChatStopConditions(
   repeatTracker: ToolCallRepeatTracker,
   maxSteps: number = MAX_AGENT_STEPS,
@@ -4829,16 +4862,21 @@ function attachRequestAbortListeners(params: {
   return cleanup;
 }
 
+/** The largest `tail` a conversation read accepts. */
+const CONVERSATION_TAIL_MAX = 200;
+
 async function findReadableConversationById(params: {
   conversationId: string;
   userId: string;
   organizationId: string;
+  tail?: number;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
   return (
     (await ConversationModel.findAccessibleById({
       id: params.conversationId,
       userId: params.userId,
       organizationId: params.organizationId,
+      tail: params.tail,
       canReadOthersViaProject: () =>
         ResourcePermissions.allows({
           userId: params.userId,
@@ -4852,6 +4890,7 @@ async function findReadableConversationById(params: {
       conversationId: params.conversationId,
       userId: params.userId,
       organizationId: params.organizationId,
+      tail: params.tail,
     }))
   );
 }
@@ -4886,11 +4925,13 @@ async function findScheduleRunConversationForAdmin(params: {
   conversationId: string;
   userId: string;
   organizationId: string;
+  tail?: number;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
   if (!(await canReadScheduleRunConversation(params))) return null;
   return ConversationModel.findByIdInOrganization({
     id: params.conversationId,
     organizationId: params.organizationId,
+    tail: params.tail,
   });
 }
 

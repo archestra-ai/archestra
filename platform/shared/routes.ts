@@ -106,6 +106,7 @@ export const RouteId = {
   GetConfig: "getConfig",
   GetBootstrap: "getBootstrap",
   GetNewChatBootstrap: "getNewChatBootstrap",
+  GetConversationBootstrap: "getConversationBootstrap",
   GetPublicConfig: "getPublicConfig",
 
   // RUM Routes

@@ -1906,6 +1906,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Bundles the new-chat composer's reads; each part keeps its own
   // endpoint's checks.
   [RouteId.GetNewChatBootstrap]: {},
+  // The conversation part is the conversation read with its own checks.
+  [RouteId.GetConversationBootstrap]: {},
 
   // Site Notification Routes
   // Every signed-in user sees the active banner.

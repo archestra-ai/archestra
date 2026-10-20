@@ -101,17 +101,6 @@ export function mimeFromExtension(filename: string): string {
   return EXTENSION_MIMES[ext] ?? "application/octet-stream";
 }
 
-/**
- * The usual file extension for a mime type, for naming a file that arrived
- * without a name. Unknown types return `undefined`.
- */
-export function extensionFromMime(mime: string): string | undefined {
-  const normalized = mime.split(";")[0]?.trim().toLowerCase() ?? "";
-  return Object.entries(EXTENSION_MIMES).find(
-    ([, candidate]) => candidate === normalized,
-  )?.[0];
-}
-
 const EXTENSION_MIMES: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",

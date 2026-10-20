@@ -1081,11 +1081,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "label history dataset the native runtime appends",
   },
-  openappaRootOpeningsTable: {
-    audited: false,
-    reason:
-      "derived from the runtime's event log once per root; read to keep or retire annotators, never edited",
-  },
   startupMigrationsTable: {
     audited: false,
     reason:

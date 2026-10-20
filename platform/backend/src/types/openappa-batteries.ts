@@ -159,15 +159,11 @@ export type ServedComposition = z.infer<typeof ServedCompositionSchema>;
 
 export const EffectivePolicySchema = createSelectSchema(
   openappaEffectivePoliciesTable,
-)
-  // Unread since policy snapshots were removed; the column stays until the
-  // next release drops it.
-  .omit({ retainedAnnotators: true })
-  .extend({
-    compiledAt: z.coerce.date(),
-    lastErrorAt: z.coerce.date().nullable(),
-    served: ServedCompositionSchema.nullable(),
-  });
+).extend({
+  compiledAt: z.coerce.date(),
+  lastErrorAt: z.coerce.date().nullable(),
+  served: ServedCompositionSchema.nullable(),
+});
 
 export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
 

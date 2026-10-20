@@ -177,6 +177,10 @@ Pending reviews and rulings expire after ten minutes. They use the platform's sh
 
 Protected runtime tools accept only proxy-signed source proofs. Returned text is an admitted value for that run, not a raw transcript. Protected file downloads admit the pinned content before issuing a ticket. They refuse transformed content and files over 4 MiB. Direct owner downloads remain an authenticated human surface. A parent cannot publish another runtime's file through `post_run_file` without a supported external-egress crossing.
 
+To post a file from the workspace to the run's thread, call `post_run_file` with `path`, the file's workspace-relative path. The platform reads it from this run's workspace, so its bytes never pass through the model. Paths that leave the workspace, symlinks, directories, and files over 40 MB are refused.
+
+A session that a person superyelled, whose parent was superyelled, or that started while Guardrails enforcement was off gets no source proof, because Guardrails no longer check it. Its proofless calls to its own runtime tools are accepted. A governed session's proofless calls are refused, including a script that calls the gateway directly: make the call as a tool call from the run's model instead.
+
 Session and parent IDs must be 1 to 512 bytes with no control characters. The proxy rejects a malformed value with HTTP 400; the gateway answers with JSON-RPC error `-32600`.
 
 Guardrails failures:

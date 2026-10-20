@@ -1205,7 +1205,10 @@ const registry = defineArchestraTools([
     description:
       "Upload a file into the messaging-channel thread a run reports to — a demo recording, " +
       "for example — so it renders natively there (Slack plays video uploads inline). Only " +
-      "runs delegated from a bound messaging channel have such a thread.",
+      "runs delegated from a bound messaging channel have such a thread. " +
+      "For a foreground agent relaying a subagent's deliverable, transfer it into " +
+      "the foreground sandbox and use post_thread_file instead. Protected runtime " +
+      "uploads through this tool must originate from the producing runtime session.",
     schema: z.object({
       task_id: z.string().uuid(),
       filename: z

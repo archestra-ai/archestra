@@ -3,7 +3,7 @@ title: Hand Off Work
 description: Hand a task from your coding agent to Agent Runtime, then bring the result back
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,6 +30,12 @@ The skill drives these tools on the [MCP Gateway](/docs/mcp/gateway). You can al
 - **Read or write files** without starting a turn: [`read_workspace_file`](/docs/reference/archestra-mcp-server#read_workspace_file) and [`write_workspace_file`](/docs/reference/archestra-mcp-server#write_workspace_file).
 
 Only the person who started a run can steer it or use its files.
+
+## Post a Worker's File to Slack
+
+The agent answering in Slack can post a worker's file with its own bot identity. Use [`transfer_workspace_file`](/docs/reference/archestra-mcp-server#transfer_workspace_file) to authorize the download, execute the returned command with [`run_command`](/docs/reference/archestra-mcp-server#run_command), then call [`post_thread_file`](/docs/reference/archestra-mcp-server#post_thread_file) with the downloaded sandbox path. The destination is the current Slack thread.
+
+If the file is missing after an approval pause or a new turn, repeat the transfer into the current sandbox. Transfer and publication remain subject to guardrails.
 
 ## Hand Off With Guardrails On
 

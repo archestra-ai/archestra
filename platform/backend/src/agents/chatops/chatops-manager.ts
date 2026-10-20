@@ -104,6 +104,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   THREAD_MUTE_HINT,
 } from "./constants";
+import { ChatOpsFileUploadError } from "./file-upload-error";
 import MSTeamsProvider from "./ms-teams-provider";
 import { sendRuntimeReplyWithAnchor } from "./runtime-reply-anchor";
 import SlackProvider from "./slack-provider";
@@ -248,18 +249,22 @@ export class ChatOpsManager {
   }): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
-      throw new Error("The task's messaging-channel binding no longer exists");
+      throw new ChatOpsFileUploadError(
+        "This conversation's messaging-channel binding no longer exists",
+      );
     }
     const provider = this.providerForBinding(
       binding.provider,
       params.pinnedAgentId,
     );
     if (!provider?.isConfigured()) {
-      throw new Error(`The ${binding.provider} provider is not configured`);
+      throw new ChatOpsFileUploadError(
+        `The ${provider?.displayName ?? binding.provider} bot is not configured for file uploads`,
+      );
     }
     if (!provider.uploadFileToThread) {
-      throw new Error(
-        `The ${binding.provider} provider does not support file uploads`,
+      throw new ChatOpsFileUploadError(
+        `File uploads are not supported for ${provider.displayName}. Currently only Slack supports posting files.`,
       );
     }
     await provider.uploadFileToThread({

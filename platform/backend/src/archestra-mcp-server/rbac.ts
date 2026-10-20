@@ -270,6 +270,7 @@ export const TOOL_PERMISSIONS: Record<
   // mounts a skill into the sandbox when the caller also has agent:read.
   run_command: { resource: "agent", action: "read" },
   download_file: { resource: "agent", action: "read" },
+  post_thread_file: { resource: "agent", action: "read" },
   upload_file: { resource: "agent", action: "read" },
 
   // Runs are an Agent capability, including when an Agent opts into

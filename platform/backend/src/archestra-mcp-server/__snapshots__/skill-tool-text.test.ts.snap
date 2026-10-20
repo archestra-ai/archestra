@@ -517,6 +517,58 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
 }
 `;
 
+exports[`skill and sandbox tool text > archestra__post_thread_file 1`] = `
+{
+  "description": "Upload a file from the foreground agent's sandbox to the current messaging thread using that conversation's bot identity. Use this to deliver a subagent's video, image, or document. Currently supports Slack; Teams and Telegram uploads are not implemented. For an Agent Runtime subagent's file, have it save under /home/node/workspace, then call transfer_workspace_file with its task_id, direction='download', a workspace-relative path, and local_path='/home/sandbox/artifacts/<filename>'. If pending, retry later. Use run_command to create the destination directory and execute the returned download command. After it succeeds, call this tool with that sandbox path. Files already in this sandbox can be posted directly. The destination is fixed by the current conversation. Maximum 40 MiB, or the deployment's lower sandbox file limit. If the file is missing after an approval pause or a new turn, repeat the transfer into the current sandbox. Only report delivery after success.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "comment": {
+        "description": "Message to accompany the file.",
+        "maxLength": 2000,
+        "type": "string",
+      },
+      "filename": {
+        "description": "Upload filename. Defaults to the file's basename.",
+        "maxLength": 120,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]*$",
+        "type": "string",
+      },
+      "path": {
+        "description": "File path in the foreground sandbox, e.g. /home/sandbox/artifacts/demo.mp4. Relative paths start at /home/sandbox.",
+        "maxLength": 4096,
+        "minLength": 1,
+        "type": "string",
+      },
+      "target": {
+        "additionalProperties": false,
+        "description": "Omit for the current sandbox, or select another sandbox owned by this conversation.",
+        "properties": {
+          "id": {
+            "description": "An existing sandbox id from this conversation.",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+        ],
+        "type": "object",
+      },
+    },
+    "required": [
+      "path",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__post_thread_file",
+  "title": "Post Thread File",
+}
+`;
+
 exports[`skill and sandbox tool text > archestra__read_file 1`] = `
 {
   "description": "Read a persistent file directly, without copying it into the sandbox. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can view them. Identify the file by \`id\` (the \`id\` or \`ref\` from search_files / save_file) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. Pass project_id to read a project's file — including its instructions.md — which is how you reach them outside a chat. For other binary types, copy the file into the sandbox with upload_file and inspect it with run_command.",

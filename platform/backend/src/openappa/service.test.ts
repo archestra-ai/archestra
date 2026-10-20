@@ -2609,6 +2609,52 @@ describe("APPA feature boundary", () => {
     ]);
   });
 
+  test.each([
+    false,
+    true,
+  ])("checks foreground file publication before dispatch (wrapped=%s)", async (wrapped) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "The thread is outside the session's readers",
+      }),
+    );
+    const args = { path: "/home/sandbox/artifacts/demo.mp4" };
+    const decision = await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "publish-file",
+          name: wrapped ? "archestra__run_tool" : "archestra__post_thread_file",
+          arguments: wrapped
+            ? { tool_name: "archestra__post_thread_file", tool_args: args }
+            : args,
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+    expect(decision).toEqual([
+      {
+        kind: "deny",
+        feedback: "The thread is outside the session's readers",
+        offers: undefined,
+        recorded: true,
+      },
+    ]);
+    expect(
+      JSON.parse(
+        native.dispatchHook.mock.calls[
+          native.dispatchHook.mock.calls.length - 1
+        ][0],
+      ),
+    ).toMatchObject({
+      event: "tool_call",
+      tool: "archestra__post_thread_file",
+      arguments: args,
+      spawn: false,
+    });
+  });
+
   test("checks run_command reached through run_tool as run_command itself", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "allow_call" }),

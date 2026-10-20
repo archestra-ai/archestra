@@ -1073,15 +1073,13 @@ test("the summary counts every file while search narrows only the table", async 
     await screen.findByRole("button", { name: "6 passing" }),
   ).toBeVisible();
   expect(screen.getByRole("button", { name: "6 failing" })).toBeVisible();
-  // Every file is listed: no page holds any of them back.
-  for (const file of files)
-    expect(screen.getByRole("link", { name: file.path })).toBeVisible();
-  fireEvent.change(
-    screen.getByRole("textbox", { name: "Search validations" }),
-    {
-      target: { value: "scenario-001" },
-    },
-  );
+  // The table pages its rows; the summary still counts every file.
+  expect(
+    screen.getAllByRole("link", { name: /^scenario-\d{3}\.appa$/ }),
+  ).toHaveLength(10);
+  fireEvent.change(screen.getByPlaceholderText(/Search validations/), {
+    target: { value: "scenario-001" },
+  });
   await waitFor(() =>
     expect(
       screen.queryByRole("link", { name: "scenario-012.appa" }),
@@ -1291,12 +1289,9 @@ test("Run all submits every file even while the table is searched", async () => 
     screen.getByRole("menuitem", { name: "Explain validations" }),
   ).toBeVisible();
   await userEvent.keyboard("{Escape}");
-  fireEvent.change(
-    screen.getByRole("textbox", { name: "Search validations" }),
-    {
-      target: { value: "scenario-12" },
-    },
-  );
+  fireEvent.change(screen.getByPlaceholderText(/Search validations/), {
+    target: { value: "scenario-12" },
+  });
   await waitFor(() =>
     expect(
       screen.queryByRole("link", { name: "scenario-1.appa" }),
@@ -1332,14 +1327,14 @@ test("row deletion persists only after confirmation", async () => {
   );
   showPage();
   await screen.findByRole("link", { name: scenario.path });
-  await chooseRowAction(scenario.path, "Delete");
+  await clickRowAction(`Delete ${scenario.path}`);
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });
   expect(saved).toBeUndefined();
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   expect(screen.getByRole("link", { name: scenario.path })).toBeVisible();
-  await chooseRowAction(scenario.path, "Delete");
+  await clickRowAction(`Delete ${scenario.path}`);
   fireEvent.click(
     within(await screen.findByRole("dialog")).getByRole("button", {
       name: "Delete",
@@ -1380,7 +1375,7 @@ test.each([
   await screen.findByRole("link", { name: scenario.path });
   expect(
     screen.queryByRole("button", {
-      name: `More actions for ${scenario.path}`,
+      name: `Delete ${scenario.path}`,
     }),
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Run all" })).toHaveProperty(
@@ -1398,9 +1393,9 @@ test("last run opens the recorded run in the runner panel; history returns to th
   }));
   server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json(runs)));
   showPage();
-  expect(
-    await screen.findByRole("textbox", { name: "Search validations" }),
-  ).toHaveValue("scenario");
+  expect(await screen.findByPlaceholderText(/Search validations/)).toHaveValue(
+    "scenario",
+  );
   fireEvent.click(await findLastRun());
   // The newest run opens in place; the list stays where it was.
   const panel = await findRunPanel();
@@ -1715,7 +1710,7 @@ test("file save and deletion preserve the other persisted files", async () => {
   );
   clickBack();
   await screen.findByRole("link", { name: scenario.path });
-  await chooseRowAction(scenario.path, "Delete");
+  await clickRowAction(`Delete ${scenario.path}`);
   fireEvent.click(
     within(await screen.findByRole("dialog")).getByRole("button", {
       name: "Delete",
@@ -1938,7 +1933,7 @@ test("inventory rows open files while row actions stay independent", async () =>
   // Navigation keeps the suite provider mounted, so reuse its completed
   // inspection instead of expecting a new mutation after returning to the list.
   await waitForInspection();
-  await chooseRowAction(scenario.path, "Delete");
+  await clickRowAction(`Delete ${scenario.path}`);
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });
@@ -1981,7 +1976,7 @@ test("failed confirmed deletion retains the file and allows retry", async () => 
   );
   showPage();
   await screen.findByRole("link", { name: scenario.path });
-  await chooseRowAction(scenario.path, "Delete");
+  await clickRowAction(`Delete ${scenario.path}`);
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });
@@ -2260,22 +2255,6 @@ async function renameFile(next: string) {
   );
 }
 
-async function chooseRowAction(path: string, action: string) {
-  // A late re-render can still swap the row's actions and close the menu
-  // under load, so open it until the action is there to click.
-  await waitFor(
-    async () => {
-      if (!screen.queryByRole("menu"))
-        await userEvent.click(
-          screen.getByRole("button", { name: `More actions for ${path}` }),
-        );
-      expect(screen.getByRole("menuitem", { name: action })).toBeVisible();
-    },
-    { timeout: 5000 },
-  );
-  await userEvent.click(screen.getByRole("menuitem", { name: action }));
-}
-
 async function openRunHistory() {
   await userEvent.click(
     screen.getByRole("button", { name: "More validation actions" }),
@@ -2375,4 +2354,15 @@ function showPage(
       </TooltipProvider>
     </QueryClientProvider>,
   );
+}
+
+/**
+ * The table settles its column widths after the first paint and re-renders
+ * its rows once, so find and click the action in one step.
+ */
+async function clickRowAction(name: string) {
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name }));
 }

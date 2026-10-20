@@ -130,7 +130,9 @@ The server caches the most-active list for at most 30 seconds, including load ti
 
 Use `archestra.resources` and `archestra.worker.resources` to size pods. Diagnostics storage shared by concurrent pods requires a compatible `ReadWriteMany` volume; check `archestra.diagnostics` in the selected chart's values.
 
-To survive a zone outage, spread replicas across zones with `archestra.topologySpreadConstraints` (web) and `archestra.worker.topologySpreadConstraints` (workers). `archestra.affinity` and `archestra.worker.affinity` take standard Kubernetes affinity rules. Select web pods by `app.kubernetes.io/component: web` and workers by `app.kubernetes.io/component: worker`, so each Deployment spreads on its own and web and worker pods can share a zone:
+The web and worker pods share `archestra.nodeSelector`, `archestra.tolerations`, `archestra.affinity`, `archestra.topologySpreadConstraints` and `archestra.podAnnotations`.
+
+To survive a zone outage, spread replicas across zones with `archestra.topologySpreadConstraints`. Leave out `labelSelector` and each Deployment counts only its own pods, so web pods and worker pods each spread evenly and can share a zone:
 
 ```yaml
 archestra:
@@ -138,22 +140,9 @@ archestra:
     - maxSkew: 1
       topologyKey: topology.kubernetes.io/zone
       whenUnsatisfiable: DoNotSchedule
-      labelSelector:
-        matchLabels:
-          app.kubernetes.io/instance: archestra # your release name
-          app.kubernetes.io/component: web
-  worker:
-    topologySpreadConstraints:
-      - maxSkew: 1
-        topologyKey: topology.kubernetes.io/zone
-        whenUnsatisfiable: DoNotSchedule
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/instance: archestra # your release name
-            app.kubernetes.io/component: worker
 ```
 
-Workers do not inherit the web affinity or spread settings.
+For pod anti-affinity, add `matchLabelKeys: [app.kubernetes.io/component]` to the term so web and worker pods are counted separately (Kubernetes 1.31 and later).
 
 ### Accessing the Platform
 

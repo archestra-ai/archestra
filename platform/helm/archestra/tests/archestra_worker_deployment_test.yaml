@@ -190,40 +190,9 @@ tests:
           path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
           value: "true"
 
-  - it: worker deployment merges global and worker pod annotations
-    set:
-      archestra.podAnnotations:
-        sidecar.istio.io/inject: "true"
-      archestra.worker.podAnnotations:
-        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
-    asserts:
-      - equal:
-          path: spec.template.metadata.annotations["sidecar.istio.io/inject"]
-          value: "true"
-      - equal:
-          path: spec.template.metadata.annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"]
-          value: "true"
-
   - it: worker deployment forces prometheus scrape port and path to worker metrics endpoint
     set:
       archestra.podAnnotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9050"
-        prometheus.io/path: "/custom"
-    asserts:
-      - equal:
-          path: spec.template.metadata.annotations["prometheus.io/scrape"]
-          value: "true"
-      - equal:
-          path: spec.template.metadata.annotations["prometheus.io/port"]
-          value: "9000"
-      - equal:
-          path: spec.template.metadata.annotations["prometheus.io/path"]
-          value: "/metrics"
-
-  - it: worker-specific prometheus scrape annotation also forces worker metrics endpoint
-    set:
-      archestra.worker.podAnnotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9050"
         prometheus.io/path: "/custom"
@@ -391,9 +360,16 @@ tests:
             name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
             value: "my-release"
 
-  - it: worker renders its own affinity and topologySpreadConstraints in the pod spec
+  - it: worker inherits nodeSelector, tolerations and affinity from archestra
     set:
-      archestra.worker.affinity:
+      archestra.nodeSelector:
+        karpenter.sh/nodepool: platform
+      archestra.tolerations:
+        - key: dedicated
+          operator: Equal
+          value: platform
+          effect: NoSchedule
+      archestra.affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
@@ -401,55 +377,56 @@ tests:
                   - key: kubernetes.io/os
                     operator: In
                     values: [linux]
-      archestra.worker.topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: ScheduleAnyway
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/instance: RELEASE-NAME
-              app.kubernetes.io/component: worker
     asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            karpenter.sh/nodepool: platform
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: dedicated
       - equal:
           path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
           value: kubernetes.io/os
+
+  # The shared constraints apply to both Deployments, so one without a
+  # labelSelector must select worker pods here, not web pods.
+  - it: worker fills in its own selector for shared topologySpreadConstraints
+    release:
+      name: my-release
+    set:
+      archestra.topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+    asserts:
       - equal:
           path: spec.template.spec.topologySpreadConstraints
           value:
             - maxSkew: 1
               topologyKey: topology.kubernetes.io/zone
-              whenUnsatisfiable: ScheduleAnyway
+              whenUnsatisfiable: DoNotSchedule
               labelSelector:
                 matchLabels:
-                  app.kubernetes.io/instance: RELEASE-NAME
+                  app.kubernetes.io/name: archestra-platform-worker
+                  app.kubernetes.io/instance: my-release
                   app.kubernetes.io/component: worker
 
-  # Web constraints select web pods. Applied to workers, they would place each
-  # worker by where web pods run, so the worker must not fall back to them the
-  # way it does for nodeSelector and tolerations.
-  - it: worker does not inherit the web affinity or topologySpreadConstraints
+  - it: worker keeps an explicit labelSelector on shared topologySpreadConstraints
     set:
-      archestra.affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                topologyKey: kubernetes.io/hostname
-                labelSelector:
-                  matchLabels:
-                    app.kubernetes.io/component: web
       archestra.topologySpreadConstraints:
         - maxSkew: 1
-          topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: DoNotSchedule
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
-              app.kubernetes.io/component: web
+              app.kubernetes.io/part-of: archestra
     asserts:
-      - isNull:
-          path: spec.template.spec.affinity
-      - isNull:
-          path: spec.template.spec.topologySpreadConstraints
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].labelSelector
+          value:
+            matchLabels:
+              app.kubernetes.io/part-of: archestra
 
   - it: worker pods carry the worker component label
     asserts:

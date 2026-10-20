@@ -215,6 +215,6 @@ spec:
       {{- end }}
       {{- with .Values.archestra.topologySpreadConstraints }}
       topologySpreadConstraints:
-        {{- toYaml . | nindent 8 }}
+        {{- include "archestra-platform.topologySpreadConstraints" (dict "constraints" . "selectorLabels" (include "archestra-platform.selectorLabels" $)) | nindent 8 }}
       {{- end }}
       {{- include "archestra-platform.volumes" . | nindent 6 }}

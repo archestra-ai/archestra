@@ -1,5 +1,5 @@
 {{- if and .Values.archestra.worker.enabled (ne (include "archestra-platform.maintenanceModeEnabled" .) "true") }}
-{{- $workerPodAnnotations := mergeOverwrite (dict) (.Values.archestra.podAnnotations | default dict) (.Values.archestra.worker.podAnnotations | default dict) }}
+{{- $workerPodAnnotations := mergeOverwrite (dict) (.Values.archestra.podAnnotations | default dict) }}
 {{- $workerResources := .Values.archestra.worker.resources | default .Values.archestra.resources }}
 {{- if hasKey $workerPodAnnotations "prometheus.io/scrape" }}
 {{- $workerPodAnnotations = mergeOverwrite $workerPodAnnotations (dict "prometheus.io/port" "9000" "prometheus.io/path" "/metrics") }}
@@ -92,25 +92,25 @@ spec:
             timeoutSeconds: {{ .Values.archestra.probes.readiness.timeoutSeconds }}
             failureThreshold: {{ .Values.archestra.probes.readiness.failureThreshold }}
           {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
-      {{- with (.Values.archestra.worker.nodeSelector | default .Values.archestra.nodeSelector) }}
+      {{- /*
+        Scheduling comes from the shared archestra.* values. Spread constraints
+        without a labelSelector select worker pods here (see the helper).
+      */}}
+      {{- with .Values.archestra.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with (.Values.archestra.worker.tolerations | default .Values.archestra.tolerations) }}
+      {{- with .Values.archestra.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- /*
-        No fallback to archestra.affinity / archestra.topologySpreadConstraints:
-        those select web pods, and would place workers by where web pods run.
-      */}}
-      {{- with .Values.archestra.worker.affinity }}
+      {{- with .Values.archestra.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.archestra.worker.topologySpreadConstraints }}
+      {{- with .Values.archestra.topologySpreadConstraints }}
       topologySpreadConstraints:
-        {{- toYaml . | nindent 8 }}
+        {{- include "archestra-platform.topologySpreadConstraints" (dict "constraints" . "selectorLabels" (include "archestra-platform.workerSelectorLabels" $)) | nindent 8 }}
       {{- end }}
       {{- include "archestra-platform.volumes" . | nindent 6 }}
 {{- end }}

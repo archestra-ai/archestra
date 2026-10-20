@@ -2611,6 +2611,25 @@ tests:
                   app.kubernetes.io/instance: RELEASE-NAME
                   app.kubernetes.io/component: web
 
+  # archestra.topologySpreadConstraints is shared with the worker Deployment, so
+  # a constraint without a labelSelector must select web pods here.
+  - it: should fill in the web selector for topologySpreadConstraints without one
+    documentIndex: 1
+    release:
+      name: my-release
+    set:
+      archestra.topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+    asserts:
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].labelSelector
+          value:
+            matchLabels:
+              app.kubernetes.io/name: archestra-platform
+              app.kubernetes.io/instance: my-release
+
   # Topology spread selectors tell web pods apart from worker pods by this
   # label, so it must stay on the web pod template.
   - it: should label web pods with the web component

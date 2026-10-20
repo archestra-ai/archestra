@@ -1930,6 +1930,9 @@ class InteractionModel {
     if (!skeleton.some((row) => row.missing)) {
       return { filled: 0, failed: 0, complete: true };
     }
+    // The listed order only settles siblings; parentsFirst puts every parent
+    // ahead of its children, depth first, so a row's last child in this order
+    // is its last child at all and the folder can drop the fold with it.
     const order = parentsFirst(skeleton);
     const folder = InteractionDeltaManager.threadFolder(
       order.map((row) => ({ id: row.id, parentId: row.parent_id })),
@@ -2017,10 +2020,12 @@ class InteractionModel {
       const values: Array<{ id: string; sessionPreview: unknown }> = [];
       for (const member of chunk) {
         const row = byId.get(member.id);
+        // member.parent_id and row.parentId are the same column, read by the
+        // skeleton query and by the chunk load.
         const foldable =
           row !== undefined &&
           !unreadable.has(member.id) &&
-          (row.parentId === null || !unfoldable.has(row.parentId));
+          (member.parent_id === null || !unfoldable.has(member.parent_id));
         const full = foldable ? folder.fold(row) : null;
         if (full === null) {
           // Removed since the skeleton was read, unreadable, below an

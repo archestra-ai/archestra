@@ -5,6 +5,7 @@ import {
   E2eTestId,
   isLegacyGeminiModel,
   isOpenRouterLatestAlias,
+  isSuggestedMinimaxModel,
   type ModelInputModality,
   requiresPerplexityAgentApi,
   type SubscriptionCredentialKind,
@@ -529,13 +530,20 @@ export const ModelSelector = memo(function ModelSelector({
   };
 
   const modelsByProvider = useMemo(() => {
-    if (!modelFilter) return fetchedModelsByProvider;
     return Object.fromEntries(
       Object.entries(fetchedModelsByProvider)
-        .map(([provider, models]) => [provider, models.filter(modelFilter)])
+        .map(([provider, models]) => [
+          provider,
+          models.filter(
+            (model) =>
+              (!modelFilter || modelFilter(model)) &&
+              (model.dbId === selectedModel ||
+                isSuggestedMinimaxModel(model.provider, model.id)),
+          ),
+        ])
         .filter(([, models]) => models.length > 0),
     ) as Record<SupportedProvider, LlmModel[]>;
-  }, [fetchedModelsByProvider, modelFilter]);
+  }, [fetchedModelsByProvider, modelFilter, selectedModel]);
 
   // Get available providers from the selectable models.
   const availableProviders = useMemo(() => {

@@ -161,6 +161,49 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useOrganization>);
 });
 
+it.each([
+  "",
+  "legacy",
+  "unavailable",
+])("filters MiniMax suggestions without resetting saved selection %s", (selectedModel) => {
+  setQuery({
+    modelsByProvider: {
+      minimax: [
+        model({
+          dbId: "legacy",
+          id: "MiniMax-M2.7",
+          displayName: "MiniMax-M2.7",
+          provider: "minimax",
+          isBest: false,
+        }),
+        model({
+          dbId: "flash",
+          id: "MiniMax-M3.1-Flash",
+          displayName: "MiniMax-M3.1-Flash",
+          provider: "minimax",
+        }),
+        model({
+          dbId: "m3",
+          id: "MiniMax-M3",
+          displayName: "MiniMax-M3",
+          provider: "minimax",
+          isBest: false,
+        }),
+      ],
+    },
+  });
+  const { onModelChange } = renderSelector({ selectedModel });
+  fireEvent.click(screen.getByTestId("dialog-toggle"));
+  expect(
+    screen
+      .getAllByTestId("model-option")
+      .filter((option) => !(option as HTMLButtonElement).disabled),
+  ).toHaveLength(selectedModel === "legacy" ? 3 : 2);
+  if (selectedModel === "unavailable")
+    expect(onModelChange).toHaveBeenCalledWith("flash");
+  else expect(onModelChange).not.toHaveBeenCalled();
+});
+
 it("selects runtime models without falling back to the provider catalog", () => {
   setQuery({
     modelsByProvider: { openai: [model()] },

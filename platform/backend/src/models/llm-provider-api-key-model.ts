@@ -163,17 +163,26 @@ class LlmProviderApiKeyModelLinkModel {
       // Delete links to models the provider no longer serves. Kept links are
       // updated in place below so their last known verdict can survive a
       // sync that learned nothing.
-      await tx.delete(schema.llmProviderApiKeyModelsTable).where(
-        uniqueModels.length > 0
-          ? and(
-              eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId),
-              notInArray(
-                schema.llmProviderApiKeyModelsTable.modelId,
-                uniqueModels.map((model) => model.id),
-              ),
-            )
-          : eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId),
-      );
+      if (provider === "minimax" && uniqueModels.length > 0) {
+        // MiniMax's maintained catalog is a recommendation list. Keep saved
+        // and custom model links usable, including through orphan cleanup.
+        await tx
+          .update(schema.llmProviderApiKeyModelsTable)
+          .set({ isBest: false })
+          .where(eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId));
+      } else {
+        await tx.delete(schema.llmProviderApiKeyModelsTable).where(
+          uniqueModels.length > 0
+            ? and(
+                eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId),
+                notInArray(
+                  schema.llmProviderApiKeyModelsTable.modelId,
+                  uniqueModels.map((model) => model.id),
+                ),
+              )
+            : eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId),
+        );
+      }
 
       // Insert new links
       if (uniqueModels.length > 0) {

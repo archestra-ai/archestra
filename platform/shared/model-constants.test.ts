@@ -3,6 +3,7 @@ import {
   anthropicEffortForThinkingEffort,
   anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
+  DEFAULT_MODELS,
   getAgentRuntimeAllowedProtocols,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
@@ -10,6 +11,8 @@ import {
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   isSmallModel,
+  isSuggestedMinimaxModel,
+  MINIMAX_MODELS,
   providerDisplayNames,
   providerSearchTerms,
   requiresOpenAiResponsesApi,
@@ -17,6 +20,31 @@ import {
   SMALL_MODEL_MAX_PARAMETERS,
   stripClaudeContextVariantSuffix,
 } from "./model-constants";
+
+describe("MiniMax suggestions", () => {
+  test("defaults to Flash and offers only Flash and M3 natively", () => {
+    expect(DEFAULT_MODELS.minimax).toBe("MiniMax-M3.1-Flash");
+    expect(MINIMAX_MODELS.map((model) => model.id)).toEqual([
+      "MiniMax-M3.1-Flash",
+      "MiniMax-M3",
+    ]);
+  });
+
+  test.each([
+    ["minimax", "MiniMax-M3.1-Flash", true],
+    ["minimax", "MiniMax-M3", true],
+    ["minimax", "MiniMax-M2.7", false],
+    ["minimax", "MiniMax-M3-highspeed", false],
+    ["minimax", "custom-deployment", true],
+    ["minimax", "speech-02-hd", true],
+    ["openrouter", "minimax/minimax-m3.1-flash:free", true],
+    ["openrouter", "minimax/minimax-m3", true],
+    ["openrouter", "minimax/minimax-m2.5", false],
+    ["openai", "gpt-5.5", true],
+  ] as const)("%s / %s suggestion: %s", (provider, model, expected) => {
+    expect(isSuggestedMinimaxModel(provider, model)).toBe(expected);
+  });
+});
 
 describe("anthropicThinksByDefault", () => {
   test("matches models whose thinking is always on, including dated snapshots", () => {

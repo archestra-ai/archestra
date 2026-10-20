@@ -4,6 +4,57 @@ import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
 import ModelModel from "./model";
 
 describe("LlmProviderApiKeyModelLinkModel", () => {
+  test("MiniMax sync preserves saved links and promotes Flash", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret();
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "minimax",
+    });
+    const models = await Promise.all(
+      [
+        "MiniMax-M2.7",
+        "custom-deployment",
+        "MiniMax-M3",
+        "MiniMax-M3.1-Flash",
+      ].map((modelId) =>
+        ModelModel.create({
+          externalId: `minimax/${modelId}`,
+          provider: "minimax",
+          modelId,
+          description: modelId,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        }),
+      ),
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+      key.id,
+      models.slice(0, 2).map((m) => m.id),
+    );
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      key.id,
+      models.slice(2).map((m) => ({ id: m.id, modelId: m.modelId })),
+      "minimax",
+    );
+    await ModelModel.deleteOrphanedModels();
+    const linked = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
+      key.id,
+    );
+    expect(linked.map((m) => m.modelId).sort()).toEqual(
+      models.map((m) => m.modelId).sort(),
+    );
+    const best = await LlmProviderApiKeyModelLinkModel.getBestModelsForApiKeys([
+      key.id,
+    ]);
+    expect(best.get(key.id)?.modelId).toBe("MiniMax-M3.1-Flash");
+  });
+
   describe("getBestModelsForApiKeys", () => {
     test("returns an empty map for empty input", async () => {
       const bestModels =

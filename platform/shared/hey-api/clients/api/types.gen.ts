@@ -5954,10 +5954,15 @@ export type MinimaxChatCompletionRequestInput = {
     user?: string;
     reasoning_split?: boolean;
     thinking?: {
-        type: 'enabled' | 'disabled';
+        type: 'adaptive' | 'enabled' | 'disabled';
     };
+    reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     extra_body?: {
         reasoning_split?: boolean;
+        thinking?: {
+            type: 'adaptive' | 'enabled' | 'disabled';
+        };
+        reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
 };
 
@@ -12396,10 +12401,15 @@ export type MinimaxChatCompletionRequest = {
     user?: string;
     reasoning_split?: boolean;
     thinking?: {
-        type: 'enabled' | 'disabled';
+        type: 'adaptive' | 'enabled' | 'disabled';
     };
+    reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     extra_body?: {
         reasoning_split?: boolean;
+        thinking?: {
+            type: 'adaptive' | 'enabled' | 'disabled';
+        };
+        reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
 };
 

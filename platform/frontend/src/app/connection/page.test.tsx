@@ -60,6 +60,24 @@ const { catalogHookMock, rowsByIdsCache } = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation");
+// The page loads each view as its own chunk. Resolve both before the tests
+// render, so a test sees the view on its first render, as a server-rendered
+// document does.
+const dynamicViews = vi.hoisted(() => [] as Promise<unknown>[]);
+vi.mock("next/dynamic", () => ({
+  default: (load: () => Promise<React.ComponentType<object>>) => {
+    let View: React.ComponentType<object> | null = null;
+    dynamicViews.push(
+      load().then((loaded) => {
+        View = loaded;
+      }),
+    );
+    return (props: object) => (View ? <View {...props} /> : null);
+  },
+}));
+beforeAll(async () => {
+  await Promise.all(dynamicViews);
+});
 vi.mock("@/lib/clipboard");
 vi.mock("@/lib/agent.query");
 vi.mock("@/lib/agent-options.query", async (importOriginal) => ({

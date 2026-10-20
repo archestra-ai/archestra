@@ -1363,6 +1363,11 @@ function runFileInput(args: {
     return { kind: "bytes", filename: args.filename, data };
   }
   const relative = workspaceRelativePath(args.path ?? "");
+  if (relative === "") {
+    return {
+      error: `Pass the path of a file in the run's workspace, for example demo/demo.mp4 or ${RUN_WORKSPACE_ROOT}/demo/demo.mp4.`,
+    };
+  }
   const filename = RunFileNameSchema.safeParse(
     args.filename ?? path.posix.basename(relative),
   );

@@ -1082,6 +1082,7 @@ describe("run tools", () => {
         ["linked.mp4", "Only regular files"],
         ["folder", "Only regular files"],
         ["big.mp4", "keep run files under 40MB"],
+        ["/home/node/workspace/", "Pass the path of a file"],
       ] as const) {
         const result = await postRunFile({
           task_id: task.id,

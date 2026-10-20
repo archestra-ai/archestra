@@ -429,4 +429,4 @@ const BOUND_TO_ANOTHER_SESSION =
   "This runtime is bound to a different session. The request was refused.";
 
 const UNPROVEN_CALLER_ON_BOUND_RUNTIME =
-  "This runtime is bound to a Guardrails session, and this call carried no proof of its source. The request was refused. Only a tool call that a model makes through the LLM Proxy carries that proof: the run's own model, or the model of the conversation that started the run. A script, or a client that does not send its model requests through the LLM Proxy, cannot make this call. Make it as a tool call from one of those conversations.";
+  "This runtime is bound to a Guardrails session, and this call carried no proof of its source. The request was refused. Only a tool call from the run's own model, or from the conversation that started the run, carries that proof when its model requests go through the LLM Proxy. A script cannot make this call.";

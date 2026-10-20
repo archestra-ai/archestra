@@ -232,24 +232,32 @@ test("drains parsed bytes before a rapid seek and publishes only the latest posi
   expect(screen.queryByText("Middle screen")).not.toBeInTheDocument();
 });
 
-test("opens a recording on its latest output, and keeps the reader's place after that", async () => {
-  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(5000);
+test("opens a recording on its latest output, follows new output at the end, and keeps a reader's place above it", async () => {
+  const scrollHeight = vi
+    .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+    .mockReturnValue(5000);
+  const size = "\x1b]777;archestra-terminal-size=80x5\x07";
   const output = Array.from({ length: 60 }, (_, i) => `Row ${i}`).join("\r\n");
   const { rerender } = render(
-    <TerminalPlayback
-      content={`\x1b]777;archestra-terminal-size=80x5\x07${output}`}
-    />,
+    <TerminalPlayback content={`${size}${output}`} />,
   );
   await waitFor(() => expect(screen.getByText("Row 59")).toBeInTheDocument());
   const viewport = screen.getByTestId("terminal-playback-viewport");
   expect(viewport.scrollTop).toBe(5000);
 
-  viewport.scrollTop = 120;
-  rerender(
-    <TerminalPlayback
-      content={`\x1b]777;archestra-terminal-size=80x5\x07${output}\r\nRow 60`}
-    />,
-  );
+  // Still at the end: new output scrolls into view.
+  scrollHeight.mockReturnValue(6000);
+  rerender(<TerminalPlayback content={`${size}${output}\r\nRow 60`} />);
   await waitFor(() => expect(screen.getByText("Row 60")).toBeInTheDocument());
+  expect(viewport.scrollTop).toBe(6000);
+
+  // Scrolled up: the place is kept.
+  viewport.scrollTop = 120;
+  fireEvent.scroll(viewport);
+  scrollHeight.mockReturnValue(7000);
+  rerender(
+    <TerminalPlayback content={`${size}${output}\r\nRow 60\r\nRow 61`} />,
+  );
+  await waitFor(() => expect(screen.getByText("Row 61")).toBeInTheDocument());
   expect(viewport.scrollTop).toBe(120);
 });

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ClientSecretCredential } from "@azure/identity";
 import { AzureIdentityAuthenticationProvider } from "@microsoft/kiota-authentication-azure";
 import {
@@ -27,10 +28,11 @@ import {
   TurnContext,
   type WebResponse,
 } from "@microsoft/agents-hosting";
+import type { A2AAttachment } from "@/agents/a2a-executor";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { LRUCacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel } from "@/models";
 import type {
@@ -1340,6 +1342,9 @@ class MSTeamsProvider implements ChatOpsProvider {
             channelId: params.message.channelId,
             workspaceId: params.message.workspaceId,
             originalMessageText: params.message.text || undefined,
+            pendingAttachmentsKey: await this.stashAgentSelectionAttachments(
+              params.message,
+            ),
           },
         },
       ],
@@ -1366,6 +1371,32 @@ class MSTeamsProvider implements ChatOpsProvider {
     // No-op: MS Teams permissions are managed in Azure AD and can't be detected at runtime
   }
 
+  /**
+   * Files of the message that triggered an agent-selection card, so the
+   * replay after **Confirm Selection** answers the whole message. Only the
+   * original sender, in the original conversation, receives them, once.
+   */
+  async takeAgentSelectionAttachments(params: {
+    key: string;
+    senderId: string;
+    channelId: string;
+  }): Promise<A2AAttachment[]> {
+    if (!isUuid(params.key)) return [];
+    const cacheKey =
+      `${CacheKey.TeamsAgentSelectionAttachments}-${params.key}` as const;
+    const pending =
+      await cacheManager.get<PendingAgentSelectionAttachments>(cacheKey);
+    if (
+      !pending ||
+      pending.senderId !== params.senderId ||
+      pending.channelId !== params.channelId
+    ) {
+      return [];
+    }
+    await cacheManager.delete(cacheKey);
+    return pending.attachments;
+  }
+
   async downloadFiles(
     files: ChatThreadMessageFile[],
   ): Promise<ThreadFileOutcome[]> {
@@ -1383,6 +1414,37 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   // ===========================================================================
   // Private Methods
+
+  /**
+   * Hold the message's files until the agent is picked. The card carries only
+   * the returned key: Teams echoes card data back from the client, so file
+   * references placed in it could be swapped for another conversation's.
+   */
+  private async stashAgentSelectionAttachments(
+    message: IncomingChatMessage,
+  ): Promise<string | undefined> {
+    if (!message.attachments?.length) return undefined;
+    const key = randomUUID();
+    const pending: PendingAgentSelectionAttachments = {
+      senderId: message.senderId,
+      channelId: message.channelId,
+      attachments: message.attachments,
+    };
+    try {
+      await cacheManager.set(
+        `${CacheKey.TeamsAgentSelectionAttachments}-${key}`,
+        pending,
+        AGENT_SELECTION_ATTACHMENTS_TTL_MS,
+      );
+      return key;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Could not hold attachments for the agent-selection replay",
+      );
+      return undefined;
+    }
+  }
 
   /**
    * Download Teams file attachments and convert to A2AAttachment format.
@@ -1862,6 +1924,15 @@ export default MSTeamsProvider;
 // =============================================================================
 // Internal Helpers
 // =============================================================================
+
+interface PendingAgentSelectionAttachments {
+  senderId: string;
+  channelId: string;
+  attachments: A2AAttachment[];
+}
+
+/** How long an unanswered agent-selection card can still replay its files. */
+const AGENT_SELECTION_ATTACHMENTS_TTL_MS = 60 * 60 * 1000;
 
 /** A Teams attachment that points at a downloadable file (not a card). */
 interface TeamsFileAttachment {

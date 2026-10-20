@@ -1,8 +1,14 @@
 import { Activity } from "@microsoft/agents-activity";
+import { CloudAdapter, TurnContext } from "@microsoft/agents-hosting";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
-import type { ChatThreadMessageFile, ThreadFileOutcome } from "@/types";
+import type {
+  ChatThreadMessageFile,
+  IncomingChatMessage,
+  ThreadFileOutcome,
+} from "@/types";
 import MSTeamsProvider, {
   buildApprovalDecisionCard,
 } from "./ms-teams-provider";
@@ -1680,5 +1686,114 @@ describe("MSTeamsProvider inline images in thread history", () => {
     expect(result[0].files).toEqual([
       { url: HOSTED_CONTENT_URL, mimetype: "image/*" },
     ]);
+  });
+});
+
+// =============================================================================
+// Agent-selection card keeps the first message's files
+// =============================================================================
+
+describe("MSTeamsProvider agent-selection card attachments", () => {
+  setupTestCacheManager();
+
+  const screenshot = {
+    contentType: "image/png",
+    contentBase64: Buffer.from("png-bytes").toString("base64"),
+  };
+
+  function firstMessage(
+    overrides: Partial<IncomingChatMessage> = {},
+  ): IncomingChatMessage {
+    return {
+      messageId: "msg-1",
+      channelId: "a:dm-conversation",
+      workspaceId: null,
+      senderId: "aad-user-1",
+      senderName: "Alice",
+      text: "",
+      rawText: "",
+      timestamp: new Date(),
+      isThreadReply: false,
+      attachments: [screenshot],
+      ...overrides,
+    };
+  }
+
+  /** Send the card and return the data its Confirm button submits. */
+  async function sendCard(message: IncomingChatMessage) {
+    const sent: Activity[] = [];
+    const adapter = new CloudAdapter();
+    adapter.sendActivities = async (_context, activities) => {
+      sent.push(...activities);
+      return activities.map(() => ({ id: "card" }));
+    };
+    const context = new TurnContext(
+      adapter,
+      Activity.fromObject({
+        type: "message",
+        channelId: "msteams",
+        serviceUrl: "https://smba.trafficmanager.net/amer/",
+        conversation: { id: message.channelId, conversationType: "personal" },
+        from: { id: "29:user-1", aadObjectId: message.senderId },
+        recipient: { id: "28:app-id-123", name: "TestBot" },
+      }),
+    );
+    await createProvider().sendAgentSelectionCard({
+      message,
+      agents: [{ id: "agent-1", name: "Helper" }],
+      isWelcome: true,
+      providerContext: context,
+    });
+    const card = sent[0]?.attachments?.[0]?.content as {
+      actions: { data: Record<string, unknown> }[];
+    };
+    return card.actions[0].data;
+  }
+
+  test("an image-only first message is replayed with its files, once, to its sender", async () => {
+    const provider = createProvider();
+    const data = await sendCard(firstMessage());
+
+    // The card carries a key, never the file itself.
+    expect(JSON.stringify(data)).not.toContain(screenshot.contentBase64);
+    const key = String(data.pendingAttachmentsKey);
+
+    expect(
+      await provider.takeAgentSelectionAttachments({
+        key,
+        senderId: "aad-someone-else",
+        channelId: "a:dm-conversation",
+      }),
+    ).toEqual([]);
+    expect(
+      await provider.takeAgentSelectionAttachments({
+        key,
+        senderId: "aad-user-1",
+        channelId: "a:other-conversation",
+      }),
+    ).toEqual([]);
+    expect(
+      await provider.takeAgentSelectionAttachments({
+        key,
+        senderId: "aad-user-1",
+        channelId: "a:dm-conversation",
+      }),
+    ).toEqual([screenshot]);
+    expect(
+      await provider.takeAgentSelectionAttachments({
+        key,
+        senderId: "aad-user-1",
+        channelId: "a:dm-conversation",
+      }),
+    ).toEqual([]);
+  });
+
+  test("a first message without files adds no key to the card", async () => {
+    const data = await sendCard(
+      firstMessage({ text: "hello", attachments: undefined }),
+    );
+
+    expect(data.pendingAttachmentsKey).toBeUndefined();
+    expect(data.originalMessageText).toBe("hello");
   });
 });

@@ -122,6 +122,8 @@ export const CacheKey = {
   KbGroupTokens: "kb-group-tokens",
   /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */
   KbConnectorIdentity: "kb-connector-identity",
+  /** Files of the MS Teams message that triggered an agent-selection card, replayed once the agent is picked */
+  TeamsAgentSelectionAttachments: "teams-agent-selection-attachments",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */

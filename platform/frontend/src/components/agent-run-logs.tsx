@@ -26,6 +26,9 @@ export function AgentRunLogs({
   const [terminalContent, setTerminalContent] = useState("");
   const [error, setError] = useState<string>();
   const [isStreaming, setIsStreaming] = useState(!run.endedAt);
+  // An ended run's history is on its way until the server says it has ended:
+  // until then the panel is loading, not empty.
+  const [historyLoaded, setHistoryLoaded] = useState(!run.endedAt);
   const [retainedStatus, setRetainedStatus] = useState<{
     source: "full" | "tail";
     truncated: boolean;
@@ -35,6 +38,31 @@ export function AgentRunLogs({
     let receivedOutput = false;
     let emptyRetryCount = 0;
     let emptyRetryTimer: ReturnType<typeof setTimeout> | undefined;
+    // Frames are collected and rendered together: every render replays and
+    // snapshots the whole recording, so one per frame (a long history is
+    // dozens of frames) multiplied that work and the copies of the string.
+    // An ended run's history renders once it has all arrived; a live run's
+    // output at most every LIVE_FLUSH_MS.
+    let received = "";
+    let pending: string[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = undefined;
+      if (pending.length === 0) return;
+      received += pending.join("");
+      pending = [];
+      setTerminalContent(received);
+    };
+    const scheduleFlush = () => {
+      if (run.endedAt) {
+        // The end message flushes; this only covers one that never comes.
+        if (flushTimer) clearTimeout(flushTimer);
+        flushTimer = setTimeout(flush, HISTORY_IDLE_FLUSH_MS);
+      } else if (!flushTimer) {
+        flushTimer = setTimeout(flush, LIVE_FLUSH_MS);
+      }
+    };
     const subscribeToLogs = () => {
       websocketService.send({
         type: "subscribe_agent_run_logs",
@@ -47,6 +75,7 @@ export function AgentRunLogs({
     setTerminalContent("");
     setError(undefined);
     setIsStreaming(!run.endedAt);
+    setHistoryLoaded(!run.endedAt);
     setRetainedStatus(undefined);
     websocketService.connect();
     const subscriptions = [
@@ -58,7 +87,8 @@ export function AgentRunLogs({
             message.payload.channel !== "readable"
           ) {
             receivedOutput = true;
-            setTerminalContent((value) => value + message.payload.logs);
+            pending.push(message.payload.logs);
+            scheduleFlush();
           }
         },
       ),
@@ -66,8 +96,10 @@ export function AgentRunLogs({
         "agent_run_logs_error",
         (message: AgentRunLogsErrorMessage) => {
           if (message.payload.runId === logId) {
+            flush();
             setError(message.payload.error);
             setIsStreaming(false);
+            setHistoryLoaded(true);
           }
         },
       ),
@@ -84,7 +116,9 @@ export function AgentRunLogs({
               );
               return;
             }
+            flush();
             setIsStreaming(false);
+            setHistoryLoaded(true);
             if (message.payload.source) {
               setRetainedStatus({
                 source: message.payload.source,
@@ -98,6 +132,7 @@ export function AgentRunLogs({
     subscribeToLogs();
     return () => {
       if (emptyRetryTimer) clearTimeout(emptyRetryTimer);
+      if (flushTimer) clearTimeout(flushTimer);
       for (const unsubscribe of subscriptions) unsubscribe();
       websocketService.send({
         type: "unsubscribe_agent_run_logs",
@@ -114,12 +149,20 @@ export function AgentRunLogs({
         <TerminalRecording key={run.taskId} content={output} />
       )}
       error={error}
-      emptyIcon={run.endedAt ? FileX2 : TerminalSquare}
-      emptyMessage={run.endedAt ? "No output recorded" : "Waiting for output"}
+      emptyIcon={run.endedAt && historyLoaded ? FileX2 : TerminalSquare}
+      emptyMessage={
+        !historyLoaded
+          ? "Loading recording"
+          : run.endedAt
+            ? "No output recorded"
+            : "Waiting for output"
+      }
       emptyHint={
-        run.endedAt
-          ? "This run ended without writing anything to its log."
-          : "Output appears here as the Agent writes it."
+        !historyLoaded
+          ? undefined
+          : run.endedAt
+            ? "This run ended without writing anything to its log."
+            : "Output appears here as the Agent writes it."
       }
       status={
         isStreaming ? (
@@ -143,6 +186,8 @@ export function AgentRunLogs({
 
 const EMPTY_LOG_RETRY_LIMIT = 3;
 const EMPTY_LOG_RETRY_DELAY_MS = 250;
+const LIVE_FLUSH_MS = 100;
+const HISTORY_IDLE_FLUSH_MS = 500;
 
 function RetainedTranscriptStatus({
   status,

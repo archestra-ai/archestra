@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { encodeSignedToolCallId } from "../adapters/gemini-openai-translator";
 import {
-  openAiToolCallId,
   withOpenAiChatToolCallIds,
   withOpenAiResponsesToolCallIds,
   wordToolCallId,
@@ -15,7 +14,15 @@ const geminiId = encodeSignedToolCallId({
   thoughtSignature: "s".repeat(340),
 });
 
-describe("openAiToolCallId", () => {
+// The id a Chat Completions tool result is forwarded with.
+function openAiToolCallId(id: string): string {
+  const [message] = withOpenAiChatToolCallIds([
+    { role: "tool", tool_call_id: id, content: "" },
+  ]);
+  return message.role === "tool" ? message.tool_call_id : "";
+}
+
+describe("OpenAI tool-call ids", () => {
   test("keeps an id of up to 64 characters, whatever its characters", () => {
     expect(openAiToolCallId("call_abc")).toBe("call_abc");
     expect(openAiToolCallId("toolu_01.x:y")).toBe("toolu_01.x:y");

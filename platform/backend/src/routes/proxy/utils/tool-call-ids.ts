@@ -19,11 +19,6 @@ import type { OpenAi } from "@/types";
 const MAX_TOOL_CALL_ID_LENGTH = 64;
 const WORD_TOOL_CALL_ID = /^[a-zA-Z0-9_-]+$/;
 
-/** An id an OpenAI wire accepts: any characters, at most 64 of them. */
-export function openAiToolCallId(id: string): string {
-  return id.length > MAX_TOOL_CALL_ID_LENGTH ? digestToolCallId(id) : id;
-}
-
 /** An id Anthropic and Bedrock accept: `[a-zA-Z0-9_-]`, at most 64 of them. */
 export function wordToolCallId(id: string): string {
   if (id === "") return id;
@@ -60,11 +55,12 @@ export function withOpenAiChatToolCallIds(
 }
 
 /**
- * A Responses input item whose call id OpenAI accepts. An item id over the
- * limit is dropped, not replaced: OpenAI did not mint it, the field is
- * optional, and OpenAI rejects an id without the prefix of the item's type.
+ * A Responses input item whose call id OpenAI accepts: the item itself, or a
+ * copy with a fitted `call_id` and without an `id` over the limit. That id is
+ * dropped, not replaced: OpenAI did not mint it, the field is optional, and
+ * OpenAI rejects an id without the prefix of the item's type.
  */
-export function withOpenAiResponsesToolCallIds<T>(item: T): T {
+export function withOpenAiResponsesToolCallIds<T>(item: T): T | Omit<T, "id"> {
   if (typeof item !== "object" || item === null) return item;
   const record = item as Record<string, unknown>;
   if (typeof record.call_id !== "string") return item;
@@ -74,7 +70,12 @@ export function withOpenAiResponsesToolCallIds<T>(item: T): T {
   if (callId === record.call_id && !dropId) return item;
   const fitted: Record<string, unknown> = { ...record, call_id: callId };
   if (dropId) delete fitted.id;
-  return fitted as T;
+  return fitted as Omit<T, "id">;
+}
+
+/** An id an OpenAI wire accepts: any characters, at most 64 of them. */
+function openAiToolCallId(id: string): string {
+  return id.length > MAX_TOOL_CALL_ID_LENGTH ? digestToolCallId(id) : id;
 }
 
 // `call_` and 32 hex digits: 37 characters, which also fits the 40-character

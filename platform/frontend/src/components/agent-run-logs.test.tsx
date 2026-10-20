@@ -83,6 +83,11 @@ describe("AgentRunLogs", () => {
       },
     });
 
+    // A tail is not the complete recording, and says so.
+    expect(screen.getByText("End of the recording")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Complete terminal recording"),
+    ).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Load full recording (3.0 MB more)" }),
     );
@@ -106,6 +111,24 @@ describe("AgentRunLogs", () => {
     expect(
       screen.queryByRole("button", { name: /Load full recording/ }),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
+  });
+
+  it("offers the full recording even when its end holds no output", () => {
+    render(<AgentRunLogs run={completedRun} />);
+    emit({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: "task-1",
+        source: "full",
+        truncated: false,
+        totalBytes: 4 * 1024 * 1024,
+        omittedBytes: 4 * 1024 * 1024,
+      },
+    });
+    expect(
+      screen.getByRole("button", { name: "Load full recording (4.0 MB more)" }),
+    ).toBeInTheDocument();
   });
 
   it("renders a history whose end message never comes once it goes quiet", () => {

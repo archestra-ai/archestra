@@ -11,7 +11,7 @@ import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
 import { Button } from "@/components/ui/button";
 import type { AgentRun } from "@/lib/agent-runtime.query";
-import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
+import { formatBytes } from "@/lib/utils/format-bytes";
 import websocketService from "@/lib/websocket/websocket";
 
 export function AgentRunLogs({
@@ -117,7 +117,13 @@ export function AgentRunLogs({
         "agent_run_logs_ended",
         (message: AgentRunLogsEndedMessage) => {
           if (message.payload.runId === logId) {
-            if (!receivedOutput && emptyRetryCount < EMPTY_LOG_RETRY_LIMIT) {
+            // Retained output can land after the run's metadata, so an empty
+            // end is retried; not when the server says what it left out.
+            if (
+              !receivedOutput &&
+              !message.payload.omittedBytes &&
+              emptyRetryCount < EMPTY_LOG_RETRY_LIMIT
+            ) {
               emptyRetryCount += 1;
               setIsStreaming(true);
               emptyRetryTimer = setTimeout(
@@ -190,7 +196,7 @@ export function AgentRunLogs({
             </span>
             <span>Streaming</span>
           </div>
-        ) : terminalContent ? (
+        ) : terminalContent || omittedBytes > 0 ? (
           <div className="flex items-center gap-3">
             {omittedBytes > 0 && (
               <Button
@@ -202,7 +208,12 @@ export function AgentRunLogs({
                 Load full recording ({formatBytes(omittedBytes)} more)
               </Button>
             )}
-            <RetainedTranscriptStatus status={retainedStatus} />
+            {terminalContent && (
+              <RetainedTranscriptStatus
+                status={retainedStatus}
+                partial={omittedBytes > 0}
+              />
+            )}
           </div>
         ) : null
       }
@@ -219,8 +230,11 @@ const HISTORY_IDLE_FLUSH_MS = 500;
 
 function RetainedTranscriptStatus({
   status,
+  partial = false,
 }: {
   status?: { source: "full" | "tail"; truncated: boolean };
+  /** Only the end of the recording is shown; the rest loads on request. */
+  partial?: boolean;
 }) {
   const isTailOnly = status?.source === "tail" && status.truncated;
   return (
@@ -245,7 +259,9 @@ function RetainedTranscriptStatus({
       />
       <span>
         {status?.source === "full"
-          ? "Complete terminal recording"
+          ? partial
+            ? "End of the recording"
+            : "Complete terminal recording"
           : isTailOnly
             ? "Retained tail only"
             : "Retained"}

@@ -1605,7 +1605,7 @@ describe("SlackProvider.sendReply", () => {
     );
   });
 
-  test("renders a hint as its own subtle context block above the footer", async () => {
+  test("renders the conversation link and hint beneath the answer above the footer", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
@@ -1627,12 +1627,21 @@ describe("SlackProvider.sendReply", () => {
       text: "hi there",
       footer: "🤖 Agent",
       hint: "Started a new conversation",
+      conversationUrl: "https://example.test/chat/runs/session-id",
     });
 
     const { blocks } = postMessage.mock.calls[0][0];
-    // markdown, then the hint context, then the footer as the final block.
     expect(blocks).toEqual([
       { type: "markdown", text: "hi there" },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: "<https://example.test/chat/runs/session-id|Open conversation>",
+          },
+        ],
+      },
       {
         type: "context",
         elements: [

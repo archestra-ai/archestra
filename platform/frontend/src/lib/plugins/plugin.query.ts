@@ -349,20 +349,4 @@ export function useBulkDeletePlugins() {
   });
 }
 
-/**
- * Whether a connection setup for this client delivers the plugin: it is for
- * that client, enabled, and its current content is the approved one.
- */
-export function isDeliverablePlugin(
-  plugin: Pick<
-    PluginListItem,
-    "clientType" | "enabled" | "approvedContentHash" | "contentHash"
-  >,
-  clientId: string,
-): boolean {
-  return (
-    plugin.clientType === clientId &&
-    plugin.enabled &&
-    plugin.approvedContentHash === plugin.contentHash
-  );
-}
+export { isDeliverablePlugin } from "./plugin-eligibility";

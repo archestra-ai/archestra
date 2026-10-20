@@ -19,6 +19,7 @@ import {
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import type { CreateConnectionSetupBody } from "@/lib/connection-setup.query";
 import type { PluginListItem } from "@/lib/plugins/plugin.query";
+import { isDeliverablePlugin } from "@/lib/plugins/plugin-eligibility";
 import type { ConnectClient } from "./clients";
 
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
@@ -236,10 +237,7 @@ export function firstConnectionSetupInputs(params: {
     canAnywhere("plugin", "update");
   if (pluginsQueryEnabled && !params.plugins) return null;
   const plugins = (pluginsQueryEnabled ? (params.plugins ?? []) : []).filter(
-    (plugin) =>
-      plugin.clientType === client.id &&
-      plugin.enabled &&
-      plugin.approvedContentHash === plugin.contentHash,
+    (plugin) => isDeliverablePlugin(plugin, client.id),
   );
   const requested = params.requestedPlatform;
   const platformOption =

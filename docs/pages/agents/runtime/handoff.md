@@ -33,25 +33,9 @@ Only the person who started a run can steer it or use its files.
 
 ## Post a Worker's File to Slack
 
-The agent answering in Slack can retrieve a worker's recording or document and post it with its own bot identity. Add this instruction to the foreground agent's prompt:
+The agent answering in Slack can post a worker's file with its own bot identity. Use [`transfer_workspace_file`](/docs/reference/archestra-mcp-server#transfer_workspace_file) to authorize the download, execute the returned command with [`run_command`](/docs/reference/archestra-mcp-server#run_command), then call [`post_thread_file`](/docs/reference/archestra-mcp-server#post_thread_file) with the downloaded sandbox path. The destination is the current Slack thread.
 
-```text
-When a worker produces a file the user asked to receive in this Slack thread:
-1. Ask the worker to save it under /home/node/workspace and return its run ID
-   and workspace-relative path.
-2. Call transfer_workspace_file with direction "download", that run ID and
-   path, and a local_path under /home/sandbox/artifacts/.
-3. If the transfer is pending, wait and retry. Once authorized, use run_command
-   to create the destination directory and execute the returned download command.
-4. After the download succeeds, call post_thread_file with the sandbox path
-   and an optional comment. Report delivery only after the tool returns success.
-If a pause or a new turn leaves the current sandbox without the file, repeat
-the transfer and download before posting.
-If guardrails refuse transfer or publication, follow the ruling; copying a
-file does not grant permission to share it.
-```
-
-The foreground agent needs [`transfer_workspace_file`](/docs/reference/archestra-mcp-server#transfer_workspace_file), [`run_command`](/docs/reference/archestra-mcp-server#run_command), and [`post_thread_file`](/docs/reference/archestra-mcp-server#post_thread_file). Posting uses the current Slack thread automatically. It accepts files up to 40 MiB, or the deployment's lower sandbox file limit. The existing [`post_run_file`](/docs/reference/archestra-mcp-server#post_run_file) tool remains for uploads associated with a runtime run.
+If the file is missing after an approval pause or a new turn, repeat the transfer into the current sandbox. Transfer and publication remain subject to guardrails.
 
 ## Hand Off With Guardrails On
 

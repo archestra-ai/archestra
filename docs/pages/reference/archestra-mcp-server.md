@@ -401,7 +401,7 @@ These tools are served only when the code runtime is enabled — set [`ARCHESTRA
 | Tool | Description | Permission |
 |------|-------------|--------------------------|
 | `run_command` | Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). | [`agent:read`](/docs/reference/permissions#agent:read) |
-| `post_thread_file` | Post a file from this conversation's sandbox to its current messaging-channel thread as the agent's bot. | [`agent:read`](/docs/reference/permissions#agent:read) † |
+| `post_thread_file` | Upload a file from the foreground agent's sandbox to the current messaging thread using that conversation's bot identity. | [`agent:read`](/docs/reference/permissions#agent:read) † |
 | `download_file` | Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `upload_file` | Place a file into the conversation's sandbox at a path, from a chat attachment, inline base64, inline text, or one of your persistent files. | [`agent:read`](/docs/reference/permissions#agent:read) |
 
@@ -443,13 +443,13 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
-Additional access requirement: Requires an authenticated messaging-channel conversation and a file in its own sandbox. The channel, thread, and bot identity come from that conversation; they cannot be supplied as tool arguments. The provider must support file uploads.
+Additional access requirement: Requires an authenticated messaging-channel conversation and a file in its own sandbox. The channel, thread, and bot identity come from that conversation; they cannot be supplied as tool arguments. Currently supported by the Slack provider; Teams and Telegram file uploads are not implemented.
 
 ##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `path` | `string` | Yes | Path to the file in this conversation's sandbox. |
+| `path` | `string` | Yes | File path in the foreground sandbox, e.g. /home/sandbox/artifacts/demo.mp4. Relative paths start at /home/sandbox. |
 | `target` | `object` | No | Omit for the current sandbox, or select another sandbox owned by this conversation. |
 | `target.id` | `string` | Yes | An existing sandbox id from this conversation. |
 | `filename` | `string` | No | Upload filename. Defaults to the file's basename. |

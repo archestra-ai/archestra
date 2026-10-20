@@ -3,8 +3,13 @@ import {
   TOOL_POST_THREAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
 import config from "@/config";
-import { ConversationModel, SkillSandboxModel } from "@/models";
+import {
+  ChatOpsChannelBindingModel,
+  ConversationModel,
+  SkillSandboxModel,
+} from "@/models";
 import {
   SandboxRuntimeError,
   sandboxRuntimeService,
@@ -234,13 +239,54 @@ describe("post_thread_file", () => {
     expect(chatOpsManager.uploadFileToBindingThread).not.toHaveBeenCalled();
   });
 
+  test("explains that Teams file posting is unsupported", async () => {
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: context.organizationId,
+      agentId: context.agent.id,
+      provider: "ms-teams",
+      channelId: "test-channel",
+    });
+    vi.mocked(chatOpsManager.uploadFileToBindingThread).mockRestore();
+    vi.spyOn(chatOpsManager, "getChatOpsProvider").mockReturnValue(
+      new MSTeamsProvider({
+        enabled: true,
+        appId: "test-app",
+        appSecret: "test-secret",
+        tenantId: "test-tenant",
+        graphTenantId: "test-tenant",
+        graphClientId: "test-app",
+        graphClientSecret: "test-secret",
+      }),
+    );
+    const result = await post(undefined, {
+      ...context,
+      chatOpsBindingId: binding.id,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "File uploads are not supported for Microsoft Teams",
+    );
+    expect(JSON.stringify(result.content)).toContain("Currently only Slack");
+    expect(result.structuredContent).not.toMatchObject({ success: true });
+  });
+
+  test("explains a missing channel binding without exposing an internal failure", async () => {
+    vi.mocked(chatOpsManager.uploadFileToBindingThread).mockRestore();
+    const result = await post();
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "messaging-channel binding no longer exists",
+    );
+  });
+
   test("does not report success or retry when the provider fails", async () => {
     vi.mocked(chatOpsManager.uploadFileToBindingThread).mockRejectedValue(
-      new Error("Upload failed"),
+      new Error("Upload failed with sensitive SDK details"),
     );
     const result = await post();
     expect(result.isError).toBe(true);
     expect(result.structuredContent).not.toMatchObject({ success: true });
     expect(chatOpsManager.uploadFileToBindingThread).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(result)).not.toContain("sensitive SDK details");
   });
 });

@@ -519,7 +519,7 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__post_thread_file 1`] = `
 {
-  "description": "Post a file from this conversation's sandbox to its current messaging-channel thread as the agent's bot. Use this after a worker produces a deliverable: transfer_workspace_file authorizes the download, then run its returned command with run_command to place the file in this sandbox before posting. Pass the sandbox path, not a worker path, run ID, URL, or base64 bytes. The destination comes from the current conversation and cannot be overridden. Requires a messaging-channel conversation with file-upload support. Maximum 40 MiB (or the deployment's lower sandbox file limit). If the file is missing after an approval pause or a new turn, repeat the transfer into the current sandbox. Only report delivery after success.",
+  "description": "Upload a file from the foreground agent's sandbox to the current messaging thread using that conversation's bot identity. Use this to deliver a subagent's video, image, or document. Currently supports Slack; Teams and Telegram uploads are not implemented. For an Agent Runtime subagent's file, have it save under /home/node/workspace, then call transfer_workspace_file with its task_id, direction='download', a workspace-relative path, and local_path='/home/sandbox/artifacts/<filename>'. If pending, retry later. Use run_command to create the destination directory and execute the returned download command. After it succeeds, call this tool with that sandbox path. Files already in this sandbox can be posted directly. The destination is fixed by the current conversation. Maximum 40 MiB, or the deployment's lower sandbox file limit. If the file is missing after an approval pause or a new turn, repeat the transfer into the current sandbox. Only report delivery after success.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -537,7 +537,7 @@ exports[`skill and sandbox tool text > archestra__post_thread_file 1`] = `
         "type": "string",
       },
       "path": {
-        "description": "Path to the file in this conversation's sandbox.",
+        "description": "File path in the foreground sandbox, e.g. /home/sandbox/artifacts/demo.mp4. Relative paths start at /home/sandbox.",
         "maxLength": 4096,
         "minLength": 1,
         "type": "string",

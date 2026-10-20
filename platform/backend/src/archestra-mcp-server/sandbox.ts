@@ -16,6 +16,7 @@ import {
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import { ChatOpsFileUploadError } from "@/agents/chatops/file-upload-error";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
@@ -811,22 +812,27 @@ const registry = defineArchestraTools([
     shortName: TOOL_POST_THREAD_FILE_SHORT_NAME,
     title: "Post Thread File",
     description:
-      "Post a file from this conversation's sandbox to its current messaging-channel " +
-      "thread as the agent's bot. Use this after a worker produces a deliverable: " +
-      "transfer_workspace_file authorizes the download, then run its returned command " +
-      "with run_command to place the file in this sandbox before posting. " +
-      "Pass the sandbox path, not a worker path, run ID, URL, or base64 bytes. " +
-      "The destination comes from the current conversation and cannot be overridden. " +
-      "Requires a messaging-channel conversation with file-upload support. Maximum 40 MiB " +
-      "(or the deployment's lower sandbox file limit). If the file is missing after an " +
-      "approval pause or a new turn, repeat the transfer into the current sandbox. " +
-      "Only report delivery after success.",
+      "Upload a file from the foreground agent's sandbox to the current messaging " +
+      "thread using that conversation's bot identity. Use this to deliver a subagent's " +
+      "video, image, or document. Currently supports Slack; Teams and Telegram uploads " +
+      "are not implemented. For an Agent Runtime subagent's file, have it save under " +
+      "/home/node/workspace, then call transfer_workspace_file with its task_id, " +
+      "direction='download', a workspace-relative path, and " +
+      "local_path='/home/sandbox/artifacts/<filename>'. If pending, retry later. " +
+      "Use run_command to create the destination directory and execute the returned " +
+      "download command. After it succeeds, call this tool with that sandbox path. " +
+      "Files already in this sandbox can be posted directly. The destination is fixed " +
+      "by the current conversation. Maximum 40 MiB, or the deployment's lower sandbox " +
+      "file limit. If the file is missing after an approval pause or a new turn, " +
+      "repeat the transfer into the current sandbox. Only report delivery after success.",
     schema: z.strictObject({
       path: z
         .string()
         .min(1)
         .max(4096)
-        .describe("Path to the file in this conversation's sandbox."),
+        .describe(
+          "File path in the foreground sandbox, e.g. /home/sandbox/artifacts/demo.mp4. Relative paths start at /home/sandbox.",
+        ),
       target: z
         .strictObject({
           id: z
@@ -915,6 +921,8 @@ const registry = defineArchestraTools([
           ),
         );
       } catch (error) {
+        if (error instanceof ChatOpsFileUploadError)
+          return errorResult(error.message);
         return handleRuntimeError(
           error,
           resolved.sandboxId,

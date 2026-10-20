@@ -122,8 +122,6 @@ export function RequestWaterfall({
   selectedKey,
   highlightedKey,
   onSelect,
-  onOpen,
-  openHint = "Enter or double-click to open",
   pagination,
   totalRequests,
   notice,
@@ -161,9 +159,6 @@ export function RequestWaterfall({
    */
   highlightedKey: string | null;
   onSelect: (key: string) => void;
-  /** Enter or a double-click on a row; `openHint` says what it opens. */
-  onOpen: (span: TimelineSpan) => void;
-  openHint?: string;
   pagination: RequestsPagination | null;
   totalRequests: number;
   /** Shown between the header and the list, such as a failed load. */
@@ -356,11 +351,6 @@ export function RequestWaterfall({
       Home: 0,
       End: steppable.length - 1,
     };
-    if (event.key === "Enter" && selected && !consultRowSelected) {
-      event.preventDefault();
-      onOpen(selected);
-      return;
-    }
     if (!(event.key in targets)) return;
     event.preventDefault();
     moveTo(Math.min(steppable.length - 1, Math.max(0, targets[event.key])));
@@ -430,7 +420,7 @@ export function RequestWaterfall({
           <span className="hidden items-center gap-1 text-[11px] text-muted-foreground xl:inline-flex">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>
-            <span className="ml-1">to step · {openHint}</span>
+            <span className="ml-1">to step</span>
           </span>
         </div>
       </header>
@@ -619,7 +609,6 @@ export function RequestWaterfall({
                       else rowRefs.current.delete(span.key);
                     },
                     onSelect: () => onSelect(span.key),
-                    onOpen: () => onOpen(span),
                   };
                   return span.type === "request" ? (
                     <RequestRow
@@ -853,7 +842,6 @@ type RowProps = {
   highlighted: boolean;
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
-  onOpen: () => void;
 };
 
 /** One row's frame and track; the cells around the track vary by kind. */
@@ -870,7 +858,6 @@ function RowShell({
   highlighted,
   buttonRef,
   onSelect,
-  onOpen,
   name,
   detail,
   time,
@@ -914,7 +901,6 @@ function RowShell({
         tabIndex={selected ? 0 : -1}
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
-        onDoubleClick={onOpen}
         aria-label={`${label}${gutterWords(gutter, note)}${off ? ", guardrails off" : ""}`}
         className={cn(
           "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",

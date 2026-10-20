@@ -11,7 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { use, useCallback, useMemo, useState } from "react";
 import { sessionTitleOf } from "@/app/llm/logs/_parts/logs-table-format";
 import { PageBackLink } from "@/components/page-back-link";
@@ -55,7 +55,6 @@ import {
 import {
   buildTimeline,
   requestSpanKey,
-  type TimelineSpan,
   toolCallSpanKey,
 } from "./_parts/session-timeline";
 import {
@@ -72,7 +71,6 @@ export default function SessionDetailPage({
 }) {
   // The session key: a session id, or a sessionless request's own id.
   const sessionId = decodeURIComponent(use(paramsPromise).id);
-  const router = useRouter();
   const appName = useAppName();
   const openappaEnabled = useFeature("openappaEnabled") === true;
   const { pageIndex, pageSize, offset, setPagination } =
@@ -310,10 +308,6 @@ export default function SessionDetailPage({
           : null
       : null;
 
-  // A request's whole record is in the details pane; a tool call has a page.
-  const openSpan = (span: TimelineSpan) => {
-    if (span.type === "tool") router.push(`/mcp/logs/${span.call.id}`);
-  };
   const exportDisabled = exportSession.isPending || totalRequests === 0;
 
   return (
@@ -382,8 +376,6 @@ export default function SessionDetailPage({
                 selectedKey={selected?.key ?? null}
                 highlightedKey={linkedKey}
                 onSelect={setPickedKey}
-                onOpen={openSpan}
-                openHint="Enter or double-click opens a tool call"
                 notice={
                   <ToolCallsNotice
                     failed={sessionToolCalls.isError}

@@ -14,7 +14,7 @@ With a [dedicated runtime](/docs/agents/managed-agents), the task runs in its ow
 
 ## Hand Off a Task
 
-1. Install the **Agent Runtime Handoff** skill from [Connect](/docs/get-started/connect).
+1. Install the **Managed Agent Handoff** skill from [Connect](/docs/get-started/connect).
 2. Ask your local agent to "hand this over to Archestra".
 3. To continue locally, ask it to "bring it back and continue here".
 4. Review the repository patch it returns before you apply it.

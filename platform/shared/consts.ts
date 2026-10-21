@@ -340,7 +340,7 @@ export const STARTUP_GUARD_FORMAT_VERSION = 5;
  * don't mistake them for their client vendor's cloud.
  */
 export function defaultRuntimeHandoffInstructions(appName: string): string {
-  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to a managed agent in ${appName}' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a managed agent if needed.`;
+  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to a managed agent in ${appName}' to continue this session in the cloud." Say this only once per session. When asked, use the Managed Agent Handoff skill and create a managed agent if needed.`;
 }
 
 /**

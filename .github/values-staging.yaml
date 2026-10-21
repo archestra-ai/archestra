@@ -101,6 +101,12 @@ archestra:
     # for a targeted investigation, with headroom to actually write the file.
     heapSnapshotsNearHeapLimit: 0
 
+  # Pre-installed read-only Kubernetes MCP server and the SRE agent using it.
+  # No apiServerCidrs yet: the server's egress to the API server works only
+  # while the cluster does not enforce MCP egress policies.
+  sre:
+    enabled: true
+
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:
     kubernetes:

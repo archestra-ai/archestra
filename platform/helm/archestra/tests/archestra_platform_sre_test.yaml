@@ -1,0 +1,89 @@
+suite: test archestra platform -- SRE agent env wiring
+templates:
+  - archestra-platform.yaml
+release:
+  name: archestra
+tests:
+  - it: does not wire the SRE agent by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SRE_AGENT_ENABLED
+            value: "true"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
+
+  - it: enables the SRE agent with the chart's MCP ServiceAccount and API server CIDRs
+    documentIndex: 1
+    set:
+      archestra.sre.enabled: true
+      archestra.sre.apiServerCidrs:
+        - 172.16.0.2/32
+        - 172.16.0.3/32
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SRE_AGENT_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
+            value: archestra-archestra-platform-mcp-k8s-operator
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SRE_APISERVER_CIDRS
+            value: "172.16.0.2/32,172.16.0.3/32"
+
+  - it: omits the CIDRs when none are configured
+    documentIndex: 1
+    set:
+      archestra.sre.enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: ARCHESTRA_SRE_APISERVER_CIDRS
+
+  - it: passes no ServiceAccount when the chart does not create the MCP server RBAC
+    documentIndex: 1
+    set:
+      archestra.sre.enabled: true
+      archestra.orchestrator.kubernetes.mcpServerRbac.create: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SRE_AGENT_ENABLED
+            value: "true"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
+
+  - it: lets archestra.env override the ServiceAccount without a duplicate entry
+    documentIndex: 1
+    set:
+      archestra.sre.enabled: true
+      archestra.env:
+        ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT: custom-sa
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
+            value: custom-sa
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
+            value: archestra-archestra-platform-mcp-k8s-operator

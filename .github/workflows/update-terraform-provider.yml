@@ -9,7 +9,6 @@ on:
     paths:
       - docs/openapi.json
       - .github/workflows/update-terraform-provider.yml
-      - platform/scripts/check-terraform-provider.py
       - platform/scripts/terraform-provider/**
 
 permissions:
@@ -58,7 +57,7 @@ jobs:
       # Provider CI regenerates its client from the release in
       # platform-version.txt and fails on any difference. So generate from that
       # release's spec, not from the newer spec on main. The token is passed to
-      # this one git command only, as in Terraform Provider Compatibility.
+      # this one git command only.
       - name: Read the released platform spec
         id: release
         env:

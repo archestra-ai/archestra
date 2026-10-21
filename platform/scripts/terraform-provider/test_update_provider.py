@@ -179,7 +179,7 @@ elif a[:1] == ['api'] and '--paginate' in a: print('[]')
         out = self.root/'failed-artifact'
         args = SimpleNamespace(provider=self.clone('failed-candidate'), tools=self.seed,
                                spec=self.spec, output=out, platform_commit='a'*40)
-        with self.assertRaises(updater.runner.ClientGenerationError) as error:
+        with self.assertRaises(updater.ClientGenerationError) as error:
             updater.prepare(args)
         self.assertEqual((out/'error.txt').read_text(), str(error.exception)+'\n')
         self.assertEqual(len((out/'error.txt').read_text().splitlines()), 1)

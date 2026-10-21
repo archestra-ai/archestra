@@ -112,6 +112,245 @@ afterEach(() => {
 });
 
 describe("SlackReplyStream", () => {
+  test("updates one pending card with complete arguments, then settles it once", async () => {
+    const { stream, chat } = createStream();
+    stream.push({
+      type: "tool-input-start",
+      toolCallId: "pending-1",
+      toolName: "tracker__find_task",
+    });
+    stream.push({
+      type: "tool-input-delta",
+      toolCallId: "pending-1",
+      inputTextDelta: '{"token":"fixture-partial-secret"',
+    });
+    await flush();
+    expect(chat.startStream.mock.calls[0][0].chunks).toEqual([
+      {
+        type: "task_update",
+        id: "pending-1",
+        title: "tracker__find_task",
+        status: "pending",
+      },
+    ]);
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "pending-1",
+      toolName: "tracker__find_task",
+      input: { query: "Example task" },
+    });
+    await flush();
+    const running = chat.appendStream.mock.calls[0][0].chunks[0];
+    expect(running).toMatchObject({
+      id: "pending-1",
+      status: "in_progress",
+      details: 'Arguments: {"query":"Example task"}',
+    });
+    stream.push({
+      type: "tool-output-available",
+      toolCallId: "pending-1",
+      output: "private preliminary output",
+      preliminary: true,
+    });
+    await flush();
+    expect(chat.appendStream).toHaveBeenCalledTimes(1);
+    stream.push({
+      type: "tool-output-available",
+      toolCallId: "pending-1",
+      output: "private final output",
+    });
+    stream.push({
+      type: "tool-output-error",
+      toolCallId: "pending-1",
+      errorText: "late duplicate",
+    });
+    await flush();
+    expect(chat.appendStream.mock.calls[1][0].chunks).toEqual([
+      { ...running, status: "complete" },
+    ]);
+    expect(JSON.stringify(chat.startStream.mock.calls)).not.toContain(
+      "fixture-partial-secret",
+    );
+    await stream.finish({ text: "Done" });
+  });
+
+  test("marks MCP failure results as failed without exposing their withheld body", async () => {
+    const { stream, chat } = createStream();
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "mcp-error",
+      toolName: "example__tool",
+      input: {},
+    });
+    stream.push({
+      type: "tool-output-available",
+      toolCallId: "mcp-error",
+      output: {
+        isError: true,
+        content: [{ type: "text", text: "private failure body" }],
+        structuredContent: { password: "fixture-private-password" },
+      },
+    });
+    await flush();
+    expect(chat.startStream.mock.calls[0][0].chunks[1]).toMatchObject({
+      status: "error",
+      output: "Tool reported an error",
+    });
+    expect(JSON.stringify(chat.startStream.mock.calls)).not.toMatch(
+      /private failure body|fixture-private-password/,
+    );
+    await stream.finish({ text: "Failed" });
+  });
+
+  test("input validation errors settle even without a preceding input event", async () => {
+    const { stream, chat } = createStream();
+    stream.push({
+      type: "tool-input-error",
+      toolCallId: "invalid",
+      toolName: "example__tool",
+      input: '{"password":"fixture-malformed-secret"',
+      errorText: "Invalid input: expected task_id",
+    });
+    await flush();
+    expect(chat.startStream.mock.calls[0][0].chunks).toEqual([
+      {
+        type: "task_update",
+        id: "invalid",
+        title: "example__tool",
+        status: "error",
+        output: "Invalid input: expected task_id",
+      },
+    ]);
+    await stream.finish({ text: "Failed" });
+  });
+
+  test("keeps approval denial distinct from a successful retry", async () => {
+    const { stream, chat } = createStream();
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "denied",
+      toolName: "example__tool",
+      input: { task_id: "EXAMPLE-42" },
+    });
+    stream.push({
+      type: "tool-approval-request",
+      toolCallId: "denied",
+      approvalId: "review-1",
+    });
+    await flush();
+    expect(chat.startStream.mock.calls[0][0].chunks[1]).toMatchObject({
+      id: "denied",
+      status: "pending",
+    });
+    stream.push({ type: "tool-output-denied", toolCallId: "denied" });
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "retry",
+      toolName: "example__tool",
+      input: { task_id: "EXAMPLE-42" },
+    });
+    stream.push({
+      type: "tool-output-available",
+      toolCallId: "retry",
+      output: {},
+    });
+    await flush();
+    expect(chat.appendStream.mock.calls[0][0].chunks).toMatchObject([
+      { id: "denied", status: "error", output: "Denied" },
+      { id: "retry", status: "in_progress" },
+      { id: "retry", status: "complete" },
+    ]);
+    await stream.finish({ text: "Done" });
+    expect(chat.update).not.toHaveBeenCalled();
+  });
+
+  test("cancellation retains sanitized arguments and ignores later updates", async () => {
+    const { stream, chat } = createStream();
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "cancelled",
+      toolName: "example__tool",
+      input: { task_id: "EXAMPLE-42", token: "fixture-secret" },
+    });
+    await flush();
+    await stream.abandon({ keepContent: true });
+    expect(chat.stopStream.mock.calls[0][0].chunks[0]).toMatchObject({
+      id: "cancelled",
+      status: "error",
+      output: "Stopped",
+      details: expect.stringContaining("EXAMPLE-42"),
+    });
+    expect(JSON.stringify(chat.stopStream.mock.calls)).not.toContain(
+      "fixture-secret",
+    );
+    stream.push({
+      type: "tool-output-available",
+      toolCallId: "cancelled",
+      output: {},
+    });
+    await flush();
+    expect(chat.appendStream).not.toHaveBeenCalled();
+  });
+
+  test("shows sanitized arguments through completion without publishing result bodies", async () => {
+    const { stream, chat } = createStream({ recipient: true });
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "details-1",
+      toolName: "archestra__run_tool",
+      input: {
+        tool_name: "tracker__create_task",
+        tool_args: JSON.stringify({
+          title: "Example task",
+          password: "fixture-password",
+        }),
+      },
+    });
+    await flush();
+    const started = chat.startStream.mock.calls[0][0].chunks[0];
+    expect(started.title).toBe("tracker__create_task");
+    expect(started.details).toContain("Example task");
+    expect(started.details).toContain("[redacted]");
+    expect(started.details).not.toContain("fixture-password");
+    stream.push({
+      type: "tool-output-available",
+      toolCallId: "details-1",
+      output: { privateResult: "result for model only" },
+    });
+    await flush();
+    expect(chat.appendStream.mock.calls[0][0].chunks[0]).toMatchObject({
+      status: "complete",
+      details: started.details,
+    });
+    expect(JSON.stringify(chat.appendStream.mock.calls)).not.toContain(
+      "result for model only",
+    );
+    await stream.finish({ text: "Done" });
+  });
+
+  test("redacts error credentials before they reach Slack", async () => {
+    const { stream, chat } = createStream();
+    stream.push({
+      type: "tool-input-available",
+      toolCallId: "error-1",
+      toolName: "tracker__create_task",
+      input: {},
+    });
+    stream.push({
+      type: "tool-output-error",
+      toolCallId: "error-1",
+      errorText:
+        "Request failed (403): Authorization: Bearer fixture-access-token password=fixture-password",
+    });
+    await flush();
+    const failed = chat.startStream.mock.calls[0][0].chunks[1];
+    expect(failed.status).toBe("error");
+    expect(failed.output).toContain("403");
+    expect(failed.output).not.toContain("fixture-access-token");
+    expect(failed.output).not.toContain("fixture-password");
+    await stream.finish({ text: "Failed" });
+  });
+
   test("streams text and tool cards in order, then appends only the tail", async () => {
     const { stream, chat, postReply } = createStream({ recipient: true });
 
@@ -346,6 +585,11 @@ describe("SlackReplyStream", () => {
 
     await stream.finish({ text: "Working on it." });
     expect(chat.stopStream).toHaveBeenCalledTimes(1);
+    expect(chat.stopStream.mock.calls[0][0].chunks[0]).toMatchObject({
+      id: "call-1",
+      status: "error",
+      output: "Tool did not finish",
+    });
     expect(chat.update).not.toHaveBeenCalled();
   });
 

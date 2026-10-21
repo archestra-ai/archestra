@@ -319,6 +319,28 @@ describe("run tools", () => {
     return task;
   }
 
+  async function seedRuntimeTask() {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+    });
+    await AgentWorkspaceModel.create({
+      id: task.id,
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: `test-${task.id.slice(0, 8)}`,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    return task;
+  }
+
   test.each([
     "TASK_STATE_COMPLETED",
     "TASK_STATE_FAILED",
@@ -1268,28 +1290,6 @@ describe("run tools", () => {
     });
 
     /** A chatops run with a live workspace, as a delegated run has. */
-    async function seedRuntimeTask() {
-      const task = await seedChatopsTask({
-        actorUserId: actorId,
-        withTarget: true,
-      });
-      await AgentWorkspaceModel.create({
-        id: task.id,
-        organizationId,
-        agentId: callingAgent.id,
-        actorKind: "user",
-        actorId,
-        backend: "kubernetes",
-        runtimeScope: "test",
-        workloadName: `test-${task.id.slice(0, 8)}`,
-        state: "active",
-        activeTaskId: task.id,
-        lastTaskId: task.id,
-        expiresAt: new Date(Date.now() + 3600_000),
-      });
-      return task;
-    }
-
     function postRunFile(
       args: Record<string, unknown>,
       extra: Partial<ArchestraContext> = {},
@@ -1299,6 +1299,134 @@ describe("run tools", () => {
         ...extra,
       });
     }
+  });
+
+  describe("workspace file tools with a workspace path", () => {
+    let root: string;
+    let workspace: string;
+    let stopServingWorkspace: () => void;
+
+    beforeEach(async () => {
+      root = await mkdtemp(path.join(tmpdir(), "workspace-file-"));
+      workspace = path.join(root, "workspace");
+      await mkdir(workspace);
+      stopServingWorkspace = serveWorkspaceFrom(workspace);
+    });
+
+    afterEach(async () => {
+      // This file shares its worker with other files: nothing may outlive it.
+      stopServingWorkspace();
+      await rm(root, { recursive: true, force: true });
+    });
+
+    test("say why a missing file could not be read, written or downloaded", async () => {
+      const task = await seedRuntimeTask();
+      const missing = "[Errno 2] No such file or directory: 'reports'";
+
+      const read = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "reports/notes.md" },
+        context,
+      );
+      const written = await executeArchestraTool(
+        "archestra__write_workspace_file",
+        { task_id: task.id, path: "reports/notes.md", content: "hello" },
+        context,
+      );
+      const download = await executeArchestraTool(
+        "archestra__transfer_workspace_file",
+        {
+          task_id: task.id,
+          direction: "download",
+          path: "reports/notes.md",
+          local_path: "/tmp/notes.md",
+        },
+        context,
+      );
+
+      expect(read).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `Error: Could not read reports/notes.md from the run's workspace: ${missing}`,
+          },
+        ],
+      });
+      expect(written).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `Error: Could not write reports/notes.md to the run's workspace: ${missing}`,
+          },
+        ],
+      });
+      expect(download).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `Error: Could not authorize the download of reports/notes.md: ${missing}`,
+          },
+        ],
+      });
+    });
+
+    test("a binary file read as text asks for base64", async () => {
+      const task = await seedRuntimeTask();
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0x00]);
+      await writeFile(path.join(workspace, "image.png"), bytes);
+
+      const asText = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "image.png" },
+        context,
+      );
+      const asBase64 = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "image.png", encoding: "base64" },
+        context,
+      );
+
+      expect(asText).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Error: Could not read image.png from the run's workspace: This file is not UTF-8 text. Read it with encoding base64.",
+          },
+        ],
+      });
+      expect(asBase64.isError).toBeFalsy();
+      expect(asBase64.structuredContent).toMatchObject({
+        encoding: "base64",
+        content: bytes.toString("base64"),
+      });
+    });
+
+    test("an unexpected failure stays generic", async () => {
+      const task = await seedRuntimeTask();
+      vi.mocked(backend.accessWorkspaceFile).mockRejectedValueOnce(
+        new Error("exec into pod agent-run-1234 failed"),
+      );
+
+      const read = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "notes.md" },
+        context,
+      );
+
+      expect(read).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Error: An internal error occurred while reading workspace file",
+          },
+        ],
+      });
+    });
   });
 });
 
@@ -1328,6 +1456,19 @@ function serveWorkspaceFrom(workspace: string): () => void {
       if (reply.ok !== true) throw new ApiError(400, reply.error);
       return reply;
     });
+  const file = vi
+    .spyOn(backend, "accessWorkspaceFile")
+    .mockImplementation(async ({ request }) => {
+      const run = spawnSync("python3", [helper], {
+        env,
+        input: JSON.stringify(request),
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      const { ok, error, ...result } = JSON.parse(run.stdout);
+      if (ok !== true) throw new ApiError(400, error);
+      return result;
+    });
   const range = vi
     .spyOn(backend, "readWorkspaceTransferRange")
     .mockImplementation(async ({ transferId, offset, length }) => {
@@ -1347,6 +1488,7 @@ function serveWorkspaceFrom(workspace: string): () => void {
     });
   return () => {
     command.mockRestore();
+    file.mockRestore();
     range.mockRestore();
   };
 }

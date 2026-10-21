@@ -483,9 +483,7 @@ const registry = defineArchestraTools([
           const content =
             args.encoding === "base64"
               ? (content_base64 ?? "")
-              : new TextDecoder("utf-8", { fatal: true }).decode(
-                  Buffer.from(content_base64 ?? "", "base64"),
-                );
+              : decodeWorkspaceText(content_base64 ?? "");
           return { metadata, content };
         };
         if (access.kind !== "parent") {
@@ -521,10 +519,11 @@ const registry = defineArchestraTools([
       } catch (error) {
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
-        return catchError(
+        return workspaceFileError({
           error,
-          "reading workspace file; use base64 encoding for binary content",
-        );
+          failure: `Could not read ${args.path} from the run's workspace`,
+          action: "reading workspace file",
+        });
       }
     },
   }),
@@ -635,7 +634,11 @@ const registry = defineArchestraTools([
       } catch (error) {
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
-        return catchError(error, "authorizing a workspace file transfer");
+        return workspaceFileError({
+          error,
+          failure: `Could not authorize the ${args.direction} of ${args.path}`,
+          action: "authorizing a workspace file transfer",
+        });
       }
     },
   }),
@@ -684,7 +687,11 @@ const registry = defineArchestraTools([
       } catch (error) {
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
-        return catchError(error, "writing workspace file");
+        return workspaceFileError({
+          error,
+          failure: `Could not write ${args.path} to the run's workspace`,
+          action: "writing workspace file",
+        });
       }
     },
   }),
@@ -1523,6 +1530,38 @@ async function readRunFile(params: {
       };
     }
     throw error;
+  }
+}
+
+/**
+ * The file helper's refusals (a missing file, a path rule, a size limit) and
+ * the workspace gate's lifecycle answers say what the caller can fix and never
+ * carry file bytes, so they are returned as they are. Anything else stays
+ * generic.
+ */
+function workspaceFileError(params: {
+  error: unknown;
+  failure: string;
+  action: string;
+}): CallToolResult {
+  const { error } = params;
+  if (error instanceof ApiError && error.statusCode < 500) {
+    return errorResult(`${params.failure}: ${error.message}`);
+  }
+  return catchError(error, params.action);
+}
+
+/** Strict UTF-8, so binary bytes are refused instead of mangled. */
+function decodeWorkspaceText(contentBase64: string): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      Buffer.from(contentBase64, "base64"),
+    );
+  } catch {
+    throw new ApiError(
+      400,
+      "This file is not UTF-8 text. Read it with encoding base64.",
+    );
   }
 }
 

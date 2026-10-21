@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-21
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -205,6 +205,45 @@ Allowed embedding origins follow [`ARCHESTRA_FRONTEND_URL`](/docs/reference/conf
 Archestra's managed Dagger engines need Linux nodes that permit privileged root pods with all Linux capabilities, plus dynamically provisioned `ReadWriteOnce` storage. Engine pods are separate from agent runtime containers.
 
 If your cluster does not admit these pods, set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST) to an external `tcp://` or `kube-pod://` engine, or disable the sandbox with [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) or Helm's `archestra.codeRuntime.enabled: false`.
+
+## SRE Agent
+
+Ask an agent why a pod keeps restarting, and it reads that pod's events and logs in your cluster, then answers with ranked hypotheses and the evidence behind each one. Archestra runs a read-only Kubernetes MCP server for it under the chart's `mcp-k8s-operator` ServiceAccount. That account can read pods, pod logs, services, events, and workloads in the Archestra namespace only. It cannot read Secrets or ConfigMaps, and it cannot change anything.
+
+1. Find the Kubernetes API server endpoint IPs: `kubectl get endpoints kubernetes -n default`. Use these IPs, not the `kubernetes` Service IP.
+2. Turn the agent on in your Helm values, then run `helm upgrade`:
+
+   ```yaml
+   archestra:
+     sre:
+       enabled: true
+       apiServerCidrs:
+         - 172.16.0.2/32
+   ```
+
+3. After the rollout, open **Chat**, pick the **SRE** agent, and ask "Why did a pod restart in the last hour?"
+
+What to know:
+
+- The MCP server runs in its own **SRE** environment, whose egress allows only `apiServerCidrs`. Without them, the server reaches the API server only on clusters that do not enforce egress policies.
+- Deleting the agent or its MCP server keeps it deleted. Setting `enabled: false` removes the agent, the server, and the environment, and turning it back on creates them again.
+- The agent appears once the server's tools are discovered. If it is missing, check the **Kubernetes** server under **MCP Registry** for a startup error.
+
+## Collect a Support Bundle
+
+When you report a problem, a support bundle gives us the pods, restarts, events, recent logs, and versions of your installation in one file. Run [`support-bundle.sh`](https://github.com/archestra-ai/archestra/blob/main/platform/scripts/support-bundle.sh) with the release namespace and name:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/archestra-ai/archestra/main/platform/scripts/support-bundle.sh
+bash support-bundle.sh archestra archestra
+```
+
+It needs `kubectl`, `helm`, and `jq` with read access to the namespace, and prints the path of the `.tar.gz` it wrote.
+
+What to know:
+
+- It never collects Secrets, ConfigMaps, or container environment values. From the Helm values it keeps only a fixed list of non-secret settings, such as replica counts and resources.
+- Logs are copied as written, so look through the bundle before you share it.
 
 ## Release Channels And Upgrades
 

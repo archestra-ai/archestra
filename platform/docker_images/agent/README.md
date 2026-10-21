@@ -12,6 +12,43 @@ non-root working directory and the invoking user's Agent-scoped MCP gateway endp
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
 
+All targets inherit the same tools from `agent-base`:
+
+| Capability | Included tools |
+| --- | --- |
+| Repository and PR work | Git, GitHub CLI 2.100.0, SSH client, jq, ripgrep |
+| Independent code review | Nitpicker, pinned to a revision with reviewer deadlines and OpenTelemetry support |
+| Browser automation and recording | Playwright 1.64.0, Chromium, shot-scraper 1.12 |
+| Media processing | FFmpeg/ffprobe, H.264 and AAC encoding, subtitle rendering, fonts |
+| Project tooling | Node.js 24, pnpm, Python 3, uv/uvx, C/C++ build tools, tmux |
+
+Browser tools live in `/opt/agent-tools`, with their commands exposed on PATH.
+Python scripts importing Playwright can use `/opt/agent-tools/bin/python`;
+project-specific Python dependencies belong in their own virtual environment.
+The matching Chromium binaries live at `$PLAYWRIGHT_BROWSERS_PATH`
+(`/opt/playwright`), outside the writable home/workspace mounts. Projects using
+a different Playwright version must install its matching browser into a writable
+cache, or prepare it in a derived image.
+
+Skills supply Nitpicker configuration, review procedures, recording scripts,
+and delivery behavior. The image contains no repository selection, organization
+prompts, promotion workflow, model credentials, or messaging destinations.
+Configure these on the Agent and load the relevant skills through its gateway.
+Sending generated media to Slack, email, or another service uses the Agent's
+authorized integrations; installing recording tools does not grant delivery access.
+
+A fresh runtime starts in `/home/node/workspace` without selecting or cloning a
+repository. Name the repository and setup procedure in the Agent's prompt,
+task, or assigned skill. A derived image can prepare a checkout before invoking
+the maintained launcher when deterministic startup is needed.
+
+The shared image build runs offline tests as the runtime user with a fresh home:
+Git credential renewal, Nitpicker configuration, Python environment creation,
+a browser interaction and recording, and captioned H.264/AAC video encoding.
+The catalog workflow runs these on both amd64 and arm64. Browser dependencies
+are pinned with hashes in `requirements.lock`; regenerate it from
+`requirements.in` using the command in the lock header after reviewing updates.
+
 On stable platform releases, the templates use the approved `:latest` aliases.
 Release candidates and development deployments keep matching fixed tags, so
 they do not pull a CLI from an older stable release. Agent Runtime

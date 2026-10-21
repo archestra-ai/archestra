@@ -35,9 +35,9 @@ import {
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import {
-  decryptInteractionContent,
   encryptInteractionContent,
   readInteractionRow,
+  restoreWrittenInteractionContent,
 } from "@/content-encryption/audit-rows";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -609,14 +609,12 @@ class InteractionModel {
         : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
     const interactionId = values.id ?? uuidv7();
+    const plaintext = {
+      ...values,
+      sessionPreview: buildSessionPreview(sanitized, values.request),
+    };
     const insertValues = {
-      ...encryptInteractionContent(
-        {
-          ...values,
-          sessionPreview: buildSessionPreview(sanitized, values.request),
-        },
-        audit,
-      ),
+      ...encryptInteractionContent({ ...plaintext }, audit),
       id: interactionId,
     };
     const insert = async (tx?: Transaction) => {
@@ -717,10 +715,14 @@ class InteractionModel {
               ),
           })
         : await write();
-    // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes. Safe for encrypted-chat rows too: this caller
-    // supplied the very key that just encrypted them.
-    decryptInteractionContent(interaction, audit);
+    // The RETURNING row is this method's public return value, so callers never
+    // see envelopes. Safe for encrypted-chat rows too: this caller supplied the
+    // very key that just encrypted them.
+    restoreWrittenInteractionContent(interaction, {
+      written: insertValues,
+      plaintext,
+      audit,
+    });
 
     if (tip) {
       InteractionDeltaManager.commitTip(interaction.id, tip);

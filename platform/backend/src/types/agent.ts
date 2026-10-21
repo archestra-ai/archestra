@@ -594,7 +594,7 @@ export type Agent = z.infer<typeof SelectAgentSchema>;
 export type AgentListItem = z.infer<typeof AgentListItemSchema>;
 export type AgentAccessContext = Pick<
   Agent,
-  "id" | "organizationId" | "scope" | "authorId"
+  "id" | "organizationId" | "scope" | "authorId" | "agentType"
 >;
 export type InsertAgent = z.input<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;

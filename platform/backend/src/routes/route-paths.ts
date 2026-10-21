@@ -1,3 +1,5 @@
+import { SupportedProviders } from "@archestra/shared/model-constants";
+
 /**
  * Route path constants shared across route definitions, auth middleware, sentry config,
  * and request logging filters. Centralizing these prevents drift between components
@@ -12,6 +14,18 @@ export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
 export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
+export const PROXY_API_PREFIX = "/v1";
+export const MODEL_ROUTER_PREFIX = `${PROXY_API_PREFIX}/model-router`;
+
+/** An LLM proxy route: `/v1/<provider>/...` or the model router. */
+export function isLlmProxyPath(url: string): boolean {
+  return (
+    url.startsWith(MODEL_ROUTER_PREFIX) ||
+    SupportedProviders.some((provider) =>
+      url.startsWith(`${PROXY_API_PREFIX}/${provider}`),
+    )
+  );
+}
 /**
  * Public unauthenticated git smart-HTTP endpoint backing the skill marketplace.
  * Routes under this prefix authenticate via the URL token (no session); they

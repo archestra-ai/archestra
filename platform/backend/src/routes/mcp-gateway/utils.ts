@@ -2368,6 +2368,7 @@ async function authenticateExternalIdpToken(
       !(await AgentTeamModel.userHasAgentAccess({
         userId: user.id,
         agentId: profileId,
+        agentAccessContext: agent,
         isAgentAdmin: isAdmin,
         action: "use",
       }))

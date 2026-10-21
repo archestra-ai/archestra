@@ -1519,7 +1519,7 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 |------|-------------|--------------------------|
 | `delete_workspace` | Permanently delete a retained runtime workspace and all of its files. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `read_workspace_file` | Read a file from your Agent Runtime's retained workspace using its run_id. | [`agent:read`](/docs/reference/permissions#agent:read) |
-| `transfer_workspace_file` | Copy a file between this machine and an Agent Runtime workspace without reading it. | [`agent:read`](/docs/reference/permissions#agent:read) |
+| `transfer_workspace_file` | Copy a file between this machine and a Remote Agent's workspace without reading it. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `write_workspace_file` | Create a file in your Agent Runtime's retained workspace using its run_id. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `start_agent_run` | Start a background run on an Agent that has Agent Runtime. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `get_agent_run` | Read a run's state, the result it has handed back so far, and whether it accepts a follow-up. | [`agent:read`](/docs/reference/permissions#agent:read) |
@@ -1528,7 +1528,7 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 | `cancel_agent_run` | Stop an active run. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `post_agent_run_message` | Post a brief update to the Slack thread an active Agent Runtime run reports to. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `post_agent_run_file` | Upload a file into the messaging-channel thread a run reports to — a demo recording, for example — so it renders natively there (Slack plays video uploads inline). | [`agent:read`](/docs/reference/permissions#agent:read) |
-| `transfer_credential` | Give an Agent Runtime Agent a credential, so a handed-over task can use the CLI authentication the local session was using. | [`credential:create`](/docs/reference/permissions#credential:create) |
+| `transfer_credential` | Give a Remote Agent a credential, so a handed-over task can use the CLI authentication the local session was using. | [`credential:create`](/docs/reference/permissions#credential:create) |
 
 #### delete_workspace
 

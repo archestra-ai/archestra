@@ -6,6 +6,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerModel from "@/models/mcp-server";
 import SecretModel from "@/models/secret";
+import ServiceAccountModel from "@/models/service-account";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -13,12 +14,16 @@ import {
   authenticatedRouteApp,
   USER_HEADER,
 } from "@/test/authenticated-route-app";
-import { setupTestCacheManager } from "@/test/cache-manager";
 import type { InternalMcpCatalog, User } from "@/types";
 import oauthRoutes from "./oauth";
 
+vi.mock("@keyv/postgres", async () => ({
+  default: (await import("@/test/keyv-postgres-store")).TestKeyvPostgresStore,
+}));
+
 describe("MCP installation OAuth authorization", () => {
-  setupTestCacheManager();
+  beforeEach(() => cacheManager.start());
+  afterEach(() => cacheManager.shutdown());
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let caller: User;
@@ -296,6 +301,40 @@ describe("MCP installation OAuth authorization", () => {
     } finally {
       verify.mockRestore();
     }
+  });
+
+  test("supports an authorized service account without a browser session", async () => {
+    await grant(["read", "use"]);
+    const account = await ServiceAccountModel.create({
+      organizationId,
+      name: "OAuth automation",
+      role: "member",
+      createdBy: null,
+    });
+    const token = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId,
+      name: "OAuth automation token",
+    });
+    const headers = { authorization: token.token };
+    const initiated = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      headers,
+      payload: { catalogId: catalog.id },
+    });
+    expect(initiated.statusCode, initiated.body).toBe(200);
+    challenge =
+      new URL(initiated.json().authorizationUrl).searchParams.get(
+        "code_challenge",
+      ) ?? "";
+    const completed = await app.inject({
+      method: "POST",
+      url: "/api/oauth/callback",
+      headers,
+      payload: { code: "synthetic-code", state: initiated.json().state },
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
   });
 
   test("uses the current configured client secret after credential rotation", async ({

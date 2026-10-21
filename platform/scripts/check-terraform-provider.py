@@ -78,6 +78,14 @@ def clean_env():
     return env
 
 
+
+def verify_source(source, selected_hash):
+    if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != selected_hash:
+        raise OfflineGenerationError(
+            "The provider revision does not read OPENAPI_SPEC in make codegen-api-client; "
+            "choose a provider_ref with offline generation (provider v3 or later)."
+        )
+
 def has_credential_target(makefile):
     # Inspect declarations only; never execute tooling to discover the layout.
     return bool(re.search(r"^codegen-credential-client\s*:(?!=)", makefile, re.M))
@@ -95,21 +103,14 @@ def generate_client(*, provider, spec, env):
                    "ARCHESTRA_OPENAPI_SPEC": str(spec.resolve()),
                    "ARCHESTRA_BASE_URL": "http://127.0.0.1:9"},
     )
-    def verify_source(name):
-        source = provider / ".codegen" / name
-        if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != selected_hash:
-            raise OfflineGenerationError(
-                "The provider revision does not read OPENAPI_SPEC in make codegen-api-client; "
-                "choose a provider_ref with offline generation (provider v3 or later)."
-            )
-    verify_source("openapi.raw.json")
+    verify_source(provider / ".codegen/openapi.raw.json", selected_hash)
     if result.returncode:
         raise ClientGenerationError(
             f"Client generation failed for the selected spec (make exit {result.returncode}); "
             "the provider's codegen must handle this API change."
         )
     if credential:
-        verify_source("credentials-source.json")
+        verify_source(provider / ".codegen/credentials-source.json", selected_hash)
     print(f"All generated-client source SHA256 hashes match the selected spec: {selected_hash}", flush=True)
 
 

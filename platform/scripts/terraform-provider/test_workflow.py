@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -67,7 +68,8 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
         self.assertNotIn('secrets.', source)
         self.assertNotIn('continue-on-error', source)
         self.assertNotIn('persist-credentials: true', source)
-        self.assertEqual(source.count('persist-credentials: false'), 3)
+        self.assertEqual(source.count('persist-credentials: false'), 2)
+        self.assertNotIn('ref: ${{ inputs.platform_ref', source)
         self.assertIn('cancel-in-progress: true', source)
         self.assertIn('github.event.pull_request.number || github.run_id', source)
         checkout = source.split('      - name: Checkout platform\n', 1)[1].split('      - name:', 1)[0]
@@ -94,6 +96,58 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
                 env=os.environ | {'SPEC_FILE': spec_path}, text=True)
             self.assertEqual(json.loads(result), ['--provider', '../terraform-provider', '--spec', spec_path])
             self.assertFalse((root/'injected').exists())
+
+    def test_platform_ref_is_validated_and_only_the_spec_is_read(self):
+        script = compatibility_step_script('Read selected platform spec')
+        self.assertIn('git show FETCH_HEAD:docs/openapi.json', script)
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            (root/'platform').mkdir()
+            (root/'docs').mkdir()
+            (root/'docs/openapi.json').write_text('{"openapi": "3.0.0"}\n')
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            env = os.environ | {'RUNNER_TEMP': work, 'GITHUB_OUTPUT': str(root/'output'),
+                                'GITHUB_STEP_SUMMARY': str(root/'summary'), 'GH_TOKEN': 'unused'}
+            for ref in ('', '--upload-pack=touch injected', 'main;touch injected', 'main\nother'):
+                result = subprocess.run(['bash', '-c', script], cwd=root/'platform', capture_output=True, text=True,
+                                        env=env | {'EVENT_NAME': 'workflow_dispatch', 'PLATFORM_REF': ref})
+                self.assertEqual(result.returncode, 2, ref)
+                self.assertIn('platform_ref must be a branch, tag or commit SHA', result.stdout)
+            self.assertFalse((root/'platform/injected').exists())
+            subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+            subprocess.run(['git', '-C', str(root), '-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
+                            'commit', '-qm', 'spec'], check=True)
+            subprocess.run(['bash', '-c', script], cwd=root/'platform', check=True,
+                           env=env | {'EVENT_NAME': 'pull_request', 'PLATFORM_REF': ''})
+            self.assertEqual((Path(work)/'openapi.json').read_text(), '{"openapi": "3.0.0"}\n')
+            self.assertIn(f'file={work}/openapi.json', (root/'output').read_text())
+
+    def test_provider_revision_must_be_on_a_branch_or_tag(self):
+        script = compatibility_step_script('Check provider revision')
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            (root/'platform').mkdir()
+            provider = root/'terraform-provider'
+            git = ['git', '-C', str(provider), '-c', 'user.name=t', '-c', 'user.email=t@example.invalid']
+            subprocess.run(['git', 'init', '-q', str(provider)], check=True)
+            subprocess.run([*git, 'commit', '-q', '--allow-empty', '-m', 'main'], check=True)
+            main = subprocess.check_output([*git, 'rev-parse', 'HEAD'], text=True).strip()
+            subprocess.run([*git, 'update-ref', 'refs/remotes/origin/main', main], check=True)
+            # A fork pull request commit is fetched by SHA without any branch or tag.
+            fork = subprocess.check_output([*git, 'commit-tree', f'{main}^{{tree}}', '-p', main, '-m', 'fork'],
+                                           text=True).strip()
+            env = os.environ | {'GITHUB_STEP_SUMMARY': str(root/'summary')}
+            for head, expected in ((main, 0), (fork, 2)):
+                subprocess.run([*git, 'checkout', '-q', '--detach', head], check=True)
+                result = subprocess.run(['bash', '-c', script], cwd=root/'platform', capture_output=True, text=True, env=env)
+                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+            self.assertIn(f'Provider commit: {main}', (root/'summary').read_text())
+
+
+def compatibility_step_script(name):
+    source = (ROOT / '.github/workflows/terraform-provider-compatibility.yml').read_text()
+    step = source.split(f'      - name: {name}\n', 1)[1].split('\n      - name:', 1)[0]
+    return textwrap.dedent(step.split('        run: |\n', 1)[1])
 
 
 if __name__ == '__main__':

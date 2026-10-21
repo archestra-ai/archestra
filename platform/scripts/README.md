@@ -116,9 +116,12 @@ branch. Both inputs are prefilled with `main` and accept a branch, tag or
 commit SHA:
 
 - `platform_ref`: the platform revision whose `docs/openapi.json` is checked.
-  It can be older than the checker, because the scripts come from the workflow
-  branch.
-- `provider_ref`: the provider revision to check.
+  The run reads only that file from it, so it can be older than the checker:
+  the scripts come from the workflow branch.
+- `provider_ref`: the provider revision to check. It must be a branch or tag of
+  the provider repository, or a commit on one of them. A commit that exists only
+  in a fork's pull request is refused, because the check runs provider code and
+  a run from `main` shares the default branch's cache.
 
 The run summary shows the commits that were checked. Manual runs do not cancel
 each other; a new push to a pull request cancels its older run.

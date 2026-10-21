@@ -20,10 +20,10 @@ BRANCH = "automation/platform-api"
 REPOSITORY = "archestra-ai/terraform-provider-archestra"
 CLIENTS = ("internal/client/archestra_client.go", "internal/client/archestra_client_manual.go")
 MANIFEST = "platform-api.json"
-module = importlib.util.spec_from_file_location(
+checker = importlib.util.spec_from_file_location(
     "compatibility", Path(__file__).resolve().parents[1] / "check-terraform-provider.py")
-runner = importlib.util.module_from_spec(module)
-module.loader.exec_module(runner)
+runner = importlib.util.module_from_spec(checker)
+checker.loader.exec_module(runner)
 
 
 def clients(makefile):

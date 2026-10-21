@@ -602,6 +602,8 @@ class A2ATaskModel {
     statusChangedAfter?: Date;
     cursor?: { stateChangedAt: Date; id: string };
     pageSize: number;
+    /** Skip a run's earlier turns: keep a workspace's latest turn and standalone tasks. */
+    currentTurnsOnly?: boolean;
   }): Promise<{ tasks: A2ATask[]; totalSize: number }> {
     const orderingTimestamp = schema.a2aTasksTable.stateChangedAt;
 
@@ -618,6 +620,15 @@ class A2ATaskModel {
       params.state ? eq(schema.a2aTasksTable.state, params.state) : undefined,
       params.statusChangedAfter
         ? sql`${orderingTimestamp} > ${params.statusChangedAfter}`
+        : undefined,
+      params.currentTurnsOnly
+        ? sql`NOT EXISTS (
+            SELECT 1 FROM ${schema.agentRunsTable}
+            JOIN ${schema.agentWorkspacesTable}
+              ON ${schema.agentWorkspacesTable.workloadName} = ${schema.agentRunsTable.workloadName}
+            WHERE ${schema.agentRunsTable.taskId} = ${schema.a2aTasksTable.id}
+              AND ${schema.agentWorkspacesTable.lastTaskId} IS DISTINCT FROM ${schema.a2aTasksTable.id}
+          )`
         : undefined,
     );
 

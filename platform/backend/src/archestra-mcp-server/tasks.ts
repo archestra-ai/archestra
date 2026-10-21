@@ -901,6 +901,7 @@ const registry = defineArchestraTools([
             agentIds: requestedAgentIds,
             state,
             pageSize: args.limit,
+            currentTurnsOnly: true,
           });
           const runIds = await AgentRunModel.findRunIdsByTaskIds(
             tasks.map((task) => task.id),

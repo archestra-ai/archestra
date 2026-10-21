@@ -312,11 +312,20 @@ test("an external gateway steers the current turn using the original session han
   );
   const listedText = JSON.parse((listed.content[0] as { text: string }).text);
   expect(listedText).toEqual(listed.structuredContent);
-  expect(listedText.runs).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ run_id: previous.taskId, state: "working" }),
-    ]),
+  // The completed first turn is history: the run is listed once, as it is now.
+  expect(listedText).toMatchObject({
+    runs: [{ run_id: previous.taskId, state: "working" }],
+    summary: { total: 1, by_state: { working: 1 } },
+  });
+  const completed = await executeArchestraTool(
+    TOOL_LIST_AGENT_RUNS_FULL_NAME,
+    { agent_ids: [agent.id], mine_only: true, state: "completed" },
+    externalContext,
   );
+  expect(completed.structuredContent).toMatchObject({
+    runs: [],
+    summary: { total: 0 },
+  });
   expect(launch).not.toHaveBeenCalled();
   expect(continuation).not.toHaveBeenCalled();
   expect(

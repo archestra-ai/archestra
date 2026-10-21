@@ -1034,12 +1034,18 @@ ${promptInstall}
 ${extraInstall}
 ${
   ctx.managedInstructionsSource
-    ? `[IO.File]::WriteAllBytes(($archGuardPath + '.instructions-source.json'), [Convert]::FromBase64String('${Buffer.from(JSON.stringify(ctx.managedInstructionsSource)).toString("base64")}'))
-[IO.File]::WriteAllBytes(($archGuardPath + '.instructions-refresh.ps1'), [Convert]::FromBase64String('${Buffer.from(MANAGED_INSTRUCTIONS_REFRESH_WINDOWS).toString("base64")}'))
+    ? `[IO.File]::WriteAllBytes(($archGuardPath + '.instructions-refresh.ps1'), [Convert]::FromBase64String('${Buffer.from(MANAGED_INSTRUCTIONS_REFRESH_WINDOWS).toString("base64")}'))
+# Set-Acl on a file that an earlier connect already locked needs
+# SeSecurityPrivilege, which a non-admin user does not have. So each run
+# recreates the file, locks it while it is still empty, then writes the token.
+# A delete that fails stops here, so the old file is never emptied in place.
+if (Test-Path -LiteralPath ($archGuardPath + '.instructions-source.json')) { Remove-Item -LiteralPath ($archGuardPath + '.instructions-source.json') -Force -ErrorAction Stop }
+[IO.File]::WriteAllBytes(($archGuardPath + '.instructions-source.json'), [byte[]]@())
 $archSourceAcl = New-Object System.Security.AccessControl.FileSecurity
 $archSourceAcl.SetAccessRuleProtection($true, $false)
 $archSourceAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([System.Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl', 'Allow')))
-Set-Acl -LiteralPath ($archGuardPath + '.instructions-source.json') -AclObject $archSourceAcl`
+Set-Acl -LiteralPath ($archGuardPath + '.instructions-source.json') -AclObject $archSourceAcl
+[IO.File]::WriteAllBytes(($archGuardPath + '.instructions-source.json'), [Convert]::FromBase64String('${Buffer.from(JSON.stringify(ctx.managedInstructionsSource)).toString("base64")}'))`
     : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions-source.json'), ($archGuardPath + '.instructions-refresh.ps1')`
 }
 ${

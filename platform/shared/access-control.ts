@@ -1499,13 +1499,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     organizationSettings: ["update"],
   },
-  // Config reads match their writes so Terraform-style drift checks need no
-  // more access than the apply.
+  // Config reads return no secret, only what GetChatOpsStatus shows at read.
   [RouteId.GetSlackChatOpsConfig]: {
-    organizationSettings: ["update"],
+    organizationSettings: ["read"],
   },
   [RouteId.GetMsTeamsChatOpsConfig]: {
-    organizationSettings: ["update"],
+    organizationSettings: ["read"],
   },
   [RouteId.ListSlackAgentBots]: {
     organizationSettings: ["read"],
@@ -1547,7 +1546,7 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   },
   [RouteId.GetTelegramChatOpsConfig]: {
-    organizationSettings: ["update"],
+    organizationSettings: ["read"],
   },
   // Any authenticated user can link or unlink their own Telegram account
   [RouteId.LinkTelegramChatOpsAccount]: {},
@@ -1728,8 +1727,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetOpenappaCredentialBinding]: {
     guardrailsPolicy: ["update"],
   },
-  [RouteId.GetOpenappaCredentialBindings]: { guardrailsPolicy: ["update"] },
-  [RouteId.GetOpenappaCredentialBinding]: { guardrailsPolicy: ["update"] },
+  // The variable -> key pairs are readable through GetOpenappaPolicyDeclarations too.
+  [RouteId.GetOpenappaCredentialBindings]: { guardrailsPolicy: ["read"] },
+  [RouteId.GetOpenappaCredentialBinding]: { guardrailsPolicy: ["read"] },
   [RouteId.GetOpenappaPolicyDeclarations]: { guardrailsPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.

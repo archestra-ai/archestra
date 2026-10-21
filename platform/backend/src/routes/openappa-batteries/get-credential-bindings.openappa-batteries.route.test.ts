@@ -133,7 +133,7 @@ describe("reading battery credential bindings", () => {
     ).toBe(400);
   });
 
-  test("takes the same policy update permission as binding", async ({
+  test("a policy reader can read bindings but still cannot bind", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -149,6 +149,12 @@ describe("reading battery credential bindings", () => {
       "/api/openappa/credential-bindings",
       `/api/openappa/credential-bindings/${GITHUB_TOKEN}`,
     ])
-      expect((await app.inject({ method: "GET", url })).statusCode).toBe(403);
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(200);
+    const write = await app.inject({
+      method: "PUT",
+      url: `/api/openappa/credential-bindings/${GITHUB_TOKEN}`,
+      payload: { key: null },
+    });
+    expect(write.statusCode).toBe(403);
   });
 });

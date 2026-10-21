@@ -148446,7 +148446,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Get the stored MS Teams chatops configuration without its secrets\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Get the stored MS Teams chatops configuration without its secrets\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -148723,7 +148723,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "organizationSettings:read"
           ]
         }
       },
@@ -149858,7 +149858,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Get the stored Slack chatops configuration without its secrets\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Get the stored Slack chatops configuration without its secrets\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -150138,7 +150138,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "organizationSettings:read"
           ]
         }
       },
@@ -154238,7 +154238,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Get the stored Telegram chatops configuration without its bot token\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Get the stored Telegram chatops configuration without its bot token\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -154505,7 +154505,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "organizationSettings:read"
           ]
         }
       },
@@ -354514,7 +354514,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "List the stored credential bindings; credential values are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries",
+        "description": "List the stored credential bindings; credential values are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -354797,7 +354797,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "guardrailsPolicy:update"
+            "guardrailsPolicy:read"
           ]
         }
       }
@@ -354808,7 +354808,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Get one stored credential binding; the credential value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries",
+        "description": "Get one stored credential binding; the credential value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
         "parameters": [
           {
             "schema": {
@@ -355099,7 +355099,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "guardrailsPolicy:update"
+            "guardrailsPolicy:read"
           ]
         }
       },

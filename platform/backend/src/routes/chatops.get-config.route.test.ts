@@ -115,7 +115,7 @@ describe("GET /api/chatops/config/:provider", () => {
       for (const secret of SECRETS) expect(response.body).not.toContain(secret);
   });
 
-  test("takes the same organization settings update permission as the write", async ({
+  test("an organization settings reader can read config but still cannot write it", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -126,7 +126,14 @@ describe("GET /api/chatops/config/:provider", () => {
     actor = await makeUser();
     await makeMember(actor.id, organizationId, { role: reader.role });
 
-    for (const provider of ["slack", "ms-teams", "telegram"])
-      expect((await get(provider)).statusCode).toBe(403);
+    for (const provider of ["slack", "ms-teams", "telegram"]) {
+      expect((await get(provider)).statusCode).toBe(200);
+      const write = await app.inject({
+        method: "PUT",
+        url: `/api/chatops/config/${provider}`,
+        payload: { enabled: false },
+      });
+      expect(write.statusCode).toBe(403);
+    }
   });
 });

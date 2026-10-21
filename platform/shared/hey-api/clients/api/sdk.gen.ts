@@ -3260,7 +3260,7 @@ export const applyChatOpsBindingPlan = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getMsTeamsChatOpsConfig = <ThrowOnError extends boolean = false>(options?: Options<GetMsTeamsChatOpsConfigData, ThrowOnError>) => (options?.client ?? client).get<GetMsTeamsChatOpsConfigResponses, GetMsTeamsChatOpsConfigErrors, ThrowOnError>({ url: '/api/chatops/config/ms-teams', ...options });
 
@@ -3339,7 +3339,7 @@ export const connectNgrok = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getSlackChatOpsConfig = <ThrowOnError extends boolean = false>(options?: Options<GetSlackChatOpsConfigData, ThrowOnError>) => (options?.client ?? client).get<GetSlackChatOpsConfigResponses, GetSlackChatOpsConfigErrors, ThrowOnError>({ url: '/api/chatops/config/slack', ...options });
 
@@ -3563,7 +3563,7 @@ export const joinSlackRouterBotChannel = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `organizationSettings:read`: View every organization settings page, including messaging channels
  */
 export const getTelegramChatOpsConfig = <ThrowOnError extends boolean = false>(options?: Options<GetTelegramChatOpsConfigData, ThrowOnError>) => (options?.client ?? client).get<GetTelegramChatOpsConfigResponses, GetTelegramChatOpsConfigErrors, ThrowOnError>({ url: '/api/chatops/config/telegram', ...options });
 
@@ -8537,7 +8537,7 @@ export const deleteOpenappaBatteryInclude = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries
+ * `guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage
  */
 export const getOpenappaCredentialBindings = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaCredentialBindingsData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaCredentialBindingsResponses, GetOpenappaCredentialBindingsErrors, ThrowOnError>({ url: '/api/openappa/credential-bindings', ...options });
 
@@ -8550,7 +8550,7 @@ export const getOpenappaCredentialBindings = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `guardrailsPolicy:update`: Validate and edit Guardrails policy and manage batteries
+ * `guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage
  */
 export const getOpenappaCredentialBinding = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaCredentialBindingData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaCredentialBindingResponses, GetOpenappaCredentialBindingErrors, ThrowOnError>({ url: '/api/openappa/credential-bindings/{variable}', ...options });
 

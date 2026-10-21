@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { isDatabaseHealthy } from "@/database";
+import { openappaReadiness } from "@/openappa/service";
 import type { SandboxRuntimeStatus } from "@/sandbox-runtime/sandbox-runtime-service";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { HEALTH_PATH, READY_PATH } from "./route-paths";
@@ -34,7 +35,9 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Readiness check — verifies database connectivity.
+   * Readiness check — verifies database connectivity and, when Guardrails
+   * (OpenAPPA) is enabled, that its runtime is open: every governed request
+   * fails while it is not.
    * Returns 200 if ready to receive traffic, 503 otherwise.
    */
   fastify.get(
@@ -48,6 +51,7 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             status: z.enum(["ok", "maintenance"]),
             version: z.string(),
             database: z.enum(["connected", "not_checked"]),
+            openappa: z.enum(["ready", "disabled", "not_checked"]),
             // Code-execution sandbox readiness. Consumers (e.g. the benchmark
             // runner) fail fast on `disabled`/`unreachable` instead of waiting
             // out their readiness deadline. `sandboxReason` carries the
@@ -64,7 +68,10 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: z.string(),
             status: z.literal("degraded"),
             version: z.string(),
-            database: z.literal("disconnected"),
+            database: z.enum(["connected", "disconnected"]),
+            openappa: z.enum(["starting", "unavailable"]).optional(),
+            // The runtime failure code, e.g. `storage`; the log has the cause.
+            openappaReason: z.string().optional(),
           }),
         },
       },
@@ -88,6 +95,7 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...ready200(),
           status: "maintenance",
           database: "not_checked",
+          openappa: "not_checked",
         });
       }
 
@@ -103,7 +111,40 @@ const healthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      return reply.send({ ...ready200(), status: "ok", database: "connected" });
+      const openappa = await openappaReadiness();
+      switch (openappa.state) {
+        case "disabled":
+        case "ready":
+          return reply.send({
+            ...ready200(),
+            status: "ok",
+            database: "connected",
+            openappa: openappa.state,
+          });
+        case "starting":
+          return reply.status(503).send({
+            name,
+            status: "degraded",
+            version,
+            database: "connected",
+            openappa: "starting",
+          });
+        case "unavailable":
+          request.log.warn(
+            { code: openappa.code },
+            "OpenAPPA runtime check failed for readiness probe",
+          );
+          return reply.status(503).send({
+            name,
+            status: "degraded",
+            version,
+            database: "connected",
+            openappa: "unavailable",
+            openappaReason: openappa.code,
+          });
+        default:
+          return assertNever(openappa);
+      }
     },
   );
 };

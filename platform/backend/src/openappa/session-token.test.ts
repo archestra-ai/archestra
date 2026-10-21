@@ -220,16 +220,17 @@ describe("session receipt restore", () => {
 
   test("strips legacy two-line and Markdown-collapsed receipt layouts", () => {
     const topLabel = `${MARK_TOP}  protected session AAA-AAAA\n${MARK_BOTTOM}`;
+    const collapsedTopLabel = `${MARK_TOP}  protected session EEE-EEEE ${MARK_BOTTOM}`;
     const bottomLabel = `${MARK_TOP}\n${MARK_BOTTOM}  protected session BBB-BBBB`;
     const collapsed = `${MARK_TOP} ${MARK_BOTTOM}  protected session CCC-CCCC`;
     const collapsedSingleSpace = `${MARK_TOP} ${MARK_BOTTOM} protected session DDD-DDDD`;
     expect(
       stripSessionReceipts(
-        `keep${topLabel}\n\n${bottomLabel}\n\n${collapsed}\n\n${collapsedSingleSpace}`,
+        `keep${topLabel}\n\n${collapsedTopLabel}\n\n${bottomLabel}\n\n${collapsed}\n\n${collapsedSingleSpace}`,
       ),
     ).toEqual({
       text: "keep",
-      codes: ["AAA-AAAA", "BBB-BBBB", "CCC-CCCC", "DDD-DDDD"],
+      codes: ["AAA-AAAA", "EEE-EEEE", "BBB-BBBB", "CCC-CCCC", "DDD-DDDD"],
     });
   });
 

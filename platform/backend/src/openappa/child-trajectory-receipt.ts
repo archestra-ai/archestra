@@ -25,7 +25,7 @@ export type AppaChildTrajectoryReceipt = {
 
 const MARK_TOP = "▄█▄▄▄█▄";
 const MARK_BOTTOM = "██▄█▄██";
-const LOGO_PATTERN = String.raw`(?:${MARK_TOP}(?:\r?\n${MARK_BOTTOM}|\s+${MARK_BOTTOM})?)`;
+const LOGO_PATTERN = String.raw`(?:${MARK_TOP}(?:(?:\r?\n|[\t ]{1,8})${MARK_BOTTOM})?)`;
 const DISPLAY_LABEL = "archestra.appa.child-trajectory-display.v1";
 const PROOF_LABEL = "archestra.appa.child-trajectory.v2";
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";

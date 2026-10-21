@@ -168,6 +168,23 @@ test("an attested child may read untrusted data and still answer at its parent's
   assert.equal((await run.hook(run.parent, run.call('p1', 'publish'))).decision, 'allow_call', 'the parent is still trusted');
 });
 
+// The pinned runtime still offers the attestation to a suspicious parent and
+// refuses it on execution with no answer. That answer reaches the model as an
+// error result, not as a runtime failure that ends the turn.
+test('a suspicious parent hears why its attested return is refused', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  const held = await run.hook(run.parent, run.call('r1', 'read_inbox'));
+  await run.remedy(run.parent, 'r1:accept', { offer_id: held.offers[0].offer_id, label: {} });
+  assert.equal((await run.hook(run.parent, run.call('r2', 'read_inbox'))).decision, 'allow_call');
+  await run.hook(run.parent, { event: 'tool_result', tool_call_id: 'r2', output: 'lease ends in 3 days', outcome: 'success' });
+
+  const { declared, call } = await startSpawn(run, schema);
+  assert.equal(declared.result.isError, true);
+  assert.match(declared.result.content[0].text, /the return declaration is refused: .*attest-schema.*the offer stands/);
+  assert.equal(call.decision, 'deny_call', 'the spawn stays held');
+});
+
 test('a child returning as spoken may not read untrusted data', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();

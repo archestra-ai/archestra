@@ -5,6 +5,7 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -734,7 +735,8 @@ class OpenAppaBatteriesService {
         organizationId,
         variable,
         credentialKey: key,
-        updatedBy: userId,
+        // `updated_by` references users; a service account has no users row.
+        updatedBy: isServiceAccountUserId(userId) ? null : userId,
       });
     }
     await this.recompose(organizationId);

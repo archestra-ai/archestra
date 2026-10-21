@@ -225,7 +225,7 @@ Ask an agent why a pod keeps restarting, and it reads that pod's events and logs
 
 What to know:
 
-- Only Admins and Platform Admins can see and use the agent, the **Kubernetes** server, and the **SRE** environment. The server can read the specs of every MCP server pod in the namespace, and their arguments can hold resolved credentials.
+- Only Admins and Platform Admins can use the agent and the **Kubernetes** catalog item, because the server can read the specs of every MCP server pod in the namespace, and their arguments can hold resolved credentials. Members can still see that the **SRE** environment, with its network policy, and the Kubernetes install exist, but they cannot use the agent or call the Kubernetes tools, even from an agent of their own.
 - The MCP server runs in its own **SRE** environment. Its egress is your organization's [default network policy](/docs/admin/environments), or public internet with private ranges blocked when none is set, plus `apiServerCidrs`. So, like other MCP servers, the Kubernetes server can reach the internet; it runs a pinned, read-only image. Without `apiServerCidrs`, it reaches the API server only on clusters that do not enforce egress policies.
 - The policy is applied at startup. Changing `apiServerCidrs` or the default policy does not restart the MCP server pod, so connections it already holds stay open until the pod restarts.
 - Deleting the agent or its MCP server keeps it deleted across restarts, as long as the deleted item is kept. If it is permanently purged, the next start creates it again.

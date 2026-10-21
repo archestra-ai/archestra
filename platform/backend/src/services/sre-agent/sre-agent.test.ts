@@ -8,6 +8,7 @@ import type * as k8s from "@kubernetes/client-node";
 import { beforeEach } from "vitest";
 import { getAppVersion } from "@/app-version";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import { buildDaggerEgressPolicies } from "@/k8s/dagger-environment-runtime/network-policy";
@@ -25,9 +26,12 @@ import {
 } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
+import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { renderSystemPrompt } from "@/templating";
 import { describe, expect, test } from "@/test";
+import { agentOwner } from "@/types";
 import {
   SRE_AGENT_ID,
   SRE_AGENT_TOOL_NAMES,
@@ -291,6 +295,70 @@ describe("sreAgentService", () => {
       catalog: false,
       environment: false,
     });
+  });
+
+  test("a member who assigns a Kubernetes tool to their own agent can neither list nor call it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organizationId, adminId } = await seedAdmin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await sreAgentService.seed();
+    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    const [podsLog] = await discoverTools(["pods_log"]);
+    // Outside the SRE environment, environment isolation already hides the
+    // tool; inside it, the catalog item's admin-only grants still do.
+    const ownAgent = await makeAgent({ organizationId, authorId: member.id });
+    const sreEnvAgent = await makeAgent({
+      organizationId,
+      authorId: member.id,
+      environmentId: SRE_ENVIRONMENT_ID,
+    });
+    for (const agent of [ownAgent, sreEnvAgent]) {
+      expect(
+        await assignToolToAgent({
+          agentId: agent.id,
+          toolId: podsLog.id,
+          mcpServerId: server.id,
+        }),
+      ).toBeNull();
+    }
+
+    const listedFor = async (agentId: string, userId: string) =>
+      (
+        await filterToolsByCallerCatalogAccess(
+          await ToolModel.getMcpToolsByAgent(agentId),
+          { userId, organizationId },
+        )
+      ).map(({ id }) => id);
+    expect(await listedFor(ownAgent.id, member.id)).toEqual([]);
+    expect(await listedFor(sreEnvAgent.id, member.id)).toEqual([]);
+    expect(await listedFor(sreEnvAgent.id, adminId)).toEqual([podsLog.id]);
+
+    for (const agent of [ownAgent, sreEnvAgent]) {
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "call_pods_log", name: podsLog.name, arguments: {} },
+        agentOwner(agent.id),
+        {
+          tokenId: "member-session",
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId,
+          userId: member.id,
+        },
+      );
+      expect(result).toMatchObject({
+        isError: true,
+        _meta: { archestraError: { code: "unknown_tool" } },
+      });
+    }
   });
 
   test("version 1 of the agent already has its tools", async ({

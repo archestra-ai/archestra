@@ -643,6 +643,7 @@ function getOAuthCallerBinding(request: FastifyRequest): string {
   ) {
     throw new ApiError(401, "Unauthenticated");
   }
+  // Keep this tuple's order stable across replicas and deployments.
   return createHash("sha256")
     .update(
       JSON.stringify([

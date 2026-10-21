@@ -57,6 +57,7 @@ export async function loadOAuthCatalogForCaller(params: {
   // Bind the transaction to OAuth configuration, not unrelated catalog edits.
   const configurationFingerprint = createHash("sha256")
     .update(
+      // codeql[js/insufficient-password-hash] This digest detects OAuth configuration changes in short-lived state; it does not store or verify passwords.
       JSON.stringify({
         oauthConfig: catalog.oauthConfig,
         clientSecretId: catalog.clientSecretId,

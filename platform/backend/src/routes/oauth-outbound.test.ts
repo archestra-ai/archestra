@@ -480,6 +480,7 @@ async function seedState(
     .digest("hex");
   const configurationFingerprint = createHash("sha256")
     .update(
+      // codeql[js/insufficient-password-hash] This fixture matches the configuration-change digest, not a password verifier.
       JSON.stringify({
         oauthConfig: catalog.oauthConfig,
         clientSecretId: catalog.clientSecretId,

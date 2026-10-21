@@ -195,6 +195,8 @@ export const InteractionRequestSchema = z.union([
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
   Azure.API.ResponsesRequestSchema,
+  Azure.API.ImageGenerationRequestSchema,
+  Azure.API.RealtimeTurnRequestSchema,
   Jev.API.DecisionsRequestSchema,
 ]);
 
@@ -248,6 +250,7 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ResponsesCompactedResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
+  Azure.API.ImageGenerationResponseSchema,
   Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
 ]);
@@ -716,6 +719,26 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     response: withErrorResponse(Azure.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["azure:realtime"]),
+    request: withReadFallback(Azure.API.RealtimeTurnRequestSchema),
+    processedRequest: withReadFallback(Azure.API.RealtimeTurnRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Azure.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["azure:images"]),
+    request: withReadFallback(Azure.API.ImageGenerationRequestSchema),
+    processedRequest: withReadFallback(Azure.API.ImageGenerationRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Azure.API.ImageGenerationResponseSchema),
+    requestType: RequestTypeSchema.optional(),
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({

@@ -1541,7 +1541,9 @@ export async function handleLLMProxy<
     // A guardrail caller disconnects once it stops waiting for the answer,
     // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
-      providerName === "microsoft-365-copilot" || proof.guardrail
+      providerName === "microsoft-365-copilot" ||
+      provider.interactionType === "azure:realtime" ||
+      proof.guardrail
         ? clientDisconnectSignal({ request, reply })
         : undefined;
     const client = provider.createClient(apiKey, {

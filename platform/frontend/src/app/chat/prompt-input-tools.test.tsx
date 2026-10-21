@@ -103,6 +103,21 @@ vi.mock("@/lib/skills/skill.query", () => ({
   useSkillsPaginated: () => ({ data: undefined, isLoading: false }),
 }));
 
+vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModels: () => ({
+    data: [
+      { dbId: "image-db-id", id: "gpt-image-1", provider: "azure" },
+      { dbId: "audio-db-id", id: "gpt-audio", provider: "azure" },
+      { dbId: "realtime-db-id", id: "gpt-realtime-2.1", provider: "azure" },
+      {
+        dbId: "translation-db-id",
+        id: "gpt-realtime-translate",
+        provider: "azure",
+      },
+    ],
+  }),
+}));
+
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -147,6 +162,30 @@ describe("chat composer typing performance", () => {
           isPending: false,
           isLoading: false,
         }) as ReturnType<typeof useHasPermissions>,
+    );
+  });
+
+  it.each([
+    ["image-db-id", "Describe an image to generate..."],
+    ["audio-db-id", "Type what to say, or attach audio..."],
+    ["realtime-db-id", "Type a message or attach a WAV audio clip..."],
+    [
+      "translation-db-id",
+      "Attach WAV audio and enter a target language code, e.g. es",
+    ],
+  ])("shows native modality guidance for selected database model %s", (selectedModel, placeholder) => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel={selectedModel}
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+      />,
+    );
+    expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveAttribute(
+      "placeholder",
+      placeholder,
     );
   });
 

@@ -1,5 +1,6 @@
 import {
   CACHE_PRICE_MULTIPLIERS,
+  getAzureModelKind,
   PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -1203,7 +1204,15 @@ class ModelModel {
       contextLength: ModelModel.resolveEffectiveContextLength(model),
       inputModalities: model.inputModalities,
       outputModalities: model.outputModalities,
-      supportsToolCalling: model.supportsToolCalling,
+      // Chat's Azure media bridge produces files without running agent tools,
+      // even when the upstream model registry advertises native tool support.
+      supportsToolCalling:
+        model.provider === "azure" &&
+        ["image", "audio", "realtime", "translation"].includes(
+          getAzureModelKind(model.modelId),
+        )
+          ? false
+          : model.supportsToolCalling,
       supportsReasoningEffort: model.supportsReasoningEffort,
       supportedEndpoints: model.supportedEndpoints,
       recommendedForAgents,
@@ -1226,8 +1235,22 @@ class ModelModel {
       return false;
     }
 
+    // Translation uses typed text as a language setting and a WAV upload as input.
+    if (
+      model.provider === "azure" &&
+      getAzureModelKind(model.modelId) === "translation"
+    )
+      return true;
+
     if (model.inputModalities && !model.inputModalities.includes("text")) {
       return false;
+    }
+
+    if (
+      model.provider === "azure" &&
+      getAzureModelKind(model.modelId) === "image"
+    ) {
+      return true;
     }
 
     if (model.outputModalities && !model.outputModalities.includes("text")) {

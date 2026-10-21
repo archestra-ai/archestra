@@ -1971,7 +1971,7 @@ class InteractionModel {
         processedRequest: null,
       })),
     );
-    const responses = await InteractionModel.titleResponsesFor(rows);
+    const responses = await InteractionModel.responsesFor(rows);
     return InteractionModel.storeSessionPreviews(
       rows.map((row) =>
         InteractionModel.sessionPreviewValue(
@@ -2102,8 +2102,15 @@ class InteractionModel {
           }
         }
         // SPDX-SnippetEnd
-        responses = await InteractionModel.titleResponsesFor(
-          loaded.filter((row) => !unreadable.has(row.id)),
+        // Ancestors are only folded; only the rows being filled read their
+        // response.
+        const filling = new Set(
+          chunk.filter((member) => member.missing).map((member) => member.id),
+        );
+        responses = await InteractionModel.responsesFor(
+          loaded.filter(
+            (row) => filling.has(row.id) && !unreadable.has(row.id),
+          ),
         );
       } catch (error) {
         // Without this chunk nothing below it can be folded: the rest of the
@@ -2158,43 +2165,35 @@ class InteractionModel {
   }
 
   /**
-   * The responses of the title-generation turns among `rows`, by id. Only
-   * those turns read their response (for the title text); responses can
-   * dwarf requests, so the rest are never loaded.
+   * The responses of `rows`, by id: a preview names a request by what it
+   * produced (its tool calls or reply) and a title turn by its title. Only
+   * rows about to be written are passed, a bounded chunk at a time.
    */
-  private static async titleResponsesFor(
-    rows: Array<{
-      id: string;
-      source: InteractionSource | null;
-      request: unknown;
-    }>,
+  private static async responsesFor(
+    rows: Array<{ id: string }>,
   ): Promise<Map<string, unknown>> {
     const t = schema.interactionsTable;
-    const titleIds = rows
-      .filter(
-        (row) =>
-          !isGuardrailSource(row.source) &&
-          JSON.stringify(row.request ?? null).includes(
-            "Please write a 5-10 word title",
-          ),
-      )
-      .map((row) => row.id);
     const responses = new Map<string, unknown>();
-    if (titleIds.length === 0) return responses;
-    const titles = await db
+    if (rows.length === 0) return responses;
+    const loaded = await db
       .select({
         id: t.id,
         response: t.response,
         encryptedChatConversationId: t.encryptedChatConversationId,
       })
       .from(t)
-      .where(inArray(t.id, titleIds));
+      .where(
+        inArray(
+          t.id,
+          rows.map((row) => row.id),
+        ),
+      );
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    for (const title of titles) {
-      readInteractionRow(title);
-      responses.set(title.id, title.response);
+    for (const row of loaded) {
+      readInteractionRow(row);
+      responses.set(row.id, row.response);
     }
     // SPDX-SnippetEnd
     return responses;

@@ -335,11 +335,11 @@ export const STARTUP_GUARD_FORMAT_VERSION = 6;
 
 /**
  * The managed instructions a deployment uses until an admin edits them. It
- * names the deployment's own Cloud runtime, so users of Claude Code or Codex
- * don't mistake it for their client vendor's.
+ * names the deployment's own Remote Agents, so users of Claude Code or Codex
+ * don't mistake them for their client vendor's.
  */
 export function defaultRuntimeHandoffInstructions(appName: string): string {
-  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${appName} Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${appName} Remote Agents' to continue this session in the cloud." Say this only once per session. When asked, use the Remote Agents Handoff skill and create a remote agent if needed.`;
 }
 
 /**

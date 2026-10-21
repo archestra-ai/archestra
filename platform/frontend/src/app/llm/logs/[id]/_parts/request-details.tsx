@@ -339,30 +339,11 @@ function RequestOverview({
           title="Timing"
           aside={<BigFigure value={formatLatency(row.durationMs)} />}
         >
-          <div
-            className="relative h-1 rounded-full bg-muted"
-            aria-hidden="true"
-          >
-            <span
-              className={cn(
-                "absolute inset-y-0 rounded-full",
-                SPAN_KINDS[kind].bar,
-              )}
-              style={{
-                left: `${span.x * 100}%`,
-                width: `max(4px, ${span.w * 100}%)`,
-              }}
-            />
-          </div>
-          <dl className={cn(OVERVIEW_GRID, "mt-2")}>
-            <OverviewCell label="Started">
-              {formatDate({
-                date: new Date(span.start).toISOString(),
-                dateFormat: "HH:mm:ss.SSS",
-              })}
-            </OverviewCell>
-            <OverviewCell label="Finished">
-              {formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss.SSS" })}
+          {/* The list's bar already places it on the session's timeline;
+              this says when, and what came before. */}
+          <dl className="grid grid-cols-3 gap-x-4">
+            <OverviewCell label="At">
+              {formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss" })}
             </OverviewCell>
             {excerpt ? null : (
               <OverviewCell label="Into session">

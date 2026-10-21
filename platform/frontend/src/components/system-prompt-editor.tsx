@@ -3,6 +3,8 @@
 import {
   DocsPage,
   getSystemPromptTemplateExpressions,
+  SYSTEM_PROMPT_HELPER_EXPRESSIONS,
+  SYSTEM_PROMPT_HELPER_NAMES,
 } from "@archestra/shared";
 import type { EditorProps } from "@monaco-editor/react";
 import { TriangleAlert } from "lucide-react";
@@ -221,6 +223,7 @@ export function SystemPromptEditor({
         </div>
       </div>
       <UnparseableExpressionsWarning expressions={unparseableExpressions} />
+      {templating && usesPerTurnHelper(value) && <PerTurnHelperWarning />}
       {templating && (
         <StandardDialog
           open={templatingInfoOpen}
@@ -347,6 +350,39 @@ function UnparseableExpressionsWarning({
     </p>
   );
 }
+
+/**
+ * `{{currentTime}}` renders differently on every turn, so the instruction it
+ * sits in never matches the previous turn's: the provider's prompt cache misses
+ * and the earlier turns' thinking has to be dropped.
+ */
+function PerTurnHelperWarning() {
+  return (
+    <output
+      aria-label="Per-turn template helper"
+      className="block text-xs text-amber-600 dark:text-amber-500"
+    >
+      <TriangleAlert className="mr-1 inline size-3.5 align-[-2px]" />
+      <code className="font-mono">
+        {SYSTEM_PROMPT_HELPER_EXPRESSIONS.currentTime}
+      </code>{" "}
+      changes the instruction on every turn, which disables prompt caching and
+      makes conversations cost more. Use{" "}
+      <code className="font-mono">
+        {SYSTEM_PROMPT_HELPER_EXPRESSIONS.currentDate}
+      </code>{" "}
+      unless the agent needs the exact time.
+    </output>
+  );
+}
+
+function usesPerTurnHelper(value: string): boolean {
+  return PER_TURN_HELPER_PATTERN.test(value);
+}
+
+const PER_TURN_HELPER_PATTERN = new RegExp(
+  `(?<!\\\\)\\{\\{~?\\s*${SYSTEM_PROMPT_HELPER_NAMES.currentTime}\\s*~?\\}\\}`,
+);
 
 /** Enough to act on without turning the warning into a second prompt. */
 const UNPARSEABLE_SHOWN_MAX = 5;

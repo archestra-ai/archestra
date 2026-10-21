@@ -2783,8 +2783,11 @@ export class ChatOpsManager {
         }),
       };
       let acknowledgementDelivery = Promise.resolve();
+      // Only a new workspace is acknowledged: the thread already holds the
+      // link to a continued one, and its follow-ups go straight to work.
       const acknowledgeSession =
         sendReply &&
+        !resumeFromTaskId &&
         provider.providerId === "slack" &&
         (message.metadata?.conversationType === "personal" ||
           message.metadata?.botMentioned === true);

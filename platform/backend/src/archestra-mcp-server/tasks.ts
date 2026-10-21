@@ -465,6 +465,7 @@ const registry = defineArchestraTools([
       encoding: z.enum(["utf8", "base64"]).default("utf8"),
     }),
     handler: async ({ args, context }) => {
+      let direct = false;
       try {
         const actor = requireActor(context);
         const access = await protectedFileAccess({
@@ -473,6 +474,7 @@ const registry = defineArchestraTools([
           taskId: args.task_id,
         });
         if (access.kind === "error") return access.result;
+        direct = access.kind !== "parent";
         const read = async () => {
           const result = await accessAgentWorkspaceFile({
             actor,
@@ -520,6 +522,7 @@ const registry = defineArchestraTools([
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
         return workspaceFileError({
+          direct,
           error,
           failure: `Could not read ${args.path} from the run's workspace`,
           action: "reading workspace file",
@@ -570,6 +573,7 @@ const registry = defineArchestraTools([
         .describe("Upload only: the local file's sha256, as hex."),
     }),
     handler: async ({ args, context }) => {
+      let direct = false;
       try {
         const actor = requireActor(context);
         const access = await protectedFileAccess({
@@ -578,6 +582,7 @@ const registry = defineArchestraTools([
           taskId: args.task_id,
         });
         if (access.kind === "error") return access.result;
+        direct = access.kind !== "parent";
         if (
           args.direction === "upload" &&
           (args.size === undefined || !args.sha256)
@@ -635,6 +640,7 @@ const registry = defineArchestraTools([
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
         return workspaceFileError({
+          direct,
           error,
           failure: `Could not authorize the ${args.direction} of ${args.path}`,
           action: "authorizing a workspace file transfer",
@@ -655,6 +661,7 @@ const registry = defineArchestraTools([
       overwrite: z.boolean().default(false),
     }),
     handler: async ({ args, context }) => {
+      let direct = false;
       try {
         const actor = requireActor(context);
         const access = await protectedFileAccess({
@@ -663,6 +670,7 @@ const registry = defineArchestraTools([
           taskId: args.task_id,
         });
         if (access.kind === "error") return access.result;
+        direct = access.kind !== "parent";
         if (access.kind === "parent") {
           await admitRuntimeSteer({
             crossing: access.crossing,
@@ -688,6 +696,7 @@ const registry = defineArchestraTools([
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
         return workspaceFileError({
+          direct,
           error,
           failure: `Could not write ${args.path} to the run's workspace`,
           action: "writing workspace file",
@@ -1523,10 +1532,10 @@ async function readRunFile(params: {
         );
     }
   } catch (error) {
-    // The helper's refusals name the path rule that failed, never file bytes.
-    if (error instanceof ApiError && error.statusCode < 500) {
+    const reason = workspaceRefusal(error);
+    if (reason !== undefined) {
       return {
-        error: `Could not read ${input.path} from the run's workspace: ${error.message}`,
+        error: `Could not read ${input.path} from the run's workspace: ${reason}`,
       };
     }
     throw error;
@@ -1534,21 +1543,32 @@ async function readRunFile(params: {
 }
 
 /**
- * The file helper's refusals (a missing file, a path rule, a size limit) and
- * the workspace gate's lifecycle answers say what the caller can fix and never
- * carry file bytes, so they are returned as they are. Anything else stays
- * generic.
+ * Says why a file tool failed when the caller reads its own runtime. A
+ * Guardrails parent (`direct: false`) gets only the generic message: nothing
+ * about the file, not even whether it exists, may reach the parent before the
+ * file crosses.
  */
 function workspaceFileError(params: {
+  direct: boolean;
   error: unknown;
   failure: string;
   action: string;
 }): CallToolResult {
-  const { error } = params;
-  if (error instanceof ApiError && error.statusCode < 500) {
-    return errorResult(`${params.failure}: ${error.message}`);
-  }
-  return catchError(error, params.action);
+  const reason = params.direct ? workspaceRefusal(params.error) : undefined;
+  if (reason === undefined) return catchError(params.error, params.action);
+  logger.info({ err: params.error }, `Refused ${params.action}`);
+  return errorResult(`${params.failure}: ${reason}`);
+}
+
+/**
+ * The file helper's refusals (a missing file, a path rule, a size limit) and
+ * the workspace gate's lifecycle answers say what the caller can fix and never
+ * carry file bytes. Anything else is not for the caller.
+ */
+function workspaceRefusal(error: unknown): string | undefined {
+  return error instanceof ApiError && error.statusCode < 500
+    ? error.message
+    : undefined;
 }
 
 /** Strict UTF-8, so binary bytes are refused instead of mangled. */

@@ -1321,7 +1321,8 @@ describe("run tools", () => {
 
     test("say why a missing file could not be read, written or downloaded", async () => {
       const task = await seedRuntimeTask();
-      const missing = "[Errno 2] No such file or directory: 'reports'";
+      // The reason is the helper's OSError text for the folder that is missing.
+      const missing = "No such file or directory.*'reports'";
 
       const read = await executeArchestraTool(
         "archestra__read_workspace_file",
@@ -1349,7 +1350,11 @@ describe("run tools", () => {
         content: [
           {
             type: "text",
-            text: `Error: Could not read reports/notes.md from the run's workspace: ${missing}`,
+            text: expect.stringMatching(
+              new RegExp(
+                `^Error: Could not read reports/notes\\.md from the run's workspace: .*${missing}`,
+              ),
+            ),
           },
         ],
       });
@@ -1358,7 +1363,11 @@ describe("run tools", () => {
         content: [
           {
             type: "text",
-            text: `Error: Could not write reports/notes.md to the run's workspace: ${missing}`,
+            text: expect.stringMatching(
+              new RegExp(
+                `^Error: Could not write reports/notes\\.md to the run's workspace: .*${missing}`,
+              ),
+            ),
           },
         ],
       });
@@ -1367,7 +1376,11 @@ describe("run tools", () => {
         content: [
           {
             type: "text",
-            text: `Error: Could not authorize the download of reports/notes.md: ${missing}`,
+            text: expect.stringMatching(
+              new RegExp(
+                `^Error: Could not authorize the download of reports/notes\\.md: .*${missing}`,
+              ),
+            ),
           },
         ],
       });

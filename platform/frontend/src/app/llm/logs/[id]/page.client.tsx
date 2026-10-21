@@ -310,7 +310,9 @@ export default function SessionDetailPage({
         // mark in its tile, then the title over its one-line description.
         icon={<SessionHeaderIcon session={sessionData} />}
         title={
-          <span className="min-w-0 truncate" title={sessionTitle || "Session"}>
+          // Block, or truncate does nothing: an inline span keeps the whole
+          // first prompt on one line and the page scrolls sideways.
+          <span className="block truncate" title={sessionTitle || "Session"}>
             {sessionTitle || "Session"}
           </span>
         }

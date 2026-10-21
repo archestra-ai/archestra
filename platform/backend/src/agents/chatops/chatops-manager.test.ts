@@ -6128,6 +6128,8 @@ describe("ChatOpsManager per-channel instructions", () => {
     const sent = executorSpy.mock.calls[0][0].message;
     expect(sent).toContain(INSTRUCTIONS);
     expect(sent).toContain("take precedence");
+    // Ordinary chat agents do not receive runtime-only progress instructions.
+    expect(sent).not.toContain("proactively send brief updates");
     // Still the message the user actually sent — the framing rides along with
     // it rather than replacing it.
     expect(sent).toContain("the checkout page is broken");

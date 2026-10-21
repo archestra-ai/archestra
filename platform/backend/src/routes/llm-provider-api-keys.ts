@@ -24,6 +24,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
@@ -440,6 +441,15 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      // A service account acts under a synthetic user id with no `users` row,
+      // so it cannot be the owner (`user_id`) of a key. Refuse before the key
+      // is tested or its secret is stored.
+      if (!body.shared && isServiceAccountUserId(user.id)) {
+        throw new ApiError(
+          400,
+          "A service account cannot own a key. Set shared to true to create a shared key.",
+        );
+      }
       // Decision: a key is either the caller's own ("just for me": they own
       // it and only they use it) or shared (no owner; its grants are its
       // audience). The retired column mirrors that until it is dropped.

@@ -1,6 +1,7 @@
 import { providerDisplayNames } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -12,6 +13,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ServiceAccountModel from "@/models/service-account";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { ApiError } from "@/types";
@@ -80,6 +82,7 @@ import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
+import { secretManager } from "@/secrets-manager";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
@@ -1479,6 +1482,90 @@ describe("LLM Provider API Keys — personal scope is self-service", () => {
 
     expect(response.statusCode, response.body).toBe(403);
     expect(response.json().error.message).toContain("create");
+  });
+});
+
+describe("LLM Provider API Keys — service account callers", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+
+  // The principal the auth middleware builds for a service account token: a
+  // synthetic `service-account:<id>` user id with no `users` row behind it.
+  beforeEach(async ({ makeOrganization }) => {
+    vi.clearAllMocks();
+    setupMemberApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    // An admin service account holds llmProviderApiKey:create.
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    const account = await ServiceAccountModel.create({
+      organizationId,
+      name: "Terraform",
+      role: "admin",
+      createdBy: null,
+    });
+    app = await createApp(organizationId, {
+      id: serviceAccountUserId(account.id),
+      name: account.name,
+      email: `${account.id}@service-account.local`,
+      emailVerified: true,
+      image: null,
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
+      role: null,
+      banned: false,
+      banReason: null,
+      banExpires: null,
+      twoFactorEnabled: false,
+    } as User);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("400s for a key just for the service account, before it tests or stores the key", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Terraform OpenAI",
+        provider: "openai",
+        apiKey: "sk-terraform-key",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toBe(
+      "A service account cannot own a key. Set shared to true to create a shared key.",
+    );
+    expect(mockTestProviderApiKey).not.toHaveBeenCalled();
+    expect(vi.mocked(secretManager)().createSecret).not.toHaveBeenCalled();
+    expect(
+      await LlmProviderApiKeyModel.findByOrganizationId(organizationId),
+    ).toEqual([]);
+  });
+
+  test("creates a shared key with the service account as its creator", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Terraform OpenAI",
+        provider: "openai",
+        apiKey: "sk-terraform-key",
+        shared: true,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      scope: "org",
+      userId: null,
+      createdBy: { name: "Terraform", type: "service_account" },
+    });
   });
 });
 

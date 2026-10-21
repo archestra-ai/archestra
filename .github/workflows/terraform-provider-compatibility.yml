@@ -58,8 +58,10 @@ jobs:
           set -euo pipefail
           spec="$RUNNER_TEMP/openapi.json"
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            # Ref names only: no option-like values, no shell or path syntax.
+            # Git also rejects "..", but say so here instead of relying on it.
             case "$PLATFORM_REF" in
-              "" | -* | *[!A-Za-z0-9._/-]*)
+              "" | -* | *..* | *[!A-Za-z0-9._/-]*)
                 echo "::error::platform_ref must be a branch, tag or commit SHA."
                 exit 2
                 ;;

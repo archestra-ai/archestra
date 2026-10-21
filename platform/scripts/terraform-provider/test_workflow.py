@@ -108,7 +108,7 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
             subprocess.run(['git', 'init', '-q', str(root)], check=True)
             env = os.environ | {'RUNNER_TEMP': work, 'GITHUB_OUTPUT': str(root/'output'),
                                 'GITHUB_STEP_SUMMARY': str(root/'summary'), 'GH_TOKEN': 'unused'}
-            for ref in ('', '--upload-pack=touch injected', 'main;touch injected', 'main\nother'):
+            for ref in ('', '--upload-pack=touch injected', 'main;touch injected', 'main\nother', '../../main'):
                 result = subprocess.run(['bash', '-c', script], cwd=root/'platform', capture_output=True, text=True,
                                         env=env | {'EVENT_NAME': 'workflow_dispatch', 'PLATFORM_REF': ref})
                 self.assertEqual(result.returncode, 2, ref)

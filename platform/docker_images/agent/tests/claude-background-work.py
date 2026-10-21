@@ -41,6 +41,7 @@ class Upstream(background.Upstream):
         self.RequestHandlerClass = NestedHandler if kind.startswith("nested") else Handler
         self.evidence = evidence
         self.finished = finished
+        self.release_review = finished.with_name("release-review")
         self.kind = kind
         self.delay = {"shell-fast": 0.1, "shell-stop": 60, "nested-fast": 0.1}.get(kind, DELAY)
         # Give the ten-minute test margin beyond its review duration. Claude
@@ -56,6 +57,17 @@ class Upstream(background.Upstream):
         self.child_result = ""
         self.parent_notifications = []
         self.release_final = threading.Event()
+
+    def review_command(self):
+        script = "from pathlib import Path\nimport time\n"
+        if self.kind in ("shell-fast", "nested-fast"):
+            script += f"while not Path({str(self.release_review)!r}).exists(): time.sleep(0.01)\n"
+        script += (
+            f"time.sleep({self.delay!r})\n"
+            f"Path({str(self.finished)!r}).write_text('REVIEW_DONE')\n"
+            "print('REVIEW_DONE')\n"
+        )
+        return "python3 -c " + shlex.quote(script)
 
 
 class Handler(background.Handler):
@@ -100,14 +112,8 @@ class Handler(background.Handler):
                 else:
                     role, reply = "main:waiting", ("text", WAITING)
             else:
-                script = (
-                    "from pathlib import Path; import time; "
-                    f"time.sleep({self.server.delay!r}); "
-                    f"Path({str(self.server.finished)!r}).write_text('REVIEW_DONE'); "
-                    "print('REVIEW_DONE')"
-                )
                 arguments = {
-                    "command": "python3 -c " + shlex.quote(script),
+                    "command": self.server.review_command(),
                     "description": "Run the background review",
                     "run_in_background": True,
                     "timeout": self.server.timeout,
@@ -129,8 +135,9 @@ class Handler(background.Handler):
         if (role == "main:waiting" and self.server.kind == "shell-fast") or (
             role == "child:waiting" and self.server.kind == "nested-fast"
         ):
-            # Complete the background job while the first assistant response
-            # is still in flight, before its initial Stop snapshot is taken.
+            # Hold fast jobs until their launch acknowledgement reaches the
+            # model, then finish them before the waiting response reaches Stop.
+            self.server.release_review.touch()
             deadline = time.monotonic() + 10
             while not self.server.finished.exists() and time.monotonic() < deadline:
                 time.sleep(0.05)
@@ -226,16 +233,10 @@ class NestedHandler(Handler):
                 self.server.launch_result = background.launch_result(messages, "toolu_child_shell")
                 role, reply = "child:waiting", ("text", WAITING)
             else:
-                script = (
-                    "from pathlib import Path; import time; "
-                    f"time.sleep({self.server.delay!r}); "
-                    f"Path({str(self.server.finished)!r}).write_text('REVIEW_DONE'); "
-                    "print('REVIEW_DONE')"
-                )
                 role, reply = "child:start", (
                     "tool_use", "Bash", "toolu_child_shell",
                     {
-                        "command": "python3 -c " + shlex.quote(script),
+                        "command": self.server.review_command(),
                         "description": "Nested shell review",
                         "run_in_background": True,
                         "timeout": self.server.timeout,

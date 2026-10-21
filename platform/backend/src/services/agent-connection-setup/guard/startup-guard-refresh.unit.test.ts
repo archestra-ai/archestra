@@ -60,6 +60,8 @@ async function fixture(
     client?: StartupGuardClient;
     platform?: "bash" | "windows";
     proxy?: boolean;
+    appName?: string;
+    cloneUrl?: string;
   } = {},
 ) {
   const root = await mkdtemp(path.join(tmpdir(), "guard-refresh-"));
@@ -96,6 +98,19 @@ async function fixture(
       return;
     }
     if (mode === "timeout") return;
+    if (mode === "network") {
+      request.socket.destroy();
+      return;
+    }
+    if (mode === "unauthorized") {
+      response.writeHead(401);
+      response.end();
+      return;
+    }
+    if (mode === "oversized") {
+      response.end(Buffer.alloc(1024 * 1024 + 1, 32));
+      return;
+    }
     if (mode === "malformed") {
       response.end("{");
       return;
@@ -118,7 +133,7 @@ async function fixture(
     throw new Error("missing fixture port");
   const origin = `http://127.0.0.1:${address.port}`;
   const context: StartupGuardContext = {
-    appName: "Archestra",
+    appName: options.appName ?? "Archestra",
     healthUrl: `${origin}/v1/health?mcp=test`,
     mcp: { serverName: "test", url: `${origin}/v1/mcp/test`, ref: "test" },
     proxy: options.proxy
@@ -135,6 +150,7 @@ async function fixture(
     skills: {
       marketplaceName: "fixture-skills",
       cloneUrl:
+        options.cloneUrl ??
         "https://fixture:private-credential's@example.com/skills/m/local.git",
       hasSkills: true,
       pluginNames: ["sample"],
@@ -233,6 +249,32 @@ describe("generated startup check refresh", () => {
     expect(await readFile(f.guard, "utf8")).toBe(f.current);
   });
 
+  test("does not interpret private values as substitution slots", async () => {
+    const f = await fixture({
+      client: OPENCODE_GUARD_CLIENT,
+      proxy: true,
+      cloneUrl:
+        "https://fixture:ARCH_GUARD_PRIVATE_KEY@example.com/skills/m/local.git",
+    });
+    expect((await f.run()).stderr).toContain(
+      "Updated Archestra launch check automatically",
+    );
+    expect(await readFile(f.guard, "utf8")).toBe(f.current);
+  });
+
+  test("preserves config with reserved markers instead of exposing a private key in a label", async () => {
+    const f = await fixture({
+      client: OPENCODE_GUARD_CLIENT,
+      proxy: true,
+      appName: "ARCH_GUARD_PRIVATE_KEY",
+    });
+    const { stderr } = await f.run();
+    expect(stderr).toContain("Ambiguous launch check substitutions");
+    expect(stderr).not.toContain("local-key-with");
+    expect(f.requests()).toBe(0);
+    expect(await readFile(f.guard, "utf8")).toBe(f.old);
+  });
+
   test("the real noninteractive Bash guard automatically refreshes on startup", async () => {
     const f = await fixture();
     const { stderr } = await execute("bash", [f.guard], {
@@ -257,6 +299,10 @@ describe("generated startup check refresh", () => {
     "malformed",
     "hash",
     "version",
+    "timeout",
+    "network",
+    "unauthorized",
+    "oversized",
   ])("keeps cached config on %s and retries next startup", async (mode) => {
     const f = await fixture();
     f.mode(mode);

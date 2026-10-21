@@ -62,6 +62,11 @@ async function refresh(guard, expectedVersion) {
     if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" ||
         (url.protocol !== "https:" && !(url.protocol === "http:" && local)) ||
         url.username || url.password || url.search || url.hash || url.pathname !== "/api/connection-setups/startup-guard") throw new Error("Unsafe launch check update endpoint");
+    const publicContext = structuredClone(state.context);
+    if (publicContext.skills) delete publicContext.skills.cloneUrl;
+    if (publicContext.proxy) delete publicContext.proxy.passthroughVirtualKey;
+    const publicText = JSON.stringify(publicContext);
+    if (publicText.includes("ARCH_GUARD_PRIVATE_CLONE_URL") || publicText.includes("ARCH_GUARD_PRIVATE_KEY")) throw new Error("Ambiguous launch check substitutions");
     const context = structuredClone(state.context);
     // The public renderer receives no credentials. Restore these only locally,
     // using the same quoting as the generated shell/PowerShell string literals.
@@ -87,12 +92,14 @@ async function refresh(guard, expectedVersion) {
         artifact.version !== expectedVersion || typeof artifact.source !== "string" ||
         artifact.sha256 !== hash(artifact.source)) throw new Error("Wrong launch check artifact");
     const quote = text => state.platform === "windows" ? "'" + text.replaceAll("'", "''") + "'" : "'" + text.replaceAll("'", "'\\''") + "'";
-    let source = artifact.source;
-    if (state.context.skills) source = source.replaceAll(quote("ARCH_GUARD_PRIVATE_CLONE_URL"), quote(state.context.skills.cloneUrl));
+    const substitutions = new Map();
+    if (state.context.skills) substitutions.set(quote("ARCH_GUARD_PRIVATE_CLONE_URL"), quote(state.context.skills.cloneUrl));
     if (state.context.proxy?.passthroughVirtualKey) {
       const encoded = JSON.stringify(state.context.proxy.passthroughVirtualKey).slice(1, -1);
-      source = source.replaceAll("ARCH_GUARD_PRIVATE_KEY", quote(encoded).slice(1, -1));
+      substitutions.set("ARCH_GUARD_PRIVATE_KEY", quote(encoded).slice(1, -1));
     }
+    // One pass: a private value containing another slot must never be expanded.
+    const source = artifact.source.replace(/'ARCH_GUARD_PRIVATE_CLONE_URL'|ARCH_GUARD_PRIVATE_KEY/g, slot => substitutions.get(slot) ?? slot);
     const stamp = source.match(state.platform === "windows" ? /^\$GuardFormatVersion = (\d+)$/m : /^GUARD_FORMAT_VERSION=(\d+)$/m);
     if (Number(stamp?.[1]) !== expectedVersion) throw new Error("Wrong launch check version");
     // Recheck after the download so concurrent setup, disconnect or user edits win.
@@ -106,7 +113,7 @@ async function refresh(guard, expectedVersion) {
     atomic(guard, bytes, owned(guard).mode & 0o777);
     console.error("Updated " + state.context.appName + " launch check automatically; applies next launch.");
   } catch (error) {
-    const reasons = new Set(["Unsafe launch check ownership", "Edited launch check updater", "Customized launch check was preserved", "Unsafe launch check update endpoint", "Launch check download unavailable", "Launch check download too large", "Wrong launch check artifact", "Wrong launch check version", "Launch check changed during update"]);
+    const reasons = new Set(["Unsafe launch check ownership", "Edited launch check updater", "Customized launch check was preserved", "Unsafe launch check update endpoint", "Launch check download unavailable", "Launch check download too large", "Wrong launch check artifact", "Wrong launch check version", "Launch check changed during update", "Ambiguous launch check substitutions"]);
     console.error("Could not update launch check automatically; kept the installed config and will retry next launch. " + (reasons.has(error.message) ? error.message : "Update unavailable."));
   } finally { if (acquired) fs.rmSync(lock, { recursive: true, force: true }); }
 }

@@ -3,7 +3,7 @@
 // and the REST call that returns the same data.
 
 import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,6 +65,22 @@ export default function CostExplorer() {
     enabled: enabled && (q.metric === "billed" || q.metric === "subscription"),
   });
 
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [settledHeight, setSettledHeight] = useState<number>();
+  const isLoading = cube.isLoading || kpis.isCostPending;
+  // A range change replaces a potentially long table with a few skeletons.
+  // Reserve its settled height until the response arrives so the browser does
+  // not clamp the page's scroll offset to the shorter loading layout.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || isLoading) return;
+    const observer = new ResizeObserver(() => {
+      setSettledHeight(content.getBoundingClientRect().height);
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [isLoading]);
+
   const update = (patch: Partial<PivotQuery>) => {
     setQ((prev) => normalize({ ...prev, ...patch }));
     setFocus(new Set());
@@ -125,7 +141,12 @@ export default function CostExplorer() {
   const pivotBySplit = hasSplit && pivotCols === "split";
 
   return (
-    <div className="space-y-4">
+    <div
+      ref={contentRef}
+      className="space-y-4"
+      aria-busy={isLoading}
+      style={isLoading ? { minHeight: settledHeight } : undefined}
+    >
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 md:[&>*:last-child:nth-child(odd)]:col-span-1">
         <KpiTile
           label="API spend"

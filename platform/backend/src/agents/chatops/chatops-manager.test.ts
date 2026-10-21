@@ -1778,6 +1778,68 @@ describe("ChatOpsManager security validation", () => {
     expect(await ownerOf("C_CODING")).toBe(coding.id);
   });
 
+  test("a file the platform keeps off the message is read before the turn is answered", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executeSpy = mockA2AExecutor();
+    const user = await makeUser({ email: "files@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+    const pdf = {
+      contentType: "application/pdf",
+      contentBase64: Buffer.from("%PDF-1.7").toString("base64"),
+      name: "spec.pdf",
+    };
+    const provider: ChatOpsProvider = {
+      ...createMockProvider({ getUserEmail: async () => user.email }),
+      downloadMessageFiles: async (message) =>
+        message.messageId === "msg-with-file"
+          ? [
+              { status: "delivered", attachment: pdf },
+              {
+                status: "skipped",
+                skipped: { name: "notes.docx", reason: "download_failed" },
+              },
+            ]
+          : [],
+    };
+    const manager = makeManagerWith(provider);
+    const messageIn = (messageId: string): IncomingChatMessage =>
+      createMockMessage({
+        messageId,
+        text: "",
+        senderEmail: user.email,
+        metadata: { conversationType: "channel" },
+      });
+
+    await manager.processMessage({
+      message: messageIn("msg-with-file"),
+      provider,
+    });
+    await manager.processMessage({ message: messageIn("msg-empty"), provider });
+
+    // The file-only message is answered with its file, and the unreadable one
+    // is named so the agent can say so; the empty one is not answered at all.
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    const [params] = executeSpy.mock.calls[0];
+    expect(params.attachments).toEqual([pdf]);
+    expect(params.message).toContain("notes.docx");
+  });
+
   test("'list' to the router bot names the agents a person can reach, without asking one", async ({
     makeUser,
     makeOrganization,

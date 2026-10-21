@@ -20,6 +20,7 @@ import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { renderSetupScript } from "../index";
+import { SETUP_STOPPED_EXIT_CODE } from "../types";
 import { CLIENT_CONNECTION_INSTALLER } from "./client-connection-installer";
 
 let directory: string;
@@ -192,6 +193,21 @@ test("downloads and executes the approved script without logging polling credent
     clientId: "cursor",
     deviceName: hostname().trim().slice(0, 64),
   });
+});
+
+test.each([
+  { exit: SETUP_STOPPED_EXIT_CODE, ending: "Setup stopped.", generic: false },
+  { exit: 1, ending: "Setup failed. Review the output above", generic: true },
+])("a setup that exits $exit ends with its own next step only when it explained one", async ({
+  exit,
+  ending,
+  generic,
+}) => {
+  scriptBody = `#!/bin/bash\necho 'Run codex login, then start a new installer run.' >&2\nexit ${exit}\n`;
+  const result = await run();
+  expect(result.code).toBe(1);
+  expect(result.output).toContain(ending);
+  expect(result.output.includes("start the installer again")).toBe(generic);
 });
 
 test("Copilot prints saved credentials once in the final instructions, after the summary and before sign-in", async () => {

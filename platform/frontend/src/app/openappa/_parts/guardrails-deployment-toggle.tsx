@@ -33,35 +33,3 @@ export function GuardrailsDisabledWarning() {
     </SidebarMenuItem>
   );
 }
-
-/**
- * Sidebar warning: new sessions keep a policy snapshot, so a policy change
- * reaches new sessions only and running sessions keep the revision they have.
- * It links to the setting. Shown wherever the sidebar shows warnings: no
- * navigation row carries it.
- */
-export function GuardrailsSnapshotPolicyWarning() {
-  const query = useGuardrailsDeployment();
-  if (
-    !query.data ||
-    query.isError ||
-    query.data.newSessionPolicy !== "snapshot"
-  )
-    return null;
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        tooltip="Policy changes reach new sessions only"
-        className="text-destructive hover:text-destructive"
-      >
-        <Link href="/settings/guardrails#new-session-policy">
-          <OpenAppaAlertIcon className="size-4 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            New sessions keep a policy snapshot
-          </span>
-        </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
-}

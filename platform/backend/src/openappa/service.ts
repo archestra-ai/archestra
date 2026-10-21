@@ -22,20 +22,14 @@ import { getDatabaseConnectionString } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
-import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import MemberModel from "@/models/member";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
-import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import {
-  helperUrlBase,
-  openappaDeclarations,
-  type UnreadableCredential,
-} from "@/openappa/declarations";
+import { openappaDeclarations } from "@/openappa/declarations";
 import {
   declareExistingInstalls,
   seedCredentialBindings,
@@ -45,14 +39,12 @@ import {
   withOpenappaContentEncryption,
 } from "@/openappa/encrypted-chat";
 import {
-  OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
   runtimeFailureCode,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
-import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
@@ -281,9 +273,7 @@ export async function getOpenappaStatus(params: {
         );
       },
     });
-    return (
-      status && { ...status, policyRevision: status.policyRevision ?? null }
-    );
+    return status ?? null;
   } catch (error) {
     throw openappaFailure(error);
   }
@@ -305,11 +295,11 @@ export async function declareOpenappaInstalls(): Promise<void> {
   if (!openappaEnabled()) return;
   try {
     const summary = await declareExistingInstalls();
-    logger.info(summary, "Declared the legacy OpenAPPA battery installs");
+    logger.info(summary, "OpenAPPA declared the legacy battery installs");
   } catch (error) {
     logger.error(
       { err: error },
-      "Declaring the legacy OpenAPPA battery installs failed; the periodic recompile will delete every install row the policy text does not declare",
+      "OpenAPPA could not declare the legacy battery installs; the periodic recompile will delete every install row the policy text does not declare",
     );
   }
   try {
@@ -317,7 +307,7 @@ export async function declareOpenappaInstalls(): Promise<void> {
   } catch (error) {
     logger.error(
       { err: error },
-      "Seeding the OpenAPPA credential bindings from the policy text failed; the text still binds its own variables",
+      "OpenAPPA could not seed the credential bindings from the policy text; the text still binds its own variables",
     );
   }
 }
@@ -332,7 +322,7 @@ export async function recompileAllOnStart(): Promise<void> {
   try {
     await openappaBatteriesService.recompileAll();
   } catch (error) {
-    logger.error({ err: error }, "Recomposing the OpenAPPA policies failed");
+    logger.error({ err: error }, "OpenAPPA could not recompose the policies");
   }
 }
 
@@ -560,7 +550,6 @@ async function dispatchWithPrincipal(params: {
           ),
       ),
     policy,
-    session,
   );
 }
 
@@ -633,7 +622,6 @@ async function withRuntime(
     policy: DispatchPolicy,
   ) => Promise<string>,
   batchPolicy?: DispatchPolicy,
-  session?: OpenAppaSession,
 ) {
   let policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
@@ -646,38 +634,17 @@ async function withRuntime(
     });
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw await dispatchFailure({
-      organizationId,
-      session,
-      served: policy.content,
-      error,
-    });
+    throw await dispatchFailure({ organizationId, error });
   }
 }
 
 async function dispatchFailure(params: {
   organizationId: string;
-  session?: OpenAppaSession;
-  served: string;
   error: unknown;
 }): Promise<ApiError> {
   // Only a refusal of the policy is explained by the policy; a storage, lease
   // or uncoded failure is reported as itself.
   switch (runtimeFailureCode(params.error)) {
-    // An annotator the opening policy routes to is no longer served, so the
-    // runtime has it unregistered.
-    case "annotation_refused":
-    case "policy_unavailable": {
-      const missing = await missingOpeningAnnotator(
-        params.session,
-        params.served,
-      );
-      return openappaFailure(
-        missing === null
-          ? params.error
-          : new OpenappaRetiredAnnotatorError(missing),
-      );
-    }
     case "policy_refused":
       return openappaFailure(
         (await rootOnlyRefusal(params.organizationId)) ?? params.error,
@@ -709,107 +676,30 @@ async function rootOnlyRefusal(
   }
 }
 
-async function missingOpeningAnnotator(
-  session: OpenAppaSession | undefined,
-  served: string,
-): Promise<string | null> {
-  if (!session) return null;
-  try {
-    const root = await OpenAppaSessionModel.root({
-      organizationId: session.organization_id,
-      sessionId: session.session_id,
-    });
-    if (!root) return null;
-    const module = await binding();
-    const opening = await withOpenappaContentEncryption(
-      session.organization_id,
-      session.session_id,
-      (encryption) => module.readOpenappaOpeningPolicy(root, encryption),
-    );
-    return opening === null
-      ? null
-      : unservedAnnotator({ opening, served, helperBase: helperUrlBase("") });
-  } catch (error) {
-    logger.warn(
-      { err: error },
-      "OpenAPPA could not compare the opening policy with the served policy",
-    );
-    return null;
-  }
-}
-
 /**
  * The organization's effective policy with the credential values the runtime
  * reads for it, or the refusal every dispatch shares.
  *
  * The enforcement switch is not read here. Each entry point reads it once at its
  * request boundary, so a turn that began governed finishes under its policy even
- * when the switch turns off mid-request. The policy for new sessions is read
- * with every policy read, so a dispatch sees it as it is now, and a dispatch
- * that cannot read it fails as the policy read does.
+ * when the switch turns off mid-request.
  */
 async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const [newSessionPolicy, { policy, readable }] = await Promise.all([
-      GuardrailsDeploymentModel.getNewSessionPolicy(),
-      openappaBatteriesService.readForDispatch(organizationId),
-    ]);
-    let unreadable: UnreadableCredential[] = [];
-    let dispatch: DispatchPolicy | null = null;
-    try {
-      dispatch = await openappaDeclarations.dispatchPolicy({
-        organizationId,
-        content: policy.content,
-        onUnreadable: (found) => {
-          unreadable = found;
-        },
-      });
-    } catch (error) {
-      if (!retainedKeyLost({ unreadable, readable })) throw error;
-    }
-    if (dispatch && !retainedKeyLost({ unreadable, readable }))
-      return {
-        ...dispatch,
-        compositionHash: policy.contentHash,
-        snapshot: newSessionPolicy === "snapshot",
-      };
-    // A credential the policy was composed to read is unreadable now. Compose
-    // again first, as a fresh read would have: a kept annotator that needed it
-    // is dropped, so its sessions are told to start a new conversation instead
-    // of failing their consults on a key that is not set.
-    logger.info(
-      { organizationId, keys: unreadable.map(({ key }) => key) },
-      "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
-    );
-    const recompiled = await openappaBatteriesService.recompile(organizationId);
+    const policy =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
     return {
       ...(await openappaDeclarations.dispatchPolicy({
         organizationId,
-        content: recompiled.content,
+        content: policy.content,
       })),
-      compositionHash: recompiled.contentHash,
-      snapshot: newSessionPolicy === "snapshot",
+      compositionHash: policy.contentHash,
     };
   } catch (error) {
     throw openappaFailure(error);
   }
-}
-
-/**
- * Whether a key the served policy's retirement inputs held readable cannot be
- * read now. With no snapshot to compare against, any unreadable key counts.
- */
-function retainedKeyLost(params: {
-  unreadable: UnreadableCredential[];
-  readable: ReadonlySet<string> | null;
-}): boolean {
-  const { unreadable, readable } = params;
-  return (
-    unreadable.length > 0 &&
-    (readable === null || unreadable.some(({ key }) => readable.has(key)))
-  );
 }
 
 /** One policy read shared by a batch of dispatches, taken by the first of them. */
@@ -934,7 +824,10 @@ export async function startRuntimeChild(params: {
   spawnCallId?: string;
 }): Promise<{ contract?: string }> {
   if (!params.session.parent_id) {
-    throw new ApiError(409, "A protected runtime requires its bound parent");
+    throw new ApiError(
+      409,
+      "OpenAPPA requires the bound parent of a protected runtime",
+    );
   }
   const decision = await dispatch(params.session, {
     event: "session_start",
@@ -1490,7 +1383,7 @@ export async function evaluateToolCalls(
               toolCallId: admitted[index],
               sessionId: session.session_id,
             },
-            "Failed to cancel OpenAPPA admitted call during batch failure cleanup",
+            "OpenAPPA could not cancel an admitted call during batch failure cleanup",
           );
         }
       }
@@ -1604,7 +1497,7 @@ export async function cancelCalls(
           toolCallId: ids[index],
           sessionId: session.session_id,
         },
-        "Failed to cancel OpenAPPA admitted call",
+        "OpenAPPA could not cancel an admitted call",
       );
     }
   }
@@ -1990,7 +1883,7 @@ export async function loadChildReturns(params: {
   } catch (error) {
     logger.warn(
       { err: error, parentSessionId: params.parentSessionId },
-      "Failed to load OpenAPPA child returns",
+      "OpenAPPA could not load child returns",
     );
     throw openappaFailure(error);
   }
@@ -2017,7 +1910,7 @@ export async function loadChildAddresses(params: {
   } catch (error) {
     logger.warn(
       { err: error, childSessionId: params.childSessionId },
-      "Failed to load OpenAPPA child addresses",
+      "OpenAPPA could not load child addresses",
     );
     throw openappaFailure(error);
   }
@@ -2263,7 +2156,7 @@ export async function loadOfferReview(params: {
   } catch (error) {
     logger.warn(
       { err: error, offerId: params.offerId },
-      "Failed to load OpenAPPA offer review",
+      "OpenAPPA could not load the offer review",
     );
     throw openappaFailure(error);
   }
@@ -2271,10 +2164,7 @@ export async function loadOfferReview(params: {
 
 function validateReturnContract(text: string): void {
   if (Buffer.byteLength(text, "utf8") > 64 * 1024) {
-    throw new ApiError(
-      413,
-      "The OpenAPPA child return contract exceeds 64 KiB",
-    );
+    throw new ApiError(413, "OpenAPPA child return contract exceeds 64 KiB");
   }
 }
 

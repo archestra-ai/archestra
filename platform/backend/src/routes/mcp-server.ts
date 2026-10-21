@@ -63,6 +63,7 @@ import {
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
 import {
   assertLifecycleRoutePermission,
   assertScopedLifecycleAuthorization,
@@ -1081,6 +1082,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Bulk create tools to avoid N+1 queries
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+                await recordInstallToolDescriptions({
+                  mcpServerId: mcpServer.id,
+                  syncedTools: createdTools,
+                  reported: toolsToCreate,
+                });
 
                 // Clone reconciliation: if this catalog has provisional cloned
                 // tools (first install of a clone), confirm the ones the server
@@ -1258,6 +1264,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Bulk create tools to avoid N+1 queries
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+        await recordInstallToolDescriptions({
+          mcpServerId: mcpServer.id,
+          syncedTools: createdTools,
+          reported: toolsToCreate,
+        });
 
         // Clone reconciliation: if this catalog has provisional cloned
         // tools (first install of a clone), confirm the ones the server

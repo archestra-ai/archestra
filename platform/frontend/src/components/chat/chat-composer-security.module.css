@@ -14,13 +14,14 @@
   transform: translateY(8px) rotate(6deg);
 }
 
+/* Low enough that the tilted ears stay inside the window. */
 .suspicious {
-  transform: translateY(2px) rotate(-10deg);
+  transform: translateY(7px) rotate(-10deg);
 }
 
 .suspicious:hover,
 .suspicious[aria-expanded="true"] {
-  transform: translateY(-3px) rotate(-5deg);
+  transform: translateY(4px) rotate(-6deg);
 }
 
 .off {
@@ -94,10 +95,10 @@
     transform: translateY(26px) rotate(14deg);
   }
   61% {
-    transform: translateY(-6px) rotate(-16deg);
+    transform: translateY(-1px) rotate(-16deg);
   }
   100% {
-    transform: translateY(2px) rotate(-10deg);
+    transform: translateY(7px) rotate(-10deg);
   }
 }
 

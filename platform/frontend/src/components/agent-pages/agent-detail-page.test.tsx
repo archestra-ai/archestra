@@ -542,7 +542,7 @@ describe("AgentDetailPage", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Runtime" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Agent Runtime" })).toBeNull();
     expect(screen.queryByText("run history")).toBeNull();
   });
 });

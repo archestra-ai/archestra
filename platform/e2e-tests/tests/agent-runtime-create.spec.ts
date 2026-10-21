@@ -144,7 +144,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
   const original = await organizationResponse.json();
   const settingsUrl = `${UI_BASE_URL}/api/organization/integration-settings`;
   const settings = page.getByRole("list", {
-    name: "Managed agents",
+    name: "Coding agents",
     exact: true,
   });
   const names = ["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"];
@@ -238,7 +238,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
 
     await goToPage(page, "/settings/agents");
     for (const name of names) {
-      await settings.getByRole("button", { name: "Add managed agent" }).click();
+      await settings.getByRole("button", { name: "Add coding agent" }).click();
       await page.getByRole("button", { name, exact: true }).click();
     }
     await save();

@@ -76,7 +76,7 @@ export function ensureToolCallsHaveResults(
         toolCallIds: unansweredToolCalls.map((part) => part.toolCallId),
         toolNames: unansweredToolCalls.map((part) => part.toolName),
       },
-      "[buildModelMessages] Synthesized interrupted tool results for unanswered tool calls",
+      "[ensureToolCallsHaveResults] Synthesized interrupted tool results for unanswered tool calls",
     );
 
     const syntheticResults: ToolResultPart[] = unansweredToolCalls.map(

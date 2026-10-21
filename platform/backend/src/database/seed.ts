@@ -1195,8 +1195,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
-  // Before the Playwright reconcile, which gives the SRE environment its
-  // browser runtime too.
   await sreAgentService.seed();
   await PlaywrightRuntimeModel.reconcileAll();
   await seedTestMcpServer();

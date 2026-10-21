@@ -3,10 +3,11 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
 } from "@archestra/shared";
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
+import { SRE_ENVIRONMENT_ID } from "@/services/sre-agent/definition";
 import type { McpServer, ToolOwner } from "@/types";
 import AgentModel from "./agent";
 import AppModel from "./app";
@@ -43,7 +44,10 @@ class PlaywrightRuntimeModel {
     const rootCatalog = await PlaywrightRuntimeModel.findRootCatalog();
     if (!rootCatalog) return [];
 
-    const environments = await db.select().from(schema.environmentsTable);
+    const environments = await db
+      .select()
+      .from(schema.environmentsTable)
+      .where(browserEnvironments());
 
     await withDbTransaction(async (tx) => {
       await PlaywrightRuntimeModel.ensureServer({
@@ -80,7 +84,8 @@ class PlaywrightRuntimeModel {
   static async retireLegacyInstallations(): Promise<void> {
     const environments = await db
       .select({ id: schema.environmentsTable.id })
-      .from(schema.environmentsTable);
+      .from(schema.environmentsTable)
+      .where(browserEnvironments());
     const activeEnvironmentIds = new Set(environments.map(({ id }) => id));
     const activeCatalogIds = new Set(
       environments.map(({ id }) => managedCatalogId(id)),
@@ -242,7 +247,8 @@ class PlaywrightRuntimeModel {
   private static async findAllActive(): Promise<McpServer[]> {
     const environments = await db
       .select({ id: schema.environmentsTable.id })
-      .from(schema.environmentsTable);
+      .from(schema.environmentsTable)
+      .where(browserEnvironments());
     return db
       .select()
       .from(schema.mcpServersTable)
@@ -334,6 +340,14 @@ class PlaywrightRuntimeModel {
 }
 
 export default PlaywrightRuntimeModel;
+
+/**
+ * The environments that get a browser runtime: all but the SRE agent's, whose
+ * egress reaches only the Kubernetes API server.
+ */
+function browserEnvironments() {
+  return ne(schema.environmentsTable.id, SRE_ENVIRONMENT_ID);
+}
 
 function deterministicUuid(key: string): string {
   const hex = createHash("sha256").update(key).digest("hex").slice(0, 32);

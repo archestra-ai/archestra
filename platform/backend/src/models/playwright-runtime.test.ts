@@ -2,11 +2,50 @@ import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { EnvironmentModel, McpServerModel } from "@/models";
+import { SRE_ENVIRONMENT_ID } from "@/services/sre-agent/definition";
 import { describe, expect, mustExist, test } from "@/test";
 import { agentOwner, appOwner } from "@/types";
 import PlaywrightRuntimeModel from "./playwright-runtime";
 
 describe("PlaywrightRuntimeModel", () => {
+  test("gives the SRE environment no browser runtime", async ({
+    makeInternalMcpCatalog,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await EnvironmentModel.create({
+      id: SRE_ENVIRONMENT_ID,
+      organizationId: organization.id,
+      name: "SRE",
+    });
+    const other = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Other",
+    });
+    await makeInternalMcpCatalog({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      organizationId: null,
+      name: "microsoft__playwright-mcp",
+      serverType: "local",
+      localConfig: { command: "node", transportType: "streamable-http" },
+    });
+
+    const servers = await PlaywrightRuntimeModel.reconcileAll();
+
+    expect(servers).toHaveLength(2);
+    expect(
+      await PlaywrightRuntimeModel.findForEnvironment(SRE_ENVIRONMENT_ID),
+    ).toBeNull();
+    expect(
+      await PlaywrightRuntimeModel.findCatalogForEnvironment(
+        SRE_ENVIRONMENT_ID,
+      ),
+    ).toBeNull();
+    expect(
+      await PlaywrightRuntimeModel.findForEnvironment(other.id),
+    ).not.toBeNull();
+  });
+
   test("reconciles one system runtime per Environment and retires legacy installs", async ({
     makeAgent,
     makeApp,

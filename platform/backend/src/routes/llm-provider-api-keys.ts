@@ -391,7 +391,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Omitted or false: the key is yours alone (you own it and " +
                   "only you use it). True: a shared key with no owner, used " +
-                  "by whoever its initialGrants reach.",
+                  "by whoever its initialGrants reach. A service account " +
+                  "cannot own a key, so it must send true.",
               ),
             isPrimary: z.boolean().optional(),
             vaultSecretPath: z.string().min(1).optional(),
@@ -445,9 +446,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // so it cannot be the owner (`user_id`) of a key. Refuse before the key
       // is tested or its secret is stored.
       if (!body.shared && isServiceAccountUserId(user.id)) {
+        const credential = { provider: body.provider, apiKey: body.apiKey };
         throw new ApiError(
           400,
-          "A service account cannot own a key. Set shared to true to create a shared key.",
+          // A per-user credential cannot be shared either, so do not suggest it.
+          credentialRequiresPerUserScope(credential)
+            ? `${perUserCredentialLabel(credential)} keys are per-user, so a service account cannot hold one.`
+            : "A service account cannot own a key. Set shared to true to create a shared key.",
         );
       }
       // Decision: a key is either the caller's own ("just for me": they own

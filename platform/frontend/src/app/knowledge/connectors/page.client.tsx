@@ -805,7 +805,7 @@ function SalesforceAuthMigrationNotice() {
   const { data: hasLegacyConnector } = useHasLegacySalesforceConnector();
   if (!hasLegacyConnector) return null;
   return (
-    <InlineNotice variant="warning" className="mb-4">
+    <InlineNotice variant="warning" className="mb-4 sm:mb-6">
       <AlertTriangle />
       <InlineNoticeText>
         Salesforce password login retires in Summer ’27. Migrate existing

@@ -56,8 +56,16 @@ def main():
             )
             if requests.returncode or tests.returncode:
                 print("Terraform provider compatibility failed: "
-                      f"request contracts={requests.returncode}, regenerated unit tests={tests.returncode}.\n"
-                      "Synchronize provider main using the Update Terraform Provider repair workflow.", file=sys.stderr)
+                      f"request contracts={requests.returncode}, regenerated unit tests={tests.returncode}.", file=sys.stderr)
+                if requests.returncode:
+                    print("The provider sends request fields that this spec does not accept (see the failures "
+                          "above). Fix them on terraform-provider-archestra main.", file=sys.stderr)
+                if tests.returncode:
+                    print("The provider does not build or pass its unit tests with a client generated from this "
+                          "spec. After the next platform release, the Update Terraform Provider workflow opens a "
+                          "provider pull request with that client; fix the provider code there.", file=sys.stderr)
+                print("The check runs against provider main, so the failure can predate this pull request.",
+                      file=sys.stderr)
                 return 1
     except ClientGenerationError as error:
         print(error, file=sys.stderr)

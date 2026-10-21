@@ -3,6 +3,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { ModelModel } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import type { ProviderMessage, Tokenizer } from "@/tokenizers";
 import type { CommonMcpToolDefinition } from "@/types";
 
@@ -30,6 +31,7 @@ export function estimateToolTokens(
 }
 
 interface CacheTokenCounts {
+  providerApiKeyId?: string;
   readTokens?: number;
   writeTokens?: number;
   /** Portion of writeTokens written at the 1-hour TTL (billed at write1h, the rest at write). */
@@ -74,13 +76,28 @@ export async function calculateCost(
     return undefined;
   }
 
-  const model_entry = await ModelModel.findByProviderAndModelId(
-    provider,
-    model,
+  const model_entry = await LlmProviderApiKeyModelLinkModel.findModelForPricing(
+    { provider, modelId: model, apiKeyId: cacheTokens?.providerApiKeyId },
   );
   const pricing = ModelModel.getEffectivePricing(model_entry, model, provider);
-  const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
-  const priceOut = Number.parseFloat(pricing.pricePerMillionOutput);
+  // A LiteLLM route may serve any vendor: OpenAI cache multipliers and a
+  // generic base estimate cannot supply a price the instance did not publish.
+  const instance = model_entry?.providerPricing;
+  if (
+    instance &&
+    instance !== "conflicting" &&
+    ((inputTokens &&
+      instance.promptPricePerToken === null &&
+      pricing.source !== "custom") ||
+      (outputTokens &&
+        instance.completionPricePerToken === null &&
+        pricing.source !== "custom") ||
+      (readTokens && pricing.pricePerMillionCacheRead === null) ||
+      (writeTokens && pricing.pricePerMillionCacheWrite === null))
+  )
+    return undefined;
+  const priceIn = Number.parseFloat(pricing.pricePerMillionInput ?? "0");
+  const priceOut = Number.parseFloat(pricing.pricePerMillionOutput ?? "0");
   // Resolved cache prices (explicit synced/custom, else multiplier-derived).
   // Null when the provider has no cache pricing model — treat as zero so cache
   // tokens add nothing rather than fabricating a cost.
@@ -123,6 +140,7 @@ export async function calculateCacheCost(
   writeTokens: number,
   /** Portion of writeTokens written at the 1-hour TTL (the rest is costed at the 5m rate). */
   write1hTokens = 0,
+  providerApiKeyId?: string,
 ): Promise<
   | { cacheCost: number; cacheSavings: number; cacheReadSavings: number }
   | undefined
@@ -130,11 +148,19 @@ export async function calculateCacheCost(
   if (!readTokens && !writeTokens) {
     return undefined;
   }
-  const model_entry = await ModelModel.findByProviderAndModelId(
-    provider,
-    model,
+  const model_entry = await LlmProviderApiKeyModelLinkModel.findModelForPricing(
+    { provider, modelId: model, apiKeyId: providerApiKeyId },
   );
   const pricing = ModelModel.getEffectivePricing(model_entry, model, provider);
+  const instance = model_entry?.providerPricing;
+  if (
+    instance &&
+    instance !== "conflicting" &&
+    ((instance.promptPricePerToken === null && pricing.source !== "custom") ||
+      (readTokens && pricing.pricePerMillionCacheRead === null) ||
+      (writeTokens && pricing.pricePerMillionCacheWrite === null))
+  )
+    return undefined;
   if (pricing.cacheSource == null) {
     // Provider has no cache pricing model; don't fabricate cost/savings.
     return undefined;
@@ -143,7 +169,7 @@ export async function calculateCacheCost(
   // known zero price (e.g. providers that don't charge for cache writes) still
   // contributes; a genuinely unpriced (null) direction is skipped so we neither
   // claim its cost nor fabricate savings for it.
-  const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
+  const priceIn = Number.parseFloat(pricing.pricePerMillionInput ?? "0");
   const cacheReadPrice =
     pricing.pricePerMillionCacheRead != null
       ? Number.parseFloat(pricing.pricePerMillionCacheRead)

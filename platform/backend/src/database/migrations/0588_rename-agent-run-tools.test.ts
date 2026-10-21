@@ -6,7 +6,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const statements = fs
-  .readFileSync(path.join(__dirname, "0587_rename-agent-run-tools.sql"), "utf8")
+  .readFileSync(path.join(__dirname, "0588_rename-agent-run-tools.sql"), "utf8")
   .split("--> statement-breakpoint")
   .map((statement) => statement.trim())
   .filter(Boolean);

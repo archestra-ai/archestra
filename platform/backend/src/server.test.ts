@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import * as proxyPlugins from "@/proxy/plugins/registry";
 import { ApiError } from "@/types";
@@ -1142,7 +1142,17 @@ describe("health endpoints", () => {
   });
 
   describe("/ready endpoint", () => {
+    const originalOpenappa = {
+      enabled: config.openappa.enabled,
+      core: config.enterpriseFeatures.core,
+    };
+    afterEach(() => {
+      config.openappa.enabled = originalOpenappa.enabled;
+      config.enterpriseFeatures.core = originalOpenappa.core;
+    });
+
     test("returns 200 when database is healthy", async () => {
+      config.openappa.enabled = false;
       const app = createFastifyInstance();
       await app.register(healthRoutes);
 
@@ -1159,6 +1169,26 @@ describe("health endpoints", () => {
       expect(body).toHaveProperty("database");
       expect(body.status).toBe("ok");
       expect(body.database).toBe("connected");
+      expect(body.openappa).toBe("disabled");
+    });
+
+    test("returns 503 when Guardrails is enabled and its runtime cannot open", async () => {
+      // The test process resolves no database URL for the native runtime, so
+      // opening it fails the way a refused URL does in a deployment.
+      config.openappa.enabled = true;
+      config.enterpriseFeatures.core = true;
+      const app = createFastifyInstance();
+      await app.register(healthRoutes);
+
+      const response = await app.inject({ method: "GET", url: "/ready" });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({
+        status: "degraded",
+        database: "connected",
+        openappa: "unavailable",
+        openappaReason: "unknown",
+      });
     });
 
     test("returns 503 when database is unhealthy", async () => {

@@ -41,6 +41,7 @@ import {
 import {
   OpenappaRootOnlyError,
   openappaFailure,
+  type RuntimeFailureCode,
   runtimeFailureCode,
   unansweredAnnotationNotice,
 } from "@/openappa/failure";
@@ -325,6 +326,50 @@ export async function recompileAllOnStart(): Promise<void> {
     logger.error({ err: error }, "OpenAPPA could not recompose the policies");
   }
 }
+
+/**
+ * Open the native runtime at boot, so a database URL, TLS or packaging failure
+ * is logged with its cause before the first governed request. Never rejects.
+ */
+export async function startOpenappaRuntime(): Promise<void> {
+  if (!openappaEnabled()) return;
+  await binding().catch(openappaFailure);
+}
+
+type OpenappaReadiness =
+  | { state: "disabled" | "ready" | "starting" }
+  | { state: "unavailable"; code: RuntimeFailureCode | "unknown" };
+
+/**
+ * Whether the runtime can decide governed requests. Opens it when it is not
+ * open yet, because a pod that is not ready receives no request that would.
+ * Waits at most `waitMs`; a slower opening reports `starting`.
+ */
+export async function openappaReadiness(
+  waitMs = READINESS_WAIT_MS,
+): Promise<OpenappaReadiness> {
+  if (!openappaEnabled()) return { state: "disabled" };
+  let timer: NodeJS.Timeout | undefined;
+  const elapsed = new Promise<"starting">((resolve) => {
+    timer = setTimeout(() => resolve("starting"), waitMs);
+  });
+  try {
+    const state = await Promise.race([
+      binding().then(() => "ready" as const),
+      elapsed,
+    ]);
+    return { state };
+  } catch (error) {
+    return {
+      state: "unavailable",
+      code: runtimeFailureCode(error) ?? "unknown",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const READINESS_WAIT_MS = 3000;
 
 export async function executeYell(params: {
   session: OpenAppaSession;

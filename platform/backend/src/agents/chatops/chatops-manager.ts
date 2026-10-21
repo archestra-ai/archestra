@@ -156,6 +156,21 @@ export class ChatOpsManager {
     return this.slackProvider;
   }
 
+  /** Workers send notices without starting inbound Slack listeners or sockets. */
+  async getSlackRuntimeNoticeProvider(
+    pinnedAgentId?: string,
+  ): Promise<SlackProvider | null> {
+    if ((await getHiddenMessagingChannels()).has("slack")) return null;
+    const slackConfig = pinnedAgentId
+      ? (await ChatOpsConfigModel.getSlackAgentBots()).find(
+          (bot) => bot.agentId === pinnedAgentId,
+        )
+      : await ChatOpsConfigModel.getSlackConfig();
+    if (!slackConfig) return null;
+    const provider = new SlackProvider(slackConfig, { pinnedAgentId });
+    return provider.isConfigured() ? provider : null;
+  }
+
   getTelegramProvider(): TelegramProvider | null {
     return this.telegramProvider;
   }

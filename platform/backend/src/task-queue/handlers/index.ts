@@ -7,6 +7,7 @@ import {
 } from "@/services/openappa-github-sync";
 import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import type { TaskQueueService } from "../task-queue";
+import { handleAgentRunAttentionNotice } from "./agent-run-attention-notice-handler";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
@@ -30,6 +31,10 @@ import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
+  taskQueueService.registerHandler(
+    "agent_run_attention_notice",
+    handleAgentRunAttentionNotice,
+  );
   taskQueueService.registerHandler(
     "interaction_user_activity_rebuild",
     handleInteractionUserActivityRebuild,

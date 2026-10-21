@@ -45,6 +45,7 @@ export const TaskTypeSchema = z.enum([
   "openappa_effective_policy_recompile",
   "openappa_unenforced_cleanup",
   "llm_model_sync",
+  "agent_run_attention_notice",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -101,6 +102,7 @@ export const TASK_LANES = {
     "openappa_effective_policy_recompile",
     "openappa_unenforced_cleanup",
     "llm_model_sync",
+    "agent_run_attention_notice",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

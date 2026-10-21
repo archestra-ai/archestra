@@ -853,6 +853,89 @@ class SlackProvider implements ChatOpsProvider {
     await this.client.chat.postMessage(postArgs);
   }
 
+  /** Authenticate only the outbound sender; never open a socket or change the app. */
+  async verifyRuntimeNoticeWorkspace(workspaceId: string): Promise<void> {
+    const identity = await this.runtimeNoticeClient().auth.test();
+    if (identity.team_id !== workspaceId || !identity.bot_id) {
+      throw new Error("Slack runtime notice workspace mismatch");
+    }
+    this.botId = identity.bot_id;
+  }
+
+  /** Generic runtime attention only: no command, prompt, or approval payload. */
+  async postRuntimeAttentionNotice(params: {
+    channelId: string;
+    threadId: string;
+    noticeId: string;
+    runUrl: string;
+  }): Promise<string> {
+    const result = await this.runtimeNoticeClient().chat.postMessage({
+      channel: params.channelId,
+      thread_ts: params.threadId,
+      ...runtimeAttentionContent(params.runUrl, false),
+      metadata: {
+        event_type: "archestra_runtime_attention",
+        event_payload: { notice_id: params.noticeId },
+      },
+      unfurl_links: false,
+      unfurl_media: false,
+      reply_broadcast: false,
+    });
+    if (!result.ts)
+      throw new Error("Slack runtime notice returned no message timestamp");
+    return result.ts;
+  }
+
+  async resolveRuntimeAttentionNotice(params: {
+    channelId: string;
+    messageTs: string;
+    runUrl: string;
+  }): Promise<void> {
+    await this.runtimeNoticeClient().chat.update({
+      channel: params.channelId,
+      ts: params.messageTs,
+      ...runtimeAttentionContent(params.runUrl, true),
+    });
+  }
+
+  /** Recover an uncertain post without blindly creating a second notification. */
+  async findRuntimeAttentionNotice(params: {
+    channelId: string;
+    threadId: string;
+    noticeId: string;
+  }): Promise<string | null> {
+    const client = this.runtimeNoticeClient();
+    let cursor: string | undefined;
+    // Bounded below the delivery lease. If a very long thread cannot be fully
+    // checked, fail safely instead of posting a possible duplicate.
+    for (let page = 0; page < 10; page++) {
+      const result = await client.conversations.replies({
+        channel: params.channelId,
+        ts: params.threadId,
+        cursor,
+        limit: 100,
+        include_all_metadata: true,
+      });
+      const message = result.messages?.find(
+        (message) =>
+          message.bot_id === this.botId &&
+          message.metadata?.event_type === "archestra_runtime_attention" &&
+          (
+            message.metadata?.event_payload as
+              | Record<string, unknown>
+              | undefined
+          )?.notice_id === params.noticeId,
+      );
+      if (message?.ts) return message.ts;
+      cursor = result.response_metadata?.next_cursor || undefined;
+      if (!cursor && !result.has_more) return null;
+      if (!cursor) break;
+    }
+    throw new Error(
+      "Could not finish checking the Slack thread for a runtime notice",
+    );
+  }
+
   async updateApprovalRequest(
     options: UpdateApprovalRequestOptions,
   ): Promise<void> {
@@ -1806,6 +1889,19 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  private runtimeNoticeClient(): WebClient {
+    if (!this.isConfigured()) {
+      throw new Error("Slack runtime notice provider not initialized");
+    }
+    // The durable task queue owns retries. Bound each call so it cannot outlive
+    // the notice's delivery lease, including rate-limit responses.
+    return new WebClient(this.config.botToken, {
+      retryConfig: { retries: 0 },
+      timeout: 10_000,
+      rejectRateLimitedCalls: true,
+    });
+  }
 
   /** Completed control retries must not stop a later turn or re-mute a resumed thread. */
   private async handleControlEvent(
@@ -3197,3 +3293,27 @@ type SlackJoinableChannel = {
   isPrivate: boolean;
   isMember: boolean;
 };
+
+/** Only fixed copy and the ordinary authenticated app URL enter Slack. */
+function runtimeAttentionContent(runUrl: string, resolved: boolean) {
+  const text = resolved
+    ? "Resolved — the runtime no longer needs your input."
+    : "The runtime needs your input.";
+  return {
+    text: `${text} Open run: ${runUrl}`,
+    blocks: [
+      { type: "section" as const, text: { type: "plain_text" as const, text } },
+      {
+        type: "actions" as const,
+        elements: [
+          {
+            type: "button" as const,
+            action_id: "open_runtime_run",
+            text: { type: "plain_text" as const, text: "Open run" },
+            url: runUrl,
+          },
+        ],
+      },
+    ],
+  };
+}

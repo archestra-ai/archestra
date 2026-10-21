@@ -15,6 +15,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { serviceAccountIdFromUserId } from "@/auth/service-account-user-id";
 import {
   CreatedByModel,
   LlmProviderApiKeyModel,
@@ -251,7 +252,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetVirtualApiKeyValue,
         description:
-          "Get the raw value of a virtual API key. Only the key's author can reveal it.",
+          "Get the raw value of a virtual API key. Only the key's author, or the service account that created it, can reveal it.",
         tags: ["Virtual API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -270,7 +271,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       // The raw value is a bearer credential — visibility (shared team/org
       // keys) is not enough to reveal it; only the author holds the secret.
-      if (virtualKey.authorId !== user.id) {
+      if (!isKeyAuthor({ virtualKey, userId: user.id })) {
         throw new ApiError(403, "Only the key's creator can reveal its value.");
       }
 
@@ -793,6 +794,23 @@ async function deleteVirtualApiKey(params: {
 
   await VirtualApiKeyModel.delete(id);
   return { success: true };
+}
+
+/** A service account owns the keys it created, which store it in `createdByServiceAccountId`. */
+function isKeyAuthor(params: {
+  virtualKey: {
+    authorId: string | null;
+    createdByServiceAccountId: string | null;
+  };
+  userId: string;
+}): boolean {
+  const { virtualKey, userId } = params;
+  if (virtualKey.authorId !== null) return virtualKey.authorId === userId;
+  const serviceAccountId = serviceAccountIdFromUserId(userId);
+  return (
+    serviceAccountId !== null &&
+    virtualKey.createdByServiceAccountId === serviceAccountId
+  );
 }
 
 async function resolveKeyOwner(params: {

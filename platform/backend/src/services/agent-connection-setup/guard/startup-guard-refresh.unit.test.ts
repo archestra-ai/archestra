@@ -69,15 +69,19 @@ async function fixture(
   const client = options.client ?? CLAUDE_CODE_GUARD_CLIENT;
   const platform = options.platform ?? "bash";
   let requests = 0;
+  let healthRequests = 0;
   let mode = "ok";
   let requestBody = "";
   let onRequest = async () => {};
   const server = createServer(async (request, response) => {
     if (request.url?.startsWith("/v1/health")) {
+      healthRequests++;
       response.end(
         JSON.stringify({
           mcp: "ok",
-          guardVersion: STARTUP_GUARD_FORMAT_VERSION,
+          guardVersion:
+            STARTUP_GUARD_FORMAT_VERSION +
+            (mode === "rolling" && healthRequests > 1 ? 1 : 0),
         }),
       );
       return;
@@ -120,6 +124,17 @@ async function fixture(
     );
     if (mode === "hash") artifact.sha256 = "0".repeat(64);
     if (mode === "version") artifact.version--;
+    if (mode === "instrumented" || mode === "rolling") {
+      artifact.source = artifact.source.replace(
+        /^GUARD_FORMAT_VERSION=\d+$/m,
+        `$&\nprintf 'CURRENT_GENERATION_ARG=<%s>\\n' "$@" >&2`,
+      );
+      artifact.sha256 = hash(artifact.source);
+    }
+    if (["broken", "broken-edit", "broken-setup"].includes(mode)) {
+      artifact.source = `#!/usr/bin/env bash\nGUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}\n${mode === "broken-edit" ? `printf '\\n# concurrent user edit\\n' >> "$0"\n` : mode === "broken-setup" ? `node -e 'const fs=require("node:fs");const file=process.argv[1]+".update.json";const state=JSON.parse(fs.readFileSync(file));state.context.appName="Newer setup";fs.writeFileSync(file,JSON.stringify(state))' "$0"\n` : ""}exit 42\n`;
+      artifact.sha256 = hash(artifact.source);
+    }
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify(artifact));
   });
@@ -196,6 +211,7 @@ async function fixture(
     current: (platform === "windows" ? "\ufeff" : "") + current,
     context,
     requests: () => requests,
+    healthRequests: () => healthRequests,
     requestBody: () => requestBody,
     mode: (value: string) => {
       mode = value;
@@ -275,14 +291,116 @@ describe("generated startup check refresh", () => {
     expect(await readFile(f.guard, "utf8")).toBe(f.old);
   });
 
-  test("the real noninteractive Bash guard automatically refreshes on startup", async () => {
+  test("the real Bash guard runs the new generation during this launch with the original arguments", async () => {
     const f = await fixture();
+    f.mode("instrumented");
+    const { stderr } = await execute(
+      "bash",
+      [f.guard, "-p", "literal $value ' quoted"],
+      {
+        env: { ...process.env, HOME: f.root },
+      },
+    );
+    expect(stderr).toContain("active this launch");
+    expect(stderr).toContain("CURRENT_GENERATION_ARG=<-p>");
+    expect(stderr).toContain(
+      "CURRENT_GENERATION_ARG=<literal $value ' quoted>",
+    );
+    expect(stderr).not.toContain("re-run");
+    expect(f.healthRequests()).toBe(2);
+    expect(f.requests()).toBe(1);
+  });
+
+  test("hands off at most once even when a rolling deployment reports another version", async () => {
+    const f = await fixture();
+    f.mode("rolling");
     const { stderr } = await execute("bash", [f.guard], {
       env: { ...process.env, HOME: f.root },
     });
-    expect(stderr).toContain("Updated Archestra launch check automatically");
-    expect(stderr).not.toContain("re-run");
+    expect(stderr).toContain("CURRENT_GENERATION_ARG");
+    expect(stderr).toContain("active this launch");
+    expect(f.healthRequests()).toBe(2);
+    expect(f.requests()).toBe(1);
+  });
+
+  test("the interactive terminal runs the updated check during the same launch", async () => {
+    const f = await fixture();
+    const driver = `import os, pty, select, sys
+pid, master = pty.fork()
+if pid == 0:
+    os.execvp("bash", ["bash", sys.argv[1]])
+output = b""
+while True:
+    ready, _, _ = select.select([master], [], [], 20)
+    if not ready:
+        os.kill(pid, 9)
+        raise RuntimeError("startup check timed out")
+    try:
+        chunk = os.read(master, 65536)
+    except OSError:
+        break
+    if not chunk:
+        break
+    output += chunk
+_, status = os.waitpid(pid, 0)
+sys.stdout.buffer.write(output)
+sys.exit(os.waitstatus_to_exitcode(status))
+`;
+    const { stdout } = await execute("python3", ["-c", driver, f.guard], {
+      env: { ...process.env, HOME: f.root },
+      timeout: 25_000,
+    });
+    expect(stdout).toContain("active this launch");
+    expect(stdout).not.toContain("applies next launch");
+    expect(f.healthRequests()).toBe(2);
+    expect(f.requests()).toBe(1);
     expect(await readFile(f.guard, "utf8")).toBe(f.current);
+  });
+
+  test("falls back to the running cached check and restores it after a failed handoff", async () => {
+    const f = await fixture();
+    f.mode("broken");
+    const { stderr } = await execute("bash", [f.guard], {
+      env: { ...process.env, HOME: f.root },
+    });
+    expect(stderr).toContain("using the cached check this launch");
+    expect(stderr).not.toContain("active this launch");
+    expect(await readFile(f.guard, "utf8")).toBe(f.old);
+    f.mode("ok");
+    await f.run();
+    expect(await readFile(f.guard, "utf8")).toBe(f.current);
+  });
+
+  test("a failed handoff cannot roll back concurrent user edits", async () => {
+    const f = await fixture();
+    f.mode("broken-edit");
+    const { stderr } = await execute("bash", [f.guard], {
+      env: { ...process.env, HOME: f.root },
+    });
+    expect(stderr).toContain("using the cached check this launch");
+    expect(await readFile(f.guard, "utf8")).toContain("# concurrent user edit");
+  });
+
+  test("a failed handoff cannot roll back a newer approved setup state", async () => {
+    const f = await fixture();
+    f.mode("broken-setup");
+    const { stderr } = await execute("bash", [f.guard], {
+      env: { ...process.env, HOME: f.root },
+    });
+    expect(stderr).toContain("using the cached check this launch");
+    const state = JSON.parse(await readFile(`${f.guard}.update.json`, "utf8"));
+    expect(state.context.appName).toBe("Newer setup");
+    expect(await readFile(f.guard, "utf8")).toContain("exit 42");
+  });
+
+  test("a disabled guard does not update or hand off", async () => {
+    const f = await fixture();
+    await execute("bash", [f.guard], {
+      env: { ...process.env, HOME: f.root, ARCHESTRA_CLAUDE_GUARD: "0" },
+    });
+    expect(f.requests()).toBe(0);
+    expect(f.healthRequests()).toBe(0);
+    expect(await readFile(f.guard, "utf8")).toBe(f.old);
   });
 
   test("preserves shell quoting in private clone URLs and PowerShell BOM", async () => {

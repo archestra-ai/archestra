@@ -372,8 +372,8 @@ SKIP_FILE="$HOME/${client.skipRelpath}"
 # rate limiting can never look like an outage.
 HEALTH_URL=${sh(ctx.healthUrl ?? "")}
 # The monotonic format version this guard was stamped with. The health response
-# above reports the running instance's current value; the guard nudges a
-# re-connect only when the instance reports a STRICTLY GREATER number, so an
+# above reports the running instance's current value; the guard refreshes
+# only when the instance reports a STRICTLY GREATER number, so an
 # older instance or a rollback stays silent.
 GUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}
 GUARD_LABELS=(${resources.map((r) => sh(r.label)).join(" ")})
@@ -526,18 +526,46 @@ version_is_stale() {
 }
 
 refresh_version_update() {
+  # The marker exists only in the child guard's environment. A rolling deploy
+  # can report another version immediately; one launch must never loop.
+  [ "\${ARCHESTRA_GUARD_REFRESHED:-}" = "1" ] && return 1
   if command -v node >/dev/null 2>&1 && [ -f "$GUARD_PATH.update.cjs" ]; then
-    node "$GUARD_PATH.update.cjs" "$GUARD_PATH" "$arch_ver_num"
+    ARCH_UPDATE_NOTICE=$(node "$GUARD_PATH.update.cjs" "$GUARD_PATH" "$arch_ver_num" --handoff 2>&1)
+    if [ "$?" -eq 10 ]; then
+      ARCH_REFRESH_RECEIPT=$ARCH_UPDATE_NOTICE
+      ARCH_UPDATE_NOTICE=''
+      return 0
+    fi
   else
-    printf '%s\\n' "Could not update $APP_NAME launch check automatically; kept the installed config. Node.js and the installed updater are required." >&2
+    ARCH_UPDATE_NOTICE="Could not update $APP_NAME launch check automatically; kept the installed config. Node.js and the installed updater are required."
   fi
-  return 0
+  return 1
+}
+
+launch_refreshed_guard() {
+  version_is_stale || return 0
+  refresh_version_update || return 0
+  if [ "$INTERACTIVE" = "1" ]; then
+    stop_frame_key_reader
+    stty echo </dev/tty 2>/dev/null || true
+    printf '\\033[?1049l'
+    trap - EXIT
+  fi
+  if ARCHESTRA_GUARD_REFRESHED=1 bash "$GUARD_PATH" "$@"; then exit 0; fi
+  # A failed child returns to this already loaded guard. Restore only its exact
+  # generated predecessor; the updater refuses to overwrite concurrent edits.
+  node "$GUARD_PATH.update.cjs" "$GUARD_PATH" "$arch_ver_num" --rollback "$ARCH_REFRESH_RECEIPT" >/dev/null 2>&1
+  ARCH_UPDATE_NOTICE='Updated launch check could not run; using the cached check this launch.'
+  if [ "$INTERACTIVE" = "1" ]; then
+    draw_guard_screen
+  fi
 }
 
 if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
   if [ -n "$HEALTH_URL" ]; then
     fetch_health || HEALTH_STATE='down'
   fi
+  launch_refreshed_guard "$@"
   i=0
   while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
     if [ "\${GUARD_ACTIVE[$i]}" = "1" ] && resource_down "$i"; then
@@ -545,9 +573,9 @@ if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
     fi
     i=$((i+1))
   done
-  if version_is_stale; then
-    refresh_version_update
-  fi
+  notify_refreshed=\${ARCHESTRA_GUARD_REFRESHED:-}
+  [ "$notify_refreshed" != "1" ] || printf '%s\\n' "Updated $APP_NAME launch check automatically; active this launch." >&2
+  [ -z "\${ARCH_UPDATE_NOTICE:-}" ] || printf '%s\\n' "$ARCH_UPDATE_NOTICE" >&2
   exit 0
 fi
 
@@ -961,11 +989,15 @@ offer_reconfigure_tail() {
   return 0
 }
 
-# Refresh the generated launch check without replaying setup or changing settings.
+# Announce from the updated guard, after its checks actually ran.
 notify_version_update() {
   [ "$GUARD_UNINSTALLED" = "1" ] && return 0
-  version_is_stale || return 0
-  refresh_version_update
+  if [ -n "\${ARCH_UPDATE_NOTICE:-}" ]; then
+    printf '%s\\n' "$ARCH_UPDATE_NOTICE" >&2
+    GUARD_DWELL=1
+  fi
+  [ "\${ARCHESTRA_GUARD_REFRESHED:-}" = "1" ] || return 0
+  printf '%s\\n' "Updated $APP_NAME launch check automatically; active this launch." >&2
   GUARD_DWELL=1
 }
 
@@ -1109,17 +1141,12 @@ wait_for_health() {
 # way claude itself does — so nothing lingers in the scrollback after claude
 # exits. When the launch needed attention, the outcome is held briefly
 # before the alternate screen closes over it.
+draw_guard_screen() {
 printf '\\033[?1049h\\033[H\\033[2J'
 # Echo off for the whole interactive run: keys pressed while the probes animate
 # (before any read) would otherwise smudge the screen. Restored on exit.
 stty -echo </dev/tty 2>/dev/null || true
 trap 'stop_frame_key_reader; stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT
-GUARD_DWELL=0
-OPEN_MENU=0
-finish_guard() {
-  [ "$GUARD_DWELL" = "1" ] && sleep 1.2
-  exit 0
-}
 ${guardHeader(ctx)}
 # Every row is on screen from the start: probed rows keep their glyph, the
 # probing row is bright, and everything still waiting sits dim below it. The
@@ -1130,6 +1157,14 @@ for i in $ACTIVE_IDXS; do
 done
 draw_reconfigure_hint
 printf '\\033[%dA' "$ACTIVE_TOTAL"
+}
+GUARD_DWELL=0
+OPEN_MENU=0
+finish_guard() {
+  [ "$GUARD_DWELL" = "1" ] && sleep 1.2
+  exit 0
+}
+draw_guard_screen
 if [ -n "$HEALTH_URL" ]; then
   spin_start "\${GUARD_LABELS[$FIRST_ACTIVE]}"
   wait_for_health || true
@@ -1160,6 +1195,9 @@ if [ "$SKIP_ALL" = "1" ]; then
   printf '\\033[J'
   finish_guard
 fi
+# Hand off before presenting connection decisions. Menu/skip/disconnect choices
+# made during the health probe above take precedence and are never replayed.
+if [ "$ARCH_DISCONNECT_ALL" = "0" ]; then launch_refreshed_guard "$@"; fi
 start_frame_key_reader
 DOWN_IDXS=''
 DOWN_COUNT=0

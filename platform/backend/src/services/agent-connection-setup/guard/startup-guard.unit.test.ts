@@ -937,7 +937,7 @@ describe("renderStartupGuardScript", () => {
   test.each([
     "c",
     "C",
-  ])("interactive, stale: %s opens reconfigure and still attempts the update after leaving", async (key) => {
+  ])("interactive, stale: a queued %s remains available for reconfigure after a refresh attempt", async (key) => {
     const { output, guardHome } = await runGuardInteractive({
       script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
@@ -947,6 +947,7 @@ describe("renderStartupGuardScript", () => {
     expect(output).toContain(
       "Could not update Archestra launch check automatically",
     );
+    expect(output).toContain("Press 1-3 to disconnect");
     expect(output).not.toContain("Disconnected");
     expect(existsSync(guardHome.skipFile)).toBe(false);
   });

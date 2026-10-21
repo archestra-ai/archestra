@@ -26,7 +26,7 @@ function atomic(file, bytes, mode) {
     fs.renameSync(temp, file);
   } finally { fs.rmSync(temp, { force: true }); }
 }
-async function refresh(guard, expectedVersion) {
+async function refresh(guard, expectedVersion, rollback = false, receipt) {
   const statePath = guard + ".update.json";
   const lock = guard + ".update-lock";
   let acquired = false;
@@ -54,6 +54,17 @@ async function refresh(guard, expectedVersion) {
     if (state.updaterHash !== hash(fs.readFileSync(__filename))) throw new Error("Edited launch check updater");
     const before = fs.readFileSync(guard);
     if (!state.hashes.includes(hash(before))) throw new Error("Customized launch check was preserved");
+    if (rollback) {
+      if (receipt !== hash(stateText) + ":" + hash(before)) return;
+      owned(guard + ".previous", false, true);
+      const previous = fs.readFileSync(guard + ".previous");
+      // Restore only the generation this handoff replaced. Concurrent setup,
+      // edits, or another completed update must never be undone.
+      if (state.hashes.length !== 2 || hash(before) !== state.hashes[1] || hash(previous) !== state.hashes[0]) return;
+      atomic(statePath, JSON.stringify({ ...state, hashes: [hash(before), hash(previous)] }), 0o600);
+      atomic(guard, previous, owned(guard).mode & 0o777);
+      return;
+    }
     const match = before.toString("utf8").match(state.platform === "windows" ? /^\$GuardFormatVersion = (\d+)$/m : /^GUARD_FORMAT_VERSION=(\d+)$/m);
     const installed = Number(match?.[1]);
     if (!Number.isSafeInteger(expectedVersion) || !Number.isSafeInteger(installed) || expectedVersion <= installed) return;
@@ -111,11 +122,15 @@ async function refresh(guard, expectedVersion) {
     atomic(guard + ".previous", before, 0o600);
     atomic(statePath, JSON.stringify({ ...state, hashes: [hash(before), hash(bytes)] }), 0o600);
     atomic(guard, bytes, owned(guard).mode & 0o777);
-    console.error("Updated " + state.context.appName + " launch check automatically; applies next launch.");
+    if (process.argv[4] !== "--handoff") console.error("Updated " + state.context.appName + " launch check automatically.");
+    return hash(fs.readFileSync(statePath)) + ":" + hash(bytes);
   } catch (error) {
     const reasons = new Set(["Unsafe launch check ownership", "Edited launch check updater", "Customized launch check was preserved", "Unsafe launch check update endpoint", "Launch check download unavailable", "Launch check download too large", "Wrong launch check artifact", "Wrong launch check version", "Launch check changed during update", "Ambiguous launch check substitutions"]);
     console.error("Could not update launch check automatically; kept the installed config and will retry next launch. " + (reasons.has(error.message) ? error.message : "Update unavailable."));
   } finally { if (acquired) fs.rmSync(lock, { recursive: true, force: true }); }
 }
-if (require.main === module) refresh(process.argv[2], Number(process.argv[3]));
+if (require.main === module) refresh(process.argv[2], Number(process.argv[3]), process.argv[4] === "--rollback", process.argv[5]).then(receipt => {
+  // A distinct status tells the shell to hand off only after a complete update.
+  if (receipt && process.argv[4] === "--handoff") { console.log(receipt); process.exitCode = 10; }
+});
 `;

@@ -35,8 +35,10 @@ async function main() {
     throw new Error("Run this preview in an interactive terminal.");
   const root = await mkdtemp(path.join(tmpdir(), "startup-guard-preview-"));
   let downloads = 0;
+  let healthChecks = 0;
   const server = createServer(async (request, response) => {
     if (request.url?.startsWith("/v1/health")) {
+      healthChecks++;
       response.end(
         JSON.stringify({
           mcp: scenario === "down" ? "down" : "ok",
@@ -133,7 +135,7 @@ async function main() {
     await run("bash", [guard], env, true);
     const source = await readFile(guard, "utf8");
     console.log(
-      `Installed guard version: ${source.match(/^GUARD_FORMAT_VERSION=(\d+)$/m)?.[1]}. Artifact downloads: ${downloads}.`,
+      `Installed guard version: ${source.match(/^GUARD_FORMAT_VERSION=(\d+)$/m)?.[1]}. Artifact downloads: ${downloads}. Health checks this launch: ${healthChecks}.`,
     );
     console.log(
       `Custom settings and deny rules: ${(await readFile(path.join(home, ".claude/settings.json"), "utf8")) === settings ? "preserved" : "CHANGED"}.`,

@@ -145,7 +145,15 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain("Invoke-ArchVersionRefresh");
     expect(script).not.toContain("/connection page and pick");
     expect(script).not.toContain("UtcNow.AddMilliseconds(6000)");
-    expect(script).toContain("$Script:GuardUninstalled -or");
+    expect(script).toContain("if ($Script:GuardUninstalled) { return }");
+    expect(script).toContain("$env:ARCHESTRA_GUARD_REFRESHED -eq '1'");
+    expect(script).toContain(
+      "-NoLogo -NoProfile -File $GuardPath @ArchLaunchArgs",
+    );
+    expect(script).toContain("--rollback");
+    expect(script).toContain(
+      "$env:ARCHESTRA_GUARD_REFRESHED = $previousMarker",
+    );
   });
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {

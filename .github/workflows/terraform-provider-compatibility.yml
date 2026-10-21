@@ -1,0 +1,84 @@
+name: Terraform Provider Compatibility
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - docs/openapi.json
+      - platform/scripts/check-terraform-provider.py
+      - platform/scripts/terraform-provider/**
+      - .github/workflows/terraform-provider-compatibility.yml
+      - .github/workflows/update-terraform-provider.yml
+      # test_workflow.py also checks that the required workflow stays independent.
+      - .github/workflows/on-pull-requests.yml
+  workflow_dispatch:
+    inputs:
+      platform_ref:
+        description: "Platform branch, tag, or commit SHA. The check reads docs/openapi.json from it."
+        type: string
+        required: true
+        default: main
+      provider_ref:
+        description: "Provider branch, tag, or commit SHA to check."
+        type: string
+        required: true
+        default: main
+
+permissions: {}
+
+concurrency:
+  group: terraform-provider-compatibility-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  terraform-provider-compatibility:
+    name: Terraform Provider Compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    steps:
+      - name: Checkout platform
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Checkout selected platform spec
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.platform_ref }}
+          path: spec-source
+          persist-credentials: false
+      - name: Checkout provider contract revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: archestra-ai/terraform-provider-archestra
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.provider_ref || 'main' }}
+          path: terraform-provider
+          persist-credentials: false
+      - name: Report resolved revisions
+        env:
+          PLATFORM_SOURCE: ${{ github.event_name == 'workflow_dispatch' && '../spec-source' || '..' }}
+        run: |
+          platform_sha="$(git -C "$PLATFORM_SOURCE" rev-parse HEAD)"
+          provider_sha="$(git -C ../terraform-provider rev-parse HEAD)"
+          {
+            echo "Platform spec commit: $platform_sha"
+            echo "Provider commit: $provider_sha"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Setup provider Go toolchain
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: terraform-provider/go.mod
+          cache-dependency-path: |
+            terraform-provider/go.sum
+            terraform-provider/tools/go.sum
+      - name: Test provider update automation
+        run: python3 -m unittest discover -s scripts/terraform-provider -p "test_*.py"
+      - name: Check provider request contracts and regenerated unit tests
+        env:
+          SPEC_FILE: ${{ github.event_name == 'workflow_dispatch' && '../spec-source/docs/openapi.json' || '../docs/openapi.json' }}
+        run: python3 scripts/check-terraform-provider.py --provider ../terraform-provider --spec "$SPEC_FILE"

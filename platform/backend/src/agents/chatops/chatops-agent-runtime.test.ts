@@ -705,8 +705,15 @@ test.each([
   expect(replies[0]).toMatchObject({
     text: "First answer",
     conversationUrl: expect.stringContaining(`/chat/runs/${first.taskId}`),
-    hint: THREAD_MUTE_HINT,
   });
+  expect(replies[0].hint).toContain(THREAD_MUTE_HINT);
+  if (providerId === "slack") {
+    expect(replies[0].hint).toMatch(
+      /Press Stop to cancel only the current answer/,
+    );
+  } else {
+    expect(replies[0].hint).not.toContain("Stop");
+  }
   expect(replies[1]).toMatchObject({ text: "Follow-up answer" });
   expect(replies[1].conversationUrl).toBeUndefined();
   expect(replies[1].hint).toBeUndefined();
@@ -729,7 +736,8 @@ test("a rejected first post preserves the anchor for its retry", async () => {
   await notify();
   expect(replies).toHaveLength(1);
   expect(replies[0].conversationUrl).toContain(`/chat/runs/${run.taskId}`);
-  expect(replies[0].hint).toBe(THREAD_MUTE_HINT);
+  expect(replies[0].hint).toContain(THREAD_MUTE_HINT);
+  expect(replies[0].hint).toContain("Press Stop");
 });
 
 test("a final reply retries when the acknowledgment gate cannot be read", async () => {

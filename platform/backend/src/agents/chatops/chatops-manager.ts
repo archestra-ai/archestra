@@ -105,6 +105,7 @@ import {
   CHATOPS_SESSION_RESET_REPLY,
   CHATOPS_SESSION_ROLLOVER_HINT,
   SLACK_DEFAULT_CONNECTION_MODE,
+  SLACK_THREAD_MUTE_HINT,
   THREAD_MUTE_HINT,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
@@ -396,7 +397,7 @@ export class ChatOpsManager {
           conversationUrl: includeAnchor ? conversationUrl : undefined,
           hint:
             nativeRuntimeReply && includeAnchor && !binding.isDm
-              ? THREAD_MUTE_HINT
+              ? this.threadMuteHint(provider)
               : undefined,
           conversationReference: params.conversationReference,
         });
@@ -2850,7 +2851,7 @@ export class ChatOpsManager {
                         hint:
                           includeAnchor &&
                           message.metadata?.conversationType !== "personal"
-                            ? THREAD_MUTE_HINT
+                            ? this.threadMuteHint(provider)
                             : undefined,
                         bestEffort: true,
                       }),
@@ -3221,7 +3222,7 @@ export class ChatOpsManager {
           ...(session?.rolledOver
             ? { hint: CHATOPS_SESSION_ROLLOVER_HINT }
             : (await this.shouldHintThreadMute(provider, message)) && {
-                hint: THREAD_MUTE_HINT,
+                hint: this.threadMuteHint(provider),
               }),
           conversationReference: message.metadata?.conversationReference,
         },
@@ -3261,6 +3262,12 @@ export class ChatOpsManager {
       agentResponse,
       interactionId: resultMessage.messageId,
     };
+  }
+
+  private threadMuteHint(provider: ChatOpsProvider): string {
+    return provider.providerId === "slack"
+      ? SLACK_THREAD_MUTE_HINT
+      : THREAD_MUTE_HINT;
   }
 
   /**

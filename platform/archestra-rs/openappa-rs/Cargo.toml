@@ -17,11 +17,12 @@ crate-type = ["cdylib"]
 # battery lists (#691), loopback requests staying local (#692),
 # parallel subagent spawns waiting for the earlier bind (#694), and plain
 # errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
-# and the generic coding battery (#697).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b9e2cee8bc8ddd79f8c75c4e850ee0b0d153f8af" }
+# and the generic coding battery (#697); then v0.37.0 and libpq TLS
+# parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bc6a5a166c2bd37ae1069f441b280dd987da6d19", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bc6a5a166c2bd37ae1069f441b280dd987da6d19" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bc6a5a166c2bd37ae1069f441b280dd987da6d19", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bc6a5a166c2bd37ae1069f441b280dd987da6d19" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

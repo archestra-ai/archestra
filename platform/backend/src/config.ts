@@ -41,6 +41,7 @@ import {
 } from "@archestra/shared";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
+import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
@@ -48,7 +49,6 @@ import {
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
 import { isValidCidr } from "@/utils/network";
-import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
 type FileStorageProviderType = "db" | "filesystem" | "s3";
@@ -80,7 +80,7 @@ const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
 
-const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
+const appVersion = getAppVersion();
 
 /**
  * Developer-only convenience: when set (and NOT in production), the login screen

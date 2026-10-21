@@ -14,6 +14,7 @@ import {
   type UserSystemPromptContext,
 } from "@archestra/shared/system-prompt-template";
 import Handlebars from "handlebars";
+import { getAppVersion } from "@/app-version";
 import logger from "@/logging";
 
 /**
@@ -49,6 +50,11 @@ Handlebars.registerHelper(SYSTEM_PROMPT_HELPER_NAMES.currentDate, () => {
 Handlebars.registerHelper(SYSTEM_PROMPT_HELPER_NAMES.currentTime, () => {
   return `${new Date().toISOString().split("T")[1].split(".")[0]} UTC`;
 });
+
+Handlebars.registerHelper(
+  SYSTEM_PROMPT_HELPER_NAMES.archestraVersion,
+  getAppVersion,
+);
 
 /**
  * Check if any of the given prompt strings contain Handlebars syntax (`{{`).

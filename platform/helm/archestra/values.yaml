@@ -693,7 +693,8 @@ archestra:
 
   # SRE agent: a pre-installed, read-only Kubernetes MCP server and an "SRE"
   # agent that investigates this installation's pods, logs, and events. It runs
-  # under the mcp-k8s-operator ServiceAccount above, so it needs
+  # under a dedicated <fullname>-sre ServiceAccount bound to the read-only Role
+  # above (never to mcpServerRbac's additional bindings), so it needs
   # orchestrator.kubernetes.mcpServerRbac.create. Turning it off removes what it
   # seeded.
   sre:

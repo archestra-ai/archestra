@@ -417,11 +417,12 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_SRE_AGENT_ENABLED
   value: "true"
 {{- end }}
-{{/* The read-only Role the SRE MCP server runs under exists only when the
-     chart creates the MCP server RBAC. */}}
+{{/* The SRE ServiceAccount (templates/sre-serviceaccount.yaml) is bound to
+     the read-only Role, which exists only when the chart creates the MCP
+     server RBAC. */}}
 {{- if and .Values.archestra.orchestrator.kubernetes.mcpServerRbac.create (not (hasKey .Values.archestra.env "ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT")) }}
 - name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
-  value: {{ printf "%s-mcp-k8s-operator" (include "archestra-platform.fullname" .) | quote }}
+  value: {{ printf "%s-sre" (include "archestra-platform.fullname" .) | quote }}
 {{- end }}
 {{- if and .Values.archestra.sre.apiServerCidrs (not (hasKey .Values.archestra.env "ARCHESTRA_SRE_APISERVER_CIDRS")) }}
 - name: ARCHESTRA_SRE_APISERVER_CIDRS

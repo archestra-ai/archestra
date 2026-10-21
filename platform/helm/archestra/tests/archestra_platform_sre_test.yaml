@@ -35,7 +35,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
-            value: archestra-archestra-platform-mcp-k8s-operator
+            value: archestra-archestra-platform-sre
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -86,4 +86,4 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT
-            value: archestra-archestra-platform-mcp-k8s-operator
+            value: archestra-archestra-platform-sre

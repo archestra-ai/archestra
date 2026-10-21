@@ -208,10 +208,10 @@ If your cluster does not admit these pods, set [`ARCHESTRA_CODE_RUNTIME_DAGGER_R
 
 ## SRE Agent
 
-Ask an agent why a pod keeps restarting, and it reads that pod's events and logs in your cluster, then answers with ranked hypotheses and the evidence behind each one. Archestra runs a read-only Kubernetes MCP server for it under the chart's `mcp-k8s-operator` ServiceAccount. That account can read pods, pod logs, services, events, and workloads in the Archestra namespace only. It cannot read Secrets or ConfigMaps, and it cannot change anything.
+Ask an agent why a pod keeps restarting, and it reads that pod's events and logs in your cluster, then answers with ranked hypotheses and the evidence behind each one. Archestra runs a read-only Kubernetes MCP server for it under its own ServiceAccount, ending in `-sre`, which the chart creates. That account can read pods, pod logs, services, events, and workloads in the Archestra namespace only. It cannot read Secrets or ConfigMaps, and it cannot change anything.
 
 1. Find the Kubernetes API server endpoint IPs: `kubectl get endpoints kubernetes -n default`. Use these IPs, not the `kubernetes` Service IP.
-2. Turn the agent on in your Helm values, then run `helm upgrade`:
+2. Turn the agent on in your Helm values, then run `helm upgrade`. It needs `archestra.orchestrator.kubernetes.mcpServerRbac.create`, which is on by default:
 
    ```yaml
    archestra:
@@ -242,7 +242,7 @@ It needs `kubectl`, `helm`, and `jq` with read access to the namespace, and prin
 
 What to know:
 
-- It never collects Secrets, ConfigMaps, or container environment values. From the Helm values it keeps only a fixed list of non-secret settings, such as replica counts and resources.
+- It never collects Secrets, ConfigMaps, or container environment values, commands, and arguments. Each log file is capped at 10 MiB. From the Helm values it keeps only a fixed list of non-secret settings, such as replica counts and resources.
 - Logs are copied as written, so look through the bundle before you share it.
 
 ## Release Channels And Upgrades

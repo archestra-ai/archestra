@@ -849,7 +849,7 @@ The [SRE agent](/docs/admin/deployment#sre-agent) investigates the installation'
   - Setting it back to `false` removes all three.
 
 - **`ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT`** - ServiceAccount the MCP server pod runs as.
-  - Default: unset. The Helm chart sets its read-only `mcp-k8s-operator` account when `archestra.orchestrator.kubernetes.mcpServerRbac.create` is `true`.
+  - Default: unset. The Helm chart creates a read-only `-sre` account for it and sets it when `archestra.orchestrator.kubernetes.mcpServerRbac.create` is `true`.
   - Required: without it, nothing is installed.
 
 - **`ARCHESTRA_SRE_APISERVER_CIDRS`** - Kubernetes API server endpoint CIDRs the MCP server may reach. Its environment allows egress to these only.

@@ -143,11 +143,74 @@ process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, r
                 self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
             self.assertIn(f'Provider commit: {main}', (root/'summary').read_text())
 
+    def test_updater_generates_from_the_release_tag_spec(self):
+        script = step_script('update-terraform-provider.yml', 'Read the released platform spec')
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            upstream = root/'upstream'
+            git = ['git', '-C', str(upstream), '-c', 'user.name=t', '-c', 'user.email=t@example.invalid']
+            (upstream/'docs').mkdir(parents=True)
+            subprocess.run(['git', 'init', '-q', str(upstream)], check=True)
+            released = '{"info": {"version": "1.2.3-rc.4"}, "paths": "released"}\n'
+            (upstream/'docs/openapi.json').write_text(released)
+            subprocess.run([*git, 'add', '.'], check=True)
+            subprocess.run([*git, 'commit', '-qm', 'release'], check=True)
+            subprocess.run([*git, 'tag', '-a', 'platform-v1.2.3-rc.4', '-m', 'release'], check=True)
+            release = subprocess.check_output([*git, 'rev-parse', 'HEAD'], text=True).strip()
+            # main changes the API before the next release; the version stays.
+            (upstream/'docs/openapi.json').write_text('{"info": {"version": "1.2.3-rc.4"}, "paths": "main"}\n')
+            subprocess.run([*git, 'commit', '-qam', 'main'], check=True)
+            checkout = root/'checkout'
+            subprocess.run(['git', 'clone', '-q', '--depth=1', f'file://{upstream}', str(checkout)], check=True)
+            # Stub gh: the release is published, a draft, or missing.
+            bin_path = root/'bin'
+            bin_path.mkdir()
+            (bin_path/'gh').write_text('#!/bin/sh\n'
+                                       'test "$*" = "release view platform-v1.2.3-rc.4 --repo archestra-ai/archestra '
+                                       '--json isDraft --jq .isDraft | not" || exit 9\n'
+                                       'case "$RELEASE" in\n'
+                                       '  missing) echo "release not found" >&2; exit 1 ;;\n'
+                                       '  broken) echo "HTTP 401: Bad credentials" >&2; exit 1 ;;\n'
+                                       'esac\necho "$RELEASE"\n')
+            (bin_path/'gh').chmod(0o755)
+            env = os.environ | {'RUNNER_TEMP': work, 'GITHUB_OUTPUT': str(root/'output'),
+                                'GITHUB_STEP_SUMMARY': str(root/'summary'), 'GH_TOKEN': 'unused',
+                                'GITHUB_REPOSITORY': 'archestra-ai/archestra',
+                                'PATH': f"{bin_path}:{os.environ['PATH']}"}
+            for state in ('false', 'missing'):
+                result = subprocess.run(['bash', '-c', script], cwd=checkout, capture_output=True, text=True,
+                                        env=env | {'RELEASE': state})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('is not a published release yet', result.stdout)
+                self.assertIn('skipped', json.loads((checkout/'provider-update/result.json').read_text()))
+                self.assertFalse((root/'output').exists())
+                self.assertFalse((root/'openapi-release.json').exists())
+            result = subprocess.run(['bash', '-c', script], cwd=checkout, capture_output=True, text=True,
+                                    env=env | {'RELEASE': 'broken'})
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('::error::Could not read release platform-v1.2.3-rc.4: HTTP 401: Bad credentials', result.stdout)
+            self.assertFalse((root/'output').exists())
+            subprocess.run(['bash', '-c', script], cwd=checkout, check=True, capture_output=True,
+                           env=env | {'RELEASE': 'true'})
+            self.assertEqual((root/'openapi-release.json').read_text(), released)
+            self.assertIn(f'commit={release}\n', (root/'output').read_text())
+            self.assertIn('platform-v1.2.3-rc.4', (root/'summary').read_text())
+            (checkout/'docs/openapi.json').write_text('{"info": {"version": "1.2.3; touch injected"}}\n')
+            result = subprocess.run(['bash', '-c', script], cwd=checkout, capture_output=True, text=True,
+                                    env=env | {'RELEASE': 'true'})
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('does not name a platform release', result.stdout)
+            self.assertFalse((checkout/'injected').exists())
 
-def compatibility_step_script(name):
-    source = (ROOT / '.github/workflows/terraform-provider-compatibility.yml').read_text()
+
+def step_script(workflow, name):
+    source = (ROOT / '.github/workflows' / workflow).read_text()
     step = source.split(f'      - name: {name}\n', 1)[1].split('\n      - name:', 1)[0]
     return textwrap.dedent(step.split('        run: |\n', 1)[1])
+
+
+def compatibility_step_script(name):
+    return step_script('terraform-provider-compatibility.yml', name)
 
 
 if __name__ == '__main__':

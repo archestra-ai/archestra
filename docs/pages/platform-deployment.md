@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1557,6 +1557,14 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills) and [Skills from MCP servers](/docs/platform-agent-skills#skills-from-mcp-servers).
 
 ### MCP Servers
+
+- **`ARCHESTRA_MCP_OAUTH_ENFORCE_OUTBOUND_VALIDATION`** - Enables optional hardening for backend requests to upstream MCP OAuth providers, for both remote and self-hosted MCP servers.
+  - Default: `false`. Set exactly `true` to enforce validation. With the default, existing HTTP and private endpoints, redirects, discovery fallbacks and token refresh behavior remain unchanged. This protection is not active by default.
+  - Enforcement covers metadata and scope discovery, dynamic client registration, authorization-code exchange (including proxy servers), refresh and client-credentials grants. Each destination must pass URL and DNS validation and the catalog's environment egress policy; the remote MCP server's base host must also be permitted. Missing organization context or a missing or foreign environment fails closed.
+  - Production requires HTTPS and public unicast addresses; private, loopback, link-local and reserved addresses are rejected, including mixed DNS answers. Connections use the validated address while retaining the original hostname for TLS. Development and test deployments retain the shared validator's HTTP and loopback exceptions.
+  - Metadata GETs may follow up to three redirects, validating every destination. Requests carrying credentials cannot follow redirects. Each fetch, including redirects and response reading, has a 30-second deadline and a 1 MiB response limit.
+  - Before enabling, check that your providers use supported endpoints and that the environment permits their metadata, registration and token hosts. HTTP/private production providers and providers redirecting token POSTs require compatibility mode. Disabling restores compatibility without rotating tokens, clearing credentials or forcing reconnection.
+  - This setting does not change incoming OAuth authentication to Archestra, the Connection page, LLM provider networking or other outbound URL consumers.
 
 - **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Opt-in periodic re-discovery of installed MCP servers' tools and Skills metadata. Every N minutes, each installed server's stored listing is re-synced from the live server — new entries are added, changed metadata is updated, and removed entries are dropped. No restart or reinstall happens. Tool assignments and policies are preserved; Skill content is always read live rather than copied.
   - Default: unset (disabled). Set to `0` to disable explicitly.

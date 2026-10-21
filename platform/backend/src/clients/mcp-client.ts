@@ -103,6 +103,11 @@ import { findExternalIdentityProviderById } from "@/services/identity-providers/
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import {
+  createMcpOAuthFetch,
+  type McpOAuthContext,
+  McpOAuthOutboundError,
+} from "@/services/mcp-oauth-fetch";
+import {
   classifyThrownRefreshError,
   type OAuthRefreshOutcome,
   refreshFailureToServerFields,
@@ -1545,6 +1550,10 @@ class McpClient {
               catalogItem,
               secrets,
               secretId,
+              oauthContext: {
+                installationId: targetMcpServerId,
+                organizationId: tokenAuth?.organizationId,
+              },
             });
             if (resolvedSecrets !== secrets) {
               this.secretsCache.set(targetMcpServerId, {
@@ -2733,6 +2742,7 @@ class McpClient {
   }
 
   private async resolveSecretsForTransport(params: {
+    oauthContext?: Omit<McpOAuthContext, "catalog">;
     catalogItem: InternalMcpCatalog;
     secrets: Record<string, unknown>;
     secretId?: string;
@@ -2787,6 +2797,7 @@ class McpClient {
       clientId,
       clientSecret,
       audience,
+      oauthContext: params.oauthContext,
     }).finally(() => {
       this.clientCredentialsLocks.delete(cacheKey);
     });
@@ -2796,6 +2807,7 @@ class McpClient {
   }
 
   private async fetchClientCredentialsAccessToken(params: {
+    oauthContext?: Omit<McpOAuthContext, "catalog">;
     catalogItem: InternalMcpCatalog;
     existingSecrets: Record<string, unknown>;
     secretId?: string;
@@ -2809,9 +2821,13 @@ class McpClient {
         "OAuth client credentials configuration is missing oauthConfig",
       );
     }
+    const fetchFn = createMcpOAuthFetch({
+      catalog: params.catalogItem,
+      ...params.oauthContext,
+    });
     let tokenEndpoint = oauthConfig.token_endpoint;
     if (!tokenEndpoint) {
-      const endpoints = await discoverOAuthEndpoints(oauthConfig);
+      const endpoints = await discoverOAuthEndpoints(oauthConfig, { fetchFn });
       tokenEndpoint = endpoints.tokenEndpoint;
     }
 
@@ -2831,7 +2847,7 @@ class McpClient {
       requestBody.scope = configuredScopes.join(" ");
     }
 
-    const tokenResponse = await fetch(tokenEndpoint, {
+    const tokenResponse = await fetchFn(tokenEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -2841,6 +2857,11 @@ class McpClient {
     });
 
     if (!tokenResponse.ok) {
+      if (config.mcpOAuth.enforceOutboundValidation) {
+        throw new Error(
+          `MCP OAuth client credentials request failed: HTTP ${tokenResponse.status}`,
+        );
+      }
       const errorText = await tokenResponse.text();
       throw new Error(
         `Client credentials token request to ${tokenEndpoint} failed: ${tokenResponse.status} ${errorText}`,
@@ -2896,6 +2917,10 @@ class McpClient {
       catalogItem,
       secrets,
       secretId,
+      oauthContext: {
+        installationId: targetMcpServerId,
+        organizationId: tokenAuth?.organizationId,
+      },
     });
     if (resolvedSecrets !== secrets) {
       this.secretsCache.set(targetMcpServerId, {
@@ -3167,6 +3192,7 @@ class McpClient {
       catalogId,
       connectionKey,
       targetMcpServerId,
+      organizationId: tokenAuth?.organizationId,
     });
 
     if (!refreshResult.refreshed) {
@@ -3280,6 +3306,7 @@ class McpClient {
   }
 
   private async refreshOAuthTokenWithLock(params: {
+    organizationId?: string;
     secretId: string;
     catalogId: string;
     connectionKey: string;
@@ -3314,7 +3341,14 @@ class McpClient {
         this.clearConnectionState(connectionKey);
       }
 
-      const outcome = await refreshOAuthToken(secretId, catalogId);
+      const outcome = await refreshOAuthToken({
+        secretId,
+        catalogId,
+        context: {
+          installationId: targetMcpServerId,
+          organizationId: params.organizationId,
+        },
+      });
       if (!outcome.ok) {
         return { refreshed: false, updatedSecret: null, outcome };
       }
@@ -3342,6 +3376,7 @@ class McpClient {
       return { refreshed: true, updatedSecret: updatedSecret.secret, outcome };
     })()
       .catch((error) => {
+        if (error instanceof McpOAuthOutboundError) throw error;
         logger.error(
           { secretId, catalogId, error },
           "OAuth token refresh lock encountered an unexpected error",

@@ -98,8 +98,7 @@
           "type": "generic",
           "path": "/docs/pages/admin/deployment.md"
         }
-      ],
-      "release-as": "1.4.0"
+      ]
     }
   },
   "plugins": [],

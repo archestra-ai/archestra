@@ -8487,7 +8487,7 @@ export const createOpenappaBatteryInstall = <ThrowOnError extends boolean = fals
 export const deleteOpenappaBatteryInstall = <ThrowOnError extends boolean = false>(options: Options<DeleteOpenappaBatteryInstallData, ThrowOnError>) => (options.client ?? client).delete<DeleteOpenappaBatteryInstallResponses, DeleteOpenappaBatteryInstallErrors, ThrowOnError>({ url: '/api/openappa/battery-installs/{id}', ...options });
 
 /**
- * Get one battery install as the battery list shows it.
+ * Get one battery install as the last composition stored it, without recomposing; an install whose battery is no longer available is still returned, with status `unavailable`, though the battery list omits it.
  *
  * Authentication:
  *

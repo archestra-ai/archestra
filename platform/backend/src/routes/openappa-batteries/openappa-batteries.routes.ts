@@ -137,7 +137,8 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         operationId: RouteId.GetOpenappaBatteryInstall,
-        description: "Get one battery install as the battery list shows it.",
+        description:
+          "Get one battery install as the last composition stored it, without recomposing; an install whose battery is no longer available is still returned, with status `unavailable`, though the battery list omits it.",
         tags: ["OpenAPPA"],
         params: InstallParamsSchema,
         response: constructResponseSchema(BatteryInstallSchema),

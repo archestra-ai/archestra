@@ -126,13 +126,15 @@ class OpenAppaBatteriesService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /** One install row, as {@link listBatteries} lists it under its battery. */
+  /**
+   * One stored install row, as the last composition left it. A read never
+   * recomposes, so its status can lag a change the next composition picks up.
+   */
   async getInstall(params: {
     organizationId: string;
     id: string;
   }): Promise<BatteryInstall> {
-    const { installs } = await this.current(params.organizationId);
-    const install = installs.find((row) => row.id === params.id);
+    const install = await OpenAppaBatteryInstallModel.find(params);
     if (!install) throw new ApiError(404, "Battery install not found");
     return install;
   }

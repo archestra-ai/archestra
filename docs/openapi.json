@@ -353173,7 +353173,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Get one battery install as the battery list shows it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
+        "description": "Get one battery install as the last composition stored it, without recomposing; an install whose battery is no longer available is still returned, with status `unavailable`, though the battery list omits it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`guardrailsPolicy:read`: View Guardrails policy, batteries, and coverage",
         "parameters": [
           {
             "schema": {

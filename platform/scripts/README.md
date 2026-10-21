@@ -104,16 +104,18 @@ for the next release, and provider CI tests them there against that release.
 `.github/workflows/update-terraform-provider.yml` regenerates the provider client
 for the latest platform release, sets `platform-version.txt` to that release
 and opens or updates a pull request on the provider branch
-`automation/platform-api`. It runs daily at 06:37 UTC, on pushes to `main` that
-change the spec, this workflow or `platform/scripts/terraform-provider/`, and by
-hand on `main`.
+`automation/platform-api`. Release Please starts it after it publishes each
+release from `main`. It also runs daily at 06:37 UTC in case that start fails,
+on pushes to `main` that change this workflow or
+`platform/scripts/terraform-provider/`, and by hand on `main`.
 
 The release is the version in `docs/openapi.json` on `main`. The spec comes from
 that release's `platform-v<version>` tag, not from `main`: provider CI
 regenerates the client from the release in `platform-version.txt` and fails on
 any difference. The updater uses a release only after Release Please has
 published it on GitHub, which happens after the images are pushed. Before that,
-a run skips with a notice and the next run proposes the release.
+a run skips with a notice. The run that Release Please starts after publishing
+proposes the release.
 
 - The pull request is opened even when the regenerated client does not build or
   its tests fail. The failure is in the pull request body and in the

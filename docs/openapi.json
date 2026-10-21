@@ -122663,6 +122663,9 @@
                         "onlineMcpCatalogEnabled": {
                           "type": "boolean"
                         },
+                        "defaultPersonalAgentAccessAllTools": {
+                          "type": "boolean"
+                        },
                         "onlineSkillCatalogEnabled": {
                           "type": "boolean"
                         },
@@ -123237,6 +123240,7 @@
                         "theme",
                         "customFont",
                         "onlineMcpCatalogEnabled",
+                        "defaultPersonalAgentAccessAllTools",
                         "onlineSkillCatalogEnabled",
                         "skillMarketplaceAnonymousAccess",
                         "allowChatFileUploads",
@@ -372485,6 +372489,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -373059,6 +373066,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -373635,6 +373643,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -374209,6 +374220,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -375026,6 +375038,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -375600,6 +375615,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -375931,6 +375947,9 @@
                   "onlineMcpCatalogEnabled": {
                     "type": "boolean"
                   },
+                  "defaultPersonalAgentAccessAllTools": {
+                    "type": "boolean"
+                  },
                   "mcpIdleHibernationEnabled": {
                     "type": "boolean"
                   }
@@ -376026,6 +376045,9 @@
                       ]
                     },
                     "onlineMcpCatalogEnabled": {
+                      "type": "boolean"
+                    },
+                    "defaultPersonalAgentAccessAllTools": {
                       "type": "boolean"
                     },
                     "onlineSkillCatalogEnabled": {
@@ -376602,6 +376624,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -377030,6 +377053,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -377604,6 +377630,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -378044,6 +378071,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -378618,6 +378648,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -379177,6 +379208,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -379751,6 +379785,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -380294,6 +380329,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -380868,6 +380906,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -381366,6 +381405,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -381940,6 +381982,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -382382,6 +382425,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -382956,6 +383002,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -383429,6 +383476,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -384003,6 +384053,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -384413,6 +384464,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -384987,6 +385041,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",
@@ -386601,6 +386656,9 @@
                     "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "defaultPersonalAgentAccessAllTools": {
+                      "type": "boolean"
+                    },
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
@@ -387175,6 +387233,7 @@
                     "theme",
                     "customFont",
                     "onlineMcpCatalogEnabled",
+                    "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
                     "allowChatFileUploads",

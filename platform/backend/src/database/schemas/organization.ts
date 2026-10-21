@@ -60,6 +60,12 @@ const organizationsTable = pgTable("organization", {
   onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
     .notNull()
     .default(true),
+  /** Initial tool mode for automatically provisioned personal agents and gateways. */
+  defaultPersonalAgentAccessAllTools: boolean(
+    "default_personal_agent_access_all_tools",
+  )
+    .notNull()
+    .default(true),
   onlineSkillCatalogEnabled: boolean("online_skill_catalog_enabled")
     .notNull()
     .default(true),

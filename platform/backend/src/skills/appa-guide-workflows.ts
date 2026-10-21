@@ -17,9 +17,9 @@ Use this while the policy's revision is 0 and its delivery is local, also for an
 2. Use the returned starter text: it declares controls for built-in platform tool calls, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, Git sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
 3. Do not ask about provider-hosted tools, and do not claim that tools the starter does not cover are safe.
 4. Preview the complete starter with \`content\` and the revision you read.
-5. Always explain the starter in message text before you ask, even though the preview card shows it, so the operator never has to ask what it is. Use at most four short sentences:
+5. Always explain the starter in message text before you ask, even though the preview card shows it. Use at most four short sentences:
    - Archestra's built-in tools follow fixed rules.
-   - Every other tool call, from servers such as one or two you name, is checked by an AI model: the organization's default model, unless Guardrails settings pick another. When it finds a call risky or the call would make data public, the person running the chat is asked to approve that call.
+   - An AI model checks every other tool call (name one or two servers) and asks the user to approve risky or public ones.
    - This will be saved and turned on now (only saved, when the preview's \`turnsOnEnforcement\` is false).
    - The AI check can be narrowed later: batteries give the connected servers fixed rules of their own.
    If setup follows a broader safety goal, add that this starter alone does not reach it: the calls involved still need checking. Do not describe individual rules or server health unless asked. Avoid "annotator", "audience", "catch-all", "composition", "revision", "preview", "rule pack", "delta", and "TOML". These sentences are the whole proposal for a starter: write them instead of the longer change summary in **Approval in Archestra**, not instead of any text.

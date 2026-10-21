@@ -42,12 +42,9 @@ repository. Name the repository and setup procedure in the Agent's prompt,
 task, or assigned skill. A derived image can prepare a checkout before invoking
 the maintained launcher when deterministic startup is needed.
 
-The shared image build runs offline tests as the runtime user with a fresh home:
-Git credential renewal, Nitpicker configuration, Python environment creation,
-a browser interaction and recording, and captioned H.264/AAC video encoding.
-The catalog workflow runs these on both amd64 and arm64. Browser dependencies
-are pinned with hashes in `requirements.lock`; regenerate it from
-`requirements.in` using the command in the lock header after reviewing updates.
+Browser dependencies are pinned with hashes in `requirements.lock`; regenerate
+it from `requirements.in` using the command in the lock header after reviewing
+updates.
 
 On stable platform releases, the templates use the approved `:latest` aliases.
 Release candidates and development deployments keep matching fixed tags, so

@@ -2787,6 +2787,243 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(JSON.stringify(question.input)).not.toContain(modelCopy);
   });
 
+  // Claude Code with tool search on declares `ToolSearch` and a
+  // `defer_loading` placeholder, and the proxy refuses a call to any tool the
+  // request does not declare. The question it writes in place of ask_user is
+  // one the client declares, so it must reach the user.
+  describe("a Claude Code session that defers its tools to a tool search", () => {
+    const claudeSession = "c6d2a8e4-1f3b-4a7c-8e5d-9b0f2c4e6a18";
+    const claudeCode = () => ({
+      ...externalClientHeaders(),
+      "user-agent": "claude-code/2.1.303",
+      "x-claude-code-session-id": claudeSession,
+    });
+    const deferring = (body: ReturnType<typeof payload>) => {
+      body.tools.push(
+        {
+          name: "ToolSearch",
+          description: "Search for deferred tools",
+          input_schema: { type: "object", properties: {} },
+        },
+        {
+          name: "DeferredToolPlaceholder",
+          description: "Deferred",
+          input_schema: { type: "object", properties: {} },
+          defer_loading: true,
+        } as (typeof body.tools)[number],
+        {
+          name: "archestra__ask_user",
+          description: "Ask the user",
+          input_schema: { type: "object", properties: {} },
+        },
+        {
+          name: "AskUserQuestion",
+          description: "Ask the user a question",
+          input_schema: { type: "object", properties: {} },
+        },
+      );
+      return body as Record<string, unknown>;
+    };
+
+    test.each([
+      true,
+      false,
+    ])("presents ask_user with a staged HITL review as AskUserQuestion (stream=%s)", async (stream) => {
+      config.openappa = { ...config.openappa, offerSigningSecret: "" };
+      const offerId = "offer-hitl-deferred";
+      await stageHitlReview({
+        session: {
+          organization_id: agent.organizationId,
+          caller_id: `user:${userId}`,
+          session_id: `user:${userId}|${claudeSession}`,
+        },
+        review: {
+          offerId,
+          text: 'Approve this call?\nmcp/example/write {"value":1}',
+        },
+      });
+      const noticeId = "toolu_denied_weather";
+      const askUser = {
+        name: "archestra__ask_user",
+        input: {
+          question: "Model-authored copy",
+          options: [{ label: "Yes" }, { label: "No" }],
+          remedy_offer_ids: [offerId],
+        },
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: askUser,
+        streamingToolUse: askUser,
+      };
+      const body = payload(stream, [
+        { role: "user", content: "Check the weather" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: noticeId,
+              name: "archestra__get_remedy_plans",
+              input: buildNoticeArguments({
+                id: noticeId,
+                tool: "get_weather",
+                arguments: { location: "SF" },
+                result: "[appa] Blocked",
+              }),
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: noticeId,
+              content: "rendered for the user",
+            },
+          ],
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: { ...internalCallHeader(), ...claudeCode() },
+        payload: deferring(body),
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).not.toContain("is not loaded in this session");
+      const question = noticeFrom(response.body, stream);
+      expect(question.name).toBe("AskUserQuestion");
+      expect(question.input).toEqual({
+        questions: [
+          {
+            question: 'Approve this call?\nmcp/example/write {"value":1}',
+            header: "Tool call",
+            options: [
+              { label: "Allow", description: "This exact call." },
+              { label: "Deny", description: "Keep it blocked." },
+              {
+                label: "Inspect",
+                description: "Show the full review in chat.",
+              },
+            ],
+            multiSelect: false,
+          },
+        ],
+      });
+    });
+
+    test.each([
+      true,
+      false,
+    ])("presents the model's own ask_user question as AskUserQuestion and returns the answer as its result (stream=%s)", async (stream) => {
+      config.openappa = { ...config.openappa, offerSigningSecret: "" };
+      const askUser = {
+        name: "archestra__ask_user",
+        input: {
+          question: "Which report format?",
+          header: "Format",
+          options: [
+            { label: "Short", preview: "model-written preview" },
+            { label: "Long" },
+          ],
+        },
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: askUser,
+        streamingToolUse: askUser,
+      };
+      const opening = [{ role: "user", content: "Write the report" }];
+
+      const asked = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: { ...internalCallHeader(), ...claudeCode() },
+        payload: deferring(payload(stream, opening)),
+      });
+
+      expect(asked.statusCode, asked.body).toBe(200);
+      expect(asked.body).not.toContain("is not loaded in this session");
+      const question = noticeFrom(asked.body, stream);
+      expect(question.name).toBe("AskUserQuestion");
+      // The model wrote these options, so they carry no preview.
+      expect(question.input).toEqual({
+        questions: [
+          {
+            question: "Which report format?",
+            header: "Format",
+            options: [
+              { label: "Short", description: "Short" },
+              { label: "Long", description: "Long" },
+            ],
+            multiSelect: false,
+          },
+        ],
+      });
+
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      providerRequests.length = 0;
+      const answer =
+        'Your questions have been answered: "Which report format?"="Long". You can now continue with the user\'s answers in mind.';
+      const answered = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: { ...internalCallHeader(), ...claudeCode() },
+        payload: deferring(
+          payload(stream, [
+            ...opening,
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: question.id,
+                  name: question.name,
+                  input: question.input,
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: question.id,
+                  content: answer,
+                },
+              ],
+            },
+          ]),
+        ),
+      });
+
+      expect(answered.statusCode, answered.body).toBe(200);
+      const sent = providerRequests.at(-1) as {
+        messages: { role: string; content: unknown }[];
+      };
+      // The model receives the user's answer as the result of its question.
+      expect(sent.messages.at(-1)).toEqual({
+        role: "user",
+        content: [
+          expect.objectContaining({
+            type: "tool_result",
+            tool_use_id: question.id,
+            content: answer,
+          }),
+        ],
+      });
+    });
+  });
+
   test.each([
     [true, false],
     [false, false],

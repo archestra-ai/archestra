@@ -139,23 +139,21 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     );
     // reads the live integer off the same health body and only flags -gt
     expect(script).toContain(`'"guardVersion":([0-9]+)'`);
-    expect(script).toContain("[int]$Matches[1] -gt $GuardFormatVersion");
-    expect(script).toContain("Test-ArchVersionStale");
-    // both the interactive notice and the non-interactive stderr advisory
-    expect(script).toContain("Show-ArchVersionUpdate");
-    expect(script).toContain("a newer ' + $AppName + ' setup");
-    // non-interactive stays advisory-only
-    expect(script).toContain("re-run the setup from the ");
-    // Steps are unconditional once stale, with a bounded reading window.
-    expect(script).not.toContain("'[U]'");
-    expect(script).toContain("/connection page and pick");
     expect(script).toContain(
-      "Your installed startup check is older than this deployment.",
+      "$Script:ArchUpdateVersion -gt $GuardFormatVersion",
     );
-    expect(script).toContain("UtcNow.AddMilliseconds(6000)");
-    // a guard that removed itself this run must not advertise an update for a
-    // startup check that no longer exists
+    expect(script).toContain("Invoke-ArchVersionRefresh");
+    expect(script).not.toContain("/connection page and pick");
+    expect(script).not.toContain("UtcNow.AddMilliseconds(6000)");
     expect(script).toContain("if ($Script:GuardUninstalled) { return }");
+    expect(script).toContain("$env:ARCHESTRA_GUARD_REFRESHED -eq '1'");
+    expect(script).toContain(
+      "-NoLogo -NoProfile -File $GuardPath @ArchLaunchArgs",
+    );
+    expect(script).toContain("--rollback");
+    expect(script).toContain(
+      "$env:ARCHESTRA_GUARD_REFRESHED = $previousMarker",
+    );
   });
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {

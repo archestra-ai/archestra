@@ -9,6 +9,7 @@ import {
   fetchPlatformPodTolerations,
 } from "@/k8s/mcp-server-runtime/k8s-deployment";
 import { constructManagedNetworkPolicyName } from "@/k8s/mcp-server-runtime/network-policy";
+import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
 import {
   createK8sClients,
   getK8sNamespace,
@@ -24,6 +25,7 @@ import {
   KubernetesNamespaceSchema,
   type NetworkPolicy,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { uuidv5 } from "@/utils/uuid";
 import {
   buildDaggerEgressPolicies,
@@ -72,6 +74,8 @@ interface EngineScheduling {
 
 const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.9";
 const ENGINE_CONTAINER = "dagger-engine";
+const OWNER_LABEL = "archestra.io/dagger-runtime-owner";
+const ORGANIZATION_LABEL = "archestra.io/dagger-organization";
 // Engine resources (cpu/memory requests, memory limit, buildkit cache PVC size)
 // come from config so small/local clusters can override the defaults. No CPU
 // limit (build throughput). The memory limit caps the buildkit daemon; the
@@ -100,6 +104,35 @@ const ENGINE_CONFIG_JSON = JSON.stringify({
  * standing pods are cheap.
  */
 class DaggerEnvironmentRuntimeManager {
+  private interval: ReturnType<typeof setInterval> | undefined;
+  private running: Promise<void> | undefined;
+
+  /** Retry failed teardown, including resources whose Environment row is gone. */
+  start(): void {
+    if (!this.isEnabled() || this.interval) return;
+    const run = (initial = false) => {
+      if (this.running) return;
+      this.running = (
+        initial ? this.reconcileAll() : this.cleanupOrphanedEngines()
+      )
+        .catch((err) =>
+          logger.error({ err }, "[DaggerEnvRuntime] reconcile failed"),
+        )
+        .finally(() => {
+          this.running = undefined;
+        });
+      trackBackgroundWork(this.running);
+    };
+    run(true);
+    this.interval = setInterval(run, 60_000);
+    this.interval.unref();
+  }
+
+  stop(): void {
+    clearInterval(this.interval);
+    this.interval = undefined;
+  }
+
   /**
    * The isolation target for an environment's engine, or undefined when k8s
    * isn't configured. The Dagger `kube-pod://` address is built in the
@@ -180,6 +213,7 @@ class DaggerEnvironmentRuntimeManager {
         );
       }
     }
+    await this.cleanupOrphanedEngines();
   }
 
   /**
@@ -216,12 +250,163 @@ class DaggerEnvironmentRuntimeManager {
   /** Provision (or update) one environment's engine pod + egress policy. */
   async reconcileEnvironment(environment: Environment): Promise<void> {
     if (!this.isEnabled()) return;
-    await this.reconcileEngine({
-      engineId: environment.id,
-      organizationId: environment.organizationId,
-      namespace: this.engineNamespace(environment.namespace),
-      networkPolicyOverride: environment.networkPolicy,
-    });
+    // A startup/update snapshot may already have been deleted by another pod.
+    // Re-read before provisioning AND after its final mutation: deletion wins
+    // even when an in-flight Kubernetes create finishes after teardown.
+    const current = await EnvironmentModel.findByIdForOrganization(
+      environment.id,
+      environment.organizationId,
+    );
+    if (!current) return;
+    const namespace = this.engineNamespace(current.namespace);
+    try {
+      await this.reconcileEngine({
+        engineId: current.id,
+        organizationId: current.organizationId,
+        namespace,
+        networkPolicyOverride: current.networkPolicy,
+      });
+    } finally {
+      const latest = await EnvironmentModel.findByIdForOrganization(
+        current.id,
+        current.organizationId,
+      );
+      if (!latest || this.engineNamespace(latest.namespace) !== namespace) {
+        await this.teardownEngine(current.id, namespace);
+      }
+    }
+  }
+
+  /**
+   * Only prune an engine we can attribute to this installation. UUID-shaped
+   * names alone are insufficient in a namespace shared by multiple releases.
+   * Legacy resources require a successful environment audit snapshot in THIS
+   * database. Without that evidence they are left for operator review.
+   */
+  private async cleanupOrphanedEngines(): Promise<void> {
+    const namespaces = new Set([
+      getK8sNamespace(),
+      ...config.orchestrator.kubernetes.environmentNamespaces,
+    ]);
+    for (const namespace of namespaces) {
+      try {
+        const { kubeConfig } = loadKubeConfig();
+        const clients = createK8sClients(kubeConfig, namespace);
+        const owner = (
+          await resolveRuntimeOwnerReferences(clients.rbacApi, namespace)
+        )?.[0]?.uid;
+        const candidates = new Map<
+          string,
+          { owned: boolean; foreign: boolean; organizationIds: Set<string> }
+        >();
+        const add = (
+          metadata: k8s.V1ObjectMeta | undefined,
+          pattern: RegExp,
+        ) => {
+          const id = metadata?.name?.match(pattern)?.[1];
+          if (!id) return;
+          const record = candidates.get(id) ?? {
+            owned: false,
+            foreign: false,
+            organizationIds: new Set<string>(),
+          };
+          const resourceOwner = metadata?.labels?.[OWNER_LABEL];
+          if (resourceOwner) {
+            if (resourceOwner === owner) record.owned = true;
+            else record.foreign = true;
+          }
+          const organization = metadata?.labels?.[ORGANIZATION_LABEL];
+          if (organization) record.organizationIds.add(organization);
+          candidates.set(id, record);
+        };
+        const uuid =
+          "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})";
+        const list = async <T extends { metadata?: k8s.V1ObjectMeta }>(
+          fetch: (
+            continuation?: string,
+          ) => Promise<{ items: T[]; metadata?: k8s.V1ListMeta }>,
+          pattern: RegExp,
+        ) => {
+          let continuation: string | undefined;
+          do {
+            const page = await fetch(continuation);
+            for (const resource of page.items) add(resource.metadata, pattern);
+            continuation = page.metadata?._continue;
+          } while (continuation);
+        };
+        await list(
+          (continuation) =>
+            clients.appsApi.listNamespacedStatefulSet({
+              namespace,
+              labelSelector: "app=dagger-engine",
+              limit: 200,
+              _continue: continuation,
+            }),
+          new RegExp(`^dagger-engine-${uuid}$`),
+        );
+        await list(
+          (continuation) =>
+            clients.coreApi.listNamespacedConfigMap({
+              namespace,
+              labelSelector: "app=dagger-engine",
+              limit: 200,
+              _continue: continuation,
+            }),
+          new RegExp(`^dagger-engine-${uuid}-config$`),
+        );
+        // Old volumeClaimTemplates had no labels. The exact cache claim name
+        // is only a candidate; owner/audit evidence is still required below.
+        await list(
+          (continuation) =>
+            clients.coreApi.listNamespacedPersistentVolumeClaim({
+              namespace,
+              limit: 200,
+              _continue: continuation,
+            }),
+          new RegExp(`^varlib-dagger-engine-${uuid}-0$`),
+        );
+
+        const history = await EnvironmentModel.findHistoricalNamespaces([
+          ...candidates.keys(),
+        ]);
+        // Read after Kubernetes enumeration so a newly-created organization's
+        // default engine cannot be mistaken for a deleted Environment.
+        const defaults = await OrganizationModel.listDefaultEngineTargets();
+        const defaultIds = new Set(
+          defaults.map((org) => deriveOrgEngineId(org.id)),
+        );
+        for (const [id, candidate] of candidates) {
+          if (candidate.foreign || defaultIds.has(id)) continue;
+          // An explicitly shared external runtime-owner Role is not a database
+          // identity. Require the resource's organization to exist here too.
+          if (
+            [...candidate.organizationIds].some((org) => !defaultIds.has(org))
+          )
+            continue;
+          const historicalOwner = history.some(
+            (record) =>
+              record.id === id &&
+              ((record.hasBeforeNamespace &&
+                this.engineNamespace(record.beforeNamespace) === namespace) ||
+                (record.hasAfterNamespace &&
+                  this.engineNamespace(record.afterNamespace) === namespace)),
+          );
+          const owned =
+            candidate.organizationIds.size > 0 && (!owner || candidate.owned);
+          if (!owned && !historicalOwner) continue;
+          const current = await EnvironmentModel.findById(id);
+          if (current && this.engineNamespace(current.namespace) === namespace)
+            continue;
+          await this.teardownEngine(id, namespace);
+        }
+      } catch (err) {
+        // Failed list/DB/ownership reads never become an empty desired set.
+        logger.warn(
+          { err, namespace },
+          "[DaggerEnvRuntime] orphan cleanup failed; will retry",
+        );
+      }
+    }
   }
 
   /**
@@ -303,9 +488,25 @@ class DaggerEnvironmentRuntimeManager {
       "StatefulSet",
       namespace,
       name,
-      () => clients.appsApi.deleteNamespacedStatefulSet({ name, namespace }),
+      () =>
+        clients.appsApi.deleteNamespacedStatefulSet({
+          name,
+          namespace,
+          propagationPolicy: "Foreground",
+        }),
     );
-    await this.deleteIfPresent(
+    // Keep storage, config and egress protection intact if the workload could
+    // not be removed. A later reconciliation retries from the remaining objects.
+    if (!workloadRemoved) return;
+    // DELETE acknowledges termination, not pod exit. Foreground deletion keeps
+    // the StatefulSet until its pods exit. Preserve protection until then.
+    try {
+      await clients.appsApi.readNamespacedStatefulSet({ name, namespace });
+      return;
+    } catch (err) {
+      if (!isK8sNotFoundError(err)) throw err;
+    }
+    const cacheRemoved = await this.deleteIfPresent(
       "PersistentVolumeClaim",
       namespace,
       `varlib-${name}-0`,
@@ -315,6 +516,16 @@ class DaggerEnvironmentRuntimeManager {
           namespace,
         }),
     );
+    if (!cacheRemoved) return;
+    const policiesRemoved = await this.pruneStalePolicies(
+      clients,
+      namespace,
+      constructManagedNetworkPolicyName(name),
+      new Set(),
+    );
+    if (!policiesRemoved) return;
+    // Keep the owned ConfigMap as a durable retry marker until everything else
+    // is gone, including an old cache PVC that has no ownership labels.
     await this.deleteIfPresent(
       "ConfigMap",
       namespace,
@@ -325,19 +536,6 @@ class DaggerEnvironmentRuntimeManager {
           namespace,
         }),
     );
-    // Only drop the egress policies once the engine pod is gone. If the
-    // StatefulSet delete failed, the privileged pod is still running — pruning
-    // its NetworkPolicy would leave it egressing unrestricted. Leave the policy
-    // in place; the next teardown retries the workload.
-    if (workloadRemoved) {
-      // Empty desired set → every managed policy kind is pruned.
-      await this.pruneStalePolicies(
-        clients,
-        namespace,
-        constructManagedNetworkPolicyName(name),
-        new Set(),
-      );
-    }
   }
 
   // Returns true when the object is gone (deleted now, or already absent),
@@ -367,15 +565,28 @@ class DaggerEnvironmentRuntimeManager {
     const { engineId, namespace } = target;
     const { kubeConfig } = loadKubeConfig();
     const clients = createK8sClients(kubeConfig, namespace);
+    const owner = (
+      await resolveRuntimeOwnerReferences(clients.rbacApi, namespace)
+    )?.[0]?.uid;
+    const ownershipLabels: Record<string, string> = {
+      [ORGANIZATION_LABEL]: deriveOrgEngineId(target.organizationId),
+      ...(owner ? { [OWNER_LABEL]: owner } : {}),
+    };
 
     // Must precede the StatefulSet: a new engine pod mounts this ConfigMap and
     // would be stuck in ContainerCreating (failed mount) if it didn't exist yet.
-    await this.applyEngineConfig(clients.coreApi, engineId, namespace);
+    await this.applyEngineConfig(
+      clients.coreApi,
+      engineId,
+      namespace,
+      ownershipLabels,
+    );
     await this.applyEngineStatefulSet(
       clients.appsApi,
       engineId,
       namespace,
       await this.resolveEngineScheduling(),
+      ownershipLabels,
     );
 
     const effectivePolicy = await this.resolveEngineEffectivePolicy(target);
@@ -494,11 +705,17 @@ class DaggerEnvironmentRuntimeManager {
     engineId: string,
     namespace: string,
     scheduling: EngineScheduling,
+    ownershipLabels: Record<string, string> = {},
   ): Promise<void> {
     try {
       await appsApi.createNamespacedStatefulSet({
         namespace,
-        body: this.buildEngineStatefulSet(engineId, namespace, scheduling),
+        body: this.buildEngineStatefulSet(
+          engineId,
+          namespace,
+          scheduling,
+          ownershipLabels,
+        ),
       });
     } catch (error) {
       if (!isConflict(error)) throw error;
@@ -560,13 +777,14 @@ class DaggerEnvironmentRuntimeManager {
     coreApi: k8s.CoreV1Api,
     engineId: string,
     namespace: string,
+    ownershipLabels: Record<string, string> = {},
   ): Promise<void> {
     const name = engineConfigMapName(engineId);
     const body: k8s.V1ConfigMap = {
       metadata: {
         name,
         namespace,
-        labels: daggerEnginePodLabels(engineId),
+        labels: { ...daggerEnginePodLabels(engineId), ...ownershipLabels },
       },
       data: { "engine.json": ENGINE_CONFIG_JSON },
     };
@@ -582,6 +800,7 @@ class DaggerEnvironmentRuntimeManager {
     engineId: string,
     namespace: string,
     scheduling: EngineScheduling,
+    ownershipLabels: Record<string, string> = {},
   ): k8s.V1StatefulSet {
     const name = daggerEngineDeploymentName(engineId);
     const labels = daggerEnginePodLabels(engineId);
@@ -589,7 +808,7 @@ class DaggerEnvironmentRuntimeManager {
     return {
       apiVersion: "apps/v1",
       kind: "StatefulSet",
-      metadata: { name, namespace, labels },
+      metadata: { name, namespace, labels: { ...labels, ...ownershipLabels } },
       spec: {
         serviceName: name,
         replicas: 1,
@@ -665,7 +884,10 @@ class DaggerEnvironmentRuntimeManager {
         // warm base instead of cold-rebuilding.
         volumeClaimTemplates: [
           {
-            metadata: { name: "varlib" },
+            metadata: {
+              name: "varlib",
+              labels: { ...labels, ...ownershipLabels },
+            },
             spec: {
               accessModes: ["ReadWriteOnce"],
               resources: { requests: { storage: engine.cacheStorage } },
@@ -709,7 +931,8 @@ class DaggerEnvironmentRuntimeManager {
     namespace: string,
     policyName: string,
     desiredKinds: Set<PolicyKind>,
-  ): Promise<void> {
+  ): Promise<boolean> {
+    let removed = true;
     for (const kind of ALL_POLICY_KINDS) {
       if (desiredKinds.has(kind)) continue;
       try {
@@ -732,6 +955,7 @@ class DaggerEnvironmentRuntimeManager {
         // Already absent (or the CRD isn't installed on this cluster) — nothing
         // to prune. Any other failure is logged but must not fail reconcile.
         if (!isK8sNotFoundError(error)) {
+          removed = false;
           logger.warn(
             { err: error, namespace, policyName, kind },
             "[DaggerEnvRuntime] failed to prune stale policy",
@@ -739,6 +963,7 @@ class DaggerEnvironmentRuntimeManager {
         }
       }
     }
+    return removed;
   }
 
   private async applyNetworkPolicy(

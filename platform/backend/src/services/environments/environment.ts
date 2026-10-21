@@ -25,6 +25,7 @@ import {
   type UpdateEnvironment,
   type UpdateEnvironmentResourceDefaults,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "./remote-server-network-policy";
 
@@ -34,14 +35,16 @@ import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "./remote-server-net
  * environment CRUD, and the manager no-ops when code-runtime/k8s is off.
  */
 function reconcileEnvironmentEngine(environment: Environment): void {
-  void daggerEnvironmentRuntimeManager
-    .reconcileEnvironment(environment)
-    .catch((err) =>
-      logger.error(
-        { err, environmentId: environment.id },
-        "[DaggerEnvRuntime] background reconcile failed",
+  trackBackgroundWork(
+    daggerEnvironmentRuntimeManager
+      .reconcileEnvironment(environment)
+      .catch((err) =>
+        logger.error(
+          { err, environmentId: environment.id },
+          "[DaggerEnvRuntime] background reconcile failed",
+        ),
       ),
-    );
+  );
 }
 
 /** Persist the Environment-bound browser runtime, then provision its pod in the background. */
@@ -72,14 +75,16 @@ async function reconcilePlaywrightRuntime(
  * code-runtime/k8s is off.
  */
 function teardownEnvironmentEngine(environment: Environment): void {
-  void daggerEnvironmentRuntimeManager
-    .teardownEnvironmentEngine(environment)
-    .catch((err) =>
-      logger.error(
-        { err, environmentId: environment.id },
-        "[DaggerEnvRuntime] background teardown failed",
+  trackBackgroundWork(
+    daggerEnvironmentRuntimeManager
+      .teardownEnvironmentEngine(environment)
+      .catch((err) =>
+        logger.error(
+          { err, environmentId: environment.id },
+          "[DaggerEnvRuntime] background teardown failed",
+        ),
       ),
-    );
+  );
 }
 
 // === Public API ===

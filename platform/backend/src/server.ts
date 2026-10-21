@@ -999,7 +999,7 @@ const startWebServer = async () => {
 
     // Eagerly provision a Dagger engine + egress policy for every environment and
     // every organization's default, so no agent routes to a non-existent pod.
-    void daggerEnvironmentRuntimeManager.reconcileAll();
+    daggerEnvironmentRuntimeManager.start();
 
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
@@ -1309,6 +1309,7 @@ function registerWebServerShutdown(
     agentImagePrefetcher.stop();
     // SPDX-SnippetEnd
     agentWarmPoolManager.stop();
+    daggerEnvironmentRuntimeManager.stop();
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the
@@ -1541,7 +1542,7 @@ const startWorker = async () => {
 
     // Eagerly provision per-environment and per-organization Dagger engines +
     // egress policies.
-    void daggerEnvironmentRuntimeManager.reconcileAll();
+    daggerEnvironmentRuntimeManager.start();
 
     // Worker server for Kubernetes probes, Prometheus scraping,
     // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.
@@ -1592,6 +1593,7 @@ const startWorker = async () => {
 
       try {
         await healthServer.close();
+        daggerEnvironmentRuntimeManager.stop();
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

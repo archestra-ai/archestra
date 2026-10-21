@@ -811,10 +811,10 @@ Gateway -> Runtime: bind child, inherit restrictions, then deliver inputs
 Gateway -> Ledger: launch outcome under the call ID
 Proxy -> Parent: the recorded outcome, not the client's result
 Runtime -> Proxy: model calls and results under the stored child identity
-Gateway -> Parent: get_run returns the recorded admitted ChildReturn
+Gateway -> Parent: get_agent_run returns the recorded admitted ChildReturn
 ```
 
-Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_run` returns only the exact admitted value for that task. Unrelated sessions and oversized values are withheld. File reads cross the same boundary.
+Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_agent_run` returns only the exact admitted value for the run's current turn. Unrelated sessions and oversized values are withheld; a run with no governed producer returns metadata and the run link only. File reads cross the same boundary.
 
 Downloads check the pinned content, size, and checksum before issuing a ticket. They require admission without transformation. Protected exports are limited to 4 MiB. HTTP ranges serve the admitted host-side copy from a byte-bounded 64 MiB cache, not the runtime's mutable file. Owner HTTP views remain separate human surfaces. Cross-runtime external publishing is refused without an egress crossing.
 

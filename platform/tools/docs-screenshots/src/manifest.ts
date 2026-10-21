@@ -53,6 +53,15 @@ export const SHOTS: Shot[] = [
     route: () => "/mcp/gateways",
   },
   {
+    asset: "automated_screenshots/mcp-gateway_default-tool-mode",
+    route: () => "/settings/mcp",
+    prepare: async (page) => {
+      await page
+        .getByRole("combobox", { name: "Default personal tool mode" })
+        .click();
+    },
+  },
+  {
     asset: "automated_screenshots/knowledge_knowledge-bases",
     route: () => "/knowledge/knowledge-bases",
     viewport: { width: 1440, height: 760 },

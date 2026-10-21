@@ -34330,6 +34330,7 @@ export type GetBootstrapResponses = {
             theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
             customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
             onlineMcpCatalogEnabled: boolean;
+            defaultPersonalAgentAccessAllTools: boolean;
             onlineSkillCatalogEnabled: boolean;
             skillMarketplaceAnonymousAccess: boolean;
             allowChatFileUploads: boolean;
@@ -97324,6 +97325,7 @@ export type GetOrganizationResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97661,6 +97663,7 @@ export type UpdateAppearanceSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97876,6 +97879,7 @@ export type UpdateSecuritySettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97995,6 +97999,7 @@ export type UpdateSecuritySettingsResponse = UpdateSecuritySettingsResponses[key
 export type UpdateMcpSettingsData = {
     body: {
         onlineMcpCatalogEnabled?: boolean;
+        defaultPersonalAgentAccessAllTools?: boolean;
         mcpIdleHibernationEnabled?: boolean;
     };
     path?: never;
@@ -98088,6 +98093,7 @@ export type UpdateMcpSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98300,6 +98306,7 @@ export type UpdateSkillsSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98513,6 +98520,7 @@ export type UpdateAgentSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98748,6 +98756,7 @@ export type UpdateConnectionSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98996,6 +99005,7 @@ export type UpdateIntegrationSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99218,6 +99228,7 @@ export type UpdateDefaultEnvironmentResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99435,6 +99446,7 @@ export type UpdateAuthSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99654,6 +99666,7 @@ export type UpdateKnowledgeSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99863,6 +99876,7 @@ export type DropEmbeddingConfigResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -100434,6 +100448,7 @@ export type CompleteOnboardingResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;

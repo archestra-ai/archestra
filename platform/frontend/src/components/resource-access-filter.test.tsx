@@ -17,6 +17,7 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   ResourceAccessFilter,
   useResourceAccessParam,
@@ -25,6 +26,7 @@ import { useScopeFilterParams } from "./resource-scope-filter";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/agent.query", () => ({
   useLabelKeys: () => ({ data: [] }),
   useLabelValues: () => ({ data: [] }),
@@ -94,6 +96,7 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useSession>);
   setQuery("");
   setReadsEveryObject(true);
+  vi.mocked(useAppName).mockReturnValue("Acme AI");
 });
 afterEach(() => {
   server.resetHandlers();
@@ -260,8 +263,30 @@ describe("access box", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("offers built-in agents to agent admins only", async () => {
+    renderFilter({ offerBuiltIn: true });
+    const user = userEvent.setup();
+    await user.click(accessTrigger());
+    // White-labeled deployments name themselves, not the vendor.
+    expect(option(/^Built-in/)).toHaveTextContent(
+      "system agents that Acme AI runs for you",
+    );
+    await user.click(option(/^Built-in/));
+    expect(push).toHaveBeenCalledWith("/agents?builtIn=true");
+  });
+
+  it("hides built-in agents from other viewers", async () => {
+    setReadsEveryObject(false);
+    renderFilter({ offerBuiltIn: true });
+    const user = userEvent.setup();
+    await user.click(accessTrigger());
+    expect(
+      screen.queryByRole("checkbox", { name: /Built-in/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows no per-option counts", async () => {
-    renderFilter();
+    renderFilter({ offerBuiltIn: true });
     const user = userEvent.setup();
     await user.click(accessTrigger());
     for (const checkbox of screen.getAllByRole("checkbox"))
@@ -438,9 +463,12 @@ describe("Owner box", () => {
   });
 });
 
-it("resets all three filters together", async () => {
-  setQuery("access=mine&sharedWith=org&owner=user-alex&name=x&page=4");
-  renderFilter();
+it("resets all three filters and the built-in option together", async () => {
+  setQuery(
+    "access=mine&builtIn=true&sharedWith=org&owner=user-alex&name=x&page=4",
+  );
+  renderFilter({ offerBuiltIn: true });
+  expect(accessTrigger()).toHaveTextContent("+ Built-in");
   expect(ownerTrigger()).toHaveTextContent("1");
   const user = userEvent.setup();
   await user.click(accessTrigger());

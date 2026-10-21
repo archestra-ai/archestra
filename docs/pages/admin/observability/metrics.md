@@ -3,12 +3,12 @@ title: Observability Metrics
 sidebarTitle: Metrics
 description: Scrape Archestra's Prometheus metrics and look up every metric name and label
 order: 1
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra serves Prometheus metrics in OpenMetrics format. Scrape them to chart and alert on LLM cost and latency, MCP tool calls, managed agent health, and background jobs.
+Archestra serves Prometheus metrics in OpenMetrics format. Scrape them to chart and alert on LLM cost and latency, MCP tool calls, Agent Runtime health, and background jobs.
 
 ## Scraping
 
@@ -16,7 +16,7 @@ Each process serves its own registry, so scrape every pod:
 
 | Process | Endpoint | Emits |
 | --- | --- | --- |
-| Web | `http://<pod>:9050/metrics` | Requests served by the web tier: LLM, MCP, chat, managed agents, HTTP |
+| Web | `http://<pod>:9050/metrics` | Requests served by the web tier: LLM, MCP, chat, Agent Runtime, HTTP |
 | Worker | `http://<pod>:9000/metrics` | Knowledge Base syncs and embeddings, the task queue, scheduled tasks, and the LLM and MCP calls they make |
 
 The Helm chart runs the worker as its own Deployment by default. Sum counters across web and worker pods: an agent run from a schedule reports its LLM metrics from a worker pod.
@@ -118,11 +118,11 @@ LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data po
 
 `mcp_server_deployment_status` is `1` for the server's current `state`: `not_created`, `pending`, `running`, `failed`, `succeeded`, `hibernated`, or `waking`. `count(mcp_server_deployment_status{state="running"} == 1)` counts running servers.
 
-## Managed Agents Health
+## Agent Runtime Health
 
 | Metric | Type | Labels | Measures |
 | --- | --- | --- | --- |
-| <span id="agent_runtime_runs_started_total"></span>`agent_runtime_runs_started_total` | Counter | | [Managed agent](/docs/agents/managed-agents) runs that reached a running backend |
+| <span id="agent_runtime_runs_started_total"></span>`agent_runtime_runs_started_total` | Counter | | [Agent Runtime](/docs/agents/runtime) runs that reached a running backend |
 | <span id="agent_runtime_runs_terminated_total"></span>`agent_runtime_runs_terminated_total` | Counter | `outcome` | Finished runs: `completed`, `failed`, `stopped_by_user`, `expired_ttl`, or `expired_idle` |
 | <span id="agent_runtime_provision_duration_seconds"></span>`agent_runtime_provision_duration_seconds` | Histogram | | Startup time, including scheduling and image pulls |
 | <span id="agent_runtime_steers_total"></span>`agent_runtime_steers_total` | Counter | `steer_mode` | Steering messages delivered into running sessions |

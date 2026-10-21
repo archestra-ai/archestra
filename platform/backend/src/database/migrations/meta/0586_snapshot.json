@@ -1,5 +1,5 @@
 {
-  "id": "5089cea1-9818-45c3-a4be-8f730615fb43",
+  "id": "20084a77-d3fd-49d0-99db-02792696c128",
   "prevId": "b9cef5ef-ed8f-4993-89bd-d99c7ff371b0",
   "version": "7",
   "dialect": "postgresql",
@@ -15790,12 +15790,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "provider_pricing": {
-          "name": "provider_pricing",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "is_best": {
           "name": "is_best",
           "type": "boolean",
@@ -19874,6 +19868,13 @@
         },
         "online_mcp_catalog_enabled": {
           "name": "online_mcp_catalog_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "default_personal_agent_access_all_tools": {
+          "name": "default_personal_agent_access_all_tools",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

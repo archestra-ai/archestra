@@ -2861,7 +2861,7 @@ async function buildSearchToolsDescription(params: {
     (name) =>
       archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
   )
-    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover managed agent tools here and load the Managed Agent Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
+    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Remote Agents tools here and load the Remote Agents Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
     : null;
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the

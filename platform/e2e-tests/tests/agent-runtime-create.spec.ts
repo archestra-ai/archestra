@@ -144,7 +144,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
   const original = await organizationResponse.json();
   const settingsUrl = `${UI_BASE_URL}/api/organization/integration-settings`;
   const settings = page.getByRole("list", {
-    name: "Managed agents",
+    name: "Agent Runtimes",
     exact: true,
   });
   const names = ["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"];
@@ -219,7 +219,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
       .click();
     await settings.getByRole("button", { name: /^Remove / }).click();
     await save();
-    // With every template hidden, a custom image is the coding agent left.
+    // With every template hidden, a custom image is the Agent Runtime left.
     await goToPage(page, "/agents/new");
     for (const name of names) {
       await expect(
@@ -238,7 +238,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
 
     await goToPage(page, "/settings/agents");
     for (const name of names) {
-      await settings.getByRole("button", { name: "Add managed agent" }).click();
+      await settings.getByRole("button", { name: "Add Agent Runtime" }).click();
       await page.getByRole("button", { name, exact: true }).click();
     }
     await save();

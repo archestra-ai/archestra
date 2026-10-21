@@ -30,7 +30,10 @@ import {
   SOURCE_HEADER,
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
-import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import {
+  ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
+  CLAUDE_DESKTOP_CLIENT_ID,
+} from "@archestra/shared/interactions/client";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
@@ -170,6 +173,7 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
 import {
@@ -1606,12 +1610,19 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] Replaced unpaired surrogates in the outbound request body; the provider would have rejected it as malformed JSON`,
       );
     }
+    const providerRequest =
+      providerName === "anthropic" &&
+      externalAgentId === CLAUDE_DESKTOP_CLIENT_ID &&
+      provider.isSubscriptionCredential?.(apiKey) === true
+        ? withClaudeDesktopSubscriptionPreamble(repairedRequest)
+        : repairedRequest;
+
     // A connection probe is not an agent task. This is request-local and does
     // not alter the client's model, sandbox, approval policy or configuration.
     const finalRequest = (
       connectionVerification
-        ? { ...asRecord(repairedRequest), tool_choice: "none" }
-        : repairedRequest
+        ? { ...asRecord(providerRequest), tool_choice: "none" }
+        : providerRequest
     ) as TRequest;
 
     // The tool names the request declares, in the canonical form tool-call

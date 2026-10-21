@@ -211,8 +211,6 @@ export const WEBSITE_URL = "https://archestra.ai";
 export const GITHUB_REPO_URL = "https://github.com/archestra-ai/archestra";
 export const GITHUB_REPO_NEW_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`;
 export const COMMUNITY_SLACK_URL = `${WEBSITE_URL}/join-slack`;
-/** Typeform behind the "Share feedback" pop-up. */
-export const FEEDBACK_TYPEFORM_URL = "https://form.typeform.com/to/qVvzSmEn";
 
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||
@@ -337,15 +335,15 @@ export const STARTUP_GUARD_FORMAT_VERSION = 6;
 
 /**
  * The managed instructions a deployment uses until an admin edits them. It
- * names the deployment's own managed agents, so users of Claude Code or Codex
- * don't mistake them for their client vendor's cloud.
+ * names the deployment's own Remote Agents, so users of Claude Code or Codex
+ * don't mistake them for their client vendor's.
  */
 export function defaultRuntimeHandoffInstructions(appName: string): string {
-  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to a managed agent in ${appName}' to continue this session in the cloud." Say this only once per session. When asked, use the Managed Agent Handoff skill and create a managed agent if needed.`;
+  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${appName} Remote Agents' to continue this session in the cloud." Say this only once per session. When asked, use the Remote Agents Handoff skill and create a remote agent if needed.`;
 }
 
 /**
- * The managed instructions in effect. Unedited ones (stored as null, or an
+ * The managed instructions in effect. Unedited ones (stored as null, or the
  * earlier default's exact text) follow the current default, so a deployment
  * that never changed them picks up new wording.
  */
@@ -354,18 +352,12 @@ export function resolveRuntimeHandoffInstructions(params: {
   appName: string;
 }): string {
   const { stored, appName } = params;
-  return stored == null ||
-    legacyRuntimeHandoffInstructions(appName).includes(stored)
+  return stored == null || stored === LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS
     ? defaultRuntimeHandoffInstructions(appName)
     : stored;
 }
 
-function legacyRuntimeHandoffInstructions(appName: string): string[] {
-  return ["Cloud runtime", `${appName} Cloud runtime`].map(
-    (target) =>
-      `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${target}' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`,
-  );
-}
+const LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
 
 /**
  * Header name for external agent ID.

@@ -34330,6 +34330,7 @@ export type GetBootstrapResponses = {
             theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
             customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
             onlineMcpCatalogEnabled: boolean;
+            defaultPersonalAgentAccessAllTools: boolean;
             onlineSkillCatalogEnabled: boolean;
             skillMarketplaceAnonymousAccess: boolean;
             allowChatFileUploads: boolean;
@@ -40436,6 +40437,96 @@ export type ApplyChatOpsBindingPlanResponses = {
 
 export type ApplyChatOpsBindingPlanResponse = ApplyChatOpsBindingPlanResponses[keyof ApplyChatOpsBindingPlanResponses];
 
+export type GetMsTeamsChatOpsConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ms-teams';
+};
+
+export type GetMsTeamsChatOpsConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMsTeamsChatOpsConfigError = GetMsTeamsChatOpsConfigErrors[keyof GetMsTeamsChatOpsConfigErrors];
+
+export type GetMsTeamsChatOpsConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        updatedAt: string | null;
+        enabled: boolean;
+        appId: string | null;
+        tenantId: string | null;
+    };
+};
+
+export type GetMsTeamsChatOpsConfigResponse = GetMsTeamsChatOpsConfigResponses[keyof GetMsTeamsChatOpsConfigResponses];
+
 export type UpdateChatOpsConfigInQuickstartData = {
     body: {
         enabled?: boolean;
@@ -40789,6 +40880,96 @@ export type ConnectNgrokResponses = {
 };
 
 export type ConnectNgrokResponse = ConnectNgrokResponses[keyof ConnectNgrokResponses];
+
+export type GetSlackChatOpsConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack';
+};
+
+export type GetSlackChatOpsConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSlackChatOpsConfigError = GetSlackChatOpsConfigErrors[keyof GetSlackChatOpsConfigErrors];
+
+export type GetSlackChatOpsConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        updatedAt: string | null;
+        enabled: boolean;
+        appId: string | null;
+        connectionMode: 'webhook' | 'socket';
+    };
+};
+
+export type GetSlackChatOpsConfigResponse = GetSlackChatOpsConfigResponses[keyof GetSlackChatOpsConfigResponses];
 
 export type UpdateSlackChatOpsConfigData = {
     body: {
@@ -42019,6 +42200,94 @@ export type JoinSlackRouterBotChannelResponses = {
 };
 
 export type JoinSlackRouterBotChannelResponse = JoinSlackRouterBotChannelResponses[keyof JoinSlackRouterBotChannelResponses];
+
+export type GetTelegramChatOpsConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/telegram';
+};
+
+export type GetTelegramChatOpsConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTelegramChatOpsConfigError = GetTelegramChatOpsConfigErrors[keyof GetTelegramChatOpsConfigErrors];
+
+export type GetTelegramChatOpsConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: boolean;
+        updatedAt: string | null;
+        enabled: boolean;
+    };
+};
+
+export type GetTelegramChatOpsConfigResponse = GetTelegramChatOpsConfigResponses[keyof GetTelegramChatOpsConfigResponses];
 
 export type UpdateTelegramChatOpsConfigData = {
     body: {
@@ -71660,6 +71929,8 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
             } | {
                 type: 'salesforce';
+                authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+                clientId?: string;
                 loginUrl: unknown;
                 objects?: Array<string>;
                 advancedObjectConfigJson?: string;
@@ -71894,6 +72165,8 @@ export type CreateConnectorData = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -72201,6 +72474,8 @@ export type CreateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -72586,6 +72861,8 @@ export type GetConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -72802,6 +73079,8 @@ export type UpdateConnectorData = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -73091,6 +73370,8 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'salesforce';
+            authMethod?: 'oauth_client_credentials' | 'soap_legacy';
+            clientId?: string;
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -90084,92 +90365,6 @@ export type SubmitOnboardingSurveyResponses = {
 
 export type SubmitOnboardingSurveyResponse = SubmitOnboardingSurveyResponses[keyof SubmitOnboardingSurveyResponses];
 
-export type GetFeedbackPopupActivationData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/onboarding/feedback-popup-activation';
-};
-
-export type GetFeedbackPopupActivationErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetFeedbackPopupActivationError = GetFeedbackPopupActivationErrors[keyof GetFeedbackPopupActivationErrors];
-
-export type GetFeedbackPopupActivationResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        activatedAt: string | null;
-    };
-};
-
-export type GetFeedbackPopupActivationResponse = GetFeedbackPopupActivationResponses[keyof GetFeedbackPopupActivationResponses];
-
 export type OpenAiEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;
@@ -92473,6 +92668,107 @@ export type DeleteOpenappaBatteryInstallResponses = {
 
 export type DeleteOpenappaBatteryInstallResponse = DeleteOpenappaBatteryInstallResponses[keyof DeleteOpenappaBatteryInstallResponses];
 
+export type GetOpenappaBatteryInstallData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/openappa/battery-installs/{id}';
+};
+
+export type GetOpenappaBatteryInstallErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaBatteryInstallError = GetOpenappaBatteryInstallErrors[keyof GetOpenappaBatteryInstallErrors];
+
+export type GetOpenappaBatteryInstallResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        batteryName: string;
+        catalogId: string | null;
+        enabled: boolean;
+        status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+        target: 'multi-user' | null;
+        packageHash: string | null;
+        lastError: string | null;
+        credentialBindings: {
+            [key: string]: string;
+        };
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetOpenappaBatteryInstallResponse = GetOpenappaBatteryInstallResponses[keyof GetOpenappaBatteryInstallResponses];
+
 export type UpdateOpenappaBatteryInstallData = {
     body: {
         enabled?: boolean;
@@ -92668,6 +92964,190 @@ export type DeleteOpenappaBatteryIncludeResponses = {
 };
 
 export type DeleteOpenappaBatteryIncludeResponse = DeleteOpenappaBatteryIncludeResponses[keyof DeleteOpenappaBatteryIncludeResponses];
+
+export type GetOpenappaCredentialBindingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/credential-bindings';
+};
+
+export type GetOpenappaCredentialBindingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaCredentialBindingsError = GetOpenappaCredentialBindingsErrors[keyof GetOpenappaCredentialBindingsErrors];
+
+export type GetOpenappaCredentialBindingsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        variable: string;
+        credentialKey: string;
+        hasValue: boolean;
+        updatedBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetOpenappaCredentialBindingsResponse = GetOpenappaCredentialBindingsResponses[keyof GetOpenappaCredentialBindingsResponses];
+
+export type GetOpenappaCredentialBindingData = {
+    body?: never;
+    path: {
+        variable: string;
+    };
+    query?: never;
+    url: '/api/openappa/credential-bindings/{variable}';
+};
+
+export type GetOpenappaCredentialBindingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaCredentialBindingError = GetOpenappaCredentialBindingErrors[keyof GetOpenappaCredentialBindingErrors];
+
+export type GetOpenappaCredentialBindingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        variable: string;
+        credentialKey: string;
+        hasValue: boolean;
+        updatedBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetOpenappaCredentialBindingResponse = GetOpenappaCredentialBindingResponses[keyof GetOpenappaCredentialBindingResponses];
 
 export type SetOpenappaCredentialBindingData = {
     body: {
@@ -97324,6 +97804,7 @@ export type GetOrganizationResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97661,6 +98142,7 @@ export type UpdateAppearanceSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97876,6 +98358,7 @@ export type UpdateSecuritySettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -97995,6 +98478,7 @@ export type UpdateSecuritySettingsResponse = UpdateSecuritySettingsResponses[key
 export type UpdateMcpSettingsData = {
     body: {
         onlineMcpCatalogEnabled?: boolean;
+        defaultPersonalAgentAccessAllTools?: boolean;
         mcpIdleHibernationEnabled?: boolean;
     };
     path?: never;
@@ -98088,6 +98572,7 @@ export type UpdateMcpSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98300,6 +98785,7 @@ export type UpdateSkillsSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98513,6 +98999,7 @@ export type UpdateAgentSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98748,6 +99235,7 @@ export type UpdateConnectionSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -98996,6 +99484,7 @@ export type UpdateIntegrationSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99218,6 +99707,7 @@ export type UpdateDefaultEnvironmentResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99435,6 +99925,7 @@ export type UpdateAuthSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99654,6 +100145,7 @@ export type UpdateKnowledgeSettingsResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -99863,6 +100355,7 @@ export type DropEmbeddingConfigResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;
@@ -100434,6 +100927,7 @@ export type CompleteOnboardingResponses = {
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         onlineMcpCatalogEnabled: boolean;
+        defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
         allowChatFileUploads: boolean;

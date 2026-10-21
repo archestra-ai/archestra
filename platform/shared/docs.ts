@@ -48,7 +48,7 @@ export const DocsPage = {
   PlatformAgentTriggersEmail: "agents/triggers-and-channels/email",
   PlatformAgentTriggersWebhookA2a: "agents/triggers-and-channels/webhook-a2a",
   PlatformAgentHooks: "agents/hooks",
-  PlatformAgentRuntime: "agents/managed-agents",
+  PlatformAgentRuntime: "agents/runtime",
   PlatformCredentials: "admin/security/credentials",
   PlatformAgents: "agents",
   PlatformApps: "chat/apps",

@@ -46,6 +46,21 @@ export const CredentialBindingParamsSchema = z.object({
   variable: z.string().regex(BATTERY_CREDENTIAL_VARIABLE),
 });
 
+/**
+ * A stored binding as the API reads it back: the credential definition key it
+ * names, never the credential's value.
+ */
+export const CredentialBindingViewSchema = z.object({
+  variable: z.string(),
+  credentialKey: z.string(),
+  /** Whether the bound credential currently has an organization value to hand over. */
+  hasValue: z.boolean(),
+  updatedBy: z.string().nullable(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type CredentialBindingView = z.infer<typeof CredentialBindingViewSchema>;
+
 /** The key to bind a variable to; null unbinds it. */
 export const SetCredentialBindingSchema = z.strictObject({
   key: z.string().min(1).max(200).nullable(),

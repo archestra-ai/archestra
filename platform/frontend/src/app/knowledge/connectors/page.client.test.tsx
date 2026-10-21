@@ -11,12 +11,14 @@ import { useIsGlobalAdmin, useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import ConnectorsPage from "./page.client";
 
+const mockHasLegacySalesforceConnector = vi.fn();
 const mockUseConnectorsPaginated = vi.fn();
 const mockUseAllMatchingConnectors = vi.fn();
 const mockRestoreMutate = vi.fn();
 const mockPurgeMutateAsync = vi.fn();
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
+  useHasLegacySalesforceConnector: () => mockHasLegacySalesforceConnector(),
   useConnectorsPaginated: (params: unknown) =>
     mockUseConnectorsPaginated(params),
   useConnector: () => ({ data: null }),
@@ -114,6 +116,7 @@ function makeConnector(overrides: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockHasLegacySalesforceConnector.mockReturnValue({ data: false });
   window.localStorage.clear();
   mockUseAllMatchingConnectors.mockReturnValue({
     data: [],
@@ -168,6 +171,37 @@ beforeEach(() => {
 });
 
 describe("ConnectorsPage", () => {
+  it("warns about legacy Salesforce authentication even when the visible page contains other connector types", async () => {
+    mockHasLegacySalesforceConnector.mockReturnValue({ data: true });
+    render(<ConnectorsPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Salesforce password login retires in Summer ’27.",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Summer ’27");
+    expect(
+      screen.getByRole("link", { name: "Review Salesforce connectors" }),
+    ).toHaveAttribute("href", "/knowledge/connectors?connectorType=salesforce");
+  });
+  it("shows Salesforce as the selected type when following the migration notice", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectorType=salesforce") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    render(<ConnectorsPage />);
+    expect(
+      await screen.findByRole("combobox", { name: "Filter by connector type" }),
+    ).toHaveTextContent("Salesforce");
+    expect(mockUseConnectorsPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ connectorType: "salesforce" }),
+    );
+  });
+  it("does not show a migration warning when no accessible legacy Salesforce connectors remain", () => {
+    render(<ConnectorsPage />);
+    expect(
+      screen.queryByText("Salesforce password login retires in Summer ’27."),
+    ).not.toBeInTheDocument();
+  });
   it("keeps type and labels with the connector name in the compact table", async () => {
     window.localStorage.setItem("archestra-connectors-view", "table");
     mockUseConnectorsPaginated.mockReturnValue({

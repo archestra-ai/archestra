@@ -34,8 +34,11 @@ import {
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
+import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
 import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
+import SlackProvider from "@/agents/chatops/slack-provider";
+import TelegramProvider from "@/agents/chatops/telegram-provider";
 import {
   buildAgentFooter,
   EventDedupMap,
@@ -71,6 +74,9 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   type IncomingChatMessage,
+  MsTeamsChatOpsConfigViewSchema,
+  SlackChatOpsConfigViewSchema,
+  TelegramChatOpsConfigViewSchema,
 } from "@/types";
 import {
   ChatOpsChannelBindingResponseSchema,
@@ -1775,6 +1781,31 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/chatops/config/ms-teams",
+    {
+      schema: {
+        operationId: RouteId.GetMsTeamsChatOpsConfig,
+        description:
+          "Get the stored MS Teams chatops configuration without its secrets",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(MsTeamsChatOpsConfigViewSchema),
+      },
+    },
+    async () => {
+      const row = await ChatOpsConfigModel.getStoredConfig("ms-teams");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
+      return {
+        configured: stored ? new MSTeamsProvider(stored).isConfigured() : false,
+        updatedAt,
+        enabled: stored?.enabled ?? false,
+        appId: stored?.appId || null,
+        tenantId: stored?.tenantId || null,
+      };
+    },
+  );
+
   /**
    * Update MS Teams chatops config.
    * Persists to DB and reinitializes the chatops manager (which reloads from DB).
@@ -1926,6 +1957,31 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
     },
   );
+  fastify.get(
+    "/api/chatops/config/slack",
+    {
+      schema: {
+        operationId: RouteId.GetSlackChatOpsConfig,
+        description:
+          "Get the stored Slack chatops configuration without its secrets",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(SlackChatOpsConfigViewSchema),
+      },
+    },
+    async () => {
+      const row = await ChatOpsConfigModel.getStoredConfig("slack");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
+      return {
+        configured: stored ? new SlackProvider(stored).isConfigured() : false,
+        updatedAt,
+        enabled: stored?.enabled ?? false,
+        appId: stored?.appId || null,
+        connectionMode: stored?.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
+      };
+    },
+  );
+
   /**
    * Update Slack chatops config.
    * Persists to DB and reinitializes the chatops manager (which reloads from DB).
@@ -2666,6 +2722,31 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/chatops/config/telegram",
+    {
+      schema: {
+        operationId: RouteId.GetTelegramChatOpsConfig,
+        description:
+          "Get the stored Telegram chatops configuration without its bot token",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(TelegramChatOpsConfigViewSchema),
+      },
+    },
+    async () => {
+      const row = await ChatOpsConfigModel.getStoredConfig("telegram");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
+      return {
+        configured: stored
+          ? new TelegramProvider(stored).isConfigured()
+          : false,
+        updatedAt,
+        enabled: stored?.enabled ?? false,
+      };
     },
   );
 

@@ -137,10 +137,6 @@ import {
   withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
 import {
-  carriesResponsesTerminal,
-  formatResponsesStreamErrorFrame,
-} from "./adapters/responses-stream-error-frame";
-import {
   assertConsistentUserCredentials,
   assertPlatformAuthenticated,
   attemptJwksAuth,
@@ -1941,12 +1937,11 @@ async function handleStreaming<
   let streamCompleted = false;
   let failedStreamResponse: unknown;
   let clientGone = false;
-  // Set once a Responses terminal reaches the client, whichever path released
-  // it: the stream loop, the policy release, or a failed generation. An error
-  // frame after it must not end the response a second time.
-  const tracksResponsesTerminal =
-    provider.formatStreamErrorFrame === formatResponsesStreamErrorFrame;
-  let responsesTerminalSent = false;
+  // Set once a terminal reaches the client, whichever path released it: the
+  // stream loop, the policy release, or a failed generation. An error frame
+  // after it must not end the response a second time.
+  const carriesStreamTerminal = provider.carriesStreamTerminal;
+  let terminalSent = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -1996,8 +1991,8 @@ async function handleStreaming<
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
-    if (tracksResponsesTerminal && !responsesTerminalSent)
-      responsesTerminalSent = carriesResponsesTerminal(data);
+    if (carriesStreamTerminal && !terminalSent)
+      terminalSent = carriesStreamTerminal(data);
   };
   const childStream = new BufferedChildStream({
     enabled: bufferModelResponse,
@@ -2849,7 +2844,7 @@ async function handleStreaming<
       model:
         streamAdapter.clientResponse?.model ??
         (streamAdapter.state.model || actualModel),
-      terminalSent: responsesTerminalSent,
+      terminalSent,
     };
     return handleError(
       streamError,

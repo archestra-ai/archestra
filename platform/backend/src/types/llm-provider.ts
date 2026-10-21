@@ -598,6 +598,13 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   ) => string;
 
   /**
+   * Whether a write to the client carries a terminal event of this stream.
+   * Set when `formatStreamErrorFrame` ends the response itself, so the
+   * handler can tell it that the client already has a terminal.
+   */
+  readonly carriesStreamTerminal?: (data: string | Uint8Array) => boolean;
+
+  /**
    * Set by adapters that serve a client wire format different from the
    * upstream provider's (e.g. OpenAI-format client, Anthropic upstream). The
    * upstream's error body is foreign to the client there, so the proxy keeps

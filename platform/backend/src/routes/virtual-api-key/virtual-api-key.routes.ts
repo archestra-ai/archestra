@@ -251,7 +251,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetVirtualApiKeyValue,
         description:
-          "Get the raw value of a virtual API key. Only the key's author, or the service account that created it, can reveal it.",
+          "Get the raw value of a virtual API key. Only the key's author can reveal it; a key created by a service account with no owner is revealed to that service account.",
         tags: ["Virtual API Keys"],
         params: z.object({
           id: z.string().uuid(),

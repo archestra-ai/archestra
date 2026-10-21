@@ -147,7 +147,7 @@ describe("GET /api/llm-virtual-keys/:id/value with a service-account token", () 
     return token;
   }
 
-  async function createKey(authorization: string) {
+  async function createKey(authorization: string, ownerId?: string) {
     const response = await app.inject({
       method: "POST",
       url: "/api/llm-virtual-keys",
@@ -155,6 +155,7 @@ describe("GET /api/llm-virtual-keys/:id/value with a service-account token", () 
       payload: {
         name: "Vended key",
         providerApiKeys: [{ provider: "openai", providerApiKeyId }],
+        ...(ownerId ? { ownerId } : {}),
       },
     });
     expect(response.statusCode, response.body).toBe(200);
@@ -188,5 +189,27 @@ describe("GET /api/llm-virtual-keys/:id/value with a service-account token", () 
 
     expect(response.statusCode).toBe(403);
     expect(response.body).not.toContain(created.value);
+  });
+
+  test("403s for the service account when it created the key for an owner", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+    const authorization = await serviceAccountToken("Terraform");
+    const created = await createKey(authorization, owner.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-virtual-keys/${created.id}/value`,
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain(created.value);
+    expect((await VirtualApiKeyModel.findById(created.id))?.authorId).toBe(
+      owner.id,
+    );
   });
 });

@@ -12175,7 +12175,7 @@ export const updateVirtualApiKey = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * Get the raw value of a virtual API key. Only the key's author can reveal it.
+ * Get the raw value of a virtual API key. Only the key's author can reveal it; a key created by a service account with no owner is revealed to that service account.
  *
  * Authentication:
  *

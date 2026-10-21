@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.1](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0...platform-v1.4.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **openappa:** accept the proxy's native question when tools are deferred (backport release/1.4) ([#9421](https://github.com/archestra-ai/archestra/issues/9421)) ([a9d936b](https://github.com/archestra-ai/archestra/commit/a9d936b7fe7633e5db0f86c081214acdf220466f))
+
+
+### Miscellaneous Chores
+
+* **agents:** name runtimes Agent Runtimes and handoff Remote Agents (backport release/1.4) ([#9437](https://github.com/archestra-ai/archestra/issues/9437)) ([8e37f9d](https://github.com/archestra-ai/archestra/commit/8e37f9de0b8e3d9e33547d1a8aec5a8c9afe6712))
+* **agents:** revert rename Agent Runtime to Managed Agents (backport release/1.4) ([#9434](https://github.com/archestra-ai/archestra/issues/9434)) ([20a30d6](https://github.com/archestra-ai/archestra/commit/20a30d69323e444cbbb7ea9f30a7b70adbfb97f4))
+
 ## [1.4.0](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.56...platform-v1.4.0) (2026-10-21)
 
 

@@ -1303,13 +1303,19 @@ function stripAuthenticatedBearer(request: FastifyRequest, token: string) {
       }
     }
   }
-  if (request.raw.url?.includes("?")) {
-    const [path, query] = request.raw.url.split("?", 2);
-    const params = new URLSearchParams(query);
-    if (params.getAll("key").includes(token)) {
-      params.delete("key", token);
-      const remaining = params.toString();
-      request.raw.url = path + (remaining ? `?${remaining}` : "");
+  const url = request.raw.url;
+  if (url?.includes("?")) {
+    const queryStart = url.indexOf("?");
+    const segments = url.slice(queryStart + 1).split("&");
+    const retained = segments.filter(
+      (segment) => !new URLSearchParams(segment).getAll("key").includes(token),
+    );
+    if (retained.length !== segments.length) {
+      // Preserve the other parameters byte for byte, including literal question
+      // marks, escaping and order. Re-serializing can change signed provider URLs.
+      request.raw.url =
+        url.slice(0, queryStart) +
+        (retained.length ? `?${retained.join("&")}` : "");
     }
   }
 }

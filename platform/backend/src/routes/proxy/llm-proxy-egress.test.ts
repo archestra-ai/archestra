@@ -113,7 +113,7 @@ describe("proxy provenance and credential egress over HTTP", () => {
     const token = await UserTokenModel.getTokenValue(row.id);
     if (!token) throw new Error("Test personal token was not created");
     const response = await fetch(
-      `${origin}/v1/ollama-native/${agent.id}/api/tags?key=${token}&keep=1`,
+      `${origin}/v1/ollama-native/${agent.id}/api/tags?keep=one?two=three&key=${token}&opaque=a%2fb&key=${token}`,
       {
         headers: {
           authorization: `Bearer ${token}`,
@@ -126,7 +126,7 @@ describe("proxy provenance and credential egress over HTTP", () => {
     );
     expect(response.status).toBe(200);
     expect(requests).toHaveLength(1);
-    expect(requests[0].url).toBe("/api/tags?keep=1");
+    expect(requests[0].url).toBe("/api/tags?keep=one?two=three&opaque=a%2fb");
     expect(requests[0].headers).not.toHaveProperty("authorization");
     expect(requests[0].headers).not.toHaveProperty("x-goog-api-key");
     expect(requests[0].headers).not.toHaveProperty(

@@ -9,8 +9,8 @@ const DevFeedbackOverlay = dynamic(
 );
 
 /**
- * Mounts the internal UI feedback overlay only on deployments that configure
- * its Slack channel, and only then loads its code.
+ * Mounts the internal UI feedback overlay only on deployments that set
+ * `ARCHESTRA_DEV_FEEDBACK_ENABLED`, and only then loads its code.
  */
 export function DevFeedbackLauncher() {
   const enabled = useFeature("devFeedbackEnabled");

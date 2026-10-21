@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import config from "@/config";
 import { describe, expect, test } from "@/test";
 import { FakeSlack } from "@/test/fake-slack";
 import { useMswServer } from "@/test/msw";
@@ -8,6 +9,43 @@ import devFeedbackRoutes from "./dev-feedback.routes";
 describe("dev feedback setup", () => {
   const ctx = useRouteTestApp(devFeedbackRoutes);
   const server = useMswServer();
+
+  test("every endpoint 404s, without calling Slack, when the flag is off", async () => {
+    const slack = new FakeSlack(channelId());
+    await slack.configureAsDevFeedbackChannel();
+    const comment = slack.addMessage({ text: "pinned", botId: "B1" });
+    // Any Slack call would fail the test: msw rejects unhandled requests.
+    config.devFeedback.enabled = false;
+
+    const requests = [
+      { method: "GET", url: "/api/dev-feedback/setup" },
+      { method: "GET", url: "/api/dev-feedback/setup/bots" },
+      { method: "GET", url: "/api/dev-feedback/setup/bots/A1/channels" },
+      { method: "PUT", url: "/api/dev-feedback/setup" },
+      { method: "GET", url: "/api/dev-feedback/comments?route=/agents" },
+      { method: "POST", url: "/api/dev-feedback/comments" },
+      {
+        method: "GET",
+        url: `/api/dev-feedback/comments/${comment.ts}/replies`,
+      },
+      {
+        method: "POST",
+        url: `/api/dev-feedback/comments/${comment.ts}/replies`,
+      },
+      {
+        method: "POST",
+        url: `/api/dev-feedback/comments/${comment.ts}/resolve`,
+      },
+    ] as const;
+    for (const request of requests) {
+      const response = await ctx.app.inject({
+        ...request,
+        payload: request.method === "GET" ? undefined : { anything: true },
+      });
+      expect(response.statusCode, `${request.method} ${request.url}`).toBe(404);
+    }
+    expect(slack.messages).toHaveLength(1);
+  });
 
   test("reports not set up until a bot and channel are picked", async () => {
     const slack = new FakeSlack(channelId());

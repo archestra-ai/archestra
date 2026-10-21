@@ -46,13 +46,14 @@ describe("POST /api/dev-feedback/comments", () => {
       authorName: ctx.user.name,
     });
     // The screenshot shows the comment, so the message body is only the
-    // author line, linking to this exact comment, and the picture.
+    // author line, linking to this exact comment, and the picture. The link
+    // keeps the page path but always points at this deployment.
     expect(posted.blocks).toEqual([
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `*${ctx.user.name}* on <https://frontend.example.test/chat/8f3a#dev-feedback-comment=${posted.ts}|/chat/[conversationId]>`,
+          text: `*${ctx.user.name}* on <${new URL("/chat/8f3a", config.frontendBaseUrl)}#dev-feedback-comment=${posted.ts}|/chat/[conversationId]>`,
         },
       },
       {

@@ -173,7 +173,7 @@ class DevFeedbackService {
       ...anchor,
       text: body.text,
       authorName,
-      url: body.url,
+      url: onThisDeployment(body.url),
       ...(screenshotFileId ? { screenshotFileId } : {}),
     };
     const { ts, payload: posted } = await this.postComment(payload);
@@ -644,6 +644,19 @@ function withCommentHash(params: { url: string; ts: string }): string {
     return url.toString();
   } catch {
     return params.url;
+  }
+}
+
+/**
+ * The page link in Slack always points at this deployment: only the path and
+ * query come from the browser, so a direct API call can't link elsewhere.
+ */
+function onThisDeployment(url: string): string | undefined {
+  try {
+    const { pathname, search } = new URL(url);
+    return new URL(`${pathname}${search}`, config.frontendBaseUrl).toString();
+  } catch {
+    return undefined;
   }
 }
 

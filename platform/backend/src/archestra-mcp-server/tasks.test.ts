@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { type SpawnSyncReturns, spawn, spawnSync } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
@@ -1465,7 +1465,7 @@ function serveWorkspaceFrom(workspace: string): () => void {
         encoding: "utf8",
         timeout: 30_000,
       });
-      const reply = JSON.parse(run.stdout);
+      const reply = helperReply(run);
       if (reply.ok !== true) throw new ApiError(400, reply.error);
       return reply;
     });
@@ -1478,7 +1478,7 @@ function serveWorkspaceFrom(workspace: string): () => void {
         encoding: "utf8",
         timeout: 30_000,
       });
-      const { ok, error, ...result } = JSON.parse(run.stdout);
+      const { ok, error, ...result } = helperReply(run);
       if (ok !== true) throw new ApiError(400, error);
       return result;
     });
@@ -1504,4 +1504,15 @@ function serveWorkspaceFrom(workspace: string): () => void {
     file.mockRestore();
     range.mockRestore();
   };
+}
+
+/** The helper's JSON reply. Without one, fail with what the helper printed. */
+function helperReply(run: SpawnSyncReturns<string>) {
+  try {
+    return JSON.parse(run.stdout);
+  } catch {
+    throw new Error(
+      `workspace-files.py gave no JSON reply: ${run.error?.message ?? run.stderr}`,
+    );
+  }
 }

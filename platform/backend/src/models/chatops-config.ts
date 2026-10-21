@@ -2,6 +2,7 @@ import { SLACK_DEFAULT_CONNECTION_MODE } from "@/agents/chatops/constants";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
+  ChatOpsProviderType,
   MsTeamsDbConfig,
   NgrokDbConfig,
   SecretValue,
@@ -25,11 +26,17 @@ const SLACK_AGENT_BOTS_SECRET_NAME = "chatops-slack-agent-bots";
 const SLACK_APP_CONFIG_TOKEN_SECRET_NAME = "chatops-slack-app-config-token";
 const TELEGRAM_SECRET_NAME = "chatops-telegram";
 const NGROK_SECRET_NAME = "chatops-ngrok";
-const PROVIDER_SECRET_NAMES = {
+const PROVIDER_SECRET_NAMES: Record<ChatOpsProviderType, string> = {
   "ms-teams": MS_TEAMS_SECRET_NAME,
   slack: SLACK_SECRET_NAME,
   telegram: TELEGRAM_SECRET_NAME,
-} as const;
+};
+
+interface ProviderDbConfigs {
+  "ms-teams": MsTeamsDbConfig;
+  slack: SlackDbConfig;
+  telegram: TelegramDbConfig;
+}
 
 class ChatOpsConfigModel {
   async getMsTeamsConfig(): Promise<MsTeamsDbConfig | null> {
@@ -38,32 +45,23 @@ class ChatOpsConfigModel {
 
   async getSlackConfig(): Promise<SlackDbConfig | null> {
     const raw = await this.getConfig<SlackDbConfig>(SLACK_SECRET_NAME);
-    if (!raw) return null;
-    // Backward compatibility — precedence:
-    // 1. Explicit connectionMode from DB (already set by user)
-    // 2. Infer "webhook" if signingSecret is present but connectionMode is missing
-    //    (configs saved before socket mode was added)
-    // 3. Default to SLACK_DEFAULT_CONNECTION_MODE ("socket") for new installs
-    const inferredMode =
-      !raw.connectionMode && raw.signingSecret
-        ? "webhook"
-        : (raw.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE);
-
-    return {
-      ...raw,
-      connectionMode: inferredMode,
-      appLevelToken: raw.appLevelToken ?? "",
-    };
+    return raw ? normalizeSlackConfig(raw) : null;
   }
 
-  /** When a provider's stored config last changed; null when none is stored. */
-  async getConfigUpdatedAt(
-    provider: "ms-teams" | "slack" | "telegram",
-  ): Promise<Date | null> {
-    const secretRow = await SecretModel.findByName(
+  /** A provider's stored config and when it last changed, from one read of its row. */
+  async getStoredConfig<P extends ChatOpsProviderType>(
+    provider: P,
+  ): Promise<{ value: ProviderDbConfigs[P]; updatedAt: Date } | null> {
+    const stored = await this.getConfigRow<ProviderDbConfigs[P]>(
       PROVIDER_SECRET_NAMES[provider],
     );
-    return secretRow?.updatedAt ?? null;
+    if (!stored || provider !== "slack") return stored;
+    return {
+      ...stored,
+      value: normalizeSlackConfig(
+        stored.value as SlackDbConfig,
+      ) as ProviderDbConfigs[P],
+    };
   }
 
   async saveMsTeamsConfig(value: MsTeamsDbConfig): Promise<void> {
@@ -219,13 +217,22 @@ class ChatOpsConfigModel {
   }
 
   private async getConfig<T>(secretName: string): Promise<T | null> {
+    return (await this.getConfigRow<T>(secretName))?.value ?? null;
+  }
+
+  private async getConfigRow<T>(
+    secretName: string,
+  ): Promise<{ value: T; updatedAt: Date } | null> {
     const secretRow = await SecretModel.findByName(secretName);
     if (!secretRow) return null;
 
     const secret = await secretManager().getSecret(secretRow.id);
     if (!secret?.secret) return null;
 
-    return secret.secret as unknown as T;
+    return {
+      value: secret.secret as unknown as T,
+      updatedAt: secretRow.updatedAt,
+    };
   }
 
   private async saveConfig(
@@ -243,6 +250,25 @@ class ChatOpsConfigModel {
 }
 
 export default new ChatOpsConfigModel();
+
+/**
+ * Backward compatibility — connectionMode precedence:
+ * 1. Explicit connectionMode from DB (already set by user)
+ * 2. Infer "webhook" if signingSecret is present but connectionMode is missing
+ *    (configs saved before socket mode was added)
+ * 3. Default to SLACK_DEFAULT_CONNECTION_MODE ("socket") for new installs
+ */
+function normalizeSlackConfig(raw: SlackDbConfig): SlackDbConfig {
+  const inferredMode =
+    !raw.connectionMode && raw.signingSecret
+      ? "webhook"
+      : (raw.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE);
+  return {
+    ...raw,
+    connectionMode: inferredMode,
+    appLevelToken: raw.appLevelToken ?? "",
+  };
+}
 
 function appConfigTokenSecretName(userId?: string): string {
   return userId

@@ -1793,10 +1793,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async () => {
-      const [stored, updatedAt] = await Promise.all([
-        ChatOpsConfigModel.getMsTeamsConfig(),
-        ChatOpsConfigModel.getConfigUpdatedAt("ms-teams"),
-      ]);
+      const row = await ChatOpsConfigModel.getStoredConfig("ms-teams");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
       return {
         configured: stored ? new MSTeamsProvider(stored).isConfigured() : false,
         updatedAt,
@@ -1970,10 +1969,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async () => {
-      const [stored, updatedAt] = await Promise.all([
-        ChatOpsConfigModel.getSlackConfig(),
-        ChatOpsConfigModel.getConfigUpdatedAt("slack"),
-      ]);
+      const row = await ChatOpsConfigModel.getStoredConfig("slack");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
       return {
         configured: stored ? new SlackProvider(stored).isConfigured() : false,
         updatedAt,
@@ -2739,10 +2737,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async () => {
-      const [stored, updatedAt] = await Promise.all([
-        ChatOpsConfigModel.getTelegramConfig(),
-        ChatOpsConfigModel.getConfigUpdatedAt("telegram"),
-      ]);
+      const row = await ChatOpsConfigModel.getStoredConfig("telegram");
+      const stored = row?.value;
+      const updatedAt = row?.updatedAt ?? null;
       return {
         configured: stored
           ? new TelegramProvider(stored).isConfigured()

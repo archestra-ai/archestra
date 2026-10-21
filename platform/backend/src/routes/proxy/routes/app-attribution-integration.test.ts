@@ -19,6 +19,7 @@ import {
 } from "fastify-type-provider-zod";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { openaiAdapterFactory } from "../adapters/openai";
@@ -121,7 +122,11 @@ describe("app-runtime interaction attribution (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: ownedApp.id },
+      headers: {
+        ...OPENAI_HEADERS,
+        ...internalCallHeader(),
+        [APP_ID_HEADER]: ownedApp.id,
+      },
       payload: PAYLOAD,
     });
 
@@ -129,7 +134,7 @@ describe("app-runtime interaction attribution (integration)", () => {
     expect(await recordedAppId(agent.id)).toBe(ownedApp.id);
   });
 
-  test("ignores the header from a non-loopback peer", async ({
+  test("ignores the header without the in-process proof, even from loopback", async ({
     makeOrganization,
     makeAgent,
     makeApp,
@@ -145,7 +150,7 @@ describe("app-runtime interaction attribution (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      remoteAddress: "203.0.113.7",
+      remoteAddress: "127.0.0.1",
       headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: ownedApp.id },
       payload: PAYLOAD,
     });
@@ -171,7 +176,11 @@ describe("app-runtime interaction attribution (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: foreignApp.id },
+      headers: {
+        ...OPENAI_HEADERS,
+        ...internalCallHeader(),
+        [APP_ID_HEADER]: foreignApp.id,
+      },
       payload: PAYLOAD,
     });
 
@@ -192,7 +201,11 @@ describe("app-runtime interaction attribution (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(agent.id),
-      headers: { ...OPENAI_HEADERS, [APP_ID_HEADER]: "not-a-uuid" },
+      headers: {
+        ...OPENAI_HEADERS,
+        ...internalCallHeader(),
+        [APP_ID_HEADER]: "not-a-uuid",
+      },
       payload: PAYLOAD,
     });
 

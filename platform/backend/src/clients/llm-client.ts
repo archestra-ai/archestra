@@ -66,6 +66,7 @@ import {
   isVertexAiEnabled,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
+import { internalCallHeader } from "@/clients/internal-call";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
@@ -196,17 +197,17 @@ export function createLLMModel(params: {
    * Locked chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
    * proxy re-validates it against the conversation's stored fingerprint and
-   * only honours it on its loopback chat path.
+   * only honours it on its in-process chat path.
    */
   lockedChatKey?: Buffer | null;
   /**
-   * Caller environment for advisor delegation billing. Loopback-gated on the
+   * Caller environment for advisor delegation billing. Proof-gated on the
    * proxy side; see DELEGATION_BILLING_ENVIRONMENT_HEADER.
    */
   delegationBillingEnvironmentId?: string | null;
   /**
    * MCP App whose runtime is making this call, so the interaction is attributed
-   * to it rather than only to the shared App Runtime agent. Loopback-gated on
+   * to it rather than only to the shared App Runtime agent. Proof-gated on
    * the proxy side; see APP_ID_HEADER.
    */
   appId?: string | null;
@@ -232,8 +233,10 @@ export function createLLMModel(params: {
     supportedEndpoints,
   } = params;
 
-  // Build headers for LLM Proxy
-  const clientHeaders: Record<string, string> = {};
+  // Build headers for LLM Proxy. The model always dials this process's own
+  // proxy (buildProxyBaseUrl), so every call carries the in-process proof the
+  // proxy's internal-only paths require.
+  const clientHeaders: Record<string, string> = { ...internalCallHeader() };
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }
@@ -257,7 +260,7 @@ export function createLLMModel(params: {
   }
   // Chat sends the raw provider secret to the proxy, so the proxy can't tie
   // the call to a chat_api_keys row. Forwarding the row ID here lets the
-  // proxy look up per-key configuration (extraHeaders). Loopback-gated on
+  // proxy look up per-key configuration (extraHeaders). Proof-gated on
   // the proxy side; see CHAT_API_KEY_ID_HEADER.
   if (chatApiKeyId) {
     clientHeaders[CHAT_API_KEY_ID_HEADER] = chatApiKeyId;
@@ -290,8 +293,7 @@ export function createLLMModel(params: {
     clientHeaders[LOCKED_CHAT_KEY_HEADER] = lockedChatKey.toString("base64url");
   }
 
-  const headers =
-    Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined;
+  const headers = clientHeaders;
 
   const cfg = providerModelConfigs[provider];
   const proxyBaseUrl = buildProxyBaseUrl(provider, agentId);
@@ -335,7 +337,7 @@ export async function createLLMModelForAgent(params: {
   lockedChatKey?: Buffer | null;
   /**
    * Caller environment for advisor delegation billing; forwarded as a
-   * loopback-gated proxy header. Set only by the A2A executor when the
+   * proof-gated proxy header. Set only by the A2A executor when the
    * executed agent is the advisor built-in.
    */
   delegationBillingEnvironmentId?: string | null;

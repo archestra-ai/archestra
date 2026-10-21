@@ -55,6 +55,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
 import { cacheManager } from "@/cache-manager";
+import { isInternalCall } from "@/clients/internal-call";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -542,6 +543,12 @@ export const createFastifyInstance = () => {
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
+    // Verify and remove the in-process proof before anything reads or forwards
+    // the headers; later checks for the same request reuse this answer.
+    .addHook("onRequest", (request, _reply, done) => {
+      isInternalCall(request);
+      done();
+    })
     // Resolve white-label branding before a top-level API navigation reaches
     // onSend. Keeping onSend synchronous is required for routes (Better Auth)
     // that write directly to the raw response.

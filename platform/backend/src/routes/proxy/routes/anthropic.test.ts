@@ -25,6 +25,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -189,7 +190,8 @@ describe("Anthropic anthropic-beta forwarding", () => {
           "anthropic-version": "2023-06-01",
           "anthropic-beta": "pdfs-2024-09-25",
           "x-api-key": "test-anthropic-key",
-          // Loopback-only override that marks the upstream as a custom base URL.
+          // In-process-only override that marks the upstream as a custom base URL.
+          ...internalCallHeader(),
           "x-archestra-provider-base-url": "http://localhost:9/v1",
         },
         payload: {

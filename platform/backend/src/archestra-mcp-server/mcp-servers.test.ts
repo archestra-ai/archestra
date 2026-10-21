@@ -372,6 +372,47 @@ describe("mcp server tool execution", () => {
     expect(createdCatalog?.serverUrl).toBe("https://example.com/mcp");
   });
 
+  test("create_mcp_server ignores streamable-http transportType on a remote server", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`,
+      {
+        name: "Remote With Transport",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        transportType: "streamable-http",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const createdCatalog = await InternalMcpCatalogModel.findByName(
+      "Remote With Transport",
+    );
+    expect(createdCatalog?.serverType).toBe("remote");
+    expect(createdCatalog?.serverUrl).toBe("https://example.com/mcp");
+    expect(createdCatalog?.localConfig).toBeNull();
+  });
+
+  test("create_mcp_server rejects stdio transportType on a remote server", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`,
+      {
+        name: "Remote With Stdio",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        transportType: "stdio",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("transportType");
+    expect(
+      await InternalMcpCatalogModel.findByName("Remote With Stdio"),
+    ).toBeFalsy();
+  });
+
   test("create_mcp_server persists environmentId", async () => {
     const env = await EnvironmentModel.create({
       organizationId,
@@ -460,6 +501,64 @@ describe("mcp server tool execution", () => {
       "@modelcontextprotocol/server-github",
     ]);
     expect(updatedCatalog?.localConfig?.transportType).toBe("stdio");
+  });
+
+  test("edit_mcp_config ignores streamable-http transportType on a remote server", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Remote Config Server",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        serverUrl: "https://example.com/v2/mcp",
+        transportType: "streamable-http",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(updatedCatalog?.serverUrl).toBe("https://example.com/v2/mcp");
+    expect(updatedCatalog?.localConfig).toBeNull();
+  });
+
+  test("edit_mcp_config rejects stdio transportType when switching a server to remote", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Local Becoming Remote",
+      serverType: "local",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        transportType: "stdio",
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("transportType");
+
+    const unchanged = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(unchanged?.serverType).toBe("local");
   });
 });
 

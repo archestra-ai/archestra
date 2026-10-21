@@ -596,7 +596,7 @@ class A2ATaskModel {
   static async listForActor(params: {
     actorKind: string;
     actorId: string;
-    agentId: string;
+    agentIds: readonly string[];
     contextId?: string;
     state?: A2ATaskState;
     statusChangedAfter?: Date;
@@ -609,7 +609,7 @@ class A2ATaskModel {
       eq(schema.a2aContextsTable.actorKind, params.actorKind),
       eq(schema.a2aContextsTable.actorId, params.actorId),
       or(
-        eq(schema.a2aTasksTable.agentId, params.agentId),
+        inArray(schema.a2aTasksTable.agentId, [...params.agentIds]),
         isNull(schema.a2aTasksTable.agentId),
       ),
       params.contextId

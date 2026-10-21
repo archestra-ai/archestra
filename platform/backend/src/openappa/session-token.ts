@@ -35,7 +35,7 @@ export function stripSessionReceipts(text: string): {
   if (matches.length === 0) return { text, codes };
   for (let index = matches.length - 1; index >= 0; index--) {
     const match = matches[index];
-    const code = match[1] ?? match[2];
+    const code = match[1];
     if (code) codes.unshift(code);
     const start = match.index ?? 0;
     const end = start + match[0].length;

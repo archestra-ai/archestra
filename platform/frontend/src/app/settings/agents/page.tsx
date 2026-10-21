@@ -425,8 +425,8 @@ export default function AgentSettingsPage() {
             id="popular-agents"
             catalogKey="popularAgentOverrides"
             catalog={PopularAgentIdSchema.options}
-            title="Coding agents"
-            description="Choose which coding agents are available when creating a new agent, and in what order."
+            title="Agent Runtimes"
+            description="Choose which Agent Runtimes are available when creating a new agent, and in what order."
             options={PopularAgentIdSchema.options.map((id) => ({
               value: id,
               label: AGENT_CATALOG_TEMPLATE_NAMES[id],
@@ -436,9 +436,9 @@ export default function AgentSettingsPage() {
                 </span>
               ),
             }))}
-            placeholder="Select coding agents…"
+            placeholder="Select Agent Runtimes…"
             emptyMessage="No agents found."
-            savedMessage="Coding agents updated"
+            savedMessage="Agent Runtimes updated"
           />
           {runtimeBackend && <RuntimeBackendSection />}
         </div>

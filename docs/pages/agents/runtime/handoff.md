@@ -1,6 +1,6 @@
 ---
-title: Hand Off Work
-description: Hand a task from your coding agent to Agent Runtime, then bring the result back
+title: Remote Agents
+description: Hand a task from your coding agent to a Remote Agent in Archestra, then bring the result back
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
 lastUpdated: 2026-10-14
@@ -8,13 +8,13 @@ lastUpdated: 2026-10-14
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Start a task on your laptop, and let Archestra finish it. Your coding agent hands the task to an agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your coding agent brings the result back as a patch.
+Start a task on your laptop, and let Archestra finish it. Your coding agent hands the task to a Remote Agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your coding agent brings the result back as a patch.
 
 With a [dedicated runtime](/docs/agents/runtime), the task runs in its own container, with a live terminal you can watch.
 
 ## Hand Off a Task
 
-1. Install the **Agent Runtime Handoff** skill from [Connect](/docs/get-started/connect).
+1. Install the **Remote Agents Handoff** skill from [Connect](/docs/get-started/connect).
 2. Ask your coding agent to "hand this over to Archestra".
 3. To continue locally, ask it to "bring it back and continue here".
 4. Review the repository patch it returns before you apply it.

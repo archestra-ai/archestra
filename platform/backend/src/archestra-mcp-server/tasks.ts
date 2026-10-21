@@ -532,7 +532,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
     title: "Transfer Workspace File",
     description:
-      "Copy a file between this machine and an Agent Runtime workspace without reading it. " +
+      "Copy a file between this machine and a Remote Agent's workspace without reading it. " +
       "Use this to move deliverables, archives, and binaries of any size, including small ones: " +
       "the bytes travel directly and never enter the conversation. " +
       "Authorize the transfer here, then run the returned command in a shell. " +
@@ -696,7 +696,7 @@ const registry = defineArchestraTools([
       `Hand local work over to ${DEFAULT_APP_NAME}, or spin it up there, as a durable agent run and return immediately with its id. ` +
       "If the Agent has Agent Runtime configured, the work executes in its runtime. " +
       "Use this only when the work has NO runtime session yet, including unfinished local work. For an existing runtime task or follow-up, use steer_run with its saved session_id as task_id; never start another run. " +
-      "For repository handoffs, first load the Agent Runtime Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
+      "For repository handoffs, first load the Remote Agents Handoff skill using load_skill. Include the repository URL, exact base commit, local changes, and return-patch baseline; local paths are not accessible remotely. " +
       "Include context, goals, decisions and remaining work in message. Optional attachments are staged before execution (repository patches or documents). " +
       "For files sent after startup through transfer_workspace_file, instruct the Agent to prepare and stop before task work. Transfer the files, then continue with steer_run. " +
       "Keep session_id and run_url so any connected client can pick up the same session. Poll get_run for progress.",

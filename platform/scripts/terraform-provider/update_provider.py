@@ -61,12 +61,14 @@ def generate_client(*, provider, spec, env):
                    "ARCHESTRA_OPENAPI_SPEC": str(spec.resolve()),
                    "ARCHESTRA_BASE_URL": "http://127.0.0.1:9"},
     )
-    verify_source(provider / ".codegen/openapi.raw.json", selected_hash)
+    # Provider main reads OPENAPI_SPEC, so a failed make is a codegen failure,
+    # even when it stops before writing the raw spec.
     if result.returncode:
         raise ClientGenerationError(
             f"Client generation failed for the selected spec (make exit {result.returncode}); "
             "the provider's codegen must handle this API change."
         )
+    verify_source(provider / ".codegen/openapi.raw.json", selected_hash)
     if credential:
         verify_source(provider / ".codegen/credentials-source.json", selected_hash)
     print(f"All generated-client source SHA256 hashes match the selected spec: {selected_hash}", flush=True)

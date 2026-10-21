@@ -99,8 +99,7 @@
           "type": "generic",
           "path": "/docs/pages/admin/deployment.md"
         }
-      ],
-      "release-as": "1.5.0-rc.1"
+      ]
     }
   },
   "plugins": [],

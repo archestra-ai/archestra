@@ -52,6 +52,7 @@ let pvcDeleteFailures: number;
 let holdWorkloadDeletion: boolean;
 let failListings: boolean;
 let policyDeleteFailures: number;
+let onWorkloadRead: (() => void) | undefined;
 const key = (ns: string, collection: string, name: string) =>
   `${ns}/${collection}/${name}`;
 const absent = () =>
@@ -64,6 +65,7 @@ beforeEach(() => {
   holdWorkloadDeletion = false;
   failListings = false;
   policyDeleteFailures = 0;
+  onWorkloadRead = undefined;
   config.skillsSandbox.enabled = true;
   config.daggerRuntime.engine.nodeSelector = { pool: "test" };
   config.orchestrator.kubernetes.environmentNamespaces = [
@@ -81,6 +83,8 @@ beforeEach(() => {
       return HttpResponse.json({ metadata: { name, uid: "our-owner-uid" } });
     }
     if (request.method === "GET") {
+      if (collection === "statefulsets" && holdWorkloadDeletion)
+        onWorkloadRead?.();
       if (name)
         return resources.has(key(ns, collection, name))
           ? HttpResponse.json(resources.get(key(ns, collection, name)))
@@ -295,13 +299,19 @@ describe("Dagger environment lifecycle", () => {
     const before = engineResources(env.id);
     await EnvironmentModel.delete(env.id, org.id);
     holdWorkloadDeletion = true;
-    await manager.teardownEnvironmentEngine(env);
+    let signalRead!: () => void;
+    const workloadRead = new Promise<void>((resolve) => {
+      signalRead = resolve;
+    });
+    onWorkloadRead = signalRead;
+    const teardown = manager.teardownEnvironmentEngine(env);
+    await Promise.race([workloadRead, teardown]);
     expect(engineResources(env.id)).toEqual(before);
     resources.delete(
       key("env-test", "statefulsets", `dagger-engine-${env.id}`),
     );
     holdWorkloadDeletion = false;
-    await manager.reconcileAll();
+    await teardown;
     expect(engineResources(env.id)).toEqual([]);
   });
 

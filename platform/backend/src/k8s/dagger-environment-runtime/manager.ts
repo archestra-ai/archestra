@@ -25,7 +25,6 @@ import {
   KubernetesNamespaceSchema,
   type NetworkPolicy,
 } from "@/types";
-import { trackBackgroundWork } from "@/utils/background-work";
 import { uuidv5 } from "@/utils/uuid";
 import {
   buildDaggerEgressPolicies,
@@ -104,35 +103,6 @@ const ENGINE_CONFIG_JSON = JSON.stringify({
  * standing pods are cheap.
  */
 class DaggerEnvironmentRuntimeManager {
-  private interval: ReturnType<typeof setInterval> | undefined;
-  private running: Promise<void> | undefined;
-
-  /** Retry failed teardown, including resources whose Environment row is gone. */
-  start(): void {
-    if (!this.isEnabled() || this.interval) return;
-    const run = (initial = false) => {
-      if (this.running) return;
-      this.running = (
-        initial ? this.reconcileAll() : this.cleanupOrphanedEngines()
-      )
-        .catch((err) =>
-          logger.error({ err }, "[DaggerEnvRuntime] reconcile failed"),
-        )
-        .finally(() => {
-          this.running = undefined;
-        });
-      trackBackgroundWork(this.running);
-    };
-    run(true);
-    this.interval = setInterval(run, 60_000);
-    this.interval.unref();
-  }
-
-  stop(): void {
-    clearInterval(this.interval);
-    this.interval = undefined;
-  }
-
   /**
    * The isolation target for an environment's engine, or undefined when k8s
    * isn't configured. The Dagger `kube-pod://` address is built in the
@@ -403,7 +373,7 @@ class DaggerEnvironmentRuntimeManager {
         // Failed list/DB/ownership reads never become an empty desired set.
         logger.warn(
           { err, namespace },
-          "[DaggerEnvRuntime] orphan cleanup failed; will retry",
+          "[DaggerEnvRuntime] orphan cleanup failed; will retry on next startup",
         );
       }
     }
@@ -500,11 +470,23 @@ class DaggerEnvironmentRuntimeManager {
     if (!workloadRemoved) return;
     // DELETE acknowledges termination, not pod exit. Foreground deletion keeps
     // the StatefulSet until its pods exit. Preserve protection until then.
-    try {
-      await clients.appsApi.readNamespacedStatefulSet({ name, namespace });
-      return;
-    } catch (err) {
-      if (!isK8sNotFoundError(err)) throw err;
+    const terminationDeadline = Date.now() + 35_000;
+    while (true) {
+      try {
+        await clients.appsApi.readNamespacedStatefulSet({ name, namespace });
+      } catch (err) {
+        if (!isK8sNotFoundError(err)) throw err;
+        break;
+      }
+      if (Date.now() >= terminationDeadline) {
+        logger.warn(
+          { engineId, namespace },
+          "[DaggerEnvRuntime] engine termination still pending; retaining resources for next startup",
+        );
+        return;
+      }
+      // A bounded wait for this deletion, not a recurring orphan-sweep job.
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
     const cacheRemoved = await this.deleteIfPresent(
       "PersistentVolumeClaim",

@@ -1287,20 +1287,46 @@ async function authenticatePassthroughProxyRequest(params: {
  * Keep distinct caller-supplied provider credentials intact.
  */
 function stripAuthenticatedBearer(request: FastifyRequest, token: string) {
+  const headerNames = new Set([
+    "authorization",
+    "x-api-key",
+    "api-key",
+    "x-goog-api-key",
+  ]);
+  const stripValue = (value: string): string | undefined => {
+    // Node joins repeated credential headers with commas. Remove matching
+    // credentials from that list without discarding a separate provider key.
+    const values = value.split(",");
+    const retained = values.filter((entry) => {
+      const credential = entry.trim();
+      return (
+        credential !== token &&
+        credential.match(/^Bearer\s+(.+)$/i)?.[1] !== token
+      );
+    });
+    if (retained.length === values.length) return value;
+    return retained.length
+      ? retained.map((entry) => entry.trim()).join(", ")
+      : undefined;
+  };
   for (const headers of new Set([request.headers, request.raw.headers])) {
-    for (const name of [
-      "authorization",
-      "x-api-key",
-      "api-key",
-      "x-goog-api-key",
-    ]) {
+    for (const name of headerNames) {
       const value = headers[name];
-      if (
-        typeof value === "string" &&
-        (value === token || value.match(/^Bearer\s+(.+)$/i)?.[1] === token)
-      ) {
-        delete headers[name];
-      }
+      if (value === undefined) continue;
+      const retained = (Array.isArray(value) ? value : [value])
+        .map(stripValue)
+        .filter((entry) => entry !== undefined);
+      if (retained.length === 0) delete headers[name];
+      else headers[name] = Array.isArray(value) ? retained : retained[0];
+    }
+  }
+  const rawHeaders = request.raw.rawHeaders;
+  if (rawHeaders) {
+    for (let i = rawHeaders.length - 2; i >= 0; i -= 2) {
+      if (!headerNames.has(rawHeaders[i].toLowerCase())) continue;
+      const retained = stripValue(rawHeaders[i + 1]);
+      if (retained === undefined) rawHeaders.splice(i, 2);
+      else rawHeaders[i + 1] = retained;
     }
   }
   const url = request.raw.url;

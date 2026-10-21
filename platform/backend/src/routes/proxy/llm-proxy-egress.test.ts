@@ -1,4 +1,9 @@
-import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingHttpHeaders,
+  type Server,
+} from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   CHAT_API_KEY_ID_HEADER,
@@ -161,6 +166,54 @@ describe("proxy provenance and credential egress over HTTP", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0].headers.authorization).toBe("Bearer provider-secret");
     expect(requests[0].headers).not.toHaveProperty("x-archestra-virtual-key");
+  });
+
+  test.for([
+    "duplicate",
+    "mixed",
+    "opaque",
+  ] as const)("removes repeated platform credentials over HTTP, preserving provider keys (%s)", async (mode, {
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const row = await UserTokenModel.ensureUserToken(
+      user.id,
+      agent.organizationId,
+    );
+    const token = await UserTokenModel.getTokenValue(row.id);
+    if (!token) throw new Error("Test personal token was not created");
+    const providerKey =
+      mode === "opaque" ? "provider,opaque,key" : "separate-provider-key";
+    const status = await new Promise<number>((resolve, reject) => {
+      const request = httpRequest(
+        `${origin}/v1/ollama-native/${agent.id}/api/tags`,
+        {
+          headers: {
+            authorization: `Bearer ${token}`,
+            "x-goog-api-key": [token, `Bearer ${token}`],
+            "api-key": [token, token],
+            "x-api-key": mode === "mixed" ? [token, providerKey] : providerKey,
+          },
+        },
+        (response) => {
+          response.resume();
+          response.on("end", () => resolve(response.statusCode ?? 0));
+          response.on("error", reject);
+        },
+      );
+      request.on("error", reject);
+      request.end();
+    });
+    expect(status).toBe(200);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].headers).not.toHaveProperty("authorization");
+    expect(requests[0].headers).not.toHaveProperty("x-goog-api-key");
+    expect(requests[0].headers).not.toHaveProperty("api-key");
+    expect(requests[0].headers["x-api-key"]).toBe(providerKey);
   });
 
   test("preserves a downstream Archestra credential on a verified internal call", async ({

@@ -42,8 +42,9 @@ const verified = new WeakMap<object, Provenance>();
  */
 export function internalCallProvenance(request: ProofCarrier): Provenance {
   const key = request.raw ?? request;
-  const result = verified.get(key) ?? takeInternalCall(request.headers);
+  const result = verified.get(key) ?? verifyInternalCall(request.headers);
   verified.set(key, result);
+  // Later hooks may rebuild header views, so cleanup is required on cache hits.
   for (const headers of new Set([request.headers, request.raw?.headers])) {
     if (headers) {
       delete headers[IN_PROCESS.header];
@@ -62,18 +63,14 @@ export function internalCallProvenance(request: ProofCarrier): Provenance {
   return result;
 }
 
-/**
- * Removes both proofs from the headers and reports which were valid. Every
- * check goes through this, so the proofs never reach the provider.
- */
-function takeInternalCall(
+/** Verify each proof's purpose; the caller owns cleanup of all header views. */
+function verifyInternalCall(
   headers: Record<string, string | string[] | undefined>,
 ): { inProcess: boolean; guardrail: boolean } {
-  const inProcess = hasProof(headers, IN_PROCESS);
-  const guardrail = hasProof(headers, GUARDRAIL);
-  delete headers[IN_PROCESS.header];
-  delete headers[GUARDRAIL.header];
-  return { inProcess, guardrail };
+  return {
+    inProcess: hasProof(headers, IN_PROCESS),
+    guardrail: hasProof(headers, GUARDRAIL),
+  };
 }
 
 // =========================================================================

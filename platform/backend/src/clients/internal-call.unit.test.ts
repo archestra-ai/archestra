@@ -32,11 +32,29 @@ describe("internal call proofs", () => {
   });
 
   it("cannot upgrade an untrusted request with a later proof", () => {
-    const request = { headers: {} as Record<string, string> };
+    const request = {
+      headers: {} as Record<string, string>,
+      raw: {
+        headers: {} as Record<string, string>,
+        rawHeaders: [] as string[],
+      },
+    };
     expect(internalCallProvenance(request).inProcess).toBe(false);
     Object.assign(request.headers, internalCallHeader());
-    expect(internalCallProvenance(request).inProcess).toBe(false);
+    Object.assign(request.raw.headers, guardrailCallHeader());
+    request.raw.rawHeaders.push(
+      ...Object.entries({
+        ...internalCallHeader(),
+        ...guardrailCallHeader(),
+      }).flat(),
+    );
+    expect(internalCallProvenance(request)).toEqual({
+      inProcess: false,
+      guardrail: false,
+    });
     expect(request.headers).toEqual({});
+    expect(request.raw.headers).toEqual({});
+    expect(request.raw.rawHeaders).toEqual([]);
   });
 
   it.each([

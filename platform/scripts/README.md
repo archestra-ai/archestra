@@ -148,6 +148,11 @@ Exit codes:
 | 1 | The provider is not compatible: a request does not match, generation fails on the spec, or the build or unit tests fail. |
 | 2 | The check could not run. Most often the provider revision does not read `OPENAPI_SPEC`; offline generation starts with provider v3. |
 
+The check uses provider `main`, so a red run can come from drift that is
+already on provider `main`, not from the pull request. Fix request mismatches
+on provider `main`. Fix build or unit-test failures with the regenerated client
+in the provider update pull request (see below).
+
 The check needs no credentials, platform server or Terraform apply. It does not
 cover nested payloads or full resource lifecycles; the provider acceptance tests
 do.

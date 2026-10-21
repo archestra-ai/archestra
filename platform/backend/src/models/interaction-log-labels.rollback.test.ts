@@ -151,12 +151,14 @@ function chatTurn(params: {
   } as InsertInteraction;
 }
 
-function completion(message: Record<string, unknown>) {
+function completion(
+  message: Record<string, unknown>,
+): InsertInteraction["response"] {
   return {
     id: crypto.randomUUID(),
     object: "chat.completion",
     created: Date.now(),
     model: "gpt-4o",
     choices: [{ index: 0, finish_reason: "stop", logprobs: null, message }],
-  };
+  } as InsertInteraction["response"];
 }

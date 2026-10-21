@@ -19,10 +19,10 @@ crate-type = ["cdylib"]
 # errors for tool names that identify no tool (#698), `[aliases.tool]` (#696)
 # and the generic coding battery (#697); then v0.37.0 and libpq TLS
 # parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5e190fd0a2b2e842cbb24ea9a3f0d3a3ee293ec3", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5e190fd0a2b2e842cbb24ea9a3f0d3a3ee293ec3" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5e190fd0a2b2e842cbb24ea9a3f0d3a3ee293ec3", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "5e190fd0a2b2e842cbb24ea9a3f0d3a3ee293ec3" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bc6a5a166c2bd37ae1069f441b280dd987da6d19", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bc6a5a166c2bd37ae1069f441b280dd987da6d19" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bc6a5a166c2bd37ae1069f441b280dd987da6d19", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "bc6a5a166c2bd37ae1069f441b280dd987da6d19" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

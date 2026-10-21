@@ -192,6 +192,7 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -1653,6 +1654,7 @@ export async function handleLLMProxy<
     );
     const ctx: LLMProxyContext<TRequest> = {
       usageAccountingMode: config.llmProxy.usageAccountingMode,
+      providerApiKeyId: perKeyChatApiKeyId,
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
@@ -2124,6 +2126,7 @@ async function handleStreaming<
 
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
         usage,
         providerName,
@@ -2389,6 +2392,7 @@ async function handleStreaming<
           }
           const cost = await calculateUsageCost({
             usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
             model: actualModel,
             usage: state.usage,
             provider: providerName,
@@ -2972,6 +2976,7 @@ async function handleNonStreaming<
             usage: error.usage,
             providerName,
             usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
           });
           const record = buildInteractionRecord({
             agent,
@@ -3108,6 +3113,7 @@ async function handleNonStreaming<
       }
       const cost = await calculateUsageCost({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         model: actualModel,
         usage,
         provider: providerName,
@@ -3294,6 +3300,7 @@ async function handleNonStreaming<
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
+        providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
         usage,
         providerName,
@@ -3460,6 +3467,7 @@ async function handleNonStreaming<
   // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
     usageAccountingMode: ctx.usageAccountingMode,
+    providerApiKeyId: ctx.providerApiKeyId,
     actualModel,
     usage,
     providerName,

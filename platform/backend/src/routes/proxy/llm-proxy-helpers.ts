@@ -355,12 +355,20 @@ export async function calculateUsageCost(params: {
   usage: UsageView;
   provider: SupportedProvider;
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
   if (params.usageAccountingMode === "enforce")
     return Number(
-      (await priceBillingUsage({ model, usage, provider, mode: "enforce" }))
-        .cost,
+      (
+        await priceBillingUsage({
+          model,
+          usage,
+          provider,
+          mode: "enforce",
+          providerApiKeyId: params.providerApiKeyId,
+        })
+      ).cost,
     );
   if (usage.providerReportedCost !== undefined) {
     return usage.providerReportedCost;
@@ -371,6 +379,7 @@ export async function calculateUsageCost(params: {
     usage.outputTokens,
     provider,
     {
+      providerApiKeyId: params.providerApiKeyId,
       readTokens: usage.cacheReadTokens ?? 0,
       writeTokens: usage.cacheWriteTokens ?? 0,
       write1hTokens: usage.cacheWrite1hTokens ?? 0,
@@ -386,6 +395,7 @@ export async function calculateInteractionCosts(params: {
   usage: UsageView;
   providerName: SupportedProvider;
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<{
   billingUsage?: PricedBillingUsage;
   actualCost: number | undefined;
@@ -400,6 +410,7 @@ export async function calculateInteractionCosts(params: {
           usage: params.usage,
           provider: params.providerName,
           mode: params.usageAccountingMode,
+          providerApiKeyId: params.providerApiKeyId,
         })
       : undefined;
   const actualCost =
@@ -409,6 +420,7 @@ export async function calculateInteractionCosts(params: {
           model: params.actualModel,
           usage: params.usage,
           provider: params.providerName,
+          providerApiKeyId: params.providerApiKeyId,
         });
   const cacheBreakdown =
     billingUsage?.mode === "enforce"
@@ -419,6 +431,7 @@ export async function calculateInteractionCosts(params: {
           params.usage.cacheReadTokens ?? 0,
           params.usage.cacheWriteTokens ?? 0,
           params.usage.cacheWrite1hTokens ?? 0,
+          params.providerApiKeyId,
         );
   const componentsCache =
     billingUsage?.mode === "enforce"

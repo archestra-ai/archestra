@@ -4103,6 +4103,13 @@
       "when": 1792546593720,
       "tag": "0585_lame_husk",
       "breakpoints": true
+    },
+    {
+      "idx": 586,
+      "version": "7",
+      "when": 1792596942183,
+      "tag": "0586_salty_paibok",
+      "breakpoints": true
     }
   ]
 }

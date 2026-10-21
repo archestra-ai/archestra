@@ -125124,6 +125124,7 @@
                                 "enum": [
                                   "custom",
                                   "models_dev",
+                                  "provider",
                                   "aws",
                                   "derived_multiplier",
                                   "default"
@@ -125143,6 +125144,7 @@
                                 "enum": [
                                   "custom",
                                   "models_dev",
+                                  "provider",
                                   "aws",
                                   "derived_multiplier",
                                   "default"
@@ -126311,6 +126313,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -126330,6 +126333,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -126525,6 +126529,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -126544,6 +126549,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -128338,6 +128344,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -128357,6 +128364,7 @@
                                     "enum": [
                                       "custom",
                                       "models_dev",
+                                      "provider",
                                       "aws",
                                       "derived_multiplier",
                                       "default"
@@ -129525,6 +129533,7 @@
                                         "enum": [
                                           "custom",
                                           "models_dev",
+                                          "provider",
                                           "aws",
                                           "derived_multiplier",
                                           "default"
@@ -129544,6 +129553,7 @@
                                         "enum": [
                                           "custom",
                                           "models_dev",
+                                          "provider",
                                           "aws",
                                           "derived_multiplier",
                                           "default"
@@ -129739,6 +129749,7 @@
                                         "enum": [
                                           "custom",
                                           "models_dev",
+                                          "provider",
                                           "aws",
                                           "derived_multiplier",
                                           "default"
@@ -129758,6 +129769,7 @@
                                         "enum": [
                                           "custom",
                                           "models_dev",
+                                          "provider",
                                           "aws",
                                           "derived_multiplier",
                                           "default"
@@ -302044,6 +302056,7 @@
                             "enum": [
                               "custom",
                               "models_dev",
+                              "provider",
                               "aws",
                               "derived_multiplier",
                               "default"
@@ -302063,6 +302076,7 @@
                             "enum": [
                               "custom",
                               "models_dev",
+                              "provider",
                               "aws",
                               "derived_multiplier",
                               "default"
@@ -303161,6 +303175,7 @@
                         "enum": [
                           "custom",
                           "models_dev",
+                          "provider",
                           "aws",
                           "derived_multiplier",
                           "default"
@@ -303180,6 +303195,7 @@
                         "enum": [
                           "custom",
                           "models_dev",
+                          "provider",
                           "aws",
                           "derived_multiplier",
                           "default"

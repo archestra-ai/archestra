@@ -674,6 +674,7 @@ export interface UsageView {
   billingUsage?: BillingUsage;
   /** Internal quote attached to this normalized request snapshot, never forwarded. */
   billingQuote?: {
+    providerApiKeyId?: string;
     model: string;
     provider: SupportedProvider;
     priced: PricedBillingUsage;

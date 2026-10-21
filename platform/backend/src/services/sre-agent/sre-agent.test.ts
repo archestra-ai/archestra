@@ -250,7 +250,7 @@ describe("sreAgentService", () => {
     expect(version?.snapshot.tools).toHaveLength(SRE_AGENT_TOOL_NAMES.length);
   });
 
-  test("an agent an interrupted run left without tools gets them; an admin's later removal stays", async ({
+  test("an agent an interrupted run left without tools gets them; an admin removing all of them later stays", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -271,7 +271,7 @@ describe("sreAgentService", () => {
         agentType: "agent",
       },
       adminId,
-      { skipCreationDefaultTools: true },
+      { skipCreationDefaultTools: true, deferInitialVersionFork: true },
     );
     const ensure = () =>
       sreAgentService.ensureAgent({
@@ -285,14 +285,11 @@ describe("sreAgentService", () => {
       SRE_AGENT_TOOL_NAMES.length,
     );
 
-    await AgentToolModel.delete({
-      agentId: SRE_AGENT_ID,
-      toolId: tools[0].id,
-    });
+    for (const { id } of tools) {
+      await AgentToolModel.delete({ agentId: SRE_AGENT_ID, toolId: id });
+    }
     await ensure();
-    expect(await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).not.toContain(
-      tools[0].id,
-    );
+    expect(await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).toEqual([]);
   });
 
   test("no agent is created for an install uninstalled during discovery", async ({

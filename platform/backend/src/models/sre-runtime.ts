@@ -38,13 +38,16 @@ class SreRuntimeModel {
     return rows.map(({ id }) => id);
   }
 
-  static async findAgent(
-    id: string,
-  ): Promise<{ id: string; deletedAt: Date | null } | null> {
+  static async findAgent(id: string): Promise<{
+    id: string;
+    deletedAt: Date | null;
+    latestVersion: number;
+  } | null> {
     const [row] = await db
       .select({
         id: schema.agentsTable.id,
         deletedAt: schema.agentsTable.deletedAt,
+        latestVersion: schema.agentsTable.latestVersion,
       })
       .from(schema.agentsTable)
       .where(eq(schema.agentsTable.id, id))

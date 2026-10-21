@@ -123,8 +123,9 @@ class SreAgentService {
 
   /**
    * Creates the agent with exactly the SRE tools, only when every one of them
-   * was discovered and the agent was never created before. An agent left with
-   * none of them by an interrupted earlier run gets them now.
+   * was discovered and setup never completed. Setup completes when version 1
+   * is forked, after the tools are assigned, so an agent without a version was
+   * left by an interrupted run and gets its tools now.
    */
   async ensureAgent(params: {
     organizationId: string;
@@ -132,7 +133,7 @@ class SreAgentService {
     mcpServerId: string;
   }): Promise<void> {
     const existing = await SreRuntimeModel.findAgent(SRE_AGENT_ID);
-    if (existing?.deletedAt) return;
+    if (existing && (existing.deletedAt || existing.latestVersion > 0)) return;
 
     const tools = await SreRuntimeModel.findToolsByRawName({
       catalogId: SRE_CATALOG_ID,
@@ -149,14 +150,6 @@ class SreAgentService {
     }
 
     const toolIds = tools.map(({ id }) => id);
-    if (existing) {
-      const assigned = new Set(
-        await AgentToolModel.findToolIdsByAgent(existing.id),
-      );
-      // Any SRE tool assigned means setup completed; what an admin changed
-      // since then stays.
-      if (toolIds.some((id) => assigned.has(id))) return;
-    }
     // An admin may have uninstalled the server while discovery ran.
     if (!(await this.isInstallLive(params.mcpServerId))) return;
 
@@ -186,7 +179,6 @@ class SreAgentService {
     await AgentToolModel.bulkCreateForAgentsAndTools([SRE_AGENT_ID], toolIds, {
       mcpServerId: params.mcpServerId,
     });
-    // Version 1 includes the tools, so restoring it keeps them.
     await AgentVersionModel.forkIfChangedBestEffort(SRE_AGENT_ID);
     logger.info({ agentId: SRE_AGENT_ID }, "Set up the SRE agent");
     if (params.authorId) {

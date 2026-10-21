@@ -14,7 +14,6 @@ import {
   Github,
   type LucideIcon,
   MessageCircle,
-  MoreHorizontal,
   PencilRuler,
   Plus,
   Search,
@@ -22,9 +21,10 @@ import {
   Star,
 } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
-import React, { useSyncExternalStore } from "react";
+import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
+import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import {
   chatsNavItems,
@@ -63,7 +63,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/consts";
+import { SHORTCUT_NEW_CHAT } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -330,31 +330,24 @@ const NavPrimary = ({
         )}
         {permittedHeaderItems.map((item) =>
           item.url === "/chat" ? (
-            // New chat and Search lead the Chats list as its two actions,
-            // above the places it links to.
-            <React.Fragment key={item.url}>
-              <SidebarNewChatItem />
-              <SidebarSearchItem />
-            </React.Fragment>
+            // New chat leads the Chats list, above the places it links to.
+            // Search sits on the chat list's first group label instead.
+            <SidebarNewChatItem key={item.url} />
           ) : (
             renderItem(item)
           ),
         )}
-        {/* The rail's search, for Studio, whose list has no Search row. */}
-        <SidebarMenuItem
-          className={cn(
-            "hidden",
-            !hasNewChat && "group-data-[collapsible=icon]:block",
-          )}
-        >
+        {/* The rail's search. Expanded, search lives on the chat list's first
+            group label, which the rail folds away. */}
+        <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
           <SidebarMenuButton
-            tooltip="Search chats"
+            tooltip="Search"
             onClick={() => {
               window.dispatchEvent(new CustomEvent("open-conversation-search"));
             }}
           >
-            <MoreHorizontal />
-            <span>Search chats</span>
+            <Search />
+            <span>Search</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
@@ -840,58 +833,4 @@ function SidebarNewChatItem() {
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
-}
-
-/** Opens the chat search palette, which Cmd/Ctrl+K also toggles. */
-function SidebarSearchItem() {
-  const { isMobile, setOpenMobile } = useSidebar();
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        tooltip="Search chats"
-        className="text-muted-foreground"
-        onClick={() => {
-          if (isMobile) setOpenMobile(false);
-          // The same palette as Cmd+K, which the row advertises.
-          window.dispatchEvent(new CustomEvent("open-conversation-search"));
-        }}
-      >
-        <Search />
-        <span className="min-w-0 flex-1 truncate">Search</span>
-        <ShortcutHint modifier="mod" letter={SHORTCUT_SEARCH.label} />
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
-}
-
-/**
- * The shortcut as the viewer's keyboard labels it: ⌥N / ⌘K on a Mac, Alt+N /
- * Ctrl+K elsewhere. Rendered only in the browser — the server cannot know the
- * platform, and a guess would flip on hydration.
- */
-function ShortcutHint({
-  modifier,
-  letter,
-}: {
-  modifier: "mod" | "alt";
-  letter: string;
-}) {
-  const isMac = useSyncExternalStore(
-    subscribeToNothing,
-    () => navigator.platform.toUpperCase().includes("MAC"),
-    () => null,
-  );
-  if (isMac === null) return null;
-  const prefix =
-    modifier === "mod" ? (isMac ? "⌘" : "Ctrl+") : isMac ? "⌥" : "Alt+";
-  return (
-    <kbd className="ml-auto shrink-0 font-sans text-[11px] tracking-wide text-muted-foreground group-data-[collapsible=icon]:hidden">
-      {prefix}
-      {letter}
-    </kbd>
-  );
-}
-
-function subscribeToNothing() {
-  return () => {};
 }

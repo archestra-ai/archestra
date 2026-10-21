@@ -45,8 +45,6 @@ import {
   TraceDetails,
   TraceWaterfall,
 } from "./_parts/guardrails-context";
-import { RequestDetails } from "./_parts/request-details";
-import { RequestWaterfall } from "./_parts/request-waterfall";
 import { SessionFacts } from "./_parts/session-facts";
 import {
   SessionHeaderIcon,

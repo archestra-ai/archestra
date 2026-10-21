@@ -3,52 +3,21 @@
 import {
   ChevronLeft,
   ChevronRight,
-  CornerDownRight,
-  Eye,
-  EyeOff,
   Lock,
-  MessageSquareText,
   RotateCcw,
   Send,
   Shield,
   ShieldAlert,
   ShieldX,
 } from "lucide-react";
-import {
-  type KeyboardEvent,
-  type MouseEvent,
-  type PointerEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  describeModelOrigin,
-  formatCompactNumber,
-  formatRequestCost,
-  formatUsageCost,
-  shortModelName,
-} from "@/app/llm/logs/_parts/logs-table-format";
-import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { McpToolCallStatusIcon } from "@/components/mcp-tool-call-status";
-import { Kbd } from "@/components/ui/kbd";
-import { Skeleton } from "@/components/ui/skeleton";
+import { type MouseEvent, type PointerEvent, useState } from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import {
-  MCP_TOOL_CALL_STATUS_LABELS,
-  readMcpToolCall,
-} from "@/lib/mcp-logs/tool-call-content";
-import type { McpServerDisplay } from "@/lib/mcp-logs/use-mcp-server-display";
-import { formatDate } from "@/lib/utils/date-time";
-import { formatElapsed, formatLatency } from "@/lib/utils/format-duration";
+import { formatLatency } from "@/lib/utils/format-duration";
 import { cn } from "@/lib/utils/tailwind";
 import {
   audienceTone,
@@ -62,16 +31,7 @@ import {
   trustTone,
 } from "./guardrails";
 import { DecisionIcon, DecisionTerm, RoleTerm } from "./guardrails-context";
-import {
-  type InteractionSummary,
-  type RequestSpan,
-  requestLabel,
-  SPAN_KINDS,
-  type SpanKind,
-  type Timeline,
-  type TimelineSpan,
-  type ToolCallSpan,
-} from "./session-timeline";
+import type { TimelineSpan } from "./session-timeline";
 import { GRIDS, type Layout, WIDE_ONLY } from "./waterfall-grid";
 import { YellStepper } from "./yell-markers";
 

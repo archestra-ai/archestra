@@ -1,28 +1,12 @@
 "use client";
 
-import {
-  ChevronLeft,
-  ChevronRight,
-  CornerDownRight,
-  Eye,
-  EyeOff,
-  Lock,
-  MessageSquareText,
-  RotateCcw,
-  Send,
-  Shield,
-  ShieldAlert,
-  ShieldX,
-} from "lucide-react";
+import { CornerDownRight, MessageSquareText } from "lucide-react";
 import {
   type KeyboardEvent,
-  type MouseEvent,
-  type PointerEvent,
   type ReactNode,
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import {
   describeModelOrigin,
@@ -65,17 +49,7 @@ import {
   SELECTED_EDGE,
   SELECTED_PAST_GUTTER,
 } from "./guardrail-rows";
-import {
-  audienceTone,
-  CONSULT_KIND,
-  DECISION_TONE,
-  type GuardrailsData,
-  type LabelSegment,
-  type LabelState,
-  type TraceConsult,
-  type TraceYell,
-  trustTone,
-} from "./guardrails";
+import type { GuardrailsData, TraceYell } from "./guardrails";
 import {
   type InteractionSummary,
   type RequestSpan,

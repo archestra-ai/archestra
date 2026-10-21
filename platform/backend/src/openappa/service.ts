@@ -2289,8 +2289,8 @@ function spawnRetrySpelling(params: {
     : `${prefix}${params.call.name}`;
 }
 
-/** The host tool every subagent spawn is ruled under. */
-const SUBAGENT_TOOL = "Agent";
+/** The host tool every subagent spawn is ruled and recorded under. */
+export const SUBAGENT_TOOL = "Agent";
 
 function nativePresentation(
   controlToolName?: string,

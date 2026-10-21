@@ -102,6 +102,7 @@ import {
   processProxyResults,
   returnRuntimeValue,
   type SpawnReturnDeclaration,
+  SUBAGENT_TOOL,
   sendPeerMessage,
   sharedPolicy,
   startRuntimeChild,
@@ -2543,7 +2544,9 @@ async function releasedRuntimeSpawns(params: {
           archestraMcpBranding.getToolShortName(call.tool) ?? call.tool;
         return (
           call.spawn &&
-          (action === TOOL_START_AGENT_RUN_SHORT_NAME || isAgentTool(action))
+          (action === TOOL_START_AGENT_RUN_SHORT_NAME ||
+            action === SUBAGENT_TOOL ||
+            isAgentTool(action))
         );
       })
       .map(([id]) => id),

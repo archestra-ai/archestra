@@ -508,6 +508,35 @@ describe("protected runtime protocol", () => {
     });
   });
 
+  // A governed agent__ spawn is recorded under the host Agent tool.
+  test("gives the model the recorded run for an agent__ spawn", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sessionId = randomUUID();
+    const { plugin, context } = await releasedLaunch(
+      org.id,
+      { kind: "launched", session_id: sessionId, state: "submitted" },
+      "Agent",
+    );
+
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: [
+        {
+          id: "runtime-call",
+          name: "agent__research",
+          content: JSON.stringify({ session_id: randomUUID() }),
+          isError: false,
+        },
+      ],
+    });
+
+    expect(
+      JSON.parse(String(outcome?.toolResultUpdates["runtime-call"])),
+    ).toMatchObject({ run_id: sessionId, state: "submitted" });
+  });
+
   test("tells the model why the gateway started no run", async ({
     makeOrganization,
   }) => {
@@ -663,6 +692,7 @@ describe("protected runtime protocol", () => {
 async function releasedLaunch(
   organizationId: string,
   recorded?: RuntimeLaunchOutcome,
+  tool = "archestra__start_agent_run",
 ) {
   const context = request(organizationId);
   const { session } = context.resources.get(
@@ -687,7 +717,7 @@ async function releasedLaunch(
     input: {
       semantic: {
         event: "tool_call",
-        tool: "archestra__start_agent_run",
+        tool,
         spawn: true,
       },
     },

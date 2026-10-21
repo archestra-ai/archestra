@@ -2,7 +2,7 @@
 title: Credentials and Secrets
 description: Save credentials once, reuse them across integrations, and configure encrypted secrets storage
 order: 1
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,7 +29,7 @@ A **GitHub user credential** links your account to an organization-managed App. 
 
 The organization App needs an OAuth client ID and client secret for personal authorization. Register `<frontend URL>/settings/credentials/github/callback` as its callback URL. Keep expiring user authorization tokens enabled. Personal authorization requires writable secret storage.
 
-GitHub user credentials and installation credentials have separate ownership policies. Interactive coding agents can use personal credentials. Unattended agents can use the organization's installation credential.
+GitHub user credentials and installation credentials have separate ownership policies. Interactive managed agents can use personal credentials. Unattended agents can use the organization's installation credential.
 
 ## Ownership
 
@@ -162,7 +162,7 @@ Provider failures delay renewal. Tokens keep their original expiry. MCP calls fa
 
 Save a GitHub token as an organization **Custom secret** named **Repository access**. Connect its value once.
 
-Select **Repository access** for a coding Agent's `GITHUB_TOKEN` environment variable. Select it again for a GitHub MCP server's `GITHUB_PERSONAL_ACCESS_TOKEN` variable. Use the same credential for a GitHub Knowledge connector.
+Select **Repository access** for a managed agent's `GITHUB_TOKEN` environment variable. Select it again for a GitHub MCP server's `GITHUB_PERSONAL_ACCESS_TOKEN` variable. Use the same credential for a GitHub Knowledge connector.
 
 For personal repository access, create a **GitHub user credential** referencing the organization App. Each person authorizes GitHub once. Select that credential for each coding harness and personal MCP installation.
 

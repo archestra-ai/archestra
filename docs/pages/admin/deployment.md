@@ -355,7 +355,7 @@ Admins configure the page under **Settings → Connect Page**, or with **Connect
 | Default client, Default MCP Gateway | Pre-selected for everyone. Users can still switch. |
 | LLM Proxy, Skills, and Plugins on Connect | Turning one off removes it from new setups. Existing setups keep working. |
 | Agents users can connect | The agents offered on Connect, in order. Drag to reorder, click **✕** to remove one, and use **Add back** to restore it. Click an agent to pick the provider keys its setup command shares with everyone who connects it. An agent with no keys picked uses each user's own. **Generic client** is always shown last. |
-| Instructions for connected agents | Added to the system prompt of every agent users connect from the Connect page. The default asks agents to offer moving a session to your deployment's Cloud runtime. CLI wrappers fetch saved changes before the next launch. |
+| Instructions for connected agents | Added to the system prompt of every agent users connect from the Connect page. The default asks agents to offer moving a session to a managed agent. CLI wrappers fetch saved changes before the next launch. |
 
 Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh these instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
 

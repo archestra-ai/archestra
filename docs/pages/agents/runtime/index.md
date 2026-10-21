@@ -1,25 +1,25 @@
 ---
 title: Agent Runtime
-description: Run coding agents and long tasks in their own Kubernetes containers
+description: Run managed agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-16
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Agent Runtime gives an agent a dedicated runtime: its own container, running a coding agent such as Claude Code or Codex. You get a live terminal, and the files persist. Send follow-ups and continue later with the same files.
+Agent Runtime gives an agent a dedicated runtime: its own container, running an agent such as Claude Code or Hermes. You get a live terminal, and the files persist. Send follow-ups and continue later with the same files.
 
 Agent Runtime becomes available when your Kubernetes cluster serves the Agent Sandbox API. It needs persistent storage and the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites). See [Setup](/docs/agents/runtime/setup).
 
 A run uses the agent's instructions, tools, skills, and permissions. Its model calls go through the [LLM Proxy](/docs/llm-proxy) and its tools through the [MCP Gateway](/docs/mcp/gateway), so logs, guardrails, and cost limits apply.
 
-![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, and OpenClaw under Coding agents](/docs/automated_screenshots/agents-runtime_create-agent.webp)
+![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, and OpenClaw under Managed agents](/docs/automated_screenshots/agents-runtime_create-agent.webp)
 
 ## Create an Agent With a Dedicated Runtime
 
 1. Go to **Agents** and click **Add Agent**.
-2. Under **Coding agents**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, or **OpenClaw**. The agent opens prefilled.
+2. Under **Managed agents**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, or **OpenClaw**. The agent opens prefilled.
 3. Review **Runtime** on the **Configuration** step. An attention icon marks a setting you must fix. Hover over it to see what to change.
 4. Click **Create and run**, or **Continue setup** to add tools, skills, and knowledge first.
 
@@ -29,9 +29,9 @@ Already have an agent? Open it, turn on **Dedicated runtime** on its **Agent Run
 
 From a connected client, ask your agent to create one. [`create_agent`](/docs/reference/archestra-mcp-server#create_agent) takes the same choice as `runtime: { "template": "claude-code" }`, or a custom `image`. [`list_llm_models`](/docs/reference/archestra-mcp-server#list_llm_models) finds a model to pin.
 
-### Choose and Order Coding Agents
+### Choose and Order Managed Agents
 
-With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Coding agents** to choose the agents offered during creation.
+With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Managed agents** to choose the agents offered during creation.
 
 1. Click **+** to add a choice, or remove one with its **Remove** button.
 2. Drag the agent chips into your preferred order. You can also focus an agent's reorder handle and use the arrow keys.
@@ -41,7 +41,7 @@ Removing a choice preserves existing agents and their runtime configuration.
 
 ### Update the Image
 
-Built-in coding agent images use the deployment's current catalog image unless pinned by digest. When the image reference changes, your next follow-up restarts the Agent on that image and keeps your files.
+Built-in agent images use the deployment's current catalog image unless pinned by digest. When the image reference changes, your next follow-up restarts the Agent on that image and keeps your files.
 
 If you change a custom image or the **Privileged mode** setting, which grants access to the host system, start a new run. Existing files are kept until their retention deadline.
 
@@ -61,7 +61,7 @@ What to know:
 
 ### Clone a Private GitHub Repository
 
-The built-in coding agent images use `GITHUB_TOKEN` to authenticate Git commands, including `git clone`.
+The built-in agent images use `GITHUB_TOKEN` to authenticate Git commands, including `git clone`.
 
 1. Save a GitHub token in [Credentials](/docs/admin/security/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
 2. Open the agent's **Agent Runtime** tab. Under **Environment**, click **Add variable**.
@@ -130,7 +130,7 @@ What to know:
 
 ## Start Runs From Elsewhere
 
-- **Your coding agent:** [hand work off](/docs/agents/runtime/handoff) from Claude Code or another connected agent, and bring it back.
+- **Your local agent:** [hand work off](/docs/agents/runtime/handoff) from Claude Code or another connected agent, and bring it back.
 - **A coordinator agent:** add the agent as a [subagent](/docs/agents/subagents). The coordinator keeps answering while the run works. This also covers messaging channels: the result returns to the original thread.
 - **Messaging channels:** a message to the agent in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), or [Telegram](/docs/agents/triggers-and-channels/telegram) starts a run. The bot replies with a link to the run, then posts the result in the thread. A follow-up from the same person continues their run.
 - **Email:** an [email](/docs/agents/triggers-and-channels/email) to the agent starts a run. The result returns in the thread when replies are on.

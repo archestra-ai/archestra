@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-21
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -76,7 +76,7 @@ Assigned containers never return to the pool. Without a spare, a run starts a ne
 
 ## Privileged Containers
 
-Ordinary coding agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace and node pool.
+Ordinary managed agents do not need privilege. Docker-in-Docker and nested Kubernetes workloads may need it. Set [`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED), enable elevated permissions on the agent, and use nodes whose runtime and admission policy permit privileged containers. Use a dedicated namespace and node pool.
 
 After resuming a run, restart Docker and development services. The deployment setting does not override cloud-provider restrictions.
 

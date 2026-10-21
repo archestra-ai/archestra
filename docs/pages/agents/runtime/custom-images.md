@@ -1,14 +1,14 @@
 ---
 title: Custom Images
-description: Run your own coding agent image in Agent Runtime
+description: Run your own agent image in Agent Runtime
 order: 3
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Run any coding agent in [Agent Runtime](/docs/agents/runtime), not only the built-in ones. Bring a container image with your agent in it. Archestra supplies the rest:
+Run any agent in [Agent Runtime](/docs/agents/runtime), not only the built-in ones. Bring a container image with your agent in it. Archestra supplies the rest:
 
 - **The task** and every follow-up.
 - **Models** through the LLM Proxy, and **tools and skills** through the MCP Gateway.
@@ -36,7 +36,7 @@ For the full contract and working examples, see the [image contract](https://git
 
 ## Add a Toolchain
 
-Extend your agent's current image to install a compiler such as Go while keeping its coding agent and runtime setup.
+Extend your agent's current image to install a compiler such as Go while keeping its agent and runtime setup.
 
 Save this as `Dockerfile`:
 

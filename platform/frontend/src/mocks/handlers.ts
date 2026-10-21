@@ -99,13 +99,14 @@ function getJson(path: string, body: JsonBodyType): HttpHandler[] {
 }
 
 function notFound(path: string): HttpHandler[] {
-  return paths(path).map((url) =>
-    http.get(url, () =>
-      HttpResponse.json(
-        { error: { message: "Not found", type: "api_not_found_error" } },
-        { status: 404 },
-      ),
-    ),
+  return paths(path).map((url) => http.get(url, () => notFoundResponse()));
+}
+
+/** The backend's 404 body for a missing item. */
+function notFoundResponse(message = "Not found") {
+  return HttpResponse.json(
+    { error: { message, type: "api_not_found_error" } },
+    { status: 404 },
   );
 }
 
@@ -534,15 +535,7 @@ export const handlers: HttpHandler[] = [
       );
       return server
         ? HttpResponse.json(server)
-        : HttpResponse.json(
-            {
-              error: {
-                message: "MCP server not found",
-                type: "api_not_found_error",
-              },
-            },
-            { status: 404 },
-          );
+        : notFoundResponse("MCP server not found");
     }),
   ),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),

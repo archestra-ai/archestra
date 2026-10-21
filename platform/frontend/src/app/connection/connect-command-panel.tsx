@@ -783,6 +783,8 @@ export function ConnectCommandPanel({
     async (key: string) => {
       const body = connectionSetupBody(key);
       if (!body) return;
+      setResult(null);
+      setFailure(null);
       refusalRef.current = null;
       const created = await createSetup(body);
       if (latestKeyRef.current !== key) return; // stale response
@@ -1855,6 +1857,17 @@ function DesktopDownload({
   /** Why no installer can be made here; null when one can. */
   gate: string | null;
 }) {
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null);
+  const downloadOnReadyRef = useRef(false);
+  useEffect(() => {
+    if (failed) downloadOnReadyRef.current = false;
+    if (!installerUrl || !downloadOnReadyRef.current) return;
+    // Only the explicit download (or retry) click starts a download. Later
+    // setup changes may prepare a new ticket without downloading it again.
+    downloadOnReadyRef.current = false;
+    downloadLinkRef.current?.click();
+  }, [installerUrl, failed]);
+
   if (gate)
     return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
   // Same shape as the Connect page's prompt row, so picking Claude Desktop
@@ -1885,16 +1898,23 @@ function DesktopDownload({
               ? "Preparing your installer"
               : requested
                 ? "Your installer, ready for 15 minutes"
-                : "Prepare an installer for this setup"}
+                : "Download an installer for this setup"}
           </span>
         )}
         {failed ? (
-          <Button variant="outline" size="lg" onClick={onRetry}>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => {
+              downloadOnReadyRef.current = true;
+              onRetry();
+            }}
+          >
             <span>Try again</span>
           </Button>
         ) : installerUrl ? (
           <Button asChild size="lg" className="h-12 rounded-xl px-6">
-            <a href={installerUrl} download>
+            <a ref={downloadLinkRef} href={installerUrl} download>
               <Download />
               <span>Download installer</span>
             </a>
@@ -1903,11 +1923,16 @@ function DesktopDownload({
           <Button
             size="lg"
             disabled={requested}
-            onClick={onPrepare}
+            onClick={() => {
+              downloadOnReadyRef.current = true;
+              onPrepare();
+            }}
             className="h-12 rounded-xl px-6"
           >
             <Download />
-            <span>{pending ? "Preparing installer" : "Prepare installer"}</span>
+            <span>
+              {pending ? "Preparing installer" : "Download installer"}
+            </span>
           </Button>
         )}
       </div>

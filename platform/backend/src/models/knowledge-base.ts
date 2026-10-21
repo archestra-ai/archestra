@@ -422,6 +422,15 @@ class KnowledgeBaseModel {
         schema.knowledgeBasesTable,
         eq(schema.knowledgeBasesTable.id, params.id),
       );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["knowledgeBase"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
       return count > 0;
     });
   }

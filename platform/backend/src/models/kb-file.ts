@@ -515,6 +515,15 @@ class KbFileModel {
         )
         .returning({ id: schema.kbFilesTable.id });
       if (!deleted) return false;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["knowledgeFile"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
       if (documentIds.length > 0) {
         await tx
           .delete(schema.kbDocumentsTable)

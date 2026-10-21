@@ -780,6 +780,15 @@ class VirtualApiKeyModel {
       await tx
         .delete(schema.virtualApiKeysTable)
         .where(eq(schema.virtualApiKeysTable.id, id));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["llmVirtualKey"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
     });
 
     try {

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.0-rc.3](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.2...platform-v1.5.0-rc.3) (2026-10-21)
+
+
+### Bug Fixes
+
+* **agent-runtime:** submit long Claude Code tasks through a tmux buffer ([#9425](https://github.com/archestra-ai/archestra/issues/9425)) ([79abe3f](https://github.com/archestra-ai/archestra/commit/79abe3f10adba359a4fa63fd613b864fb64964f4))
+* **proxy:** end failed Responses streams with response.failed ([#9423](https://github.com/archestra-ai/archestra/issues/9423)) ([8731d4d](https://github.com/archestra-ai/archestra/commit/8731d4decf17b78b6896a7d00730571657ef5a6a))
+* **settings:** keep Appearance subpages on refresh ([#9395](https://github.com/archestra-ai/archestra/issues/9395)) ([b75d5bb](https://github.com/archestra-ai/archestra/commit/b75d5bb381e1106892b13f845bdc9f13241afb48))
+* **slack:** show bounded tool arguments and error details in streams ([#9400](https://github.com/archestra-ai/archestra/issues/9400)) ([ef49ce0](https://github.com/archestra-ai/archestra/commit/ef49ce009e417269b77261d0fa39a332946a5403))
+* sync instance-scoped LiteLLM model pricing ([#9414](https://github.com/archestra-ai/archestra/issues/9414)) ([a34a93e](https://github.com/archestra-ai/archestra/commit/a34a93ea1ff7bacdc38a0e0620f1320fe910ded1))
+
 ## [1.5.0-rc.2](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.1...platform-v1.5.0-rc.2) (2026-10-21)
 
 

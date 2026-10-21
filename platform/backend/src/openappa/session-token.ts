@@ -5,7 +5,7 @@ const MARK_BOTTOM = "██▄█▄██";
 const RECEIPT_CODE = "([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4})";
 
 const SESSION_RECEIPT_PATTERN = new RegExp(
-  `${MARK_TOP}\\r?\\n${MARK_BOTTOM} {2}(?:started )?protected session ${RECEIPT_CODE}|${MARK_TOP} {2}(?:started )?protected session ${RECEIPT_CODE}\\r?\\n${MARK_BOTTOM}`,
+  `${MARK_TOP}(?:\\r?\\n${MARK_BOTTOM} {2}| +${MARK_BOTTOM} {1,2}| {2})(?:started )?protected session ${RECEIPT_CODE}(?:\\r?\\n${MARK_BOTTOM})?`,
   "g",
 );
 
@@ -14,7 +14,7 @@ export function mintReceiptCode(): string {
 }
 
 export function formatSessionReceipt(code: string): string {
-  return `${MARK_TOP}\n${MARK_BOTTOM}  protected session ${code}`;
+  return `${MARK_TOP}  protected session ${code}`;
 }
 
 export function appendSessionReceipt(text: string, code: string): string {

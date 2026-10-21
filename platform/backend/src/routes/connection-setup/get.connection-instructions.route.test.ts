@@ -90,7 +90,7 @@ test("installed connections fetch updated prompts after ticket expiry, and obser
   expect((await fetchInstructions()).statusCode).toBe(403);
 });
 
-test("unedited instructions name the deployment's own Cloud runtime, including the earlier default", async ({
+test("unedited instructions name the deployment's own Remote Agents, including the earlier default", async ({
   makeMember,
   makeAgent,
 }) => {
@@ -131,7 +131,7 @@ test("unedited instructions name the deployment's own Cloud runtime, including t
     connectionRuntimeHandoffInstructions: null,
   });
   const unedited = await fetchInstructions();
-  expect(unedited).toContain("'move this to Acme Platform Cloud runtime'");
+  expect(unedited).toContain("'move this to Acme Platform Remote Agents'");
 
   // The default before it named the runtime, saved verbatim, still follows it.
   await OrganizationModel.patch(ctx.organizationId, {

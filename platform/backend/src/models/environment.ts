@@ -1,3 +1,4 @@
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import { and, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -154,6 +155,8 @@ class EnvironmentModel {
     trustedImageRegistries?: TrustedImageRegistries | null;
     /** The creator, who gets full access. */
     authorId?: string | null;
+    /** Who else may use it; omitted opens it to the whole organization. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
   }): Promise<typeof schema.environmentsTable.$inferSelect> {
     const {
       organizationId,
@@ -191,7 +194,8 @@ class EnvironmentModel {
         resource: "environment",
         scope: row.id,
         authorId: params.authorId ?? null,
-        publishToOrganization: true,
+        grants: params.initialPermissionGrants,
+        publishToOrganization: params.initialPermissionGrants === undefined,
       });
       // SPDX-SnippetEnd
       return row;

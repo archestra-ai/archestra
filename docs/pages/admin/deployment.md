@@ -225,6 +225,7 @@ Ask an agent why a pod keeps restarting, and it reads that pod's events and logs
 
 What to know:
 
+- Only Admins and Platform Admins can see and use the agent, the **Kubernetes** server, and the **SRE** environment. The server can read the specs of every MCP server pod in the namespace, and their arguments can hold resolved credentials.
 - The MCP server runs in its own **SRE** environment, whose egress allows only `apiServerCidrs`. Without them, the server reaches the API server only on clusters that do not enforce egress policies.
 - Deleting the agent or its MCP server keeps it deleted. Setting `enabled: false` removes the agent, the server, and the environment, and turning it back on creates them again.
 - The agent appears once the server's tools are discovered. If it is missing, check the **Kubernetes** server under **MCP Registry** for a startup error.

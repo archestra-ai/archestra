@@ -1,9 +1,10 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { beforeEach } from "vitest";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
   AgentModel,
+  AgentTeamModel,
   AgentToolModel,
   AgentVersionModel,
   EnvironmentModel,
@@ -14,6 +15,7 @@ import {
 } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { describe, expect, test } from "@/test";
 import {
   SRE_AGENT_ID,
@@ -160,6 +162,64 @@ describe("sreAgentService", () => {
     expect(
       (await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).sort(),
     ).toEqual(expectedToolIds);
+  });
+
+  test("only admins can reach the agent, its catalog item, and its environment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, adminId } = await seedAdmin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    const otherAdmin = await makeUser();
+    await makeMember(otherAdmin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await sreAgentService.seed();
+    const [server] = await McpServerModel.findByCatalogId(SRE_CATALOG_ID);
+    await discoverTools(SRE_AGENT_TOOL_NAMES);
+    await sreAgentService.ensureAgent({
+      organizationId,
+      authorId: adminId,
+      mcpServerId: server.id,
+    });
+
+    const canUse = async (userId: string) => ({
+      agent: await AgentTeamModel.userHasAgentAccess({
+        userId,
+        agentId: SRE_AGENT_ID,
+        isAgentAdmin: false,
+        action: "use",
+      }),
+      catalog: await ResourcePermissions.allows({
+        userId,
+        organizationId,
+        resource: "mcpRegistry",
+        scope: SRE_CATALOG_ID,
+        action: "use",
+      }),
+      environment: await ResourcePermissions.allows({
+        userId,
+        organizationId,
+        resource: "environment",
+        scope: SRE_ENVIRONMENT_ID,
+        action: "use",
+      }),
+    });
+
+    expect(await canUse(otherAdmin.id)).toEqual({
+      agent: true,
+      catalog: true,
+      environment: true,
+    });
+    expect(await canUse(member.id)).toEqual({
+      agent: false,
+      catalog: false,
+      environment: false,
+    });
   });
 
   test("version 1 of the agent already has its tools", async ({

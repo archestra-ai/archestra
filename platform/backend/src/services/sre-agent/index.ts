@@ -1,3 +1,8 @@
+import {
+  ADMIN_ROLE_NAME,
+  PLATFORM_ADMIN_ROLE_NAME,
+  type ResourcePermissionGrant,
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -172,7 +177,7 @@ class SreAgentService {
         },
         params.authorId ?? undefined,
         {
-          publishToOrganization: true,
+          initialPermissionGrants: SRE_ADMIN_GRANTS,
           skipCreationDefaultTools: true,
           deferInitialVersionFork: true,
         },
@@ -326,6 +331,7 @@ class SreAgentService {
         description: "Runs the SRE agent's read-only Kubernetes MCP server.",
         networkPolicy,
         authorId: adminUserId,
+        initialPermissionGrants: SRE_ADMIN_GRANTS,
       });
     }
     await InternalMcpCatalogModel.create(
@@ -342,7 +348,7 @@ class SreAgentService {
       {
         organizationId: organization.id,
         authorId: adminUserId,
-        publishToOrganization: true,
+        initialPermissionGrants: SRE_ADMIN_GRANTS,
       },
     );
     await this.createInstall(adminUserId);
@@ -354,6 +360,16 @@ class SreAgentService {
 }
 
 export const sreAgentService = new SreAgentService();
+
+/**
+ * The SRE tools can read other installs' pod specs, whose arguments may carry
+ * resolved credentials, so the agent, its catalog item, and its environment
+ * are for admins only.
+ */
+const SRE_ADMIN_GRANTS: ResourcePermissionGrant[] = [
+  ADMIN_ROLE_NAME,
+  PLATFORM_ADMIN_ROLE_NAME,
+].map((id) => ({ subject: { type: "role", id }, actions: ["read", "use"] }));
 
 function sreNetworkPolicy(apiServerCidrs: string[]): NetworkPolicy | null {
   if (apiServerCidrs.length === 0) return null;

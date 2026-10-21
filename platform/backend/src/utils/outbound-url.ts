@@ -1,3 +1,6 @@
+import { lookup } from "node:dns/promises";
+import ipaddr from "ipaddr.js";
+import { Agent as UndiciAgent } from "undici";
 import config from "@/config";
 import {
   isLoopbackAddress,
@@ -19,6 +22,10 @@ export type OutboundUrlRejection =
 type OutboundUrlValidation =
   | { ok: true; url: URL }
   | { ok: false; reason: OutboundUrlRejection };
+
+type PinnedOutboundDispatcher =
+  | { ok: true; dispatcher: UndiciAgent }
+  | { ok: false; reason: "unresolved_host" | "private_or_loopback_host" };
 
 /**
  * Validate a URL the platform is about to fetch on a caller's behalf.
@@ -69,6 +76,61 @@ export function validateOutboundUrl(rawUrl: string): OutboundUrlValidation {
   }
 
   return { ok: true, url };
+}
+
+/**
+ * Resolve once and pin the connection to a validated address, preserving the
+ * original hostname for TLS. Callers must close or destroy the dispatcher.
+ */
+export async function createPinnedOutboundDispatcher(params: {
+  hostname: string;
+}): Promise<PinnedOutboundDispatcher> {
+  const normalizedHostname = params.hostname.replace(/^\[(.*)\]$/, "$1");
+  let addresses: { address: string; family: number }[];
+  try {
+    addresses = await lookup(normalizedHostname, { all: true, verbatim: true });
+  } catch {
+    return { ok: false, reason: "unresolved_host" };
+  }
+  if (addresses.length === 0) {
+    return { ok: false, reason: "unresolved_host" };
+  }
+  if (!addresses.every(({ address }) => isAllowedOutboundAddress(address))) {
+    return { ok: false, reason: "private_or_loopback_host" };
+  }
+  const pinned = addresses[0];
+  return {
+    ok: true,
+    dispatcher: new UndiciAgent({
+      connect: {
+        lookup: (_hostname, options, callback) => {
+          if (options.all) {
+            callback(null, [pinned]);
+            return;
+          }
+          callback(null, pinned.address, pinned.family);
+        },
+      },
+    }),
+  };
+}
+
+function isAllowedOutboundAddress(address: string): boolean {
+  let parsed: ipaddr.IPv4 | ipaddr.IPv6;
+  try {
+    parsed = ipaddr.parse(address);
+  } catch {
+    return false;
+  }
+  if (parsed.kind() === "ipv6") {
+    const ipv6 = parsed as ipaddr.IPv6;
+    if (ipv6.isIPv4MappedAddress()) parsed = ipv6.toIPv4Address();
+  }
+  const range = parsed.range();
+  if (range === "unicast") return true;
+  const allowLocalTargets =
+    !config.production || config.test.enableE2eTestEndpoints;
+  return allowLocalTargets && range === "loopback";
 }
 
 /** localhost / *.localhost / 127.0.0.0.0/8 / ::1 — the dev-only exception. */

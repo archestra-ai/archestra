@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import {
   createServer,
@@ -10,6 +11,8 @@ import { vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import EnvironmentModel from "@/models/environment";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
 import {
   createMcpOAuthFetch,
@@ -29,7 +32,15 @@ const servers: Server[] = [];
 describe("outbound OAuth integration", () => {
   setupTestCacheManager();
   const ctx = useRouteTestApp(oauthRoutes);
-  beforeEach(() => {
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+    ctx.app.addHook("onRequest", async (request) => {
+      request.authMethod = "session";
+      request.sessionInfo = {
+        id: "outbound-test-session",
+        createdAt: new Date(),
+      };
+    });
     config.mcpOAuth.enforceOutboundValidation = true;
     config.production = false;
     config.test.enableE2eTestEndpoints = false;
@@ -61,6 +72,18 @@ describe("outbound OAuth integration", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: null,
       oauthConfig: { ...oauth(base), supports_resource_metadata: false },
+    });
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: ctx.organizationId,
+      resource: "mcpRegistry",
+      scope: catalog.id,
+      revision: 0,
+      grants: [
+        {
+          subject: { type: "user", id: ctx.user.id },
+          actions: ["read", "use"],
+        },
+      ],
     });
     const initiated = await ctx.app.inject({
       method: "POST",
@@ -162,7 +185,7 @@ describe("outbound OAuth integration", () => {
     "auth_override",
     "metadata_override",
     "token_override",
-  ])("blocks denied %s without callback/refresh fallback or secret mutation", async (variant, {
+  ])("refresh blocks denied %s and callback enforces its recorded token endpoint", async (variant, {
     makeInternalMcpCatalog,
   }) => {
     let canary = 0;
@@ -215,7 +238,12 @@ describe("outbound OAuth integration", () => {
       access_token: "still-valid",
       refresh_token: "still-refresh",
     });
-    const state = await seedState(catalog.id);
+    const state = await seedState(
+      catalog.id,
+      ctx.user.id,
+      ctx.organizationId,
+      denied,
+    );
     const callback = await ctx.app.inject({
       method: "POST",
       url: OAUTH_CALLBACK_PATH,
@@ -301,7 +329,7 @@ describe("outbound OAuth integration", () => {
       organizationId: ctx.organizationId,
       oauthConfig: { ...oauth(base), requires_proxy: true },
     });
-    const state = await seedState(catalog.id);
+    const state = await seedState(catalog.id, ctx.user.id, ctx.organizationId);
     const result = await ctx.app.inject({
       method: "POST",
       url: OAUTH_CALLBACK_PATH,
@@ -427,15 +455,51 @@ function metadata(base: string) {
     token_endpoint: `${base}/token`,
   };
 }
-async function seedState(catalogId: string): Promise<string> {
+// Seed an already authorized transaction so callback-denial tests can exercise
+// network policy independently of the initiation gate.
+async function seedState(
+  catalogId: string,
+  userId: string,
+  organizationId: string,
+  tokenEndpoint?: string,
+): Promise<string> {
+  const catalog = await InternalMcpCatalogModel.findById(catalogId, {
+    expandSecrets: false,
+  });
+  if (!catalog?.oauthConfig) throw new Error("OAuth catalog is missing");
   const state = crypto.randomUUID();
+  const callerBinding = createHash("sha256")
+    .update(
+      JSON.stringify([
+        organizationId,
+        userId,
+        "session",
+        "outbound-test-session",
+      ]),
+    )
+    .digest("hex");
+  const configurationFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        oauthConfig: catalog.oauthConfig,
+        clientSecretId: catalog.clientSecretId,
+      }),
+    )
+    .digest("hex");
   await cacheManager.set(
-    `${CacheKey.OAuthState}-${state}`,
+    `${CacheKey.OAuthState}-v2-${callerBinding}-${state}`,
     {
+      version: 2,
+      callerBinding,
       catalogId,
+      configurationFingerprint,
+      redirectUri: catalog.oauthConfig.redirect_uris[0],
+      tokenEndpoint:
+        tokenEndpoint ??
+        catalog.oauthConfig.token_endpoint ??
+        `${catalog.oauthConfig.server_url}/token`,
       codeVerifier: "synthetic-verifier",
       clientId: "synthetic-client",
-      clientSecret: "synthetic-secret",
     },
     600_000,
   );

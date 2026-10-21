@@ -1659,14 +1659,31 @@ export function startupGuardRefreshInstall({
     return `$archUpdateState = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(JSON.stringify(state)).toString("base64")}')) | ConvertFrom-Json
 $archUpdateHash = [Security.Cryptography.SHA256]::Create()
 try { $archUpdateState.hashes = @(([BitConverter]::ToString($archUpdateHash.ComputeHash([IO.File]::ReadAllBytes($archGuardPath)))).Replace('-', '').ToLowerInvariant()) } finally { $archUpdateHash.Dispose() }
-[IO.File]::WriteAllBytes(($archGuardPath + '.update.cjs'), [Convert]::FromBase64String('${Buffer.from(STARTUP_GUARD_REFRESH).toString("base64")}'))
-[IO.File]::WriteAllText(($archGuardPath + '.update.json'), ($archUpdateState | ConvertTo-Json -Depth 32 -Compress), (New-Object Text.UTF8Encoding $false))
 foreach ($archUpdateFile in @(($archGuardPath + '.update.cjs'), ($archGuardPath + '.update.json'))) {
-  $archUpdateAcl = New-Object Security.AccessControl.FileSecurity
-  $archUpdateAcl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)
-  $archUpdateAcl.SetAccessRuleProtection($true, $false)
-  $archUpdateAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl', 'Allow')))
-  Set-Acl -LiteralPath $archUpdateFile -AclObject $archUpdateAcl
+  $archUpdateTemp = $archUpdateFile + '.' + [guid]::NewGuid().ToString('n') + '.tmp'
+  try {
+    New-Item -ItemType File -Path $archUpdateTemp -ErrorAction Stop | Out-Null
+    # Protect an empty file before writing private context. PowerShell also
+    # runs on Unix, where Windows ACL APIs are unavailable.
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+      $archUpdateAcl = New-Object Security.AccessControl.FileSecurity
+      $archUpdateAcl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)
+      $archUpdateAcl.SetAccessRuleProtection($true, $false)
+      $archUpdateAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl', 'Allow')))
+      Set-Acl -LiteralPath $archUpdateTemp -AclObject $archUpdateAcl -ErrorAction Stop
+    } else {
+      & chmod 600 $archUpdateTemp
+      if ($LASTEXITCODE -ne 0) { throw 'Could not protect startup check refresh files.' }
+    }
+    if ($archUpdateFile.EndsWith('.update.cjs')) {
+      [IO.File]::WriteAllBytes($archUpdateTemp, [Convert]::FromBase64String('${Buffer.from(STARTUP_GUARD_REFRESH).toString("base64")}'))
+    } else {
+      [IO.File]::WriteAllText($archUpdateTemp, ($archUpdateState | ConvertTo-Json -Depth 32 -Compress), (New-Object Text.UTF8Encoding $false))
+    }
+    Move-Item -LiteralPath $archUpdateTemp -Destination $archUpdateFile -Force -ErrorAction Stop
+  } finally {
+    Remove-Item -LiteralPath $archUpdateTemp -Force -ErrorAction SilentlyContinue
+  }
 }`;
   }
   return `printf '%s' ${sh(STARTUP_GUARD_REFRESH)} > "${"$HOME"}/${client.scriptRelpath}.update.cjs"

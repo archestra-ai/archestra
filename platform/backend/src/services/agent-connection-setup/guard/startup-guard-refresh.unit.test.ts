@@ -1,11 +1,13 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmod,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -36,6 +38,9 @@ import {
 } from "./startup-guard-artifact";
 
 const execute = promisify(execFile);
+const powershellAvailable =
+  process.platform !== "win32" &&
+  spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
 const hash = (value: string | Buffer) =>
   createHash("sha256").update(value).digest("hex");
 const roots: string[] = [];
@@ -507,4 +512,88 @@ sys.exit(os.waitstatus_to_exitcode(status))
       hash(await readFile(`${f.guard}.update.cjs`)),
     );
   });
+
+  test.skipIf(!powershellAvailable)(
+    "PowerShell installation keeps refresh files private on Unix, including reconnects",
+    async () => {
+      const f = await fixture({ platform: "windows" });
+      const section = startupGuardRefreshInstall({
+        ctx: f.context,
+        client: CLAUDE_CODE_GUARD_CLIENT,
+        platform: "windows",
+      });
+      const driver = path.join(f.root, "install.ps1");
+      await writeFile(
+        driver,
+        `$ErrorActionPreference = 'Stop'; $archGuardPath = '${f.guard.replaceAll("'", "''")}'; ${section}`,
+      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await chmod(`${f.guard}.update.cjs`, 0o644);
+        await chmod(`${f.guard}.update.json`, 0o644);
+        await execute("pwsh", [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          driver,
+        ]);
+        for (const suffix of [".update.cjs", ".update.json"]) {
+          expect((await stat(f.guard + suffix)).mode & 0o777).toBe(0o600);
+        }
+        const state = JSON.parse(
+          await readFile(`${f.guard}.update.json`, "utf8"),
+        );
+        expect(state.hashes).toEqual([hash(f.old)]);
+        expect(state.updaterHash).toBe(hash(STARTUP_GUARD_REFRESH));
+      }
+    },
+  );
+
+  test.skipIf(!powershellAvailable)(
+    "PowerShell permission failures preserve installed files and never write private context",
+    async () => {
+      const f = await fixture({ platform: "windows" });
+      const section = startupGuardRefreshInstall({
+        ctx: f.context,
+        client: CLAUDE_CODE_GUARD_CLIENT,
+        platform: "windows",
+      });
+      const driver = path.join(f.root, "install.ps1");
+      const bin = path.join(f.root, "bin");
+      const sizeLog = path.join(f.root, "lock-size");
+      await mkdir(bin);
+      await writeFile(
+        path.join(bin, "chmod"),
+        '#!/bin/sh\nwc -c < "$2" > "$ARCHESTRA_TEST_LOCK_SIZE"\nexit 1\n',
+        { mode: 0o700 },
+      );
+      await writeFile(
+        driver,
+        `$ErrorActionPreference = 'Stop'; $archGuardPath = '${f.guard.replaceAll("'", "''")}'; ${section}`,
+      );
+      const updater = await readFile(`${f.guard}.update.cjs`);
+      const state = await readFile(`${f.guard}.update.json`);
+      await expect(
+        execute(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driver],
+          {
+            env: {
+              ...process.env,
+              PATH: `${bin}:${process.env.PATH}`,
+              ARCHESTRA_TEST_LOCK_SIZE: sizeLog,
+            },
+          },
+        ),
+      ).rejects.toThrow("Could not protect startup check refresh files");
+      expect((await readFile(sizeLog, "utf8")).trim()).toBe("0");
+      expect(await readFile(`${f.guard}.update.cjs`)).toEqual(updater);
+      expect(await readFile(`${f.guard}.update.json`)).toEqual(state);
+      expect(
+        (await readdir(path.dirname(f.guard))).filter((file) =>
+          file.endsWith(".tmp"),
+        ),
+      ).toEqual([]);
+    },
+  );
 });

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0-rc.2](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.1...platform-v1.5.0-rc.2) (2026-10-21)
+
+
+### Miscellaneous Chores
+
+* **agents:** name runtimes Agent Runtimes and handoff Remote Agents ([#9417](https://github.com/archestra-ai/archestra/issues/9417)) ([2bcced8](https://github.com/archestra-ai/archestra/commit/2bcced864e9ba7d43a9364a84ce3aa3288e1d2b3))
+* **onboarding:** remove the feedback pop-up ([#9428](https://github.com/archestra-ai/archestra/issues/9428)) ([4a1775d](https://github.com/archestra-ai/archestra/commit/4a1775d69a1200cc9413efbc1a6c7cdf22bc1bd4))
+
 ## [1.5.0-rc.1](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.56...platform-v1.5.0-rc.1) (2026-10-21)
 
 

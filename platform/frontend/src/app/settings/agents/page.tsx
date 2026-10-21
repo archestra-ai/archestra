@@ -408,7 +408,7 @@ export default function AgentSettingsPage() {
         className="space-y-3 border-t pt-6"
       >
         <h2 id="agent-runtime-heading" className="text-base font-semibold">
-          <span>Agent Runtime</span>{" "}
+          <span>Managed Agents</span>{" "}
           <Badge
             variant="outline"
             className="align-middle border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar"

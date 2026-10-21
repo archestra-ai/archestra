@@ -24,7 +24,7 @@ An agent is a reusable assistant: instructions, a model, and the tools, knowledg
 What to know:
 
 - Instructions can use your details, such as your name, teams, and today's date. See [Prompt Templates](#prompt-templates).
-- To run the agent in its own container, with a live terminal, give it a [dedicated runtime](/docs/agents/runtime).
+- To run the agent in its own container, with a live terminal, give it a [dedicated runtime](/docs/agents/managed-agents).
 
 <span id="tool-access-modes"></span>
 <span id="custom-mode"></span>
@@ -57,7 +57,7 @@ What to know:
 Run an agent interactively, delegate work to it from your coding client, or trigger it from team channels and APIs:
 
 - **Chat and Projects:** select the agent from the picker in [Chat](/docs/chat) or scope it to a [Project](/docs/chat/projects).
-- **Local agents:** once [connected](/docs/get-started/connect), hand off background tasks from your editor or CLI with [`start_run`](/docs/reference/archestra-mcp-server#start_run) and monitor their progress. See [Hand Off Work](/docs/agents/runtime/handoff).
+- **Local agents:** once [connected](/docs/get-started/connect), hand off background tasks from your editor or CLI with [`start_run`](/docs/reference/archestra-mcp-server#start_run) and monitor their progress. See [Hand Off Work](/docs/agents/managed-agents/handoff).
 - **Messaging channels:** connect [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), [Telegram](/docs/agents/triggers-and-channels/telegram), or [Email](/docs/agents/triggers-and-channels/email) on the agent's **Messaging Channels** tab. See [Triggers & Channels](/docs/agents/triggers-and-channels).
 - **Automations and APIs:** invoke the agent programmatically via [Agent-to-Agent (A2A) calls or incoming webhooks](/docs/agents/triggers-and-channels/webhook-a2a).
 

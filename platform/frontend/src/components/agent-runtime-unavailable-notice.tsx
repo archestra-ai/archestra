@@ -31,7 +31,7 @@ export function AgentRuntimeUnavailableNotice({
     <InlineNotice variant="info" className={className}>
       <Info />
       <InlineNoticeText>
-        <span className="font-medium">Agent Runtime unavailable.</span>{" "}
+        <span className="font-medium">Managed Agents unavailable.</span>{" "}
         <span>
           {canInspectCluster
             ? "The Agent Sandbox controller is not installed."

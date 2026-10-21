@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-21
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -202,7 +202,7 @@ Allowed embedding origins follow [`ARCHESTRA_FRONTEND_URL`](/docs/reference/conf
 
 ## Code Sandbox
 
-Archestra's managed Dagger engines need Linux nodes that permit privileged root pods with all Linux capabilities, plus dynamically provisioned `ReadWriteOnce` storage. Engine pods are separate from agent runtime containers.
+Archestra's managed Dagger engines need Linux nodes that permit privileged root pods with all Linux capabilities, plus dynamically provisioned `ReadWriteOnce` storage. Engine pods are separate from managed agent containers.
 
 If your cluster does not admit these pods, set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST) to an external `tcp://` or `kube-pod://` engine, or disable the sandbox with [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) or Helm's `archestra.codeRuntime.enabled: false`.
 

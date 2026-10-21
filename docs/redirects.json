@@ -69,7 +69,7 @@
     {"source": "/docs/platform-knowledge-retrieval", "destination": "/docs/knowledge", "permanent": true},
     {"source": "/docs/platform-knowledge-connectors", "destination": "/docs/knowledge/connectors", "permanent": true},
     {"source": "/docs/platform-agents", "destination": "/docs/agents", "permanent": true},
-    {"source": "/docs/platform-agent-runtime", "destination": "/docs/agents/runtime", "permanent": true},
+    {"source": "/docs/platform-agent-runtime", "destination": "/docs/agents/managed-agents", "permanent": true},
     {"source": "/docs/platform-agent-skills", "destination": "/docs/agents/skills", "permanent": true},
     {"source": "/docs/platform-agent-skills-sharing", "destination": "/docs/agents/skills/sharing", "permanent": true},
     {"source": "/docs/platform-agent-plugins", "destination": "/docs/agents/plugins", "permanent": true},
@@ -136,7 +136,7 @@
     {"source": "/docs/llm-proxy/model-router-client-credentials", "destination": "/docs/llm-proxy/authentication#call-as-the-app", "permanent": true},
     {"source": "/docs/llm-proxy/model-router-user-oauth", "destination": "/docs/llm-proxy/authentication#call-for-a-person", "permanent": true},
     {"source": "/docs/knowledge/retrieval", "destination": "/docs/knowledge", "permanent": true},
-    {"source": "/docs/agents/runtime-setup", "destination": "/docs/agents/runtime/setup", "permanent": true},
+    {"source": "/docs/agents/runtime-setup", "destination": "/docs/agents/managed-agents/setup", "permanent": true},
     {"source": "/docs/knowledge/importing", "destination": "/docs/knowledge/files#import-from-a-pipeline", "permanent": true},
     {"source": "/docs/knowledge/files/importing", "destination": "/docs/knowledge/files#import-from-a-pipeline", "permanent": true},
     {"source": "/docs/llm-proxy/model-router/client-credentials", "destination": "/docs/llm-proxy/authentication#call-as-the-app", "permanent": true},
@@ -165,6 +165,10 @@
     {"source": "/docs/contributing/security", "destination": "/docs/contributing#reporting-a-vulnerability", "permanent": true},
     {"source": "/docs/contributing/adding-llm-providers", "destination": "/docs/contributing/extending-archestra#adding-llm-providers", "permanent": true},
     {"source": "/docs/contributing/adding-knowledge-connectors", "destination": "/docs/contributing/extending-archestra#adding-knowledge-connectors", "permanent": true},
-    {"source": "/docs/contributing/adding-knowledge-retrieval-backends", "destination": "/docs/contributing/extending-archestra#adding-knowledge-retrieval-backends", "permanent": true}
+    {"source": "/docs/contributing/adding-knowledge-retrieval-backends", "destination": "/docs/contributing/extending-archestra#adding-knowledge-retrieval-backends", "permanent": true},
+    {"source": "/docs/agents/runtime", "destination": "/docs/agents/managed-agents", "permanent": true},
+    {"source": "/docs/agents/runtime/setup", "destination": "/docs/agents/managed-agents/setup", "permanent": true},
+    {"source": "/docs/agents/runtime/handoff", "destination": "/docs/agents/managed-agents/handoff", "permanent": true},
+    {"source": "/docs/agents/runtime/custom-images", "destination": "/docs/agents/managed-agents/custom-images", "permanent": true}
   ]
 }

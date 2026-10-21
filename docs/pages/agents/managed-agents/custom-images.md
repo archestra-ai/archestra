@@ -1,14 +1,14 @@
 ---
 title: Custom Images
-description: Run your own agent image in Agent Runtime
+description: Run your own agent image as a managed agent
 order: 3
-beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+beta: "Managed Agents are in Beta and require the [Agent Sandbox controller](/docs/agents/managed-agents/setup#cluster-prerequisites)."
 lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Run any agent in [Agent Runtime](/docs/agents/runtime), not only the built-in ones. Bring a container image with your agent in it. Archestra supplies the rest:
+Run any agent as a [managed agent](/docs/agents/managed-agents), not only the built-in ones. Bring a container image with your agent in it. Archestra supplies the rest:
 
 - **The task** and every follow-up.
 - **Models** through the LLM Proxy, and **tools and skills** through the MCP Gateway.
@@ -64,7 +64,7 @@ What to know:
 
 - This example uses the Debian-based built-in image and Debian's packaged Go version. Install the version your project requires if it differs.
 - The Kubernetes cluster must be able to pull your published image.
-- Supply repository tokens through the agent's [environment settings](/docs/agents/runtime#clone-a-private-github-repository), rather than including them in the image.
+- Supply repository tokens through the agent's [environment settings](/docs/agents/managed-agents#clone-a-private-github-repository), rather than including them in the image.
 
 ## Send the Run Headers
 

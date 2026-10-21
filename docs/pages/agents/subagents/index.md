@@ -26,7 +26,7 @@ What to know:
 - External agents are added after the parent agent is created. See [External Agents](/docs/agents/subagents/external).
 - Subagents must share the parent agent's [environment](/docs/admin/environments).
 - Automated runs, with no signed-in person, use only the agents you selected.
-- For long coding tasks, pick a subagent with a [dedicated runtime](/docs/agents/runtime).
+- For long coding tasks, pick a subagent with a [dedicated runtime](/docs/agents/managed-agents).
 
 ## Fork the Agent
 

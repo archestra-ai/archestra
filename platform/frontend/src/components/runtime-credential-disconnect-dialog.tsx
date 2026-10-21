@@ -18,8 +18,8 @@ export function RuntimeCredentialDisconnectDialog({
 }) {
   const impact =
     scope === "personal"
-      ? "Agent Runtime runs you start will no longer be able to use this connection."
-      : "Agent Runtime runs for every Agent bound to this organization connection will stop using it.";
+      ? "Managed agent runs you start will no longer be able to use this connection."
+      : "Managed agent runs for every Agent bound to this organization connection will stop using it.";
 
   return (
     <DeleteConfirmDialog

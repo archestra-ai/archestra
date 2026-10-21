@@ -1,8 +1,8 @@
 ---
 title: Hand Off Work
-description: Hand a task from your local agent to Agent Runtime, then bring the result back
+description: Hand a task from your local agent to a managed agent, then bring the result back
 order: 2
-beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+beta: "Managed Agents are in Beta and require the [Agent Sandbox controller](/docs/agents/managed-agents/setup#cluster-prerequisites)."
 lastUpdated: 2026-10-21
 ---
 
@@ -10,7 +10,7 @@ lastUpdated: 2026-10-21
 
 Start a task on your laptop, and let Archestra finish it. Your local agent hands the task to an agent in Archestra, with your repository changes and context. The task keeps running after you close the laptop. When it is done, your local agent brings the result back as a patch.
 
-With a [dedicated runtime](/docs/agents/runtime), the task runs in its own container, with a live terminal you can watch.
+With a [dedicated runtime](/docs/agents/managed-agents), the task runs in its own container, with a live terminal you can watch.
 
 ## Hand Off a Task
 

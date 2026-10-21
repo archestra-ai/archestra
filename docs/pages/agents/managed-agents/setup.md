@@ -1,9 +1,9 @@
 ---
-title: Agent Runtime Setup
+title: Managed Agents Setup
 sidebarTitle: Setup
-description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
+description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Managed Agents
 order: 1
-beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+beta: "Managed Agents are in Beta and require the [Agent Sandbox controller](/docs/agents/managed-agents/setup#cluster-prerequisites)."
 lastUpdated: 2026-10-21
 ---
 
@@ -35,7 +35,7 @@ kubectl rollout restart deployment/agent-sandbox-controller -n agent-sandbox-sys
 kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
 ```
 
-Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Agent Runtime turns on when Archestra finds the controller in the cluster. You do not need to restart Archestra after you install the controller. Check **Settings → Agents → Runtime Backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
+Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Managed Agents turn on when Archestra finds the controller in the cluster. You do not need to restart Archestra after you install the controller. Check **Settings → Agents → Runtime Backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
 
 The controller does not install a container isolation runtime. Check image architecture and admission policies before starting workloads.
 
@@ -54,7 +54,7 @@ Runtime workspaces use dynamically provisioned `ReadWriteOnce` volumes. Set [`AR
 
 ## EKS With Fargate
 
-Fargate-only clusters cannot host Agent Runtime's storage. [AWS Fargate](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html) does not support EBS mounts or dynamic persistent-volume provisioning.
+Fargate-only clusters cannot host managed agent storage. [AWS Fargate](https://docs.aws.amazon.com/eks/latest/userguide/fargate.html) does not support EBS mounts or dynamic persistent-volume provisioning.
 
 Keep Archestra on Fargate and place runtime containers on EC2 nodes:
 

@@ -136,7 +136,7 @@ describe("AgentCreatePage", () => {
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual(["Managed agents Beta", "External agents"]);
-    expect(screen.getByText("Agent Runtime unavailable.")).toBeVisible();
+    expect(screen.getByText("Managed Agents unavailable.")).toBeVisible();
     expect(
       screen.queryByText(/sandboxes\.agents\.x-k8s\.io/),
     ).not.toBeInTheDocument();

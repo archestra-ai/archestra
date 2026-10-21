@@ -80095,7 +80095,7 @@ export type CreateLlmProviderApiKeyData = {
             [key: string]: string;
         } | null;
         /**
-         * Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach.
+         * Omitted or false: the key is yours alone (you own it and only you use it). True: a shared key with no owner, used by whoever its initialGrants reach. A service account cannot own a key, so it must send true.
          */
         shared?: boolean;
         isPrimary?: boolean;

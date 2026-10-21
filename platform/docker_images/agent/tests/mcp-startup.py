@@ -40,6 +40,7 @@ class Gateway(ThreadingHTTPServer):
         self.catalog_sent = False
         self.discovery_failed = threading.Event()
         self.binding_headers = []
+        self.prompts = []
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -121,6 +122,7 @@ class Handler(BaseHTTPRequestHandler):
         self.server.sequence += 1
         self.reply_id = str(self.server.sequence)
         self.server.requests.append({"names": names, "catalog_sent": self.server.catalog_sent})
+        self.server.prompts.append(json.dumps(request.get("messages") or request.get("input") or ""))
         if len(self.server.requests) == 1:
             print(f"{CLIENT}: first request gateway tools: {[n for n in names if 'remedy' in n or 'yell' in n]}", flush=True)
         tool = next((name for name in names if len(self.server.calls) < len(TOOLS) and name.endswith(TOOLS[len(self.server.calls)].removeprefix("archestra__"))), None)
@@ -217,11 +219,21 @@ class StartupTest(unittest.TestCase):
         def test_empty_gateway_catalog(self):
             self.run_client("one_shot", failure="empty")
 
+    if CLIENT == "claude-code":
+        def test_large_multiline_task(self):
+            # tmux refuses a single command above its ~16 KB message limit.
+            for size in (17_000, 100_000):
+                with self.subTest(size=size):
+                    self.run_client("one_shot", task_size=size)
+
+        def test_task_submission_failure(self):
+            self.run_client("one_shot", submission_failure=True)
+
     if CLIENT != "hermes":
         def test_plain_cli(self):
             self.run_client("one_shot", plain=True)
 
-    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False, missing_binding=False):
+    def run_client(self, mode, plain=False, failure=None, hold=3, resume=False, idle_resume=False, missing_binding=False, task_size=0, submission_failure=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             runtime = root / "runtime"
@@ -232,6 +244,16 @@ class StartupTest(unittest.TestCase):
             threading.Thread(target=server.serve_forever, daemon=True).start()
             origin = f"http://127.0.0.1:{server.server_port}"
             env = {**os.environ, "HOME": str(home), "TERM": "xterm-256color", "PATH": str(BIN) + os.pathsep + os.environ["PATH"], "ARCHESTRA_LLM_PROXY_PROTOCOL": "anthropic" if CLIENT == "claude-code" else "openai_chat" if CLIENT == "hermes" else "openai_responses", "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime), "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn"), "ARCHESTRA_AGENT_RUNTIME_MODE": mode, "ARCHESTRA_AGENT_RUNTIME_PLAIN": "1" if plain else "0", "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "1", "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "claude-sonnet-4-6" if CLIENT == "claude-code" else "gpt-6-astra" if CLIENT == "codex" else "gpt-4.1", "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "startup-test", "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "startup-workspace", "ARCHESTRA_AGENT_RUNTIME_TASK": "Call each recovery tool, then reply STARTUP_OK.", "ARCHESTRA_MCP_GATEWAY_URL": origin + "/mcp", "ARCHESTRA_MCP_GATEWAY_TOKEN": "synthetic-token", "OPENAI_BASE_URL": origin + "/v1", "OPENAI_API_KEY": "synthetic-key", "ANTHROPIC_BASE_URL": origin, "ANTHROPIC_AUTH_TOKEN": "synthetic-key", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
+            if submission_failure:
+                # Only the task paste fails; the pane and MCP status probes work.
+                shim = root / "shim"
+                shim.mkdir()
+                (shim / "tmux").write_text('#!/bin/sh\ncase "$1" in load-buffer|paste-buffer) exit 1;; esac\nexec /usr/bin/tmux "$@"\n')
+                (shim / "tmux").chmod(0o755)
+                env["PATH"] = str(shim) + os.pathsep + env["PATH"]
+            if task_size:
+                line = "Context line that must reach the model unchanged.\n"
+                env["ARCHESTRA_AGENT_RUNTIME_TASK"] += "\n" + line * (task_size // len(line)) + "TASK_TAIL_MARKER"
             try:
                 for turn in range(2 if resume else 1):
                     if missing_binding:
@@ -262,7 +284,7 @@ class StartupTest(unittest.TestCase):
                         self.assertFalse(server.binding_headers, "A runtime without its binding contacted the gateway")
                         self.assertFalse((runtime / "missing-binding.result").exists(), "A runtime without its binding was marked successful")
                     else:
-                        self.run_turn(root, home, runtime, env, server, turn_mode, plain, failure, hold, idle=bool(turn and idle_resume))
+                        self.run_turn(root, home, runtime, env, server, turn_mode, plain, failure, hold, idle=bool(turn and idle_resume), submission_failure=submission_failure)
             finally:
                 server.release.set()
                 server.shutdown()
@@ -271,7 +293,7 @@ class StartupTest(unittest.TestCase):
                     if folder.exists():
                         folder.chmod(0o755)
 
-    def run_turn(self, root, home, runtime, env, server, mode, plain, failure, hold, idle=False):
+    def run_turn(self, root, home, runtime, env, server, mode, plain, failure, hold, idle=False, submission_failure=False):
         turn_prefix = env["ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX"]
         # A previous daemon can still be shutting down when a resumed turn
         # starts. Keep native session storage, but use a fresh socket per turn.
@@ -299,7 +321,7 @@ class StartupTest(unittest.TestCase):
                         os.write(fd, b"\x1b[?1;2c")
                 if idle and server.requests:
                     self.fail("Idle resume submitted inference without a prompt")
-                if failure and server.requests:
+                if (failure or submission_failure) and server.requests:
                     self.fail("Inference ran after required gateway discovery failed: " + repr(server.requests[:1]))
                 if failure and server.discovery_failed.is_set() and time.monotonic() - started > (40 if failure in ("timeout", "empty") else 12):
                     break
@@ -333,6 +355,17 @@ class StartupTest(unittest.TestCase):
                 self.assertFalse(Path(turn_prefix + ".result").exists(), "Failed startup was marked successful")
                 print(f"{CLIENT}: {failure} failure sends no tool-using inference", flush=True)
                 return
+            if submission_failure:
+                self.assertTrue(server.catalog_sent, details)
+                self.assertFalse(server.requests, details)
+                envelope = json.loads(Path(turn_prefix + ".failure").read_text())
+                self.assertEqual(envelope["code"], "task_submission", details)
+                self.assertNotIn("MCP", envelope["message"])
+                self.assertEqual((runtime / "final-answer.txt").read_text().strip(), envelope["message"])
+                self.assertTrue((runtime / "turn-complete.failed").exists(), details)
+                self.assertFalse(Path(turn_prefix + ".result").exists(), "Unsubmitted task was marked successful")
+                print(f"{CLIENT}: task submission failure is reported as such", flush=True)
+                return
             if idle:
                 # Some clients connect lazily when the next prompt arrives.
                 # Claude's terminal gate must finish even for an idle restore.
@@ -352,6 +385,9 @@ class StartupTest(unittest.TestCase):
                     self.assertTrue(any(name.endswith(tool.removeprefix("archestra__")) for name in request["names"]), (tool, request))
             if not plain:
                 self.assertTrue((runtime / "readable-transcript.json").exists(), details)
+            if len(env["ARCHESTRA_AGENT_RUNTIME_TASK"]) > 16_000:
+                # Every byte and line feed of the task reaches the model.
+                self.assertIn(json.dumps(env["ARCHESTRA_AGENT_RUNTIME_TASK"])[1:-1], server.prompts[0], "The large task was altered")
             if mode == "one_shot":
                 if plain:
                     self.assertEqual(status, 0, details)

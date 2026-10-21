@@ -2,12 +2,12 @@
 title: Credentials and Secrets
 description: Save credentials once, reuse them across integrations, and configure encrypted secrets storage
 order: 1
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Credentials supply authentication to Agent Runtime, MCP servers, skills, plugins, and Knowledge connectors. Manage them under **Settings → Credentials**. Credentials are available without enabling Agent Runtime.
+Credentials supply authentication to managed agents, MCP servers, skills, plugins, and Knowledge connectors. Manage them under **Settings → Credentials**. Credentials are available without enabling Managed Agents.
 
 ## Credential Types
 
@@ -29,15 +29,15 @@ A **GitHub user credential** links your account to an organization-managed App. 
 
 The organization App needs an OAuth client ID and client secret for personal authorization. Register `<frontend URL>/settings/credentials/github/callback` as its callback URL. Keep expiring user authorization tokens enabled. Personal authorization requires writable secret storage.
 
-GitHub user credentials and installation credentials have separate ownership policies. Interactive coding agents can use personal credentials. Unattended agents can use the organization's installation credential.
+GitHub user credentials and installation credentials have separate ownership policies. Interactive agents can use personal credentials. Unattended agents can use the organization's installation credential.
 
 ## Ownership
 
 Every credential definition has a name, description, type, and owner policy. Its saved values are separate from that definition.
 
-**Each user** means every person connects their own private value. Agent Runtime uses the person acting on the run. MCP servers use the owner of a personal installation. Another user's value is never substituted.
+**Each user** means every person connects their own private value. Managed agents use the person acting on the run. MCP servers use the owner of a personal installation. Another user's value is never substituted.
 
-People who can open **Settings → Credentials** connect their own values, and add credentials only they can use, there. Everyone else does it under **Personal Settings → Credentials** (click your name in the sidebar). That page lists every personal credential they can see and, with Agent Runtime enabled, their Claude Code subscription.
+People who can open **Settings → Credentials** connect their own values, and add credentials only they can use, there. Everyone else does it under **Personal Settings → Credentials** (click your name in the sidebar). That page lists every personal credential they can see and, with Managed Agents enabled, their Claude Code subscription.
 
 **The organization** means an administrator connects one shared value. Scheduled skill, plugin, and Knowledge syncs use organization credentials.
 
@@ -130,7 +130,7 @@ Archestra supports three authentication methods for connecting to HashiCorp Vaul
 
 ## Using Credentials
 
-Agent Runtime and MCP environment editors share the same **Secret source** selector. Choose a saved credential and enter the variable name expected by the runtime. One credential can supply `GITHUB_TOKEN` in one resource and `GH_TOKEN` in another.
+Managed agent and MCP environment editors share the same **Secret source** selector. Choose a saved credential and enter the variable name expected by the runtime. One credential can supply `GITHUB_TOKEN` in one resource and `GH_TOKEN` in another.
 
 A resource-specific secret supplies only that resource. Use a saved credential when several resources need the same value.
 
@@ -140,7 +140,7 @@ Skill and plugin imports and policy sync use a GitHub App or a GitLab token. Git
 
 ## Rotation And Disconnection
 
-Replacing a value updates future resolutions wherever the credential is referenced. For static secrets, restart MCP processes or start a new Agent Runtime run.
+Replacing a value updates future resolutions wherever the credential is referenced. For static secrets, restart MCP processes or start a new managed agent run.
 
 Skill and Knowledge operations resolve GitHub App tokens when they authenticate. Managed runtime tokens also renew during execution. Personal GitHub credentials refresh automatically while their authorization remains valid. Expired or revoked authorization requires reconnecting through GitHub.
 
@@ -150,7 +150,7 @@ Disconnecting removes a saved value without removing its definition. Required bi
 
 MCP servers receive renewed tokens through a managed process restart. Existing calls finish before renewal. New calls receive a retry response while the server drains and reconnects. Shared installations renew their common process together. Failed tool calls are never replayed automatically.
 
-Agent Runtime keeps its running process and workspace. The built-in Agent reads renewed values before each shell command. Maintained images refresh GitHub authentication for each `gh` invocation, including Git credential-helper requests.
+A managed agent keeps its running process and workspace. The built-in Agent reads renewed values before each shell command. Maintained images refresh GitHub authentication for each `gh` invocation, including Git credential-helper requests.
 
 Custom runtime code reads the file named by `ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE`. It contains a `taskId` and a `credentials` object keyed by environment-variable name. Each entry has a `value` and `expiresAt`, expressed in Unix milliseconds. Read the file again before authenticating, and reject expired values. Kubernetes updates this file without restarting the process.
 
@@ -162,7 +162,7 @@ Provider failures delay renewal. Tokens keep their original expiry. MCP calls fa
 
 Save a GitHub token as an organization **Custom secret** named **Repository access**. Connect its value once.
 
-Select **Repository access** for a coding Agent's `GITHUB_TOKEN` environment variable. Select it again for a GitHub MCP server's `GITHUB_PERSONAL_ACCESS_TOKEN` variable. Use the same credential for a GitHub Knowledge connector.
+Select **Repository access** for a managed agent's `GITHUB_TOKEN` environment variable. Select it again for a GitHub MCP server's `GITHUB_PERSONAL_ACCESS_TOKEN` variable. Use the same credential for a GitHub Knowledge connector.
 
 For personal repository access, create a **GitHub user credential** referencing the organization App. Each person authorizes GitHub once. Select that credential for each coding harness and personal MCP installation.
 

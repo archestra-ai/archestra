@@ -38,7 +38,7 @@ export function RuntimeCapableIndicator({
   const templateName = templateId
     ? AGENT_CATALOG_TEMPLATE_NAMES[templateId]
     : null;
-  const tooltip = `Runs ${templateName ? `${templateName} ` : ""}in a dedicated Agent Runtime. Starting it opens a live terminal instead of a chat.`;
+  const tooltip = `Runs ${templateName ? `${templateName} ` : ""}as a managed agent. Starting it opens a live terminal instead of a chat.`;
 
   if (variant === "icon") {
     return (
@@ -67,7 +67,7 @@ export function RuntimeCapableIndicator({
         <TooltipContent side="bottom" className="px-2.5 py-1">
           <span className="flex flex-col leading-snug">
             <span className="font-medium">
-              {templateName ?? "Agent Runtime"}
+              {templateName ?? "Managed agent"}
             </span>
             <span className="text-muted-foreground">Opens a live terminal</span>
           </span>

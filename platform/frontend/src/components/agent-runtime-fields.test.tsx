@@ -387,7 +387,7 @@ describe("AgentRuntimeFields", () => {
     });
     expect(toggle).toBeEnabled();
     expect(
-      screen.getByText(/Agent Runtime is off on this deployment/),
+      screen.getByText(/Managed Agents are off on this deployment/),
     ).toBeVisible();
 
     await user.click(toggle);

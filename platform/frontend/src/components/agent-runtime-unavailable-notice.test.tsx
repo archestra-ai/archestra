@@ -63,7 +63,7 @@ describe("Agent Runtime unavailable notice", () => {
   it("reveals the discovered missing API resources only when requested", async () => {
     renderNotice();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Agent Runtime unavailable. The Agent Sandbox controller is not installed.",
+      "Managed Agents unavailable. The Agent Sandbox controller is not installed.",
     );
     const toggle = await screen.findByRole("button", { name: "Show details" });
     expect(screen.queryByText(/Missing API resources/)).not.toBeInTheDocument();

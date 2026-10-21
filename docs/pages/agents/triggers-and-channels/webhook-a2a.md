@@ -80,7 +80,7 @@ The reply is the agent's message:
 }
 ```
 
-**Some calls return a task, not a message:** an agent with a [dedicated runtime](/docs/agents/runtime), a tool call that needs approval, or a background run. A finished task holds the answer in its text artifact `agent-response`. `messageId` is optional.
+**Some calls return a task, not a message:** an agent with a [dedicated runtime](/docs/agents/managed-agents), a tool call that needs approval, or a background run. A finished task holds the answer in its text artifact `agent-response`. `messageId` is optional.
 
 ## Continuing a Conversation
 

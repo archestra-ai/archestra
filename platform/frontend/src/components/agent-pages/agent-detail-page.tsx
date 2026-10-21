@@ -950,7 +950,7 @@ const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
   general: "General",
   tools: "Tools, Skills & Knowledge",
   messaging: "Triggers & Channels",
-  runtime: "Agent Runtime",
+  runtime: "Runtime",
   advanced: "Advanced",
   connect: "Connect",
   runs: "Runs",

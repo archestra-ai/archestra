@@ -154,7 +154,7 @@ describe("AgentWorkSources", () => {
     ).toHaveAttribute("href", "/agents/a1/edit?step=messaging");
     // A coding agent already has a runtime: nothing to offer there.
     expect(
-      screen.queryByRole("link", { name: "Set up Agent Runtime" }),
+      screen.queryByRole("link", { name: "Set up managed agent" }),
     ).toBeNull();
   });
 
@@ -184,7 +184,7 @@ describe("AgentWorkSources", () => {
       screen.getByRole("link", { name: "Add MS Teams channel" }),
     ).toHaveAttribute("href", "/agents/a1/edit?step=messaging");
     expect(
-      screen.getByRole("link", { name: "Set up Agent Runtime" }),
+      screen.getByRole("link", { name: "Set up managed agent" }),
     ).toHaveAttribute("href", "/agents/a1/edit");
   });
 

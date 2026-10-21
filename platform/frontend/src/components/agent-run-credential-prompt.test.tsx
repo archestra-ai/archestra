@@ -15,7 +15,7 @@ describe("AgentRuntimeCredentialPrompt", () => {
         agentId="agent-1"
         missing={[]}
         declarations={[]}
-        incompatible="This Agent Runtime image expects the Anthropic API."
+        incompatible="This managed agent image expects the Anthropic API."
         onConnected={vi.fn()}
       />,
     );

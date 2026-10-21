@@ -3022,6 +3022,140 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         ],
       });
     });
+
+    test.each([
+      true,
+      false,
+    ])("shows the complete review after Inspect and records the ruling on Allow, each card reaching the user (stream=%s)", async (stream) => {
+      config.openappa = { ...config.openappa, offerSigningSecret: "" };
+      const offerId = "offer-hitl-deferred-inspect";
+      const session = {
+        organization_id: agent.organizationId,
+        caller_id: `user:${userId}`,
+        session_id: `user:${userId}|${claudeSession}`,
+      };
+      // Longer than the card's preview shows, so only Inspect delivers it.
+      const command = `echo ${"exact-payload ".repeat(400)}`;
+      await stageHitlReview({
+        session,
+        review: {
+          offerId,
+          text: [
+            "[OpenAPPA] Approve this call?",
+            "",
+            "What this ruling would cover:",
+            "  - the readers must be the public audience",
+            "",
+          ].join("\n"),
+          tool: "Bash",
+          arguments: JSON.stringify({ command, cmd: command }),
+          remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
+        },
+      });
+      const askUser = {
+        name: "archestra__ask_user",
+        input: {
+          question: "Open the pending HITL review.",
+          header: "Approval",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          remedy_offer_ids: [offerId],
+        },
+      };
+      const send = (history: unknown[]) => {
+        providerRequests.length = 0;
+        return app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: { ...internalCallHeader(), ...claudeCode() },
+          payload: deferring(payload(stream, history)),
+        });
+      };
+      const ask = async (history: unknown[]) => {
+        options = {
+          includeToolUse: true,
+          streamStopReason: "tool_use",
+          nonStreamingToolUse: askUser,
+          streamingToolUse: askUser,
+        };
+        const response = await send(history);
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).not.toContain("is not loaded in this session");
+        const card = noticeFrom(response.body, stream);
+        expect(card.name).toBe("AskUserQuestion");
+        const [question] = (
+          card.input as {
+            questions: Array<{
+              question: string;
+              options: Array<{ label: string }>;
+            }>;
+          }
+        ).questions;
+        expect(question.options.map((option) => option.label)).toEqual([
+          "Allow",
+          "Deny",
+          "Inspect",
+        ]);
+        return { body: response.body, card, question: question.question };
+      };
+      const answered = (
+        card: ReturnType<typeof noticeFrom>,
+        question: string,
+        label: string,
+      ) => [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: card.id,
+              name: card.name,
+              input: card.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: card.id,
+              content: `Your questions have been answered: "${question}"="${label}". You can now continue with these answers in mind.`,
+            },
+          ],
+        },
+      ];
+      const opening = [{ role: "user", content: "Run the command" }];
+
+      const first = await ask(opening);
+      expect(first.body).not.toContain("exact-payload");
+
+      // Inspect: the complete review precedes the same card, and the model
+      // reads the instruction to ask again in place of the answer.
+      const inspecting = [
+        ...opening,
+        ...answered(first.card, first.question, "Inspect"),
+      ];
+      const second = await ask(inspecting);
+      expect(second.body).toContain("exact-payload");
+      expect(JSON.stringify(providerRequests.at(-1))).toContain(
+        "the platform will place the complete, authoritative review",
+      );
+      expect(await peekHitlDecision({ session, offerId })).toBeUndefined();
+
+      // Allow on the card issued again records the ruling.
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      const approved = await send([
+        ...inspecting,
+        ...answered(second.card, second.question, "Allow"),
+      ]);
+      expect(approved.statusCode, approved.body).toBe(200);
+      expect(approved.body).not.toContain("is not loaded in this session");
+      expect(JSON.stringify(providerRequests.at(-1))).toContain(
+        "approved OpenAPPA offer IDs",
+      );
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    });
   });
 
   test.each([

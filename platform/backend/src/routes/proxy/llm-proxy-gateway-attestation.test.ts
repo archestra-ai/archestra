@@ -1121,6 +1121,94 @@ describe("Gateway tool attestation on the LLM proxy", () => {
         "Search for get_remedy_plans and execute_remedy_plan with your tool search",
       );
     });
+
+    // The tools of a captured Claude Code 2.1.285 request with tool search
+    // on, names and deferral only: the client's own tools, then the
+    // gateway's and an MCP server's, all deferred.
+    const capturedToolSearchRequest = () => [
+      ...[
+        "Agent",
+        "AskUserQuestion",
+        "Bash",
+        "Edit",
+        "ListAgents",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "Skill",
+        "ToolSearch",
+        "Workflow",
+        "Write",
+      ].map((name) => ({ name })),
+      ...[
+        ASK_USER,
+        CONTROL,
+        NOTICE,
+        "archestra__list_peer_messages",
+        "archestra__read_peer_message",
+        "archestra__yell",
+      ].map((advertised) => ({
+        name: claudeCode.spell("archestra", advertised),
+        description: served(advertised),
+        defer_loading: true,
+      })),
+      { name: "DeferredToolPlaceholder", defer_loading: true },
+      { name: "mcp__many__probe_tool_3", defer_loading: true },
+    ];
+
+    test("issues its own question for the gateway ask_user, and still refuses a tool the request does not declare as not loaded", async () => {
+      block = false;
+      claudeCode.modelCalls({
+        name: claudeCode.spell("archestra", ASK_USER),
+        input: {
+          question: "Which probe?",
+          header: "Probe",
+          options: [{ label: "3" }, { label: "7" }],
+        },
+      });
+      const asked = await claudeCode.send(capturedToolSearchRequest());
+      expect(asked.statusCode, asked.body).toBe(200);
+      expect(asked.body).not.toContain("is not loaded in this session");
+      expect(claudeCode.released(asked.body)).toEqual([
+        {
+          name: "AskUserQuestion",
+          input: {
+            questions: [
+              {
+                question: "Which probe?",
+                header: "Probe",
+                options: [
+                  { label: "3", description: "3" },
+                  { label: "7", description: "7" },
+                ],
+                multiSelect: false,
+              },
+            ],
+          },
+        },
+      ]);
+
+      claudeCode.modelCalls({ name: "mcp__many__probe_tool_7", input: {} });
+      const undeclared = await claudeCode.send(capturedToolSearchRequest());
+      expect(undeclared.statusCode, undeclared.body).toBe(200);
+      const [refusal] = claudeCode.released(undeclared.body);
+      expect(refusal.name).toBe(claudeCode.spell("archestra", NOTICE));
+      expect(refusal.input).toMatchObject({
+        tool: "mcp__many__probe_tool_7",
+        ruling:
+          "[appa] mcp__many__probe_tool_7 is not loaded in this session. Search for it with your tool search, then call it again.",
+      });
+
+      claudeCode.modelCalls({
+        name: "mcp__many__probe_tool_3",
+        input: { note: "x" },
+      });
+      const declared = await claudeCode.send(capturedToolSearchRequest());
+      expect(declared.statusCode, declared.body).toBe(200);
+      expect(claudeCode.released(declared.body)).toEqual([
+        { name: "mcp__many__probe_tool_3", input: { note: "x" } },
+      ]);
+    });
   });
 
   // Codex on a tool-search model declares a client-run `tool_search` and loads
@@ -1189,6 +1277,67 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       expect(response.body).toContain(
         "unloaded_tool is not loaded in this session. Search for it with your tool search, then call it again.",
       );
+    });
+
+    test("issues request_user_input in place of the namespaced gateway ask_user", async () => {
+      block = false;
+      const label = "mcp__archestra";
+      codex.modelCalls({
+        name: ASK_USER,
+        namespace: label,
+        input: {
+          question: "Which probe?",
+          header: "Probe",
+          options: [{ label: "3" }, { label: "7" }],
+        },
+      });
+
+      const response = await post({
+        url: `/v1/openai/${agent.id}/responses`,
+        headers: {
+          originator: "codex_exec",
+          "x-archestra-native-question": "request_user_input",
+        },
+        payload: {
+          model: "gpt-4o",
+          stream: false,
+          input: [{ role: "user", content: "Pick a probe" }],
+          tools: [
+            codex.function(WEATHER),
+            codex.function({ name: "request_user_input" }),
+            search,
+            codex.namespace(
+              label,
+              [ASK_USER, NOTICE, CONTROL].map((name) => ({
+                name,
+                description: served(name),
+              })),
+            ),
+          ],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).not.toContain("is not loaded in this session");
+      expect(codex.released(response.body)).toEqual([
+        {
+          name: "request_user_input",
+          namespace: undefined,
+          input: {
+            questions: [
+              {
+                id: "archestra_question",
+                header: "Probe",
+                question: "Which probe?",
+                options: [
+                  { label: "3", description: "3" },
+                  { label: "7", description: "7" },
+                ],
+              },
+            ],
+          },
+        },
+      ]);
     });
   });
 

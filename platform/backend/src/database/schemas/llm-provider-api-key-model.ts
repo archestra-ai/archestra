@@ -1,11 +1,13 @@
 import {
   boolean,
   index,
+  jsonb,
   pgTable,
   timestamp,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ProviderModelPricing } from "@/types/provider-model-pricing";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 
@@ -31,6 +33,8 @@ const llmProviderApiKeyModelsTable = pgTable(
       .notNull()
       .references(() => modelsTable.id, { onDelete: "cascade" }),
     /** Whether this model is marked as the best (highest quality) for this API key */
+    /** USD/token rates published by this endpoint, isolated from other instances. */
+    providerPricing: jsonb("provider_pricing").$type<ProviderModelPricing>(),
     isBest: boolean("is_best").notNull().default(false),
     /**
      * Whether this model is worth pointing an agent at, as judged from what

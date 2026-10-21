@@ -116,6 +116,30 @@ describe("WithPagePermissions", () => {
     ).toBeVisible();
   });
 
+  it("keeps an admin on an Appearance subpage", () => {
+    signInAs(predefinedPermissionsMap.admin);
+    renderAt("/settings/appearance/branding");
+    expect(screen.getByText("Page content")).toBeVisible();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("shows nothing on an Appearance subpage until permissions load", () => {
+    signInAs(null);
+    renderAt("/settings/appearance/chat");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("refuses an Appearance subpage without organization settings access", () => {
+    // Users is enough to open Settings, but not Appearance.
+    signInAs({ member: ["read"] } as Permissions);
+    renderAt("/settings/appearance/branding");
+    expect(screen.queryByText("Page content")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("You don't have permission to access this page."),
+    ).toBeVisible();
+  });
+
   it("leaves pages outside Settings to their own permission", () => {
     signInAs(predefinedPermissionsMap.member);
     renderAt("/account/credentials");

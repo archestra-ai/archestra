@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
+import { APIError as OpenAIAPIError } from "openai";
 import { describe, expect, test, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { SESSION_ID_KEY } from "@/observability/request-context";
@@ -1148,6 +1149,13 @@ describe("handleError", () => {
   const extractMessage = (error: unknown) =>
     error instanceof Error ? error.message : "Internal server error";
 
+  /** The events of a Responses error frame: the `error` event, then the terminal. */
+  const responsesEvents = (frame: string) =>
+    frame
+      .split("\n\n")
+      .filter(Boolean)
+      .map((event) => JSON.parse(event.replace(/^data: /, "")));
+
   test("preserves the internal code carried by a thrown ApiError", () => {
     const { reply } = makeReply(false);
     const upstreamError = new ApiError(
@@ -1299,12 +1307,45 @@ describe("handleError", () => {
     );
 
     expect(writes).toHaveLength(1);
-    const payload = JSON.parse(writes[0].replace(/^data: /, ""));
+    const [payload] = responsesEvents(writes[0]);
     expect(payload.error).toEqual({
       type: "server_error",
       code: "upstream_connection_closed",
       message: CLOSED_MESSAGE,
       param: null,
+    });
+  });
+
+  test("keeps an in-stream provider error's own code and fields on a Responses stream", () => {
+    // The OpenAI SDK throws this when the stream carries an `error` event:
+    // no HTTP status, the event's error object on `.error`. Codex stops a
+    // turn on `misalignment_policy_violation` and shows its review details;
+    // replaced by the error type, the code read as a retryable failure.
+    const upstreamError = {
+      type: "invalid_request_error",
+      code: "misalignment_policy_violation",
+      message: "This request was blocked by our safety systems.",
+      misalignment: {
+        error_type: "other",
+        detailed_explanation: "The agent turned off a safety check.",
+      },
+    };
+    const { reply, writes } = makeReply(true);
+
+    handleError(
+      new OpenAIAPIError(undefined, upstreamError, undefined, new Headers()),
+      reply,
+      extractMessage,
+      true,
+      () => undefined,
+      formatResponsesStreamErrorFrame,
+    );
+
+    const events = responsesEvents(writes[0]);
+    expect(events[0].error).toMatchObject(upstreamError);
+    expect(events.at(-1)).toMatchObject({
+      type: "response.failed",
+      response: { status: "failed", error: upstreamError },
     });
   });
 

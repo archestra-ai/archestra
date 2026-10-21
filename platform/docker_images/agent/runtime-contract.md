@@ -19,6 +19,12 @@ This reference is for custom image authors. For maintained image targets and bui
 
 The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. When `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` and the mode is `interactive`, an absent or empty task means reopen the saved conversation without submitting a prompt. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
+### Background work in maintained images
+
+One delegated assignment may span several model turns. A turn ending to wait for background results does not mean that assignment is complete. The maintained TUI supervisor can publish the assignment result while retaining the native client for later interaction, so a live process alone does not establish that reporting is still active.
+
+Claude Code supplies both `background_tasks` and `session_crons` from its Stop hook. Every registered entry holds the assignment, without a task-type allowlist. Its adapter also tracks native background launches through result delivery: a finished shell or agent can leave the running inventory before its notification reaches the main agent. This delivery state is scoped to the current assignment and reset at wrapper startup. Completion requires a fresh main-agent Stop with no pending work. Missing or invalid inventory fails the assignment explicitly. Waiting suppresses idle-input attention; permission requests remain visible. Cancellation, API failure and the workspace hard deadline still end the run. A quiet recurring monitor must be deleted when no longer needed. Unregistered detached processes are outside this contract. Interactive sessions retain their existing lifecycle. Other harnesses still need verified native adapters before adopting this policy.
+
 ## Failure Reasons
 
 Custom images can publish a user-facing failure before exiting non-zero. Write a versioned JSON envelope to `${ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX}.failure`. The supervisor supplies this turn-specific prefix before initialization and client startup.

@@ -81,7 +81,9 @@ The native wrappers create client configuration at run time under `/var/run/arch
 
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
-In delegated runs, Claude Code ends a turn while its background subagents or workflows still run, and starts a new turn when they report back. The wrapper completes the run only after a turn ends with none of them running. Background shells do not keep the run open.
+Delegated Claude Code assignments stay open until registered background work finishes and the main agent handles its result. This includes shells, subagents and native scheduled monitors. Stop background servers and delete recurring monitors when the assignment is done. Unregistered detached processes are not detected. See the [background-work contract](runtime-contract.md#background-work-in-maintained-images) for lifecycle and failure rules. Codex and OpenCode adapters are not included.
+
+`tests/claude-background-work.py` exercises the pinned Claude binary and retained tmux runtime with scripted model and MCP HTTP endpoints. Image builds run all six short cases. For the ten-minute check, run `BackgroundWorkTest.test_background_review_keeps_turn_open` inside a maintained Claude image with `ARCHESTRA_TEST_BACKGROUND_SECONDS=600`.
 
 Maintained clients send `ARCHESTRA_AGENT_RUNTIME_TASK_ID` as `X-Archestra-Run-Id` to label one turn. They send `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` as both `X-Archestra-Session-Id` and `X-Appa-Session-ID` to keep the conversation together across turns and follow-ups. New wrappers must use the same stable session ID on proxy and MCP gateway requests; see the [runtime image contract](runtime-contract.md#runtime-environment).
 

@@ -13,7 +13,7 @@ MESSAGE = ('The provider revision does not read OPENAPI_SPEC in make codegen-api
 
 
 class OfflineGenerationTests(unittest.TestCase):
-    def run_checker(self, source_mode):
+    def run_checker(self, source_mode, failing=()):
         with tempfile.TemporaryDirectory() as work:
             root = Path(work)
             provider = root/'provider'
@@ -29,7 +29,7 @@ class OfflineGenerationTests(unittest.TestCase):
                 'case "$4" in\n'
                 '  ./internal/provider) test ! -e "$2/.codegen" ;;\n'
                 '  ./...) test -f "$2/.codegen/openapi.raw.json" ;;\n'
-                'esac\n')
+                'esac\n' + ''.join(f'test "$4" != {target} || exit 1\n' for target in failing))
             (bin_path/'go').chmod(0o755)
             primary = 'cp "$$ARCHESTRA_OPENAPI_SPEC" .codegen/openapi.raw.json'
             credential = 'cp "$$ARCHESTRA_OPENAPI_SPEC" .codegen/credentials-source.json'
@@ -88,6 +88,19 @@ class OfflineGenerationTests(unittest.TestCase):
         self.assertIn('All generated-client source SHA256 hashes match', result.stdout)
         self.assertNotIn('credentials-source.json', result.stdout)
         self.assertLess(result.stdout.index('All generated-client'), result.stdout.index('go-was-run'))
+
+    def test_failures_say_where_to_fix_them(self):
+        contracts = 'Fix them on terraform-provider-archestra main.'
+        unit_tests = 'fix the provider code there.'
+        for failing, shown, hidden in ((('./internal/provider',), contracts, unit_tests),
+                                       (('./...',), unit_tests, contracts)):
+            with self.subTest(failing=failing):
+                result = self.run_checker('v3', failing)
+                self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+                self.assertIn(shown, result.stderr)
+                self.assertNotIn(hidden, result.stderr)
+                self.assertEqual(result.stderr.splitlines()[-1],
+                                 'The check runs against provider main, so the failure can predate this pull request.')
 
     def test_selected_spec_is_verified_before_compile(self):
         result = self.run_checker('honor')

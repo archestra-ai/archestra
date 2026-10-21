@@ -49,6 +49,7 @@ os.execvp(sys.argv[1], sys.argv[1:] + ([task] if task else []))
     name,
     "archestra-agent-failure",
     "archestra-agent-instructions",
+    "archestra-claude-background",
     "archestra-codex-failure-watch",
   ]) {
     await symlink(path.join(IMAGE_BIN, script), path.join(bin, script));

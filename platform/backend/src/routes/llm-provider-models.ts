@@ -344,10 +344,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user }, reply) => {
-      // No visible keys: a picker needs each model and its `isBest` flag
-      // (still taken across every link), not the keys that serve it.
+      // Resolve prices from the caller's instances; conflicting rates remain
+      // unknown on a picker that has not selected a provider key yet.
       const linked = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
-        visibleKeyIds: [],
+        visibleKeyIds: await LlmProviderApiKeyModel.getVisibleKeyIds(
+          organizationId,
+          user.id,
+        ),
       });
       const unlinked = await findUnlinkedLlmProxyModels(linked);
       const options = [

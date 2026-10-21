@@ -336,7 +336,7 @@ export async function startOpenappaRuntime(): Promise<void> {
   await binding().catch(openappaFailure);
 }
 
-export type OpenappaReadiness =
+type OpenappaReadiness =
   | { state: "disabled" | "ready" | "starting" }
   | { state: "unavailable"; code: RuntimeFailureCode | "unknown" };
 

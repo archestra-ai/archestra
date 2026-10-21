@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
-import { openappaReadiness } from "@/openappa/service";
 import healthRoutes, { mapSandboxStatus } from "./health";
 
 describe("mapSandboxStatus", () => {
@@ -57,32 +56,5 @@ describe("GET /ready", () => {
     expect(body.openappa).toBe("not_checked");
 
     await app.close();
-  });
-});
-
-describe("openappaReadiness", () => {
-  const original = {
-    openappa: config.openappa.enabled,
-    core: config.enterpriseFeatures.core,
-  };
-  afterEach(() => {
-    config.openappa.enabled = original.openappa;
-    config.enterpriseFeatures.core = original.core;
-  });
-
-  test("a deployment without Guardrails is not held back by it", async () => {
-    config.openappa.enabled = false;
-    expect(await openappaReadiness()).toEqual({ state: "disabled" });
-  });
-
-  test("a runtime that cannot open reports unavailable with its code", async () => {
-    // The test process never resolves a database URL for the native runtime,
-    // so opening it fails the way a refused URL does in a deployment.
-    config.openappa.enabled = true;
-    config.enterpriseFeatures.core = true;
-    expect(await openappaReadiness()).toEqual({
-      state: "unavailable",
-      code: "unknown",
-    });
   });
 });

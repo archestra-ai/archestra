@@ -112,6 +112,37 @@ afterEach(() => {
 });
 
 describe("SlackReplyStream", () => {
+  test("repeated input and approval updates cannot append the argument preview again", async () => {
+    const { stream, chat } = createStream();
+    const input = {
+      type: "tool-input-available" as const,
+      toolCallId: "repeated",
+      toolName: "example__tool",
+      input: { title: "Example task", payload: "x".repeat(1_000_000) },
+    };
+    stream.push(input);
+    stream.push(input);
+    stream.push({
+      type: "tool-approval-request",
+      toolCallId: "repeated",
+      approvalId: "review-1",
+    });
+    await flush();
+    stream.push({ type: "tool-output-denied", toolCallId: "repeated" });
+    await stream.finish({ text: "Denied" });
+    const chunks = [
+      ...chat.startStream.mock.calls,
+      ...chat.appendStream.mock.calls,
+      ...chat.stopStream.mock.calls,
+    ].flatMap((call) => call[0].chunks ?? []);
+    const detail = chunks
+      .map((chunk: { details?: string }) => chunk.details ?? "")
+      .join("");
+    expect(detail.match(/Arguments:/g)).toHaveLength(1);
+    expect(detail).toContain("Example task");
+    expect(detail.length).toBeLessThanOrEqual(256);
+  });
+
   test("updates one pending card with complete arguments, then settles it once", async () => {
     const { stream, chat } = createStream();
     stream.push({

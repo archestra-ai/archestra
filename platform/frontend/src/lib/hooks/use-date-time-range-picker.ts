@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   describeTimeRange,
-  isRelativeTimeRange,
   resolveTimeRange,
   type TimeRange,
 } from "@/components/time-range-picker/time-range";
-import { useMinute } from "@/components/time-range-picker/use-minute";
 
 export interface UseDateTimeRangePickerOptions {
   startDateFromUrl: string | null;
@@ -35,8 +33,9 @@ export interface UseDateTimeRangePickerReturn {
 /**
  * A page's time filter, kept in its URL as written ("now-6h" to "now", or two
  * exact times) so a relative range keeps rolling forward on reload and in a
- * shared link. Relative ranges are re-resolved every minute, so the queries
- * built from them move with the clock.
+ * shared link. A relative range resolves against the moment it was loaded or
+ * picked and then holds still: the list never refreshes under the reader, and
+ * picking the range again or reloading brings it up to date.
  */
 export function useDateTimeRangePicker({
   startDateFromUrl,
@@ -53,21 +52,25 @@ export function useDateTimeRangePicker({
   useEffect(() => {
     if (hasUrlRange) return;
     const stored = readStoredRange();
-    if (stored) setRangeState(stored);
+    if (stored) {
+      setRangeState(stored);
+      setAnchor(startOfMinute());
+    }
   }, [hasUrlRange]);
-  const minute = useMinute(range !== null && isRelativeTimeRange(range));
-
+  // Resolved to the start of the minute, so queries keep a stable key.
+  const [anchor, setAnchor] = useState(startOfMinute);
   const resolved = useMemo(
-    () => (range ? resolveTimeRange(range, new Date(minute)) : undefined),
-    [range, minute],
+    () => (range ? resolveTimeRange(range, new Date(anchor)) : undefined),
+    [range, anchor],
   );
   // A range that runs up to now leaves its end open, so rows written since
-  // the last tick still show.
+  // it was resolved still show on the next fetch.
   const endsNow = range?.to.trim() === "now";
 
   const setRange = useCallback(
     (next: TimeRange) => {
       setRangeState(next);
+      setAnchor(startOfMinute());
       storeRange(next);
       onDateRangeChange({ startDate: next.from, endDate: next.to });
     },
@@ -81,8 +84,8 @@ export function useDateTimeRangePicker({
   }, [onDateRangeChange]);
 
   const getDateRangeDisplay = useCallback(
-    () => (range ? describeTimeRange(range, new Date(minute)) : null),
-    [range, minute],
+    () => (range ? describeTimeRange(range, new Date(anchor)) : null),
+    [range, anchor],
   );
 
   return {
@@ -132,3 +135,7 @@ function storeRange(range: TimeRange | null) {
 
 /** One range for every log page in this browser. */
 const STORAGE_KEY = "archestra-logs-time-range";
+
+function startOfMinute(): number {
+  return Math.floor(Date.now() / 60_000) * 60_000;
+}

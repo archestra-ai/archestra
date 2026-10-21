@@ -1,54 +1,68 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
 import { KpiTile } from "@/app/llm/(costs)/costs/cost-overview";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useAgentAdoption,
   useAgentAdoptionUsage,
 } from "@/lib/connected-client.query";
-import { cn } from "@/lib/utils/tailwind";
 import { AgentAdoptionUsers } from "./agent-adoption";
 import { ConnectionLogTable } from "./connection-log-table";
 import { ConnectionUsageExplorer } from "./connection-usage";
+import type { Dimension } from "./connection-usage-data";
 import type { ConnectionsWindow } from "./connections-window";
 
+/**
+ * Three views of one window. Usage is the call explorer (its "by" picks the
+ * user, agent or gateway grouping the old per-grouping views preset), User
+ * connections is who has and hasn't connected, and Activity is setup and
+ * sign-in events.
+ */
 const VIEWS = [
-  { id: "user", label: "Calls by user" },
-  { id: "agent", label: "Agent usage" },
-  { id: "service", label: "Gateways & proxies" },
+  { id: "usage", label: "Usage" },
   { id: "users", label: "User connections" },
-  { id: "activity", label: "Recent activity" },
+  { id: "activity", label: "Activity" },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
+/** Earlier links named a grouping as the view; they open Usage grouped so. */
+const LEGACY_USAGE_VIEWS: Record<string, Dimension> = {
+  user: "user",
+  agent: "agent",
+  service: "service",
+};
 
 export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
-  const [viewRevision, setViewRevision] = useState(0);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const selected = params.get("view");
+  const legacyGroup = selected ? LEGACY_USAGE_VIEWS[selected] : undefined;
   const view: View =
     VIEWS.find((item) => item.id === selected)?.id ??
-    (params.has("state") || params.has("q")
-      ? "users"
-      : params.has("action") || params.has("userId")
-        ? "activity"
-        : "user");
+    (legacyGroup
+      ? "usage"
+      : params.has("state") || params.has("q")
+        ? "users"
+        : params.has("action") || params.has("userId")
+          ? "activity"
+          : "usage");
   const query = { startDate: window.startDate, endDate: window.endDate };
   const adoption = useAgentAdoption(query);
   const usage = useAgentAdoptionUsage(query);
 
-  function pickView(next: View, state?: string) {
-    setViewRevision((current) => current + 1);
-    const updated = new URLSearchParams(params.toString());
-    updated.set("view", next);
-    for (const key of ["state", "q", "userId", "action"]) updated.delete(key);
-    if (state) updated.set("state", state);
-    router.replace(`${pathname}?${updated.toString()}`, { scroll: false });
+  function pickView(next: View) {
+    const updated = new URLSearchParams();
+    // The range carries over; every view keeps its own filters.
+    for (const key of ["startDate", "endDate"]) {
+      const value = params.get(key);
+      if (value) updated.set(key, value);
+    }
+    if (next !== "usage") updated.set("view", next);
+    const search = updated.toString();
+    router.push(search ? `${pathname}?${search}` : pathname, { scroll: false });
   }
 
   if (adoption.isLoadingError || usage.isLoadingError) {
@@ -75,11 +89,13 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
     );
   }
   const members = adoption.data.members;
-  const active = members.filter((member) => member.status === "active").length;
-  const inactive = members.filter(
-    (member) => member.status === "inactive",
+  // Read off the window's own calls, so every tile follows the range.
+  const usedInRange = members.filter((member) =>
+    [...member.gatewayUses, ...member.llmUses].some((use) => use.calls > 0),
   ).length;
-  const unconnected = members.length - active - inactive;
+  const connected = members.filter((member) => member.agents.length > 0).length;
+  const idle = connected - usedInRange;
+  const unconnected = members.length - connected;
   const agents = members.reduce(
     (count, member) => count + member.agents.length,
     0,
@@ -91,23 +107,24 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
   const llm = usage.data.days.reduce((count, day) => count + day.llmCalls, 0);
   return (
     <div className="min-w-0 space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Summaries only: the tabs below pick the view, so no tile doubles
+          as a selector. */}
+      <section
+        aria-label="Connection summary"
+        className="grid gap-3 sm:grid-cols-3"
+      >
         <KpiTile
           label="Users"
           value={members.length.toLocaleString()}
-          caption={`${agents.toLocaleString()} agents configured`}
-          onClick={() => pickView("users")}
-          active={view === "users" && !params.has("state")}
+          caption={`${agents.toLocaleString()} agents connected`}
         />
         <KpiTile
           label="Active users"
-          value={active.toLocaleString()}
-          caption="Used an agent in the last 30 days"
-          onClick={() => pickView("users", "active")}
-          active={view === "users" && params.get("state") === "active"}
+          value={usedInRange.toLocaleString()}
+          caption={`Used an agent ${duringRange(window.label)}`}
           extra={
             <div className="flex h-6 items-center gap-3 text-[11px] text-muted-foreground">
-              <span>{inactive.toLocaleString()} inactive</span>
+              <span>{Math.max(0, idle).toLocaleString()} connected, idle</span>
               <span>{unconnected.toLocaleString()} not connected</span>
             </div>
           }
@@ -117,26 +134,17 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
           value={(mcp + llm).toLocaleString()}
           caption={`${mcp.toLocaleString()} MCP · ${llm.toLocaleString()} LLM · ${window.label}`}
           series={usage.data.days.map((day) => day.gatewayCalls + day.llmCalls)}
-          onClick={() => pickView("user")}
         />
-      </div>
-      <nav aria-label="Connection views" className="flex flex-wrap gap-1.5">
-        {VIEWS.map((item) => (
-          <UnstyledButton
-            key={item.id}
-            aria-pressed={view === item.id}
-            onClick={() => pickView(item.id)}
-            className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors",
-              view === item.id
-                ? "border-foreground bg-foreground text-background"
-                : "bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground dark:bg-input/30",
-            )}
-          >
-            <span>{item.label}</span>
-          </UnstyledButton>
-        ))}
-      </nav>
+      </section>
+      <Tabs value={view} onValueChange={(next) => pickView(next as View)}>
+        <TabsList size="sm" aria-label="Connection views">
+          {VIEWS.map((item) => (
+            <TabsTrigger key={item.id} value={item.id}>
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
       {view === "users" ? (
         <AgentAdoptionUsers window={window} />
       ) : view === "activity" ? (
@@ -151,12 +159,18 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
         </section>
       ) : (
         <ConnectionUsageExplorer
-          key={`${view}:${viewRevision}`}
           adoption={adoption.data}
           window={window}
-          initialGroup={view}
+          legacyGroup={legacyGroup}
         />
       )}
     </div>
   );
+}
+
+/** "last 30 days" reads "in the last 30 days"; a picked span, "in Oct 1 – 3". */
+function duringRange(label: string): string {
+  return /^last /i.test(label)
+    ? `in the ${label.toLowerCase()}`
+    : `in ${label}`;
 }

@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
@@ -89,6 +94,9 @@ export function useDisconnectConnectedClient() {
 export function useConnectionLog(query: ConnectionLogQuery) {
   return useQuery({
     queryKey: connectedClientKeys.log(query),
+    // A new page or a minute tick keeps the rows on screen until the
+    // answer lands, so the table never blanks and loses its scroll.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const response = await getConnectedClientLog({ query });
       throwOnApiError(response.error, { toastOnError: false });

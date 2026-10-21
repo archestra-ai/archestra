@@ -520,7 +520,7 @@ function TrajectoryRow({ t }: { t: Trajectory }) {
       {t.boundBy ? (
         <TrajectoryPair
           label="Grouped by"
-          hint="How these requests were tied into one session: the session id the client sent, and where it was found."
+          hint="Where the session id that ties these requests together came from: the header or client field it was read from."
         >
           <span className="truncate">{groupingLabel(t.boundBy)}</span>
         </TrajectoryPair>
@@ -528,7 +528,7 @@ function TrajectoryRow({ t }: { t: Trajectory }) {
       {t.origins.length > 0 ? (
         <TrajectoryPair
           label={t.origins.length === 1 ? "Source" : "Sources"}
-          hint="Every surface that sent requests into this session. Hover an icon for its name."
+          hint="The apps and features that sent requests into this session, such as a client, chat, or a knowledge base. Hover an icon for its name."
           className="col-span-2"
         >
           <span className="flex min-w-0 gap-1 overflow-x-auto">
@@ -689,9 +689,10 @@ function groupingLabel(sessionSource: string): string {
 }
 
 const GROUPING_LABELS: Record<string, string> = {
-  header: "Session header",
-  meta_header: "Meta header",
-  appa_header: "Guardrails header",
+  // Name the header itself: "Session header" left people asking which one.
+  header: "X-Archestra-Session-Id header",
+  meta_header: "X-Archestra-Meta header",
+  appa_header: "X-Appa-Session-ID header",
   openwebui_chat: "Open WebUI chat",
   codex_session: "Codex session",
   opencode_session: "OpenCode session",

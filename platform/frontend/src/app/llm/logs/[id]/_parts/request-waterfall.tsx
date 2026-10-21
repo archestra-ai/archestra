@@ -122,8 +122,6 @@ export function RequestWaterfall({
   selectedKey,
   highlightedKey,
   onSelect,
-  onOpen,
-  openHint = "Enter or double-click to open",
   pagination,
   totalRequests,
   notice,
@@ -161,9 +159,6 @@ export function RequestWaterfall({
    */
   highlightedKey: string | null;
   onSelect: (key: string) => void;
-  /** Enter or a double-click on a row; `openHint` says what it opens. */
-  onOpen: (span: TimelineSpan) => void;
-  openHint?: string;
   pagination: RequestsPagination | null;
   totalRequests: number;
   /** Shown between the header and the list, such as a failed load. */
@@ -356,11 +351,6 @@ export function RequestWaterfall({
       Home: 0,
       End: steppable.length - 1,
     };
-    if (event.key === "Enter" && selected && !consultRowSelected) {
-      event.preventDefault();
-      onOpen(selected);
-      return;
-    }
     if (!(event.key in targets)) return;
     event.preventDefault();
     moveTo(Math.min(steppable.length - 1, Math.max(0, targets[event.key])));
@@ -430,7 +420,7 @@ export function RequestWaterfall({
           <span className="hidden items-center gap-1 text-[11px] text-muted-foreground xl:inline-flex">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>
-            <span className="ml-1">to step · {openHint}</span>
+            <span className="ml-1">to step</span>
           </span>
         </div>
       </header>
@@ -453,9 +443,12 @@ export function RequestWaterfall({
       ) : null}
       {notice}
 
+      {/* Only sideways scrolling is contained: containing vertical overscroll
+          swallowed the wheel even when the list had nothing to scroll, so the
+          page under the pointer would not move. */}
       <div
         ref={scrollerRef}
-        className="max-h-[50svh] overflow-auto overscroll-contain lg:max-h-[440px]"
+        className="max-h-[50svh] overflow-auto overscroll-x-contain lg:max-h-[440px]"
       >
         <div className="lg:min-w-[920px]">
           {/* Column header and axis */}
@@ -616,7 +609,6 @@ export function RequestWaterfall({
                       else rowRefs.current.delete(span.key);
                     },
                     onSelect: () => onSelect(span.key),
-                    onOpen: () => onOpen(span),
                   };
                   return span.type === "request" ? (
                     <RequestRow
@@ -749,8 +741,12 @@ function StatusText({
       key: "count",
       text: (
         <span>
+          {/* Every figure here is this page's, not the session's: the facts
+              card above has the session totals. */}
+          <span className="hidden text-muted-foreground/80 lg:inline">
+            This page:{" "}
+          </span>
           {requests.toLocaleString()} {requests === 1 ? "request" : "requests"}
-          <span className="hidden lg:inline"> on this page</span>
         </span>
       ),
     },
@@ -786,10 +782,23 @@ function StatusText({
     parts.push({
       key: "idle",
       text: (
-        <span>
-          {timeline.breaks.length} idle{" "}
-          {timeline.breaks.length === 1 ? "stretch" : "stretches"} folded
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <UnstyledButton className="cursor-default underline decoration-muted-foreground/40 decoration-dotted underline-offset-2">
+              {formatElapsed(
+                timeline.breaks.reduce((sum, b) => sum + b.gapMs, 0),
+              )}{" "}
+              idle, shortened
+            </UnstyledButton>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-64 px-2 py-1.5">
+            {timeline.breaks.length === 1
+              ? "One stretch with no activity"
+              : `${timeline.breaks.length} stretches with no activity`}{" "}
+            is drawn as a narrow hatched band, so the busy parts of the timeline
+            keep their width.
+          </TooltipContent>
+        </Tooltip>
       ),
       wideOnly: true,
     });
@@ -833,7 +842,6 @@ type RowProps = {
   highlighted: boolean;
   buttonRef: (el: HTMLButtonElement | null) => void;
   onSelect: () => void;
-  onOpen: () => void;
 };
 
 /** One row's frame and track; the cells around the track vary by kind. */
@@ -850,7 +858,6 @@ function RowShell({
   highlighted,
   buttonRef,
   onSelect,
-  onOpen,
   name,
   detail,
   time,
@@ -894,7 +901,6 @@ function RowShell({
         tabIndex={selected ? 0 : -1}
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
-        onDoubleClick={onOpen}
         aria-label={`${label}${gutterWords(gutter, note)}${off ? ", guardrails off" : ""}`}
         className={cn(
           "group grid h-11 w-full scroll-mt-8 scroll-mb-1 border-b border-border/40 text-left text-xs outline-none transition-colors duration-100 lg:h-10",
@@ -1101,23 +1107,23 @@ function RequestRow({
       }
       tokens={<TokensStack row={row} />}
       cost={
-        // On a plan the figure is list price, never billed: dimmed with a
-        // hollow mark, which fits the column where a chip did not.
+        // On a plan the figure is list price, never billed: dimmed behind the
+        // same "Plan" tag the sessions list uses, so it reads the same here.
         <span
           className={cn(
             "inline-flex items-center gap-1",
             onPlan ? "text-muted-foreground" : "font-medium",
           )}
-          title={onPlan ? "On plan: list price, not billed" : undefined}
+          title={
+            onPlan
+              ? "Covered by a subscription plan: list price, not billed"
+              : undefined
+          }
         >
           {onPlan ? (
-            <>
-              <span
-                aria-hidden="true"
-                className="size-1.5 shrink-0 rounded-full ring-1 ring-muted-foreground/70 ring-inset"
-              />
-              <span className="sr-only">On plan,</span>
-            </>
+            <span className="rounded-sm bg-muted px-1 text-[9px] leading-[14px] font-medium tracking-wide uppercase">
+              Plan
+            </span>
           ) : null}
           {formatRequestCost(Number(row.cost ?? 0))}
         </span>

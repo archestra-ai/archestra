@@ -10,7 +10,7 @@ import {
 import {
   describeActor,
   describeSessionOrigin,
-  SessionAvatar,
+  SessionClientMark,
 } from "@/app/llm/logs/_parts/session-identity";
 import { AgentIcon } from "@/components/agent-icon";
 import { SourceIcon } from "@/components/source-badge";
@@ -24,37 +24,15 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { describeKey } from "@/components/virtual-key-badge";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
-/**
- * The session's title behind its composite avatar. From `lg` the 44px avatar
- * fronts both header lines, so it hangs below the title row into the
- * description's gutter; below that it simply leads the title.
- */
-export function SessionHeaderTitle({
+/** The session's mark for the page's icon tile: the client it came through. */
+export function SessionHeaderIcon({
   session,
-  title,
 }: {
   session: LogSession | undefined;
-  title: string;
 }) {
-  return (
-    <span className="flex min-w-0 items-center gap-3.5">
-      <span className="shrink-0 lg:relative lg:h-8 lg:w-11">
-        <span className="block lg:absolute lg:top-1.5 lg:left-0">
-          {session ? (
-            <SessionHeaderAvatar session={session} />
-          ) : (
-            <Skeleton className="size-11 rounded-[11px]" />
-          )}
-        </span>
-      </span>
-      <span
-        title={title}
-        className="min-w-0 truncate text-[17px] leading-6 max-lg:self-start lg:text-xl lg:leading-7"
-      >
-        {title}
-      </span>
-    </span>
-  );
+  if (!session) return <Skeleton className="size-6 rounded-md" />;
+  const { client, primarySource } = describeSessionOrigin(session);
+  return <SessionClientMark client={client} source={primarySource} />;
 }
 
 /**
@@ -95,7 +73,7 @@ export function SessionIdentityLine({
                   {actor.label}
                 </UnstyledButton>
               </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
+              <TooltipContent className="max-w-64 text-pretty">
                 {actor.explanation}
               </TooltipContent>
             </Tooltip>
@@ -184,7 +162,7 @@ export function SessionIdentityLine({
           <TooltipTrigger asChild>
             <UnstyledButton className="inline-flex cursor-default items-center gap-1 text-left hover:text-foreground">
               <KeyRound className="size-3.5 opacity-70" aria-hidden="true" />
-              <span className="max-w-[28ch] truncate">{first.name}</span>
+              <span className="max-w-[48ch] truncate">{first.name}</span>
               {sharedScope ? (
                 <span className="rounded-[4px] bg-muted px-1 text-[10px] leading-[14px]">
                   {sharedScope}
@@ -251,27 +229,5 @@ export function SessionIdentityLine({
 // Internal helpers
 // ============================================================================
 
-/**
- * Lines the identity up under the title text: the back arrow and its gap
- * (32), then the avatar (44) and its gap (14). It rises into the title row's
- * slack so it reads as the title's second line. Below `lg` the avatar sets
- * the row's height (44px) and the title sits at its top, so the identity
- * rises by the rest of the row (20px), plus the header grid's 8px row gap on
- * phones or the 4px description margin from `sm`. From `lg` the row is 40px
- * for a 28px line.
- */
-const IDENTITY_INSET = "pl-[90px] -mt-7 sm:-mt-6 lg:-mt-2.5";
-
-function SessionHeaderAvatar({ session }: { session: LogSession }) {
-  const appName = useAppName();
-  const { client, primarySource, originLabel } = describeSessionOrigin(session);
-  return (
-    <SessionAvatar
-      client={client}
-      source={primarySource}
-      originLabel={originLabel}
-      actor={describeActor(session, appName)}
-      size="lg"
-    />
-  );
-}
+/** The identity line is the header description; it takes the full width. */
+const IDENTITY_INSET = "min-w-0";

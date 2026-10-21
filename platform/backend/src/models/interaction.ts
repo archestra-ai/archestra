@@ -989,6 +989,11 @@ class InteractionModel {
           durationMs: schema.interactionsTable.durationMs,
           createdAt: schema.interactionsTable.createdAt,
           source: schema.interactionsTable.source,
+          // The row's small stored preview (not the payload), so the trace can
+          // name a turn by the prompt it served; decrypted below.
+          sessionPreview: schema.interactionsTable.sessionPreview,
+          encryptedChatConversationId:
+            schema.interactionsTable.encryptedChatConversationId,
           requestType: sql<"main" | "subagent">`
             CASE
               WHEN ${schema.interactionsTable.source} IN ('opencode:main', 'kilo:main')
@@ -1044,13 +1049,31 @@ class InteractionModel {
       ),
     );
     return createPaginatedResult(
-      rows.map((row) => ({
-        ...row,
-        externalAgentIdLabel: resolveExternalAgentIdLabel(
-          row.externalAgentId,
-          agentNamesMap,
-        ),
-      })),
+      rows.map(({ sessionPreview, encryptedChatConversationId, ...row }) => {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Locked-safe: a locked chat's preview stays a sentinel, which then
+        // fails the schema check and names nothing.
+        const read = readInteractionRow({
+          sessionPreview,
+          encryptedChatConversationId,
+        });
+        // SPDX-SnippetEnd
+        const preview = InteractionSessionPreviewSchema.safeParse(
+          read.sessionPreview,
+        );
+        return {
+          ...row,
+          externalAgentIdLabel: resolveExternalAgentIdLabel(
+            row.externalAgentId,
+            agentNamesMap,
+          ),
+          userMessagePreview: preview.success
+            ? preview.data.lastUserMessagePreview
+            : null,
+        };
+      }),
       Number(total),
       pagination,
     );
@@ -2608,6 +2631,12 @@ class InteractionModel {
         conversationTitle: sql<
           string | null
         >`(SELECT ${schema.conversationsTable.title} FROM ${schema.conversationsTable} WHERE ${schema.conversationsTable.id} = CASE WHEN MAX(${schema.interactionsTable.sessionId}) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN MAX(${schema.interactionsTable.sessionId})::uuid END)`,
+        // The knowledge connector a knowledge:* row ran for, so the list can
+        // tell "Embedding documents" rows apart. Only when one connector owns
+        // every row; looked up by primary key once per session.
+        connectorName: sql<
+          string | null
+        >`CASE WHEN COUNT(DISTINCT ${schema.interactionsTable.connectorId}) = 1 THEN (SELECT ${schema.knowledgeBaseConnectorsTable.name} FROM ${schema.knowledgeBaseConnectorsTable} WHERE ${schema.knowledgeBaseConnectorsTable.id} = MAX(${schema.interactionsTable.connectorId}::text)::uuid) END`,
       })
       .from(schema.interactionsTable)
       .leftJoin(
@@ -2723,6 +2752,7 @@ class InteractionModel {
         contentNotStored: lastInteraction?.contentNotStored ?? false,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
+        connectorName: s.connectorName ?? null,
       };
     });
     return sessions;

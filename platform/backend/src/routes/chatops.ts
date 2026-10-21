@@ -34,8 +34,11 @@ import {
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
+import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
 import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
+import SlackProvider from "@/agents/chatops/slack-provider";
+import TelegramProvider from "@/agents/chatops/telegram-provider";
 import {
   buildAgentFooter,
   EventDedupMap,
@@ -1795,7 +1798,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ChatOpsConfigModel.getConfigUpdatedAt("ms-teams"),
       ]);
       return {
-        configured: Boolean(stored?.appId && stored.appSecret),
+        configured: stored ? new MSTeamsProvider(stored).isConfigured() : false,
         updatedAt,
         enabled: stored?.enabled ?? false,
         appId: stored?.appId || null,
@@ -1972,7 +1975,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ChatOpsConfigModel.getConfigUpdatedAt("slack"),
       ]);
       return {
-        configured: Boolean(stored?.botToken),
+        configured: stored ? new SlackProvider(stored).isConfigured() : false,
         updatedAt,
         enabled: stored?.enabled ?? false,
         appId: stored?.appId || null,
@@ -2741,7 +2744,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ChatOpsConfigModel.getConfigUpdatedAt("telegram"),
       ]);
       return {
-        configured: Boolean(stored?.botToken),
+        configured: stored
+          ? new TelegramProvider(stored).isConfigured()
+          : false,
         updatedAt,
         enabled: stored?.enabled ?? false,
       };

@@ -54,9 +54,10 @@ export const ChatOpsProviderInfoSchema = z.object({
 
 /**
  * Stored chatops config as the config routes read it back: only what is not a
- * secret, and whether the credentials the provider needs are stored.
+ * secret.
  */
 const ChatOpsStoredConfigBaseSchema = z.object({
+  /** Whether the provider would start from this config: enabled, with the credentials its mode needs. */
   configured: z.boolean(),
   /** When the stored config last changed; null when none is stored. */
   updatedAt: z.date().nullable(),

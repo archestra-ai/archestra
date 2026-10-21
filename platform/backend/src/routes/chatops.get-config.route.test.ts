@@ -83,7 +83,7 @@ describe("GET /api/chatops/config/:provider", () => {
       graphClientSecret: SECRETS[4],
     });
     await ChatOpsConfigModel.saveTelegramConfig({
-      enabled: false,
+      enabled: true,
       botToken: SECRETS[5],
     });
 
@@ -109,10 +109,85 @@ describe("GET /api/chatops/config/:provider", () => {
     expect(telegram.json()).toEqual({
       configured: true,
       updatedAt: expect.any(String),
-      enabled: false,
+      enabled: true,
     });
     for (const response of [slack, teams, telegram])
       for (const secret of SECRETS) expect(response.body).not.toContain(secret);
+  });
+
+  test.each([
+    {
+      connectionMode: "socket",
+      appLevelToken: "xapp",
+      signingSecret: "",
+      configured: true,
+    },
+    {
+      connectionMode: "socket",
+      appLevelToken: "",
+      signingSecret: "secret",
+      configured: false,
+    },
+    {
+      connectionMode: "webhook",
+      appLevelToken: "",
+      signingSecret: "secret",
+      configured: true,
+    },
+    {
+      connectionMode: "webhook",
+      appLevelToken: "xapp",
+      signingSecret: "",
+      configured: false,
+    },
+  ] as const)("Slack in $connectionMode mode is configured only with the token that mode needs", async ({
+    connectionMode,
+    appLevelToken,
+    signingSecret,
+    configured,
+  }) => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: true,
+      botToken: "xoxb",
+      signingSecret,
+      appId: "A0SLACKAPP",
+      connectionMode,
+      appLevelToken,
+    });
+
+    expect((await get("slack")).json()).toMatchObject({
+      configured,
+      connectionMode,
+    });
+  });
+
+  test("a disabled or incomplete config is stored but not configured", async () => {
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: false,
+      botToken: "xoxb",
+      signingSecret: "secret",
+      appId: "A0SLACKAPP",
+      connectionMode: "webhook",
+    });
+    await ChatOpsConfigModel.saveMsTeamsConfig({
+      enabled: true,
+      appId: "teams-app-id",
+      appSecret: "",
+      tenantId: "",
+      graphTenantId: "",
+      graphClientId: "teams-app-id",
+      graphClientSecret: "",
+    });
+    await ChatOpsConfigModel.saveTelegramConfig({
+      enabled: false,
+      botToken: "123:abc",
+    });
+
+    for (const provider of ["slack", "ms-teams", "telegram"])
+      expect((await get(provider)).json()).toMatchObject({
+        configured: false,
+        updatedAt: expect.any(String),
+      });
   });
 
   test("an organization settings reader can read config but still cannot write it", async ({

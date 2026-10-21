@@ -8,7 +8,9 @@
 # versions, and an allowlisted subset of the Helm values. Container env values,
 # commands and arguments, Secrets, ConfigMaps, and last-applied annotations are
 # never collected. Logs are collected as written by the application, so review
-# the bundle before sharing.
+# the bundle before sharing. Every kubectl call times out after
+# KUBECTL_REQUEST_TIMEOUT (default 20s); a failed step leaves its error in the
+# bundle and the rest is still collected.
 #
 # Requires kubectl, helm, jq, and tar.
 set -euo pipefail
@@ -80,14 +82,20 @@ trap 'rm -rf "$work_dir"' EXIT
 bundle_dir="${work_dir}/${bundle_name}"
 mkdir -p "${bundle_dir}/logs"
 
+kubectl_timeout="${KUBECTL_REQUEST_TIMEOUT:-20s}"
+
 kc() {
-  kubectl --namespace "$namespace" "$@"
+  kubectl --request-timeout="$kubectl_timeout" --namespace "$namespace" "$@"
 }
 
 echo "Collecting pods..." >&2
 kc get pods -o wide >"${bundle_dir}/pods.txt" 2>&1 || true
 pods_json="${work_dir}/pods.json"
-kc get pods -o json >"$pods_json"
+if kc get pods -o json >"$pods_json" 2>"${bundle_dir}/pods.err"; then
+  rm -f "${bundle_dir}/pods.err"
+else
+  echo '{"items": []}' >"$pods_json"
+fi
 jq "$SANITIZE" "$pods_json" >"${bundle_dir}/pods.json"
 
 jq -r '
@@ -148,7 +156,7 @@ fi
 helm list --namespace "$namespace" --filter "^${release}\$" \
   >"${bundle_dir}/helm-release.txt" 2>&1 || true
 
-kubectl version -o json >"${bundle_dir}/kubectl-version.json" 2>&1 || true
+kubectl --request-timeout="$kubectl_timeout" version -o json >"${bundle_dir}/kubectl-version.json" 2>&1 || true
 
 archive="${output_dir%/}/${bundle_name}.tar.gz"
 tar -czf "$archive" -C "$work_dir" "$bundle_name"

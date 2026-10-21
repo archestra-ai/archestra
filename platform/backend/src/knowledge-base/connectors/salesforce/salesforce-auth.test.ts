@@ -280,7 +280,6 @@ describe("Salesforce OAuth transport", () => {
   });
 
   test.each([
-    {},
     { ...tokenResponse(), access_token: "" },
     { ...tokenResponse(), instance_url: "https://attacker.test" },
   ])("rejects malformed or unsafe OAuth responses", async (data) => {
@@ -327,7 +326,7 @@ describe("Salesforce OAuth transport", () => {
     { ...CONFIG, loginUrl: `${DOMAIN}/services/oauth2/token` },
     { ...CONFIG, loginUrl: `${DOMAIN}?secret=wrong` },
     { ...CONFIG, loginUrl: "https://user:password@example.my.salesforce.com" },
-  ])("rejects legacy or invalid configuration before making an auth request: %j", async (config) => {
+  ])("rejects invalid OAuth configuration before making an auth request: %j", async (config) => {
     expect(
       (
         await new SalesforceConnector().testConnection({
@@ -349,21 +348,87 @@ describe("Salesforce OAuth transport", () => {
     expect(result.error).toContain("Missing Salesforce OAuth consumer secret");
   });
 
-  test("keeps legacy configs readable, but blocks their use with a migration message", async () => {
+  test.each([
+    undefined,
+    "soap_legacy",
+  ])("preserves existing SOAP login for authMethod %s and warns about retirement", async (authMethod) => {
+    const bodies: string[] = [];
+    agent
+      .get("https://login.salesforce.com")
+      .intercept({
+        path: /^\/services\/Soap\/u\/[\d.]+$/,
+        method: "POST",
+      })
+      .reply(
+        200,
+        async (options) => {
+          const chunks: Uint8Array[] = [];
+          for await (const chunk of options.body as AsyncIterable<Uint8Array>)
+            chunks.push(chunk);
+          bodies.push(Buffer.concat(chunks).toString("utf8"));
+          return `<Envelope><Body><loginResponse><result><serverUrl>${DOMAIN}/services/Soap/u/58.0/00D000000000001</serverUrl><sessionId>${TOKEN}</sessionId><userId>005000000000001</userId><organizationId>00D000000000001</organizationId></result></loginResponse></Body></Envelope>`;
+        },
+        { headers: { "content-type": "text/xml" } },
+      )
+      .persist();
+    mockQuery(({ bearer }) => {
+      expect(bearer).toBe(`Bearer ${TOKEN}`);
+      return { statusCode: 200, data: queryResponse() };
+    });
+    const connector = new SalesforceConnector();
+    const params = {
+      config: { type: "salesforce", authMethod, objects: ["Account"] },
+      credentials: {
+        email: "legacy@example.com",
+        apiToken: "old-password-token",
+      },
+    };
+    expect(await connector.testConnection(params)).toEqual({ success: true });
+    const batches = [];
+    for await (const batch of connector.sync({ ...params, checkpoint: null }))
+      batches.push(batch);
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) {
+      expect(body).toContain("<username>legacy@example.com</username>");
+      expect(body).toContain("<password>old-password-token</password>");
+    }
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).toContain(
+      "Summer ’27",
+    );
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain(
+      "old-password-token",
+    );
+  });
+
+  test("keeps a failed legacy login sanitized and explains migration", async () => {
+    agent
+      .get("https://login.salesforce.com")
+      .intercept({ path: /^\/services\/Soap\/u\/[\d.]+$/, method: "POST" })
+      .reply(401, "Rejected old-password-token");
+    const result = await new SalesforceConnector().testConnection({
+      config: { type: "salesforce" },
+      credentials: {
+        email: "legacy@example.com",
+        apiToken: "old-password-token",
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Salesforce legacy login failed");
+    expect(result.error).toContain("Migrate to OAuth client credentials");
+    expect(JSON.stringify(result)).not.toContain("old-password-token");
+  });
+
+  test("rejects missing legacy credentials before making an auth request", async () => {
+    const result = await new SalesforceConnector().testConnection({
+      config: { type: "salesforce" },
+      credentials: CREDS,
+    });
+    expect(result.error).toContain(
+      "Missing Salesforce username or password+security token",
+    );
     expect(
       SalesforceConfigSchema.parse({ type: "salesforce" }).authMethod,
     ).toBeUndefined();
-    const connector = new SalesforceConnector();
-    const result = await connector.testConnection({
-      config: { type: "salesforce" },
-      credentials: { email: "legacy@example.com", apiToken: "old-password" },
-    });
-    expect(result.error).toContain("OAuth migration required");
-    await expect(
-      connector
-        .sync({ config: {}, credentials: CREDS, checkpoint: null })
-        .next(),
-    ).rejects.toThrow("OAuth migration required");
     expect(
       SalesforceConfigSchema.safeParse({ ...CONFIG, authMethod: "password" })
         .success,

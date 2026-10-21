@@ -21,13 +21,13 @@ Access tokens inherit the execution user's permissions. Keep the consumer secret
 
 ## Migrate an Existing Connector
 
-Password and security-token authentication requires replacement: Salesforce [retires SOAP login in Summer ’27](https://help.salesforce.com/s/articleView?id=005132110&language=en_US&type=1).
+Existing username/password connectors keep working while SOAP login is enabled in the Salesforce org. Salesforce [retires SOAP login in Summer ’27](https://help.salesforce.com/s/articleView?id=005132110&language=en_US&type=1).
 
 1. Set up the External Client App above, using the same integration user and org to preserve the source's access.
-2. Edit the Salesforce connector. Replace **My Domain URL**, enter **Consumer Key**, and enter a new **Consumer Secret**. A stored password cannot be reused or converted automatically.
+2. Edit the Salesforce connector and select **OAuth client credentials (recommended)** under **Authentication**. Enter **My Domain URL**, **Consumer Key**, and a new **Consumer Secret**. A stored password cannot be reused or converted automatically.
 3. Save, then use **Test Connection** and run a document sync. Saving configuration starts a full resync; object selection, assignments, and schedules remain configured.
 
-Until migrated, connection tests and syncs report that OAuth migration is required. There is no fallback to password login.
+The **Connectors** page warns when an accessible Salesforce connector still uses username/password. Existing connectors default to **Username/password (legacy)** when edited; leave credentials blank to keep them, or replace the username and password/security token as needed. New connectors require OAuth, and a connector saved with OAuth cannot switch back or fall back to password login.
 
 ## Connecting Salesforce
 

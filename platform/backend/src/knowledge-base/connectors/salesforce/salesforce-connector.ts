@@ -211,21 +211,22 @@ export class SalesforceConnector extends BaseConnector {
       };
     }
 
-    if (parsed.authMethod !== "oauth_client_credentials") {
-      return { valid: false, error: SALESFORCE_MIGRATION_REQUIRED };
-    }
-    if (!parsed.clientId) {
-      return {
-        valid: false,
-        error: "Salesforce OAuth consumer key is required",
-      };
-    }
-    if (!isSalesforceMyDomainUrl(parsed.loginUrl)) {
-      return {
-        valid: false,
-        error:
-          "loginUrl must be an HTTPS Salesforce My Domain origin (production or sandbox)",
-      };
+    if (parsed.authMethod === "oauth_client_credentials") {
+      if (!parsed.clientId) {
+        return {
+          valid: false,
+          error: "Salesforce OAuth consumer key is required",
+        };
+      }
+      if (!isSalesforceMyDomainUrl(parsed.loginUrl)) {
+        return {
+          valid: false,
+          error:
+            "loginUrl must be an HTTPS Salesforce My Domain origin (production or sandbox)",
+        };
+      }
+    } else if (!/^https?:\/\/.+/.test(parsed.loginUrl)) {
+      return { valid: false, error: "loginUrl must be a valid HTTP(S) URL" };
     }
 
     if (parsed.advancedObjectConfigJson) {
@@ -1398,6 +1399,9 @@ export class SalesforceConnector extends BaseConnector {
   }): Promise<Connection> {
     const validation = await this.validateConfig(params.config);
     if (!validation.valid) throw new Error(validation.error);
+    if (params.config.authMethod !== "oauth_client_credentials") {
+      return this.createLegacyConnection(params);
+    }
     const clientSecret = params.credentials.apiToken?.trim();
     if (!clientSecret) {
       throw new Error("Missing Salesforce OAuth consumer secret");
@@ -1455,6 +1459,35 @@ export class SalesforceConnector extends BaseConnector {
     return conn;
   }
 
+  /** Compatibility path for pre-existing connectors only; never an OAuth fallback. */
+  private async createLegacyConnection(params: {
+    credentials: ConnectorCredentials;
+    config: SalesforceConfig;
+  }): Promise<Connection> {
+    const username = params.credentials.email?.trim();
+    const passwordAndToken = params.credentials.apiToken?.trim();
+    if (!username || !passwordAndToken) {
+      throw new Error("Missing Salesforce username or password+security token");
+    }
+    this.authSecrets.add(passwordAndToken);
+    this.log.warn(
+      "Salesforce username/password authentication is deprecated and retires in Summer ’27. Migrate this existing connector to OAuth client credentials.",
+    );
+    const conn = new Connection({ loginUrl: params.config.loginUrl });
+    conn.on("refresh", (token: string) => {
+      if (token) this.authSecrets.add(token);
+    });
+    try {
+      await conn.login(username, passwordAndToken);
+      if (conn.accessToken) this.authSecrets.add(conn.accessToken);
+    } catch {
+      throw new Error(
+        "Salesforce legacy login failed. Check the username, password/security token, and whether SOAP login is still enabled. Migrate to OAuth client credentials.",
+      );
+    }
+    return conn;
+  }
+
   private redactError(error: unknown): string {
     let message = extractErrorMessage(error);
     for (const secret of this.authSecrets) {
@@ -1465,9 +1498,6 @@ export class SalesforceConnector extends BaseConnector {
 }
 
 // ===== Internal helpers =====
-
-const SALESFORCE_MIGRATION_REQUIRED =
-  "Salesforce OAuth migration required: edit this connector and enter its My Domain URL, OAuth consumer key, and a new consumer secret. Username/password SOAP login is no longer supported.";
 
 function isSalesforceInstanceUrl(value: string): boolean {
   try {

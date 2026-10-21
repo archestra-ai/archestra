@@ -1406,6 +1406,7 @@ describe("knowledge base routes", () => {
       };
       for (const invalidConfig of [
         { type: "salesforce" },
+        { type: "salesforce", authMethod: "soap_legacy" },
         { ...oauthConfig, clientId: "" },
         { ...oauthConfig, loginUrl: "https://test.salesforce.com" },
       ]) {
@@ -2246,6 +2247,21 @@ describe("knowledge base routes", () => {
         },
         secretId: secret.id,
       });
+      const legacyEdit = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: { ...connector.config, authMethod: "soap_legacy" },
+          credentials: { apiToken: "rotated-password" },
+        },
+      });
+      expect(legacyEdit.statusCode).toBe(200);
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({
+        email: "legacy@example.com",
+        apiToken: "rotated-password",
+      });
       const oauthConfig = {
         type: "salesforce",
         authMethod: "oauth_client_credentials",
@@ -2264,10 +2280,10 @@ describe("knowledge base routes", () => {
       );
       expect(
         (await secretManager().getSecret(secret.id))?.secret,
-      ).toMatchObject({ apiToken: "old-password" });
+      ).toMatchObject({ apiToken: "rotated-password" });
       expect(
         (await KnowledgeBaseConnectorModel.findById(connector.id))?.config,
-      ).not.toHaveProperty("authMethod");
+      ).toHaveProperty("authMethod", "soap_legacy");
 
       const migrated = await app.inject({
         method: "PUT",
@@ -2294,6 +2310,18 @@ describe("knowledge base routes", () => {
         (await secretManager().getSecret(secret.id))?.secret,
       ).toMatchObject({ apiToken: "consumer-secret" });
 
+      for (const authMethod of [undefined, "soap_legacy"]) {
+        const downgrade = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            config: { ...oauthConfig, authMethod },
+            credentials: { apiToken: "must-not-be-stored" },
+          },
+        });
+        expect(downgrade.statusCode).toBe(400);
+        expect(downgrade.json().error.message).toContain("cannot switch back");
+      }
       const invalid = await app.inject({
         method: "PUT",
         url: `/api/connectors/${connector.id}`,

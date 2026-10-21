@@ -276750,7 +276750,8 @@
                                       "authMethod": {
                                         "type": "string",
                                         "enum": [
-                                          "oauth_client_credentials"
+                                          "oauth_client_credentials",
+                                          "soap_legacy"
                                         ]
                                       },
                                       "clientId": {
@@ -278302,7 +278303,8 @@
                           "authMethod": {
                             "type": "string",
                             "enum": [
-                              "oauth_client_credentials"
+                              "oauth_client_credentials",
+                              "soap_legacy"
                             ]
                           },
                           "clientId": {
@@ -279585,7 +279587,8 @@
                             "authMethod": {
                               "type": "string",
                               "enum": [
-                                "oauth_client_credentials"
+                                "oauth_client_credentials",
+                                "soap_legacy"
                               ]
                             },
                             "clientId": {
@@ -281092,7 +281095,8 @@
                                 "authMethod": {
                                   "type": "string",
                                   "enum": [
-                                    "oauth_client_credentials"
+                                    "oauth_client_credentials",
+                                    "soap_legacy"
                                   ]
                                 },
                                 "clientId": {
@@ -282470,7 +282474,8 @@
                           "authMethod": {
                             "type": "string",
                             "enum": [
-                              "oauth_client_credentials"
+                              "oauth_client_credentials",
+                              "soap_legacy"
                             ]
                           },
                           "clientId": {
@@ -283619,7 +283624,8 @@
                             "authMethod": {
                               "type": "string",
                               "enum": [
-                                "oauth_client_credentials"
+                                "oauth_client_credentials",
+                                "soap_legacy"
                               ]
                             },
                             "clientId": {

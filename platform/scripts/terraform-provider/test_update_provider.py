@@ -1,6 +1,9 @@
 """Local bare-Git + stub-gh integration tests; never accesses GitHub."""
 
+from contextlib import redirect_stdout
+import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -45,7 +48,9 @@ root = Path(os.environ['STUB_GH_ROOT'])
 a = sys.argv[1:]
 with (root/'gh.log').open('a') as log: log.write(json.dumps(a)+'\\n')
 if a[:2] == ['pr', 'list']:
- print('7' if (root/'pr').exists() else '')
+ if a[a.index('--state')+1] == 'closed':
+  print((root/'closed-prs').read_text() if (root/'closed-prs').exists() else '[]')
+ else: print('7' if (root/'pr').exists() else '')
 elif a[:2] == ['pr', 'create']:
  if os.environ.get('STUB_FAIL_CREATE') == '1': sys.exit(1)
  (root/'pr').write_text(Path(a[a.index('--body-file')+1]).read_text())
@@ -131,9 +136,85 @@ elif a[:1] == ['api'] and '--paginate' in a: print('[]')
         (self.seed/'platform-version.txt').unlink()
         self.commit(self.seed, 'provider before shared target follow-up')
         updater.git(self.seed, 'push', 'origin', 'main')
-        with self.assertRaisesRegex(ValueError, 'Provider main needs a change adding platform-version.txt'):
-            self.prepare()
+        output = self.root/'github-output'
+        log = io.StringIO()
+        with patch.dict(os.environ, {'GITHUB_OUTPUT': str(output)}), redirect_stdout(log):
+            out = self.prepare()
+        reason = json.loads((out/'result.json').read_text())['skipped']
+        self.assertIn('Provider main needs a change adding platform-version.txt', reason)
+        self.assertIn('::warning::'+reason, log.getvalue())
+        self.assertEqual(output.read_text(), 'ready=false\n')
+        self.assertEqual(self.generation_calls, 0)
+        self.assertFalse((out/'update.patch').exists())
+        self.assertFalse((out/'tests.log').exists())
         self.assertFalse((self.root/'gh.log').exists())
+
+    def test_main_manifest_with_merged_human_fixes_is_a_new_baseline(self):
+        prior = {'spec_sha256': hashlib.sha256(self.spec.read_bytes()).hexdigest(),
+                 'generator_commit': updater.git(self.seed, 'rev-parse', 'HEAD').stdout.strip(),
+                 'files': updater.hashes(self.seed, (*updater.CLIENTS, 'platform-version.txt'))}
+        (self.seed/updater.MANIFEST).write_text(json.dumps(prior))
+        (self.seed/updater.CLIENTS[0]).write_text('merged human generated-code fix\n')
+        self.update_trusted_generator()
+        out = self.prepare(generated_client='next generated client\n')
+        self.assertEqual(self.generation_calls, 1)
+        result = json.loads((out/'result.json').read_text())
+        self.assertFalse(result['existed'])
+        self.assertTrue(result['changed'])
+        self.assertIn('next generated client', (out/'update.patch').read_text())
+
+    def test_missing_managed_file_has_null_hash(self):
+        (self.seed/updater.CLIENTS[1]).unlink()
+        actual = updater.hashes(self.seed, updater.CLIENTS)
+        self.assertIsNone(actual[updater.CLIENTS[1]])
+        self.assertEqual(actual[updater.CLIENTS[0]], hashlib.sha256(b'original client\n').hexdigest())
+
+    def test_generation_failure_retains_one_line_error_artifact(self):
+        self.use_v3_layout()
+        (self.seed/'Makefile').write_text(
+            'codegen-api-client:\n\tmkdir -p .codegen\n'
+            '\tcp "$$OPENAPI_SPEC" .codegen/openapi.raw.json\n\tfalse\n')
+        self.commit(self.seed, 'generator fails on selected spec')
+        updater.git(self.seed, 'push', 'origin', 'main')
+        out = self.root/'failed-artifact'
+        args = SimpleNamespace(provider=self.clone('failed-candidate'), tools=self.seed,
+                               spec=self.spec, output=out, platform_commit='a'*40)
+        with self.assertRaises(updater.runner.ClientGenerationError) as error:
+            updater.prepare(args)
+        self.assertEqual((out/'error.txt').read_text(), str(error.exception)+'\n')
+        self.assertEqual(len((out/'error.txt').read_text().splitlines()), 1)
+        self.assertIn('Client generation failed for the selected spec', (out/'error.txt').read_text())
+        self.assertFalse((out/'update.patch').exists())
+        self.assertFalse((out/'result.json').exists())
+
+    def test_artifacts_are_written_after_candidate_tests(self):
+        (self.bin/'go').write_text('#!/bin/sh\nset -eu\n'
+            'for dir in "$STUB_GH_ROOT"/artifact-*; do\n'
+            '  test ! -e "$dir/update.patch" && test ! -e "$dir/result.json" || exit 23\n'
+            '  echo poisoned > "$dir/update.patch"\n'
+            '  echo poisoned > "$dir/result.json"\n'
+            'done\nexit 1\n')
+        output = self.root/'github-output'
+        with patch.dict(os.environ, {'GITHUB_OUTPUT': str(output)}):
+            out = self.prepare()
+        self.assertEqual(json.loads((out/'result.json').read_text())['test_exit'], 1)
+        self.assertNotIn('poisoned', (out/'update.patch').read_text())
+        self.assertIn('new generated client', (out/'update.patch').read_text())
+        self.assertEqual(output.read_text(), 'ready=true\n')
+
+    def test_declined_head_is_not_reopened_but_new_commit_gets_pr(self):
+        self.publish(self.prepare())
+        head = updater.git(self.seed, 'ls-remote', '--heads', 'origin', 'refs/heads/'+updater.BRANCH).stdout.split()[0]
+        (self.root/'pr').unlink()
+        (self.root/'closed-prs').write_text(json.dumps([{'headRefOid': head, 'mergedAt': None}]))
+        log = io.StringIO()
+        with redirect_stdout(log):
+            self.publish(self.prepare())
+        self.assertIn('was declined', log.getvalue())
+        self.assertFalse((self.root/'pr').exists())
+        self.spec.write_text('{"info":{"version":"1.1.0"}}')
+        self.publish(self.prepare(generated_client='new target client\n'))
+        self.assertTrue((self.root/'pr').exists())
 
     def test_failing_compile_still_creates_pr_and_rerun_reuses_it(self):
         out = self.prepare()

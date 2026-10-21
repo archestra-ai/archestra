@@ -64,10 +64,13 @@ func TestPlatformTerraformGuardRegression(t *testing.T) {
 			if err := allowed.VisitJSON(body); err != nil {
 				t.Fatalf("synchronized request must pass: %v", err)
 			}
-			var retired openapi3.Schema
-			if err := json.Unmarshal([]byte(`{"type":"object","properties":{"name":{"type":"string"},"agentType":{"type":"string"},"teams":{"not":{}}}}`), &retired); err != nil {
-				t.Fatal(err)
+			retired := openapi3.Schema{Type: &openapi3.Types{"object"}, Properties: openapi3.Schemas{}}
+			for key := range body {
+				retired.Properties[key] = &openapi3.SchemaRef{Value: &openapi3.Schema{}}
 			}
+			retired.Properties["teams"] = &openapi3.SchemaRef{Value: &openapi3.Schema{
+				Not: &openapi3.SchemaRef{Value: &openapi3.Schema{}},
+			}}
 			delete(body, "teams")
 			if err := platformTerraformValidateRequest(&retired, body); err != nil {
 				t.Fatalf("request without retired field must pass: %v", err)

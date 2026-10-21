@@ -31,10 +31,7 @@ def main():
     parser.add_argument("--spec", type=Path,
                         default=Path(__file__).resolve().parents[2] / "docs/openapi.json")
     args = parser.parse_args()
-    env = os.environ | {"GOFLAGS": "-mod=readonly", "TF_ACC": "",
-                        "ARCHESTRA_TERRAFORM_OPENAPI": str(args.spec.resolve())}
-    for key in ("GH_TOKEN", "GITHUB_TOKEN", "ARCHESTRA_API_KEY", "ARCHESTRA_BASE_URL"):
-        env.pop(key, None)
+    env = clean_env() | {"ARCHESTRA_TERRAFORM_OPENAPI": str(args.spec.resolve())}
     try:
         with tempfile.TemporaryDirectory(prefix="terraform-provider-check-") as work:
             provider = Path(work) / "provider"
@@ -72,6 +69,13 @@ def main():
         return 2
     print("Terraform provider request contracts and regenerated unit tests passed.")
     return 0
+
+
+def clean_env():
+    env = os.environ | {"GOFLAGS": "-mod=readonly", "TF_ACC": ""}
+    for key in ("GH_TOKEN", "GITHUB_TOKEN", "ARCHESTRA_API_KEY", "ARCHESTRA_BASE_URL"):
+        env.pop(key, None)
+    return env
 
 
 def has_credential_target(makefile):

@@ -169,6 +169,11 @@ branch `automation/platform-api`. It runs daily at 06:37 UTC, on pushes to
   its tests fail. The failure is in the pull request body and in the
   `terraform-provider-update` artifact, and the workflow fails after the pull
   request exists. A maintainer then pushes the code changes to the same branch.
+- If code generation itself fails on the spec, there is no client to propose:
+  no pull request is opened, the run fails and the artifact gives the reason.
+  Fix the code generation on provider `main`.
+- If a maintainer closes the pull request without merging it, the updater does
+  not open it again until the generated output changes.
 - A preparation job without credentials runs code generation with the tools
   from provider `main`. A separate publish job applies only
   `internal/client/archestra_client.go`, the credential bridge client when
@@ -182,14 +187,16 @@ branch `automation/platform-api`. It runs daily at 06:37 UTC, on pushes to
   without force and create nothing when the output is unchanged.
   `platform-api.json` records the spec hash and the provider `main` commit
   whose tools generated the client. A new spec or new tools regenerate the
-  client. Changes from people to generated files are kept only while both stay
-  the same. If they conflict, the run fails without changing the branch; fix
-  the conflict on the branch, update `platform-api.json` and run it again.
+  client. While the update branch exists, changes from people to generated
+  files are kept only while both stay the same. If they conflict, the run fails
+  without changing the branch; fix the conflict on the branch, update
+  `platform-api.json` and run it again. After the pull request merges, provider
+  `main` is the new starting point.
 
 The updater needs `platform-version.txt` on provider `main`, which provider v3
 does not have yet. Until a provider change adds that file and makes the
-acceptance tests read it, the updater stops with a message that says so. The
-compatibility check does not need the file.
+acceptance tests read it, each run ends with a warning that says so, and
+nothing is published. The compatibility check does not need the file.
 
 The tests in `platform/scripts/terraform-provider/` use bare Git repositories and
 a stub `gh`. They cover pull request creation after a failed build, unchanged

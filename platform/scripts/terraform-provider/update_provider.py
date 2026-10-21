@@ -42,7 +42,8 @@ def sha(value):
 
 
 def hashes(repo, managed):
-    return {name: hashlib.sha256((repo / name).read_bytes()).hexdigest() for name in managed}
+    return {name: hashlib.sha256((repo / name).read_bytes()).hexdigest()
+            if (repo / name).is_file() else None for name in managed}
 
 
 def branch(repo):
@@ -64,21 +65,28 @@ def generate(tools, candidate, spec):
     with tempfile.TemporaryDirectory(prefix="provider-codegen-") as work:
         copy = Path(work) / "provider"
         shutil.copytree(tools, copy, ignore=shutil.ignore_patterns(".git", ".codegen", "crossplane"))
-        runner.generate_client(provider=copy, spec=spec, env=clean_env())
+        runner.generate_client(provider=copy, spec=spec, env=runner.clean_env())
         for name in clients((tools / "Makefile").read_text()):
             shutil.copyfile(copy / name, candidate / name)
 
 
-def clean_env():
-    env = os.environ | {"GOFLAGS": "-mod=readonly", "TF_ACC": ""}
-    for key in ("GH_TOKEN", "GITHUB_TOKEN", "ARCHESTRA_API_KEY", "ARCHESTRA_BASE_URL"):
-        env.pop(key, None)
-    return env
+def set_ready(ready):
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"ready={str(ready).lower()}\n")
 
 
 def prepare(args):
     repo, out = args.provider.resolve(), args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
+    try:
+        prepare_candidate(args, repo, out)
+    except (ValueError, subprocess.CalledProcessError) as error:
+        (out / "error.txt").write_text(" ".join(str(error).splitlines()) + "\n")
+        raise
+
+
+def prepare_candidate(args, repo, out):
     tools = args.tools.resolve()
     generator_commit = sha(git(tools, "rev-parse", "HEAD").stdout.strip())
     candidate_main = sha(git(repo, "rev-parse", "origin/main").stdout.strip())
@@ -89,7 +97,11 @@ def prepare(args):
     managed = (*clients((tools / "Makefile").read_text()), "platform-version.txt")
     allowed = (*managed, MANIFEST)
     if not (tools / "platform-version.txt").is_file():
-        raise ValueError("Provider main needs a change adding platform-version.txt and using it as the acceptance target before enabling this updater")
+        reason = "Provider main needs a change adding platform-version.txt and using it as the acceptance target before enabling this updater"
+        (out / "result.json").write_text(json.dumps({"skipped": reason}, indent=2) + "\n")
+        print(f"::warning::{reason}")
+        set_ready(False)
+        return
     metadata = branch(repo)
     spec = args.spec.resolve()
     spec_hash = hashlib.sha256(spec.read_bytes()).hexdigest()
@@ -104,9 +116,9 @@ def prepare(args):
         raise ValueError("Existing automation branch has no provenance manifest; inspect it manually")
     # Same-input reruns preserve even human fixes inside generated files. On a
     # new target, refuse to overwrite those fixes; a maintainer must reconcile.
-    same = (prior is not None and prior["spec_sha256"] == spec_hash
+    same = (metadata["existed"] and prior is not None and prior["spec_sha256"] == spec_hash
             and prior.get("generator_commit") == generator_commit)
-    if prior and not same and before != prior["files"]:
+    if metadata["existed"] and prior and not same and before != prior["files"]:
         raise ValueError("Human changes to generated files/version detected; reconcile the new target manually")
     git(repo, "merge", "--no-edit", metadata["main"])
     metadata["tree"] = git(repo, "rev-parse", "HEAD^{tree}").stdout.strip()
@@ -121,15 +133,17 @@ def prepare(args):
             }, indent=2) + "\n")
     git(repo, "add", "--", *[p for p in allowed if (repo / p).exists()])
     patch = subprocess.check_output(["git", "-C", str(repo), "diff", "--cached", "--binary", "HEAD", "--", *allowed])
-    (out / "update.patch").write_bytes(patch)
     # Test failure is evidence attached to the PR, not a prerequisite for repair.
     with (out / "tests.log").open("w") as log:
         tests = subprocess.run(["go", "-C", str(repo), "test", "./...", "-count=1", "-timeout=120s"],
-                               env=clean_env(), stdout=log, stderr=subprocess.STDOUT)
+                               env=runner.clean_env(), stdout=log, stderr=subprocess.STDOUT)
     metadata.update({"test_exit": tests.returncode, "changed": bool(patch),
                      "generator_commit": generator_commit,
                      "platform_commit": sha(args.platform_commit), "version": version})
+    # Keep the prepared patch in memory until unprivileged candidate tests exit.
+    (out / "update.patch").write_bytes(patch)
     (out / "result.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    set_ready(True)
     print(json.dumps(metadata))
 
 
@@ -190,6 +204,14 @@ def publish(args):
         endpoint = f"repos/{REPOSITORY}/issues/comments/{existing['id']}" if existing else f"repos/{REPOSITORY}/issues/{query}/comments"
         subprocess.run(["gh", "api", "--method", "PATCH" if existing else "POST", endpoint, "--input", str(payload)], check=True)
     else:
+        closed = json.loads(subprocess.check_output([
+            "gh", "pr", "list", "--repo", REPOSITORY, "--state", "closed",
+            "--head", BRANCH, "--base", "main", "--limit", "100",
+            "--json", "headRefOid,mergedAt"], text=True))
+        head = git(repo, "rev-parse", "HEAD").stdout.strip()
+        if any(pr["headRefOid"] == head and pr["mergedAt"] is None for pr in closed):
+            print(f"Provider update {head} was declined; no new pull request created.")
+            return
         subprocess.run(["gh", "pr", "create", "--repo", REPOSITORY, "--base", "main", "--head", BRANCH,
                         "--title", "chore: synchronize platform API client", "--body-file", str(body)], check=True)
 

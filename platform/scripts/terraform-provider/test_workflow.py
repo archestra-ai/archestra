@@ -17,21 +17,24 @@ class WorkflowTests(unittest.TestCase):
         for job in ('prepare', 'publish'):
             job_source = source.split(f'  {job}:\n', 1)[1]
             condition = re.search(r'^    if: (.+)$', job_source, re.M)[1]
-            for repository, ref, expected in (
-                ('archestra-ai/archestra', 'refs/heads/main', 'true'),
-                ('archestra-ai/archestra', 'refs/heads/feature', 'false'),
-                ('archestra-ai/archestra', 'refs/pull/12/merge', 'false'),
-                ('archestra-ai/archestra', 'refs/heads/gh-readonly-queue/main/pr-12', 'false'),
-                ('fork/archestra', 'refs/heads/main', 'false'),
+            for repository, ref, ready, expected in (
+                ('archestra-ai/archestra', 'refs/heads/main', 'true', 'true'),
+                ('archestra-ai/archestra', 'refs/heads/main', 'false', 'true' if job == 'prepare' else 'false'),
+                ('archestra-ai/archestra', 'refs/heads/feature', 'true', 'false'),
+                ('archestra-ai/archestra', 'refs/pull/12/merge', 'true', 'false'),
+                ('archestra-ai/archestra', 'refs/heads/gh-readonly-queue/main/pr-12', 'true', 'false'),
+                ('fork/archestra', 'refs/heads/main', 'true', 'false'),
             ):
                 actual = subprocess.check_output(['node', '-e', '''
 const vm = require('node:vm');
-const [condition, repository, ref] = process.argv.slice(1);
-process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, ref}})));
-''', condition, repository, ref], text=True)
+const [condition, repository, ref, ready] = process.argv.slice(1);
+process.stdout.write(String(vm.runInNewContext(condition, {github:{repository, ref}, needs:{prepare:{outputs:{ready}}}})));
+''', condition, repository, ref, ready], text=True)
                 self.assertEqual(actual, expected)
         self.assertNotIn('secrets.', source.split('  publish:', 1)[0])
         self.assertNotIn('pull_request_target:', source)
+        self.assertIn('ready: ${{ steps.generate.outputs.ready }}', source)
+        self.assertIn('name: Generate and record test results\n        id: generate', source)
 
     def test_semantic_failure_is_reported_after_publication(self):
         source = (ROOT / '.github/workflows/update-terraform-provider.yml').read_text()

@@ -25,6 +25,8 @@ jobs:
     if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      ready: ${{ steps.generate.outputs.ready }}
     steps:
       - name: Checkout trusted platform main revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,6 +58,7 @@ jobs:
       # The trusted helper detects single-client or legacy bridge layout from
       # provider main. platform-version.txt must be added by the provider first.
       - name: Generate and record test results
+        id: generate
         working-directory: platform
         env:
           PLATFORM_COMMIT: ${{ github.sha }}
@@ -78,7 +81,7 @@ jobs:
   publish:
     name: Propose generated provider update
     needs: prepare
-    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main'
+    if: github.repository == 'archestra-ai/archestra' && github.ref == 'refs/heads/main' && needs.prepare.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

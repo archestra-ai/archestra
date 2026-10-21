@@ -247,10 +247,10 @@ function Agents() {
     | null;
   const scopeFilter = useScopeFilterParams({
     includeBuiltIn: true,
-    offerAdminAccess: false,
     queryParamsAdapter,
   });
   const labelsFromUrl = searchParams.get("labels");
+  const includeBuiltIn = searchParams.get("builtIn") === "true";
   const statusFromUrl = searchParams.get("status") as
     | "active"
     | "deleted"
@@ -279,6 +279,7 @@ function Agents() {
     access: scopeFilter.access,
     sharedWith: scopeFilter.sharedWith,
     owner: scopeFilter.owner,
+    includeBuiltIn: includeBuiltIn || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
@@ -619,6 +620,7 @@ function Agents() {
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
+    includeBuiltIn ||
     labelsFromUrl ||
     isDeletedView ||
     providerApiKeyIdFilter
@@ -635,6 +637,7 @@ function Agents() {
       access: null,
       sharedWith: null,
       owner: null,
+      builtIn: null,
       labels: null,
       status: null,
       providerApiKeyId: null,
@@ -1086,7 +1089,7 @@ function Agents() {
                   <ResourceAccessFilter
                     resource="agent"
                     noun="agents"
-                    offerAdminAccess={false}
+                    offerBuiltIn
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ResourceScopeFilter

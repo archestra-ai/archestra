@@ -8,6 +8,7 @@
  * @see https://neon.com/guides/building-resilient-applications-with-postgres
  */
 import { isIP } from "node:net";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import config from "@/config";
 import logger from "@/logging";
 import { getConnectionFailureTarget } from "@/utils/network-errors";
@@ -135,6 +136,9 @@ const DEFAULT_POSTGRES_PORT = 5432;
 /** Maximum depth for cause-chain traversal to guard against circular references */
 const MAX_CAUSE_DEPTH = 5;
 
+/** How the ORM begins the message of a failed query. */
+const FAILED_QUERY_PREFIX = "Failed query:";
+
 /**
  * SQLSTATE 57014 (query_canceled): raised when the pool's `statement_timeout`
  * kills a query that ran too long (see createPool in database/index.ts).
@@ -208,6 +212,25 @@ export function isDbStatementTimeoutError(error: unknown, depth = 0): boolean {
 
   const cause = (error as Error & { cause?: unknown }).cause;
   if (cause) return isDbStatementTimeoutError(cause, depth + 1);
+
+  return false;
+}
+
+/**
+ * Whether an error is, or wraps, a failed database query. The ORM's message
+ * for one holds the SQL text and its parameter values ("Failed query: <sql>
+ * params: <values>"), which can include ids and stored values, so it must
+ * not reach a client.
+ */
+export function isDbQueryError(error: unknown, depth = 0): boolean {
+  if (!(error instanceof Error)) return false;
+  if (depth > MAX_CAUSE_DEPTH) return false;
+
+  if (error instanceof DrizzleQueryError) return true;
+  if (error.message.startsWith(FAILED_QUERY_PREFIX)) return true;
+
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause) return isDbQueryError(cause, depth + 1);
 
   return false;
 }

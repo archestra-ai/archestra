@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import * as proxyPlugins from "@/proxy/plugins/registry";
@@ -527,6 +528,50 @@ describe("createFastifyInstance", () => {
           type: "api_internal_server_error",
         },
       });
+    });
+
+    test("keeps a failed query's SQL and parameters out of the 500 body but logs them", async () => {
+      const app = createFastifyInstance();
+      const loggerErrorSpy = vi.spyOn(app.log, "error");
+      const pgError = Object.assign(
+        new Error(
+          'insert or update on table "chat_api_keys" violates foreign key constraint',
+        ),
+        { code: "23503" },
+      );
+      app.get("/test-db-query-error", async () => {
+        throw new DrizzleQueryError(
+          'insert into "chat_api_keys" ("secret_id", "user_id") values ($1, $2)',
+          ["9eeff2fc-secret-id", "service-account:776d5377"],
+          pgError,
+        );
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-db-query-error",
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        error: {
+          message:
+            "A database query failed. Ask an administrator to check the server logs.",
+          type: "api_internal_server_error",
+        },
+      });
+      expect(response.body).not.toContain("chat_api_keys");
+      expect(response.body).not.toContain("9eeff2fc-secret-id");
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining("9eeff2fc-secret-id"),
+          statusCode: 500,
+        }),
+        "HTTP 50x request error occurred",
+      );
+
+      loggerErrorSpy.mockRestore();
+      await app.close();
     });
 
     test("handles response serialization errors when response doesn't match schema", async () => {

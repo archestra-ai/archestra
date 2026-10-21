@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.56...platform-v1.4.0) (2026-10-21)
+
+
+### Documentation
+
+* **release:** note that Release Please needs a platform/ commit after a stable cut ([#9408](https://github.com/archestra-ai/archestra/issues/9408)) ([c6b3e0d](https://github.com/archestra-ai/archestra/commit/c6b3e0da514c3b4ceeb87cca7a3a8b85436f8d7b))
+
 ## [1.4.0-rc.56](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.55...platform-v1.4.0-rc.56) (2026-10-21)
 
 

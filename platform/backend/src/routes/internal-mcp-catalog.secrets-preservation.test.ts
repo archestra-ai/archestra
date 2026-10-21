@@ -32,6 +32,11 @@ describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () =>
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
+      request.authMethod = "session";
+      request.sessionInfo = {
+        id: "secret-recovery-session",
+        createdAt: new Date(),
+      };
       (request as typeof request & { user: unknown }).user = user;
       (request as typeof request & { organizationId: string }).organizationId =
         organizationId;

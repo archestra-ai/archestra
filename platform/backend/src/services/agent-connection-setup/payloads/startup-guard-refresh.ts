@@ -122,7 +122,7 @@ async function refresh(guard, expectedVersion, rollback = false, receipt) {
     atomic(guard + ".previous", before, 0o600);
     atomic(statePath, JSON.stringify({ ...state, hashes: [hash(before), hash(bytes)] }), 0o600);
     atomic(guard, bytes, owned(guard).mode & 0o777);
-    if (process.argv[4] !== "--handoff") console.error("Updated " + state.context.appName + " launch check automatically.");
+    if (process.argv[4] !== "--handoff") console.error("A startup check update was available and has been applied.");
     return hash(fs.readFileSync(statePath)) + ":" + hash(bytes);
   } catch (error) {
     const reasons = new Set(["Unsafe launch check ownership", "Edited launch check updater", "Customized launch check was preserved", "Unsafe launch check update endpoint", "Launch check download unavailable", "Launch check download too large", "Wrong launch check artifact", "Wrong launch check version", "Launch check changed during update", "Ambiguous launch check substitutions"]);

@@ -361,7 +361,7 @@ if (-not $Interactive -and -not $ArchDisconnectAll) {
     }
   }
   if ($env:ARCHESTRA_GUARD_REFRESHED -eq '1') {
-    [Console]::Error.WriteLine('Updated ' + $AppName + ' launch check automatically; active this launch.')
+    [Console]::Error.WriteLine('A startup check update was available and has been applied.')
   }
   if ($Script:GuardUpdateNotice) { [Console]::Error.WriteLine($Script:GuardUpdateNotice) }
   return
@@ -736,7 +736,7 @@ function Show-ArchVersionUpdate {
     $Script:Dwell = $true
   }
   if ($env:ARCHESTRA_GUARD_REFRESHED -ne '1') { return }
-  [Console]::Error.WriteLine('Updated ' + $AppName + ' launch check automatically; active this launch.')
+  [Console]::Error.WriteLine('A startup check update was available and has been applied.')
   $Script:Dwell = $true
 }
 

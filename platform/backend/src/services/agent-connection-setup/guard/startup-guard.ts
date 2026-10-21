@@ -574,7 +574,7 @@ if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
     i=$((i+1))
   done
   notify_refreshed=\${ARCHESTRA_GUARD_REFRESHED:-}
-  [ "$notify_refreshed" != "1" ] || printf '%s\\n' "Updated $APP_NAME launch check automatically; active this launch." >&2
+  [ "$notify_refreshed" != "1" ] || printf '%s\\n' "A startup check update was available and has been applied." >&2
   [ -z "\${ARCH_UPDATE_NOTICE:-}" ] || printf '%s\\n' "$ARCH_UPDATE_NOTICE" >&2
   exit 0
 fi
@@ -997,7 +997,7 @@ notify_version_update() {
     GUARD_DWELL=1
   fi
   [ "\${ARCHESTRA_GUARD_REFRESHED:-}" = "1" ] || return 0
-  printf '%s\\n' "Updated $APP_NAME launch check automatically; active this launch." >&2
+  printf '%s\\n' "A startup check update was available and has been applied." >&2
   GUARD_DWELL=1
 }
 

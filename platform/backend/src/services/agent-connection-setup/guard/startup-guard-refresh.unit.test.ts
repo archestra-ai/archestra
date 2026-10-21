@@ -238,7 +238,9 @@ describe("generated startup check refresh", () => {
       '{"permissions":{"deny":["Bash(*)"]},"env":{"CUSTOM":"kept"}}\n';
     await writeFile(config, custom);
     const { stderr } = await f.run();
-    expect(stderr).toContain("Updated Archestra launch check automatically");
+    expect(stderr).toContain(
+      "A startup check update was available and has been applied.",
+    );
     expect(await readFile(f.guard, "utf8")).toBe(f.current);
     expect(await readFile(`${f.guard}.previous`, "utf8")).toBe(f.old);
     expect(await readFile(config, "utf8")).toBe(custom);
@@ -259,7 +261,7 @@ describe("generated startup check refresh", () => {
       proxy: true,
     });
     expect((await f.run()).stderr).toContain(
-      "Updated Archestra launch check automatically",
+      "A startup check update was available and has been applied.",
     );
     expect(f.requestBody()).not.toContain("local-key-with");
     expect(await readFile(f.guard, "utf8")).toBe(f.current);
@@ -273,7 +275,7 @@ describe("generated startup check refresh", () => {
         "https://fixture:ARCH_GUARD_PRIVATE_KEY@example.com/skills/m/local.git",
     });
     expect((await f.run()).stderr).toContain(
-      "Updated Archestra launch check automatically",
+      "A startup check update was available and has been applied.",
     );
     expect(await readFile(f.guard, "utf8")).toBe(f.current);
   });
@@ -301,7 +303,9 @@ describe("generated startup check refresh", () => {
         env: { ...process.env, HOME: f.root },
       },
     );
-    expect(stderr).toContain("active this launch");
+    expect(stderr).toContain(
+      "A startup check update was available and has been applied.",
+    );
     expect(stderr).toContain("CURRENT_GENERATION_ARG=<-p>");
     expect(stderr).toContain(
       "CURRENT_GENERATION_ARG=<literal $value ' quoted>",
@@ -318,7 +322,9 @@ describe("generated startup check refresh", () => {
       env: { ...process.env, HOME: f.root },
     });
     expect(stderr).toContain("CURRENT_GENERATION_ARG");
-    expect(stderr).toContain("active this launch");
+    expect(stderr).toContain(
+      "A startup check update was available and has been applied.",
+    );
     expect(f.healthRequests()).toBe(2);
     expect(f.requests()).toBe(1);
   });
@@ -350,7 +356,9 @@ sys.exit(os.waitstatus_to_exitcode(status))
       env: { ...process.env, HOME: f.root },
       timeout: 25_000,
     });
-    expect(stdout).toContain("active this launch");
+    expect(stdout).toContain(
+      "A startup check update was available and has been applied.",
+    );
     expect(stdout).not.toContain("applies next launch");
     expect(f.healthRequests()).toBe(2);
     expect(f.requests()).toBe(1);
@@ -364,7 +372,9 @@ sys.exit(os.waitstatus_to_exitcode(status))
       env: { ...process.env, HOME: f.root },
     });
     expect(stderr).toContain("using the cached check this launch");
-    expect(stderr).not.toContain("active this launch");
+    expect(stderr).not.toContain(
+      "A startup check update was available and has been applied.",
+    );
     expect(await readFile(f.guard, "utf8")).toBe(f.old);
     f.mode("ok");
     await f.run();
@@ -406,7 +416,7 @@ sys.exit(os.waitstatus_to_exitcode(status))
   test("preserves shell quoting in private clone URLs and PowerShell BOM", async () => {
     const f = await fixture({ platform: "windows" });
     expect((await f.run()).stderr).toContain(
-      "Updated Archestra launch check automatically",
+      "A startup check update was available and has been applied.",
     );
     expect(await readFile(f.guard, "utf8")).toBe(f.current);
   });

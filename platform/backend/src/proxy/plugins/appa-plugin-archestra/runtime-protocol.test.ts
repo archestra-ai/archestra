@@ -71,7 +71,7 @@ describe("protected runtime protocol", () => {
         {
           id: "observed-read",
           name: "archestra__get_agent_run",
-          arguments: { task_id: "task-one" },
+          arguments: { run_id: "task-one" },
         },
         {
           id: "observed-launch",
@@ -81,12 +81,12 @@ describe("protected runtime protocol", () => {
         {
           id: "observed-steer",
           name: "archestra__steer_agent_run",
-          arguments: { task_id: "task-one", message: "keep going" },
+          arguments: { run_id: "task-one", message: "keep going" },
         },
         {
           id: "observed-forged",
           name: "archestra__get_agent_run",
-          arguments: { task_id: "task-one", runtime_proof: "model-written" },
+          arguments: { run_id: "task-one", runtime_proof: "model-written" },
         },
       ],
     });
@@ -97,11 +97,11 @@ describe("protected runtime protocol", () => {
     // made again under a ruling, and a proof the model wrote is not replaced.
     expect(spawn.arguments).toEqual(launch);
     expect(steer.arguments).toEqual({
-      task_id: "task-one",
+      run_id: "task-one",
       message: "keep going",
     });
     expect(forged.arguments).toEqual({
-      task_id: "task-one",
+      run_id: "task-one",
       runtime_proof: "model-written",
     });
     const signed = read.arguments as Record<string, unknown>;
@@ -164,7 +164,7 @@ describe("protected runtime protocol", () => {
         {
           id: "unrecorded-read",
           name: "archestra__get_agent_run",
-          arguments: { task_id: "task-one" },
+          arguments: { run_id: "task-one" },
         },
       ],
     });
@@ -318,9 +318,9 @@ describe("protected runtime protocol", () => {
         const args = spawn
           ? { agent_id: agent.id, message: "Do the work" }
           : tool === "list_agent_runs"
-            ? { agent_id: agent.id }
+            ? { agent_ids: [agent.id], mine_only: true }
             : {
-                task_id: "example-run",
+                run_id: "example-run",
                 ...(tool === "steer_agent_run"
                   ? { message: "Continue the work" }
                   : {}),

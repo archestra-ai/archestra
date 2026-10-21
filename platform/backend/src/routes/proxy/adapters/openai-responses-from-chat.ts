@@ -169,6 +169,10 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     return this.inner.state;
   }
 
+  get clientResponse() {
+    return { id: this.ctx.responseId, model: this.ctx.requestedModel };
+  }
+
   setTextSuffix(getSuffix: (completedText: string) => string): void {
     this.getTextSuffix = getSuffix;
   }

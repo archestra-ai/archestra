@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
-import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./responses-stream-error-frame";
 
 /** The SSE events a frame string carries, in order. */
 const parseEvents = (frame: string) => {
@@ -204,16 +207,60 @@ describe("formatResponsesStreamErrorFrame", () => {
     });
   });
 
-  test("does not end the stream again after the provider's own failure terminal", () => {
+  test("does not end the response again after a terminal the client already has", () => {
     const events = parseEvents(
       formatResponsesStreamErrorFrame(
         {
           type: "error",
           error: { type: "server_error", message: "settlement failed" },
         },
-        { providerTerminalSent: true },
+        { terminalSent: true },
       ),
     );
     expect(events.map((event) => event.type)).toEqual(["error"]);
+  });
+
+  test("numbers its events after the ones the client already received", () => {
+    const relayedUntil = Date.now();
+    const [error, failed] = parseEvents(
+      formatResponsesStreamErrorFrame({
+        type: "error",
+        error: { type: "server_error", message: "Upstream request failed" },
+      }),
+    );
+    expect(error.sequence_number).toBeGreaterThanOrEqual(relayedUntil);
+    expect(failed.sequence_number).toBe(error.sequence_number + 1);
+  });
+});
+
+describe("carriesResponsesTerminal", () => {
+  const sse = (event: object) => `data: ${JSON.stringify(event)}\n\n`;
+
+  test("finds each terminal event, also in bytes", () => {
+    for (const type of [
+      "response.completed",
+      "response.failed",
+      "response.incomplete",
+    ])
+      expect(carriesResponsesTerminal(sse({ type, response: {} }))).toBe(true);
+    expect(
+      carriesResponsesTerminal(
+        new TextEncoder().encode(sse({ type: "response.completed" })),
+      ),
+    ).toBe(true);
+  });
+
+  test("ignores other events, also when the model's text names a terminal", () => {
+    expect(carriesResponsesTerminal(sse({ type: "response.created" }))).toBe(
+      false,
+    );
+    expect(
+      carriesResponsesTerminal(
+        sse({
+          type: "response.output_text.delta",
+          delta: '{"type":"response.completed"}',
+        }),
+      ),
+    ).toBe(false);
   });
 });

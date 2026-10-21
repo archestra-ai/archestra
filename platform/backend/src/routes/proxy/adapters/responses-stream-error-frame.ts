@@ -53,10 +53,13 @@ export function formatResponsesStreamErrorFrame(
         : type;
   const param = typeof source.param === "string" ? source.param : null;
   const error = { ...source, type, code, message, param };
+  // Above the numbers the client already received, as the adapters' own
+  // synthetic events are.
+  const sequenceNumber = Date.now();
 
   const errorFrame = `data: ${JSON.stringify({
     type: "error",
-    sequence_number: 0,
+    sequence_number: sequenceNumber,
     error,
     // Top-level duplicates for clients that read the Responses API's own
     // documented error event rather than the AI SDK's nested shape.
@@ -64,13 +67,13 @@ export function formatResponsesStreamErrorFrame(
     message,
     param,
   })}\n\n`;
-  if (context.providerTerminalSent) return errorFrame;
+  if (context.terminalSent) return errorFrame;
 
   return `${errorFrame}data: ${JSON.stringify({
     type: "response.failed",
-    sequence_number: 1,
+    sequence_number: sequenceNumber + 1,
     response: {
-      id: context.responseId || `resp_${randomUUID().replaceAll("-", "")}`,
+      id: context.responseId || `resp_${randomUUID()}`,
       object: "response",
       created_at: Math.floor(Date.now() / 1000),
       status: "failed",
@@ -82,3 +85,16 @@ export function formatResponsesStreamErrorFrame(
     },
   })}\n\n`;
 }
+
+/**
+ * Whether a write to the client carries a Responses terminal event. Quotes
+ * inside model text are escaped in the JSON, so text cannot match.
+ */
+export function carriesResponsesTerminal(data: string | Uint8Array): boolean {
+  return RESPONSES_TERMINAL_EVENT.test(
+    typeof data === "string" ? data : Buffer.from(data).toString("utf8"),
+  );
+}
+
+const RESPONSES_TERMINAL_EVENT =
+  /"type"\s*:\s*"response\.(?:completed|failed|incomplete)"/;

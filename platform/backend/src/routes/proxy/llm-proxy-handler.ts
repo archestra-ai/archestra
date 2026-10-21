@@ -137,6 +137,10 @@ import {
   withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
 import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./adapters/responses-stream-error-frame";
+import {
   assertConsistentUserCredentials,
   assertPlatformAuthenticated,
   attemptJwksAuth,
@@ -1937,6 +1941,12 @@ async function handleStreaming<
   let streamCompleted = false;
   let failedStreamResponse: unknown;
   let clientGone = false;
+  // Set once a Responses terminal reaches the client, whichever path released
+  // it: the stream loop, the policy release, or a failed generation. An error
+  // frame after it must not end the response a second time.
+  const tracksResponsesTerminal =
+    provider.formatStreamErrorFrame === formatResponsesStreamErrorFrame;
+  let responsesTerminalSent = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -1986,6 +1996,8 @@ async function handleStreaming<
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
+    if (tracksResponsesTerminal && !responsesTerminalSent)
+      responsesTerminalSent = carriesResponsesTerminal(data);
   };
   const childStream = new BufferedChildStream({
     enabled: bufferModelResponse,
@@ -2055,10 +2067,6 @@ async function handleStreaming<
   let accountingFinalized = false;
   let upstreamFinished = false;
   let providerTerminalSeen = false;
-  // Set once the provider's own failure terminal is on the wire. A later
-  // error frame must not follow it with a second terminal: Codex keeps the
-  // last `response.failed` it reads, and the provider's one names the cause.
-  let providerFailureTerminalSent = false;
   const finalizeInteraction = async () => {
     if (accountingFinalized) return;
     accountingFinalized = true;
@@ -2447,7 +2455,6 @@ async function handleStreaming<
         ? withoutResponsesModelOutputSSE(failureEvents)
         : failureEvents)
         writeToClient(event);
-      providerFailureTerminalSent = true;
       await finalizeInteraction();
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
@@ -2836,9 +2843,13 @@ async function handleStreaming<
     }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
     const frameContext: StreamErrorFrameContext = {
-      responseId: streamAdapter.state.responseId || undefined,
-      model: streamAdapter.state.model || actualModel,
-      providerTerminalSent: providerFailureTerminalSent,
+      responseId:
+        streamAdapter.clientResponse?.id ??
+        (streamAdapter.state.responseId || undefined),
+      model:
+        streamAdapter.clientResponse?.model ??
+        (streamAdapter.state.model || actualModel),
+      terminalSent: responsesTerminalSent,
     };
     return handleError(
       streamError,
@@ -2848,13 +2859,14 @@ async function handleStreaming<
       provider.extractInternalCode.bind(provider),
       formatStreamErrorFrame
         ? (event: unknown) => {
-            if (!eofError) return formatStreamErrorFrame(event, frameContext);
             const source = asRecord(event);
             return formatStreamErrorFrame(
-              {
-                ...source,
-                error: { ...asRecord(source?.error), code: eofError.code },
-              },
+              eofError
+                ? {
+                    ...source,
+                    error: { ...asRecord(source?.error), code: eofError.code },
+                  }
+                : event,
               frameContext,
             );
           }

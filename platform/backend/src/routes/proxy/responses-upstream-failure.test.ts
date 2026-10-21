@@ -13,9 +13,12 @@
  */
 
 import { CHAT_API_KEY_ID_HEADER } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import OpenAI from "openai";
 import { afterEach, beforeEach, vi } from "vitest";
+import config from "@/config";
+import db from "@/database";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ModelModel } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -80,6 +83,19 @@ const FAILED_TERMINAL = {
     output: [],
     error: MISALIGNMENT_ERROR,
     usage: null,
+  },
+};
+
+const COMPLETED_TERMINAL = {
+  type: "response.completed",
+  sequence_number: 3,
+  response: {
+    id: "resp_upstream",
+    object: "response",
+    status: "completed",
+    model: "gpt-5.6",
+    output: [],
+    usage: { input_tokens: 12, output_tokens: 4, total_tokens: 16 },
   },
 };
 
@@ -233,5 +249,35 @@ describe("Responses upstream failures", () => {
         error: { code: "proxy_stream_incomplete" },
       },
     });
+  });
+
+  test("a failure after the completed terminal reached the client does not end the response again", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    // A text-only turn releases `response.completed` as it arrives; usage
+    // settles only afterwards, and in enforce mode its failure still ends the
+    // stream with an error.
+    config.llmProxy.usageAccountingMode = "enforce";
+    upstreamEvents = [...STREAM_START, COMPLETED_TERMINAL];
+    await db.execute(
+      sql`ALTER TABLE interaction_billing ADD CONSTRAINT reject_test_settlement CHECK (false)`,
+    );
+    try {
+      const events = await streamTurn({ makeAgent, makeMember, makeUser });
+
+      expect(terminals(events)).toEqual([
+        expect.objectContaining({ type: "response.completed" }),
+      ]);
+      expect(events.at(-1)).toMatchObject({
+        type: "error",
+        error: { message: "Unable to settle LLM usage" },
+      });
+    } finally {
+      await db.execute(
+        sql`ALTER TABLE interaction_billing DROP CONSTRAINT reject_test_settlement`,
+      );
+    }
   });
 });

@@ -243,8 +243,9 @@ It needs `kubectl`, `helm`, and `jq` with read access to the namespace, and prin
 
 What to know:
 
-- It never collects Secrets, ConfigMaps, or container environment values, commands, and arguments. Each log file is capped at 10 MiB. From the Helm values it keeps only a fixed list of non-secret settings, such as replica counts and resources.
+- It never collects Secrets, ConfigMaps, container environment values, commands, and arguments, or the header values of HTTP probes and hooks. Each log file is capped at 10 MiB. From the Helm values it keeps only a fixed list of non-secret settings, such as replica counts and resources.
 - Logs are copied as written, so look through the bundle before you share it.
+- Each `kubectl` call gives up after 20 seconds; set `KUBECTL_REQUEST_TIMEOUT` to change that. A step that fails leaves its error in the bundle, and the rest is still collected.
 
 ## Release Channels And Upgrades
 

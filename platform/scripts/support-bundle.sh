@@ -6,7 +6,7 @@
 # Collects pods, restarts, events, the last 2h of logs per container (and the
 # previous container, each capped in size), deployments and statefulsets, image
 # versions, and an allowlisted subset of the Helm values. Container env values,
-# commands and arguments, Secrets, ConfigMaps, and last-applied annotations are
+# commands and arguments, probe and hook header values, Secrets, ConfigMaps, and last-applied annotations are
 # never collected. Logs are collected as written by the application, so review
 # the bundle before sharing. Every kubectl call times out after
 # KUBECTL_REQUEST_TIMEOUT (default 20s); a failed step leaves its error in the
@@ -59,13 +59,15 @@ readonly HELM_VALUE_ALLOWLIST='[
 readonly LOG_LIMIT_BYTES=$((10 * 1024 * 1024))
 
 # Drops container env values, commands and arguments (MCP server arguments can
-# carry substituted credentials), exec probe and hook commands, and the
-# annotations that can repeat them.
+# carry substituted credentials), exec probe and hook commands, HTTP probe and
+# hook header values, and the annotations that can repeat them.
 readonly SANITIZE='
   walk(
     if type == "object" then
       (if has("env") and (.env | type) == "array"
         then .env |= map(del(.value)) else . end)
+      | (if has("httpHeaders") and (.httpHeaders | type) == "array"
+        then .httpHeaders |= map(del(.value)) else . end)
       | (if has("image") and has("name") then del(.command, .args) else . end)
       | del(.exec)
       | del(.managedFields)

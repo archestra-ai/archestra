@@ -1364,7 +1364,7 @@ function runFileInput(args: {
     }
     return { kind: "bytes", filename: args.filename, data };
   }
-  const relative = workspaceRelativePath(args.path ?? "");
+  const relative = stripWorkspaceRoot(args.path ?? "");
   if (relative === "") {
     return {
       error: `Pass the path of a file in the run's workspace, for example demo/demo.mp4 or ${RUN_WORKSPACE_ROOT}/demo/demo.mp4.`,
@@ -1384,10 +1384,11 @@ function runFileInput(args: {
 /**
  * The model in the run sees its files at absolute paths, so an absolute path
  * under the workspace root, or one starting with ./, names the same file. The
- * root itself names no file and comes back empty. The transfer helper refuses
- * everything else that is not workspace-relative.
+ * root itself names no file and comes back empty. Any other value comes back
+ * unchanged, so the result is not always relative: the transfer helper refuses
+ * an absolute path outside the workspace.
  */
-function workspaceRelativePath(value: string): string {
+function stripWorkspaceRoot(value: string): string {
   if (value === RUN_WORKSPACE_ROOT) return "";
   const relative = value.startsWith(`${RUN_WORKSPACE_ROOT}/`)
     ? value.slice(RUN_WORKSPACE_ROOT.length + 1)

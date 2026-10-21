@@ -159,7 +159,7 @@ export function AgentWorkSources({
             </p>
           </div>
           <Button size="sm" variant="outline" asChild>
-            <Link href={agentEditHref(agentId)}>Set up managed agent</Link>
+            <Link href={agentEditHref(agentId)}>Set up Agent Runtime</Link>
           </Button>
         </div>
       )}

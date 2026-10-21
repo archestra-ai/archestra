@@ -203,6 +203,9 @@ const activeAuthFormSchema = z
     serverType: z.enum(["remote", "local"]),
     multitenant: z.boolean().optional(),
     serverUrl: HttpUrlSchema.optional().or(z.literal("")),
+    // Carried from an existing entry so a save keeps it; choosing "None"
+    // clears it.
+    requiresAuth: z.boolean().optional(),
     authMethod: z.enum([
       "none",
       "bearer",

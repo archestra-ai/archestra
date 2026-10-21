@@ -66,6 +66,9 @@ export function transformFormToApiData(
     multitenant:
       values.serverType === "local" ? Boolean(values.multitenant) : false,
     icon: values.icon ?? null,
+    ...(values.requiresAuth !== undefined && {
+      requiresAuth: values.requiresAuth,
+    }),
   };
 
   if (values.serverUrl) {
@@ -300,6 +303,16 @@ export function transformCatalogItemToFormValues(
     secret: Record<string, unknown>;
   } | null,
 ): McpCatalogFormValues {
+  const staticHeaderFields = getHeaderMappedUserConfigEntries(item.userConfig);
+  // Entries written through the API, the built-in MCP tool or Terraform can
+  // declare their credentials as `requiresAuth` plus header `authFields`
+  // instead of header-mapped userConfig. Until a save writes them into
+  // userConfig, the form shows them as the install-time headers they describe.
+  const authFieldHeaders =
+    Object.keys(staticHeaderFields).length === 0
+      ? getAuthFieldHeaders(item)
+      : [];
+
   // Determine auth method
   let authMethod: McpCatalogFormValues["authMethod"] = "none";
   let includeBearerPrefix = true;
@@ -332,6 +345,14 @@ export function transformCatalogItemToFormValues(
         (config as { valuePrefix?: string } | undefined)?.valuePrefix ===
           "Bearer ",
     )
+  ) {
+    authMethod = "auth_header";
+  } else if (
+    item.requiresAuth &&
+    (authFieldHeaders.length > 0 ||
+      Object.values(staticHeaderFields).some(
+        (config) => config.promptOnInstallation !== false,
+      ))
   ) {
     authMethod = "auth_header";
   }
@@ -496,10 +517,9 @@ export function transformCatalogItemToFormValues(
     };
   }
 
-  const staticHeaderFields = getHeaderMappedUserConfigEntries(item.userConfig);
   const authHeaderConfig =
     staticHeaderFields.access_token ?? staticHeaderFields.raw_access_token;
-  const additionalHeaders = Object.entries(staticHeaderFields)
+  const headersFromUserConfig = Object.entries(staticHeaderFields)
     .filter(([fieldName]) => {
       return fieldName !== "access_token" && fieldName !== "raw_access_token";
     })
@@ -513,6 +533,7 @@ export function transformCatalogItemToFormValues(
       includeBearerPrefix: config.valuePrefix === "Bearer ",
       sensitive: config.sensitive ?? false,
     }));
+  const additionalHeaders = [...headersFromUserConfig, ...authFieldHeaders];
 
   return {
     name: item.name,
@@ -521,6 +542,7 @@ export function transformCatalogItemToFormValues(
     serverType: item.serverType as "remote" | "local",
     multitenant: item.serverType === "local" && Boolean(item.multitenant),
     serverUrl: item.serverUrl || "",
+    requiresAuth: item.requiresAuth,
     authMethod,
     includeBearerPrefix,
     authHeaderName:
@@ -954,6 +976,35 @@ function getHeaderMappedUserConfigEntries(
         ];
       }),
   );
+}
+
+function getAuthFieldHeaders(
+  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+): NonNullable<McpCatalogFormValues["additionalHeaders"]> {
+  const sendsHeaders =
+    item.serverType === "remote" ||
+    (item.serverType === "local" &&
+      item.localConfig?.transportType === "streamable-http");
+  if (!item.requiresAuth || !sendsHeaders) {
+    return [];
+  }
+  return (item.authFields ?? [])
+    .filter(
+      (field) =>
+        field.type.toLowerCase() === "header" && field.name.trim().length > 0,
+    )
+    .map((field) => ({
+      fieldName: undefined,
+      headerName: field.name.trim(),
+      promptOnInstallation: true,
+      // The entry requires auth, and `required` defaults to false whenever a
+      // caller omits it, so it says nothing about this field.
+      required: true,
+      value: undefined,
+      description: field.description || field.label,
+      includeBearerPrefix: false,
+      sensitive: true,
+    }));
 }
 
 function isDefaultAuthorizationHeader(headerName: string): boolean {

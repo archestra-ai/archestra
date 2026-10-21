@@ -721,6 +721,101 @@ describe("transformFormToApiData", () => {
     expect(values.authHeaderName).toBe("");
   });
 
+  describe("entries that declare auth through requiresAuth and authFields", () => {
+    const authFieldsItem = {
+      id: "catalog-auth-fields",
+      name: "Auth Fields MCP",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      requiresAuth: true,
+      authFields: [
+        {
+          name: "X-API-Key",
+          label: "API key",
+          type: "header",
+          required: false,
+        },
+        {
+          name: "token",
+          label: "Query token",
+          type: "query",
+          required: false,
+        },
+      ],
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: null,
+      scope: "personal",
+      teams: [],
+      labels: [],
+    };
+
+    it("hydrates header auth fields as a prompted token header", () => {
+      const values = transformCatalogItemToFormValues(authFieldsItem as never);
+
+      expect(values.authMethod).toBe("auth_header");
+      expect(values.requiresAuth).toBe(true);
+      expect(values.additionalHeaders).toEqual([
+        {
+          fieldName: undefined,
+          headerName: "X-API-Key",
+          promptOnInstallation: true,
+          required: true,
+          value: undefined,
+          description: "API key",
+          includeBearerPrefix: false,
+          sensitive: true,
+        },
+      ]);
+    });
+
+    it("keeps the token header mode and its headers after a save", () => {
+      const saved = transformFormToApiData(
+        transformCatalogItemToFormValues(authFieldsItem as never),
+      );
+
+      expect(saved.requiresAuth).toBe(true);
+      expect(saved.authFields).toBeUndefined();
+      expect(saved.userConfig).toEqual({
+        header_x_api_key: expect.objectContaining({
+          headerName: "X-API-Key",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+        }),
+      });
+
+      const reloaded = transformCatalogItemToFormValues({
+        ...authFieldsItem,
+        userConfig: saved.userConfig,
+      } as never);
+      expect(reloaded.authMethod).toBe("auth_header");
+      expect(reloaded.additionalHeaders).toEqual([
+        expect.objectContaining({
+          fieldName: "header_x_api_key",
+          headerName: "X-API-Key",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+        }),
+      ]);
+    });
+
+    it("shows no auth once the entry no longer requires it", () => {
+      const values = transformCatalogItemToFormValues({
+        ...authFieldsItem,
+        requiresAuth: false,
+      } as never);
+
+      expect(values.authMethod).toBe("none");
+      expect(values.additionalHeaders).toEqual([]);
+    });
+  });
+
   describe("preserves additionalHeaders across all auth methods", () => {
     const additionalHeaders: McpCatalogFormValues["additionalHeaders"] = [
       {

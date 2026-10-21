@@ -1343,7 +1343,9 @@ function runFileInput(args: {
   filename?: string;
   content_base64?: string;
 }): RunFileInput | { error: string } {
-  if ((args.path === undefined) === (args.content_base64 === undefined)) {
+  const hasPath = args.path !== undefined;
+  const hasBytes = args.content_base64 !== undefined;
+  if (hasPath === hasBytes) {
     return {
       error:
         "Pass exactly one of path or content_base64. Prefer path for a file in the run's workspace.",
@@ -1382,14 +1384,15 @@ function runFileInput(args: {
 /**
  * The model in the run sees its files at absolute paths, so an absolute path
  * under the workspace root, or one starting with ./, names the same file. The
- * transfer helper refuses everything else that is not workspace-relative.
+ * root itself names no file and comes back empty. The transfer helper refuses
+ * everything else that is not workspace-relative.
  */
 function workspaceRelativePath(value: string): string {
-  let relative = value.startsWith(`${RUN_WORKSPACE_ROOT}/`)
+  if (value === RUN_WORKSPACE_ROOT) return "";
+  const relative = value.startsWith(`${RUN_WORKSPACE_ROOT}/`)
     ? value.slice(RUN_WORKSPACE_ROOT.length + 1)
     : value;
-  while (relative.startsWith("./")) relative = relative.slice(2);
-  return relative;
+  return relative.replace(/^(\.\/)+/, "");
 }
 
 /**

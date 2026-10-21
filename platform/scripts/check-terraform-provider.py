@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--spec", type=Path,
                         default=Path(__file__).resolve().parents[2] / "docs/openapi.json")
     args = parser.parse_args()
+    # platform_contract_test.go reads the selected spec from ARCHESTRA_TERRAFORM_OPENAPI.
     env = clean_env() | {"ARCHESTRA_TERRAFORM_OPENAPI": str(args.spec.resolve())}
     try:
         with tempfile.TemporaryDirectory(prefix="terraform-provider-check-") as work:

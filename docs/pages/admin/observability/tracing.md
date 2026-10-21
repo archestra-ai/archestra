@@ -2,7 +2,7 @@
 title: Tracing
 description: Send OpenTelemetry traces and logs for every LLM call, tool call, and agent run to your collector
 order: 2
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -79,7 +79,7 @@ To group LLM Proxy calls into one trace, send [`X-Archestra-Session-Id`](/docs/l
 Archestra also emits:
 
 - `context_compaction auto` and `context_compaction manual` spans when chat history is compacted.
-- `send_completion` spans when a [managed agent](/docs/agents/managed-agents) run sends its final reply to ChatOps or email.
+- `send_completion` spans when an [Agent Runtime](/docs/agents/runtime) run sends its final reply to ChatOps or email.
 - Spans from the [Code Sandbox](/docs/agents#code-sandbox) under the service name `archestra-sandbox-rs`, nested under the tool call that ran the command.
 
 ## LLM Spans

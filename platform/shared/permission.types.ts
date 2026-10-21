@@ -116,7 +116,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   log: "LLM proxy, MCP tool-call, and Guardrails consult logs, with separate own and organization-wide visibility, plus Guardrails yells",
   chat: "Chat conversations",
   project:
-    "Projects — shared collections of chats, schedules, managed agent runs, and files",
+    "Projects — shared collections of chats, schedules, Agent Runtime runs, and files",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
   llmModel: "LLM model catalog entries and chat capabilities",

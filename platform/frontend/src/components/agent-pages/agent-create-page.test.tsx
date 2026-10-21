@@ -135,8 +135,8 @@ describe("AgentCreatePage", () => {
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Managed agents Beta", "External agents"]);
-    expect(screen.getByText("Managed Agents unavailable.")).toBeVisible();
+    ).toEqual(["Coding agents Beta", "External agents"]);
+    expect(screen.getByText("Agent Runtime unavailable.")).toBeVisible();
     expect(
       screen.queryByText(/sandboxes\.agents\.x-k8s\.io/),
     ).not.toBeInTheDocument();
@@ -205,13 +205,13 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     expect(
-      screen.getByRole("heading", { level: 2, name: "Managed agents Beta" }),
+      screen.getByRole("heading", { level: 2, name: "Coding agents Beta" }),
     ).toBeInTheDocument();
     expect(
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Managed agents Beta", "External agents"]);
+    ).toEqual(["Coding agents Beta", "External agents"]);
     for (const name of [
       "Claude Code",
       "Codex",
@@ -225,7 +225,7 @@ describe("AgentCreatePage", () => {
     }
     // The platform's own harness is offered on its own, not as a coding agent.
     const codingAgents = screen
-      .getByRole("heading", { level: 2, name: "Managed agents Beta" })
+      .getByRole("heading", { level: 2, name: "Coding agents Beta" })
       .closest("section") as HTMLElement;
     expect(
       within(codingAgents)

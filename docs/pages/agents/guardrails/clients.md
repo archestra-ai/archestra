@@ -4,7 +4,7 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -53,5 +53,5 @@ Reuse the same ID for the whole conversation, including when you send tool resul
 Guardrails check tool calls that go through the LLM Proxy. They do not cover:
 
 - **Other traffic:** a client that skips the proxy, or sends no session header, is not checked. To refuse such clients, set **Other clients** to **Blocked** in **Settings → Guardrails**.
-- **The machine itself:** shell, files, and network are not sandboxed. Run it as a [managed agent](/docs/agents/managed-agents) to isolate it.
+- **The machine itself:** shell, files, and network are not sandboxed. Run the agent in [Agent Runtime](/docs/agents/runtime) to isolate it.
 - **Provider-hosted tools:** a provider's own tools, such as its web search, run before the proxy sees them.

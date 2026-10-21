@@ -247,7 +247,6 @@ function Agents() {
     | null;
   const scopeFilter = useScopeFilterParams({
     includeBuiltIn: true,
-    offerAdminAccess: false,
     queryParamsAdapter,
   });
   const labelsFromUrl = searchParams.get("labels");
@@ -1086,7 +1085,6 @@ function Agents() {
                   <ResourceAccessFilter
                     resource="agent"
                     noun="agents"
-                    offerAdminAccess={false}
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ResourceScopeFilter

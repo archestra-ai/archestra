@@ -357,6 +357,9 @@ describe("bounded chat roster", () => {
       });
     }
     const expectedShared = new Set<string>();
+    // Readable only through admin authority: kept by explicit references,
+    // never offered in the chat roster.
+    const adminAccessOnly = new Set<string>();
     for (const item of subjectCases) {
       const agent = await makeAgent({
         organizationId: ctx.organizationId,
@@ -405,10 +408,12 @@ describe("bounded chat roster", () => {
           "Mixed organization and team read",
           "Duplicate team read",
         ].includes(item.name) ||
-        (role === "admin" &&
-          ["Unrelated role read", "Unrelated team read"].includes(item.name))
+        // A role grant reads as organization-wide, so it stays "Shared with me".
+        (role === "admin" && item.name === "Unrelated role read")
       )
         expectedShared.add(agent.id);
+      if (role === "admin" && item.name === "Unrelated team read")
+        adminAccessOnly.add(agent.id);
     }
     const own = await makeAgent({
       organizationId: ctx.organizationId,
@@ -435,9 +440,17 @@ describe("bounded chat roster", () => {
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
     });
     const legacy = await get("/api/agents/chat-roster");
+    const legacyIds = legacy.map((agent: { id: string }) => agent.id);
+    for (const id of adminAccessOnly) expect(legacyIds).toContain(id);
     const expected = legacy.filter(
-      (agent: { builtIn: boolean; scope: string; authorId: string | null }) =>
+      (agent: {
+        id: string;
+        builtIn: boolean;
+        scope: string;
+        authorId: string | null;
+      }) =>
         !agent.builtIn &&
+        !adminAccessOnly.has(agent.id) &&
         (agent.scope !== "personal" || agent.authorId === ctx.user.id),
     );
     expected.sort(

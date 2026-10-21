@@ -4,6 +4,7 @@ import {
   BUILT_IN_AGENT_IDS,
   type CursorQuery,
   DEFAULT_LLM_PROXY_NAME,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   getCreationDefaultArchestraToolShortNames,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type PaginationQuery,
@@ -1034,10 +1035,23 @@ class AgentModel {
     pagination: CursorQuery;
   }) {
     const table = schema.agentsTable;
-    const base = await AgentModel.buildRosterWhere({
-      ...params,
-      options: { ...params.options, excludeOtherPersonalAgents: false },
+    const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
+      userId: params.userId,
+      organizationId: params.options.authorization?.organizationId,
     });
+    // The Agents page's default access selection: an agent admin does not get
+    // agents nobody shared with them offered for chat.
+    const base = and(
+      await AgentModel.buildRosterWhere({
+        ...params,
+        options: { ...params.options, excludeOtherPersonalAgents: false },
+      }),
+      agentAccessCondition({
+        userId: params.userId,
+        principals,
+        selection: { relations: DEFAULT_RESOURCE_ACCESS_RELATIONS },
+      }),
+    );
     const pattern = params.filters.search
       ? `%${escapeLikePattern(params.filters.search)}%`
       : undefined;

@@ -466,6 +466,10 @@ export type LinearCheckpoint = z.infer<typeof LinearCheckpointSchema>;
 
 export const SalesforceConfigSchema = z.object({
   type: SALESFORCE,
+  // Absent on legacy SOAP connectors: keep them readable, but require an
+  // explicit migration before authenticating with their stored secret.
+  authMethod: z.literal("oauth_client_credentials").optional(),
+  clientId: z.string().trim().min(1).optional(),
   loginUrl: connectorUrlSchema
     .optional()
     .default("https://login.salesforce.com"),

@@ -252,10 +252,10 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
     },
     salesforce: {
       fieldName: "config.loginUrl",
-      label: "Login URL",
-      placeholder: "https://login.salesforce.com",
+      label: "My Domain URL",
+      placeholder: "https://your-domain.my.salesforce.com",
       description:
-        "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
+        "Your Salesforce My Domain URL, including the sandbox domain for sandboxes. login.salesforce.com and test.salesforce.com are not supported.",
     },
     web_crawler: {
       fieldName: "config.startUrl",
@@ -480,7 +480,7 @@ const AUTO_SYNC_CONNECTOR_REQUIREMENTS = {
     docsPage: "salesforce",
     docsAnchor: "salesforce-auto-sync-permissions",
     requirement:
-      "Auto-sync permissions needs view-all and share-table read permissions on this user.",
+      "Auto-sync permissions needs view-all and share-table read permissions on the app’s execution user.",
   },
   perforce: {
     docsPage: "perforce",
@@ -718,7 +718,7 @@ export function getDefaultConnectorConfig(
     asana: { type },
     onedrive: { type, userIds: "", recursive: true },
     outline: { type, outlineUrl: "https://app.getoutline.com" },
-    salesforce: { type, loginUrl: "https://login.salesforce.com" },
+    salesforce: { type, authMethod: "oauth_client_credentials", loginUrl: "" },
     web_crawler: {
       type,
       maxPages: 250,
@@ -745,12 +745,7 @@ export function getDefaultConnectorConfig(
 }
 
 export function connectorNeedsEmail(type: ConnectorType): boolean {
-  return (
-    type === "jira" ||
-    type === "confluence" ||
-    type === "salesforce" ||
-    type === "mfiles"
-  );
+  return type === "jira" || type === "confluence" || type === "mfiles";
 }
 
 export function getConnectorCredentialConfig(params: {
@@ -807,7 +802,7 @@ export function getConnectorCredentialConfig(params: {
     linear: "Personal Access Token",
     asana: "Personal Access Token",
     onedrive: "Client Secret",
-    salesforce: "Password + Security Token",
+    salesforce: "Consumer Secret",
     web_crawler: undefined,
     perforce: "Login Ticket",
     mfiles: mfilesUsesOAuth ? "Client Secret" : "Password",
@@ -832,7 +827,7 @@ export function getConnectorCredentialConfig(params: {
       linear: "Your personal access token",
       asana: "Your personal access token",
       onedrive: "Your Azure AD client secret",
-      salesforce: "Your Salesforce password followed by your security token",
+      salesforce: "Your Salesforce OAuth consumer secret",
       web_crawler: undefined,
       perforce: "Ticket from p4 login -a -p",
       mfiles: mfilesUsesOAuth
@@ -842,7 +837,7 @@ export function getConnectorCredentialConfig(params: {
 
   const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
     servicenow: "Leave empty to keep existing password",
-    salesforce: "Leave empty to keep existing password + security token",
+    salesforce: "Leave empty to keep existing consumer secret",
     notion: "Leave empty to keep existing token",
     sharepoint: "Leave empty to keep existing token",
     gdrive: gdriveUsesOAuth
@@ -884,7 +879,7 @@ export function getConnectorCredentialConfig(params: {
     linear: "Personal access token is required",
     asana: "Personal access token is required",
     onedrive: "Client secret is required",
-    salesforce: "Password and security token are required",
+    salesforce: "Consumer secret is required",
     web_crawler: undefined,
     perforce: "Login ticket is required",
     mfiles: mfilesUsesOAuth
@@ -1077,6 +1072,16 @@ function getApiTokenHelpText(params: {
         </UpstreamConsoleLink>
         {"."}
       </>
+    );
+  }
+
+  if (type === "salesforce") {
+    return (
+      <span>
+        Enable client credentials flow on an External Client App and assign its
+        execution user. Use the app's consumer secret, not a password or
+        security token.
+      </span>
     );
   }
 
@@ -1519,31 +1524,24 @@ const INLINE_CONFIG_FIELDS: Record<
       )}
     />
   ),
-  salesforce: ({ form, mode }) => (
+  salesforce: ({ form }) => (
     <FormField
       control={form.control}
-      name="email"
-      rules={mode === "create" ? { required: "Email is required" } : undefined}
+      name="config.clientId"
+      rules={{ required: "Consumer key is required" }}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>Email{mode === "edit" && " (optional)"}</FormLabel>
-          {mode === "edit" && (
-            <FormDescription>
-              Leave empty to keep existing credentials unchanged.
-            </FormDescription>
-          )}
+          <FormLabel>Consumer Key</FormLabel>
+          <FormDescription>
+            The OAuth consumer key (client ID) of your Salesforce External
+            Client App.
+          </FormDescription>
           <FormControl>
             <Input
-              type="email"
-              placeholder={
-                mode === "create"
-                  ? "user@example.com"
-                  : "Leave empty to keep existing credentials"
-              }
+              placeholder="Your Salesforce OAuth consumer key"
               autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
               {...field}
+              value={field.value ?? ""}
             />
           </FormControl>
           <FormMessage />

@@ -88,6 +88,9 @@ type EditConnectorFormValues = {
 };
 
 function editableConnectorConfig(connector: ConnectorItem) {
+  if (connector.connectorType === "salesforce") {
+    return { ...connector.config, authMethod: "oauth_client_credentials" };
+  }
   if (
     connector.connectorType === "mfiles" &&
     typeof (connector.config as Record<string, unknown>).authMethod !== "string"
@@ -176,6 +179,10 @@ export function EditConnectorDialog({
     return null;
   }
 
+  const salesforceMigrationRequired =
+    connectorType === "salesforce" &&
+    (connector.config as Record<string, unknown>).authMethod !==
+      "oauth_client_credentials";
   const typeLabel = getConnectorTypeLabel(connectorType);
   const connectorDocsUrl = getConnectorDocsUrl(connectorType);
 
@@ -484,12 +491,22 @@ export function EditConnectorDialog({
           <FormField
             control={form.control}
             name="apiToken"
+            rules={
+              salesforceMigrationRequired
+                ? {
+                    required:
+                      "Enter a new OAuth consumer secret to migrate this connector",
+                  }
+                : undefined
+            }
             render={({ field }) => (
               <FormItem>
                 <FormLabel>{apiTokenLabel}</FormLabel>
                 <FormDescription>
                   <span>
-                    Leave empty to keep existing credentials unchanged.
+                    {salesforceMigrationRequired
+                      ? "OAuth migration required. Enter the app’s My Domain URL, consumer key, and a new consumer secret. The stored password cannot be reused."
+                      : "Leave empty to keep existing credentials unchanged."}
                   </span>{" "}
                   {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
                   {credentialRequirement}
@@ -502,7 +519,14 @@ export function EditConnectorDialog({
                       {...field}
                     />
                   ) : (
-                    <SecretInput placeholder={apiTokenPlaceholder} {...field} />
+                    <SecretInput
+                      placeholder={
+                        salesforceMigrationRequired
+                          ? "Enter a new Salesforce OAuth consumer secret"
+                          : apiTokenPlaceholder
+                      }
+                      {...field}
+                    />
                   )}
                 </FormControl>
                 <FormMessage />

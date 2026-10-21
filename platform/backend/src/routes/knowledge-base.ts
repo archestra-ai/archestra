@@ -1210,6 +1210,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      if (
+        body.connectorType === "salesforce" &&
+        !body.credentials?.apiToken.trim()
+      ) {
+        throw new ApiError(400, "Salesforce OAuth consumer secret is required");
+      }
+
       // Validate knowledge base IDs if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
         for (const kbId of body.knowledgeBaseIds) {
@@ -1712,6 +1719,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // resolve the connector's auth shape after this update so credential
       // storage stays consistent across App <-> inline-secret transitions
       const nextConfig = body.config ?? connector.config;
+      if (connector.connectorType === "salesforce" && body.config) {
+        const validation = await getConnector("salesforce").validateConfig(
+          body.config,
+        );
+        if (!validation.valid) {
+          throw new ApiError(
+            400,
+            `Invalid connector configuration: ${validation.error}`,
+          );
+        }
+        if (
+          connector.config.type === "salesforce" &&
+          connector.config.authMethod !== "oauth_client_credentials" &&
+          !body.credentials?.apiToken?.trim()
+        ) {
+          throw new ApiError(
+            400,
+            "Salesforce OAuth migration requires a new consumer secret; the stored password cannot be reused",
+          );
+        }
+      }
       const appConfigRef = await resolveGithubAppConfigReference({
         config: nextConfig,
         organizationId,

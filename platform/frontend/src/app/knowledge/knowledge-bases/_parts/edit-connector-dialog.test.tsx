@@ -791,3 +791,78 @@ describe("EditConnectorDialog - SharePoint publication status", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("EditConnectorDialog - Salesforce OAuth migration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
+      typeof useTeams
+    >);
+  });
+  function salesforceConnector(oauth: boolean): ConnectorFixture {
+    return {
+      ...makeAsanaConnector(),
+      connectorType: "salesforce",
+      config: {
+        type: "salesforce",
+        loginUrl: oauth
+          ? "https://example.my.salesforce.com"
+          : "https://login.salesforce.com",
+        ...(oauth
+          ? { authMethod: "oauth_client_credentials", clientId: "consumer-key" }
+          : {}),
+        objects: ["Account"],
+      },
+    } as ConnectorFixture;
+  }
+  it("requires a replacement secret and submits an explicit OAuth configuration for a legacy connector", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-salesforce" });
+    const user = userEvent.setup();
+    renderDialog(salesforceConnector(false));
+    expect(screen.getByText(/OAuth migration required/)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(
+        "Enter a new Salesforce OAuth consumer secret",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Email/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^My Domain URL$/), {
+      target: { value: "https://example.my.salesforce.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Consumer Key$/), {
+      target: { value: "consumer-key" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        "Enter a new OAuth consumer secret to migrate this connector",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Consumer Secret$/), {
+      target: { value: "consumer-secret" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledOnce());
+    expect(mockMutateAsync.mock.calls[0][0].body).toMatchObject({
+      config: {
+        authMethod: "oauth_client_credentials",
+        clientId: "consumer-key",
+        loginUrl: "https://example.my.salesforce.com",
+        objects: ["Account"],
+      },
+      credentials: { apiToken: "consumer-secret" },
+    });
+  });
+  it("keeps the stored OAuth secret when editing a migrated connector", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-salesforce" });
+    const user = userEvent.setup();
+    renderDialog(salesforceConnector(true));
+    expect(
+      screen.queryByText(/OAuth migration required/),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledOnce());
+    expect(mockMutateAsync.mock.calls[0][0].body.credentials).toBeUndefined();
+  });
+});

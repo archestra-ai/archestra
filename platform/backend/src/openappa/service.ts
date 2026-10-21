@@ -4,6 +4,7 @@ import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
   extractMcpToolError,
+  isAgentTool,
   isSeededAppRenderToolResult,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -1251,16 +1252,28 @@ export async function evaluateToolCalls(
         return { kind: "allow" as const };
       }
       // The target is already canonical, so it is read, not re-canonicalized.
-      const tool = shortName === "yell" ? "yell" : target.toolCallName;
+      const canonicalTool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =
         options.spawnCallIds?.has(call.id) === true ||
         options.isSpawn?.(call.name, call.namespace) === true;
-      const spelling = spawnRetrySpelling({
-        call,
-        tool,
-        spawn,
-        canonicalize: options.canonicalize,
-      });
+      // An agent__<slug> spawn starts a subagent like the host's own Agent
+      // tool, so it is ruled as one. The model keeps its own spelling.
+      const tool =
+        spawn && isAgentTool(shortName ?? canonicalTool)
+          ? SUBAGENT_TOOL
+          : canonicalTool;
+      const spelling =
+        spawnRetrySpelling({
+          call,
+          tool: canonicalTool,
+          spawn,
+          canonicalize: options.canonicalize,
+        }) ??
+        (tool === canonicalTool
+          ? undefined
+          : target.isRunToolDispatchTarget
+            ? canonicalTool
+            : call.name);
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
@@ -2275,6 +2288,9 @@ function spawnRetrySpelling(params: {
     ? params.call.name
     : `${prefix}${params.call.name}`;
 }
+
+/** The host tool every subagent spawn is ruled under. */
+const SUBAGENT_TOOL = "Agent";
 
 function nativePresentation(
   controlToolName?: string,

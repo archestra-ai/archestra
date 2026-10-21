@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { count } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -19,12 +19,34 @@ vi.mock("@/services/model-sync", () => ({
   },
 }));
 
-async function countSecrets(): Promise<number> {
-  const [row] = await db.select({ n: count() }).from(schema.secretsTable);
-  return row.n;
+/**
+ * Make every update of a provider key row do what a concurrent writer would
+ * cause: "conflict" raises the unique violation Postgres reports when another
+ * writer took the primary slot, "gone" skips the row as if it was deleted.
+ * The test database has one connection, so the real race cannot happen here.
+ */
+async function interceptKeyRowUpdates(effect: "conflict" | "gone") {
+  const body =
+    effect === "conflict"
+      ? "RAISE EXCEPTION 'duplicate key value violates unique constraint' USING ERRCODE = '23505';"
+      : "RETURN NULL;";
+  await db.execute(
+    sql.raw(`
+      CREATE FUNCTION intercept_key_row_update() RETURNS trigger AS $$
+      BEGIN
+        ${body}
+      END;
+      $$ LANGUAGE plpgsql;
+    `),
+  );
+  await db.execute(sql`
+    CREATE TRIGGER intercept_key_row_update
+      BEFORE UPDATE ON chat_api_keys
+      FOR EACH ROW EXECUTE FUNCTION intercept_key_row_update();
+  `);
 }
 
-describe("PATCH /api/llm-provider-api-keys/:id when the update fails", () => {
+describe("provider key writes that fail after the secret is stored", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
@@ -45,28 +67,24 @@ describe("PATCH /api/llm-provider-api-keys/:id when the update fails", () => {
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
+    await db.execute(
+      sql`DROP FUNCTION IF EXISTS intercept_key_row_update() CASCADE`,
+    );
     await app.close();
   });
 
-  test("removes the secret it stored for a key that had none", async ({
-    makeLlmProviderApiKey,
-  }) => {
+  test.for([
+    ["the update conflicts", "conflict"],
+    ["the key is gone", "gone"],
+  ] as const)("PATCH deletes the secret it stored for a key that had none when %s", async ([
+    ,
+    effect,
+  ], { makeLlmProviderApiKey }) => {
     const apiKey = await makeLlmProviderApiKey(organizationId, null, {
       provider: "openai",
     });
-    // A concurrent writer took the primary slot between the demotion and
-    // this update. The test database has one connection, so that race is
-    // injected here as the unique violation Postgres would raise.
-    vi.spyOn(LlmProviderApiKeyModel, "update").mockRejectedValueOnce(
-      Object.assign(
-        new Error("duplicate key value violates unique constraint"),
-        {
-          code: "23505",
-        },
-      ),
-    );
-    const secretsBefore = await countSecrets();
+    await interceptKeyRowUpdates(effect);
+    const secretsBefore = await db.$count(schema.secretsTable);
 
     const response = await app.inject({
       method: "PATCH",
@@ -74,10 +92,31 @@ describe("PATCH /api/llm-provider-api-keys/:id when the update fails", () => {
       payload: { apiKey: "sk-new-key", isPrimary: true },
     });
 
-    expect(response.statusCode, response.body).toBe(409);
-    expect(await countSecrets()).toBe(secretsBefore);
+    if (effect === "conflict") {
+      expect(response.statusCode, response.body).toBe(409);
+    }
+    expect(await db.$count(schema.secretsTable)).toBe(secretsBefore);
     expect((await LlmProviderApiKeyModel.findById(apiKey.id))?.secretId).toBe(
       null,
     );
+  });
+
+  test("reconnect deletes the secret it stored when the key is gone", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const apiKey = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    await interceptKeyRowUpdates("gone");
+    const secretsBefore = await db.$count(schema.secretsTable);
+
+    await app.inject({
+      method: "POST",
+      url: `/api/llm-provider-api-keys/${apiKey.id}/reconnect`,
+      payload: { apiKey: "gho_new_token" },
+    });
+
+    expect(await db.$count(schema.secretsTable)).toBe(secretsBefore);
   });
 });

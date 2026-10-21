@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { count } from "drizzle-orm";
 import { vi } from "vitest";
 import { authPlugin } from "@/auth/fastify-plugin";
 import db, { schema } from "@/database";
@@ -21,11 +20,6 @@ vi.mock("@/services/model-sync", () => ({
     maybeAutoSetOrgDefaultModel: vi.fn(),
   },
 }));
-
-async function countSecrets(): Promise<number> {
-  const [row] = await db.select({ n: count() }).from(schema.secretsTable);
-  return row.n;
-}
 
 describe("POST /api/llm-provider-api-keys with a service-account token", () => {
   let app: FastifyInstanceWithZod;
@@ -69,7 +63,7 @@ describe("POST /api/llm-provider-api-keys with a service-account token", () => {
   }
 
   test("400s for a key of its own, before the key is tested or stored", async () => {
-    const secretsBefore = await countSecrets();
+    const secretsBefore = await db.$count(schema.secretsTable);
 
     const response = await createKey({
       name: "Terraform OpenAI",
@@ -82,7 +76,7 @@ describe("POST /api/llm-provider-api-keys with a service-account token", () => {
       "A service account cannot own a key. Set shared to true to create a shared key.",
     );
     expect(testProviderApiKey).not.toHaveBeenCalled();
-    expect(await countSecrets()).toBe(secretsBefore);
+    expect(await db.$count(schema.secretsTable)).toBe(secretsBefore);
     expect(
       await LlmProviderApiKeyModel.findByOrganizationId(organizationId),
     ).toEqual([]);
@@ -139,18 +133,21 @@ describe("POST /api/llm-provider-api-keys when the insert fails", () => {
     const { default: llmProviderApiKeyRoutes } = await import(
       "./llm-provider-api-keys"
     );
-    await app.register(llmProviderApiKeyRoutes);
-    const secretsBefore = await countSecrets();
+    try {
+      await app.register(llmProviderApiKeyRoutes);
+      const secretsBefore = await db.$count(schema.secretsTable);
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/llm-provider-api-keys",
-      payload: { name: "My OpenAI", provider: "openai", apiKey: "sk-my-key" },
-    });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: { name: "My OpenAI", provider: "openai", apiKey: "sk-my-key" },
+      });
 
-    expect(response.statusCode, response.body).toBe(500);
-    expect(testProviderApiKey).toHaveBeenCalledOnce();
-    expect(await countSecrets()).toBe(secretsBefore);
-    await app.close();
+      expect(response.statusCode, response.body).toBe(500);
+      expect(testProviderApiKey).toHaveBeenCalledOnce();
+      expect(await db.$count(schema.secretsTable)).toBe(secretsBefore);
+    } finally {
+      await app.close();
+    }
   });
 });

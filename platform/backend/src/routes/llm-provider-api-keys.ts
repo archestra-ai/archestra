@@ -695,32 +695,33 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ReturnType<typeof LlmProviderApiKeyModel.create>
       >;
       try {
-        createdApiKey = await LlmProviderApiKeyModel.create(
-          {
-            organizationId,
-            createdBy: user.id,
-            name: body.name,
-            provider: body.provider,
-            secretId: secret?.id ?? null,
-            baseUrl: body.baseUrl ?? null,
-            inferenceBaseUrl: body.inferenceBaseUrl ?? null,
-            extraHeaders: body.extraHeaders ?? null,
-            scope,
-            userId: ownerId,
-            teamId: null,
-            isPrimary: body.isPrimary ?? false,
-          },
-          // SPDX-SnippetBegin
-          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          {
-            initialPermissionGrants: body.initialGrants ?? [],
-            apiKeyValue: actualApiKeyValue ?? null,
-          },
-          // SPDX-SnippetEnd
+        createdApiKey = await writeKeyWithStoredSecret(secret?.id, () =>
+          LlmProviderApiKeyModel.create(
+            {
+              organizationId,
+              createdBy: user.id,
+              name: body.name,
+              provider: body.provider,
+              secretId: secret?.id ?? null,
+              baseUrl: body.baseUrl ?? null,
+              inferenceBaseUrl: body.inferenceBaseUrl ?? null,
+              extraHeaders: body.extraHeaders ?? null,
+              scope,
+              userId: ownerId,
+              teamId: null,
+              isPrimary: body.isPrimary ?? false,
+            },
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            {
+              initialPermissionGrants: body.initialGrants ?? [],
+              apiKeyValue: actualApiKeyValue ?? null,
+            },
+            // SPDX-SnippetEnd
+          ),
         );
       } catch (error) {
-        if (secret) await deleteUnusedSecret(secret.id);
         if (isUniqueConstraintError(error)) {
           throw new ApiError(
             409,
@@ -1231,9 +1232,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (Object.keys(updateData).length > 0) {
         try {
-          await LlmProviderApiKeyModel.update(params.id, updateData);
+          await writeKeyWithStoredSecret(newSecretId, () =>
+            LlmProviderApiKeyModel.update(params.id, updateData),
+          );
         } catch (error) {
-          if (newSecretId) await deleteUnusedSecret(newSecretId);
           if (isUniqueConstraintError(error)) {
             throw new ApiError(
               409,
@@ -1386,9 +1388,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
           }),
         );
-        await LlmProviderApiKeyModel.update(keyRow.id, {
-          secretId: secret.id,
-        });
+        await writeKeyWithStoredSecret(secret.id, () =>
+          LlmProviderApiKeyModel.update(keyRow.id, { secretId: secret.id }),
+        );
       }
       await LlmProviderApiKeyModel.recordCredentialKind({
         id: keyRow.id,
@@ -1615,9 +1617,28 @@ function assertApiKeyIsNotSystem(apiKey: { isSystem: boolean }): void {
 }
 
 /**
- * Delete a secret stored for a key row that was then not written, so a
- * failed insert or update does not leave a secret that no key refers to.
- * In read-only Vault mode this removes only the stored reference.
+ * Write a key row that refers to a secret stored just before it. If the write
+ * fails, or finds no row because the key was deleted meanwhile, delete that
+ * secret so it is not left behind with no key referring to it.
+ */
+async function writeKeyWithStoredSecret<T>(
+  secretId: string | null | undefined,
+  write: () => Promise<T>,
+): Promise<T> {
+  let result: T;
+  try {
+    result = await write();
+  } catch (error) {
+    if (secretId) await deleteUnusedSecret(secretId);
+    throw error;
+  }
+  if (result == null && secretId) await deleteUnusedSecret(secretId);
+  return result;
+}
+
+/**
+ * Delete a secret that no key row refers to. In read-only Vault mode this
+ * removes only the stored reference, never the Vault entry.
  */
 async function deleteUnusedSecret(secretId: string): Promise<void> {
   try {

@@ -1,5 +1,4 @@
 import { createHmac } from "node:crypto";
-import { isIP } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,6 +47,7 @@ import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
+import { isValidCidr } from "@/utils/network";
 import packageJson from "../../package.json";
 
 type ProcessType = "web" | "worker" | "all";
@@ -1936,21 +1936,6 @@ export function parseLabelSelector(
 
 const IPV4_CIDR =
   /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
-
-function isValidCidr(value: string): boolean {
-  const [address, prefix, ...rest] = value.split("/");
-  if (!address || !prefix || rest.length > 0 || !/^\d+$/.test(prefix)) {
-    return false;
-  }
-  switch (isIP(address)) {
-    case 4:
-      return Number(prefix) <= 32;
-    case 6:
-      return Number(prefix) <= 128;
-    default:
-      return false;
-  }
-}
 
 /**
  * Whether the code execution sandbox is enabled.

@@ -109,7 +109,10 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
     <div className="min-w-0 space-y-4">
       {/* Summaries only: the tabs below pick the view, so no tile doubles
           as a selector. */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <section
+        aria-label="Connection summary"
+        className="grid gap-3 sm:grid-cols-3"
+      >
         <KpiTile
           label="Users"
           value={members.length.toLocaleString()}
@@ -132,7 +135,7 @@ export function ConnectionExplorer({ window }: { window: ConnectionsWindow }) {
           caption={`${mcp.toLocaleString()} MCP · ${llm.toLocaleString()} LLM · ${window.label}`}
           series={usage.data.days.map((day) => day.gatewayCalls + day.llmCalls)}
         />
-      </div>
+      </section>
       <Tabs value={view} onValueChange={(next) => pickView(next as View)}>
         <TabsList size="sm" aria-label="Connection views">
           {VIEWS.map((item) => (

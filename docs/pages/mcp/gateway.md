@@ -21,11 +21,7 @@ Give each client the right tools from one URL, and never hand out a server crede
 
 ## Create a Gateway
 
-Everyone already has a personal gateway, My Gateway, which starts with every tool they can use. Set **Settings → MCP → Default personal tool mode** to **Custom** to start with assigned tools only. That default applies only when My Gateway or My Assistant is first created; existing objects keep their saved tool mode and assignments.
-
-![Default personal tool mode under Settings → MCP](/docs/automated_screenshots/mcp-gateway_default-tool-mode.webp)
-
-Create a gateway when a team, an app, or a script needs a fixed set of tools.
+You may not need to. Everyone already has My Gateway; **Settings → MCP → Default personal tool mode** controls whether new personal gateways and My Assistant agents start with all accessible or assigned tools. Create a gateway when a team, an app, or a script needs a fixed set of tools.
 
 1. Go to **MCP Gateways** and click **Create MCP Gateway**.
 2. Enter a name, such as `support-tools`. Under **Advanced**, choose the people and teams who can use it.

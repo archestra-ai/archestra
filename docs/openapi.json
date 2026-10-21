@@ -457304,7 +457304,7 @@
         "tags": [
           "Virtual API Keys"
         ],
-        "description": "Get the raw value of a virtual API key. Only the key's author, or the service account that created it, can reveal it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get the raw value of a virtual API key. Only the key's author can reveal it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {

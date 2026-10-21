@@ -2837,6 +2837,8 @@ async function handleStreaming<
       streamError = settlementError;
     }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
+    // Read once, here: nothing else writes to the client before the error
+    // frame, so `terminalSent` cannot change after this point.
     const frameContext: StreamErrorFrameContext = {
       responseId:
         streamAdapter.clientResponse?.id ??

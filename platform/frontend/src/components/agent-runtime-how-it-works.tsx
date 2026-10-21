@@ -11,7 +11,7 @@ export function AgentRuntimeHowItWorks() {
   const steps = [
     {
       title: "Someone gives it a task",
-      body: `In ${appName} chat, a Slack thread, or handed off from an agent on their laptop.`,
+      body: `In ${appName} chat, a Slack thread, or handed off from a coding agent on their laptop.`,
     },
     {
       title: "It starts a run",

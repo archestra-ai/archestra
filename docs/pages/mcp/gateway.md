@@ -2,7 +2,7 @@
 title: MCP Gateway
 description: One MCP endpoint that gives a client the tools, knowledge, subagents, and skills you choose
 order: 2
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,7 +21,7 @@ Give each client the right tools from one URL, and never hand out a server crede
 
 ## Create a Gateway
 
-You may not need to. Everyone already has a personal gateway, My Gateway, with every tool they can use. Create a gateway when a team, an app, or a script needs a fixed set of tools.
+You may not need to. Everyone already has My Gateway; **Settings → MCP → Default personal tool mode** controls whether new personal gateways and My Assistant agents start with all accessible or assigned tools. Create a gateway when a team, an app, or a script needs a fixed set of tools.
 
 1. Go to **MCP Gateways** and click **Create MCP Gateway**.
 2. Enter a name, such as `support-tools`. Under **Advanced**, choose the people and teams who can use it.

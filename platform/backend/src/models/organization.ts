@@ -30,6 +30,21 @@ export type IntegrationOverrideColumns = {
 };
 
 class OrganizationModel {
+  /** Read only when provisioning a new personal assistant or gateway. */
+  static async getDefaultPersonalAgentAccessAllTools(
+    organizationId: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({
+        accessAllTools:
+          schema.organizationsTable.defaultPersonalAgentAccessAllTools,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organizationId))
+      .limit(1);
+    return row?.accessAllTools ?? true;
+  }
+
   /**
    * Process-local cache for {@link getAppearanceSettings}. The appearance
    * settings back white-labeling on the unauthenticated login page (and every
@@ -863,6 +878,8 @@ class OrganizationModel {
       defaultMemberRole: org.defaultMemberRole ?? null,
       onboardingComplete: org.onboardingComplete,
       onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
+      defaultPersonalAgentAccessAllTools:
+        org.defaultPersonalAgentAccessAllTools,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

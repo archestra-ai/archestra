@@ -408,7 +408,7 @@ export default function AgentSettingsPage() {
         className="space-y-3 border-t pt-6"
       >
         <h2 id="agent-runtime-heading" className="text-base font-semibold">
-          <span>Managed Agents</span>{" "}
+          <span>Agent Runtime</span>{" "}
           <Badge
             variant="outline"
             className="align-middle border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar"
@@ -425,8 +425,8 @@ export default function AgentSettingsPage() {
             id="popular-agents"
             catalogKey="popularAgentOverrides"
             catalog={PopularAgentIdSchema.options}
-            title="Managed agents"
-            description="Choose which managed agents are available when creating a new agent, and in what order."
+            title="Agent Runtimes"
+            description="Choose which Agent Runtimes are available when creating a new agent, and in what order."
             options={PopularAgentIdSchema.options.map((id) => ({
               value: id,
               label: AGENT_CATALOG_TEMPLATE_NAMES[id],
@@ -436,9 +436,9 @@ export default function AgentSettingsPage() {
                 </span>
               ),
             }))}
-            placeholder="Select managed agents…"
+            placeholder="Select Agent Runtimes…"
             emptyMessage="No agents found."
-            savedMessage="Managed agents updated"
+            savedMessage="Agent Runtimes updated"
           />
           {runtimeBackend && <RuntimeBackendSection />}
         </div>

@@ -613,7 +613,6 @@ export const RouteId = {
   MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
   GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
   SubmitOnboardingSurvey: "submitOnboardingSurvey",
-  GetFeedbackPopupActivation: "getFeedbackPopupActivation",
 
   // Organization Routes
   GetOrganization: "getOrganization",

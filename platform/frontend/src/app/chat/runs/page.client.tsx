@@ -86,7 +86,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [commandCopied, setCommandCopied] = useState(false);
   const [portCommandCopied, setPortCommandCopied] = useState(false);
   const run = query.data;
-  usePageTitle(run?.title ?? "Managed agent");
+  usePageTitle(run?.title ?? "Agent Runtime");
   const now = useRuntimeClock(true);
 
   // The run's LLM requests are logged under its session id, which only the

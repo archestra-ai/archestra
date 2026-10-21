@@ -96,9 +96,9 @@ export function getAgentCatalogTemplates(
     template({
       id: "hermes",
       name: AGENT_CATALOG_TEMPLATE_NAMES.hermes,
-      summary: `The Hermes agent. Uses any model your company set up in ${appName}.`,
+      summary: `The Hermes coding agent. Uses any model your company set up in ${appName}.`,
       icon: CATALOG_AGENT_ICONS.hermes,
-      description: `The Hermes agent with its model and remote MCP tools supplied by ${appName}.`,
+      description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
       platformName: appName,
       image: images.hermes,
     }),
@@ -179,7 +179,7 @@ export function AgentCatalog({
       <CatalogSection
         title={
           <>
-            <span>Managed agents</span>{" "}
+            <span>Coding agents</span>{" "}
             <Badge
               variant="outline"
               className="align-middle border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar"
@@ -195,7 +195,7 @@ export function AgentCatalog({
         {runtimeAvailable === undefined || isLoading ? (
           <output
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            aria-label="Loading managed agents"
+            aria-label="Loading coding agents"
           >
             {[0, 1, 2].map((index) => (
               <Skeleton key={index} className="h-[132px] rounded-xl" />
@@ -203,7 +203,7 @@ export function AgentCatalog({
           </output>
         ) : isError ? (
           <QueryLoadError
-            title="Could not load managed agents"
+            title="Could not load coding agents"
             onRetry={() => refetch()}
           />
         ) : (
@@ -375,7 +375,7 @@ function GiveItWorkFrom() {
           ))}
         </span>
       )}
-      {source(Laptop, "Handoff from a local agent")}
+      {source(Laptop, "Handoff from a local coding agent")}
       {source(Share2, "Other agents")}
     </div>
   );

@@ -33,7 +33,7 @@ If inference works but tools do not, authenticate the gateway separately. If no 
 
 ## Gateway Tool Permissions
 
-Setup lets Claude Code run gateway tools through [`run_tool`](/docs/reference/archestra-mcp-server#run_tool) without asking each time. A permission prompt or Claude Code's auto mode then does not stop a task such as a [handoff](/docs/agents/managed-agents/handoff) halfway. Setup adds the allow rule to `permissions.allow` in `settings.json`.
+Setup lets Claude Code run gateway tools through [`run_tool`](/docs/reference/archestra-mcp-server#run_tool) without asking each time. A permission prompt or Claude Code's auto mode then does not stop a task such as a [handoff](/docs/agents/runtime/handoff) halfway. Setup adds the allow rule to `permissions.allow` in `settings.json`.
 
 What to know:
 

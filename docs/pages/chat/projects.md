@@ -2,7 +2,7 @@
 title: Projects
 description: Keep chats, agent runs, files, instructions, and schedules in one shared project
 order: 1
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-15
 ---
 
 Keep an investigation's chats, files, agent runs, and schedules together. Project instructions carry across conversations, so a new agent can use the same reference files and conventions.
@@ -17,7 +17,7 @@ Create a project before starting work that needs shared files or recurring tasks
 2. Enter a project name and optional description.
 3. Choose a default agent if new chats and schedules should start with the same agent. Save and confirm the project opens.
 
-You can also convert an existing chat into a project by opening the chat's context menu and selecting **Create project**. To move an ongoing conversation or managed agent session into a project, select **Change project** from its menu. Choosing **Remove from project** returns the session to the main chat list.
+You can also convert an existing chat into a project by opening the chat's context menu and selecting **Create project**. To move an ongoing conversation or Agent Runtime session into a project, select **Change project** from its menu. Choosing **Remove from project** returns the session to the main chat list.
 
 ## Shared Files and Instructions
 
@@ -38,7 +38,7 @@ Ask an agent in a project chat to schedule a task, or create it from **New sched
 3. Choose a cadence and time zone. For example, `0 9 * * 1-5` runs at 09:00 on weekdays in that zone.
 4. Save, check the next run time, and use **Run now** to verify the prompt and agent before relying on the schedule.
 
-Open a run in the schedule history to inspect its conversation or managed agent session, tool calls, and files. Failed runs keep their status and history for investigation.
+Open a run in the schedule history to inspect its conversation or Agent Runtime session, tool calls, and files. Failed runs keep their status and history for investigation.
 
 Pause a schedule to halt automatic triggers while retaining the ability to trigger manual test runs ([`project:update`](/docs/reference/permissions#project:update)). Deleting a schedule with [`project:delete`](/docs/reference/permissions#project:delete) removes its cadence and schedule definition, but preserves all past conversations and session history.
 
@@ -54,7 +54,7 @@ Share the project when another person needs its files and instructions; conversa
 
 Configure member access in project settings under **Access**. You can grant permissions to individual users, teams, service accounts, roles, or the entire organization.
 
-Viewing projects and their shared files requires [`project:read`](/docs/reference/permissions#project:read). Modifying project instructions or settings requires [`project:update`](/docs/reference/permissions#project:update). Viewing another member's chats inside a project requires separate conversation read access, and only the author of an managed agent session can attach to its interactive container shell.
+Viewing projects and their shared files requires [`project:read`](/docs/reference/permissions#project:read). Modifying project instructions or settings requires [`project:update`](/docs/reference/permissions#project:update). Viewing another member's chats inside a project requires separate conversation read access, and only the author of an Agent Runtime session can attach to its interactive container shell.
 
 Transfer project ownership to another member from the permissions tab. The previous owner retains Full access, and all files, schedules, instructions, and past conversations remain intact.
 

@@ -1,10 +1,14 @@
+import { createHash } from "node:crypto";
 import {
   isDefaultBrandedAppName,
   STARTUP_GUARD_FORMAT_VERSION,
   type StartupGuardClientId,
   type SupportedProvider,
 } from "@archestra/shared";
-import { CONNECTION_HEALTH_PATH } from "@/routes/route-paths";
+import {
+  CONNECTION_HEALTH_PATH,
+  CONNECTION_STARTUP_GUARD_PATH,
+} from "@/routes/route-paths";
 import {
   ARCHESTRA_MARK,
   ARCHESTRA_MARK_GAP,
@@ -15,6 +19,7 @@ import {
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
 import { MANAGED_INSTRUCTIONS_REFRESH } from "../payloads/managed-instructions-refresh";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
+import { STARTUP_GUARD_REFRESH } from "../payloads/startup-guard-refresh";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { sh } from "../steps/quoting";
 import type { SetupScriptContext, SetupScriptProxySection } from "../types";
@@ -432,6 +437,7 @@ uninstall_guard() {
   }
   GUARD_UNINSTALLED=1
   rm -f "$GUARD_PATH.instructions-source.json" "$GUARD_PATH.instructions-refresh.py"
+  rm -f "$GUARD_PATH.update.cjs" "$GUARD_PATH.update.json" "$GUARD_PATH.previous"
   rm -f "$GUARD_PATH" "$SKIP_FILE" "$GUARD_PATH.prompt.md"${client.inlineConfigEnv ? ' "$GUARD_PATH.handoff.mjs"' : ""} 2>/dev/null || true
   rm -rf "$GUARD_PATH.instructions" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
@@ -519,6 +525,15 @@ version_is_stale() {
   [ "$arch_ver_num" -gt "$GUARD_FORMAT_VERSION" ]
 }
 
+refresh_version_update() {
+  if command -v node >/dev/null 2>&1 && [ -f "$GUARD_PATH.update.cjs" ]; then
+    node "$GUARD_PATH.update.cjs" "$GUARD_PATH" "$arch_ver_num"
+  else
+    printf '%s\\n' "Could not update $APP_NAME launch check automatically; kept the installed config. Node.js and the installed updater are required." >&2
+  fi
+  return 0
+}
+
 if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
   if [ -n "$HEALTH_URL" ]; then
     fetch_health || HEALTH_STATE='down'
@@ -531,7 +546,7 @@ if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
     i=$((i+1))
   done
   if version_is_stale; then
-    printf '%s\\n' "archestra: a newer $APP_NAME setup for ${client.binary} is available — re-run the setup from the $APP_NAME /connection page to update this startup check." >&2
+    refresh_version_update
   fi
   exit 0
 fi
@@ -946,28 +961,12 @@ offer_reconfigure_tail() {
   return 0
 }
 
-# The health request checks for updates on every launch. Show the reason and
-# concrete steps automatically, without requiring a menu or another keypress.
-# Keep the notice readable, but always let the client start after six seconds.
+# Refresh the generated launch check without replaying setup or changing settings.
 notify_version_update() {
   [ "$GUARD_UNINSTALLED" = "1" ] && return 0
   version_is_stale || return 0
-  # Flush type-ahead without waiting, including a burst beyond PENDING_KEY.
-  # MIN=0/TIME=0 makes the tty return EOF as soon as its queue is empty.
-  arch_update_tty=$(stty -g </dev/tty 2>/dev/null)
-  if [ -n "$arch_update_tty" ] && stty -icanon min 0 time 0 </dev/tty 2>/dev/null; then
-    cat </dev/tty >/dev/null 2>&1
-    stty "$arch_update_tty" </dev/tty 2>/dev/null || true
-  fi
-  PENDING_KEY_SET=0
-  printf '\\n%sUpdate available%s — a newer %s setup is available.\\n' "$C_WARN" "$C_RESET" "$APP_NAME"
-  printf 'Your installed startup check is older than this deployment.\\n'
-  printf '%sTo update, re-run the %s connection setup:%s\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"
-  printf '  1. Open the %s /connection page and pick %s.\\n' "$APP_NAME" ${sh(client.label)}
-  printf '  2. Copy the setup command it shows and run it in your terminal.\\n'
-  printf '     It reinstalls this startup check at the current version.\\n'
-  printf '%sContinuing in 6 seconds — press any key to continue now.%s\\n' "$C_DIM" "$C_RESET"
-  IFS= read -rs -n 1 -t 6 key </dev/tty 2>/dev/null || true
+  refresh_version_update
+  GUARD_DWELL=1
 }
 
 # When something is down: the quick (Y/n) reverses everything that failed in
@@ -1300,6 +1299,7 @@ fi
 cat > "${guardPath}" <<'${GUARD_FILE_EOF}'
 ${renderStartupGuardScript(ctx, client)}${GUARD_FILE_EOF}
 chmod +x "${guardPath}"
+${startupGuardRefreshInstall({ ctx, client, platform: "bash" })}
 if [ "$archestra_guard_pre_feature" = "1" ]; then
   ok ${sh(`Upgraded your existing ${client.label} startup guard to the version-aware format automatically — no re-connect prompt was needed.`)}
 fi
@@ -1580,4 +1580,58 @@ function guardResources(ctx: StartupGuardContext): Array<{
     });
   }
   return resources;
+}
+
+/** No connection credentials are minted; only existing local render parameters are kept. */
+export function startupGuardRefreshInstall({
+  ctx,
+  client,
+  platform,
+}: {
+  ctx: StartupGuardContext;
+  client: StartupGuardClient;
+  platform: "bash" | "windows";
+}): string {
+  if (!ctx.healthUrl) return "";
+  const url = new URL(CONNECTION_STARTUP_GUARD_PATH, ctx.healthUrl).href;
+  const context = {
+    appName: ctx.appName,
+    healthUrl: ctx.healthUrl,
+    mcp: ctx.mcp,
+    proxy: ctx.proxy,
+    skills: ctx.skills,
+  };
+  const source =
+    platform === "windows" ? "" : renderStartupGuardScript(ctx, client);
+  const state = {
+    clientId: client.clientId,
+    platform,
+    url,
+    context,
+    updaterHash: createHash("sha256")
+      .update(STARTUP_GUARD_REFRESH)
+      .digest("hex"),
+    hashes:
+      platform === "windows"
+        ? []
+        : [createHash("sha256").update(source).digest("hex")],
+  };
+  if (platform === "windows") {
+    // Hash the exact UTF-8 BOM bytes written by the PowerShell installer.
+    return `$archUpdateState = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(JSON.stringify(state)).toString("base64")}')) | ConvertFrom-Json
+$archUpdateHash = [Security.Cryptography.SHA256]::Create()
+try { $archUpdateState.hashes = @(([BitConverter]::ToString($archUpdateHash.ComputeHash([IO.File]::ReadAllBytes($archGuardPath)))).Replace('-', '').ToLowerInvariant()) } finally { $archUpdateHash.Dispose() }
+[IO.File]::WriteAllBytes(($archGuardPath + '.update.cjs'), [Convert]::FromBase64String('${Buffer.from(STARTUP_GUARD_REFRESH).toString("base64")}'))
+[IO.File]::WriteAllText(($archGuardPath + '.update.json'), ($archUpdateState | ConvertTo-Json -Depth 32 -Compress), (New-Object Text.UTF8Encoding $false))
+foreach ($archUpdateFile in @(($archGuardPath + '.update.cjs'), ($archGuardPath + '.update.json'))) {
+  $archUpdateAcl = New-Object Security.AccessControl.FileSecurity
+  $archUpdateAcl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)
+  $archUpdateAcl.SetAccessRuleProtection($true, $false)
+  $archUpdateAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl', 'Allow')))
+  Set-Acl -LiteralPath $archUpdateFile -AclObject $archUpdateAcl
+}`;
+  }
+  return `printf '%s' ${sh(STARTUP_GUARD_REFRESH)} > "${"$HOME"}/${client.scriptRelpath}.update.cjs"
+printf '%s' ${sh(JSON.stringify(state))} > "${"$HOME"}/${client.scriptRelpath}.update.json"
+chmod 600 "${"$HOME"}/${client.scriptRelpath}.update.cjs" "${"$HOME"}/${client.scriptRelpath}.update.json"`;
 }

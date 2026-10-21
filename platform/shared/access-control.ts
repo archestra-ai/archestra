@@ -577,6 +577,7 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route.
    */
   [RouteId.GetConnectionHealth]: {},
+  [RouteId.RenderStartupGuard]: {},
   // Installation credential and live access are checked by the refresh handler.
   [RouteId.GetConnectionInstructions]: {},
   [RouteId.GetConnectionRuntime]: {},

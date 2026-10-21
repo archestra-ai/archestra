@@ -1009,6 +1009,7 @@ export const RouteId = {
   GetConnectionInstructions: "getConnectionInstructions",
   GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
+  RenderStartupGuard: "renderStartupGuard",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",
   GetConnectedClientLog: "getConnectedClientLog",

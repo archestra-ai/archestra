@@ -15,7 +15,11 @@ import { MANAGED_INSTRUCTIONS_REFRESH_WINDOWS } from "../payloads/managed-instru
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { psq } from "../steps/quoting";
-import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
+import {
+  type StartupGuardClient,
+  type StartupGuardContext,
+  startupGuardRefreshInstall,
+} from "./startup-guard";
 
 /**
  * PowerShell counterpart of the client-agnostic POSIX startup guard renderer in
@@ -160,6 +164,7 @@ function Remove-ArchGuard {
   }
   $Script:GuardUninstalled = $true
   Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions-source.json'), ($GuardPath + '.instructions-refresh.ps1')
+  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.update.cjs'), ($GuardPath + '.update.json'), ($GuardPath + '.previous')
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
   Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.prompt.md')${client.inlineConfigEnv ? ", ($GuardPath + '.handoff.mjs')" : ""}
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions')
@@ -300,7 +305,16 @@ function Test-ArchResourceDown($r) {
 # older instances stay silent — matching how a missing down marker reads as ok.
 function Test-ArchVersionStale {
   if ($Script:HealthBody -notmatch '"guardVersion":([0-9]+)') { return $false }
-  return ([int]$Matches[1] -gt $GuardFormatVersion)
+  $Script:ArchUpdateVersion = [int]$Matches[1]
+  return ($Script:ArchUpdateVersion -gt $GuardFormatVersion)
+}
+
+function Invoke-ArchVersionRefresh {
+  if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path ($GuardPath + '.update.cjs'))) {
+    & node ($GuardPath + '.update.cjs') $GuardPath $Script:ArchUpdateVersion
+  } else {
+    [Console]::Error.WriteLine('Could not update launch check automatically; kept the installed config. Node.js and the installed updater are required.')
+  }
 }
 
 if (-not $Interactive -and -not $ArchDisconnectAll) {
@@ -313,7 +327,7 @@ if (-not $Interactive -and -not $ArchDisconnectAll) {
     }
   }
   if (Test-ArchVersionStale) {
-    [Console]::Error.WriteLine((ConvertTo-ArchConsole ('archestra: a newer ' + $AppName + ' setup for ${client.binary} is available — re-run the setup from the ' + $AppName + ' /connection page to update this startup check.')))
+    Invoke-ArchVersionRefresh
   }
   return
 }
@@ -679,29 +693,11 @@ function Show-ArchReconfigureOffer {
   if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
 }
 
-# The health request checks for updates on every launch. Show the reason and
-# concrete steps automatically, then let the client start after six seconds.
+# Refresh only the generated launch check; client settings and permissions stay local.
 function Show-ArchVersionUpdate {
-  if ($Script:GuardUninstalled) { return }
-  if (-not (Test-ArchVersionStale)) { return }
-  # Flush type-ahead before drawing, including keys beyond PendingKey.
-  $Script:PendingKey = $null
-  try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { }
-  Clear-ArchLine
-  Write-Host ''
-  Write-Arch 'Update available' Yellow -NoNewline
-  Write-Host (' — a newer ' + $AppName + ' setup is available.')
-  Write-Host 'Your installed startup check is older than this deployment.'
-  Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan
-  Write-Host ('  1. Open the ' + $AppName + ' /connection page and pick ' + ${psq(client.label)} + '.')
-  Write-Host '  2. Copy the setup command it shows and run it in your terminal.'
-  Write-Host '     It reinstalls this startup check at the current version.'
-  Write-Arch 'Continuing in 6 seconds — press any key to continue now.' DarkGray
-  $deadline = [DateTime]::UtcNow.AddMilliseconds(6000)
-  while ([DateTime]::UtcNow -lt $deadline) {
-    if (Read-ArchKey) { break }
-    Start-Sleep -Milliseconds 40
-  }
+  if ($Script:GuardUninstalled -or -not (Test-ArchVersionStale)) { return }
+  Invoke-ArchVersionRefresh
+  $Script:Dwell = $true
 }
 
 # Every down remote already got its failure line during the turn; this single
@@ -1070,6 +1066,7 @@ if ((Test-Path $archGuardPath) -and -not (Select-String -Path $archGuardPath -Pa
 $archGuardBody = @'
 ${inSingleQuotedHereString(renderStartupGuardPowerShell(ctx, client))}'@
 [IO.File]::WriteAllText($archGuardPath, $archGuardBody, (New-Object System.Text.UTF8Encoding $true))
+${startupGuardRefreshInstall({ ctx, client, platform: "windows" })}
 Write-Host ('Updated ' + $archGuardPath)
 if ($archGuardPreFeature) {
   Ok ${psq(`Upgraded your existing ${client.label} startup guard to the version-aware format automatically — no re-connect prompt was needed.`)}

@@ -20,6 +20,7 @@ import {
 } from "fastify-type-provider-zod";
 import type OpenAI from "openai";
 import { vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import db, { schema } from "@/database";
 import {
   EnvironmentDefaultUserLimitModel,
@@ -1157,7 +1158,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
   });
 
   // The advisor is one org-wide env-less row; consultations carry the
-  // delegating caller's environment in a loopback-gated header so environment
+  // delegating caller's environment in a proof-gated header so environment
   // budgets keep seeing advisor spend.
   async function makeAdvisorAgent(
     makeAgent: (
@@ -1210,6 +1211,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       url: OPENAI_ENDPOINT(advisor.id),
       headers: {
         ...OPENAI_HEADERS(),
+        ...internalCallHeader(),
         [DELEGATION_BILLING_ENVIRONMENT_HEADER]: environment.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -1249,6 +1251,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       url: OPENAI_ENDPOINT(agent.id),
       headers: {
         ...OPENAI_HEADERS(),
+        ...internalCallHeader(),
         [DELEGATION_BILLING_ENVIRONMENT_HEADER]: environment.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -1277,6 +1280,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       url: OPENAI_ENDPOINT(advisor.id),
       headers: {
         ...OPENAI_HEADERS(),
+        ...internalCallHeader(),
         [DELEGATION_BILLING_ENVIRONMENT_HEADER]: foreignEnvironment.id,
       },
       payload: SIMPLE_PAYLOAD(),
@@ -1285,7 +1289,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("the delegation header is ignored from a non-loopback peer", async ({
+  test("the delegation header is ignored without the in-process proof, even from loopback", async ({
     makeAgent,
     makeOrganization,
   }) => {
@@ -1302,7 +1306,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const response = await app.inject({
       method: "POST",
       url: OPENAI_ENDPOINT(advisor.id),
-      remoteAddress: "203.0.113.7",
+      remoteAddress: "127.0.0.1",
       headers: {
         ...OPENAI_HEADERS(),
         [DELEGATION_BILLING_ENVIRONMENT_HEADER]: environment.id,
@@ -1329,6 +1333,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       url: OPENAI_ENDPOINT(advisor.id),
       headers: {
         ...OPENAI_HEADERS(),
+        ...internalCallHeader(),
         [DELEGATION_BILLING_ENVIRONMENT_HEADER]: "not-a-uuid",
       },
       payload: SIMPLE_PAYLOAD(),
@@ -1361,6 +1366,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       url: OPENAI_ENDPOINT(advisor.id),
       headers: {
         ...OPENAI_HEADERS(),
+        ...internalCallHeader(),
         [DELEGATION_BILLING_ENVIRONMENT_HEADER]: environment.id,
       },
       payload: SIMPLE_PAYLOAD(),

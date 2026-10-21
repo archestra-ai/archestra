@@ -35,6 +35,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { isInternalCall } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
@@ -95,7 +96,6 @@ import {
   type UnsafeContextBoundary,
 } from "@/types";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
-import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
 import {
   assertAuthenticatedForKeylessProvider,
@@ -174,12 +174,12 @@ export interface LLMProxyContext<TRequest> {
   lockedChat: LockedChatAuditDisposition;
   /**
    * Caller environment an advisor consultation bills to, resolved from the
-   * loopback-gated delegation header and re-validated against the executing
+   * proof-gated delegation header and re-validated against the executing
    * agent row. Undefined for every non-advisor request.
    */
   delegationBillingEnvironmentId?: string;
   /**
-   * MCP App whose runtime made this call, resolved from the loopback-gated app
+   * MCP App whose runtime made this call, resolved from the proof-gated app
    * header and re-validated against the executing agent's organization.
    * Undefined for every request that is not an app-runtime completion.
    */
@@ -286,6 +286,9 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
+  // Whether this process made the call. The socket peer is not evidence: the
+  // frontend rewrites public /v1/* traffic to the API over loopback.
+  const internalCall = isInternalCall(request);
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
@@ -415,7 +418,7 @@ export async function handleLLMProxy<
   // Resolve a passthrough virtual key (X-Archestra-Virtual-Key). It authenticates
   // the acting Archestra user and gates proxy access, but carries no provider
   // credential — the provider auth still comes from the Authorization header.
-  // Skipped for internal loopback auth overrides (in-app chat).
+  // Skipped for in-process auth overrides (in-app chat).
   if (passthroughVirtualKeyToken && !authOverride) {
     await virtualKeyRateLimiter.check({
       ip: request.ip,
@@ -453,12 +456,12 @@ export async function handleLLMProxy<
   > = null;
   /**
    * The chat_api_key row ID for this call, if the call resolved through a
-   * DB-managed key OR was forwarded by an internal loopback caller via
+   * DB-managed key OR was forwarded by an in-process caller via
    * CHAT_API_KEY_ID_HEADER. Used at the bottom of the handler to look up
    * extra HTTP headers. `undefined` for raw-bearer calls from external IPs.
    */
   let perKeyChatApiKeyId: string | undefined;
-  let perKeyChatApiKeyIdFromLoopbackHeader = false;
+  let perKeyChatApiKeyIdFromInternalHeader = false;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
   let wasOAuthAuthenticated = false;
@@ -506,7 +509,7 @@ export async function handleLLMProxy<
   const rawApiKey = normalizeVirtualKeyCandidate(apiKey);
 
   // In-app chat forwards a stored provider secret through the local proxy
-  // (loopback) tagged with CHAT_API_KEY_ID_HEADER and a downstream
+  // (with the in-process proof) tagged with CHAT_API_KEY_ID_HEADER and a downstream
   // PROVIDER_BASE_URL_HEADER. That secret can itself be an `arch_*` virtual key
   // whose mapped provider is ANOTHER Archestra instance — not one of this
   // instance's keys — so it must be forwarded to that downstream base URL
@@ -518,7 +521,7 @@ export async function handleLLMProxy<
   const providerBaseUrlHeaderValue =
     headersForExtraction[PROVIDER_BASE_URL_HEADER.toLowerCase()];
   const isInternalChatForward =
-    isLoopbackRequest(request) &&
+    internalCall &&
     typeof chatApiKeyIdHeader === "string" &&
     chatApiKeyIdHeader.length > 0 &&
     typeof providerBaseUrlHeaderValue === "string" &&
@@ -583,7 +586,7 @@ export async function handleLLMProxy<
       // didn't and this is an internal chat forward, the secret belongs to a
       // downstream Archestra instance: leave `apiKey` as the raw secret so it
       // is forwarded to the provider base URL (which validates it), rather than
-      // failing or penalizing the loopback caller's rate limit.
+      // failing or penalizing the in-process caller's rate limit.
       if (
         isInternalChatForward &&
         error instanceof ApiError &&
@@ -606,7 +609,7 @@ export async function handleLLMProxy<
   }
 
   // 4. Internal callers (in-app chat) that send a raw provider secret can
-  // forward the resolved chat_api_keys row ID via a loopback-only header so
+  // forward the resolved chat_api_keys row ID via a proof-gated header so
   // the proxy can pick up per-key configuration (extraHeaders) below.
   // External clients must NOT be able to spoof this — same SSRF reasoning
   // as PROVIDER_BASE_URL_HEADER.
@@ -615,10 +618,10 @@ export async function handleLLMProxy<
       headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
     const headerPresent =
       typeof headerValue === "string" && headerValue.length > 0;
-    if (isLoopbackRequest(request)) {
+    if (internalCall) {
       if (headerPresent) {
         perKeyChatApiKeyId = headerValue;
-        perKeyChatApiKeyIdFromLoopbackHeader = true;
+        perKeyChatApiKeyIdFromInternalHeader = true;
         logger.info(
           { chatApiKeyId: perKeyChatApiKeyId },
           `[${providerName}Proxy] received provider-api-key-id header`,
@@ -627,12 +630,12 @@ export async function handleLLMProxy<
     } else if (headerPresent) {
       logger.warn(
         { ip: request.socket.remoteAddress },
-        `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
+        `[${providerName}Proxy] ignoring provider-api-key-id header without the in-process proof`,
       );
     }
   }
 
-  if (perKeyChatApiKeyId && perKeyChatApiKeyIdFromLoopbackHeader) {
+  if (perKeyChatApiKeyId && perKeyChatApiKeyIdFromInternalHeader) {
     perKeyProviderApiKeyRow =
       await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
 
@@ -684,7 +687,7 @@ export async function handleLLMProxy<
     apiKey,
     wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
-    isLoopbackCaller: isLoopbackRequest(request),
+    internalCall,
     providerSuppliesServerCredential:
       providerSuppliesServerCredential(providerName),
   });
@@ -726,7 +729,7 @@ export async function handleLLMProxy<
   if (!authMethod) {
     authMethod = passthroughVirtualKeyId
       ? "passthrough_virtual_key"
-      : isLoopbackRequest(request)
+      : internalCall
         ? "internal"
         : "provider_key";
   }
@@ -739,10 +742,7 @@ export async function handleLLMProxy<
   // handlers agree on it.
   const lockedChat = await resolveLockedChatAuditContext({
     source,
-    // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
-    // from forwarded headers, and this seam must only ever match the
-    // loopback socket the in-app chat actually dials.
-    requestIp: request.socket.remoteAddress,
+    internalCall,
     sessionId,
     userId,
     dek: readLockedChatDek(request),
@@ -755,11 +755,19 @@ export async function handleLLMProxy<
   // advisor's own row is env-less). Resolved once so the limit check and every
   // interaction write agree on it.
   const delegationBillingEnvironmentId =
-    await resolveDelegationBillingEnvironment(request, resolvedAgent);
+    await resolveDelegationBillingEnvironment({
+      request,
+      agent: resolvedAgent,
+      internalCall,
+    });
 
   // App-runtime completions carry the calling app, so per-app runtime spend is
   // attributable instead of collapsing into the shared App Runtime agent.
-  const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
+  const attributedAppId = await resolveAttributedAppId({
+    request,
+    agent: resolvedAgent,
+    internalCall,
+  });
 
   // Check usage limits
   try {
@@ -998,7 +1006,7 @@ export async function handleLLMProxy<
       : inheritedContextUntrusted
         ? UNSAFE_CONTEXT_BOUNDARY_REASON.inheritedFromParent
         : undefined;
-    // Dual LLM progress delivery. A chat-loopback request carries a progress
+    // Dual LLM progress delivery. An in-process chat request carries a progress
     // channel header and receives structured events on the in-process bus,
     // which the chat turn renders as model-invisible analysis parts. Everyone
     // else gets protocol-level SSE keep-alive comments while an analysis
@@ -1121,7 +1129,7 @@ export async function handleLLMProxy<
     // External clients must NOT be able to set this header — it would be an SSRF vector
     // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
     const providerBaseUrlHeader =
-      isLoopbackRequest(request) &&
+      internalCall &&
       typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
         ? headersForExtraction["x-archestra-provider-base-url"]
         : undefined;
@@ -2700,17 +2708,19 @@ async function persistProxyInteraction(
 /**
  * Resolve the environment an advisor consultation bills to, from
  * DELEGATION_BILLING_ENVIRONMENT_HEADER. Honored only when all three hold:
- * the request arrived over the loopback socket (the in-process A2A executor's
- * path — the raw socket peer, not request.ip, which trustProxy can rewrite
- * from forwarded headers), the executing agent row is the advisor built-in,
+ * the request carried the in-process proof (the in-process A2A executor's
+ * path; the socket peer is no evidence, since the frontend relays public
+ * traffic over loopback), the executing agent row is the advisor built-in,
  * and the id names an environment of that agent's organization. Anything else
  * ignores the header with a warning: the worst a spoofed value can do is
  * misattribute advisor spend between one organization's environments.
  */
-async function resolveDelegationBillingEnvironment(
-  request: FastifyRequest,
-  agent: GatewayAgent,
-): Promise<string | undefined> {
+async function resolveDelegationBillingEnvironment(params: {
+  request: FastifyRequest;
+  agent: GatewayAgent;
+  internalCall: boolean;
+}): Promise<string | undefined> {
+  const { request, agent, internalCall } = params;
   const raw =
     request.headers[DELEGATION_BILLING_ENVIRONMENT_HEADER.toLowerCase()];
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -2718,10 +2728,10 @@ async function resolveDelegationBillingEnvironment(
     return undefined;
   }
 
-  if (!isLoopbackRequest(request)) {
+  if (!internalCall) {
     logger.warn(
       { agentId: agent.id },
-      "Ignoring delegation billing environment header from a non-loopback peer",
+      "Ignoring delegation billing environment header without the in-process proof",
     );
     return undefined;
   }
@@ -2771,28 +2781,29 @@ async function resolveDelegationBillingEnvironment(
 
 /**
  * Resolve the MCP App an app-runtime completion is attributed to, from
- * APP_ID_HEADER. Honored only when all three hold: the request arrived over the
- * loopback socket (the in-process app-runtime tool's path — the raw socket peer,
- * not request.ip, which trustProxy can rewrite from forwarded headers), the id
+ * APP_ID_HEADER. Honored only when all three hold: the request carried the
+ * in-process proof (the in-process app-runtime tool's path), the id
  * is a uuid, and it names an app of the executing agent's organization.
  * Anything else ignores the header with a warning: the worst a spoofed value
  * can do is misattribute app spend between one organization's apps, so an
  * unusable header must be ignored rather than fail the LLM call.
  */
-async function resolveAttributedAppId(
-  request: FastifyRequest,
-  agent: GatewayAgent,
-): Promise<string | undefined> {
+async function resolveAttributedAppId(params: {
+  request: FastifyRequest;
+  agent: GatewayAgent;
+  internalCall: boolean;
+}): Promise<string | undefined> {
+  const { request, agent, internalCall } = params;
   const raw = request.headers[APP_ID_HEADER.toLowerCase()];
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (!value) {
     return undefined;
   }
 
-  if (!isLoopbackRequest(request)) {
+  if (!internalCall) {
     logger.warn(
       { agentId: agent.id },
-      "Ignoring app attribution header from a non-loopback peer",
+      "Ignoring app attribution header without the in-process proof",
     );
     return undefined;
   }

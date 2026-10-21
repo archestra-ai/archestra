@@ -19,6 +19,36 @@ import {
 test.describe("Quickstart", { tag: "@quickstart" }, () => {
   test.setTimeout(120_000);
 
+  test("public frontend forwarding does not grant internal proxy access", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ storageState: undefined });
+    try {
+      const discovery = await context.request.get(
+        `${UI_BASE_URL}/v1/ollama-native/api/tags`,
+      );
+      expect(discovery.status()).toBe(401);
+
+      const completion = await context.request.post(
+        `${UI_BASE_URL}/v1/ollama-native/api/chat`,
+        {
+          headers: {
+            "x-archestra-internal-call": "forged",
+            "x-archestra-provider-base-url": "http://127.0.0.1:1",
+          },
+          data: {
+            model: "llama3",
+            messages: [{ role: "user", content: "Hello" }],
+            stream: false,
+          },
+        },
+      );
+      expect(completion.status()).toBe(401);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("first-time user can add API key and immediately chat", async ({
     browser,
   }) => {

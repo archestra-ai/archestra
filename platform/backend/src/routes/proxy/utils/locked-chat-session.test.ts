@@ -101,7 +101,7 @@ describe("resolveLockedChatAuditContext", () => {
 
   const chatParams = () => ({
     source: "chat" as const,
-    requestIp: "127.0.0.1",
+    internalCall: true,
     sessionId: lockedChatConversationId,
     userId,
     dek,
@@ -177,7 +177,7 @@ describe("resolveLockedChatAuditContext", () => {
     await expect(
       resolveLockedChatAuditContext({
         ...chatParams(),
-        requestIp: "203.0.113.7",
+        internalCall: false,
       }),
     ).resolves.toEqual({ kind: "none" });
   });

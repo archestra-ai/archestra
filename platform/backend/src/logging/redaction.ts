@@ -31,6 +31,10 @@ export const REDACTED_LOG_PATHS = [
     '["x-archestra-locked-chat-key"]',
     '*["x-archestra-locked-chat-key"]',
     '*.headers["x-archestra-locked-chat-key"]',
+    // The in-process proof (clients/internal-call.ts).
+    '["x-archestra-internal-call"]',
+    '*["x-archestra-internal-call"]',
+    '*.headers["x-archestra-internal-call"]',
   ]);
 
 /**

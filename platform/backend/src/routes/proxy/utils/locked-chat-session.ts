@@ -15,7 +15,6 @@ import type {
   InteractionRequest,
   InteractionResponse,
 } from "@/types";
-import { isLoopbackAddress } from "@/utils/network";
 
 /**
  * LLM-proxy side of locked chats: decide how a request's stored audit
@@ -62,7 +61,7 @@ const LOCKED_CHAT_SESSION_CACHE_TTL_MS = 5 * TimeInMs.Minute;
  * Resolve how this proxy request's audit content must be stored.
  *
  * Session detection is server-derived — never trusted from spoofable public
- * headers alone: only requests that arrived over the loopback path the in-app
+ * headers alone: only requests that carry the in-process proof the in-app
  * chat uses (source === "chat" is set by the chat backend on its in-process
  * proxy call, and the session id equals the conversation id there) qualify for
  * the lookup, and the conversation must be owned by the request's user.
@@ -79,12 +78,13 @@ const LOCKED_CHAT_SESSION_CACHE_TTL_MS = 5 * TimeInMs.Minute;
  */
 export async function resolveLockedChatAuditContext(params: {
   source: InteractionSource;
-  requestIp: string | undefined;
+  /** The request carried the in-process proof (see clients/internal-call). */
+  internalCall: boolean;
   sessionId: string | null | undefined;
   userId: string | undefined;
   dek: Buffer | null;
 }): Promise<LockedChatAuditDisposition> {
-  const { source, requestIp, sessionId, userId, dek } = params;
+  const { source, internalCall, sessionId, userId, dek } = params;
   // "chat" plus chat:* subrequests (e.g. chat:tool_call_repair — a repair
   // prompt carries the same conversation content as the turn it repairs).
   // NOT chatops:* — those are unrelated messaging-channel sessions.
@@ -92,7 +92,7 @@ export async function resolveLockedChatAuditContext(params: {
     (source !== "chat" && !source?.startsWith("chat:")) ||
     !sessionId ||
     !userId ||
-    !isLoopbackAddress(requestIp)
+    !internalCall
   ) {
     return { kind: "none" };
   }

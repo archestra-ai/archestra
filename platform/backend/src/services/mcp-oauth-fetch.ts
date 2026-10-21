@@ -1,5 +1,6 @@
 import type { Agent } from "undici";
 import config from "@/config";
+import logger from "@/logging";
 import EnvironmentModel from "@/models/environment";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
@@ -16,7 +17,7 @@ import { isHostAllowedByNetworkPolicy } from "./environments/network-policy-matc
 export class McpOAuthOutboundError extends ApiError {
   constructor(reason: string) {
     super(
-      400,
+      403,
       `MCP OAuth outbound request refused: ${reason}`,
       "mcp_oauth_outbound_refused",
     );
@@ -64,12 +65,12 @@ class GuardedMcpOAuthFetch {
       ? AbortSignal.any([callerSignal, controller.signal])
       : controller.signal;
     let dispatcher: Agent | undefined;
+    let destinationUrl: string | undefined;
     try {
       // Request normalizes URL/method/headers without accepting dispatcher or
       // redirect overrides. Only the validated URL is passed to fetch below.
-      const initialUrl = validateOutboundUrl(
-        input instanceof Request ? input.url : String(input),
-      );
+      destinationUrl = input instanceof Request ? input.url : String(input);
+      const initialUrl = validateOutboundUrl(destinationUrl);
       if (!initialUrl.ok) throw new McpOAuthOutboundError(initialUrl.reason);
       const request = new Request(input, init);
       signal.throwIfAborted();
@@ -79,6 +80,8 @@ class GuardedMcpOAuthFetch {
       let url = request.url;
       for (let redirects = 0; ; redirects++) {
         signal.throwIfAborted();
+        // Recheck the normalized initial URL and each subsequent redirect.
+        destinationUrl = url;
         const validation = validateOutboundUrl(url);
         if (!validation.ok) throw new McpOAuthOutboundError(validation.reason);
         if (
@@ -161,6 +164,17 @@ class GuardedMcpOAuthFetch {
     } catch (error) {
       if (error instanceof McpOAuthOutboundError) {
         this.refusal = error;
+        // Never log full URLs, headers or bodies: they can contain credentials.
+        let hostname: string | undefined;
+        try {
+          hostname = new URL(destinationUrl ?? "").hostname;
+        } catch {
+          // Malformed URLs have no safe hostname to include.
+        }
+        logger.warn(
+          { hostname, reason: error.message },
+          "MCP OAuth outbound request refused",
+        );
         throw error;
       }
       // Ordinary transport failures retain discovery fallback and transient
@@ -218,6 +232,11 @@ async function resolvePolicy(
         const ids = await MemberModel.findOrganizationIdsByUserId(
           installation.ownerId,
         );
+        if (ids.length > 1) {
+          throw new McpOAuthOutboundError(
+            "installation owner belongs to multiple organizations; explicit organization context required",
+          );
+        }
         if (ids.length === 1) organizationId = ids[0];
       }
     }

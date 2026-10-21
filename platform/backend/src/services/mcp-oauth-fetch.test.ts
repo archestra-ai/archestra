@@ -9,6 +9,7 @@ import type { AddressInfo } from "node:net";
 import { Agent } from "undici";
 import { vi } from "vitest";
 import config from "@/config";
+import logger from "@/logging";
 import EnvironmentModel from "@/models/environment";
 import OrganizationModel from "@/models/organization";
 import { afterEach, beforeEach, expect, test } from "@/test";
@@ -16,6 +17,7 @@ import { createMcpOAuthFetch, McpOAuthOutboundError } from "./mcp-oauth-fetch";
 
 // Only DNS is faked: HTTP, dispatcher connections, bodies and redirects are real.
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
+vi.mock("@/logging");
 const servers: Server[] = [];
 
 beforeEach(() => {
@@ -76,6 +78,26 @@ test("compatibility preserves real HTTP loopback POST redirects and credentials 
   });
   expect(await response.json()).toEqual({ access_token: "legacy-token" });
   expect(received).toBe("client_secret=synthetic");
+  expect(lookup).not.toHaveBeenCalled();
+});
+
+test("refusal diagnostics include the hostname without URL credentials or query secrets", async () => {
+  config.production = true;
+  await expect(
+    createMcpOAuthFetch()(
+      "https://user:synthetic-url-secret@provider.example/token?code=synthetic-code-secret",
+    ),
+  ).rejects.toBeInstanceOf(McpOAuthOutboundError);
+  expect(logger.warn).toHaveBeenCalledWith(
+    {
+      hostname: "provider.example",
+      reason: expect.stringContaining("outbound request refused"),
+    },
+    "MCP OAuth outbound request refused",
+  );
+  const diagnostics = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+  expect(diagnostics).not.toContain("synthetic-url-secret");
+  expect(diagnostics).not.toContain("synthetic-code-secret");
   expect(lookup).not.toHaveBeenCalled();
 });
 
@@ -392,6 +414,22 @@ test("global catalogs use authorized request or installation-derived organizatio
       "allowed",
     );
   }
+  const otherOrg = await makeOrganization();
+  await makeMember(user.id, otherOrg.id);
+  await expect(
+    createMcpOAuthFetch({ catalog, installationId: owned.id })(base),
+  ).rejects.toThrow(
+    "installation owner belongs to multiple organizations; explicit organization context required",
+  );
+  expect(
+    await (
+      await createMcpOAuthFetch({
+        catalog,
+        installationId: owned.id,
+        organizationId: org.id,
+      })(base)
+    ).text(),
+  ).toBe("allowed");
   await OrganizationModel.patch(org.id, {
     defaultNetworkPolicy: {
       egressMode: "off",
@@ -401,7 +439,11 @@ test("global catalogs use authorized request or installation-derived organizatio
     },
   });
   await expect(
-    createMcpOAuthFetch({ catalog, installationId: owned.id })(base),
+    createMcpOAuthFetch({
+      catalog,
+      installationId: owned.id,
+      organizationId: org.id,
+    })(base),
   ).rejects.toThrow("environment policy");
 });
 

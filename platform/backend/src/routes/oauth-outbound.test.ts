@@ -228,7 +228,7 @@ describe("outbound OAuth integration", () => {
       url: OAUTH_CALLBACK_PATH,
       payload: { code: "synthetic-code", state },
     });
-    expect(callback.statusCode, callback.body).toBe(400);
+    expect(callback.statusCode, callback.body).toBe(403);
     expect(callback.body).not.toContain("synthetic-secret");
     expect(canary).toBe(0);
   });
@@ -245,7 +245,7 @@ describe("outbound OAuth integration", () => {
       url: "/api/oauth/initiate",
       payload: { catalogId: catalog.id },
     });
-    expect(response.statusCode, response.body).toBe(400);
+    expect(response.statusCode, response.body).toBe(403);
     expect(response.json().error.message).toContain("outbound request refused");
     expect(lookup).not.toHaveBeenCalled();
   });
@@ -279,7 +279,7 @@ describe("outbound OAuth integration", () => {
       url: "/api/oauth/initiate",
       payload: { catalogId: catalog.id },
     });
-    expect(result.statusCode, result.body).toBe(400);
+    expect(result.statusCode, result.body).toBe(403);
     expect(registrations).toBe(1);
     expect(canary).toBe(0);
   });
@@ -314,7 +314,7 @@ describe("outbound OAuth integration", () => {
       url: OAUTH_CALLBACK_PATH,
       payload: { code: "synthetic-code", state },
     });
-    expect(result.statusCode, result.body).toBe(enforced ? 400 : 200);
+    expect(result.statusCode, result.body).toBe(enforced ? 403 : 200);
     expect(canary).toBe(enforced ? 0 : 1);
     if (!enforced)
       expect(new URLSearchParams(received).get("code")).toBe("synthetic-code");

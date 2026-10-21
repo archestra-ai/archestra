@@ -1798,7 +1798,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (!binding.runtimeTaskId) {
         throw new ApiError(
           409,
-          "The runtime turn has no authenticated task identity",
+          "OpenAPPA found no authenticated task identity for the runtime turn",
         );
       }
       const outcome = await returnRuntimeValue({
@@ -5281,7 +5281,7 @@ async function recordNativeHitlRulings(params: {
           ? "array"
           : typeof answer.content,
       },
-      "Recorded native OpenAPPA HITL answer",
+      "OpenAPPA recorded a native HITL answer",
     );
     for (const offerId of claim.offerIds) {
       const review = await getHitlReview({
@@ -5537,7 +5537,7 @@ function assertUniqueNativeQuestionResultIds(params: {
     if (seen.has(result.id) && questionIds.has(result.id)) {
       throw new ApiError(
         400,
-        "Duplicate native question result IDs are not allowed",
+        "OpenAPPA does not allow duplicate native question result IDs",
       );
     }
     seen.add(result.id);
@@ -6483,7 +6483,10 @@ async function enforcementFor(
   try {
     return await readGuardrailsV2Activation();
   } catch {
-    throw new ApiError(503, "Guardrails availability could not be confirmed");
+    throw new ApiError(
+      503,
+      "OpenAPPA could not confirm Guardrails availability",
+    );
   }
 }
 

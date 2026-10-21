@@ -1,5 +1,6 @@
 import type { FastifyRequest } from "fastify";
 import { beforeEach, describe, expect, test } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import { gatewayLlmSessionId, gatewayLlmToolCallId } from "./llm-link";
 
@@ -20,11 +21,12 @@ describe("gatewayLlmSessionId", () => {
     ).toBe("appa-session");
   });
 
-  test("keeps the ordinary session for the built-in chat on loopback", () => {
+  test("keeps the ordinary session for the verified built-in chat", () => {
     expect(
       gatewayLlmSessionId(
         fakeRequest(
           {
+            ...internalCallHeader(),
             "x-archestra-source": "chat",
             "x-archestra-session-id": "conversation",
             "x-appa-session-id": "appa-session",
@@ -45,6 +47,21 @@ describe("gatewayLlmSessionId", () => {
           "x-archestra-session-id": "conversation",
           "x-appa-session-id": "appa-session",
         }),
+      ),
+    ).toBe("appa-session");
+  });
+
+  test("does not honor a chat source forwarded over loopback", () => {
+    expect(
+      gatewayLlmSessionId(
+        fakeRequest(
+          {
+            "x-archestra-source": "chat",
+            "x-archestra-session-id": "conversation",
+            "x-appa-session-id": "appa-session",
+          },
+          "127.0.0.1",
+        ),
       ),
     ).toBe("appa-session");
   });

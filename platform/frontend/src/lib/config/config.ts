@@ -76,18 +76,25 @@ const appendProxySuffix = (baseUrl: string): string => {
  * Returns array of URLs for UI display when multiple URLs are configured.
  */
 export const getExternalProxyUrls = (): string[] => {
-  const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
-  if (!externalUrl) {
+  const configured = getConfiguredExternalProxyUrls();
+  if (configured.length === 0) {
     return typeof window !== "undefined"
       ? [appendProxySuffix(window.location.origin)]
       : [];
   }
-  return externalUrl
+  return configured;
+};
+
+/**
+ * The external proxy URLs the deployment configures, without the page-origin
+ * fallback. A server render that knows the document's origin adds that itself.
+ */
+export const getConfiguredExternalProxyUrls = (): string[] =>
+  (env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL") ?? "")
     .split(",")
     .map((url) => url.trim())
     .filter((url) => url.length > 0)
     .map(appendProxySuffix);
-};
 
 /**
  * Get the WebSocket URL for general communication.

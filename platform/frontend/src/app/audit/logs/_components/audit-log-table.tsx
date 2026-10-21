@@ -30,7 +30,7 @@ import { useMemberSearch } from "@/lib/member.query";
 import { AuditActorCell } from "./audit-actor-cell";
 import {
   AuditEventCell,
-  AuditRequestCell,
+  AuditStatusCell,
   AuditTimeCell,
 } from "./audit-event-cells";
 import {
@@ -74,35 +74,21 @@ export function AuditLogTable() {
   const actorTypeFromUrl = (searchParams.get("actorType") ?? ALL_VALUE) as
     | typeof ALL_VALUE
     | AuditActorType;
-  const cursorFromUrl = searchParams.get("cursor");
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
   const searchFromUrl = searchParams.get("search");
 
   const cursorPagination = useCursorPagination({
     defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
+  // Free-text search was removed from this page; scrub it from old links.
   useEffect(() => {
-    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl && !searchFromUrl)
-      return;
+    if (!searchFromUrl) return;
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("cursor");
-    params.delete("page");
-    params.delete("pageSize");
     params.delete("search");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
     });
-  }, [
-    cursorFromUrl,
-    pageFromUrl,
-    pageSizeFromUrl,
-    pathname,
-    router,
-    searchFromUrl,
-    searchParams,
-  ]);
+  }, [pathname, router, searchFromUrl, searchParams]);
   const eventId = searchParams.get("event");
   const { data: eventFromUrl } = useAuditLog(eventId ?? undefined);
   const {
@@ -127,6 +113,11 @@ export function AuditLogTable() {
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
+      // A cursor belongs to the listing it was issued for.
+      if (!("cursor" in updates)) {
+        params.delete("cursor");
+        params.delete("page");
+      }
       for (const [key, value] of Object.entries(updates)) {
         if (value === null || value === "") {
           params.delete(key);
@@ -144,10 +135,9 @@ export function AuditLogTable() {
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        cursorPagination.goNewest();
         updateUrlParams({ startDate, endDate });
       },
-      [cursorPagination.goNewest, updateUrlParams],
+      [updateUrlParams],
     ),
   });
   // Every log page keeps its time range in the header's top-right corner.
@@ -169,50 +159,44 @@ export function AuditLogTable() {
 
   const handleActionChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ action: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleResourceChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ resourceType: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleActorChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ actorId: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleEntityChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ resourceId: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleOutcomeChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ outcome: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleActorTypeChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ actorType: value === ALL_VALUE ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const action = (ALL_ACTIONS as readonly string[]).includes(actionFromUrl)
@@ -361,11 +345,11 @@ export function AuditLogTable() {
         cell: ({ row }) => <AuditActorCell event={row.original} />,
       },
       {
-        id: "request",
-        header: () => <div className="text-right">Request</div>,
-        size: 112,
-        minSize: 100,
-        cell: ({ row }) => <AuditRequestCell event={row.original} />,
+        id: "status",
+        header: () => <div className="text-right">Status</div>,
+        size: 120,
+        minSize: 108,
+        cell: ({ row }) => <AuditStatusCell event={row.original} />,
       },
       {
         id: "createdAt",
@@ -388,7 +372,6 @@ export function AuditLogTable() {
     dateTimePicker.startDate !== undefined;
 
   const clearFilters = useCallback(() => {
-    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
       search: null,
@@ -402,9 +385,8 @@ export function AuditLogTable() {
       endDate: null,
       cursor: null,
       page: null,
-      pageSize: null,
     });
-  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
+  }, [dateTimePicker, updateUrlParams]);
 
   if (isAuditLogsLoadError) {
     return (
@@ -524,24 +506,11 @@ export function AuditLogTable() {
 
       <DataTable<AuditLogRow, unknown>
         columns={columns}
-        fixedWidthColumnIds={["actor", "request", "createdAt"]}
+        fixedWidthColumnIds={["actor", "status", "createdAt"]}
         flexibleColumnIds={["resource"]}
         data={rows}
         hideSelectedCount
-        cursorPagination={
-          paginationMeta
-            ? {
-                pageIndex: cursorPagination.pageIndex,
-                pageSize: cursorPagination.pageSize,
-                hasNext: paginationMeta.hasNext,
-                canGoNewer: cursorPagination.canGoNewer,
-                onPageSizeChange: cursorPagination.setPageSize,
-                onNewer: cursorPagination.goNewer,
-                onOlder: () =>
-                  cursorPagination.goOlder(paginationMeta.nextCursor),
-              }
-            : undefined
-        }
+        cursorPagination={cursorPagination.tableState(paginationMeta)}
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}

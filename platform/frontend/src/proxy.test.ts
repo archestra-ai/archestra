@@ -148,6 +148,29 @@ describe("proxy", () => {
       }
     });
 
+    it("marks a connection approval document, and not the plain Connect page", () => {
+      const request = `connectRequest=${"0a1b2c".repeat(8)}`;
+      expect(
+        forwarded(
+          proxy(
+            createMockRequest({
+              url: `/connection?clientId=opencode&platform=linux&${request}`,
+              headers: documentLoad,
+            }),
+          ),
+        ),
+      ).toBe("/connection");
+      for (const url of [
+        "/connection",
+        "/connection?clientId=opencode",
+        "/connection?connectRequest=not-a-request-id",
+      ]) {
+        expect(
+          forwarded(proxy(createMockRequest({ url, headers: documentLoad }))),
+        ).toBeNull();
+      }
+    });
+
     it("does not mark a client navigation or route prefetch", () => {
       // What the proxy sees of a router fetch: Next has already removed the
       // flight headers, and the browser marks the fetch as not a document.

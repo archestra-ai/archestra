@@ -397,9 +397,12 @@ function stripArchestraHeaders(
   _request: unknown,
   headers: Record<string, string | string[] | undefined>,
 ): Record<string, string | string[] | undefined> {
+  // Gemini builds its own header set instead of using the catch-all filter.
   return Object.fromEntries(
     Object.entries(headers).filter(
-      ([name]) => !name.toLowerCase().startsWith("x-archestra-"),
+      ([name]) =>
+        !name.toLowerCase().startsWith("x-archestra-") &&
+        name.toLowerCase() !== "provider-api-key-id",
     ),
   );
 }

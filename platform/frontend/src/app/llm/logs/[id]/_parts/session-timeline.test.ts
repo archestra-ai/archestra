@@ -173,6 +173,36 @@ describe("requestLabel", () => {
     );
   });
 
+  it("tells apart the requests one prompt drives by what each produced", () => {
+    const prompt = { userMessagePreview: "find the flaky test" };
+    expect(
+      requestLabel(
+        row({
+          ...prompt,
+          responseToolNames: [
+            "mcp__engineering-gateway__linear__get_issue",
+            "Read",
+          ],
+        }),
+        "Proxy",
+      ),
+    ).toBe("Called linear__get_issue, Read");
+    expect(
+      requestLabel(
+        row({ ...prompt, responseToolNames: ["Read", "Grep", "Bash", "Edit"] }),
+        "Proxy",
+      ),
+    ).toBe("Called Read, Grep, Bash +1");
+    expect(
+      requestLabel(
+        row({ ...prompt, responseTextPreview: "The **retry** key is stale." }),
+        "Proxy",
+      ),
+    ).toBe("The retry key is stale.");
+    // Logged before the output was kept: the prompt still names it.
+    expect(requestLabel(row(prompt), "Proxy")).toBe("find the flaky test");
+  });
+
   it("falls back to a generic sub-agent label", () => {
     expect(requestLabel(row({ requestType: "subagent" }), "Proxy")).toBe(
       "Sub-agent",

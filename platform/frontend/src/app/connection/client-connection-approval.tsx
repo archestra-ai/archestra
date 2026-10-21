@@ -2,10 +2,10 @@
 
 import { Check, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
-import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -20,7 +20,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { ApprovedHandoff } from "./approved-handoff";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientIcon } from "./client-icon";
-import { CONNECT_CLIENTS } from "./clients";
+import { CONNECT_CLIENTS, type ConnectClient } from "./clients";
 import { GatewayLink } from "./gateway-link";
 import { platformLabels, toPlatformOption } from "./platform.utils";
 
@@ -125,13 +125,28 @@ export function ClientConnectionApproval({
       </div>
     );
   if (!request.data)
+    // The card's own layout with placeholders, so the request lands without
+    // moving anything.
     return (
-      <div className="p-5 sm:p-6">
-        <LoadingState
-          variant="inline"
-          showLabel
-          label="Loading connection request…"
-        />
+      <div aria-busy>
+        <div className="space-y-3 p-4 sm:p-5">
+          <CardHeading client={client} />
+          <div className="rounded-lg border bg-muted/40 px-3 py-2">
+            <p className="text-xs text-muted-foreground">Terminal code</p>
+            <div className="flex h-7 items-center">
+              <Skeleton className="h-5 w-36" />
+            </div>
+          </div>
+          <div className="flex h-5 items-center">
+            <Skeleton className="h-4 w-72" />
+          </div>
+        </div>
+        {/* Outside the spaced column, so it adds no gap. */}
+        <output className="sr-only">Loading connection request…</output>
+        <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-4 py-3 sm:px-5">
+          <Skeleton className="h-8 w-44" />
+          <Skeleton className="h-8 w-16" />
+        </div>
       </div>
     );
   const matches =
@@ -160,15 +175,7 @@ export function ClientConnectionApproval({
   return (
     <div>
       <div className="space-y-3 p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          {client && <ClientIcon client={client} size={24} />}
-          <div className="min-w-0 space-y-0.5">
-            <h2 className="text-sm font-semibold">Confirm the connection</h2>
-            <p className="text-sm text-muted-foreground">
-              Check the code matches your terminal, then approve.
-            </p>
-          </div>
-        </div>
+        <CardHeading client={client} />
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 rounded-lg border bg-muted/40 px-3 py-2">
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground">Terminal code</p>
@@ -231,12 +238,16 @@ export function ClientConnectionApproval({
                   )
                 }
               >
-                {working && (
+                {/* The icon changes, not the width: Deny stays in place
+                    when the setup is ready. */}
+                {working ? (
                   <Loader2
                     aria-hidden
                     data-testid="approve-connection-progress"
                     className="animate-spin"
                   />
+                ) : (
+                  <Check aria-hidden />
                 )}
                 <span>Approve connection</span>
               </Button>
@@ -258,6 +269,20 @@ export function ClientConnectionApproval({
         >
           <span>Deny</span>
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function CardHeading({ client }: { client: ConnectClient | undefined }) {
+  return (
+    <div className="flex items-start gap-3">
+      {client && <ClientIcon client={client} size={24} />}
+      <div className="min-w-0 space-y-0.5">
+        <h2 className="text-sm font-semibold">Confirm the connection</h2>
+        <p className="text-sm text-muted-foreground">
+          Check the code matches your terminal, then approve.
+        </p>
       </div>
     </div>
   );

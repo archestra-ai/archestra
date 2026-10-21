@@ -111,7 +111,9 @@ describe("MCP gateway tools/list query budget", () => {
       ]),
     );
     // Was 157 before the caller and agent were resolved once per request.
-    expect(statements.length).toBeLessThanOrEqual(60);
+    // One more: the constant check for tools whose installations describe
+    // them differently (per-installation descriptions).
+    expect(statements.length).toBeLessThanOrEqual(61);
     // Listing several installations must batch catalog metadata and labels,
     // reuse caller teams, and avoid enriching each server with its users.
     expect(

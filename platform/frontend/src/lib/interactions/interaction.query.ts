@@ -7,7 +7,7 @@ import {
   type InteractionSource,
   isUuid,
 } from "@archestra/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
@@ -304,14 +304,12 @@ export function useSessionLineage({
       const response = await getInteractionSessionLineage({
         path: { sessionId },
       });
-      throwOnApiError(response.error);
-      return (
-        response.data ?? {
-          forkedFrom: null,
-          forks: [],
-          forksTruncated: false,
-        }
-      );
+      const none = { forkedFrom: null, forks: [], forksTruncated: false };
+      // A session several people share (a Slack thread, say) has no single
+      // lineage to show; that is not an error worth interrupting anyone for.
+      if (response.response?.status === 409) return none;
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data ?? none;
     },
     enabled,
   });
@@ -358,6 +356,9 @@ export function useInteractionSessions({
       limit,
       cursor,
     ],
+    // A new page or a minute tick keeps the rows on screen until the
+    // answer lands, so the table never blanks and loses its scroll.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const response = await getInteractionSessions({
         query: {

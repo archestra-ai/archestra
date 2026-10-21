@@ -2326,6 +2326,32 @@ class ToolModel {
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
+  /** A catalog's live tool rows, with the upstream name each was synced from. */
+  static async findSyncedByCatalogId(catalogId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      rawName: string | null;
+      description: string | null;
+    }>
+  > {
+    return db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
+        description: schema.toolsTable.description,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          isNull(schema.toolsTable.agentId),
+          notDeleted(schema.toolsTable),
+        ),
+      );
+  }
+
   /**
    * Discovered tools for a catalog including their `meta` (for `_meta.ui.*`).
    * Powers the server-scoped Apps run path: building `tools/list` and gating

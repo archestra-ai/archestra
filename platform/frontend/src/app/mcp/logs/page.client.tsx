@@ -27,7 +27,7 @@ import { llmSessionHref } from "@/lib/interactions/llm-log-links";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
 import { useMcpServerDisplayByName } from "@/lib/mcp-logs/use-mcp-server-display";
 import { ErrorBoundary } from "../../_parts/error-boundary";
-import { CallCell } from "./_parts/call-cell";
+import { CallCell, StatusCell } from "./_parts/call-cell";
 import { CredentialCell } from "./_parts/credential-cell";
 import { GatewayCell } from "./_parts/gateway-cell";
 import { CalledAtCell, DurationCell } from "./_parts/timing-cells";
@@ -58,9 +58,6 @@ function McpToolCallsTable() {
   const mcpServerNameFromUrl = searchParams.get("mcpServerName") ?? "all";
   const userIdFromUrl = searchParams.get("userId") ?? "all";
   const searchFromUrl = searchParams.get("search");
-  const cursorFromUrl = searchParams.get("cursor");
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
   const cursorPagination = useCursorPagination({
@@ -68,35 +65,28 @@ function McpToolCallsTable() {
   });
   useEffect(() => {
     setProfileFilter(profileIdFromUrl || "all");
-    cursorPagination.goNewest();
-  }, [cursorPagination.goNewest, profileIdFromUrl]);
+  }, [profileIdFromUrl]);
 
+  // Free-text search was removed from this page; scrub it from old links.
   useEffect(() => {
-    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl && !searchFromUrl)
-      return;
+    if (!searchFromUrl) return;
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("cursor");
-    params.delete("page");
-    params.delete("pageSize");
     params.delete("search");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
     });
-  }, [
-    cursorFromUrl,
-    pageFromUrl,
-    pageSizeFromUrl,
-    pathname,
-    router,
-    searchFromUrl,
-    searchParams,
-  ]);
+  }, [pathname, router, searchFromUrl, searchParams]);
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
+      // A cursor belongs to the listing it was issued for.
+      if (!("cursor" in updates)) {
+        params.delete("cursor");
+        params.delete("page");
+      }
       Object.entries(updates).forEach(([key, value]) => {
         if (value === null || value === "") {
           params.delete(key);
@@ -113,29 +103,26 @@ function McpToolCallsTable() {
   const handleProfileFilterChange = useCallback(
     (value: string) => {
       setProfileFilter(value);
-      cursorPagination.goNewest();
       updateUrlParams({
         profileId: value === "all" ? null : value,
         profileID: null,
       });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleMcpServerChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ mcpServerName: value === "all" ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   const handleUserFilterChange = useCallback(
     (value: string) => {
-      cursorPagination.goNewest();
       updateUrlParams({ userId: value === "all" ? null : value });
     },
-    [cursorPagination.goNewest, updateUrlParams],
+    [updateUrlParams],
   );
 
   // Date time range picker hook
@@ -144,13 +131,12 @@ function McpToolCallsTable() {
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        cursorPagination.goNewest();
         updateUrlParams({
           startDate,
           endDate,
         });
       },
-      [cursorPagination.goNewest, updateUrlParams],
+      [updateUrlParams],
     ),
   });
   // Every log page keeps its time range in the header's top-right corner.
@@ -309,10 +295,17 @@ function McpToolCallsTable() {
       cell: ({ row }) => <CredentialCell row={row.original} />,
     },
     {
+      id: "status",
+      header: "Status",
+      size: 112,
+      minSize: 104,
+      cell: ({ row }) => <StatusCell row={row.original} />,
+    },
+    {
       id: "duration",
       header: () => <div className="text-right">Duration</div>,
-      size: 108,
-      minSize: 100,
+      size: 92,
+      minSize: 84,
       cell: ({ row }) => <DurationCell row={row.original} />,
     },
     {
@@ -333,7 +326,6 @@ function McpToolCallsTable() {
 
   const clearFilters = useCallback(() => {
     setProfileFilter("all");
-    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
       profileId: null,
@@ -345,9 +337,8 @@ function McpToolCallsTable() {
       search: null,
       cursor: null,
       page: null,
-      pageSize: null,
     });
-  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
+  }, [dateTimePicker, updateUrlParams]);
 
   if (isMcpToolCallsLoadError) {
     return (
@@ -417,24 +408,17 @@ function McpToolCallsTable() {
 
       <DataTable
         columns={columns}
-        fixedWidthColumnIds={["agent", "credential", "duration", "createdAt"]}
+        fixedWidthColumnIds={[
+          "agent",
+          "credential",
+          "status",
+          "duration",
+          "createdAt",
+        ]}
         flexibleColumnIds={["call"]}
         data={mcpToolCalls}
         hideSelectedCount
-        cursorPagination={
-          paginationMeta
-            ? {
-                pageIndex: cursorPagination.pageIndex,
-                pageSize: cursorPagination.pageSize,
-                hasNext: paginationMeta.hasNext,
-                canGoNewer: cursorPagination.canGoNewer,
-                onPageSizeChange: cursorPagination.setPageSize,
-                onNewer: cursorPagination.goNewer,
-                onOlder: () =>
-                  cursorPagination.goOlder(paginationMeta.nextCursor),
-              }
-            : undefined
-        }
+        cursorPagination={cursorPagination.tableState(paginationMeta)}
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}

@@ -1527,6 +1527,7 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 | `list_agent_runs` | List recent runs across one or more accessible Agents for a read-only operations dashboard. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `steer_run` | Interject one message into a live run's container session — a course correction without stopping the work. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `cancel_run` | Stop an active run. | [`agent:read`](/docs/reference/permissions#agent:read) |
+| `post_run_message` | Post a brief update to the Slack thread an active Agent Runtime run reports to. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `post_run_file` | Upload a file into the messaging-channel thread a run reports to — a demo recording, for example — so it renders natively there (Slack plays video uploads inline). | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `transfer_credential` | Give an Agent Runtime Agent a credential, so a handed-over task can use the CLI authentication the local session was using. | [`credential:create`](/docs/reference/permissions#credential:create) |
 
@@ -1753,6 +1754,18 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `task_id` | `string` | Yes |  |
 
 
+#### post_run_message
+
+Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | `string` | Yes |  |
+| `message` | `string` | Yes |  |
+
+
 #### post_run_file
 
 Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
@@ -1762,8 +1775,9 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `task_id` | `string` | Yes |  |
-| `filename` | `string` | Yes |  |
-| `content_base64` | `string` | Yes |  |
+| `path` | `string` | No | The file in the run's own workspace, relative to /home/node/workspace (for example demo/demo.mp4) or absolute under it. |
+| `filename` | `string` | No | Name shown in the thread. Defaults to the last part of path; required with content_base64. |
+| `content_base64` | `string` | No | The file's bytes, base64-encoded, when there is no path. |
 | `comment` | `string` | No |  |
 
 

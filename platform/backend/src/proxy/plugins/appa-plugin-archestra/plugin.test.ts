@@ -4577,7 +4577,7 @@ describe("asking through the client's own question tool", () => {
         }),
       ).rejects.toMatchObject({
         statusCode: 400,
-        message: "Duplicate native question result IDs are not allowed",
+        message: "OpenAPPA does not allow duplicate native question result IDs",
       });
       await plugin.onToolResults({
         ...context,
@@ -10953,7 +10953,7 @@ describe("activation gate on plugin dispatch", () => {
       const context = requestContext({ sessionId: "switch-unreadable" });
       await expect(plugin.onSessionInit(context)).rejects.toMatchObject({
         statusCode: 503,
-        message: "Guardrails availability could not be confirmed",
+        message: "OpenAPPA could not confirm Guardrails availability",
       });
     } finally {
       read.mockRestore();

@@ -216,7 +216,10 @@ export async function cleanForwardedBody(
 export function stripArchestraRequestHeaders(request: FastifyRequest): void {
   for (const headers of new Set([request.headers, request.raw.headers])) {
     for (const name of Object.keys(headers)) {
-      if (name.toLowerCase().startsWith("x-archestra-")) {
+      if (
+        name.toLowerCase().startsWith("x-archestra-") ||
+        name.toLowerCase() === "provider-api-key-id"
+      ) {
         delete headers[name];
       }
     }

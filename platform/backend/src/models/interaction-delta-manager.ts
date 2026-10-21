@@ -93,9 +93,9 @@ interface ReconstructableRow {
 }
 
 /**
- * A stored, already-decrypted row as {@link
- * InteractionDeltaManager.foldLoadedRows} takes it: a {@link ChainRow} whose
- * processed side may be left out when the caller only needs the request.
+ * A stored, already-decrypted row as a {@link ThreadFolder} takes it: a
+ * {@link ChainRow} whose processed side may be left out when the caller only
+ * needs the request.
  */
 type LoadedChainRow = Omit<
   ChainRow,
@@ -112,6 +112,20 @@ interface FoldState {
   full: FullRequest;
   requestMessages: unknown[];
   processedMessages: unknown[] | null;
+}
+
+/** The fold of one thread's rows, fed one row at a time; see `threadFolder`. */
+interface ThreadFolder {
+  /**
+   * Fold one row from its parent's fold and return its full request. Null
+   * when the parent belongs to the thread but has not been fed yet.
+   */
+  fold(row: LoadedChainRow): unknown | null;
+  /**
+   * Pass a row the caller will not fold (it could not be read, or its parent
+   * could not be folded), so its parent's fold is not held for it.
+   */
+  skip(row: { id: string; parentId: string | null }): void;
 }
 
 const CACHE_MAX_SIZE = 5000;
@@ -392,41 +406,32 @@ class InteractionDeltaManager {
   }
 
   /**
-   * Fold rows the caller has already loaded and decrypted (targets plus every
-   * ancestor each one needs), without touching the reconstruct cache, and
-   * hand each target's full request to `visit` as soon as it is folded.
+   * Fold a thread's rows one at a time, parents before children, given the
+   * skeleton of the rows to come (each row's id and parent id).
    *
-   * For the session-preview backfill, which rebuilds every row of a thread in
-   * one pass. Going through {@link reconstructMany} there would load the chain
-   * of every row again, size (stringify) one whole conversation per row to
-   * cache it, and hold one conversation per row until the batch was done; on
-   * a Claude Code session of hundreds of turns that exhausted the worker's
-   * heap. Here each row is folded once from its parent's fold, so a thread
-   * costs one pass over its messages and holds one fold at a time.
+   * For the session-preview backfill, which rebuilds a thread of any size
+   * with bounded memory: it loads the rows in small batches, feeds each one
+   * here and keeps only the preview. Going through {@link reconstructMany}
+   * instead would load the chain of every row again, size (stringify) one
+   * whole conversation per row to cache it, and hold one conversation per
+   * row until the batch was done; on a Claude Code session of hundreds of
+   * turns that exhausted the worker's heap. The folder keeps a row's fold
+   * only while a child of it is still to come and drops it with the last
+   * child, so a thread holds one conversation at a time however many rows,
+   * and however many full head rows, it has.
    *
-   * A row whose parent is not in `rows` is folded as its own head, as
-   * {@link reconstructMany} treats a chain cut by retention. Ancestors cached
-   * by earlier reads are still reused.
+   * The reconstruct cache is left alone, though an ancestor cached by an
+   * earlier read is reused. A row whose parent is not in the skeleton is
+   * folded as its own head, as {@link reconstructMany} treats a chain cut by
+   * retention.
    */
-  static foldLoadedRows(
-    rows: Iterable<LoadedChainRow>,
-    targets: Iterable<string>,
-    visit: (id: string, request: unknown) => void,
-  ): void {
-    const map = new Map<string, ChainRow>();
-    for (const row of rows) {
-      map.set(row.id, {
-        processedRequestSharedPrefix: null,
-        processedRequest: null,
-        ...row,
-      });
-    }
-    // Each row is folded once, from its parent's fold, and a parent's fold
-    // is dropped once its last loaded child has been folded: a linear thread
-    // holds one fold at a time however long it is.
+  static threadFolder(
+    skeleton: ReadonlyArray<{ id: string; parentId: string | null }>,
+  ): ThreadFolder {
+    const members = new Set(skeleton.map((row) => row.id));
     const unfoldedChildren = new Map<string, number>();
-    for (const row of map.values()) {
-      if (row.parentId !== null && map.has(row.parentId)) {
+    for (const row of skeleton) {
+      if (row.parentId !== null && members.has(row.parentId)) {
         unfoldedChildren.set(
           row.parentId,
           (unfoldedChildren.get(row.parentId) ?? 0) + 1,
@@ -434,45 +439,46 @@ class InteractionDeltaManager {
       }
     }
     const states = new Map<string, FoldState>();
-    const folded = (row: ChainRow, state: FoldState) => {
-      states.set(row.id, state);
-      if (row.parentId === null) return;
-      const left = (unfoldedChildren.get(row.parentId) ?? 1) - 1;
-      unfoldedChildren.set(row.parentId, left);
-      if (left <= 0) states.delete(row.parentId);
+    const threadParent = (row: { parentId: string | null }) =>
+      row.parentId !== null && members.has(row.parentId) ? row.parentId : null;
+    // One child fewer to come for `parentId`; its fold goes with the last.
+    const release = (parentId: string | null) => {
+      if (parentId === null) return;
+      const left = (unfoldedChildren.get(parentId) ?? 1) - 1;
+      unfoldedChildren.set(parentId, left);
+      if (left <= 0) states.delete(parentId);
     };
-    const stateOf = (id: string): FoldState | null => {
-      // Walk up to the nearest folded or cached ancestor, then fold down.
-      const pending: ChainRow[] = [];
-      let state: FoldState | null = null;
-      let cursor = map.get(id);
-      while (cursor) {
-        const known = states.get(cursor.id);
-        if (known) {
-          state = known;
-          break;
+    return {
+      fold(row) {
+        const parentId = threadParent(row);
+        let parent: FoldState | null = null;
+        if (parentId !== null) {
+          const known = states.get(parentId);
+          if (known) {
+            parent = known;
+          } else {
+            const cached =
+              InteractionDeltaManager.reconstructCache.get(parentId);
+            if (!cached) return null;
+            parent = stateFromFull(cached);
+          }
         }
-        const cached = InteractionDeltaManager.reconstructCache.get(cursor.id);
-        if (cached) {
-          state = stateFromFull(cached);
-          break;
-        }
-        pending.push(cursor);
-        cursor =
-          cursor.parentId === null ? undefined : map.get(cursor.parentId);
-      }
-      for (let i = pending.length - 1; i >= 0; i--) {
-        state = InteractionDeltaManager.foldChild(pending[i], state);
-        folded(pending[i], state);
-      }
-      return state;
+        const state = InteractionDeltaManager.foldChild(
+          {
+            processedRequestSharedPrefix: null,
+            processedRequest: null,
+            ...row,
+          },
+          parent,
+        );
+        if ((unfoldedChildren.get(row.id) ?? 0) > 0) states.set(row.id, state);
+        release(parentId);
+        return state.full.request;
+      },
+      skip(row) {
+        release(threadParent(row));
+      },
     };
-    for (const id of targets) {
-      const state = stateOf(id);
-      if (!state) continue;
-      visit(id, state.full.request);
-      if ((unfoldedChildren.get(id) ?? 0) <= 0) states.delete(id);
-    }
   }
 
   /** Clear both caches. Intended for tests that exercise the cold-cache DB path. */

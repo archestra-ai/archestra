@@ -21,6 +21,7 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { normalizeMcpAppExternalUrl } from "@/components/mcp-app/external-link";
+import { withGenericFontFallback } from "@/components/mcp-app/font-stack";
 import { McpAppAuthBanner } from "@/components/mcp-app/mcp-app-auth-banner";
 import { Button } from "@/components/ui/button";
 import {
@@ -1416,8 +1417,14 @@ function buildMcpUiStyleVariables(): McpUiStyles {
   const primary = getCssVar("--primary");
   const primaryFg = getCssVar("--primary-foreground");
   const radius = getCssVar("--radius");
-  const fontSans = getCssVar("--font-sans");
-  const fontMono = getCssVar("--font-mono");
+  const fontSans = withGenericFontFallback(
+    getCssVar("--font-sans"),
+    "sans-serif",
+  );
+  const fontMono = withGenericFontFallback(
+    getCssVar("--font-mono"),
+    "monospace",
+  );
   const shadowSm = getCssVar("--shadow-sm");
   const shadowMd = getCssVar("--shadow-md");
   const shadowLg = getCssVar("--shadow-lg");

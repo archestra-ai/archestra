@@ -90,7 +90,7 @@ it("lists consults for the URL filters with the tool name", async () => {
   expect(requests[0].searchParams.has("sessionId")).toBe(false);
 });
 
-it("names an outcome on the row only when the service did not answer", async () => {
+it("shows every consult's outcome in the Status column", async () => {
   server.use(
     http.get(consultsUrl, () =>
       HttpResponse.json({
@@ -113,7 +113,7 @@ it("names an outcome on the row only when the service did not answer", async () 
 
   expect(await screen.findByText("Timed out")).toBeInTheDocument();
   const table = screen.getByRole("table");
-  expect(within(table).queryByText("Answered")).not.toBeInTheDocument();
+  expect(within(table).getByText("Answered")).toBeInTheDocument();
 });
 
 it("exports JSONL with the current filters", async () => {

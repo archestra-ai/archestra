@@ -836,7 +836,9 @@ function Agents() {
       header: ({ column }) => (
         <SortableHeader column={column} label="Last used" />
       ),
-      size: 140,
+      // Fits the longest relative time, "less than a minute ago", with room
+      // before the Provider icon.
+      size: 180,
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-sm text-muted-foreground">
           {formatRelativeTimeFromNow(row.original.value.lastUsedAt ?? null, {

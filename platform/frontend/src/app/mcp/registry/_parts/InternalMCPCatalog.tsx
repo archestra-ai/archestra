@@ -482,6 +482,7 @@ export function InternalMCPCatalog() {
       const { authorizationUrl, state } =
         await initiateOAuthMutation.mutateAsync({
           catalogId: selectedCatalogItem.id,
+          ...(reauthServerId && { serverId: reauthServerId }),
         });
 
       setOAuthState(state);

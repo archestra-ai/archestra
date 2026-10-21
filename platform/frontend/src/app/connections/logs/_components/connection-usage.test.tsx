@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { useSyncExternalStore } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentAdoption,
   AgentAdoptionMember,
@@ -11,6 +12,28 @@ import {
   filterFacts,
   groupsOf,
 } from "./connection-usage-data";
+
+/** The page's URL: the explorer keeps its drilldown there. */
+const location = {
+  search: new URLSearchParams(),
+  listeners: new Set<() => void>(),
+  push(href: string) {
+    location.search = new URLSearchParams(href.split("?")[1] ?? "");
+    for (const listener of location.listeners) listener();
+  },
+};
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/connections/logs",
+  useRouter: () => ({ push: location.push, replace: location.push }),
+  useSearchParams: () =>
+    useSyncExternalStore(
+      (listener) => {
+        location.listeners.add(listener);
+        return () => location.listeners.delete(listener);
+      },
+      () => location.search,
+    ),
+}));
 
 const window = {
   startDate: "2026-10-01T00:00:00Z",
@@ -94,6 +117,9 @@ function grouped(dimension: "user" | "agent" | "service") {
 }
 
 describe("connection usage", () => {
+  beforeEach(() => {
+    location.search = new URLSearchParams();
+  });
   it("groups one agent across installations without multiplying calls or users", () => {
     const [agent] = grouped("agent");
     expect(agent).toMatchObject({
@@ -157,56 +183,65 @@ describe("connection usage", () => {
       }),
     ).toMatchObject([{ key: "user-c", calls: 0, lastSeenAt: null }]);
   });
-  it("drills from user to agent to service and removes a scope filter", () => {
-    render(
-      <ConnectionUsageExplorer
-        adoption={adoption}
-        window={window}
-        initialGroup="user"
-      />,
-    );
-    fireEvent.click(
-      within(screen.getByRole("table"))
-        .getByText("Member Alpha")
-        .closest("tr") as HTMLElement,
-    );
-    expect(
-      screen.getByRole("button", { name: "Remove Member Alpha filter" }),
-    ).toBeInTheDocument();
+  it("drills from user to agent to service, then steps back out", () => {
+    render(<ConnectionUsageExplorer adoption={adoption} window={window} />);
+    openRow("Member Alpha");
+    expect(location.search.get("user")).toBe("user-a");
     expect(
       within(screen.getByRole("table")).queryByText("Member Beta"),
     ).not.toBeInTheDocument();
-    fireEvent.click(
-      within(screen.getByRole("table"))
-        .getByText("Claude Code")
-        .closest("tr") as HTMLElement,
-    );
+    openRow("Claude Code");
     expect(
       screen.getByRole("button", { name: "Remove Claude Code filter" }),
     ).toBeInTheDocument();
     expect(
       within(screen.getByRole("table")).getAllByText("Development"),
     ).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(
+      screen.queryByRole("button", { name: "Remove Claude Code filter" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Claude Code: 15 calls" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(location.search.toString()).toBe("");
+    expect(
+      screen.getByRole("button", { name: "Member Beta: 7 calls" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Back" }),
+    ).not.toBeInTheDocument();
+  });
+  it("regroups by a filter when it is removed, keeping the others", () => {
+    render(<ConnectionUsageExplorer adoption={adoption} window={window} />);
+    openRow("Member Alpha");
+    openRow("Claude Code");
     fireEvent.click(
       screen.getByRole("button", { name: "Remove Member Alpha filter" }),
     );
+    // Every user of Claude Code, not Claude Code's gateways for nobody.
     expect(
-      screen.queryByRole("button", { name: "Remove Member Alpha filter" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Member Alpha: 15 calls" }),
+    ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", {
-        name: "Development (MCP gateway): 17 calls",
-      }),
+      screen.getByRole("button", { name: "Member Beta: 7 calls" }),
+    ).toBeInTheDocument();
+  });
+  it("opens a shared drilldown link where it was left", () => {
+    location.search = new URLSearchParams("by=agent&user=user-b");
+    render(<ConnectionUsageExplorer adoption={adoption} window={window} />);
+    expect(
+      screen.getByRole("button", { name: "Remove Member Beta filter" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Claude Code: 7 calls" }),
     ).toBeInTheDocument();
   });
   it("narrows by a call-type count and resets to all connections", () => {
-    render(
-      <ConnectionUsageExplorer
-        adoption={adoption}
-        window={window}
-        initialGroup="user"
-      />,
-    );
+    render(<ConnectionUsageExplorer adoption={adoption} window={window} />);
     const row = within(screen.getByRole("table"))
       .getByText("Member Alpha")
       .closest("tr") as HTMLElement;
@@ -222,7 +257,15 @@ describe("connection usage", () => {
       screen.queryByRole("button", { name: /^Remove/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Claude Code: 22 calls" }),
+      screen.getByRole("button", { name: "Member Beta: 7 calls" }),
     ).toBeInTheDocument();
   });
 });
+
+function openRow(name: string) {
+  fireEvent.click(
+    within(screen.getByRole("table"))
+      .getByText(name)
+      .closest("tr") as HTMLElement,
+  );
+}

@@ -745,6 +745,25 @@ describe("GET /api/connected-clients/adoption", () => {
     expect(total(everyone)).toEqual({ gateway: 3, llm: 1 });
     expect(total(await usage(ada.id))).toEqual({ gateway: 2, llm: 0 });
     expect(total(await usage(bob.id))).toEqual({ gateway: 1, llm: 1 });
+
+    // The adoption summary counts the same traffic, so the page's totals
+    // agree: Bob's tools/list is no more a call there than here.
+    const summary = await app.inject({
+      method: "GET",
+      url: "/api/connected-clients/adoption",
+    });
+    const { members } = summary.json() as {
+      members: {
+        gatewayUses: { calls: number }[];
+        llmUses: { calls: number }[];
+      }[];
+    };
+    const sum = (uses: { calls: number }[]) =>
+      uses.reduce((count, use) => count + use.calls, 0);
+    expect({
+      gateway: sum(members.flatMap((member) => member.gatewayUses)),
+      llm: sum(members.flatMap((member) => member.llmUses)),
+    }).toEqual(total(everyone));
   });
 
   async function redeem(userId: string, clientId: ConnectionSetupClientId) {

@@ -152,7 +152,9 @@ class OpenAppaHelperBridge {
       try {
         await sandboxRuntimeService.attach(CONSUMER_ID);
         executed = await sandboxRuntimeService.runCommand({
-          command: external.command.map(shellQuote).join(" "),
+          // Helpers are short-lived; lazy imports (Python 3.15+, ignored before)
+          // skip loading modules a consult never touches.
+          command: `PYTHON_LAZY_IMPORTS=all ${external.command.map(shellQuote).join(" ")}`,
           cwd,
           timeoutSeconds: HELPER_EXEC_TIMEOUT_SECONDS,
           replayEntries: [

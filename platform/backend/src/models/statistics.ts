@@ -667,17 +667,19 @@ class StatisticsModel {
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
       .select({
-        model: schema.interactionsTable.model,
+        model: billedModel,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
-        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
-        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
-        cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
+        requests: modelRequests,
+        inputTokens: modelInput,
+        outputTokens: modelOutput,
+        cacheReadTokens: modelCacheRead,
         // Billed spend: subscription-fulfilled traffic incurs no per-token
         // charge, so its list-price `cost` is excluded from the reported total.
-        cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
+        cost: modelBilledCost,
       })
       .from(schema.interactionsTable)
+      .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+      .leftJoin(billingModelFacts, sql`true`)
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
@@ -685,7 +687,7 @@ class StatisticsModel {
         ),
       )
       .groupBy(
-        schema.interactionsTable.model,
+        billedModel,
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       )
       .orderBy(
@@ -1613,21 +1615,23 @@ class StatisticsModel {
     const [rows, [people]] = await Promise.all([
       db
         .select({
-          model: i.model,
+          model: billedModel,
           timeBucket: bucket,
-          requests: sql<number>`COUNT(*)::integer`,
-          inputTokens: tokenSum(i.inputTokens),
-          outputTokens: tokenSum(i.outputTokens),
-          cacheReadTokens: tokenSum(i.cacheReadTokens),
-          cost: billedSum(i.cost, "DOUBLE PRECISION"),
-          baselineCost: billedSum(i.baselineCost, "DECIMAL"),
-          actualCost: billedSum(i.cost, "DECIMAL"),
-          cacheSavings: billedSum(i.cacheSavings, "DECIMAL"),
-          subscriptionCost: subscriptionCostSum("DECIMAL"),
+          requests: modelRequests,
+          inputTokens: modelInput,
+          outputTokens: modelOutput,
+          cacheReadTokens: modelCacheRead,
+          cost: modelBilledCost,
+          baselineCost: modelBaselineCost,
+          actualCost: modelBilledCost,
+          cacheSavings: modelCacheSavings,
+          subscriptionCost: modelSubscriptionCost,
         })
         .from(i)
+        .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+        .leftJoin(billingModelFacts, sql`true`)
         .where(scope)
-        .groupBy(i.model, bucket)
+        .groupBy(billedModel, bucket)
         .orderBy(bucket),
       db
         .select({ activeUsers: sql<number>`COUNT(*)::integer` })
@@ -2343,9 +2347,7 @@ class StatisticsModel {
   }) {
     const { timeframe, userIds, whereClause, byModel = false } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
-    const model = byModel
-      ? schema.interactionsTable.model
-      : sql<null>`NULL::text`;
+    const model = byModel ? billedModel : sql<null>`NULL::text`;
     // created_at stores UTC without a timezone. Return an explicit instant so
     // database drivers cannot interpret the bucket in the server's local zone.
     const bucket = sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt}) AT TIME ZONE 'UTC'`;
@@ -2354,14 +2356,16 @@ class StatisticsModel {
         userId: schema.interactionsTable.userId,
         model,
         timeBucket: bucket,
-        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
-        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
-        cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
-        cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
-        subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+        requests: modelRequests,
+        inputTokens: modelInput,
+        outputTokens: modelOutput,
+        cacheReadTokens: modelCacheRead,
+        cost: modelBilledCost,
+        subscriptionCost: modelSubscriptionCost,
       })
       .from(schema.interactionsTable)
+      .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+      .leftJoin(billingModelFacts, sql`true`)
       .where(
         and(
           whereClause,
@@ -2396,18 +2400,17 @@ class StatisticsModel {
     const rows = await db
       .select({
         userId: schema.interactionsTable.userId,
-        model: schema.interactionsTable.model,
-        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
-        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
-        cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
-        billedCost: billedSum(
-          schema.interactionsTable.cost,
-          "DOUBLE PRECISION",
-        ),
-        subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+        model: billedModel,
+        requests: modelRequests,
+        inputTokens: modelInput,
+        outputTokens: modelOutput,
+        cacheReadTokens: modelCacheRead,
+        billedCost: modelBilledCost,
+        subscriptionCost: modelSubscriptionCost,
       })
       .from(schema.interactionsTable)
+      .leftJoin(schema.interactionBillingTable, billingReceiptJoin)
+      .leftJoin(billingModelFacts, sql`true`)
       .where(
         and(
           whereClause,
@@ -2415,12 +2418,8 @@ class StatisticsModel {
           isNotNull(schema.interactionsTable.model),
         ),
       )
-      .groupBy(schema.interactionsTable.userId, schema.interactionsTable.model)
-      .orderBy(
-        desc(
-          sql`COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) + COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0)`,
-        ),
-      );
+      .groupBy(schema.interactionsTable.userId, billedModel)
+      .orderBy(desc(sql`${modelInput} + ${modelOutput}`));
 
     const byUser = new Map<string, UserModelUsage[]>();
     for (const row of rows) {
@@ -2703,3 +2702,39 @@ type CostSavingsRow = {
   cacheSavings: number;
   subscriptionCost: number;
 };
+
+// Join receipts before expanding JSON so PostgreSQL can plan one set-based
+// receipt join rather than a correlated receipt lookup for every interaction.
+const billingReceiptJoin = and(
+  eq(schema.interactionBillingTable.interactionId, schema.interactionsTable.id),
+  sql`${schema.interactionBillingTable.usage}->>'mode' = 'enforce'`,
+);
+const billingModelFacts = sql`LATERAL (
+  SELECT component->>'model' AS model,
+    bool_or(component->>'model' = COALESCE(
+      jsonb_path_query_first(${schema.interactionBillingTable.usage}, '$.components[*] ? (@.kind == "message")')->>'model',
+      ${schema.interactionBillingTable.usage}->'components'->0->>'model'
+    )) AS parent_request,
+    sum((component->>'inputTokens')::bigint) AS input_tokens,
+    sum((component->>'outputTokens')::bigint) AS output_tokens,
+    sum((component->>'cacheReadTokens')::bigint) AS cache_read_tokens,
+    sum((component->>'cost')::numeric) AS cost,
+    sum(round((
+      ((component->>'cacheReadTokens')::numeric + (component->>'cacheWriteTokens')::numeric) * (component->'prices'->>'input')::numeric
+      - (component->>'cacheReadTokens')::numeric * COALESCE((component->'prices'->>'cacheRead')::numeric, 0)
+      - ((component->>'cacheWriteTokens')::numeric - (component->>'cacheWrite1hTokens')::numeric) * COALESCE((component->'prices'->>'cacheWrite')::numeric, 0)
+      - (component->>'cacheWrite1hTokens')::numeric * COALESCE((component->'prices'->>'cacheWrite1h')::numeric, 0)
+    ) / 1000000, 10)) AS cache_savings
+  FROM jsonb_array_elements(${schema.interactionBillingTable.usage}->'components') AS component
+  GROUP BY component->>'model'
+) AS billing_model`;
+const billedModel = sql<string>`COALESCE(billing_model.model, ${schema.interactionsTable.model})`;
+const modelRequests = sql<number>`CAST(COUNT(*) FILTER (WHERE billing_model.model IS NULL OR billing_model.parent_request) AS INTEGER)`;
+const modelInput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.input_tokens, ${schema.interactionsTable.inputTokens})), 0) AS BIGINT)`;
+const modelOutput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.output_tokens, ${schema.interactionsTable.outputTokens})), 0) AS BIGINT)`;
+const modelCacheRead = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_read_tokens, ${schema.interactionsTable.cacheReadTokens})), 0) AS BIGINT)`;
+const modelBilledCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;
+
+const modelSubscriptionCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription'), 0) AS DOUBLE PRECISION)`;
+const modelBaselineCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.baselineCost})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;
+const modelCacheSavings = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_savings, ${schema.interactionsTable.cacheSavings})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;

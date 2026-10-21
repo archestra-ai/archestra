@@ -3226,7 +3226,7 @@ describe("APPA request preflight", () => {
         interactionType: "anthropic:messages",
         identity,
       }),
-    ).toThrow("conflicts with the OpenAPPA remedy tools");
+    ).toThrow("conflicts with its remedy tools");
   });
 
   test("rejects a hosted name that collides with a declared client remedy tool", () => {

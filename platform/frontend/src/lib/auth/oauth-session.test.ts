@@ -4,10 +4,12 @@ import {
   clearOAuthPendingChatResume,
   getOAuthMcpServerId,
   getOAuthPendingChatResume,
+  getOAuthState,
   getOAuthUserConfigValues,
   setOAuthInstallChatResume,
   setOAuthMcpServerId,
   setOAuthReauthChatResume,
+  setOAuthState,
   setOAuthUserConfigValues,
 } from "./oauth-session";
 
@@ -23,6 +25,14 @@ describe("oauth-session install context", () => {
     clearInstallContext();
 
     expect(getOAuthMcpServerId()).toBeNull();
+  });
+
+  it("keeps the expected callback state until the install context is cleared", () => {
+    expect(getOAuthState()).toBeNull();
+    setOAuthState("synthetic-state");
+    expect(getOAuthState()).toBe("synthetic-state");
+    clearInstallContext();
+    expect(getOAuthState()).toBeNull();
   });
 });
 

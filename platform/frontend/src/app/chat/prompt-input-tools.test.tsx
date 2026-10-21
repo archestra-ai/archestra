@@ -17,7 +17,11 @@ const { renderCounts, statusState, deploymentState, layoutState } = vi.hoisted(
   () => ({
     renderCounts: { modelButton: 0, apiKeySelector: 0 },
     statusState: {
-      data: null as { trust: string; audience: string } | null,
+      data: null as {
+        trust: string;
+        audience: string;
+        policyRevision: number;
+      } | null,
       isError: false,
     },
     deploymentState: { active: true },
@@ -288,30 +292,11 @@ describe("chat composer typing performance", () => {
     expect(screen.queryByTestId("chat-setup-menu")).toBeNull();
   });
 
-  it("shows trust and audience as a static session readout", () => {
-    statusState.data = { trust: "suspicious", audience: "internal" };
-    render(
-      <ArchestraPromptInput
-        onSubmit={vi.fn()}
-        status="ready"
-        selectedModel="gpt-4"
-        onModelChange={vi.fn()}
-        agentId="agent-1"
-        conversationId="conv-1"
-      />,
-    );
-
-    const status = screen.getByRole("status", {
-      name: "Trust: suspicious; audience: internal",
-    });
-    expect(status).toHaveTextContent("suspicious");
-    expect(status).toHaveTextContent("internal");
-  });
-
-  it("preserves policy-defined labels in the status text", () => {
+  it("names trust and audience on the session status and APPA", () => {
     statusState.data = {
-      trust: "reviewed",
-      audience: "alice ∩ internal,@finance",
+      trust: "suspicious",
+      audience: "internal",
+      policyRevision: 2,
     };
     render(
       <ArchestraPromptInput
@@ -324,15 +309,53 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    const status = screen.getByRole("status", {
-      name: "Trust: reviewed; audience: alice ∩ internal,@finance",
-    });
-    expect(status).toHaveTextContent("reviewed");
-    expect(status).toHaveTextContent("alice ∩ internal,@finance");
+    expect(
+      screen.getByRole("status", {
+        name: "Trust: suspicious; audience: internal; policy revision: 2",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust suspicious, audience internal",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("preserves policy-defined labels in the status text", () => {
+    statusState.data = {
+      trust: "reviewed",
+      audience: "alice ∩ internal,@finance",
+      policyRevision: 2,
+    };
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+      />,
+    );
+
+    expect(
+      screen.getByRole("status", {
+        name: "Trust: reviewed; audience: alice ∩ internal,@finance; policy revision: 2",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust reviewed, audience alice ∩ internal,@finance",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("hides retained labels when the selected session status read failed", () => {
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     const { rerender } = render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -344,7 +367,9 @@ describe("chat composer typing performance", () => {
       />,
     );
     expect(
-      screen.getByRole("status", { name: "Trust: trusted; audience: public" }),
+      screen.getByRole("status", {
+        name: "Trust: trusted; audience: public; policy revision: 2",
+      }),
     ).toBeInTheDocument();
 
     // The hook can expose retained data alongside an error for a session.
@@ -380,7 +405,11 @@ describe("chat composer typing performance", () => {
 
   it("hides the status when guardrails are disabled", () => {
     deploymentState.active = false;
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -398,7 +427,11 @@ describe("chat composer typing performance", () => {
     vi.mocked(useFeature).mockImplementation((flag) =>
       flag === "openappaEnabled" ? false : undefined,
     );
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -413,9 +446,13 @@ describe("chat composer typing performance", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("keeps trust and audience visible above a narrow composer", () => {
+  it("keeps APPA above a narrow composer", () => {
     layoutState.isNarrow = true;
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -427,14 +464,23 @@ describe("chat composer typing performance", () => {
       />,
     );
 
-    const status = screen.getByRole("status", {
-      name: "Trust: trusted; audience: public",
-    });
-    expect(status).toHaveTextContent("trust:trusted");
-    expect(status).toHaveTextContent("audience:public");
+    expect(
+      screen.getByRole("status", {
+        name: "Trust: trusted; audience: public; policy revision: 2",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Guardrails: trust trusted, audience public",
+      }),
+    ).toBeInTheDocument();
   });
   it("removes the session readout when navigating to a new chat", () => {
-    statusState.data = { trust: "trusted", audience: "public" };
+    statusState.data = {
+      trust: "trusted",
+      audience: "public",
+      policyRevision: 2,
+    };
     const props = {
       onSubmit: vi.fn(),
       status: "ready" as const,

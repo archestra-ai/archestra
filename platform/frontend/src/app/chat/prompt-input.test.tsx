@@ -1119,7 +1119,7 @@ describe("ArchestraPromptInput", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows compact privacy details and a usable attach button after the encrypted chat starts", () => {
+    it("keeps the privacy details visible and the attach button usable after the encrypted chat starts", () => {
       mockConversationState.conversation = { encryptedChat: true };
 
       render(
@@ -1131,11 +1131,8 @@ describe("ArchestraPromptInput", () => {
       );
 
       expect(
-        screen.queryByTestId(E2eTestId.EncryptedChatNotice),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Encrypted chat privacy details" }),
-      ).toBeInTheDocument();
+        screen.getByTestId(E2eTestId.EncryptedChatNotice),
+      ).toHaveTextContent("Use this mode for highly sensitive work.");
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();

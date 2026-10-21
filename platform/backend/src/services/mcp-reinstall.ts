@@ -10,6 +10,7 @@ import { secretManager } from "@/secrets-manager";
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { recordInstallToolDescriptions } from "@/services/mcp-install-tool-descriptions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import type {
   InternalMcpCatalog,
@@ -524,6 +525,15 @@ async function syncToolsForServer(
   }));
 
   const syncResult = await ToolModel.syncToolsForCatalog(toolsToSync);
+  await recordInstallToolDescriptions({
+    mcpServerId: server.id,
+    syncedTools: [
+      ...syncResult.created,
+      ...syncResult.updated,
+      ...syncResult.unchanged,
+    ],
+    reported: toolsToSync,
+  });
   await refreshMcpSkillMetadata({
     catalogId: catalogItem.id,
     mcpServerId: server.id,

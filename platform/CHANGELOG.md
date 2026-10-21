@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.4.0-rc.55](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.54...platform-v1.4.0-rc.55) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **openappa:** drop the policy-snapshot schema ([#9344](https://github.com/archestra-ai/archestra/issues/9344))
+
+### Features
+
+* **agent-runtime:** let agents post progress updates to Slack ([#9343](https://github.com/archestra-ai/archestra/issues/9343)) ([6f1d033](https://github.com/archestra-ai/archestra/commit/6f1d033e3858288b9bb8aaee06dade6f99b75f24))
+* **openappa:** drop the policy-snapshot schema ([#9344](https://github.com/archestra-ai/archestra/issues/9344)) ([0f8d890](https://github.com/archestra-ai/archestra/commit/0f8d8901441b9e2bba001ad2a6dd0ac949005c45))
+
+
+### Bug Fixes
+
+* **chatops:** read screenshots and files sent to the Teams bot ([#9318](https://github.com/archestra-ai/archestra/issues/9318)) ([64c80e0](https://github.com/archestra-ai/archestra/commit/64c80e029f91af83897214ea86db70939ca0dd33))
+
 ## [1.4.0-rc.54](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.53...platform-v1.4.0-rc.54) (2026-10-20)
 
 

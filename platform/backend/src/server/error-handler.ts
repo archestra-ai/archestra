@@ -9,10 +9,10 @@ import {
   getDbResourceExhaustionErrorCode,
   getNonDatabaseConnectionTarget,
   getTransientDbErrorCode,
-  isDbQueryError,
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { ApiError } from "@/types";
+import { FAILED_QUERY_CLIENT_MESSAGE, hasFailedQueryText } from "@/utils/db";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { isFetchConnectivityError } from "@/utils/network-errors";
 import { captureServerException } from "./exception-capture";
@@ -303,7 +303,10 @@ export function handleServerError(
 
     return reply.status(statusCode).send({
       error: {
-        message,
+        // A route can build an ApiError from a failed query's message.
+        message: hasFailedQueryText(error)
+          ? FAILED_QUERY_CLIENT_MESSAGE
+          : message,
         type,
         ...(internalCode && { internal_code: internalCode }),
         ...(error.details && { details: error.details }),
@@ -337,8 +340,8 @@ export function handleServerError(
     error: {
       // A failed query's message holds its SQL and parameter values. Keep it
       // in the log and the error report above, not in the response.
-      message: isDbQueryError(error)
-        ? "A database query failed. Ask an administrator to check the server logs."
+      message: hasFailedQueryText(error)
+        ? FAILED_QUERY_CLIENT_MESSAGE
         : message,
       type: "api_internal_server_error",
     },

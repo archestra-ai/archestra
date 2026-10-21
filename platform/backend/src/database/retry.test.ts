@@ -1,11 +1,9 @@
-import { DrizzleQueryError } from "drizzle-orm/errors";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   getDbResourceExhaustionErrorCode,
   getTransientDbErrorCode,
   installDbErrorSafetyNet,
-  isDbQueryError,
   isDbStatementTimeoutError,
   isTransientDbError,
   withDbRetry,
@@ -337,32 +335,6 @@ describe("isDbStatementTimeoutError", () => {
       cause: pgError,
     });
     expect(isTransientDbError(drizzleError)).toBe(false);
-  });
-});
-
-describe("isDbQueryError", () => {
-  test("detects the ORM's failed-query error", () => {
-    expect(
-      isDbQueryError(
-        new DrizzleQueryError('select "id" from "secret"', ["x"], new Error()),
-      ),
-    ).toBe(true);
-  });
-
-  test("detects the failed-query message and a wrapped failed query", () => {
-    expect(isDbQueryError(new Error('Failed query: select "id"'))).toBe(true);
-    expect(
-      isDbQueryError(
-        new Error("Could not save the key", {
-          cause: new Error('Failed query: insert into "secret"'),
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  test("ignores other errors", () => {
-    expect(isDbQueryError(new Error("Something went wrong"))).toBe(false);
-    expect(isDbQueryError("Failed query: not an Error")).toBe(false);
   });
 });
 

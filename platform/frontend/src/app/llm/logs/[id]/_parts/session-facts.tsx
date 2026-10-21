@@ -385,9 +385,10 @@ function ModelsFact({ models }: { models: ModelEntry[] }) {
                 size={18}
                 ring={false}
               />
-              {/* Phones: name and maker on one line; wide: stacked. */}
+              {/* Phones: name and maker on one line; wide: stacked. Wide
+                  names truncate, or a long one runs into its neighbour. */}
               <span className="flex min-w-0 items-baseline gap-1.5 lg:block">
-                <span className="block text-sm leading-5 font-medium whitespace-nowrap">
+                <span className="block truncate text-sm leading-5 font-medium max-lg:shrink-0">
                   {model.name}
                 </span>
                 <span className="block truncate text-xs leading-4 text-muted-foreground">

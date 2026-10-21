@@ -5,7 +5,7 @@ const MARK_BOTTOM = "██▄█▄██";
 const RECEIPT_CODE = "([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4})";
 
 const SESSION_RECEIPT_PATTERN = new RegExp(
-  `${MARK_TOP}(?:\\r?\\n${MARK_BOTTOM} {2}| +${MARK_BOTTOM} {1,2}| {2})(?:started )?protected session ${RECEIPT_CODE}(?:\\r?\\n${MARK_BOTTOM})?`,
+  `${MARK_TOP}(?:\\r?\\n${MARK_BOTTOM} {2}| {1,4}${MARK_BOTTOM} {1,2}| {2})(?:started )?protected session ${RECEIPT_CODE}(?:\\r?\\n${MARK_BOTTOM})?`,
   "g",
 );
 

@@ -5398,9 +5398,20 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     ...FLOOR_PUBLIC_EGRESS,
   ];
   // AWS ApplicationNetworkPolicy floor: cannot express selector peers, and with
-  // no resolved ClusterIP the DNS bootstrap allows :53 to any IP.
+  // no resolved ClusterIP the DNS bootstrap allows :53 to private space only.
   const AWS_FLOOR_EGRESS = [
-    { to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: DNS_PORTS },
+    {
+      to: [
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "169.254.0.0/16",
+        "fc00::/7",
+        "fe80::/10",
+      ].map((cidr) => ({ ipBlock: { cidr } })),
+      ports: DNS_PORTS,
+    },
     ...FLOOR_PUBLIC_EGRESS,
   ];
 

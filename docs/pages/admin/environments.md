@@ -2,7 +2,7 @@
 title: "Environments"
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -91,7 +91,7 @@ A **remote MCP server** runs outside Archestra and is reached over HTTP, so the 
 
 See Kubernetes [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/), Cilium [DNS policy](https://docs.cilium.io/en/latest/security/dns/), GKE [FQDN network policy](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), and EKS Auto Mode [network policy](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html) docs for provider details. AWS DNS-based rules apply only to workloads running on EKS Auto Mode-launched EC2 instances.
 
-On EKS Auto Mode, `ApplicationNetworkPolicy` only supports IP and domain egress peers, so Archestra automatically adds a DNS bootstrap rule allowing port 53 to the cluster DNS service IP (recorded in the `archestra.io/network-policy-cluster-dns` annotation).
+On EKS Auto Mode, `ApplicationNetworkPolicy` only supports IP and domain egress peers, so Archestra adds a rule allowing port 53 to the cluster DNS service IP, recorded in the `archestra.io/network-policy-cluster-dns` annotation. When Archestra cannot read that IP, the rule allows port 53 to private ranges only and the annotation reads `private-ranges`. To pin the resolver, set [`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS).
 
 ### The Public Internet Floor
 

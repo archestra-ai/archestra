@@ -1,8 +1,24 @@
 import type * as k8s from "@kubernetes/client-node";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import config from "@/config";
 import { clusterDnsResolver, parseResolvConfNameservers } from "./cluster-dns";
 
 describe("clusterDnsResolver", () => {
+  beforeEach(() => {
+    config.orchestrator.kubernetes.clusterDnsIps = [];
+  });
+
+  test("uses the configured resolver IPs without querying the cluster", async () => {
+    config.orchestrator.kubernetes.clusterDnsIps = ["172.20.0.10"];
+    const readNamespacedService = vi.fn();
+    const coreApi = { readNamespacedService } as unknown as k8s.CoreV1Api;
+
+    await expect(clusterDnsResolver.getClusterDnsIps(coreApi)).resolves.toEqual(
+      ["172.20.0.10"],
+    );
+    expect(readNamespacedService).not.toHaveBeenCalled();
+  });
+
   test("resolves the kube-dns service ClusterIPs", async () => {
     const coreApi = {
       readNamespacedService: vi.fn(async () => ({

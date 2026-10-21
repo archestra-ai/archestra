@@ -40,6 +40,7 @@ import config, {
   parseClampedFloat,
   parseClampedInt,
   parseClampedIntOrZero,
+  parseClusterDnsIps,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -2474,6 +2475,25 @@ describe("parseSandboxMemoryMaxBytes", () => {
       4 * 1024 ** 3,
     );
     expect(logged).not.toHaveBeenCalled();
+  });
+});
+
+describe("parseClusterDnsIps", () => {
+  test("keeps IPv4 and IPv6 resolver addresses", () => {
+    expect(parseClusterDnsIps(" 172.20.0.10 , fd00:ec2::10 ")).toEqual([
+      "172.20.0.10",
+      "fd00:ec2::10",
+    ]);
+    expect(parseClusterDnsIps(undefined)).toEqual([]);
+  });
+
+  // Each entry becomes a single-host ipBlock on the DNS rule. A CIDR or a
+  // hostname would either be rejected by the Kubernetes API or open port 53 to
+  // more than the resolver, so it is dropped and discovery fills the gap.
+  test("drops entries that are not a single IP address", () => {
+    expect(
+      parseClusterDnsIps("172.20.0.10,0.0.0.0/0,kube-dns.kube-system,"),
+    ).toEqual(["172.20.0.10"]);
   });
 });
 

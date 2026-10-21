@@ -773,6 +773,11 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: unset (the editor takes free text)
   - Values: comma-separated namespaces, for example `staging,production`
 
+- **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DNS_IPS`** - Cluster resolver addresses that [environment](/docs/admin/environments) egress policies allow DNS to.
+  - Default: unset (Archestra reads the `kube-system/kube-dns` Service, which the Helm chart grants access to)
+  - Values: comma-separated IP addresses, for example `172.20.0.10`
+  - Set it when the resolver is not the `kube-dns` Service, such as NodeLocal DNSCache, or when Archestra cannot read that Service.
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN`** - Cluster DNS domain used to build in-cluster Service addresses.
   - Default: `cluster.local`
 

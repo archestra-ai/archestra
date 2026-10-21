@@ -1038,7 +1038,8 @@ ${
 # Set-Acl on a file that an earlier connect already locked needs
 # SeSecurityPrivilege, which a non-admin user does not have. So each run
 # recreates the file, locks it while it is still empty, then writes the token.
-Remove-Item -LiteralPath ($archGuardPath + '.instructions-source.json') -Force -ErrorAction SilentlyContinue
+# A delete that fails stops here, so the old file is never emptied in place.
+if (Test-Path -LiteralPath ($archGuardPath + '.instructions-source.json')) { Remove-Item -LiteralPath ($archGuardPath + '.instructions-source.json') -Force -ErrorAction Stop }
 [IO.File]::WriteAllBytes(($archGuardPath + '.instructions-source.json'), [byte[]]@())
 $archSourceAcl = New-Object System.Security.AccessControl.FileSecurity
 $archSourceAcl.SetAccessRuleProtection($true, $false)

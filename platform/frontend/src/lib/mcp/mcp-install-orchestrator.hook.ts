@@ -101,6 +101,7 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
         const { authorizationUrl, state } =
           await initiateOAuthMutation.mutateAsync({
             catalogId: params.catalogItem.id,
+            ...(params.reauthServerId && { serverId: params.reauthServerId }),
           });
 
         const scope: McpServerInstallScope =

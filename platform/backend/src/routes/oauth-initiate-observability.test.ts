@@ -18,6 +18,10 @@ describe("POST /api/oauth/initiate observability", () => {
   const ctx = useRouteTestApp(oauthRoutes);
 
   test("warns with catalogId and statusCode when initiate rejects with a client error", async () => {
+    ctx.app.addHook("onRequest", async (request) => {
+      request.authMethod = "session";
+      request.sessionInfo = { id: "test-session", createdAt: new Date() };
+    });
     const catalogId = "00000000-0000-4000-8000-000000000000";
 
     const response = await ctx.app.inject({

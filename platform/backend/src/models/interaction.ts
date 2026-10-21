@@ -1072,6 +1072,12 @@ class InteractionModel {
           userMessagePreview: preview.success
             ? preview.data.lastUserMessagePreview
             : null,
+          responseToolNames: preview.success
+            ? (preview.data.responseToolNames ?? null)
+            : null,
+          responseTextPreview: preview.success
+            ? (preview.data.responseTextPreview ?? null)
+            : null,
         };
       }),
       Number(total),
@@ -3613,16 +3619,22 @@ function buildLastUserMessagePreview(
     if (!message) {
       return null;
     }
-    let preview = message.slice(0, LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH);
-    // Don't leave half a surrogate pair at the truncation point.
-    const lastCode = preview.charCodeAt(preview.length - 1);
-    if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
-      preview = preview.slice(0, -1);
-    }
-    return preview;
+    return truncatePreview(message);
   } catch {
     return null;
   }
+}
+
+function truncatePreview(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  let preview = trimmed.slice(0, LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH);
+  // Don't leave half a surrogate pair at the truncation point.
+  const lastCode = preview.charCodeAt(preview.length - 1);
+  if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+    preview = preview.slice(0, -1);
+  }
+  return preview;
 }
 
 /**
@@ -3744,7 +3756,36 @@ function buildSessionPreview(
     claudeCodeTitle: isTitleGeneration
       ? (response?.content?.[0]?.text ?? null)
       : null,
+    ...(contentNotStored
+      ? { responseToolNames: [], responseTextPreview: null }
+      : buildResponsePreview(data)),
   };
+}
+
+/** The tools a response asked for, else the start of its reply. */
+function buildResponsePreview(
+  data: InsertInteraction,
+): Pick<
+  InteractionSessionPreview,
+  "responseToolNames" | "responseTextPreview"
+> {
+  try {
+    const interaction = new DynamicInteraction({
+      request: data.request,
+      response: data.response,
+      type: data.type,
+    } as never);
+    const responseToolNames = interaction.getToolNamesRequested();
+    return {
+      responseToolNames,
+      responseTextPreview:
+        responseToolNames.length > 0
+          ? null
+          : truncatePreview(interaction.getLastAssistantResponse()),
+    };
+  } catch {
+    return { responseToolNames: [], responseTextPreview: null };
+  }
 }
 
 /** Retry only failed log foreign keys; admission attribution stays in the receipt. */

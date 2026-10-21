@@ -14,7 +14,13 @@ import {
   ShieldAlert,
   TriangleAlert,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { CopyButton } from "@/components/copy-button";
 import { EncryptedChatContentUnavailable } from "@/components/encrypted-chat-content-unavailable";
 import { JsonCodeBlock } from "@/components/json-code-block";
@@ -31,12 +37,12 @@ import { describeKey } from "@/components/virtual-key-badge";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { GhostThread, OverviewFact } from "./overview-parts";
+import { GhostThread, OverviewCell } from "./overview-parts";
 import { PayloadTree } from "./payload-tree";
 import {
   type RequestKind,
   type RequestSpan,
-  SPAN_KINDS,
+  shortToolName,
 } from "./session-timeline";
 
 /**
@@ -60,12 +66,29 @@ export function RequestContent({
 }) {
   const [view, setView] = useState<ContentView>("conversation");
   const { row, kind } = span;
-  const time = formatDate({ date: row.createdAt, dateFormat: "HH:mm:ss" });
   const query = useInteraction({
     interactionId: row.id,
     refetchInterval: null,
   });
   const record = query.data ?? null;
+  // Each request resends the conversation so far, so its top matches the
+  // last one's: the conversation opens at the bottom, where what this request
+  // added is. The payload tabs read top-down, so they open at the top. Once
+  // per request and tab, so a refetch never moves the reader.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const scrolledFor = useRef<string | null>(null);
+  const loaded = record !== null;
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const position = `${row.id}:${view}`;
+    if (!loaded || !scroller || scrolledFor.current === position) return;
+    scrolledFor.current = position;
+    if (view !== "conversation") {
+      scroller.scrollTop = 0;
+      return;
+    }
+    return pinToBottom(scroller);
+  }, [loaded, row.id, view]);
 
   return (
     <Tabs
@@ -93,25 +116,14 @@ export function RequestContent({
               </TabsTrigger>
             ))}
           </TabsList>
-          {/* Which request this is; phones already show it in the Overview
-              directly above, so the bar keeps only the tabs there. */}
-          <span className="ml-auto inline-flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground max-md:hidden">
-            <span
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                SPAN_KINDS[kind].bar,
-              )}
-              aria-hidden="true"
-            />
-            <span className="min-w-0 truncate">{label}</span>
-            <span className="shrink-0 tabular-nums">· {time}</span>
-            {latest ? <span className="shrink-0">· latest</span> : null}
-          </span>
         </PaneHeader>
         {/* Phones stack the pane at its natural height, and one captured
           prompt can run to thousands of lines: cap it near a screenful so
           the page stays scannable. */}
-        <div className="max-lg:max-h-[70svh] max-lg:overflow-y-auto max-lg:overscroll-contain lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+        <div
+          ref={scrollerRef}
+          className="max-lg:max-h-[70svh] max-lg:overflow-y-auto max-lg:overscroll-contain lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+        >
           {query.isError && !record ? (
             <QueryLoadError
               title="Couldn't load this request"
@@ -239,6 +251,7 @@ function ConversationView({
         hideDivider
         agentName={profileName ?? undefined}
         selectedModel={thread.modelName}
+        openPendingTools
       />
     </>
   );
@@ -266,72 +279,55 @@ function RequestView({ record }: { record: InteractionRecord }) {
   return (
     <div className="space-y-4 px-4 pt-2 pb-4">
       <PayloadSection title="Metadata">
-        <dl className="max-w-xl">
-          <OverviewFact label="Recorded">
+        <dl className="grid max-w-4xl grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2 xl:grid-cols-3">
+          <OverviewCell label="Recorded">
             {formatDate({ date: record.createdAt })}
-          </OverviewFact>
+          </OverviewCell>
           {record.authMethod ? (
-            <OverviewFact label="Auth method">
+            <OverviewCell label="Auth method">
               {formatAuthMethod(record.authMethod)}
-            </OverviewFact>
+            </OverviewCell>
           ) : null}
           {/* The passthrough key carries the acting user's identity, the
               standard key only supplied the provider credential. */}
           {virtualKeys.map((key) => (
-            <OverviewFact key={key.id} label="Virtual API key">
+            <OverviewCell key={key.id} label="Virtual API key">
               <span className="min-w-0">
                 <span className="block truncate font-mono">{key.name}</span>
                 <span className="block truncate text-[11px] text-muted-foreground">
                   {describeKey(key)}
                 </span>
               </span>
-            </OverviewFact>
+            </OverviewCell>
           ))}
           {record.authenticatedAppName ? (
-            <OverviewFact label="OAuth client">
+            <OverviewCell label="OAuth client">
               <span
                 className="truncate font-mono"
                 title={record.authenticatedAppId ?? undefined}
               >
                 {record.authenticatedAppName}
               </span>
-            </OverviewFact>
+            </OverviewCell>
           ) : null}
           {record.externalAgentId ? (
-            <OverviewFact label="External agent">
+            <OverviewCell label="External agent">
               <IdValue value={record.externalAgentId} />
-            </OverviewFact>
+            </OverviewCell>
           ) : null}
           {record.runId ? (
-            <OverviewFact label="Run ID">
+            <OverviewCell label="Run ID">
               <IdValue value={record.runId} />
-            </OverviewFact>
+            </OverviewCell>
           ) : null}
           {record.connectorId ? (
-            <OverviewFact label="KB connector">
+            <OverviewCell label="KB connector">
               {record.connectorName ?? "Deleted connector"}
-            </OverviewFact>
+            </OverviewCell>
           ) : null}
         </dl>
       </PayloadSection>
-      {toolNames.length > 0 ? (
-        <PayloadSection
-          title="Tools used"
-          meta={toolNames.length === 1 ? "1 tool" : `${toolNames.length} tools`}
-        >
-          <div className="flex flex-wrap gap-1">
-            {toolNames.map((name) => (
-              <Badge
-                key={name}
-                variant="secondary"
-                className="font-mono text-xs"
-              >
-                {name}
-              </Badge>
-            ))}
-          </div>
-        </PayloadSection>
-      ) : null}
+      {toolNames.length > 0 ? <ToolsUsed toolNames={toolNames} /> : null}
       <Payload
         title="Request"
         value={shown}
@@ -638,3 +634,93 @@ function fenceJsonReplies<
     }),
   };
 }
+
+/**
+ * The tools the conversation had used so far, as one flowing list: the tool
+ * leads, its MCP server a faint path prefix. A long list folds after a few
+ * lines, since an agent loop can reach a hundred.
+ */
+function ToolsUsed({ toolNames }: { toolNames: string[] }) {
+  const [all, setAll] = useState(false);
+  const items = useMemo(() => toolItems(toolNames), [toolNames]);
+  const shown = all ? items : items.slice(0, TOOLS_USED_FOLDED);
+  return (
+    <PayloadSection
+      title="Tools used"
+      meta={items.length === 1 ? "1 tool" : `${items.length} tools`}
+    >
+      <ul className="flex max-w-4xl flex-wrap gap-x-4 gap-y-1.5 font-mono text-[12px]">
+        {shown.map((item) => (
+          <li key={item.key} className="whitespace-nowrap">
+            {item.server ? (
+              <span className="text-muted-foreground/60">{item.server}/</span>
+            ) : null}
+            <span className="text-foreground/90">{item.tool}</span>
+          </li>
+        ))}
+        {items.length > TOOLS_USED_FOLDED ? (
+          <li>
+            <UnstyledButton
+              onClick={() => setAll((open) => !open)}
+              className="font-sans text-xs text-muted-foreground hover:text-foreground"
+            >
+              {all ? "Show fewer" : `+${items.length - TOOLS_USED_FOLDED} more`}
+            </UnstyledButton>
+          </li>
+        ) : null}
+      </ul>
+    </PayloadSection>
+  );
+}
+
+/**
+ * MCP tools first, grouped by server (`server__tool` once the client's
+ * `mcp__<gateway>__` prefix is dropped), then the client's own tools.
+ */
+function toolItems(names: string[]) {
+  const mcp: { key: string; server: string | null; tool: string }[] = [];
+  const client: typeof mcp = [];
+  for (const name of names) {
+    const short = shortToolName(name);
+    const at = short.indexOf("__");
+    if (at < 0) client.push({ key: name, server: null, tool: name });
+    else
+      mcp.push({
+        key: name,
+        server: short.slice(0, at),
+        tool: short.slice(at + 2),
+      });
+  }
+  mcp.sort((a, b) => (a.server ?? "").localeCompare(b.server ?? ""));
+  return [...mcp, ...client];
+}
+
+const TOOLS_USED_FOLDED = 18;
+
+/**
+ * Hold a scroller at its bottom while its content finishes laying out (a
+ * thread's markdown and tool cards grow after the first paint), letting go
+ * once the reader scrolls themselves or the content settles.
+ */
+function pinToBottom(scroller: HTMLElement): () => void {
+  const toBottom = () => {
+    scroller.scrollTop = scroller.scrollHeight;
+  };
+  toBottom();
+  const content = scroller.firstElementChild;
+  const observer = new ResizeObserver(toBottom);
+  if (content) observer.observe(content);
+  const release = () => {
+    observer.disconnect();
+    clearTimeout(timer);
+    for (const type of RELEASE_EVENTS)
+      scroller.removeEventListener(type, release);
+  };
+  const timer = setTimeout(release, PIN_SETTLE_MS);
+  for (const type of RELEASE_EVENTS)
+    scroller.addEventListener(type, release, { passive: true });
+  return release;
+}
+
+const RELEASE_EVENTS = ["wheel", "touchstart", "keydown", "pointerdown"];
+const PIN_SETTLE_MS = 1500;

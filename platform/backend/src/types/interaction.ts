@@ -50,6 +50,12 @@ export const InteractionSessionPreviewSchema = z.object({
   contentNotStored: z.boolean(),
   lastUserMessagePreview: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
+  /**
+   * What the request produced: the tools its response asked for, else the
+   * start of its reply. Rows written before these existed have neither.
+   */
+  responseToolNames: z.array(z.string()).optional(),
+  responseTextPreview: z.string().nullable().optional(),
 });
 export type InteractionSessionPreview = z.infer<
   typeof InteractionSessionPreviewSchema
@@ -381,6 +387,13 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
    * a turn by the prompt it served. Null when none was captured.
    */
   userMessagePreview: z.string().nullable().optional(),
+  /**
+   * What this request produced, from its stored preview: the tools its
+   * response asked for, else the start of its reply. One prompt drives many
+   * requests in an agent loop, so this is what tells them apart.
+   */
+  responseToolNames: z.array(z.string()).nullable().optional(),
+  responseTextPreview: z.string().nullable().optional(),
 });
 
 /**

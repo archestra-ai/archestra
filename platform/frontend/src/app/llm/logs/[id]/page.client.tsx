@@ -57,10 +57,7 @@ import {
   requestSpanKey,
   toolCallSpanKey,
 } from "./_parts/session-timeline";
-import {
-  DETAILS_PANE_DEFAULT_HEIGHT,
-  SplitHandle,
-} from "./_parts/split-handle";
+import { DETAILS_PANE_DEFAULT_HEIGHT } from "./_parts/split-handle";
 import { useLinkedRequest } from "./_parts/use-linked-request";
 import { useSessionToolCalls } from "./_parts/use-session-tool-calls";
 
@@ -208,9 +205,6 @@ export default function SessionDetailPage({
   );
   const spans = timeline?.spans ?? [];
   const [pickedKey, setPickedKey] = useState<string | null>(null);
-  const [detailsHeight, setDetailsHeight] = useState(
-    DETAILS_PANE_DEFAULT_HEIGHT,
-  );
 
   const unavailableSession =
     sessionResponse !== undefined && sessionResponse.data.length === 0;
@@ -417,9 +411,9 @@ export default function SessionDetailPage({
                   </Button>
                 }
               />
-              <SplitHandle height={detailsHeight} onChange={setDetailsHeight} />
+              <div className="hidden h-px bg-border lg:block" />
               <TraceDetails
-                height={detailsHeight}
+                height={DETAILS_PANE_DEFAULT_HEIGHT}
                 loading={traceLoading}
                 span={traceLoading ? null : selected}
                 origin={timeline?.origin ?? 0}

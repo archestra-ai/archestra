@@ -39,6 +39,7 @@ import { KindChip } from "./request-waterfall";
 import {
   type RequestSpan,
   requestLabel,
+  requestPrompt,
   SPAN_KINDS,
   type TimelineSpan,
   type ToolCallSpan,
@@ -72,7 +73,7 @@ export function RequestDetails({
   excerpt,
   toolCallChecks,
 }: {
-  /** The resizable pane height, applied from `lg`. */
+  /** The pane height, applied from `lg`. */
   height: number;
   loading: boolean;
   span: TimelineSpan | null;
@@ -153,7 +154,7 @@ export function RequestDetails({
 
   return (
     // Phones: the overview then the content in the page's own flow, each with a
-    // sticky header. Wide: the fixed-height, resizable split.
+    // sticky header. Wide: the fixed-height split.
     <section
       aria-label="Request details"
       className="flex flex-col border-t lg:grid lg:h-[var(--pane-h)] lg:grid-cols-[300px_minmax(0,1fr)] lg:overflow-hidden lg:border-t-0"
@@ -221,6 +222,7 @@ function RequestOverview({
       : modelOrigin.name;
   const modelName = row.model ? shortModelName(row.model) : "Unknown model";
   const gapBefore = previous ? span.start - previous.end : null;
+  const prompt = kind === "main" ? requestPrompt(row) : null;
 
   // Tokens: cache counts are part of the input when they fit inside it
   // (OpenAI-style); otherwise they are reported beside it (Anthropic-style).
@@ -285,6 +287,16 @@ function RequestOverview({
             <span className="truncate text-sm font-semibold">{label}</span>
             <KindChip kind={kind} />
           </div>
+          {prompt && prompt !== label ? (
+            // The list names a request by what it did; this is what it was for.
+            <p
+              className="mt-1 line-clamp-2 pl-[11px] text-xs text-muted-foreground"
+              title={prompt}
+            >
+              <span className="font-medium text-foreground/80">Prompt</span>{" "}
+              {prompt}
+            </p>
+          ) : null}
           <div
             className="mt-2 flex min-w-0 items-center gap-2"
             title={row.model ?? undefined}

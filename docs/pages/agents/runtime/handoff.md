@@ -14,7 +14,7 @@ With a [dedicated runtime](/docs/agents/runtime), the task runs in its own conta
 
 ## Hand Off a Task
 
-1. Install the **Remote Agents** skill from [Connect](/docs/get-started/connect).
+1. Install the **Remote Agents Handoff** skill from [Connect](/docs/get-started/connect).
 2. Ask your coding agent to "hand this over to Archestra".
 3. To continue locally, ask it to "bring it back and continue here".
 4. Review the repository patch it returns before you apply it.
